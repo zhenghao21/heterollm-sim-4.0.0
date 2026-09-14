@@ -24,16 +24,16 @@ def test_aggregate_record_uses_concurrent_batch_p50_and_absolute_delta():
     payload = {
         "native": {
             "aggregate": {
-                "request_to_first_token_ms": {"p50_ms": 10.0},
-                "tpot_ms": {"p50_ms": 2.0},
-                "request_to_end_ms": {"p50_ms": 20.0},
+                "engine_ttft_ms": {"p50_ms": 10.0},
+                "engine_tpot_ms": {"p50_ms": 2.0},
+                "engine_e2e_ms": {"p50_ms": 20.0},
             }
         },
         "simulator": {
             "aggregate": {
-                "ttft_ms": {"p50_ms": 11.0},
-                "tpot_ms": {"p50_ms": 2.2},
-                "e2e_ms": {"p50_ms": 19.0},
+                "engine_ttft_ms": {"p50_ms": 11.0},
+                "engine_tpot_ms": {"p50_ms": 2.2},
+                "engine_e2e_ms": {"p50_ms": 19.0},
             }
         },
     }

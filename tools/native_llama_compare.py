@@ -319,7 +319,10 @@ def _engine_counter_timing(timings: Mapping[str, object], output_tokens: int) ->
     """
     prompt_ms = timings.get("prompt_ms")
     eval_ms = timings.get("predicted_ms")
-    if not isinstance(prompt_ms, (int, float)) or not isinstance(eval_ms, (int, float)):
+    if (not isinstance(prompt_ms, (int, float)) or isinstance(prompt_ms, bool)
+            or not isinstance(eval_ms, (int, float)) or isinstance(eval_ms, bool)
+            or not math.isfinite(float(prompt_ms)) or not math.isfinite(float(eval_ms))
+            or float(prompt_ms) < 0 or float(eval_ms) < 0 or output_tokens < 0):
         return {"engine_ttft_ms": None, "engine_tpot_ms": None,
                 "engine_e2e_ms": None, "engine_timing_status": "unavailable",
                 "engine_timing_source": "llama.cpp.server_slot_stats.unavailable"}
@@ -329,6 +332,10 @@ def _engine_counter_timing(timings: Mapping[str, object], output_tokens: int) ->
             "engine_tpot_ms": float(eval_ms) / (output_tokens - 1) if output_tokens > 1 else None,
             "engine_e2e_ms": float(prompt_ms) + float(eval_ms),
             "engine_timing_status": "counter_proven",
+            "measurement_status": "complete",
+            "measurement_kind": "verified_slot_counters",
+            "semantic_validation_status": "verified",
+            "timing_contract_id": "engine-boundary/v1",
             "engine_timing_source": "llama.cpp.server_slot_stats.t_start_prompt_last_gen_last"}
 
 
@@ -743,7 +750,11 @@ def _hardware_fingerprint(snapshot: Mapping[str, object]) -> str:
             "logical_processors": _field(cpu, "logical_processors", "thread_count"),
             "max_clock_mhz": _field(cpu, "max_clock_mhz", "max_clock"),
         },
-        "pcie": {k: pcie.get(k) for k in ("gen_current", "width_current", "gen_max", "width_max")},
+        # Current link values are sampled run state and can drop while the GPU
+        # is idle.  Only negotiated maxima belong to the stable identity gate;
+        # the complete current snapshot remains available for service-model
+        # diagnostics and is recorded separately by the caller.
+        "pcie": {k: pcie.get(k) for k in ("gen_max", "width_max")},
     })
 
 
@@ -1210,7 +1221,6 @@ def main() -> int:
     try:
         base = f"http://127.0.0.1:{port}"
         wait_health(base, proc)
-        metrics_before = get_text(base + "/metrics")
         try:
             slots_before = get_json(base + "/slots")
         except Exception:
@@ -1220,6 +1230,13 @@ def main() -> int:
         warmup_started = time.perf_counter()
         warmup = post_json(base + "/completion", warmup_payload)
         warmup_wall_ms = (time.perf_counter() - warmup_started) * 1000.0
+        # The formal baseline must be captured after warmup.  Otherwise the
+        # delta mixes warmup work into the measured request counters.
+        metrics_before = get_text(base + "/metrics")
+        try:
+            slots_before = get_json(base + "/slots")
+        except Exception:
+            slots_before = None
         started = time.perf_counter()
         formal_payload = {"prompt": prompt, "n_predict": args.predict, "temperature": args.temperature, "top_k": args.top_k, "seed": args.seed, "cache_prompt": False, "stream": args.request_timing == "stream", "ignore_eos": args.output_mode == "fixed"}
         if args.stop:
@@ -1357,8 +1374,10 @@ def main() -> int:
         "prompt_tokenizer": prompt_tokens,
         "ok": int(native_prompt_value) == prompt_tokens and output_tokens == req.visible_output_tokens,
     }
-    if not token_parity["ok"]:
-        raise ValueError("native/simulator token parity gate failed: output token count differs")
+    # Preserve the complete native capture even when parity fails.  Eligibility
+    # and scoring consume this flag later; raising here used to discard the
+    # structured response and its failure context.
+    token_parity_error = None if token_parity["ok"] else "native/simulator token parity gate failed: output token count differs"
     native_prompt_ms = float(timings.get("prompt_ms", 0.0)); native_eval_ms = float(timings.get("predicted_ms", 0.0))
     native_request_records = [
         _native_request_record(response, boundary, index, args.predict)
@@ -1534,6 +1553,7 @@ def main() -> int:
               "validity_note": "Engine TTFT/TPOT/E2E are the primary acceptance metrics (prompt_eval/eval boundary); client stream TTFT/TPOT/E2E remain secondary diagnostics.",
               "command": cmd, "server": {"port": port, "pid": proc.pid}, "log": str(log_path), "model": str(Path(args.model).resolve()), "gguf": parity,
               "parity": {"geometry": parity, "ctx": {"native": args.ctx, "simulator": args.ctx, "ok": True}, "tokens": token_parity},
+              "eligibility": {"status": "eligible" if token_parity["ok"] else "ineligible", "reasons": [] if token_parity["ok"] else [token_parity_error]},
               "configuration": {"ctx": args.ctx, "parallel": args.parallel, "batch": args.batch, "ubatch": args.ubatch, "threads": args.threads, "threads_batch": args.threads, "gpu_layers": args.gpu_layers, "flash_attn": False, "mmap": True, "mlock": False, "offload_kqv": True, "op_offload": True, "split_mode": "layer", "main_gpu": 0, "cpu_range": None, "cpu_range_batch": None, "numa": None, "kv_type_k": "f16", "kv_type_v": "f16", "kv_unified": True, "continuous_batching": True, "coherent_dma_mode": args.coherent_dma_mode, "mtp": False, "temperature": args.temperature, "top_k": args.top_k, "seed": args.seed, "stop": list(args.stop), "warmup_predict": args.warmup_predict, "request_timing": args.request_timing},
               "token_counts": {"prompt": prompt_tokens, "output": output_tokens, "requested_output": args.predict}, "output_policy": {"mode": args.output_mode, "ignore_eos": args.output_mode == "fixed"}, "warmup": {"wall_ms": warmup_wall_ms, "timings": warmup.get("timings", {})},
               "native": native_payload, "evidence": native_payload["evidence"], "simulator": {"ttft_ms": simulator_request_records[0].get("client_ttft_ms") if simulator_request_records else None, "client_ttft_ms": simulator_request_records[0].get("client_ttft_ms") if simulator_request_records else None, "engine_ttft_ms": simulator_request_records[0].get("engine_ttft_ms") if simulator_request_records else None, "tpot_ms": simulator_request_records[0].get("client_tpot_ms") if simulator_request_records else None, "client_tpot_ms": simulator_request_records[0].get("client_tpot_ms") if simulator_request_records else None, "engine_tpot_ms": simulator_request_records[0].get("engine_tpot_ms") if simulator_request_records else None, "e2e_ms": simulator_request_records[0].get("client_e2e_ms") if simulator_request_records else None, "client_e2e_ms": simulator_request_records[0].get("client_e2e_ms") if simulator_request_records else None, "engine_e2e_ms": simulator_request_records[0].get("engine_e2e_ms") if simulator_request_records else None, "makespan_ms": float(getattr(sim.serving, "makespan_ns", 0.0)) / 1e6, "client_makespan_ms": simulator_aggregate.get("client_makespan_ms"), "requests": simulator_request_records, "aggregate": simulator_aggregate}, "hardware": {**hardware, "llama_cpp": "0.3.0-dev build1 commit 0f3a71b"},

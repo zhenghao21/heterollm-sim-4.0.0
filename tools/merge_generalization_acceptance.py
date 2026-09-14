@@ -71,6 +71,10 @@ def aggregate(cells):
         delta = [v["absolute_delta_ms"] for v in vals]
         native = [v["native_ms"] for v in vals]
         simulator = [v["simulator_ms"] for v in vals]
+        native_center = statistics.median(native) if native else None
+        simulator_center = statistics.median(simulator) if simulator else None
+        center_error = (100.0 * (simulator_center - native_center) / native_center
+                        if native_center not in (None, 0) and simulator_center is not None else None)
         result["metrics"][metric] = {
             "n": len(vals), "expected_repeats": REPEATS,
             "median_signed_pct": statistics.median(signed) if signed else None,
@@ -81,7 +85,13 @@ def aggregate(cells):
             "p90_absolute_ms": percentile(delta, 90),
             "worst_absolute_ms": max(delta) if delta else None,
             "native_median_ms": statistics.median(native) if native else None,
-            "simulator_median_ms": statistics.median(simulator) if simulator else None,
+            "simulator_median_ms": simulator_center,
+            # Frozen acceptance formula: take the repeated-run centre on each
+            # side first, then calculate one APE for the scenario.
+            "median_of_repeats_signed_pct": center_error,
+            "median_of_repeats_abs_pct": abs(center_error) if center_error is not None else None,
+            "evaluation_boundary": "engine",
+            "evaluation_contract_id": "engine-boundary/v1",
         }
     return result
 
@@ -194,6 +204,18 @@ def main():
       "identity_inconsistent_models": [m for m in MODELS if not identity_evidence[m]["consistent"]], "coverage_by_model": coverage, "invalid_cells": invalid, "aggregation": aggregation,
       "policy": "仅使用通过 schema/geometry/token/identity/stream/并发检查的 cell 计算统计；无效、重复、缺失 cell 保留并单独列出。每格 3 次重复，p90/worst 对重复 cell 的绝对误差计算。",
       "acceptance_reference": "10% absolute relative error is a reporting threshold, not a guarantee."}
+    # Keep structure, accuracy, coverage, and evidence as separate gates.
+    # No gate is inferred from another gate's truth value.
+    group_metrics = [m for group in aggregation.values() for m in (group.get("metrics") or {}).values()]
+    report["accuracy_pass"] = bool(group_metrics) and all(
+        m.get("median_of_repeats_abs_pct") is not None and
+        m["median_of_repeats_abs_pct"] < 10.0 and
+        (m.get("p90_abs_pct") is None or m["p90_abs_pct"] <= 20.0) and
+        (m.get("worst_abs_pct") is None or m["worst_abs_pct"] <= 30.0)
+        for m in group_metrics)
+    report["coverage_pass"] = all(v["valid_cells"] / v["expected_cells"] >= 0.95 for v in coverage.values())
+    report["evidence_pass"] = report["matrix_complete"] and not report["identity_inconsistent_models"] and not report["metric_incomplete_cell_count"]
+    report["overall_acceptance_status"] = "pass" if report["accuracy_pass"] and report["coverage_pass"] and report["evidence_pass"] else "fail"
     args.output.parent.mkdir(parents=True, exist_ok=True); args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     md = args.markdown_output or args.output.with_suffix(".md"); md.parent.mkdir(parents=True, exist_ok=True); md.write_text(render_markdown(report), encoding="utf-8")
     print(json.dumps({"output": str(args.output.resolve()), "markdown": str(md.resolve()), "cells": report["cell_count"], "valid": report["valid_cell_count"], "invalid": report["invalid_cell_count"], "missing": report["missing_cell_count"], "groups": len(aggregation)}, ensure_ascii=False))

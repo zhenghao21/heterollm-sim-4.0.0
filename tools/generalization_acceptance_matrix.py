@@ -9,9 +9,11 @@ import argparse, hashlib, json, math, statistics, subprocess, sys, time
 from pathlib import Path
 try:
     from .unified_evidence_manifest import validate_prediction_before_native
+    from .evaluation_contract import evaluate_metrics
 except ImportError:  # direct execution or importlib loading by the test runner
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from unified_evidence_manifest import validate_prediction_before_native
+    from evaluation_contract import evaluate_metrics
 ROOT=Path(__file__).resolve().parents[1]
 BINARY=ROOT/'source/llama.cpp-semantic/build-semantic-direct/bin/llama-server.exe'
 MODELS={
@@ -54,21 +56,22 @@ def metric_records(payload):
  """Return one metric record for the concurrent batch represented by payload."""
  native=(payload.get('native') or {}); sim=(payload.get('simulator') or {})
  na=native.get('aggregate') or {}; sa=sim.get('aggregate') or {}
- specs={'ttft_ms':('request_to_first_token_ms','ttft_ms'),'tpot_ms':('tpot_ms','tpot_ms'),'e2e_ms':('request_to_end_ms','e2e_ms')}
- out={}
- for metric,(nk,sk) in specs.items():
-  nobj=na.get(nk) or {}; sobj=sa.get(sk) or {}
-  n=nobj.get('p50_ms') if isinstance(nobj,dict) else None; s=sobj.get('p50_ms') if isinstance(sobj,dict) else None
-  if n is None or s is None:
-   n={'ttft_ms':native.get('request_to_first_token_ms'),'tpot_ms':native.get('tpot_ms'),'e2e_ms':native.get('request_to_end_ms')}.get(metric)
-   s=sim.get(metric)
-  err=100*(float(s)-float(n))/float(n) if n not in (None,0) and s is not None else None
-  out[metric]={'native_ms':float(n) if n is not None else None,'simulator_ms':float(s) if s is not None else None,'signed_error_pct':err,'absolute_error_pct':abs(err) if err is not None else None,'absolute_delta_ms':abs(float(s)-float(n)) if n is not None and s is not None else None}
- return out
+ evaluation = evaluate_metrics(native, sim, boundary="engine")
+ metrics = evaluation["metrics"]
+ for metric, entry in metrics.items():
+  entry["boundary"] = evaluation["boundary"]
+  entry["contract_id"] = evaluation["contract_id"]
+  entry["native_field"] = evaluation["native_field"][metric]
+  entry["simulator_field"] = evaluation["simulator_field"][metric]
+ return metrics
 def validate_payload(payload, *, model, prompt, output, parallel, model_sha, binary_sha, source_path=None):
- checks={}; checks['schema']=payload.get('schema')=='native-simulator-comparison/v2'; checks['geometry']=bool((payload.get('parity') or {}).get('geometry',{}).get('ok')); checks['tokens']=bool((payload.get('parity') or {}).get('tokens',{}).get('ok')); checks['parallel']=int(payload.get('configuration',{}).get('parallel',-1))==parallel; checks['prompt']=payload.get('request',{}).get('prompt')==prompt; checks['model_sha']=((payload.get('gguf') or {}).get('gguf') or {}).get('sha256')==model_sha; checks['binary_sha']=binary_sha==sha(BINARY); checks['stream']='request_boundary_aligned'==payload.get('validity_status') or payload.get('native',{}).get('request_boundary',{}).get('status')=='measured'; checks['prediction_before_native']=not validate_prediction_before_native(payload, source_path=source_path, require=True); return checks,all(checks.values())
+ checks={}; checks['schema']=payload.get('schema')=='native-simulator-comparison/v2'; checks['geometry']=bool((payload.get('parity') or {}).get('geometry',{}).get('ok')); checks['tokens']=bool((payload.get('parity') or {}).get('tokens',{}).get('ok')); checks['parallel']=int(payload.get('configuration',{}).get('parallel',-1))==parallel; checks['prompt']=payload.get('request',{}).get('prompt')==prompt; checks['model_sha']=((payload.get('gguf') or {}).get('gguf') or {}).get('sha256')==model_sha
+ captured_binary=((payload.get('evidence') or {}).get('native_binary') or {}).get('sha256')
+ checks['binary_sha']=isinstance(captured_binary,str) and captured_binary.lower()==str(binary_sha).lower()
+ checks['output_policy']=int((payload.get('request') or {}).get('requested_output_tokens',-1))==int(output) and (payload.get('output_policy') or {}).get('mode') in {'fixed','natural'}
+ checks['stream']='request_boundary_aligned'==payload.get('validity_status') or payload.get('native',{}).get('request_boundary',{}).get('status')=='measured'; checks['prediction_before_native']=not validate_prediction_before_native(payload, source_path=source_path, require=True); return checks,all(checks.values())
 def main():
- ap=argparse.ArgumentParser(); ap.add_argument('--output',type=Path,default=ROOT/'artifacts/multimodel_next/generalization_acceptance_v1.json'); ap.add_argument('--cells-dir',type=Path); ap.add_argument('--models',default=','.join(MODELS)); ap.add_argument('--repeats',type=int,default=3); ap.add_argument('--max-cells',type=int); ap.add_argument('--start-cell',type=int,default=0); ap.add_argument('--dry-run',action='store_true'); ap.add_argument('--timeout',type=int,default=900); ap.add_argument('--freeze-manifest',type=Path,default=ROOT/'artifacts/multimodel_next/blind_generalization_freeze_v3.json'); ap.add_argument('--output-mode',choices=('natural','fixed'),default='natural'); args=ap.parse_args()
+ ap=argparse.ArgumentParser(); ap.add_argument('--output',type=Path,default=ROOT/'artifacts/multimodel_next/generalization_acceptance_v1.json'); ap.add_argument('--cells-dir',type=Path); ap.add_argument('--models',default=','.join(MODELS)); ap.add_argument('--repeats',type=int,default=3); ap.add_argument('--max-cells',type=int); ap.add_argument('--start-cell',type=int,default=0); ap.add_argument('--dry-run',action='store_true'); ap.add_argument('--timeout',type=int,default=900); ap.add_argument('--freeze-manifest',type=Path,default=ROOT/'artifacts/multimodel_next/blind_generalization_freeze_v3.json'); ap.add_argument('--output-mode',choices=('natural','fixed'),default='fixed'); args=ap.parse_args()
  selected=[x for x in args.models.split(',') if x]; unknown=set(selected)-set(MODELS)
  if unknown: raise SystemExit(f'unknown models: {sorted(unknown)}')
  freeze_path=args.freeze_manifest.resolve(); freeze=json.loads(freeze_path.read_text(encoding='utf-8')) if freeze_path.exists() else {}

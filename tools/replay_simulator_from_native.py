@@ -324,19 +324,16 @@ def _validate_native_evidence(payload, source_path=None):
             elif digest.lower() != _native_measurements_digest(native):
                 errors.append("native measurements sha256 mismatch")
         extractor_identity = evidence.get("extractor") or {}
-        try:
-            current_extractor = _native_extractor_identity()
-            if extractor_identity.get("implementation_sha256") != current_extractor.get("implementation_sha256"):
-                if not legacy_contract:
-                    errors.append("extractor implementation sha256 mismatch")
-            if extractor_identity.get("functions") != current_extractor.get("functions"):
-                if not legacy_contract:
-                    errors.append("extractor function list mismatch")
-            if extractor_identity.get("sha256_basis") != current_extractor.get("sha256_basis"):
-                if not legacy_contract:
-                    errors.append("extractor sha256 basis mismatch")
-        except Exception as exc:
-            errors.append(f"extractor identity unavailable: {exc}")
+        if not legacy_contract and (
+                not _is_sha256(extractor_identity.get("implementation_sha256"))
+                or not extractor_identity.get("functions")
+                or extractor_identity.get("sha256_basis") != "selected_function_ast_v1"):
+            errors.append("extractor capture identity missing or malformed")
+        # The capture stores its own extractor identity.  Do not compare it to
+        # the current enclosing script: simulator/evaluation edits must not
+        # invalidate an otherwise complete historical native capture.  A new
+        # parser may write a new derived parse revision while retaining the
+        # immutable capture and its original identity.
         expected_contract = _timing_contract()
         if (not legacy_contract and (contract.get("id") != expected_contract["id"] or
               any(contract.get(k) != expected_contract[k] for k in expected_contract if k != "id"))):
@@ -366,8 +363,9 @@ def _validate_native_evidence(payload, source_path=None):
                 errors.append(f"{section_name} artifact missing")
             elif section_name == "native_binary" and ref.get("sha256") != _sha256_file(ref_path):
                 errors.append(f"{section_name} artifact sha256 mismatch")
-            elif section_name == "extractor" and ref.get("file_sha256") and ref.get("file_sha256") != _sha256_file(ref_path):
-                errors.append(f"{section_name} file sha256 mismatch")
+            # The enclosing file also contains simulator/evaluation code.  Its
+            # current byte hash is provenance only; historical captures are
+            # bound to the selected-function identity and immutable payload.
         binary = evidence.get("native_binary") or {}
         command = payload.get("command") or []
         if binary.get("path") and command and Path(str(binary["path"])).resolve() != Path(str(command[0])).resolve():
