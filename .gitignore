@@ -6,6 +6,8 @@ build/
 source/llama.cpp-semantic/build*/
 
 # Model weights and large profiler files
+artifacts/*
+!artifacts/development/
 artifacts/**/*.gguf
 artifacts/**/*.bin
 artifacts/**/*.nsys-rep
@@ -27,6 +29,11 @@ artifacts/development/*
 !artifacts/development/*compare*.json
 !artifacts/development/*holdout*.json
 !artifacts/development/*diagnosis*.json
+
+# Keep raw traces and unreviewed historical dumps local, even when their
+# filenames do not use the conventional *.trace.json suffix.
+artifacts/**/*trace*.json
+artifacts/**/*_trace_*.json
 
 # Never commit raw profiler/event payloads, even under the compact-evidence allowlist
 artifacts/**/*.trace.json
