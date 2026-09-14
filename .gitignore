@@ -35,6 +35,10 @@ artifacts/development/*
 artifacts/**/*trace*.json
 artifacts/**/*_trace_*.json
 
+# New development outputs require an explicit review/force-add before they
+# enter the repository; the compact evidence already committed remains tracked.
+artifacts/development/*
+
 # Never commit raw profiler/event payloads, even under the compact-evidence allowlist
 artifacts/**/*.trace.json
 artifacts/**/*.sqlite
