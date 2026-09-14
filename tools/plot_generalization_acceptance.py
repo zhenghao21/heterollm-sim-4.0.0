@@ -9,7 +9,7 @@ PROMPTS = ("short", "medium", "long")
 OUTPUTS = ("short", "medium", "long")
 PARALLEL = (1, 2, 4)
 METRICS = ("ttft_ms", "tpot_ms", "e2e_ms")
-STATS_PCT = ("median_abs_pct", "p90_abs_pct", "worst_abs_pct")
+STATS_PCT = ("median_of_repeats_abs_pct", "p90_abs_pct", "worst_abs_pct")
 STATS_MS = ("median_absolute_ms", "p90_absolute_ms", "worst_absolute_ms")
 
 def scale_color(v, vmax):

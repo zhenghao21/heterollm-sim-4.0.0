@@ -165,7 +165,7 @@ def test_explicit_engine_boundary_has_precedence_over_client_stream():
         {"timings": {"prompt_ms": 99.0, "predicted_ms": 99.0, "predicted_n": 2}},
         boundary, 0, 2,
     )
-    assert result["engine_timing_status"] == "measured"
+    assert result["engine_timing_status"] == "marker_proven"
     assert result["engine_ttft_ms"] == pytest.approx(3.0)
     assert result["engine_tpot_ms"] == pytest.approx(5.0)
     assert result["engine_e2e_ms"] == pytest.approx(8.0)

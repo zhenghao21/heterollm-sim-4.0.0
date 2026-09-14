@@ -138,7 +138,8 @@ def _error_summary(results: list[dict]) -> dict:
         values = [
             float((item.get("relative_error_pct") or {}).get(metric))
             for item in results
-            if (item.get("relative_error_pct") or {}).get(metric) is not None
+            if (item.get("status") in (None, "pass"))
+            and (item.get("relative_error_pct") or {}).get(metric) is not None
         ]
         if not values:
             summary[metric] = {"n": 0, "median_pct": None, "p95_pct": None, "min_pct": None, "max_pct": None}
@@ -159,6 +160,6 @@ def main() -> int:
     root=Path(__file__).resolve().parents[1]; out_dir=args.output.parent / (args.output.stem + "_cases"); out_dir.mkdir(parents=True, exist_ok=True)
     selected=[c for c in CASES if not args.case_ids or c["id"] in set(args.case_ids)]
     results=[run_case(c, exe=args.exe, model=args.model, root=root, out_dir=out_dir) for c in selected]
-    summary={"schema":"native-error-matrix/v1", "case_count":len(results), "valid_count":sum(r.get("status")=="pass" for r in results), "invalid_count":sum(r.get("status")!="pass" for r in results), "cases":results, "relative_error_summary":_error_summary(results), "boundary_mismatch":{"ttft":True,"e2e":True,"tpot":False,"diagnostic_only":True,"fields":["ttft_ms","e2e_ms"]}, "notes":["Each case uses a fresh llama-server and the same GGUF; warmup is excluded by the parity harness.", "TTFT versus prompt_ms and E2E versus prompt_ms+predicted_ms are diagnostic comparisons with different boundary semantics; TPOT is undefined for one-token output.", "token_count_gate is structural_only because native token counts are currently fed back as simulator inputs; timing_gate remains diagnostic_only until timer boundaries are aligned."]}
+    summary={"schema":"native-error-matrix/v1", "case_count":len(results), "valid_count":sum(r.get("status")=="pass" for r in results), "invalid_count":sum(r.get("status")!="pass" for r in results), "cases":results, "relative_error_summary":_error_summary(results), "summary_scope":"structurally_valid_pass_cases_only", "boundary_mismatch":{"ttft":True,"e2e":True,"tpot":False,"diagnostic_only":True,"fields":["ttft_ms","e2e_ms"]}, "notes":["Each case uses a fresh llama-server and the same GGUF; warmup is excluded by the parity harness.", "TTFT versus prompt_ms and E2E versus prompt_ms+predicted_ms are diagnostic comparisons with different boundary semantics; TPOT is undefined for one-token output.", "token_count_gate is structural_only because native token counts are currently fed back as simulator inputs; timing_gate remains diagnostic_only until timer boundaries are aligned."]}
     args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps({"schema":summary["schema"],"case_count":summary["case_count"],"valid_count":summary["valid_count"],"invalid_count":summary["invalid_count"],"output":str(args.output.resolve())},ensure_ascii=False)); return 0
 if __name__=='__main__': raise SystemExit(main())

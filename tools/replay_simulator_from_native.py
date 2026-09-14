@@ -9,6 +9,7 @@ from heterollm_sim.gguf_parity import read_gguf_metadata, build_model_from_gguf
 from heterollm_sim.calibration import load_native_calibration, apply_native_calibration
 from heterollm_sim.reporting import run_scenario
 from heterollm_sim.serde import stable_hash
+from evaluation_contract import evaluate_metrics
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATHS = {
@@ -238,6 +239,15 @@ def _validate_native_evidence(payload, source_path=None):
             errors.append(f"configuration.{field} mismatch")
     counts = payload.get("token_counts") or {}
     output_tokens = counts.get("output")
+    requested_output = request.get("requested_output_tokens")
+    manifest_present = "evidence" in payload or "evidence" in native
+    if manifest_present and (not isinstance(output_tokens, int) or isinstance(output_tokens, bool) or output_tokens < 1):
+        errors.append("token_counts.output missing or invalid")
+    if manifest_present and (not isinstance(requested_output, int) or isinstance(requested_output, bool) or requested_output < 1):
+        errors.append("request.requested_output_tokens missing or invalid")
+    if (isinstance(output_tokens, int) and isinstance(requested_output, int)
+            and output_tokens != requested_output and output_policy.get("mode") == "fixed"):
+        errors.append("fixed output token count does not match requested output")
     parallel = int(config.get("parallel", 1) or 1)
     requests = native.get("requests") or []
     if not requests:
@@ -256,7 +266,6 @@ def _validate_native_evidence(payload, source_path=None):
             errors.append(f"request[{index}] token timestamp count {len(timestamps)} != output {expected_output}")
         if boundary.get("request_to_first_token_ms") is None or boundary.get("request_to_end_ms") is None:
             errors.append(f"request[{index}] request boundary timestamps missing")
-    manifest_present = "evidence" in payload or "evidence" in native
     evidence_raw = payload.get("evidence", native.get("evidence")) if manifest_present else None
     if manifest_present and not isinstance(evidence_raw, dict):
         errors.append("native evidence manifest missing")
@@ -525,13 +534,26 @@ def replay(payload, model_key, source_path=None):
         "tpot_ms": p50([r.get("client_tpot_ms") for r in sim_requests]),
         "e2e_ms": p50([r.get("client_e2e_ms") for r in sim_requests]),
     }
-    explicit_engine = all(native_agg.get(name, {}).get("p50_ms") is not None
-                           for name in ("engine_ttft_ms", "engine_tpot_ms", "engine_e2e_ms"))
+    native_engine = {"aggregate": native_agg,
+                     "engine_timing_status": (native.get("engine_timing_status")
+                                               or native_agg.get("engine_timing_status")),
+                     "timing_contract_id": (native.get("timing_contract_id")
+                                             or native_agg.get("timing_contract_id"))}
+    evaluation = evaluate_metrics(native_engine, {"aggregate": {
+        "engine_ttft_ms": {"p50_ms": sim_values.get("engine_ttft_ms"), "count": len(sim_requests)},
+        "engine_tpot_ms": {"p50_ms": sim_values.get("engine_tpot_ms"), "count": len(sim_requests)},
+        "engine_e2e_ms": {"p50_ms": sim_values.get("engine_e2e_ms"), "count": len(sim_requests)},
+        "request_count": len(sim_requests),
+        "engine_timing_status": "counter_proven",
+        "timing_contract_id": "engine-boundary/v1",
+    }}, boundary="engine", aggregation="p50")
+    explicit_engine = evaluation["status"] == "measured"
     row_status = "valid" if evidence_summary.get("evidence_level") == "complete" and explicit_engine else "legacy_development"
-    return {"status": row_status, "evidence_level": evidence_summary.get("evidence_level"), "acceptance_eligible": False,
+    return {"status": row_status, "evidence_level": evidence_summary.get("evidence_level"), "acceptance_eligible": explicit_engine and row_status == "valid",
             "model_key": model_key, "prompt_tokens": prompt_tokens, "output_tokens": output_tokens,
             "parallel": int(config.get("parallel", 1)), "native": native_values, "simulator": sim_values,
-            "relative_error_pct": {m: error(native_values[m], sim_values[m]) for m in native_values},
+            "relative_error_pct": {metric: evaluation["metrics"][metric].get("signed_error_pct") for metric in ("ttft_ms", "tpot_ms", "e2e_ms")},
+            "engine_evaluation": evaluation,
             "relative_error_client_pct": {
                 "ttft_ms": error(_agg_metric("client_ttft_ms", "request_to_first_token_ms"), sim_client_values["ttft_ms"]),
                 "tpot_ms": error(_agg_metric("client_tpot_ms", "tpot_ms"), sim_client_values["tpot_ms"]),
@@ -542,7 +564,7 @@ def replay(payload, model_key, source_path=None):
             "prefill_chunk_tokens": getattr(scenario.workload.scheduler, "prefill_chunk_tokens", None),
             "native_identity": (payload.get("identity") or payload.get("native", {}).get("identity")),
             "profile_gate": profile_gate,
-            "engine_timing_status": "measured" if explicit_engine else "legacy_counter_diagnostic",
+            "engine_timing_status": "measured" if explicit_engine else "unavailable",
             "native_request_boundary": native.get("request_boundary"),
             "native_evidence": evidence_summary,
             "source_payload": str(payload.get("model", ""))}

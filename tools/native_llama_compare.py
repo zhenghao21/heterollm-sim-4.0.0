@@ -42,6 +42,7 @@ from heterollm_sim.llama_scenario import apply_llama_runtime_config
 from heterollm_sim.gguf_parity import read_gguf_metadata, compare_gguf_to_model, assert_gguf_parity, build_model_from_gguf
 from heterollm_sim.calibration import load_native_calibration, apply_native_calibration
 from heterollm_sim.serde import stable_hash
+from tools.evaluation_contract import evaluate_metrics
 
 
 DEFAULT_EXE = r"C:\Users\A\.lmstudio\extensions\backends\llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.33.0\llama-server.exe"
@@ -277,6 +278,13 @@ def _percentile_summary(values: list[float]) -> dict[str, object]:
     }
 
 
+def _finite_timing(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if math.isfinite(value) and value >= 0 else None
+
+
 def _engine_boundary_timing(boundary: Mapping[str, object] | None,
                             output_tokens: int) -> dict[str, object]:
     """Read a verified engine clock without substituting stage counters.
@@ -304,40 +312,51 @@ def _engine_boundary_timing(boundary: Mapping[str, object] | None,
     return {"engine_ttft_ms": (first - begin) / 1e6,
             "engine_tpot_ms": (last - first) / (output_tokens - 1) / 1e6 if output_tokens > 1 else None,
             "engine_e2e_ms": (last - begin) / 1e6,
-            "engine_timing_status": "measured"}
+            "engine_timing_status": "marker_proven",
+            "measurement_status": "complete",
+            "measurement_kind": "explicit_engine_markers",
+            "semantic_validation_status": "verified",
+            "timing_contract_id": "engine-boundary/v1",
+            "engine_timing_source": "explicit_engine_boundary"}
 
 
 def _engine_counter_timing(timings: Mapping[str, object], output_tokens: int) -> dict[str, object]:
-    """Use llama.cpp ``server_slot_stats`` counters as a proven engine clock.
+    """Map proven llama.cpp slot counters to the engine timing contract.
 
-    In the locked semantic server, ``t_start`` is set when a slot starts
-    execution; ``t_prompt_last`` is updated after the first sample/accept and
-    ``t_gen_last`` after subsequent generation.  The JSON ``prompt_ms`` and
-    ``predicted_ms`` values therefore map to engine TTFT and the remaining
-    decode wall, respectively.  They are kept separate from client stream
-    timestamps.
+    A counter is not proof by itself: the caller must provide a valid output
+    counter and the returned record carries explicit status/proof fields.  For
+    zero output tokens no generated-token boundary exists, so all engine
+    metrics are unavailable and the capture remains diagnosable.
     """
+    unavailable = {
+        "engine_ttft_ms": None, "engine_tpot_ms": None, "engine_e2e_ms": None,
+        "engine_timing_status": "unavailable", "measurement_status": "incomplete",
+        "measurement_kind": "verified_slot_counters", "semantic_validation_status": "unverified",
+        "timing_contract_id": "engine-boundary/v1",
+        "engine_timing_source": "llama.cpp.server_slot_stats.unavailable",
+    }
     prompt_ms = timings.get("prompt_ms")
     eval_ms = timings.get("predicted_ms")
+    predicted_n = timings.get("predicted_n")
     if (not isinstance(prompt_ms, (int, float)) or isinstance(prompt_ms, bool)
             or not isinstance(eval_ms, (int, float)) or isinstance(eval_ms, bool)
             or not math.isfinite(float(prompt_ms)) or not math.isfinite(float(eval_ms))
-            or float(prompt_ms) < 0 or float(eval_ms) < 0 or output_tokens < 0):
-        return {"engine_ttft_ms": None, "engine_tpot_ms": None,
-                "engine_e2e_ms": None, "engine_timing_status": "unavailable",
-                "engine_timing_source": "llama.cpp.server_slot_stats.unavailable"}
-    # n_gen_steps() is n_gen - 1: the first token is produced from prompt
-    # logits, so predicted_ms is divided by output_tokens-1 for TPOT.
-    return {"engine_ttft_ms": float(prompt_ms),
-            "engine_tpot_ms": float(eval_ms) / (output_tokens - 1) if output_tokens > 1 else None,
-            "engine_e2e_ms": float(prompt_ms) + float(eval_ms),
-            "engine_timing_status": "counter_proven",
-            "measurement_status": "complete",
-            "measurement_kind": "verified_slot_counters",
-            "semantic_validation_status": "verified",
-            "timing_contract_id": "engine-boundary/v1",
-            "engine_timing_source": "llama.cpp.server_slot_stats.t_start_prompt_last_gen_last"}
-
+            or float(prompt_ms) < 0 or float(eval_ms) < 0
+            or isinstance(output_tokens, bool) or not isinstance(output_tokens, int)
+            or output_tokens < 1
+            or predicted_n is not None and predicted_n != output_tokens):
+        return unavailable
+    return {
+        "engine_ttft_ms": float(prompt_ms),
+        "engine_tpot_ms": float(eval_ms) / (output_tokens - 1) if output_tokens > 1 else None,
+        "engine_e2e_ms": float(prompt_ms) + float(eval_ms),
+        "engine_timing_status": "counter_proven",
+        "measurement_status": "complete",
+        "measurement_kind": "verified_slot_counters",
+        "semantic_validation_status": "verified",
+        "timing_contract_id": "engine-boundary/v1",
+        "engine_timing_source": "llama.cpp.server_slot_stats.t_start_prompt_last_gen_last",
+    }
 
 def _native_request_record(response: Mapping[str, object],
                            boundary: Mapping[str, object],
@@ -346,15 +365,18 @@ def _native_request_record(response: Mapping[str, object],
     timings = response.get("timings", {})
     if not isinstance(timings, Mapping):
         timings = {}
-    prompt_ms = float(timings.get("prompt_ms", 0.0) or 0.0)
-    eval_ms = float(timings.get("predicted_ms", 0.0) or 0.0)
-    prompt_tokens = int(timings.get("prompt_n", response.get("tokens_evaluated", 0)) or 0)
-    output_tokens = int(timings.get("predicted_n", response.get("tokens_predicted", requested_output)) or 0)
+    prompt_ms = _finite_timing(timings.get("prompt_ms"))
+    eval_ms = _finite_timing(timings.get("predicted_ms"))
+    prompt_value = timings.get("prompt_n", response.get("tokens_evaluated"))
+    output_value = timings.get("predicted_n", response.get("tokens_predicted"))
+    prompt_tokens = int(prompt_value) if isinstance(prompt_value, int) and not isinstance(prompt_value, bool) and prompt_value >= 0 else None
+    output_tokens = int(output_value) if isinstance(output_value, int) and not isinstance(output_value, bool) and output_value >= 0 else None
     first = boundary.get("request_to_first_token_ms")
     end = boundary.get("request_to_end_ms")
     client_tpot = ((float(end) - float(first)) / (output_tokens - 1)
-                   if output_tokens > 1 and first is not None and end is not None else None)
-    eval_tpot = eval_ms / (output_tokens - 1) if output_tokens > 1 else None
+                   if isinstance(output_tokens, int) and output_tokens > 1 and first is not None and end is not None else None)
+    eval_tpot = (eval_ms / (output_tokens - 1)
+                 if eval_ms is not None and isinstance(output_tokens, int) and output_tokens > 1 else None)
     engine_boundary = response.get("engine_boundary", boundary.get("engine_boundary"))
     engine = _engine_boundary_timing(engine_boundary, output_tokens)
     if engine["engine_timing_status"] == "unavailable":
@@ -373,9 +395,13 @@ def _native_request_record(response: Mapping[str, object],
         "engine_ttft_ms": engine["engine_ttft_ms"],
         "engine_e2e_ms": engine["engine_e2e_ms"],
         "engine_timing_status": engine["engine_timing_status"],
+        "measurement_status": engine.get("measurement_status", "incomplete"),
+        "measurement_kind": engine.get("measurement_kind"),
+        "semantic_validation_status": engine.get("semantic_validation_status", "unverified"),
+        "timing_contract_id": engine.get("timing_contract_id", "engine-boundary/v1"),
         "engine_timing_source": engine.get("engine_timing_source", "explicit_engine_boundary"),
         "engine_boundary": dict(engine_boundary) if isinstance(engine_boundary, Mapping) else None,
-        "total_ms": prompt_ms + eval_ms,
+        "total_ms": prompt_ms + eval_ms if prompt_ms is not None and eval_ms is not None else None,
         "ttft_ms": float(first) if first is not None else None,
         "e2e_ms": float(end) if end is not None else None,
         "client_ttft_ms": float(first) if first is not None else None,
@@ -402,6 +428,39 @@ def _aggregate_request_records(records: list[Mapping[str, object]],
     aggregate["request_count"] = len(records)
     aggregate["makespan_ms"] = max(end_values) if end_values else None
     aggregate["batch_client_wall_ms"] = batch_client_wall_ms
+    statuses = [str(item.get("engine_timing_status")) for item in records]
+    proof_statuses = {"counter_proven", "marker_proven"}
+    aggregate["engine_timing_status"] = (
+        "marker_proven" if statuses and all(status == "measured" for status in statuses)
+        else statuses[0] if statuses and all(status == statuses[0] for status in statuses)
+        and statuses[0] in proof_statuses else "unavailable"
+    )
+    aggregate["measurement_status"] = (
+        "complete" if records and all(item.get("measurement_status") == "complete" for item in records)
+        else "incomplete"
+    )
+    timing_contracts = {item.get("timing_contract_id") for item in records}
+    aggregate["timing_contract_id"] = (
+        next(iter(timing_contracts)) if len(timing_contracts) == 1 else None
+    )
+    aggregate["semantic_validation_status"] = (
+        "verified" if records and all(item.get("semantic_validation_status") == "verified" for item in records)
+        else "unverified"
+    )
+    aggregate["engine_contract_id"] = aggregate["timing_contract_id"]
+    for metric_name in ("tpot_ms", "client_tpot_ms", "engine_tpot_ms"):
+        eligible = [
+            item for item in records
+            if isinstance(item.get("output_tokens"), int)
+            and item.get("output_tokens") > 1
+            and item.get(metric_name) is not None
+        ]
+        if not eligible:
+            aggregate[metric_name]["status"] = "not_applicable"
+        elif len(eligible) < len(records):
+            aggregate[metric_name]["status"] = "incomplete"
+        else:
+            aggregate[metric_name]["status"] = "measured"
     # Friendly aliases match the simulator payload and matrix terminology;
     # the request_* names remain canonical for boundary provenance.
     aggregate["ttft_ms"] = aggregate["request_to_first_token_ms"]
@@ -708,6 +767,8 @@ def _hardware_inputs(hardware_snapshot: Mapping[str, object] | None) -> dict[str
         memory_mib = int(gpu_raw.get("memory_mib", gpu_raw.get("memory_total_mib", gpu_raw.get("vram_mib"))))
         host_raw = hardware_snapshot.get("host_memory") or {}
         host_memory_bytes = int(host_raw.get("total_bytes", host_raw.get("total_memory_bytes")))
+        # Active negotiated state drives the service link.  Max capability is
+        # retained separately for the stable identity fingerprint.
         generation = int(pcie.get("gen_current"))
         width = int(pcie.get("width_current"))
     except (TypeError, ValueError, AttributeError):
@@ -719,7 +780,9 @@ def _hardware_inputs(hardware_snapshot: Mapping[str, object] | None) -> dict[str
         "physical_cores": int(cpu.get("physical_cores", cpu.get("core_count")) or 0) or None,
         "logical_processors": int(cpu.get("logical_processors", cpu.get("thread_count")) or 0) or None,
         "gpu_name": gpu_name, "gpu": gpu_raw, "host_memory_bytes": host_memory_bytes,
-        "pcie": pcie, "pcie_bandwidth_gbps": _pcie_one_way_bandwidth({**gpu_raw, **pcie}, generation, width),
+        "pcie": pcie,
+        "pcie_bandwidth_basis": "measured_one_way_microbenchmark" if gpu_raw.get("bandwidth_gbps_one_way") else "active_link_spec_fallback",
+        "pcie_bandwidth_gbps": _pcie_one_way_bandwidth({**gpu_raw, **pcie}, generation, width),
         "source": "measured-hardware-snapshot",
     }
 
@@ -880,8 +943,10 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     # topology to one GPU memory device, matching the RTX 5080 experiment.
     gpu_raw = measured["gpu"]
     pcie = measured.get("pcie", gpu_raw.get("pcie", {}))
-    pcie_generation = int(pcie.get("gen_current", 5))
-    pcie_width = int(pcie.get("width_current", 8))
+    # Service bandwidth follows the negotiated active link; the stable
+    # hardware identity still uses max capability in _hardware_fingerprint.
+    pcie_generation = int(pcie.get("gen_current", pcie.get("gen_max", 5)))
+    pcie_width = int(pcie.get("width_current", pcie.get("width_max", 16)))
     pcie_bandwidth = float(measured.get("pcie_bandwidth_gbps", gpu_raw.get("bandwidth_gbps_one_way", 256.0)))
     vram_bytes = int(gpu_raw.get("memory_mib", 16303)) * 1024**2
     host_memory_bytes = int(measured["host_memory_bytes"])
@@ -896,7 +961,9 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
             components.append(replace(component, ports=ports, capacity_bytes=50 * 1024**2, peak_ops_per_s=112_600_000_000_000.0, metadata={
                 **component.metadata, "measured_gpu": measured["gpu_name"], "gpu_uuid": gpu_raw.get("uuid"),
                 "driver": gpu_raw.get("driver"), "clocks": gpu_raw.get("clocks", {}),
-                "pcie_generation_current": pcie_generation, "pcie_width_current": pcie_width,
+                "pcie_generation_max": pcie_generation, "pcie_width_max": pcie_width,
+                "pcie_generation_current": pcie.get("gen_current"), "pcie_width_current": pcie.get("width_current"),
+                "pcie_bandwidth_basis": measured.get("pcie_bandwidth_basis"),
             }))
         elif component.component_id == "hostmem0":
             components.append(replace(component, ports=tuple(
@@ -1280,9 +1347,17 @@ def main() -> int:
     # requested output length.
     native_prompt_value = timings.get("prompt_n", native.get("tokens_evaluated"))
     native_output_value = timings.get("predicted_n", native.get("tokens_predicted"))
-    if native_prompt_value is None or native_output_value is None:
-        raise ValueError("native token counters are missing; token parity is unavailable")
-    output_tokens = int(native_output_value)
+    prompt_counter_available = (
+        isinstance(native_prompt_value, int) and not isinstance(native_prompt_value, bool)
+        and native_prompt_value >= 0
+    )
+    output_counter_available = (
+        isinstance(native_output_value, int) and not isinstance(native_output_value, bool)
+        and native_output_value >= 0
+    )
+    # Preserve a structured capture when counters are missing.  Missing native
+    # facts make the record ineligible; they must not discard the raw response.
+    output_tokens = int(native_output_value) if output_counter_available else None
     sim = prediction_sim
     req = next(iter(sim.metrics.request_metrics.values()))
     req_e2e_ns = getattr(req, "e2e_ns", None)
@@ -1361,24 +1436,46 @@ def main() -> int:
             if item.get("client_ttft_ms") is not None
         ]),
         "request_count": len(simulator_request_records),
+        "engine_timing_status": "counter_proven" if simulator_request_records and all(
+            item.get("engine_ttft_ms") is not None and item.get("engine_e2e_ms") is not None
+            for item in simulator_request_records
+        ) else "unavailable",
+        "measurement_status": "complete" if simulator_request_records else "incomplete",
+        "timing_contract_id": "engine-boundary/v1",
+        "engine_contract_id": "engine-boundary/v1",
         "makespan_ms": float(getattr(sim.serving, "makespan_ns", 0.0)) / 1e6,
         "client_makespan_ms": max((float(item["client_e2e_ms"]) for item in simulator_request_records
                                     if item.get("client_e2e_ms") is not None), default=None),
         "batch_client_wall_ms": None,
     }
+    for metric_name in ("tpot_ms", "client_tpot_ms", "engine_tpot_ms"):
+        eligible = [
+            item for item in simulator_request_records
+            if item.get("output_tokens", 0) > 1 and item.get(metric_name) is not None
+        ]
+        if not eligible:
+            simulator_aggregate[metric_name]["status"] = "not_applicable"
+        elif len(eligible) < len(simulator_request_records):
+            simulator_aggregate[metric_name]["status"] = "incomplete"
+        else:
+            simulator_aggregate[metric_name]["status"] = "measured"
     token_parity = {
-        "native_prompt": int(native_prompt_value),
+        "native_prompt": int(native_prompt_value) if prompt_counter_available else None,
         "simulator_prompt": prompt_tokens,
-        "native_output": output_tokens,
+        "native_output": output_tokens if output_counter_available else None,
         "simulator_output": req.visible_output_tokens,
         "prompt_tokenizer": prompt_tokens,
-        "ok": int(native_prompt_value) == prompt_tokens and output_tokens == req.visible_output_tokens,
+        "native_prompt_counter_available": prompt_counter_available,
+        "native_output_counter_available": output_counter_available,
+        "ok": prompt_counter_available and output_counter_available
+              and int(native_prompt_value) == prompt_tokens
+              and output_tokens == req.visible_output_tokens,
     }
     # Preserve the complete native capture even when parity fails.  Eligibility
     # and scoring consume this flag later; raising here used to discard the
     # structured response and its failure context.
     token_parity_error = None if token_parity["ok"] else "native/simulator token parity gate failed: output token count differs"
-    native_prompt_ms = float(timings.get("prompt_ms", 0.0)); native_eval_ms = float(timings.get("predicted_ms", 0.0))
+    native_prompt_ms = _finite_timing(timings.get("prompt_ms")); native_eval_ms = _finite_timing(timings.get("predicted_ms"))
     native_request_records = [
         _native_request_record(response, boundary, index, args.predict)
         for index, (response, boundary) in enumerate(zip(native_requests, request_boundaries))
@@ -1425,8 +1522,10 @@ def main() -> int:
     boundary_measured = request_boundary.get("status") == "measured"
     native_request_ttft = request_boundary.get("request_to_first_token_ms") if boundary_measured else None
     native_request_e2e = request_boundary.get("request_to_end_ms") if boundary_measured else None
-    native_total_ms = float(timings.get("predicted_ms", 0.0) + timings.get("prompt_ms", 0.0))
-    native_engine_tpot_ms = native_eval_ms / (output_tokens - 1) if output_tokens > 1 else None
+    native_total_ms = (native_prompt_ms + native_eval_ms
+                       if native_prompt_ms is not None and native_eval_ms is not None else None)
+    native_engine_tpot_ms = (native_eval_ms / (output_tokens - 1)
+                             if native_eval_ms is not None and isinstance(output_tokens, int) and output_tokens > 1 else None)
     native_payload = {"prompt_eval_ms": native_prompt_ms, "eval_ms": native_eval_ms,
                       # Engine-level metrics are the primary comparison
                       # contract; prompt/eval counters are llama.cpp's model
@@ -1550,7 +1649,7 @@ def main() -> int:
               "prediction_status": "saved_before_native_reveal",
               "native_reveal_timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "validity_status": "request_boundary_aligned" if boundary_measured else "timing_comparison_only",
-              "validity_note": "Engine TTFT/TPOT/E2E are the primary acceptance metrics (prompt_eval/eval boundary); client stream TTFT/TPOT/E2E remain secondary diagnostics.",
+              "validity_note": "Engine TTFT/TPOT/E2E require proven server_slot_stats or explicit engine-marker evidence; client stream TTFT/TPOT/E2E remain secondary diagnostics.",
               "command": cmd, "server": {"port": port, "pid": proc.pid}, "log": str(log_path), "model": str(Path(args.model).resolve()), "gguf": parity,
               "parity": {"geometry": parity, "ctx": {"native": args.ctx, "simulator": args.ctx, "ok": True}, "tokens": token_parity},
               "eligibility": {"status": "eligible" if token_parity["ok"] else "ineligible", "reasons": [] if token_parity["ok"] else [token_parity_error]},
@@ -1561,14 +1660,21 @@ def main() -> int:
               "parallel_support": {"requested": args.parallel, "native_requests": len(native_request_records), "simulator_requests": len(simulator_request_records), "status": "modeled" if len(simulator_request_records) == args.parallel else "mismatch"}}
     # Engine is the primary acceptance boundary.  Client values are retained
     # as a secondary service diagnostic and never mixed into this headline.
+    engine_evaluation = evaluate_metrics(
+        {"aggregate": native_aggregate, "engine_timing_status": native_payload.get("engine_timing_status"),
+         "timing_contract_id": native_payload.get("timing_contract_id")},
+        {"aggregate": simulator_aggregate},
+        boundary="engine", aggregation="p50",
+    )
     result["relative_error_pct"] = {
-        "ttft_ms": (100.0 * (result["simulator"]["engine_ttft_ms"] - native_prompt_ms) / native_prompt_ms
-                    if native_prompt_ms not in (None, 0) else None),
-        "tpot_ms": (100.0 * (result["simulator"]["engine_tpot_ms"] - native_engine_tpot_ms) / native_engine_tpot_ms
-                    if native_engine_tpot_ms not in (None, 0) and result["simulator"].get("engine_tpot_ms") is not None else None),
-        "e2e_ms": (100.0 * (result["simulator"]["engine_e2e_ms"] - native_total_ms) / native_total_ms
-                   if native_total_ms not in (None, 0) else None),
+        "ttft_ms": (100.0 * (result["simulator"]["engine_ttft_ms"] - result["native"]["engine_ttft_ms"]) / result["native"]["engine_ttft_ms"]
+                    if result["native"].get("engine_ttft_ms") not in (None, 0) and result["simulator"].get("engine_ttft_ms") is not None else None),
+        "tpot_ms": (100.0 * (result["simulator"]["engine_tpot_ms"] - result["native"]["engine_tpot_ms"]) / result["native"]["engine_tpot_ms"]
+                    if result["native"].get("engine_tpot_ms") not in (None, 0) and result["simulator"].get("engine_tpot_ms") is not None else None),
+        "e2e_ms": (100.0 * (result["simulator"]["engine_e2e_ms"] - result["native"]["engine_e2e_ms"]) / result["native"]["engine_e2e_ms"]
+                   if result["native"].get("engine_e2e_ms") not in (None, 0) and result["simulator"].get("engine_e2e_ms") is not None else None),
     }
+    result["engine_evaluation"] = engine_evaluation
     result["relative_error_client_pct"] = {
         "ttft_ms": (100.0 * (result["simulator"]["client_ttft_ms"] - native_request_ttft) / native_request_ttft
                     if native_request_ttft not in (None, 0) and result["simulator"].get("client_ttft_ms") is not None else None),

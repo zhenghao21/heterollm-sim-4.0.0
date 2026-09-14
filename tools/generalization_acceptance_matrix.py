@@ -53,25 +53,56 @@ def planned_cells(models,repeats):
     for parallel in PARALLEL:
      for rep in range(1,repeats+1): yield f'{m}__{pi}__{oi}__p{parallel}__r{rep}',m,pi,oi,parallel,rep
 def metric_records(payload):
- """Return one metric record for the concurrent batch represented by payload."""
- native=(payload.get('native') or {}); sim=(payload.get('simulator') or {})
- na=native.get('aggregate') or {}; sa=sim.get('aggregate') or {}
- evaluation = evaluate_metrics(native, sim, boundary="engine")
- metrics = evaluation["metrics"]
- for metric, entry in metrics.items():
-  entry["boundary"] = evaluation["boundary"]
-  entry["contract_id"] = evaluation["contract_id"]
-  entry["native_field"] = evaluation["native_field"][metric]
-  entry["simulator_field"] = evaluation["simulator_field"][metric]
- return metrics
-def validate_payload(payload, *, model, prompt, output, parallel, model_sha, binary_sha, source_path=None):
- checks={}; checks['schema']=payload.get('schema')=='native-simulator-comparison/v2'; checks['geometry']=bool((payload.get('parity') or {}).get('geometry',{}).get('ok')); checks['tokens']=bool((payload.get('parity') or {}).get('tokens',{}).get('ok')); checks['parallel']=int(payload.get('configuration',{}).get('parallel',-1))==parallel; checks['prompt']=payload.get('request',{}).get('prompt')==prompt; checks['model_sha']=((payload.get('gguf') or {}).get('gguf') or {}).get('sha256')==model_sha
- captured_binary=((payload.get('evidence') or {}).get('native_binary') or {}).get('sha256')
- checks['binary_sha']=isinstance(captured_binary,str) and captured_binary.lower()==str(binary_sha).lower()
- checks['output_policy']=int((payload.get('request') or {}).get('requested_output_tokens',-1))==int(output) and (payload.get('output_policy') or {}).get('mode') in {'fixed','natural'}
- checks['stream']='request_boundary_aligned'==payload.get('validity_status') or payload.get('native',{}).get('request_boundary',{}).get('status')=='measured'; checks['prediction_before_native']=not validate_prediction_before_native(payload, source_path=source_path, require=True); return checks,all(checks.values())
+  """Return one engine-boundary record for the concurrent batch."""
+  native=(payload.get('native') or {}); sim=(payload.get('simulator') or {})
+  evaluation = evaluate_metrics(native, sim, boundary="engine", aggregation="p50")
+  metrics = evaluation["metrics"]
+  for metric, entry in metrics.items():
+   entry["boundary"] = evaluation["boundary"]
+   entry["contract_id"] = evaluation["contract_id"]
+   entry["aggregation_policy"] = evaluation["aggregation_policy"]
+   entry["native_field"] = evaluation["native_field"][metric]
+   entry["simulator_field"] = evaluation["simulator_field"][metric]
+  return metrics
+def _expected_output_policy(output_mode, output):
+  return {"mode": output_mode, "ignore_eos": output_mode == "fixed", "requested_output_tokens": int(output)}
+
+def _policy_matches(payload, *, output_mode, output):
+  request = payload.get("request") or {}
+  policy = payload.get("output_policy") or {}
+  expected = _expected_output_policy(output_mode, output)
+  return (request.get("requested_output_tokens") == expected["requested_output_tokens"]
+          and request.get("output_mode") == expected["mode"]
+          and policy.get("mode") == expected["mode"]
+          and policy.get("ignore_eos") == expected["ignore_eos"])
+
+def validate_payload(payload, *, model, prompt, output, parallel, model_sha, binary_sha,
+                     output_mode="fixed", source_path=None):
+  checks={}
+  checks['schema']=payload.get('schema')=='native-simulator-comparison/v2'
+  checks['geometry']=bool((payload.get('parity') or {}).get('geometry',{}).get('ok'))
+  checks['tokens']=bool((payload.get('parity') or {}).get('tokens',{}).get('ok'))
+  checks['parallel']=int(payload.get('configuration',{}).get('parallel',-1))==parallel
+  checks['prompt']=payload.get('request',{}).get('prompt')==prompt
+  checks['model_sha']=((payload.get('gguf') or {}).get('gguf') or {}).get('sha256')==model_sha
+  captured_binary=((payload.get('evidence') or {}).get('native_binary') or {}).get('sha256')
+  checks['binary_sha']=isinstance(captured_binary,str) and captured_binary.lower()==str(binary_sha).lower()
+  request = payload.get('request') or {}
+  policy = payload.get('output_policy') or {}
+  checks['output_policy']=(request.get('requested_output_tokens') == int(output)
+                           and request.get('output_mode') == output_mode
+                           and policy.get('mode') == output_mode
+                           and policy.get('ignore_eos') == (output_mode == 'fixed'))
+  checks['stream']='request_boundary_aligned'==payload.get('validity_status') or payload.get('native',{}).get('request_boundary',{}).get('status')=='measured'
+  checks['prediction_before_native']=not validate_prediction_before_native(payload, source_path=source_path, require=True)
+  evidence=payload.get('evidence') or {}
+  timing=evidence.get('engine_timing') or {}
+  checks['engine_evidence']=timing.get('status') in {'counter_proven','marker_proven'}
+  checks['engine_contract']=(evidence.get('timing_contract') or {}).get('id') == 'engine-stage+client-real-token/v3'
+  checks['measurement_status']=payload.get('validity_status') == 'request_boundary_aligned' and checks['engine_evidence']
+  return checks,all(checks.values())
 def main():
- ap=argparse.ArgumentParser(); ap.add_argument('--output',type=Path,default=ROOT/'artifacts/multimodel_next/generalization_acceptance_v1.json'); ap.add_argument('--cells-dir',type=Path); ap.add_argument('--models',default=','.join(MODELS)); ap.add_argument('--repeats',type=int,default=3); ap.add_argument('--max-cells',type=int); ap.add_argument('--start-cell',type=int,default=0); ap.add_argument('--dry-run',action='store_true'); ap.add_argument('--timeout',type=int,default=900); ap.add_argument('--freeze-manifest',type=Path,default=ROOT/'artifacts/multimodel_next/blind_generalization_freeze_v3.json'); ap.add_argument('--output-mode',choices=('natural','fixed'),default='fixed'); args=ap.parse_args()
+ ap=argparse.ArgumentParser(); ap.add_argument('--output',type=Path,default=ROOT/'artifacts/multimodel_next/generalization_acceptance_v2.json'); ap.add_argument('--cells-dir',type=Path); ap.add_argument('--models',default=','.join(MODELS)); ap.add_argument('--repeats',type=int,default=3); ap.add_argument('--max-cells',type=int); ap.add_argument('--start-cell',type=int,default=0); ap.add_argument('--dry-run',action='store_true'); ap.add_argument('--timeout',type=int,default=900); ap.add_argument('--freeze-manifest',type=Path,default=ROOT/'artifacts/multimodel_next/blind_generalization_freeze_v3.json'); ap.add_argument('--output-mode',choices=('natural','fixed'),default='fixed'); args=ap.parse_args()
  selected=[x for x in args.models.split(',') if x]; unknown=set(selected)-set(MODELS)
  if unknown: raise SystemExit(f'unknown models: {sorted(unknown)}')
  freeze_path=args.freeze_manifest.resolve(); freeze=json.loads(freeze_path.read_text(encoding='utf-8')) if freeze_path.exists() else {}
@@ -94,7 +125,7 @@ def main():
   planned=[item for item in planned if (item[2],item[3],item[4]) in {(x.get('prompt_band'),x.get('output_band'),int(x.get('parallel'))) for x in allowed.get(item[1], [])}]
  planned=planned[args.start_cell:]; planned=planned[:args.max_cells] if args.max_cells else planned; cells=[]
  for cid,m,pi,oi,parallel,rep in planned:
-  model=MODELS[m]; profile,stage,memory,phase=PROFILE[m]; path=Path(out)/(cid+'.json'); meta={'cell_id':cid,'model_key':m,'prompt_band':pi,'output_band':oi,'parallel':parallel,'repeat':rep,'prompt':PROMPTS[pi],'requested_output_tokens':OUTPUTS[oi],'model_path':str(model),'model_sha256':model_sha[m],'binary_sha256':binary_sha,'freeze_manifest':str(freeze_path),'config':{'ctx':CTX,'parallel':parallel,'batch':64,'ubatch':64,'threads':16,'gpu_layers':0 if m=='qwen38' else -1,'request_timing':'stream','output_mode':args.output_mode},'output':str(path)}
+  model=MODELS[m]; profile,stage,memory,phase=PROFILE[m]; path=Path(out)/(cid+'.json'); meta={'cell_id':cid,'model_key':m,'prompt_band':pi,'output_band':oi,'parallel':parallel,'repeat':rep,'prompt':PROMPTS[pi],'requested_output_tokens':OUTPUTS[oi],'model_path':str(model),'model_sha256':model_sha[m],'binary_sha256':binary_sha,'freeze_manifest':str(freeze_path),'source_sha256':{rel:sha(ROOT/rel) for rel in ('tools/evaluation_contract.py','tools/generalization_acceptance_matrix.py','tools/merge_generalization_acceptance.py','tools/native_llama_compare.py','tools/replay_simulator_from_native.py','tools/unified_evidence_manifest.py') if (ROOT/rel).exists()},'config':{'ctx':CTX,'parallel':parallel,'batch':64,'ubatch':64,'threads':16,'gpu_layers':0 if m=='qwen38' else -1,'request_timing':'stream','output_mode':args.output_mode},'output':str(path)}
   payload=None; returncode=0
   if path.exists() and not args.dry_run:
    try: payload=json.loads(path.read_text(encoding='utf-8'))
@@ -109,7 +140,7 @@ def main():
     try: payload=json.loads(path.read_text(encoding='utf-8'))
     except Exception: payload=None
   if payload is None: meta.update({'status':'error','returncode':returncode}); cells.append(meta); continue
-  checks,ok=validate_payload(payload,model=model,prompt=PROMPTS[pi],output=OUTPUTS[oi],parallel=parallel,model_sha=model_sha[m],binary_sha=binary_sha,source_path=path)
+  checks,ok=validate_payload(payload,model=model,prompt=PROMPTS[pi],output=OUTPUTS[oi],parallel=parallel,model_sha=model_sha[m],binary_sha=binary_sha,output_mode=args.output_mode,source_path=path)
   identity_cfg=(payload.get('identity') or {}).get('configuration') or {}
   expected_gpu=0 if m=='qwen38' else -1
   checks['configuration']=all(identity_cfg.get(k)==v for k,v in {'ctx':CTX,'parallel':parallel,'batch':64,'ubatch':64,'threads':16,'gpu_layers':expected_gpu,'seed':42}.items())
@@ -121,11 +152,19 @@ def main():
   groups.setdefault((c['model_key'],c['prompt_band'],c['output_band'],c['parallel']),[]).append(c)
  aggregation={}
  for key,arr in groups.items():
-  aggregation['|'.join(map(str,key))]={'n':len(arr),'metrics':{}}
+  group_key='|'.join(map(str,key)); aggregation[group_key]={'n':len(arr),'metrics':{}}
   for metric in ('ttft_ms','tpot_ms','e2e_ms'):
-   vals=[c['metrics'][metric] for c in arr if c['metrics'].get(metric,'').get('signed_error_pct') is not None]; signed=[x['signed_error_pct'] for x in vals]; abs_pct=[x['absolute_error_pct'] for x in vals]; abs_ms=[x['absolute_delta_ms'] for x in vals]
-   aggregation['|'.join(map(str,key))]['metrics'][metric]={'n':len(vals),'median_signed_pct':statistics.median(signed) if signed else None,'median_abs_pct':statistics.median(abs_pct) if abs_pct else None,'p90_abs_pct':percentile(abs_pct,90),'worst_abs_pct':max(abs_pct) if abs_pct else None,'median_absolute_ms':statistics.median(abs_ms) if abs_ms else None,'p90_absolute_ms':percentile(abs_ms,90),'worst_absolute_ms':max(abs_ms) if abs_ms else None,'native_median_ms':statistics.median([x['native_ms'] for x in vals]) if vals else None,'simulator_median_ms':statistics.median([x['simulator_ms'] for x in vals]) if vals else None}
- result={'schema':'generalization-acceptance-matrix/v1','freeze_manifest':str(freeze_path),'models':selected,'prompt_bands':PROMPTS,'output_bands':OUTPUTS,'parallel_values':list(PARALLEL),'repeats':args.repeats,'planned_cell_count':len(planned),'cell_count':len(cells),'valid_cell_count':sum(c.get('status')=='valid' for c in cells),'cells':cells,'aggregation':aggregation,'policy':'Frozen blind run. No held-out result may modify profile or source. Concurrent cells aggregate request-level p50; p90/worst and absolute millisecond deltas are retained.','limitations':['Native request boundary is stream client timing and includes HTTP/client overhead; prompt_eval_ms remains separate diagnostic.','Requested output length can terminate early on EOS; actual token counts are retained per cell.','A complete 5x3x3x3 matrix with 3 repeats is 405 executions.']}
+   records=[c['metrics'].get(metric) or {} for c in arr]
+   if records and all(x.get('status') == 'not_applicable' for x in records):
+    aggregation[group_key]['metrics'][metric]={'n':0,'expected_repeats':args.repeats,'status':'not_applicable','median_of_repeats_signed_pct':None,'median_of_repeats_abs_pct':None,'median_signed_pct':None,'median_abs_pct':None,'p90_abs_pct':None,'worst_abs_pct':None,'median_absolute_ms':None,'p90_absolute_ms':None,'worst_absolute_ms':None,'native_median_ms':None,'simulator_median_ms':None,'evaluation_boundary':'engine','evaluation_contract_id':'engine-boundary/v1'}
+    continue
+   vals=[x for x in records if x.get('status') in (None, 'measured') and x.get('signed_error_pct') is not None]
+   signed=[float(x['signed_error_pct']) for x in vals]; abs_pct=[float(x['absolute_error_pct']) for x in vals]; abs_ms=[float(x['absolute_delta_ms']) for x in vals]
+   native=[float(x['native_ms']) for x in vals]; simulator=[float(x['simulator_ms']) for x in vals]
+   native_center=statistics.median(native) if native else None; simulator_center=statistics.median(simulator) if simulator else None
+   center_error=(100.0*(simulator_center-native_center)/native_center if native_center not in (None,0) and simulator_center is not None else None)
+   aggregation[group_key]['metrics'][metric]={'n':len(vals),'expected_repeats':args.repeats,'median_signed_pct':statistics.median(signed) if signed else None,'median_abs_pct':statistics.median(abs_pct) if abs_pct else None,'p90_abs_pct':percentile(abs_pct,90),'worst_abs_pct':max(abs_pct) if abs_pct else None,'median_absolute_ms':statistics.median(abs_ms) if abs_ms else None,'p90_absolute_ms':percentile(abs_ms,90),'worst_absolute_ms':max(abs_ms) if abs_ms else None,'native_median_ms':native_center,'simulator_median_ms':simulator_center,'median_of_repeats_signed_pct':center_error,'median_of_repeats_abs_pct':abs(center_error) if center_error is not None else None,'evaluation_boundary':'engine','evaluation_contract_id':'engine-boundary/v1'}
+ result={'schema':'generalization-acceptance-matrix/v2','freeze_manifest':str(freeze_path),'source_sha256':{rel:sha(ROOT/rel) for rel in ('tools/evaluation_contract.py','tools/generalization_acceptance_matrix.py','tools/merge_generalization_acceptance.py','tools/native_llama_compare.py','tools/replay_simulator_from_native.py','tools/unified_evidence_manifest.py') if (ROOT/rel).exists()},'models':selected,'prompt_bands':PROMPTS,'output_bands':OUTPUTS,'parallel_values':list(PARALLEL),'repeats':args.repeats,'planned_cell_count':len(planned),'cell_count':len(cells),'valid_cell_count':sum(c.get('status')=='valid' for c in cells),'cells':cells,'aggregation':aggregation,'policy':'Frozen blind run. No held-out result may modify profile or source. Concurrent cells aggregate request-level p50; p90/worst and absolute millisecond deltas are retained.','limitations':['Engine acceptance requires proven server engine timing evidence; client stream timing is diagnostic only.','Requested output length can terminate early on EOS; actual token counts are retained per cell.','A complete 5x3x3x3 matrix with 3 repeats is 405 executions.']}
  args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps({'output':str(args.output.resolve()),'planned':len(planned),'cells':len(cells),'valid':result['valid_cell_count'],'groups':len(aggregation)},ensure_ascii=False)); return 0
 if __name__=='__main__': raise SystemExit(main())
 

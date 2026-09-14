@@ -32,6 +32,7 @@ QWEN38 = (("short", "short", 1), ("short", "medium", 4), ("short", "long", 2),
 SOURCE_FILES = (
     Path(__file__).resolve(), ROOT / "tools/native_llama_compare.py",
     ROOT / "tools/generalization_acceptance_matrix.py", ROOT / "tools/merge_generalization_acceptance.py",
+    ROOT / "tools/evaluation_contract.py", ROOT / "tools/native_error_matrix.py",
     ROOT / "tools/plot_error_heatmaps.py", ROOT / "tools/extract_nsys_trace.py",
     ROOT / "tools/extract_cuda_api_phase.py", ROOT / "src/heterollm_sim/planner.py",
     ROOT / "src/heterollm_sim/calibration.py", ROOT / "src/heterollm_sim/gguf_parity.py",
@@ -77,6 +78,7 @@ def create():
                                  "engine_primary_metrics": ["engine_ttft", "engine_tpot", "engine_e2e"],
                                  "batch": "per-request timestamps plus common batch start/end/makespan", "eos": "fixed ignore_eos; natural EOS is separate exploratory data"},
         "required_identity": ["source_sha256", "model_sha256", "profile_sha256", "binary_sha256", "tokenizer_sha256", "hardware_fingerprint"],
+        "required_source_files": [str(path.relative_to(ROOT)).replace("\\", "/") for path in SOURCE_FILES],
         "required_contract": ["engine_timing_contract", "engine_timing_contract_sha256"],
         "acceptance_status": "not_final_independent_blind_set", "limitations": ["Qwen3.8 has 9 selected triples; 18 remain unvalidated", "cross-hardware is unverified"],
     }
@@ -102,6 +104,12 @@ def verify():
         raise SystemExit("prediction-before-native policy mismatch")
     if not isinstance(m.get("required_identity"), list) or any(not item for item in m["required_identity"]):
         raise SystemExit("required identity list missing")
+    expected_sources = {str(path.relative_to(ROOT)).replace("\\", "/") for path in SOURCE_FILES}
+    declared_sources = set(m.get("source_sha256") or {})
+    if declared_sources != expected_sources:
+        raise SystemExit("freeze source coverage mismatch")
+    if set(m.get("required_source_files") or ()) != expected_sources:
+        raise SystemExit("freeze required source file list mismatch")
     for rel, want in (m.get("source_sha256") or {}).items():
         p = ROOT / rel
         if not p.exists() or len(str(want)) != 64 or digest(p).lower() != str(want).lower(): raise SystemExit(f"source hash mismatch: {rel}")
