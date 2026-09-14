@@ -1,0 +1,3 @@
+[console_scripts]
+heterollm-import-v3 = heterollm_sim.schema_v4:main
+heterollm-sim = heterollm_sim.cli:main

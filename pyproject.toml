@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heterollm-sim"
+version = "4.0.0"
+description = "System-level LLM inference simulator for heterogeneous integrated chips"
+readme = "README.md"
+requires-python = "==3.12.*"
+authors = [{ name = "HeteroLLM Simulator Contributors" }]
+dependencies = [
+    # NumPy 2.0.2 is the old-CPU-safe Windows x64 baseline used by the offline
+    # package.  Keep the upper bound below newer CPU-dispatch baselines; the
+    # offline wheelhouse pins this exact version for Python 3.12.
+    "numpy>=2.0.2,<2.4",
+    "ortools==9.15.6755",
+]
+
+[project.scripts]
+heterollm-sim = "heterollm_sim.cli:main"
+heterollm-import-v3 = "heterollm_sim.schema_v4:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+heterollm_sim = ["webui/*", "webui/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

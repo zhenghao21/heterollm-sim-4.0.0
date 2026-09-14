@@ -1,0 +1,3340 @@
+{
+  "schema": "native-llama-nsys-profile/v1",
+  "validity_status": "profiled_stage_evidence",
+  "command": [
+    "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+    "launch",
+    "--session-new=llamasim44148",
+    "--trace=cuda,nvtx,wddm",
+    "--cuda-graph-trace=node",
+    "--cuda-memory-usage=true",
+    "--wait=all",
+    "--",
+    "source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server.exe",
+    "-m",
+    "artifacts\\multimodel_20260913\\models\\smollm2-1.7b-instruct-q4_k_m.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18547",
+    "-c",
+    "512",
+    "-ngl",
+    "-1",
+    "-np",
+    "1",
+    "-b",
+    "64",
+    "-ub",
+    "64",
+    "-t",
+    "16",
+    "-tb",
+    "16",
+    "-fa",
+    "off",
+    "--load-mode",
+    "mmap",
+    "-kvo",
+    "--op-offload",
+    "-sm",
+    "layer",
+    "-mg",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-kvu",
+    "-cb",
+    "--perf",
+    "--metrics",
+    "--warmup",
+    "--spec-type",
+    "none"
+  ],
+  "server_command": [
+    "source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server.exe",
+    "-m",
+    "artifacts\\multimodel_20260913\\models\\smollm2-1.7b-instruct-q4_k_m.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18547",
+    "-c",
+    "512",
+    "-ngl",
+    "-1",
+    "-np",
+    "1",
+    "-b",
+    "64",
+    "-ub",
+    "64",
+    "-t",
+    "16",
+    "-tb",
+    "16",
+    "-fa",
+    "off",
+    "--load-mode",
+    "mmap",
+    "-kvo",
+    "--op-offload",
+    "-sm",
+    "layer",
+    "-mg",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-kvu",
+    "-cb",
+    "--perf",
+    "--metrics",
+    "--warmup",
+    "--spec-type",
+    "none"
+  ],
+  "native_binary_artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server.exe",
+      "status": "captured",
+      "sha256": "849e137cd6383b96321d39ecc3deb9c3e235215884b4713cbae278162dca595e",
+      "bytes": 10752
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-base.dll",
+      "status": "captured",
+      "sha256": "588b393b56c73775ff064aaa33bca9c256d507bf703c028bb95c4edcf27a1dbd",
+      "bytes": 675328
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-cpu.dll",
+      "status": "captured",
+      "sha256": "e0b535f2d16b5ed48d4d8737ae2148a8ab630f90d76f9eb10e005a4bf83710ac",
+      "bytes": 1059840
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-cuda.dll",
+      "status": "captured",
+      "sha256": "2c002e3fcc1e1a3873b970f221a7e08da4bab3e66ef456dfa371e6109e903c4a",
+      "bytes": 33773056
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml.dll",
+      "status": "captured",
+      "sha256": "c4de8bbdd1fddce4458224f6df65b39574cfc321bc99be17fdc29440f7de2fe1",
+      "bytes": 59904
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-batched-bench-impl.dll",
+      "status": "captured",
+      "sha256": "dc2cdc701491a53313b9b74470cb842ab123415119d95157ec298e3bbdbc9d3c",
+      "bytes": 125440
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-bench-impl.dll",
+      "status": "captured",
+      "sha256": "c97f175238b548b7eb2002620ccf90c3855383b28367d3769389dc916b6824fd",
+      "bytes": 887296
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-cli-impl.dll",
+      "status": "captured",
+      "sha256": "8b9b564621083fa57057e84740d50f53012c0a00f05281898edacee9abc32398",
+      "bytes": 837120
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-common.dll",
+      "status": "captured",
+      "sha256": "749e1c6c967981ed34cc00a387f74bf2e1d7f193a2a262902571b338ef5ef51f",
+      "bytes": 7957504
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-completion-impl.dll",
+      "status": "captured",
+      "sha256": "71435590892c15dcd82fe80a9fbaf2904caf41d57471c04162c4a5f19e7948b7",
+      "bytes": 238592
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-fit-params-impl.dll",
+      "status": "captured",
+      "sha256": "5bf7aa8190169b10d91c9d9189b6b4b8af5a90ba43d4a3c4c216b170f6692f11",
+      "bytes": 101888
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-perplexity-impl.dll",
+      "status": "captured",
+      "sha256": "dfa6c427ef46dd9bca3a21d5fda43b73c7ed83af1b545f3000c17183e7c4371f",
+      "bytes": 335360
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-quantize-impl.dll",
+      "status": "captured",
+      "sha256": "a77066cb1b666369aacfe94ac58b7d52bda954262d9c663e04c3648b4515e8d6",
+      "bytes": 328192
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server-impl.dll",
+      "status": "captured",
+      "sha256": "288c4cd3560956c36b3f3f3b97d22d429ecf6805d71a028dcd9612c5ad80d5ea",
+      "bytes": 6165504
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama.dll",
+      "status": "captured",
+      "sha256": "08d2fca79943be2383a9bf9aa410267dbfd3171185415ab0acc77ec5be6e93a5",
+      "bytes": 2579456
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\mtmd.dll",
+      "status": "captured",
+      "sha256": "e5346fc2b7cf15c2e82a5f10a24b26473e575938bdc716d81adf25bb34e4b9a4",
+      "bytes": 2181120
+    }
+  ],
+  "native_binary_identity_status": "captured_before_and_after",
+  "environment": {},
+  "capture_start_command": [
+    "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+    "start",
+    "--session=llamasim44148",
+    "--sample=none",
+    "--cpuctxsw=none",
+    "--force-overwrite=true",
+    "--export=sqlite",
+    "-o",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1"
+  ],
+  "capture_start": {
+    "stdout": "",
+    "stderr": ""
+  },
+  "capture_settle_s": 0.5,
+  "capture_stop": {
+    "stdout": "Generating 'C:\\Users\\A\\AppData\\Local\\Temp\\nsys-report-1c29.qdstrm'\n\n[1/2] [0%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep\n[1/2] [0%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep\n[1/2] [============57%             ] eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep\n[1/2] [===============65%          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep\n[1/2] [========================100%] eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep\n[1/2] [========================100%] eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep\n\n[2/2] [0%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [1%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [2%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [3%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [4%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [5%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [6%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [7%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [8%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [9%                          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [10%                         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [11%                         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [12%                         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [13%                         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [14%                         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=15%                        ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=16%                        ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=17%                        ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==18%                       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==19%                       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==20%                       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==21%                       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===22%                      ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===23%                      ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===24%                      ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [====25%                     ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [====26%                     ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [====27%                     ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [====28%                     ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====29%                    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====30%                    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====31%                    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====32%                    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [======33%                   ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [======34%                   ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [======35%                   ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======36%                  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======37%                  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======38%                  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======39%                  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========40%                 ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========41%                 ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========42%                 ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=========43%                ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=========44%                ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=========45%                ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=========46%                ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==========47%               ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==========48%               ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==========49%               ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===========50%              ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===========51%              ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===========52%              ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===========53%              ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [============54%             ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [============55%             ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [============56%             ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [============57%             ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=============58%            ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=============59%            ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=============60%            ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==============61%           ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==============62%           ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==============63%           ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==============64%           ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===============65%          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===============66%          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===============67%          ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [================68%         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [================69%         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [================70%         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [================71%         ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=================72%        ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=================73%        ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=================74%        ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==================75%       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==================76%       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==================77%       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [==================78%       ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===================79%      ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===================80%      ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===================81%      ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [===================82%      ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [====================83%     ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [====================84%     ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [====================85%     ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====================86%    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====================87%    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====================88%    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=====================89%    ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [======================90%   ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [======================91%   ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [======================92%   ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======================93%  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======================94%  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======================95%  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [=======================96%  ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========================97% ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========================98% ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========================99% ] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========================100%] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n[2/2] [========================100%] eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\nGenerated:\n    F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep\n    F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.sqlite\n",
+    "stderr": ""
+  },
+  "model": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\smollm2-1.7b-instruct-q4_k_m.gguf",
+  "request": {
+    "prompt": "Hi.",
+    "requested_output_tokens": 4,
+    "output_mode": "fixed",
+    "ignore_eos": true,
+    "warmup_output_tokens": 2
+  },
+  "output_policy": {
+    "mode": "fixed",
+    "ignore_eos": true
+  },
+  "hardware": {
+    "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor          ",
+    "cpu_topology": {
+      "physical_cores": 16,
+      "logical_processors": 32,
+      "max_clock_mhz": 4300,
+      "current_clock_mhz": 4300
+    },
+    "cpu_cores": 16,
+    "cpu_threads": 32,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 5080",
+      "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+      "memory_mib": 16303,
+      "memory_free_mib": 14522,
+      "memory_used_mib": 1456,
+      "driver": "616.64",
+      "compute_capability": "12.0",
+      "clocks": {
+        "graphics_mhz": 2760,
+        "memory_mhz": 15201,
+        "sm_mhz": 2760
+      },
+      "pcie": {
+        "gen_current": 5,
+        "gen_max": 5,
+        "width_current": 8,
+        "width_max": 16
+      }
+    },
+    "host_memory": {
+      "total_bytes": 134939398144,
+      "modules": [
+        {
+          "Capacity": 34359738368,
+          "Speed": 5600,
+          "ConfiguredClockSpeed": 5600
+        },
+        {
+          "Capacity": 34359738368,
+          "Speed": 4800,
+          "ConfiguredClockSpeed": 5600
+        },
+        {
+          "Capacity": 34359738368,
+          "Speed": 5600,
+          "ConfiguredClockSpeed": 5600
+        },
+        {
+          "Capacity": 34359738368,
+          "Speed": 4800,
+          "ConfiguredClockSpeed": 5600
+        }
+      ]
+    }
+  },
+  "gguf": {
+    "ok": true,
+    "status": "pass",
+    "mismatches": [],
+    "expected": {
+      "architecture": "llama",
+      "n_layer": 24,
+      "n_embd": 2048,
+      "n_head": 32,
+      "n_head_kv": 32,
+      "vocab_size": 49152,
+      "context_length": 8192
+    },
+    "gguf": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\smollm2-1.7b-instruct-q4_k_m.gguf",
+      "sha256": "decd2598bc2c8ed08c19adc3c8fdd461ee19ed5708679d1c54ef54a5a30d4f33",
+      "version": 3,
+      "tensor_count": 218,
+      "metadata_kv_count": 34,
+      "architecture": "llama",
+      "n_layer": 24,
+      "n_layer_all": 24,
+      "n_layer_nextn": 0,
+      "n_embd": 2048,
+      "n_head": 32,
+      "n_head_kv": 32,
+      "vocab_size": 49152,
+      "context_length": 8192,
+      "quantization": "MOSTLY_Q4_K_M",
+      "file_type": 15,
+      "metadata": {
+        "general.architecture": "llama",
+        "general.type": "model",
+        "general.name": "Smollm2 1.7B 8k Mix7 Ep2 v2",
+        "general.version": "v2",
+        "general.organization": "Loubnabnl",
+        "general.finetune": "8k-mix7-ep2",
+        "general.basename": "smollm2",
+        "general.size_label": "1.7B",
+        "general.license": "apache-2.0",
+        "general.languages": {
+          "count": 1
+        },
+        "llama.block_count": 24,
+        "llama.context_length": 8192,
+        "llama.embedding_length": 2048,
+        "llama.feed_forward_length": 8192,
+        "llama.attention.head_count": 32,
+        "llama.attention.head_count_kv": 32,
+        "llama.rope.freq_base": 130000.0,
+        "llama.attention.layer_norm_rms_epsilon": 9.999999747378752e-06,
+        "general.file_type": 15,
+        "llama.vocab_size": 49152,
+        "llama.rope.dimension_count": 64,
+        "tokenizer.ggml.add_space_prefix": false,
+        "tokenizer.ggml.add_bos_token": false,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "smollm",
+        "tokenizer.ggml.tokens": {
+          "count": 49152,
+          "truncated": true
+        },
+        "tokenizer.ggml.token_type": {
+          "count": 49152,
+          "truncated": true
+        },
+        "tokenizer.ggml.merges": {
+          "count": 48900,
+          "truncated": true
+        },
+        "tokenizer.ggml.bos_token_id": 1,
+        "tokenizer.ggml.eos_token_id": 2,
+        "tokenizer.ggml.unknown_token_id": 0,
+        "tokenizer.ggml.padding_token_id": 2,
+        "tokenizer.chat_template": "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
+        "general.quantization_version": 2
+      },
+      "tensor_directory": [
+        {
+          "name": "token_embd.weight",
+          "shape": [
+            2048,
+            49152
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 82575360,
+          "offset": 0
+        },
+        {
+          "name": "blk.0.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 82575360
+        },
+        {
+          "name": "blk.0.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 82583552
+        },
+        {
+          "name": "blk.0.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 96346112
+        },
+        {
+          "name": "blk.0.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 105783296
+        },
+        {
+          "name": "blk.0.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 115220480
+        },
+        {
+          "name": "blk.0.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 115228672
+        },
+        {
+          "name": "blk.0.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 117587968
+        },
+        {
+          "name": "blk.0.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 119947264
+        },
+        {
+          "name": "blk.0.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 122306560
+        },
+        {
+          "name": "blk.1.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 125747200
+        },
+        {
+          "name": "blk.1.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 125755392
+        },
+        {
+          "name": "blk.1.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 139517952
+        },
+        {
+          "name": "blk.1.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 148955136
+        },
+        {
+          "name": "blk.1.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 158392320
+        },
+        {
+          "name": "blk.1.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 158400512
+        },
+        {
+          "name": "blk.1.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 160759808
+        },
+        {
+          "name": "blk.1.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 163119104
+        },
+        {
+          "name": "blk.1.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 165478400
+        },
+        {
+          "name": "blk.10.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 168919040
+        },
+        {
+          "name": "blk.10.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 168927232
+        },
+        {
+          "name": "blk.10.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 182689792
+        },
+        {
+          "name": "blk.10.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 192126976
+        },
+        {
+          "name": "blk.10.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 201564160
+        },
+        {
+          "name": "blk.10.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 201572352
+        },
+        {
+          "name": "blk.10.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 203931648
+        },
+        {
+          "name": "blk.10.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 206290944
+        },
+        {
+          "name": "blk.10.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 208650240
+        },
+        {
+          "name": "blk.11.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 212090880
+        },
+        {
+          "name": "blk.11.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 212099072
+        },
+        {
+          "name": "blk.11.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 221536256
+        },
+        {
+          "name": "blk.11.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 230973440
+        },
+        {
+          "name": "blk.11.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 240410624
+        },
+        {
+          "name": "blk.11.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 240418816
+        },
+        {
+          "name": "blk.11.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 242778112
+        },
+        {
+          "name": "blk.11.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 245137408
+        },
+        {
+          "name": "blk.11.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 247496704
+        },
+        {
+          "name": "blk.12.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 249856000
+        },
+        {
+          "name": "blk.12.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 249864192
+        },
+        {
+          "name": "blk.12.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 259301376
+        },
+        {
+          "name": "blk.12.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 268738560
+        },
+        {
+          "name": "blk.12.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 278175744
+        },
+        {
+          "name": "blk.12.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 278183936
+        },
+        {
+          "name": "blk.12.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 280543232
+        },
+        {
+          "name": "blk.12.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 282902528
+        },
+        {
+          "name": "blk.12.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 285261824
+        },
+        {
+          "name": "blk.13.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 287621120
+        },
+        {
+          "name": "blk.13.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 287629312
+        },
+        {
+          "name": "blk.13.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 301391872
+        },
+        {
+          "name": "blk.13.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 310829056
+        },
+        {
+          "name": "blk.13.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 320266240
+        },
+        {
+          "name": "blk.13.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 320274432
+        },
+        {
+          "name": "blk.13.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 322633728
+        },
+        {
+          "name": "blk.13.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 324993024
+        },
+        {
+          "name": "blk.13.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 327352320
+        },
+        {
+          "name": "blk.14.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 330792960
+        },
+        {
+          "name": "blk.14.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 330801152
+        },
+        {
+          "name": "blk.14.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 340238336
+        },
+        {
+          "name": "blk.14.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 349675520
+        },
+        {
+          "name": "blk.14.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 359112704
+        },
+        {
+          "name": "blk.14.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 359120896
+        },
+        {
+          "name": "blk.14.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 361480192
+        },
+        {
+          "name": "blk.14.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 363839488
+        },
+        {
+          "name": "blk.14.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 366198784
+        },
+        {
+          "name": "blk.15.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 368558080
+        },
+        {
+          "name": "blk.15.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 368566272
+        },
+        {
+          "name": "blk.15.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 378003456
+        },
+        {
+          "name": "blk.15.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 387440640
+        },
+        {
+          "name": "blk.15.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 396877824
+        },
+        {
+          "name": "blk.15.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 396886016
+        },
+        {
+          "name": "blk.15.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 399245312
+        },
+        {
+          "name": "blk.15.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 401604608
+        },
+        {
+          "name": "blk.15.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 403963904
+        },
+        {
+          "name": "blk.16.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 406323200
+        },
+        {
+          "name": "blk.16.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 406331392
+        },
+        {
+          "name": "blk.16.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 420093952
+        },
+        {
+          "name": "blk.16.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 429531136
+        },
+        {
+          "name": "blk.16.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 438968320
+        },
+        {
+          "name": "blk.16.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 438976512
+        },
+        {
+          "name": "blk.16.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 441335808
+        },
+        {
+          "name": "blk.16.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 443695104
+        },
+        {
+          "name": "blk.16.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 446054400
+        },
+        {
+          "name": "blk.17.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 449495040
+        },
+        {
+          "name": "blk.17.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 449503232
+        },
+        {
+          "name": "blk.17.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 458940416
+        },
+        {
+          "name": "blk.17.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 468377600
+        },
+        {
+          "name": "blk.17.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 477814784
+        },
+        {
+          "name": "blk.17.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 477822976
+        },
+        {
+          "name": "blk.17.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 480182272
+        },
+        {
+          "name": "blk.17.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 482541568
+        },
+        {
+          "name": "blk.17.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 484900864
+        },
+        {
+          "name": "blk.18.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 487260160
+        },
+        {
+          "name": "blk.18.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 487268352
+        },
+        {
+          "name": "blk.18.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 496705536
+        },
+        {
+          "name": "blk.18.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 506142720
+        },
+        {
+          "name": "blk.18.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 515579904
+        },
+        {
+          "name": "blk.18.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 515588096
+        },
+        {
+          "name": "blk.18.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 517947392
+        },
+        {
+          "name": "blk.18.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 520306688
+        },
+        {
+          "name": "blk.18.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 522665984
+        },
+        {
+          "name": "blk.19.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 525025280
+        },
+        {
+          "name": "blk.19.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 525033472
+        },
+        {
+          "name": "blk.19.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 538796032
+        },
+        {
+          "name": "blk.19.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 548233216
+        },
+        {
+          "name": "blk.19.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 557670400
+        },
+        {
+          "name": "blk.19.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 557678592
+        },
+        {
+          "name": "blk.19.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 560037888
+        },
+        {
+          "name": "blk.19.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 562397184
+        },
+        {
+          "name": "blk.19.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 564756480
+        },
+        {
+          "name": "blk.2.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 568197120
+        },
+        {
+          "name": "blk.2.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 568205312
+        },
+        {
+          "name": "blk.2.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 577642496
+        },
+        {
+          "name": "blk.2.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 587079680
+        },
+        {
+          "name": "blk.2.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 596516864
+        },
+        {
+          "name": "blk.2.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 596525056
+        },
+        {
+          "name": "blk.2.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 598884352
+        },
+        {
+          "name": "blk.2.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 601243648
+        },
+        {
+          "name": "blk.2.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 603602944
+        },
+        {
+          "name": "blk.20.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 605962240
+        },
+        {
+          "name": "blk.20.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 605970432
+        },
+        {
+          "name": "blk.20.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 615407616
+        },
+        {
+          "name": "blk.20.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 624844800
+        },
+        {
+          "name": "blk.20.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 634281984
+        },
+        {
+          "name": "blk.20.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 634290176
+        },
+        {
+          "name": "blk.20.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 636649472
+        },
+        {
+          "name": "blk.20.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 639008768
+        },
+        {
+          "name": "blk.20.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 641368064
+        },
+        {
+          "name": "blk.21.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 643727360
+        },
+        {
+          "name": "blk.21.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 643735552
+        },
+        {
+          "name": "blk.21.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 657498112
+        },
+        {
+          "name": "blk.21.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 666935296
+        },
+        {
+          "name": "blk.21.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 676372480
+        },
+        {
+          "name": "blk.21.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 676380672
+        },
+        {
+          "name": "blk.21.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 678739968
+        },
+        {
+          "name": "blk.21.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 681099264
+        },
+        {
+          "name": "blk.21.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 683458560
+        },
+        {
+          "name": "blk.22.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 686899200
+        },
+        {
+          "name": "blk.22.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 686907392
+        },
+        {
+          "name": "blk.22.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 696344576
+        },
+        {
+          "name": "blk.22.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 705781760
+        },
+        {
+          "name": "blk.22.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 715218944
+        },
+        {
+          "name": "blk.22.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 715227136
+        },
+        {
+          "name": "blk.22.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 717586432
+        },
+        {
+          "name": "blk.22.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 719945728
+        },
+        {
+          "name": "blk.22.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 722305024
+        },
+        {
+          "name": "blk.23.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 724664320
+        },
+        {
+          "name": "blk.23.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 724672512
+        },
+        {
+          "name": "blk.23.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 734109696
+        },
+        {
+          "name": "blk.23.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 743546880
+        },
+        {
+          "name": "blk.23.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 752984064
+        },
+        {
+          "name": "blk.23.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 752992256
+        },
+        {
+          "name": "blk.23.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 755351552
+        },
+        {
+          "name": "blk.23.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 757710848
+        },
+        {
+          "name": "blk.23.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 760070144
+        },
+        {
+          "name": "blk.3.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 762429440
+        },
+        {
+          "name": "blk.3.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 762437632
+        },
+        {
+          "name": "blk.3.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 776200192
+        },
+        {
+          "name": "blk.3.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 785637376
+        },
+        {
+          "name": "blk.3.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 795074560
+        },
+        {
+          "name": "blk.3.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 795082752
+        },
+        {
+          "name": "blk.3.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 797442048
+        },
+        {
+          "name": "blk.3.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 799801344
+        },
+        {
+          "name": "blk.3.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 802160640
+        },
+        {
+          "name": "blk.4.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 805601280
+        },
+        {
+          "name": "blk.4.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 805609472
+        },
+        {
+          "name": "blk.4.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 815046656
+        },
+        {
+          "name": "blk.4.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 824483840
+        },
+        {
+          "name": "blk.4.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 833921024
+        },
+        {
+          "name": "blk.4.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 833929216
+        },
+        {
+          "name": "blk.4.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 836288512
+        },
+        {
+          "name": "blk.4.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 838647808
+        },
+        {
+          "name": "blk.4.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 841007104
+        },
+        {
+          "name": "blk.5.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 843366400
+        },
+        {
+          "name": "blk.5.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 843374592
+        },
+        {
+          "name": "blk.5.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 852811776
+        },
+        {
+          "name": "blk.5.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 862248960
+        },
+        {
+          "name": "blk.5.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 871686144
+        },
+        {
+          "name": "blk.5.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 871694336
+        },
+        {
+          "name": "blk.5.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 874053632
+        },
+        {
+          "name": "blk.5.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 876412928
+        },
+        {
+          "name": "blk.5.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 878772224
+        },
+        {
+          "name": "blk.6.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 881131520
+        },
+        {
+          "name": "blk.6.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 881139712
+        },
+        {
+          "name": "blk.6.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 894902272
+        },
+        {
+          "name": "blk.6.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 904339456
+        },
+        {
+          "name": "blk.6.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 913776640
+        },
+        {
+          "name": "blk.6.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 913784832
+        },
+        {
+          "name": "blk.6.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 916144128
+        },
+        {
+          "name": "blk.6.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 918503424
+        },
+        {
+          "name": "blk.6.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 920862720
+        },
+        {
+          "name": "blk.7.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 924303360
+        },
+        {
+          "name": "blk.7.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 924311552
+        },
+        {
+          "name": "blk.7.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 938074112
+        },
+        {
+          "name": "blk.7.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 947511296
+        },
+        {
+          "name": "blk.7.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 956948480
+        },
+        {
+          "name": "blk.7.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 956956672
+        },
+        {
+          "name": "blk.7.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 959315968
+        },
+        {
+          "name": "blk.7.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 961675264
+        },
+        {
+          "name": "blk.7.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 964034560
+        },
+        {
+          "name": "blk.8.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 967475200
+        },
+        {
+          "name": "blk.8.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 967483392
+        },
+        {
+          "name": "blk.8.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 981245952
+        },
+        {
+          "name": "blk.8.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 990683136
+        },
+        {
+          "name": "blk.8.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 1000120320
+        },
+        {
+          "name": "blk.8.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 1000128512
+        },
+        {
+          "name": "blk.8.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 1002487808
+        },
+        {
+          "name": "blk.8.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 1004847104
+        },
+        {
+          "name": "blk.8.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 1007206400
+        },
+        {
+          "name": "blk.9.attn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 1010647040
+        },
+        {
+          "name": "blk.9.ffn_down.weight",
+          "shape": [
+            8192,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 13762560,
+          "offset": 1010655232
+        },
+        {
+          "name": "blk.9.ffn_gate.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 1024417792
+        },
+        {
+          "name": "blk.9.ffn_up.weight",
+          "shape": [
+            2048,
+            8192
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 9437184,
+          "offset": 1033854976
+        },
+        {
+          "name": "blk.9.ffn_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 1043292160
+        },
+        {
+          "name": "blk.9.attn_k.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 1043300352
+        },
+        {
+          "name": "blk.9.attn_output.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 1045659648
+        },
+        {
+          "name": "blk.9.attn_q.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 1048018944
+        },
+        {
+          "name": "blk.9.attn_v.weight",
+          "shape": [
+            2048,
+            2048
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3440640,
+          "offset": 1050378240
+        },
+        {
+          "name": "output_norm.weight",
+          "shape": [
+            2048
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 8192,
+          "offset": 1053818880
+        }
+      ]
+    }
+  },
+  "warmup": {
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 2,
+      "prompt_ms": 6.757,
+      "prompt_per_token_ms": 3.3785,
+      "prompt_per_second": 295.9893443836022,
+      "predicted_n": 2,
+      "predicted_ms": 15.802,
+      "predicted_per_token_ms": 15.802,
+      "predicted_per_second": 63.28312871788381
+    }
+  },
+  "formal": {
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 2,
+      "prompt_ms": 6.7,
+      "prompt_per_token_ms": 3.35,
+      "prompt_per_second": 298.5074626865672,
+      "predicted_n": 4,
+      "predicted_ms": 14.905,
+      "predicted_per_token_ms": 4.968333333333333,
+      "predicted_per_second": 201.2747400201275
+    },
+    "prompt_n": 2,
+    "predicted_n": 4
+  },
+  "report": {
+    "nsys_rep": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep",
+    "server_log": "artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.llama.log",
+    "elapsed_wall_s": 6.946387529373169
+  },
+  "stats": {
+    "kernel": {
+      "command": [
+        "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+        "stats",
+        "--report",
+        "cuda_gpu_kern_sum",
+        "--format",
+        "csv",
+        "--output",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.kernel.csv",
+        "--force-overwrite",
+        "true",
+        "--force-export",
+        "true",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "csv": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.kernel.csv",
+      "rows": [
+        {
+          "Time (%)": "29.8",
+          "Total Time (ns)": "2648932",
+          "Instances": "179",
+          "Avg (ns)": "14798.5",
+          "Med (ns)": "13536.0",
+          "Min (ns)": "4672",
+          "Max (ns)": "31809",
+          "StdDev (ns)": "8872.7",
+          "Name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "16.9",
+          "Total Time (ns)": "1501589",
+          "Instances": "141",
+          "Avg (ns)": "10649.6",
+          "Med (ns)": "6368.0",
+          "Min (ns)": "5728",
+          "Max (ns)": "18784",
+          "StdDev (ns)": "5533.2",
+          "Name": "void mul_mat_vec_q<(ggml_type)12, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "8.1",
+          "Total Time (ns)": "721754",
+          "Instances": "183",
+          "Avg (ns)": "3944.0",
+          "Med (ns)": "3873.0",
+          "Min (ns)": "3712",
+          "Max (ns)": "4896",
+          "StdDev (ns)": "194.8",
+          "Name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "7.0",
+          "Total Time (ns)": "627349",
+          "Instances": "36",
+          "Avg (ns)": "17426.4",
+          "Med (ns)": "17408.0",
+          "Min (ns)": "17121",
+          "Max (ns)": "18176",
+          "StdDev (ns)": "198.9",
+          "Name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "6.8",
+          "Total Time (ns)": "606136",
+          "Instances": "72",
+          "Avg (ns)": "8418.6",
+          "Med (ns)": "8416.0",
+          "Min (ns)": "8384",
+          "Max (ns)": "8449",
+          "StdDev (ns)": "15.5",
+          "Name": "void mul_mat_vec_f<__half, float, (int)1, (int)32, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)"
+        },
+        {
+          "Time (%)": "6.4",
+          "Total Time (ns)": "565300",
+          "Instances": "603",
+          "Avg (ns)": "937.5",
+          "Med (ns)": "928.0",
+          "Min (ns)": "896",
+          "Max (ns)": "1024",
+          "StdDev (ns)": "17.0",
+          "Name": "quantize_q8_1(const float *, void *, long long, long long, long long, long long, long long, unsigned int, uint3)"
+        },
+        {
+          "Time (%)": "6.2",
+          "Total Time (ns)": "553711",
+          "Instances": "40",
+          "Avg (ns)": "13842.8",
+          "Med (ns)": "5216.0",
+          "Min (ns)": "4896",
+          "Max (ns)": "92515",
+          "StdDev (ns)": "26442.7",
+          "Name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "5.4",
+          "Total Time (ns)": "477777",
+          "Instances": "196",
+          "Avg (ns)": "2437.6",
+          "Med (ns)": "2432.0",
+          "Min (ns)": "2336",
+          "Max (ns)": "2625",
+          "StdDev (ns)": "60.7",
+          "Name": "void rms_norm_f32<(int)1024, (bool)1, (bool)0>(const float *, float *, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3)"
+        },
+        {
+          "Time (%)": "3.1",
+          "Total Time (ns)": "274699",
+          "Instances": "24",
+          "Avg (ns)": "11445.8",
+          "Med (ns)": "11568.5",
+          "Min (ns)": "5024",
+          "Max (ns)": "19137",
+          "StdDev (ns)": "6325.4",
+          "Name": "void mul_mat_vec_q<(ggml_type)14, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "2.6",
+          "Total Time (ns)": "233483",
+          "Instances": "72",
+          "Avg (ns)": "3242.8",
+          "Med (ns)": "3201.0",
+          "Min (ns)": "3136",
+          "Max (ns)": "3488",
+          "StdDev (ns)": "86.2",
+          "Name": "void mul_mat_vec_f<__half, __half, (int)1, (int)128, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)"
+        },
+        {
+          "Time (%)": "1.5",
+          "Total Time (ns)": "130147",
+          "Instances": "96",
+          "Avg (ns)": "1355.7",
+          "Med (ns)": "1344.0",
+          "Min (ns)": "1312",
+          "Max (ns)": "1536",
+          "StdDev (ns)": "52.1",
+          "Name": "void soft_max_f32<(bool)1, (int)256, (int)256, float>(const float *, const T4 *, const float *, float *, soft_max_params)"
+        },
+        {
+          "Time (%)": "1.2",
+          "Total Time (ns)": "107812",
+          "Instances": "96",
+          "Avg (ns)": "1123.0",
+          "Med (ns)": "1120.0",
+          "Min (ns)": "1088",
+          "Max (ns)": "1248",
+          "StdDev (ns)": "22.8",
+          "Name": "void rope_norm<(bool)1, (bool)0, float, __half>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)"
+        },
+        {
+          "Time (%)": "1.2",
+          "Total Time (ns)": "106596",
+          "Instances": "96",
+          "Avg (ns)": "1110.4",
+          "Med (ns)": "1088.0",
+          "Min (ns)": "1056",
+          "Max (ns)": "1344",
+          "StdDev (ns)": "58.8",
+          "Name": "void k_set_rows<float, long long, __half>(const T1 *, const T2 *, T3 *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, uint3, uint3, uint3, uint3, uint3)"
+        },
+        {
+          "Time (%)": "1.1",
+          "Total Time (ns)": "96705",
+          "Instances": "96",
+          "Avg (ns)": "1007.3",
+          "Med (ns)": "992.0",
+          "Min (ns)": "960",
+          "Max (ns)": "1088",
+          "StdDev (ns)": "19.7",
+          "Name": "void rope_norm<(bool)1, (bool)0, float, float>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)"
+        },
+        {
+          "Time (%)": "0.9",
+          "Total Time (ns)": "76835",
+          "Instances": "24",
+          "Avg (ns)": "3201.5",
+          "Med (ns)": "3136.0",
+          "Min (ns)": "2976",
+          "Max (ns)": "3744",
+          "StdDev (ns)": "204.9",
+          "Name": "void mul_mat_f<__half2, (int)32, (int)2, (int)2, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)"
+        },
+        {
+          "Time (%)": "0.7",
+          "Total Time (ns)": "61570",
+          "Instances": "24",
+          "Avg (ns)": "2565.4",
+          "Med (ns)": "2528.0",
+          "Min (ns)": "2432",
+          "Max (ns)": "2784",
+          "StdDev (ns)": "110.8",
+          "Name": "void mul_mat_f<__half2, (int)32, (int)2, (int)1, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)"
+        },
+        {
+          "Time (%)": "0.6",
+          "Total Time (ns)": "50690",
+          "Instances": "50",
+          "Avg (ns)": "1013.8",
+          "Med (ns)": "1024.0",
+          "Min (ns)": "992",
+          "Max (ns)": "1025",
+          "StdDev (ns)": "15.1",
+          "Name": "void k_bin_bcast<&op_add, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)"
+        },
+        {
+          "Time (%)": "0.3",
+          "Total Time (ns)": "29153",
+          "Instances": "24",
+          "Avg (ns)": "1214.7",
+          "Med (ns)": "1216.0",
+          "Min (ns)": "1184",
+          "Max (ns)": "1248",
+          "StdDev (ns)": "11.5",
+          "Name": "void cpy_scalar<&cpy_1_scalar<float, float>>(const char *, char *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long)"
+        },
+        {
+          "Time (%)": "0.2",
+          "Total Time (ns)": "20576",
+          "Instances": "23",
+          "Avg (ns)": "894.6",
+          "Med (ns)": "896.0",
+          "Min (ns)": "864",
+          "Max (ns)": "896",
+          "StdDev (ns)": "6.7",
+          "Name": "void unary_gated_op_kernel<&op_silu, float>(const T2 *, const T2 *, T2 *, long long, long long, long long, long long)"
+        },
+        {
+          "Time (%)": "0.1",
+          "Total Time (ns)": "8896",
+          "Instances": "8",
+          "Avg (ns)": "1112.0",
+          "Med (ns)": "1104.0",
+          "Min (ns)": "992",
+          "Max (ns)": "1216",
+          "StdDev (ns)": "103.7",
+          "Name": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long long, long long, uint3, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)"
+        }
+      ]
+    },
+    "api": {
+      "command": [
+        "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+        "stats",
+        "--report",
+        "cuda_api_sum",
+        "--format",
+        "csv",
+        "--output",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.api.csv",
+        "--force-overwrite",
+        "true",
+        "--force-export",
+        "true",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "csv": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.api.csv",
+      "rows": [
+        {
+          "Time (%)": "59.2",
+          "Total Time (ns)": "9215657",
+          "Num Calls": "80",
+          "Avg (ns)": "115195.7",
+          "Med (ns)": "755.0",
+          "Min (ns)": "340",
+          "Max (ns)": "2722550",
+          "StdDev (ns)": "489049.6",
+          "Name": "cudaStreamSynchronize"
+        },
+        {
+          "Time (%)": "32.6",
+          "Total Time (ns)": "5081376",
+          "Num Calls": "1747",
+          "Avg (ns)": "2908.6",
+          "Med (ns)": "2420.0",
+          "Min (ns)": "1550",
+          "Max (ns)": "162984",
+          "StdDev (ns)": "4490.8",
+          "Name": "cudaLaunchKernelExC_v11060"
+        },
+        {
+          "Time (%)": "5.7",
+          "Total Time (ns)": "889009",
+          "Num Calls": "336",
+          "Avg (ns)": "2645.9",
+          "Med (ns)": "2460.0",
+          "Min (ns)": "1680",
+          "Max (ns)": "22451",
+          "StdDev (ns)": "1349.2",
+          "Name": "cudaLaunchKernel"
+        },
+        {
+          "Time (%)": "2.5",
+          "Total Time (ns)": "386980",
+          "Num Calls": "100",
+          "Avg (ns)": "3869.8",
+          "Med (ns)": "3280.5",
+          "Min (ns)": "1290",
+          "Max (ns)": "27350",
+          "StdDev (ns)": "3324.6",
+          "Name": "cudaMemcpyAsync"
+        }
+      ]
+    },
+    "memcpy": {
+      "command": [
+        "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+        "stats",
+        "--report",
+        "cuda_gpu_mem_time_sum",
+        "--format",
+        "csv",
+        "--output",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.memcpy.csv",
+        "--force-overwrite",
+        "true",
+        "--force-export",
+        "true",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.nsys-rep"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "csv": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_hosttrace_p2_o4_profile_v1.memcpy.csv",
+      "rows": [
+        {
+          "Time (%)": "49.5",
+          "Total Time (ns)": "57026",
+          "Count": "72",
+          "Avg (ns)": "792.0",
+          "Med (ns)": "800.0",
+          "Min (ns)": "768",
+          "Max (ns)": "832",
+          "StdDev (ns)": "14.9",
+          "Operation": "[CUDA memcpy Device-to-Device]"
+        },
+        {
+          "Time (%)": "27.9",
+          "Total Time (ns)": "32098",
+          "Count": "4",
+          "Avg (ns)": "8024.5",
+          "Med (ns)": "8032.5",
+          "Min (ns)": "7872",
+          "Max (ns)": "8161",
+          "StdDev (ns)": "141.7",
+          "Operation": "[CUDA memcpy Device-to-Host]"
+        },
+        {
+          "Time (%)": "22.6",
+          "Total Time (ns)": "25985",
+          "Count": "24",
+          "Avg (ns)": "1082.7",
+          "Med (ns)": "992.0",
+          "Min (ns)": "608",
+          "Max (ns)": "2144",
+          "StdDev (ns)": "382.7",
+          "Operation": "[CUDA memcpy Host-to-Device]"
+        }
+      ]
+    }
+  },
+  "calibration_scope": {
+    "prompt_eval": "formal request only; collection starts after warmup; prompt/decode split still requires NVTX markers",
+    "decode_eval": "formal request only; collection starts after warmup; llama.cpp aggregate prompt/eval timings remain stage boundaries",
+    "launch_and_sync": "cuda_api_sum rows, never folded into GEMM demand",
+    "host_output": "cuda_gpu_mem_time_sum plus llama.cpp timing; D2H attribution requires explicit memcpy rows"
+  }
+}

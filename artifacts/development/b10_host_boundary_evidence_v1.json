@@ -1,0 +1,74 @@
+{
+  "status": "captured",
+  "events": [
+    {
+      "label": "http.handler.begin",
+      "start_ns": 1780888610,
+      "event_kind": "instant"
+    },
+    {
+      "label": "http.handler.end",
+      "start_ns": 1781023813,
+      "event_kind": "instant"
+    },
+    {
+      "label": "http.handler.begin",
+      "start_ns": 1782499638,
+      "event_kind": "instant"
+    },
+    {
+      "label": "slot.launch",
+      "start_ns": 1782785030,
+      "event_kind": "instant"
+    },
+    {
+      "label": "response.queue",
+      "start_ns": 1782835582,
+      "event_kind": "instant"
+    },
+    {
+      "label": "http.handler.end",
+      "start_ns": 1782853222,
+      "event_kind": "instant"
+    },
+    {
+      "label": "response.queue",
+      "start_ns": 1787984674,
+      "event_kind": "instant"
+    },
+    {
+      "label": "response.queue",
+      "start_ns": 1803003218,
+      "event_kind": "instant"
+    }
+  ],
+  "counts": {
+    "http.handler.begin": 2,
+    "http.handler.end": 2,
+    "json.tokenize": 0,
+    "response.queue": 3,
+    "sink.write": 0,
+    "slot.launch": 1
+  },
+  "labels": [
+    "http.handler.begin",
+    "http.handler.end",
+    "json.tokenize",
+    "response.queue",
+    "sink.write",
+    "slot.launch"
+  ],
+  "source": "artifacts\\development\\b10_qwen25_hosttrace_v5.sqlite",
+  "schema": "b10-host-boundary-evidence/v1",
+  "purpose": "development_diagnostic_only",
+  "binary": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server.exe",
+  "binary_sha256": "52750f47b550ee47af23c14495b99525c1d0bc077ed670efd6b61fc89ff14797",
+  "sqlite_sha256": "0e3b78ab342ba626df59eb6d05a8e3ec2e4656119a14cc6ee0765677450e02a0",
+  "nsys_rep": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\b10_qwen25_hosttrace_v5.nsys-rep",
+  "coverage_status": "partial_host_boundary_only",
+  "limitations": [
+    "CUDA kernel/memcpy activity absent in this forced-child-exit capture; not usable as cost profile",
+    "json.tokenize and sink.write marker counts are zero for this HTTP path; missing boundaries remain unmodeled",
+    "No native target latency fitting; no 27B rerun"
+  ]
+}

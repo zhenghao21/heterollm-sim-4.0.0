@@ -1,0 +1,45 @@
+{
+  "schema": "smollm2-engine-marker-gap-diagnosis/v2",
+  "purpose": "development_only_structural_diagnosis",
+  "native_execution_count": 0,
+  "native_latency_fitting": false,
+  "interpretation": "inter_token gaps are candidate scheduler/synchronization/profiling windows; no cost calibration is enabled",
+  "rows": [
+    {
+      "trace": "artifacts/development/eengine_smollm2_marker_p2_o2_trace_v2.json",
+      "token_indices": [
+        "1",
+        "2"
+      ],
+      "token_intervals_ms": [
+        0.154223,
+        0.085792
+      ],
+      "inter_token_gaps_ms": [
+        15.049375
+      ],
+      "inter_token_begin_gaps_ms": [
+        15.203598
+      ],
+      "engine_request_interval_ms": 19.998373
+    },
+    {
+      "trace": "artifacts/development/eengine_smollm2_marker_p4_o2_trace_v1.json",
+      "token_indices": [
+        "1",
+        "2"
+      ],
+      "token_intervals_ms": [
+        0.129633,
+        0.060551
+      ],
+      "inter_token_gaps_ms": [
+        15.26877
+      ],
+      "inter_token_begin_gaps_ms": [
+        15.398403
+      ],
+      "engine_request_interval_ms": 21.977525
+    }
+  ]
+}

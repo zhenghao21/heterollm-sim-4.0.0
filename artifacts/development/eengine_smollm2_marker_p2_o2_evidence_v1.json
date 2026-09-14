@@ -1,0 +1,390 @@
+{
+  "schema": "native-engine-marker-evidence/v1",
+  "generated_at_utc": "2026-09-14T00:31:37.965306+00:00",
+  "identity": {
+    "native_binary_artifacts": [
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server.exe",
+        "status": "captured",
+        "sha256": "849e137cd6383b96321d39ecc3deb9c3e235215884b4713cbae278162dca595e",
+        "bytes": 10752
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-base.dll",
+        "status": "captured",
+        "sha256": "588b393b56c73775ff064aaa33bca9c256d507bf703c028bb95c4edcf27a1dbd",
+        "bytes": 675328
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-cpu.dll",
+        "status": "captured",
+        "sha256": "e0b535f2d16b5ed48d4d8737ae2148a8ab630f90d76f9eb10e005a4bf83710ac",
+        "bytes": 1059840
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-cuda.dll",
+        "status": "captured",
+        "sha256": "2c002e3fcc1e1a3873b970f221a7e08da4bab3e66ef456dfa371e6109e903c4a",
+        "bytes": 33773056
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml.dll",
+        "status": "captured",
+        "sha256": "c4de8bbdd1fddce4458224f6df65b39574cfc321bc99be17fdc29440f7de2fe1",
+        "bytes": 59904
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-batched-bench-impl.dll",
+        "status": "captured",
+        "sha256": "dc2cdc701491a53313b9b74470cb842ab123415119d95157ec298e3bbdbc9d3c",
+        "bytes": 125440
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-bench-impl.dll",
+        "status": "captured",
+        "sha256": "c97f175238b548b7eb2002620ccf90c3855383b28367d3769389dc916b6824fd",
+        "bytes": 887296
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-cli-impl.dll",
+        "status": "captured",
+        "sha256": "8b9b564621083fa57057e84740d50f53012c0a00f05281898edacee9abc32398",
+        "bytes": 837120
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-common.dll",
+        "status": "captured",
+        "sha256": "749e1c6c967981ed34cc00a387f74bf2e1d7f193a2a262902571b338ef5ef51f",
+        "bytes": 7957504
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-completion-impl.dll",
+        "status": "captured",
+        "sha256": "71435590892c15dcd82fe80a9fbaf2904caf41d57471c04162c4a5f19e7948b7",
+        "bytes": 238592
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-fit-params-impl.dll",
+        "status": "captured",
+        "sha256": "5bf7aa8190169b10d91c9d9189b6b4b8af5a90ba43d4a3c4c216b170f6692f11",
+        "bytes": 101888
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-perplexity-impl.dll",
+        "status": "captured",
+        "sha256": "dfa6c427ef46dd9bca3a21d5fda43b73c7ed83af1b545f3000c17183e7c4371f",
+        "bytes": 335360
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-quantize-impl.dll",
+        "status": "captured",
+        "sha256": "a77066cb1b666369aacfe94ac58b7d52bda954262d9c663e04c3648b4515e8d6",
+        "bytes": 328192
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server-impl.dll",
+        "status": "captured",
+        "sha256": "288c4cd3560956c36b3f3f3b97d22d429ecf6805d71a028dcd9612c5ad80d5ea",
+        "bytes": 6165504
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama.dll",
+        "status": "captured",
+        "sha256": "08d2fca79943be2383a9bf9aa410267dbfd3171185415ab0acc77ec5be6e93a5",
+        "bytes": 2579456
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\mtmd.dll",
+        "status": "captured",
+        "sha256": "e5346fc2b7cf15c2e82a5f10a24b26473e575938bdc716d81adf25bb34e4b9a4",
+        "bytes": 2181120
+      }
+    ],
+    "profile_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_profile_v1.json",
+    "profile_sha256": "646caf3af0ccc78cc31636d7b09c05017f24f074a4b299019adc23d61fc6eef7"
+  },
+  "trace": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_trace_v1.json",
+    "sha256": "232c0ffd3ed0d63e1828a3880a990195964515bc28b006490937949c11da2245",
+    "sqlite_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_profile_v1.sqlite",
+    "sqlite_sha256": "30d573cbe257ecdd53326abeb2c8119651b1f5d8651798b96cca38dde633bb01",
+    "event_count": 2338,
+    "nvtx_event_count": 1444
+  },
+  "engine_marker_contract": {
+    "request_begin": "engine_request_begin|slot=<id>",
+    "token_begin": "engine_token_begin|slot=<id>|token_index=<n>|token_count=<n>",
+    "token_end": "engine_token_end|slot=<id>|token_index=<n>|token_count=<n>",
+    "request_end": "engine_request_end|slot=<id>",
+    "source": "server_slot_stats boundary-adjacent host marker; does not alter ggml_time_us counters"
+  },
+  "marker_counts": {
+    "engine_request_begin": 1,
+    "engine_token_begin": 2,
+    "engine_token_end": 2,
+    "engine_request_end": 1
+  },
+  "engine_markers": [
+    {
+      "nvtx_event_id": 4,
+      "kind": "nvtx",
+      "source": "NVTX_EVENTS",
+      "start_ns": 526487724,
+      "end_ns": 526487724,
+      "duration_ns": 0,
+      "nvtx_event_type": 34,
+      "is_instant": true,
+      "global_tid": 281679927227696,
+      "label": "engine_request_begin|slot=0",
+      "operator_name": null,
+      "operator_id": null,
+      "phase_name": null,
+      "request_marker": "engine_request_begin",
+      "engine_boundary": "engine_request_begin",
+      "engine_token_index": null,
+      "engine_token_count": null,
+      "raw": {
+        "start": 526487724,
+        "end": null,
+        "eventType": 34,
+        "rangeId": null,
+        "category": null,
+        "color": null,
+        "text": "engine_request_begin|slot=0",
+        "globalTid": 281679927227696,
+        "endGlobalTid": null,
+        "textId": null,
+        "domainId": 0,
+        "uint64Value": null,
+        "int64Value": null,
+        "doubleValue": null,
+        "uint32Value": null,
+        "int32Value": null,
+        "floatValue": null,
+        "jsonTextId": null,
+        "jsonText": null,
+        "binaryData": null
+      }
+    },
+    {
+      "nvtx_event_id": 848,
+      "kind": "nvtx",
+      "source": "NVTX_EVENTS",
+      "start_ns": 532162290,
+      "end_ns": 532162290,
+      "duration_ns": 0,
+      "nvtx_event_type": 34,
+      "is_instant": true,
+      "global_tid": 281679927227696,
+      "label": "engine_token_begin|slot=0|token_index=1|token_count=1",
+      "operator_name": null,
+      "operator_id": null,
+      "phase_name": null,
+      "request_marker": "engine_token_begin",
+      "engine_boundary": "engine_token_begin",
+      "engine_token_index": "1",
+      "engine_token_count": "1",
+      "raw": {
+        "start": 532162290,
+        "end": null,
+        "eventType": 34,
+        "rangeId": null,
+        "category": null,
+        "color": null,
+        "text": "engine_token_begin|slot=0|token_index=1|token_count=1",
+        "globalTid": 281679927227696,
+        "endGlobalTid": null,
+        "textId": null,
+        "domainId": 0,
+        "uint64Value": null,
+        "int64Value": null,
+        "doubleValue": null,
+        "uint32Value": null,
+        "int32Value": null,
+        "floatValue": null,
+        "jsonTextId": null,
+        "jsonText": null,
+        "binaryData": null
+      }
+    },
+    {
+      "nvtx_event_id": 850,
+      "kind": "nvtx",
+      "source": "NVTX_EVENTS",
+      "start_ns": 532333154,
+      "end_ns": 532333154,
+      "duration_ns": 0,
+      "nvtx_event_type": 34,
+      "is_instant": true,
+      "global_tid": 281679927227696,
+      "label": "engine_token_end|slot=0|token_index=1|token_count=1",
+      "operator_name": null,
+      "operator_id": null,
+      "phase_name": null,
+      "request_marker": "engine_token_end",
+      "engine_boundary": "engine_token_end",
+      "engine_token_index": "1",
+      "engine_token_count": "1",
+      "raw": {
+        "start": 532333154,
+        "end": null,
+        "eventType": 34,
+        "rangeId": null,
+        "category": null,
+        "color": null,
+        "text": "engine_token_end|slot=0|token_index=1|token_count=1",
+        "globalTid": 281679927227696,
+        "endGlobalTid": null,
+        "textId": null,
+        "domainId": 0,
+        "uint64Value": null,
+        "int64Value": null,
+        "doubleValue": null,
+        "uint32Value": null,
+        "int32Value": null,
+        "floatValue": null,
+        "jsonTextId": null,
+        "jsonText": null,
+        "binaryData": null
+      }
+    },
+    {
+      "nvtx_event_id": 1438,
+      "kind": "nvtx",
+      "source": "NVTX_EVENTS",
+      "start_ns": 548562210,
+      "end_ns": 548562210,
+      "duration_ns": 0,
+      "nvtx_event_type": 34,
+      "is_instant": true,
+      "global_tid": 281679927227696,
+      "label": "engine_token_begin|slot=0|token_index=2|token_count=1",
+      "operator_name": null,
+      "operator_id": null,
+      "phase_name": null,
+      "request_marker": "engine_token_begin",
+      "engine_boundary": "engine_token_begin",
+      "engine_token_index": "2",
+      "engine_token_count": "1",
+      "raw": {
+        "start": 548562210,
+        "end": null,
+        "eventType": 34,
+        "rangeId": null,
+        "category": null,
+        "color": null,
+        "text": "engine_token_begin|slot=0|token_index=2|token_count=1",
+        "globalTid": 281679927227696,
+        "endGlobalTid": null,
+        "textId": null,
+        "domainId": 0,
+        "uint64Value": null,
+        "int64Value": null,
+        "doubleValue": null,
+        "uint32Value": null,
+        "int32Value": null,
+        "floatValue": null,
+        "jsonTextId": null,
+        "jsonText": null,
+        "binaryData": null
+      }
+    },
+    {
+      "nvtx_event_id": 1439,
+      "kind": "nvtx",
+      "source": "NVTX_EVENTS",
+      "start_ns": 548604521,
+      "end_ns": 548604521,
+      "duration_ns": 0,
+      "nvtx_event_type": 34,
+      "is_instant": true,
+      "global_tid": 281679927227696,
+      "label": "engine_token_end|slot=0|token_index=2|token_count=1",
+      "operator_name": null,
+      "operator_id": null,
+      "phase_name": null,
+      "request_marker": "engine_token_end",
+      "engine_boundary": "engine_token_end",
+      "engine_token_index": "2",
+      "engine_token_count": "1",
+      "raw": {
+        "start": 548604521,
+        "end": null,
+        "eventType": 34,
+        "rangeId": null,
+        "category": null,
+        "color": null,
+        "text": "engine_token_end|slot=0|token_index=2|token_count=1",
+        "globalTid": 281679927227696,
+        "endGlobalTid": null,
+        "textId": null,
+        "domainId": 0,
+        "uint64Value": null,
+        "int64Value": null,
+        "doubleValue": null,
+        "uint32Value": null,
+        "int32Value": null,
+        "floatValue": null,
+        "jsonTextId": null,
+        "jsonText": null,
+        "binaryData": null
+      }
+    },
+    {
+      "nvtx_event_id": 1441,
+      "kind": "nvtx",
+      "source": "NVTX_EVENTS",
+      "start_ns": 548633142,
+      "end_ns": 548633142,
+      "duration_ns": 0,
+      "nvtx_event_type": 34,
+      "is_instant": true,
+      "global_tid": 281679927227696,
+      "label": "engine_request_end|slot=0",
+      "operator_name": null,
+      "operator_id": null,
+      "phase_name": null,
+      "request_marker": "engine_request_end",
+      "engine_boundary": "engine_request_end",
+      "engine_token_index": null,
+      "engine_token_count": null,
+      "raw": {
+        "start": 548633142,
+        "end": null,
+        "eventType": 34,
+        "rangeId": null,
+        "category": null,
+        "color": null,
+        "text": "engine_request_end|slot=0",
+        "globalTid": 281679927227696,
+        "endGlobalTid": null,
+        "textId": null,
+        "domainId": 0,
+        "uint64Value": null,
+        "int64Value": null,
+        "doubleValue": null,
+        "uint32Value": null,
+        "int32Value": null,
+        "floatValue": null,
+        "jsonTextId": null,
+        "jsonText": null,
+        "binaryData": null
+      }
+    }
+  ],
+  "coverage": {
+    "engine_request_begin": true,
+    "engine_request_end": true,
+    "token_begin_end_balanced": true,
+    "token_indices": [
+      "1",
+      "2"
+    ]
+  },
+  "native_execution_count": 1,
+  "notes": [
+    "This is a semantic marker/profile capture for SmolLM2 prompt=2/output=2; no Qwen3.8-27B run was performed.",
+    "The capture uses the new hosttrace binary and is a new native artifact, not a replay.",
+    "Markers expose boundaries; they are not yet used to fit a cost coefficient."
+  ]
+}

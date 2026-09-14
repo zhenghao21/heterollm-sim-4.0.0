@@ -1,0 +1,4596 @@
+{
+  "schema": "native-llama-nsys-profile/v1",
+  "validity_status": "profiled_stage_evidence",
+  "command": [
+    "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+    "launch",
+    "--session-new=llamasim37980",
+    "--trace=cuda,nvtx,wddm",
+    "--cuda-graph-trace=node",
+    "--cuda-memory-usage=true",
+    "--wait=all",
+    "--",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+    "-m",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.5-0.8B-Q4_K_M.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18521",
+    "-c",
+    "512",
+    "-ngl",
+    "-1",
+    "-np",
+    "1",
+    "-b",
+    "64",
+    "-ub",
+    "64",
+    "-t",
+    "16",
+    "-tb",
+    "16",
+    "-fa",
+    "off",
+    "--load-mode",
+    "mmap",
+    "-kvo",
+    "--op-offload",
+    "-sm",
+    "layer",
+    "-mg",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-kvu",
+    "-cb",
+    "--perf",
+    "--metrics",
+    "--warmup",
+    "--spec-type",
+    "none"
+  ],
+  "server_command": [
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+    "-m",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.5-0.8B-Q4_K_M.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18521",
+    "-c",
+    "512",
+    "-ngl",
+    "-1",
+    "-np",
+    "1",
+    "-b",
+    "64",
+    "-ub",
+    "64",
+    "-t",
+    "16",
+    "-tb",
+    "16",
+    "-fa",
+    "off",
+    "--load-mode",
+    "mmap",
+    "-kvo",
+    "--op-offload",
+    "-sm",
+    "layer",
+    "-mg",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-kvu",
+    "-cb",
+    "--perf",
+    "--metrics",
+    "--warmup",
+    "--spec-type",
+    "none"
+  ],
+  "environment": {},
+  "capture_start_command": [
+    "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+    "start",
+    "--session=llamasim37980",
+    "--sample=none",
+    "--cpuctxsw=none",
+    "--force-overwrite=true",
+    "--export=sqlite",
+    "-o",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1"
+  ],
+  "capture_start": {
+    "stdout": "",
+    "stderr": ""
+  },
+  "capture_stop": {
+    "stdout": "Generating 'C:\\Users\\A\\AppData\\Local\\Temp\\nsys-report-c801.qdstrm'\n\n[1/2] [0%                          ] eengine_qwen35_p2_o4_profile_v1.nsys-rep\n[1/2] [0%                          ] eengine_qwen35_p2_o4_profile_v1.nsys-rep\n[1/2] [======35%                   ] eengine_qwen35_p2_o4_profile_v1.nsys-rep\n[1/2] [============56%             ] eengine_qwen35_p2_o4_profile_v1.nsys-rep\n[1/2] [===============65%          ] eengine_qwen35_p2_o4_profile_v1.nsys-rep\n[1/2] [========================100%] eengine_qwen35_p2_o4_profile_v1.nsys-rep\n[1/2] [========================100%] eengine_qwen35_p2_o4_profile_v1.nsys-rep\n\n[2/2] [0%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [1%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [2%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [3%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [4%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [5%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [6%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [7%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [8%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [9%                          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [10%                         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [11%                         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [12%                         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [13%                         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [14%                         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=15%                        ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=16%                        ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=17%                        ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==18%                       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==19%                       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==20%                       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==21%                       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===22%                      ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===23%                      ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===24%                      ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [====25%                     ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [====26%                     ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [====27%                     ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [====28%                     ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====29%                    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====30%                    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====31%                    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====32%                    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [======33%                   ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [======34%                   ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [======35%                   ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======36%                  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======37%                  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======38%                  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======39%                  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========40%                 ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========41%                 ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========42%                 ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=========43%                ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=========44%                ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=========45%                ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=========46%                ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==========47%               ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==========48%               ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==========49%               ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===========50%              ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===========51%              ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===========52%              ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===========53%              ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [============54%             ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [============55%             ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [============56%             ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [============57%             ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=============58%            ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=============59%            ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=============60%            ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==============61%           ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==============62%           ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==============63%           ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==============64%           ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===============65%          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===============66%          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===============67%          ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [================68%         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [================69%         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [================70%         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [================71%         ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=================72%        ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=================73%        ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=================74%        ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==================75%       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==================76%       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==================77%       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [==================78%       ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===================79%      ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===================80%      ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===================81%      ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [===================82%      ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [====================83%     ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [====================84%     ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [====================85%     ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====================86%    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====================87%    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====================88%    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=====================89%    ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [======================90%   ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [======================91%   ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [======================92%   ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======================93%  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======================94%  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======================95%  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [=======================96%  ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========================97% ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========================98% ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========================99% ] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========================100%] eengine_qwen35_p2_o4_profile_v1.sqlite\n[2/2] [========================100%] eengine_qwen35_p2_o4_profile_v1.sqlite\nGenerated:\n    F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.nsys-rep\n    F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.sqlite\n",
+    "stderr": ""
+  },
+  "model": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.5-0.8B-Q4_K_M.gguf",
+  "request": {
+    "prompt": "Hi.",
+    "requested_output_tokens": 4,
+    "warmup_output_tokens": 2
+  },
+  "hardware": {
+    "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor          ",
+    "cpu_topology": {
+      "physical_cores": 16,
+      "logical_processors": 32,
+      "max_clock_mhz": 4300,
+      "current_clock_mhz": 4300
+    },
+    "cpu_cores": 16,
+    "cpu_threads": 32,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 5080",
+      "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+      "memory_mib": 16303,
+      "memory_free_mib": 14013,
+      "memory_used_mib": 1965,
+      "driver": "616.64",
+      "compute_capability": "12.0",
+      "clocks": {
+        "graphics_mhz": 2700,
+        "memory_mhz": 15201,
+        "sm_mhz": 2700
+      },
+      "pcie": {
+        "gen_current": 5,
+        "gen_max": 5,
+        "width_current": 8,
+        "width_max": 16
+      }
+    },
+    "host_memory": {
+      "total_bytes": 134939398144,
+      "modules": [
+        {
+          "Capacity": 34359738368,
+          "Speed": 5600,
+          "ConfiguredClockSpeed": 5600
+        },
+        {
+          "Capacity": 34359738368,
+          "Speed": 4800,
+          "ConfiguredClockSpeed": 5600
+        },
+        {
+          "Capacity": 34359738368,
+          "Speed": 5600,
+          "ConfiguredClockSpeed": 5600
+        },
+        {
+          "Capacity": 34359738368,
+          "Speed": 4800,
+          "ConfiguredClockSpeed": 5600
+        }
+      ]
+    }
+  },
+  "gguf": {
+    "ok": true,
+    "status": "pass",
+    "mismatches": [],
+    "expected": {
+      "architecture": "qwen3_5_hybrid_transformer",
+      "n_layer": 24,
+      "n_embd": 1024,
+      "n_head": 8,
+      "n_head_kv": 2,
+      "vocab_size": 248320,
+      "context_length": 262144
+    },
+    "gguf": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.5-0.8B-Q4_K_M.gguf",
+      "sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+      "version": 3,
+      "tensor_count": 320,
+      "metadata_kv_count": 46,
+      "architecture": "qwen35",
+      "n_layer": 24,
+      "n_layer_all": 24,
+      "n_layer_nextn": 0,
+      "n_embd": 1024,
+      "n_head": 8,
+      "n_head_kv": 2,
+      "vocab_size": 248320,
+      "context_length": 262144,
+      "quantization": "MOSTLY_Q4_K_M",
+      "file_type": 15,
+      "metadata": {
+        "general.architecture": "qwen35",
+        "general.type": "model",
+        "general.name": "Qwen3.5-0.8B",
+        "general.basename": "Qwen3.5-0.8B",
+        "general.quantized_by": "Unsloth",
+        "general.size_label": "0.8B",
+        "general.license": "apache-2.0",
+        "general.license.link": "https://huggingface.co/Qwen/Qwen3.5-0.8B/blob/main/LICENSE",
+        "general.repo_url": "https://huggingface.co/unsloth",
+        "general.base_model.count": 1,
+        "general.base_model.0.name": "Qwen3.5 0.8B",
+        "general.base_model.0.organization": "Qwen",
+        "general.base_model.0.repo_url": "https://huggingface.co/Qwen/Qwen3.5-0.8B",
+        "general.tags": {
+          "count": 1
+        },
+        "qwen35.block_count": 24,
+        "qwen35.context_length": 262144,
+        "qwen35.embedding_length": 1024,
+        "qwen35.feed_forward_length": 3584,
+        "qwen35.attention.head_count": 8,
+        "qwen35.attention.head_count_kv": 2,
+        "qwen35.rope.dimension_sections": [
+          11,
+          11,
+          10,
+          0
+        ],
+        "qwen35.rope.freq_base": 10000000.0,
+        "qwen35.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+        "qwen35.attention.key_length": 256,
+        "qwen35.attention.value_length": 256,
+        "qwen35.ssm.conv_kernel": 4,
+        "qwen35.ssm.state_size": 128,
+        "qwen35.ssm.group_count": 16,
+        "qwen35.ssm.time_step_rank": 16,
+        "qwen35.ssm.inner_size": 2048,
+        "qwen35.full_attention_interval": 4,
+        "qwen35.rope.dimension_count": 64,
+        "tokenizer.ggml.model": "gpt2",
+        "tokenizer.ggml.pre": "qwen35",
+        "tokenizer.ggml.tokens": {
+          "count": 248320,
+          "truncated": true
+        },
+        "tokenizer.ggml.token_type": {
+          "count": 248320,
+          "truncated": true
+        },
+        "tokenizer.ggml.merges": {
+          "count": 247587,
+          "truncated": true
+        },
+        "tokenizer.ggml.eos_token_id": 248046,
+        "tokenizer.ggml.padding_token_id": 248055,
+        "tokenizer.chat_template": "{%- set image_count = namespace(value=0) %}\n{%- set video_count = namespace(value=0) %}\n{%- macro render_content(content, do_vision_count, is_system_content=false) %}\n    {%- if content is string %}\n        {{- content }}\n    {%- elif content is iterable and content is not mapping %}\n        {%- for item in content %}\n            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain images.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set image_count.value = image_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Picture ' ~ image_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}\n            {%- elif 'video' in item or item.type == 'video' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain videos.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set video_count.value = video_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Video ' ~ video_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}\n            {%- elif 'text' in item %}\n                {{- item.text }}\n            {%- else %}\n                {{- raise_exception('Unexpected item type in content.') }}\n            {%- endif %}\n        {%- endfor %}\n    {%- elif content is none or content is undefined %}\n        {{- '' }}\n    {%- else %}\n        {{- raise_exception('Unexpected content type.') }}\n    {%- endif %}\n{%- endmacro %}\n{%- if not messages %}\n    {{- raise_exception('No messages provided.') }}\n{%- endif %}\n{%- if tools and tools is iterable and tools is not mapping %}\n    {{- '<|im_start|>system\\n' }}\n    {{- \"# Tools\\n\\nYou have access to the following functions:\\n\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\" }}\n    {{- '\\n\\nIf you choose to call a function ONLY reply in the following format with NO suffix:\\n\\n<tool_call>\\n<function=example_function_name>\\n<parameter=example_parameter_1>\\nvalue_1\\n</parameter>\\n<parameter=example_parameter_2>\\nThis is the value for the second parameter\\nthat can span\\nmultiple lines\\n</parameter>\\n</function>\\n</tool_call>\\n\\n<IMPORTANT>\\nReminder:\\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\\n- Required parameters MUST be specified\\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\\n</IMPORTANT>' }}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '\\n\\n' + content }}\n        {%- endif %}\n    {%- endif %}\n    {{- '<|im_end|>\\n' }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" %}\n        {%- set content = render_content(message.content, false)|trim %}\n        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}\n            {%- set ns.multi_step_tool = false %}\n            {%- set ns.last_query_index = index %}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if ns.multi_step_tool %}\n    {{- raise_exception('No user query found in messages.') }}\n{%- endif %}\n{%- for message in messages %}\n    {%- set content = render_content(message.content, true)|trim %}\n    {%- if message.role == \"system\" %}\n        {%- if not loop.first %}\n            {{- raise_exception('System message must be at the beginning.') }}\n        {%- endif %}\n    {%- elif message.role == \"user\" %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- set reasoning_content = reasoning_content|trim %}\n        {%- if loop.index0 > ns.last_query_index %}\n            {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content + '\\n</think>\\n\\n' + content }}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if tool_call.function is defined %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {%- if loop.first %}\n                    {%- if content|trim %}\n                        {{- '\\n\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- else %}\n                        {{- '<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- endif %}\n                {%- else %}\n                    {{- '\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                {%- endif %}\n                {%- if tool_call.arguments is mapping %}\n                    {%- for args_name in tool_call.arguments %}\n                        {%- set args_value = tool_call.arguments[args_name] %}\n                        {{- '<parameter=' + args_name + '>\\n' }}\n                        {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}\n                        {{- args_value }}\n                        {{- '\\n</parameter>\\n' }}\n                    {%- endfor %}\n                {%- endif %}\n                {{- '</function>\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.previtem and loop.previtem.role != \"tool\" %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if not loop.last and loop.nextitem.role != \"tool\" %}\n            {{- '<|im_end|>\\n' }}\n        {%- elif loop.last %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Unexpected message role.') }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is true %}\n        {{- '<think>\\n' }}\n    {%- else %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}",
+        "general.quantization_version": 2,
+        "general.file_type": 15,
+        "quantize.imatrix.file": "Qwen3.5-0.8B-GGUF/imatrix_unsloth.gguf",
+        "quantize.imatrix.dataset": "unsloth_calibration_Qwen3.5-0.8B.txt",
+        "quantize.imatrix.entries_count": 186,
+        "quantize.imatrix.chunks_count": 80
+      },
+      "tensor_directory": [
+        {
+          "name": "output_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 0
+        },
+        {
+          "name": "token_embd.weight",
+          "shape": [
+            1024,
+            248320
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 208588800,
+          "offset": 4096
+        },
+        {
+          "name": "blk.0.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 208592896
+        },
+        {
+          "name": "blk.0.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 209772544
+        },
+        {
+          "name": "blk.0.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 209776640
+        },
+        {
+          "name": "blk.0.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 214102016
+        },
+        {
+          "name": "blk.0.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 217112576
+        },
+        {
+          "name": "blk.0.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 219176960
+        },
+        {
+          "name": "blk.0.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 221241344
+        },
+        {
+          "name": "blk.0.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 221245440
+        },
+        {
+          "name": "blk.0.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 221245504
+        },
+        {
+          "name": "blk.0.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 221262912
+        },
+        {
+          "name": "blk.0.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 221280320
+        },
+        {
+          "name": "blk.0.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 221378624
+        },
+        {
+          "name": "blk.0.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 221378688
+        },
+        {
+          "name": "blk.0.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 221379200
+        },
+        {
+          "name": "blk.1.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 222820992
+        },
+        {
+          "name": "blk.1.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 224000640
+        },
+        {
+          "name": "blk.1.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 224004736
+        },
+        {
+          "name": "blk.1.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 228330112
+        },
+        {
+          "name": "blk.1.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 231340672
+        },
+        {
+          "name": "blk.1.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 233405056
+        },
+        {
+          "name": "blk.1.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 235469440
+        },
+        {
+          "name": "blk.1.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 235473536
+        },
+        {
+          "name": "blk.1.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 235473600
+        },
+        {
+          "name": "blk.1.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 235491008
+        },
+        {
+          "name": "blk.1.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 235508416
+        },
+        {
+          "name": "blk.1.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 235606720
+        },
+        {
+          "name": "blk.1.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 235606784
+        },
+        {
+          "name": "blk.1.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 235607296
+        },
+        {
+          "name": "blk.2.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 237049088
+        },
+        {
+          "name": "blk.2.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 238228736
+        },
+        {
+          "name": "blk.2.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 238232832
+        },
+        {
+          "name": "blk.2.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 242558208
+        },
+        {
+          "name": "blk.2.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 245568768
+        },
+        {
+          "name": "blk.2.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 247633152
+        },
+        {
+          "name": "blk.2.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 249697536
+        },
+        {
+          "name": "blk.2.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 249701632
+        },
+        {
+          "name": "blk.2.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 249701696
+        },
+        {
+          "name": "blk.2.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 249719104
+        },
+        {
+          "name": "blk.2.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 249736512
+        },
+        {
+          "name": "blk.2.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 249834816
+        },
+        {
+          "name": "blk.2.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 249834880
+        },
+        {
+          "name": "blk.2.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 249835392
+        },
+        {
+          "name": "blk.3.attn_k.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 251277184
+        },
+        {
+          "name": "blk.3.attn_k_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 251572096
+        },
+        {
+          "name": "blk.3.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 251573120
+        },
+        {
+          "name": "blk.3.attn_output.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 251577216
+        },
+        {
+          "name": "blk.3.attn_q.weight",
+          "shape": [
+            1024,
+            4096
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 252756864
+        },
+        {
+          "name": "blk.3.attn_q_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 255116160
+        },
+        {
+          "name": "blk.3.attn_v.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 430080,
+          "offset": 255117184
+        },
+        {
+          "name": "blk.3.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 255547264
+        },
+        {
+          "name": "blk.3.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 257611648
+        },
+        {
+          "name": "blk.3.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 259676032
+        },
+        {
+          "name": "blk.3.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 261740416
+        },
+        {
+          "name": "blk.4.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 261744512
+        },
+        {
+          "name": "blk.4.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 262924160
+        },
+        {
+          "name": "blk.4.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 262928256
+        },
+        {
+          "name": "blk.4.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 267253632
+        },
+        {
+          "name": "blk.4.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 269318016
+        },
+        {
+          "name": "blk.4.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 271382400
+        },
+        {
+          "name": "blk.4.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 273446784
+        },
+        {
+          "name": "blk.4.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 273450880
+        },
+        {
+          "name": "blk.4.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 273450944
+        },
+        {
+          "name": "blk.4.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 273468352
+        },
+        {
+          "name": "blk.4.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 273485760
+        },
+        {
+          "name": "blk.4.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 273584064
+        },
+        {
+          "name": "blk.4.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 273584128
+        },
+        {
+          "name": "blk.4.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 273584640
+        },
+        {
+          "name": "blk.5.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 275026432
+        },
+        {
+          "name": "blk.5.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 276206080
+        },
+        {
+          "name": "blk.5.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 276210176
+        },
+        {
+          "name": "blk.5.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 280535552
+        },
+        {
+          "name": "blk.5.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 283546112
+        },
+        {
+          "name": "blk.5.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 285610496
+        },
+        {
+          "name": "blk.5.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 287674880
+        },
+        {
+          "name": "blk.5.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 287678976
+        },
+        {
+          "name": "blk.5.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 287679040
+        },
+        {
+          "name": "blk.5.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 287696448
+        },
+        {
+          "name": "blk.5.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 287713856
+        },
+        {
+          "name": "blk.5.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 287812160
+        },
+        {
+          "name": "blk.5.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 287812224
+        },
+        {
+          "name": "blk.5.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 287812736
+        },
+        {
+          "name": "blk.6.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 289254528
+        },
+        {
+          "name": "blk.6.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 290434176
+        },
+        {
+          "name": "blk.6.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 290438272
+        },
+        {
+          "name": "blk.6.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 294763648
+        },
+        {
+          "name": "blk.6.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 296828032
+        },
+        {
+          "name": "blk.6.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 298892416
+        },
+        {
+          "name": "blk.6.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 300956800
+        },
+        {
+          "name": "blk.6.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 300960896
+        },
+        {
+          "name": "blk.6.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 300960960
+        },
+        {
+          "name": "blk.6.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 300978368
+        },
+        {
+          "name": "blk.6.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 300995776
+        },
+        {
+          "name": "blk.6.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 301094080
+        },
+        {
+          "name": "blk.6.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 301094144
+        },
+        {
+          "name": "blk.6.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 301094656
+        },
+        {
+          "name": "blk.7.attn_k.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 302536448
+        },
+        {
+          "name": "blk.7.attn_k_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 302831360
+        },
+        {
+          "name": "blk.7.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 302832384
+        },
+        {
+          "name": "blk.7.attn_output.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 302836480
+        },
+        {
+          "name": "blk.7.attn_q.weight",
+          "shape": [
+            1024,
+            4096
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 304016128
+        },
+        {
+          "name": "blk.7.attn_q_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 306375424
+        },
+        {
+          "name": "blk.7.attn_v.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 430080,
+          "offset": 306376448
+        },
+        {
+          "name": "blk.7.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 306806528
+        },
+        {
+          "name": "blk.7.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 308870912
+        },
+        {
+          "name": "blk.7.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 310935296
+        },
+        {
+          "name": "blk.7.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 312999680
+        },
+        {
+          "name": "blk.8.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 313003776
+        },
+        {
+          "name": "blk.8.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 314183424
+        },
+        {
+          "name": "blk.8.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 314187520
+        },
+        {
+          "name": "blk.8.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 318512896
+        },
+        {
+          "name": "blk.8.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 321523456
+        },
+        {
+          "name": "blk.8.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 323587840
+        },
+        {
+          "name": "blk.8.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 325652224
+        },
+        {
+          "name": "blk.8.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 325656320
+        },
+        {
+          "name": "blk.8.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 325656384
+        },
+        {
+          "name": "blk.8.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 325673792
+        },
+        {
+          "name": "blk.8.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 325691200
+        },
+        {
+          "name": "blk.8.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 325789504
+        },
+        {
+          "name": "blk.8.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 325789568
+        },
+        {
+          "name": "blk.8.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 325790080
+        },
+        {
+          "name": "blk.9.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 327231872
+        },
+        {
+          "name": "blk.9.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 328411520
+        },
+        {
+          "name": "blk.9.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 328415616
+        },
+        {
+          "name": "blk.9.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 332740992
+        },
+        {
+          "name": "blk.9.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 334805376
+        },
+        {
+          "name": "blk.9.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 336869760
+        },
+        {
+          "name": "blk.9.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 338934144
+        },
+        {
+          "name": "blk.9.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 338938240
+        },
+        {
+          "name": "blk.9.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 338938304
+        },
+        {
+          "name": "blk.9.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 338955712
+        },
+        {
+          "name": "blk.9.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 338973120
+        },
+        {
+          "name": "blk.9.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 339071424
+        },
+        {
+          "name": "blk.9.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 339071488
+        },
+        {
+          "name": "blk.9.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 339072000
+        },
+        {
+          "name": "blk.10.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 340513792
+        },
+        {
+          "name": "blk.10.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 341693440
+        },
+        {
+          "name": "blk.10.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 341697536
+        },
+        {
+          "name": "blk.10.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 346022912
+        },
+        {
+          "name": "blk.10.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 348087296
+        },
+        {
+          "name": "blk.10.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 350151680
+        },
+        {
+          "name": "blk.10.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 352216064
+        },
+        {
+          "name": "blk.10.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 352220160
+        },
+        {
+          "name": "blk.10.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 352220224
+        },
+        {
+          "name": "blk.10.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 352237632
+        },
+        {
+          "name": "blk.10.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 352255040
+        },
+        {
+          "name": "blk.10.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 352353344
+        },
+        {
+          "name": "blk.10.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 352353408
+        },
+        {
+          "name": "blk.10.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 352353920
+        },
+        {
+          "name": "blk.11.attn_k.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 353795712
+        },
+        {
+          "name": "blk.11.attn_k_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 354090624
+        },
+        {
+          "name": "blk.11.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 354091648
+        },
+        {
+          "name": "blk.11.attn_output.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 354095744
+        },
+        {
+          "name": "blk.11.attn_q.weight",
+          "shape": [
+            1024,
+            4096
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 355275392
+        },
+        {
+          "name": "blk.11.attn_q_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 357634688
+        },
+        {
+          "name": "blk.11.attn_v.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 430080,
+          "offset": 357635712
+        },
+        {
+          "name": "blk.11.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 358065792
+        },
+        {
+          "name": "blk.11.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 361076352
+        },
+        {
+          "name": "blk.11.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 363140736
+        },
+        {
+          "name": "blk.11.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 365205120
+        },
+        {
+          "name": "blk.12.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 365209216
+        },
+        {
+          "name": "blk.12.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 366388864
+        },
+        {
+          "name": "blk.12.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 366392960
+        },
+        {
+          "name": "blk.12.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 370718336
+        },
+        {
+          "name": "blk.12.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 372782720
+        },
+        {
+          "name": "blk.12.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 374847104
+        },
+        {
+          "name": "blk.12.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 376911488
+        },
+        {
+          "name": "blk.12.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 376915584
+        },
+        {
+          "name": "blk.12.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 376915648
+        },
+        {
+          "name": "blk.12.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 376933056
+        },
+        {
+          "name": "blk.12.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 376950464
+        },
+        {
+          "name": "blk.12.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 377048768
+        },
+        {
+          "name": "blk.12.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 377048832
+        },
+        {
+          "name": "blk.12.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 377049344
+        },
+        {
+          "name": "blk.13.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 378491136
+        },
+        {
+          "name": "blk.13.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 379670784
+        },
+        {
+          "name": "blk.13.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 379674880
+        },
+        {
+          "name": "blk.13.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 384000256
+        },
+        {
+          "name": "blk.13.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 386064640
+        },
+        {
+          "name": "blk.13.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 388129024
+        },
+        {
+          "name": "blk.13.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 390193408
+        },
+        {
+          "name": "blk.13.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 390197504
+        },
+        {
+          "name": "blk.13.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 390197568
+        },
+        {
+          "name": "blk.13.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 390214976
+        },
+        {
+          "name": "blk.13.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 390232384
+        },
+        {
+          "name": "blk.13.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 390330688
+        },
+        {
+          "name": "blk.13.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 390330752
+        },
+        {
+          "name": "blk.13.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 390331264
+        },
+        {
+          "name": "blk.14.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 391773056
+        },
+        {
+          "name": "blk.14.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 392952704
+        },
+        {
+          "name": "blk.14.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 392956800
+        },
+        {
+          "name": "blk.14.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 397282176
+        },
+        {
+          "name": "blk.14.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 400292736
+        },
+        {
+          "name": "blk.14.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 402357120
+        },
+        {
+          "name": "blk.14.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 404421504
+        },
+        {
+          "name": "blk.14.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 404425600
+        },
+        {
+          "name": "blk.14.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 404425664
+        },
+        {
+          "name": "blk.14.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 404443072
+        },
+        {
+          "name": "blk.14.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 404460480
+        },
+        {
+          "name": "blk.14.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 404558784
+        },
+        {
+          "name": "blk.14.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 404558848
+        },
+        {
+          "name": "blk.14.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 404559360
+        },
+        {
+          "name": "blk.15.attn_k.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 406001152
+        },
+        {
+          "name": "blk.15.attn_k_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 406296064
+        },
+        {
+          "name": "blk.15.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 406297088
+        },
+        {
+          "name": "blk.15.attn_output.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 406301184
+        },
+        {
+          "name": "blk.15.attn_q.weight",
+          "shape": [
+            1024,
+            4096
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 407480832
+        },
+        {
+          "name": "blk.15.attn_q_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 409840128
+        },
+        {
+          "name": "blk.15.attn_v.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 409841152
+        },
+        {
+          "name": "blk.15.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 410136064
+        },
+        {
+          "name": "blk.15.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 412200448
+        },
+        {
+          "name": "blk.15.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 414264832
+        },
+        {
+          "name": "blk.15.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 416329216
+        },
+        {
+          "name": "blk.16.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 416333312
+        },
+        {
+          "name": "blk.16.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 417512960
+        },
+        {
+          "name": "blk.16.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 417517056
+        },
+        {
+          "name": "blk.16.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 421842432
+        },
+        {
+          "name": "blk.16.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 423906816
+        },
+        {
+          "name": "blk.16.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 425971200
+        },
+        {
+          "name": "blk.16.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 428035584
+        },
+        {
+          "name": "blk.16.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 428039680
+        },
+        {
+          "name": "blk.16.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 428039744
+        },
+        {
+          "name": "blk.16.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 428057152
+        },
+        {
+          "name": "blk.16.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 428074560
+        },
+        {
+          "name": "blk.16.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 428172864
+        },
+        {
+          "name": "blk.16.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 428172928
+        },
+        {
+          "name": "blk.16.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 428173440
+        },
+        {
+          "name": "blk.17.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 429615232
+        },
+        {
+          "name": "blk.17.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 430794880
+        },
+        {
+          "name": "blk.17.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 430798976
+        },
+        {
+          "name": "blk.17.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 435124352
+        },
+        {
+          "name": "blk.17.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 438134912
+        },
+        {
+          "name": "blk.17.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 440199296
+        },
+        {
+          "name": "blk.17.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 442263680
+        },
+        {
+          "name": "blk.17.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 442267776
+        },
+        {
+          "name": "blk.17.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 442267840
+        },
+        {
+          "name": "blk.17.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 442285248
+        },
+        {
+          "name": "blk.17.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 442302656
+        },
+        {
+          "name": "blk.17.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 442400960
+        },
+        {
+          "name": "blk.17.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 442401024
+        },
+        {
+          "name": "blk.17.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 442401536
+        },
+        {
+          "name": "blk.18.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 443843328
+        },
+        {
+          "name": "blk.18.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 445022976
+        },
+        {
+          "name": "blk.18.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 445027072
+        },
+        {
+          "name": "blk.18.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 449352448
+        },
+        {
+          "name": "blk.18.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 451416832
+        },
+        {
+          "name": "blk.18.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 453481216
+        },
+        {
+          "name": "blk.18.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 455545600
+        },
+        {
+          "name": "blk.18.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 455549696
+        },
+        {
+          "name": "blk.18.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 455549760
+        },
+        {
+          "name": "blk.18.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 455567168
+        },
+        {
+          "name": "blk.18.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 455584576
+        },
+        {
+          "name": "blk.18.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 455682880
+        },
+        {
+          "name": "blk.18.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 455682944
+        },
+        {
+          "name": "blk.18.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 455683456
+        },
+        {
+          "name": "blk.19.attn_k.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 457125248
+        },
+        {
+          "name": "blk.19.attn_k_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 457420160
+        },
+        {
+          "name": "blk.19.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 457421184
+        },
+        {
+          "name": "blk.19.attn_output.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 457425280
+        },
+        {
+          "name": "blk.19.attn_q.weight",
+          "shape": [
+            1024,
+            4096
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 458604928
+        },
+        {
+          "name": "blk.19.attn_q_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 460964224
+        },
+        {
+          "name": "blk.19.attn_v.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 460965248
+        },
+        {
+          "name": "blk.19.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 461260160
+        },
+        {
+          "name": "blk.19.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 463324544
+        },
+        {
+          "name": "blk.19.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 465388928
+        },
+        {
+          "name": "blk.19.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 467453312
+        },
+        {
+          "name": "blk.20.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 467457408
+        },
+        {
+          "name": "blk.20.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 468637056
+        },
+        {
+          "name": "blk.20.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 468641152
+        },
+        {
+          "name": "blk.20.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 472966528
+        },
+        {
+          "name": "blk.20.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 475977088
+        },
+        {
+          "name": "blk.20.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 478041472
+        },
+        {
+          "name": "blk.20.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 480105856
+        },
+        {
+          "name": "blk.20.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 480109952
+        },
+        {
+          "name": "blk.20.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 480110016
+        },
+        {
+          "name": "blk.20.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 480127424
+        },
+        {
+          "name": "blk.20.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 480144832
+        },
+        {
+          "name": "blk.20.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 480243136
+        },
+        {
+          "name": "blk.20.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 480243200
+        },
+        {
+          "name": "blk.20.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 480243712
+        },
+        {
+          "name": "blk.21.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 481685504
+        },
+        {
+          "name": "blk.21.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 482865152
+        },
+        {
+          "name": "blk.21.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 482869248
+        },
+        {
+          "name": "blk.21.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 487194624
+        },
+        {
+          "name": "blk.21.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 490205184
+        },
+        {
+          "name": "blk.21.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 492269568
+        },
+        {
+          "name": "blk.21.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 494333952
+        },
+        {
+          "name": "blk.21.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 494338048
+        },
+        {
+          "name": "blk.21.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 494338112
+        },
+        {
+          "name": "blk.21.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 494355520
+        },
+        {
+          "name": "blk.21.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 494372928
+        },
+        {
+          "name": "blk.21.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 494471232
+        },
+        {
+          "name": "blk.21.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 494471296
+        },
+        {
+          "name": "blk.21.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 494471808
+        },
+        {
+          "name": "blk.22.attn_gate.weight",
+          "shape": [
+            1024,
+            2048
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 495913600
+        },
+        {
+          "name": "blk.22.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 497093248
+        },
+        {
+          "name": "blk.22.attn_qkv.weight",
+          "shape": [
+            1024,
+            6144
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 4325376,
+          "offset": 497097344
+        },
+        {
+          "name": "blk.22.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 501422720
+        },
+        {
+          "name": "blk.22.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 504433280
+        },
+        {
+          "name": "blk.22.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 506497664
+        },
+        {
+          "name": "blk.22.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 508562048
+        },
+        {
+          "name": "blk.22.ssm_a",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 508566144
+        },
+        {
+          "name": "blk.22.ssm_alpha.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 508566208
+        },
+        {
+          "name": "blk.22.ssm_beta.weight",
+          "shape": [
+            1024,
+            16
+          ],
+          "type_id": 8,
+          "type_name": "Q8_0",
+          "block_size": 32,
+          "n_bytes": 17408,
+          "offset": 508583616
+        },
+        {
+          "name": "blk.22.ssm_conv1d.weight",
+          "shape": [
+            4,
+            6144
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 98304,
+          "offset": 508601024
+        },
+        {
+          "name": "blk.22.ssm_dt.bias",
+          "shape": [
+            16
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 64,
+          "offset": 508699328
+        },
+        {
+          "name": "blk.22.ssm_norm.weight",
+          "shape": [
+            128
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 512,
+          "offset": 508699392
+        },
+        {
+          "name": "blk.22.ssm_out.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 13,
+          "type_name": "Q5_K",
+          "block_size": 256,
+          "n_bytes": 1441792,
+          "offset": 508699904
+        },
+        {
+          "name": "blk.23.attn_k.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 294912,
+          "offset": 510141696
+        },
+        {
+          "name": "blk.23.attn_k_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 510436608
+        },
+        {
+          "name": "blk.23.attn_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 510437632
+        },
+        {
+          "name": "blk.23.attn_output.weight",
+          "shape": [
+            2048,
+            1024
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 1179648,
+          "offset": 510441728
+        },
+        {
+          "name": "blk.23.attn_q.weight",
+          "shape": [
+            1024,
+            4096
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2359296,
+          "offset": 511621376
+        },
+        {
+          "name": "blk.23.attn_q_norm.weight",
+          "shape": [
+            256
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 1024,
+          "offset": 513980672
+        },
+        {
+          "name": "blk.23.attn_v.weight",
+          "shape": [
+            1024,
+            512
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 430080,
+          "offset": 513981696
+        },
+        {
+          "name": "blk.23.ffn_down.weight",
+          "shape": [
+            3584,
+            1024
+          ],
+          "type_id": 14,
+          "type_name": "Q6_K",
+          "block_size": 256,
+          "n_bytes": 3010560,
+          "offset": 514411776
+        },
+        {
+          "name": "blk.23.ffn_gate.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 517422336
+        },
+        {
+          "name": "blk.23.ffn_up.weight",
+          "shape": [
+            1024,
+            3584
+          ],
+          "type_id": 12,
+          "type_name": "Q4_K",
+          "block_size": 256,
+          "n_bytes": 2064384,
+          "offset": 519486720
+        },
+        {
+          "name": "blk.23.post_attention_norm.weight",
+          "shape": [
+            1024
+          ],
+          "type_id": 0,
+          "type_name": "F32",
+          "block_size": 1,
+          "n_bytes": 4096,
+          "offset": 521551104
+        }
+      ]
+    }
+  },
+  "warmup": {
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 2,
+      "prompt_ms": 9.183,
+      "prompt_per_token_ms": 4.5915,
+      "prompt_per_second": 217.79374931939455,
+      "predicted_n": 2,
+      "predicted_ms": 18.718,
+      "predicted_per_token_ms": 18.718,
+      "predicted_per_second": 53.42451116572283
+    }
+  },
+  "formal": {
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 2,
+      "prompt_ms": 6.925,
+      "prompt_per_token_ms": 3.4625,
+      "prompt_per_second": 288.8086642599278,
+      "predicted_n": 4,
+      "predicted_ms": 15.922,
+      "predicted_per_token_ms": 5.307333333333333,
+      "predicted_per_second": 188.4185403843738
+    },
+    "prompt_n": 2,
+    "predicted_n": 4
+  },
+  "report": {
+    "nsys_rep": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.nsys-rep",
+    "server_log": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.llama.log",
+    "elapsed_wall_s": 7.531219244003296
+  },
+  "stats": {
+    "kernel": {
+      "command": [
+        "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+        "stats",
+        "--report",
+        "cuda_gpu_kern_sum",
+        "--format",
+        "csv",
+        "--output",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.kernel.csv",
+        "--force-overwrite",
+        "true",
+        "--force-export",
+        "true",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.nsys-rep"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "csv": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.kernel.csv",
+      "rows": [
+        {
+          "Time (%)": "15.4",
+          "Total Time (ns)": "1179755",
+          "Instances": "16",
+          "Avg (ns)": "73734.7",
+          "Med (ns)": "1856.0",
+          "Min (ns)": "1792",
+          "Max (ns)": "291435",
+          "StdDev (ns)": "128615.2",
+          "Name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "11.9",
+          "Total Time (ns)": "906232",
+          "Instances": "72",
+          "Avg (ns)": "12586.6",
+          "Med (ns)": "12433.0",
+          "Min (ns)": "11776",
+          "Max (ns)": "15329",
+          "StdDev (ns)": "538.2",
+          "Name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)1, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "8.2",
+          "Total Time (ns)": "630039",
+          "Instances": "676",
+          "Avg (ns)": "932.0",
+          "Med (ns)": "928.0",
+          "Min (ns)": "896",
+          "Max (ns)": "2336",
+          "StdDev (ns)": "56.2",
+          "Name": "quantize_q8_1(const float *, void *, long long, long long, long long, long long, long long, unsigned int, uint3)"
+        },
+        {
+          "Time (%)": "8.0",
+          "Total Time (ns)": "610649",
+          "Instances": "98",
+          "Avg (ns)": "6231.1",
+          "Med (ns)": "6928.5",
+          "Min (ns)": "2176",
+          "Max (ns)": "8992",
+          "StdDev (ns)": "1611.2",
+          "Name": "void mul_mat_vec_q<(ggml_type)12, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "5.3",
+          "Total Time (ns)": "402377",
+          "Instances": "54",
+          "Avg (ns)": "7451.4",
+          "Med (ns)": "7424.0",
+          "Min (ns)": "6976",
+          "Max (ns)": "8448",
+          "StdDev (ns)": "265.4",
+          "Name": "void mul_mat_vec_q<(ggml_type)13, (int)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "5.0",
+          "Total Time (ns)": "379089",
+          "Instances": "196",
+          "Avg (ns)": "1934.1",
+          "Med (ns)": "1920.0",
+          "Min (ns)": "1824",
+          "Max (ns)": "2177",
+          "StdDev (ns)": "63.6",
+          "Name": "void rms_norm_f32<(int)1024, (bool)1, (bool)0>(const float *, float *, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3)"
+        },
+        {
+          "Time (%)": "4.3",
+          "Total Time (ns)": "325552",
+          "Instances": "36",
+          "Avg (ns)": "9043.1",
+          "Med (ns)": "8801.0",
+          "Min (ns)": "4352",
+          "Max (ns)": "14913",
+          "StdDev (ns)": "4600.8",
+          "Name": "void mul_mat_vec_q<(ggml_type)13, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "4.1",
+          "Total Time (ns)": "316941",
+          "Instances": "96",
+          "Avg (ns)": "3301.5",
+          "Med (ns)": "3040.0",
+          "Min (ns)": "2304",
+          "Max (ns)": "5408",
+          "StdDev (ns)": "933.9",
+          "Name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "3.1",
+          "Total Time (ns)": "233195",
+          "Instances": "54",
+          "Avg (ns)": "4318.4",
+          "Med (ns)": "4704.0",
+          "Min (ns)": "3200",
+          "Max (ns)": "5248",
+          "StdDev (ns)": "762.8",
+          "Name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "2.8",
+          "Total Time (ns)": "210413",
+          "Instances": "36",
+          "Avg (ns)": "5844.8",
+          "Med (ns)": "5824.0",
+          "Min (ns)": "5536",
+          "Max (ns)": "6528",
+          "StdDev (ns)": "237.1",
+          "Name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "2.7",
+          "Total Time (ns)": "207944",
+          "Instances": "174",
+          "Avg (ns)": "1195.1",
+          "Med (ns)": "1024.0",
+          "Min (ns)": "960",
+          "Max (ns)": "1632",
+          "StdDev (ns)": "225.2",
+          "Name": "void k_bin_bcast<&op_add, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)"
+        },
+        {
+          "Time (%)": "2.5",
+          "Total Time (ns)": "192998",
+          "Instances": "180",
+          "Avg (ns)": "1072.2",
+          "Med (ns)": "896.0",
+          "Min (ns)": "864",
+          "Max (ns)": "2913",
+          "StdDev (ns)": "504.3",
+          "Name": "scale_f32(const float *, float *, float, float, long long)"
+        },
+        {
+          "Time (%)": "2.2",
+          "Total Time (ns)": "164488",
+          "Instances": "120",
+          "Avg (ns)": "1370.7",
+          "Med (ns)": "1376.0",
+          "Min (ns)": "1280",
+          "Max (ns)": "1472",
+          "StdDev (ns)": "45.7",
+          "Name": "void rms_norm_f32<(int)256, (bool)1, (bool)0>(const float *, float *, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3)"
+        },
+        {
+          "Time (%)": "2.1",
+          "Total Time (ns)": "160164",
+          "Instances": "72",
+          "Avg (ns)": "2224.5",
+          "Med (ns)": "2368.0",
+          "Min (ns)": "1472",
+          "Max (ns)": "2912",
+          "StdDev (ns)": "407.1",
+          "Name": "void k_get_rows_float_vec<float>(const T1 *, const int *, T1 *, long long, long long, uint3, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)"
+        },
+        {
+          "Time (%)": "2.1",
+          "Total Time (ns)": "157027",
+          "Instances": "54",
+          "Avg (ns)": "2907.9",
+          "Med (ns)": "2816.5",
+          "Min (ns)": "2688",
+          "Max (ns)": "3296",
+          "StdDev (ns)": "184.3",
+          "Name": "void mul_mat_vec_q<(ggml_type)13, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "2.0",
+          "Total Time (ns)": "152421",
+          "Instances": "144",
+          "Avg (ns)": "1058.5",
+          "Med (ns)": "1056.0",
+          "Min (ns)": "1024",
+          "Max (ns)": "1089",
+          "StdDev (ns)": "12.6",
+          "Name": "void rms_norm_f32<(int)256, (bool)0, (bool)0>(const float *, float *, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3)"
+        },
+        {
+          "Time (%)": "1.8",
+          "Total Time (ns)": "135363",
+          "Instances": "108",
+          "Avg (ns)": "1253.4",
+          "Med (ns)": "1248.0",
+          "Min (ns)": "1184",
+          "Max (ns)": "1472",
+          "StdDev (ns)": "59.6",
+          "Name": "void mul_mat_vec_q<(ggml_type)8, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "1.7",
+          "Total Time (ns)": "132676",
+          "Instances": "18",
+          "Avg (ns)": "7370.9",
+          "Med (ns)": "7360.5",
+          "Min (ns)": "7328",
+          "Max (ns)": "7424",
+          "StdDev (ns)": "24.6",
+          "Name": "void concat_non_cont<unsigned int, (int)0>(const char *, const char *, char *, long long, long long, long long, long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, long long, long long, long long, long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, long long, long long, long long, long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)"
+        },
+        {
+          "Time (%)": "1.7",
+          "Total Time (ns)": "126850",
+          "Instances": "102",
+          "Avg (ns)": "1243.6",
+          "Med (ns)": "1248.0",
+          "Min (ns)": "1184",
+          "Max (ns)": "1280",
+          "StdDev (ns)": "27.0",
+          "Name": "void cpy_scalar<&cpy_1_scalar<float, float>>(const char *, char *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long)"
+        },
+        {
+          "Time (%)": "1.5",
+          "Total Time (ns)": "116133",
+          "Instances": "72",
+          "Avg (ns)": "1613.0",
+          "Med (ns)": "1504.0",
+          "Min (ns)": "1472",
+          "Max (ns)": "2016",
+          "StdDev (ns)": "190.1",
+          "Name": "void gated_delta_net_cuda<(int)128, (bool)0, (bool)0>(const float *, const float *, const float *, const float *, const float *, const float *, float *, float *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, uint3, uint3, float, long long, int)"
+        },
+        {
+          "Time (%)": "1.3",
+          "Total Time (ns)": "95875",
+          "Instances": "76",
+          "Avg (ns)": "1261.5",
+          "Med (ns)": "1280.0",
+          "Min (ns)": "1024",
+          "Max (ns)": "1600",
+          "StdDev (ns)": "147.5",
+          "Name": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long long, long long, uint3, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)"
+        },
+        {
+          "Time (%)": "1.1",
+          "Total Time (ns)": "86178",
+          "Instances": "96",
+          "Avg (ns)": "897.7",
+          "Med (ns)": "896.0",
+          "Min (ns)": "864",
+          "Max (ns)": "928",
+          "StdDev (ns)": "10.8",
+          "Name": "void unary_gated_op_kernel<&op_silu, float>(const T2 *, const T2 *, T2 *, long long, long long, long long, long long)"
+        },
+        {
+          "Time (%)": "1.1",
+          "Total Time (ns)": "84098",
+          "Instances": "72",
+          "Avg (ns)": "1168.0",
+          "Med (ns)": "1152.0",
+          "Min (ns)": "1056",
+          "Max (ns)": "1536",
+          "StdDev (ns)": "92.3",
+          "Name": "void ssm_conv_f32<(bool)1, (unsigned long long)128, (unsigned long long)4>(const float *, const float *, const float *, int, int, int, int, float *, int, int, int, long long)"
+        },
+        {
+          "Time (%)": "0.9",
+          "Total Time (ns)": "69697",
+          "Instances": "16",
+          "Avg (ns)": "4356.1",
+          "Med (ns)": "4912.5",
+          "Min (ns)": "1664",
+          "Max (ns)": "6144",
+          "StdDev (ns)": "1542.4",
+          "Name": "void mul_mat_vec_q<(ggml_type)14, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "0.8",
+          "Total Time (ns)": "60866",
+          "Instances": "72",
+          "Avg (ns)": "845.4",
+          "Med (ns)": "832.0",
+          "Min (ns)": "832",
+          "Max (ns)": "865",
+          "StdDev (ns)": "15.9",
+          "Name": "void unary_op_kernel<&op_sigmoid, float>(const T2 *, T2 *, int)"
+        },
+        {
+          "Time (%)": "0.8",
+          "Total Time (ns)": "59745",
+          "Instances": "54",
+          "Avg (ns)": "1106.4",
+          "Med (ns)": "1088.0",
+          "Min (ns)": "1056",
+          "Max (ns)": "1248",
+          "StdDev (ns)": "37.6",
+          "Name": "void unary_gated_op_kernel<&op_softplus, float>(const T2 *, const T2 *, T2 *, long long, long long, long long, long long)"
+        },
+        {
+          "Time (%)": "0.8",
+          "Total Time (ns)": "57475",
+          "Instances": "54",
+          "Avg (ns)": "1064.4",
+          "Med (ns)": "1056.0",
+          "Min (ns)": "1024",
+          "Max (ns)": "1089",
+          "StdDev (ns)": "16.7",
+          "Name": "void concat_cont<unsigned int, (int)0>(const T1 *, const T1 *, T1 *, long long, long long, long long, long long, long long, long long)"
+        },
+        {
+          "Time (%)": "0.7",
+          "Total Time (ns)": "55875",
+          "Instances": "18",
+          "Avg (ns)": "3104.2",
+          "Med (ns)": "3104.0",
+          "Min (ns)": "3072",
+          "Max (ns)": "3169",
+          "StdDev (ns)": "31.2",
+          "Name": "void mul_mat_vec_f<__half, __half, (int)1, (int)128, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)"
+        },
+        {
+          "Time (%)": "0.7",
+          "Total Time (ns)": "54146",
+          "Instances": "18",
+          "Avg (ns)": "3008.1",
+          "Med (ns)": "3008.0",
+          "Min (ns)": "2976",
+          "Max (ns)": "3072",
+          "StdDev (ns)": "32.9",
+          "Name": "void mul_mat_vec_f<__half, float, (int)1, (int)128, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)"
+        },
+        {
+          "Time (%)": "0.7",
+          "Total Time (ns)": "51617",
+          "Instances": "48",
+          "Avg (ns)": "1075.4",
+          "Med (ns)": "1056.0",
+          "Min (ns)": "1024",
+          "Max (ns)": "1216",
+          "StdDev (ns)": "68.2",
+          "Name": "void rope_multi<(bool)1, (bool)0, float>(const T3 *, T3 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, mrope_sections, bool, bool)"
+        },
+        {
+          "Time (%)": "0.6",
+          "Total Time (ns)": "48034",
+          "Instances": "48",
+          "Avg (ns)": "1000.7",
+          "Med (ns)": "1040.0",
+          "Min (ns)": "832",
+          "Max (ns)": "1248",
+          "StdDev (ns)": "136.6",
+          "Name": "void k_set_rows<float, long long, __half>(const T1 *, const T2 *, T3 *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, uint3, uint3, uint3, uint3, uint3)"
+        },
+        {
+          "Time (%)": "0.6",
+          "Total Time (ns)": "44513",
+          "Instances": "36",
+          "Avg (ns)": "1236.5",
+          "Med (ns)": "1216.0",
+          "Min (ns)": "1184",
+          "Max (ns)": "1376",
+          "StdDev (ns)": "40.6",
+          "Name": "void mul_mat_vec_q<(ggml_type)8, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)"
+        },
+        {
+          "Time (%)": "0.5",
+          "Total Time (ns)": "35200",
+          "Instances": "12",
+          "Avg (ns)": "2933.3",
+          "Med (ns)": "2848.0",
+          "Min (ns)": "2688",
+          "Max (ns)": "3392",
+          "StdDev (ns)": "238.8",
+          "Name": "void mul_mat_f<__half2, (int)32, (int)2, (int)2, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)"
+        },
+        {
+          "Time (%)": "0.4",
+          "Total Time (ns)": "33475",
+          "Instances": "24",
+          "Avg (ns)": "1394.8",
+          "Med (ns)": "1376.5",
+          "Min (ns)": "1280",
+          "Max (ns)": "1568",
+          "StdDev (ns)": "95.7",
+          "Name": "void soft_max_f32<(bool)1, (int)256, (int)256, float>(const float *, const T4 *, const float *, float *, soft_max_params)"
+        },
+        {
+          "Time (%)": "0.3",
+          "Total Time (ns)": "26369",
+          "Instances": "18",
+          "Avg (ns)": "1464.9",
+          "Med (ns)": "1472.0",
+          "Min (ns)": "1376",
+          "Max (ns)": "1568",
+          "StdDev (ns)": "41.8",
+          "Name": "void k_bin_bcast<&op_mul, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)"
+        },
+        {
+          "Time (%)": "0.3",
+          "Total Time (ns)": "21344",
+          "Instances": "24",
+          "Avg (ns)": "889.3",
+          "Med (ns)": "896.0",
+          "Min (ns)": "864",
+          "Max (ns)": "896",
+          "StdDev (ns)": "13.3",
+          "Name": "void unary_gated_op_kernel<&op_sigmoid, float>(const T2 *, const T2 *, T2 *, long long, long long, long long, long long)"
+        },
+        {
+          "Time (%)": "0.2",
+          "Total Time (ns)": "15170",
+          "Instances": "18",
+          "Avg (ns)": "842.8",
+          "Med (ns)": "832.0",
+          "Min (ns)": "832",
+          "Max (ns)": "865",
+          "StdDev (ns)": "15.6",
+          "Name": "void unary_op_kernel<&op_softplus, float>(const T2 *, T2 *, int)"
+        }
+      ]
+    },
+    "api": {
+      "command": [
+        "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+        "stats",
+        "--report",
+        "cuda_api_sum",
+        "--format",
+        "csv",
+        "--output",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.api.csv",
+        "--force-overwrite",
+        "true",
+        "--force-export",
+        "true",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.nsys-rep"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "csv": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.api.csv",
+      "rows": [
+        {
+          "Time (%)": "63.8",
+          "Total Time (ns)": "8407939",
+          "Num Calls": "3028",
+          "Avg (ns)": "2776.7",
+          "Med (ns)": "2230.0",
+          "Min (ns)": "1570",
+          "Max (ns)": "143623",
+          "StdDev (ns)": "3585.7",
+          "Name": "cudaLaunchKernelExC_v11060"
+        },
+        {
+          "Time (%)": "32.9",
+          "Total Time (ns)": "4341812",
+          "Num Calls": "100",
+          "Avg (ns)": "43418.1",
+          "Med (ns)": "635.0",
+          "Min (ns)": "320",
+          "Max (ns)": "1422723",
+          "StdDev (ns)": "191911.2",
+          "Name": "cudaStreamSynchronize"
+        },
+        {
+          "Time (%)": "2.1",
+          "Total Time (ns)": "283007",
+          "Num Calls": "50",
+          "Avg (ns)": "5660.1",
+          "Med (ns)": "3320.5",
+          "Min (ns)": "1290",
+          "Max (ns)": "28321",
+          "StdDev (ns)": "5827.5",
+          "Name": "cudaMemcpyAsync"
+        },
+        {
+          "Time (%)": "1.1",
+          "Total Time (ns)": "150281",
+          "Num Calls": "54",
+          "Avg (ns)": "2783.0",
+          "Med (ns)": "2425.0",
+          "Min (ns)": "1900",
+          "Max (ns)": "5970",
+          "StdDev (ns)": "861.1",
+          "Name": "cudaLaunchKernel"
+        }
+      ]
+    },
+    "memcpy": {
+      "command": [
+        "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+        "stats",
+        "--report",
+        "cuda_gpu_mem_time_sum",
+        "--format",
+        "csv",
+        "--output",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.memcpy.csv",
+        "--force-overwrite",
+        "true",
+        "--force-export",
+        "true",
+        "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.nsys-rep"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "csv": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_qwen35_p2_o4_profile_v1.memcpy.csv",
+      "rows": [
+        {
+          "Time (%)": "78.3",
+          "Total Time (ns)": "144804",
+          "Count": "4",
+          "Avg (ns)": "36201.0",
+          "Med (ns)": "36161.0",
+          "Min (ns)": "35617",
+          "Max (ns)": "36865",
+          "StdDev (ns)": "522.1",
+          "Operation": "[CUDA memcpy Device-to-Host]"
+        },
+        {
+          "Time (%)": "14.1",
+          "Total Time (ns)": "26081",
+          "Count": "28",
+          "Avg (ns)": "931.5",
+          "Med (ns)": "912.0",
+          "Min (ns)": "640",
+          "Max (ns)": "2528",
+          "StdDev (ns)": "370.8",
+          "Operation": "[CUDA memcpy Host-to-Device]"
+        },
+        {
+          "Time (%)": "7.6",
+          "Total Time (ns)": "14112",
+          "Count": "18",
+          "Avg (ns)": "784.0",
+          "Med (ns)": "784.0",
+          "Min (ns)": "768",
+          "Max (ns)": "800",
+          "StdDev (ns)": "16.5",
+          "Operation": "[CUDA memcpy Device-to-Device]"
+        }
+      ]
+    }
+  },
+  "calibration_scope": {
+    "prompt_eval": "formal request only; collection starts after warmup; prompt/decode split still requires NVTX markers",
+    "decode_eval": "formal request only; collection starts after warmup; llama.cpp aggregate prompt/eval timings remain stage boundaries",
+    "launch_and_sync": "cuda_api_sum rows, never folded into GEMM demand",
+    "host_output": "cuda_gpu_mem_time_sum plus llama.cpp timing; D2H attribution requires explicit memcpy rows"
+  }
+}

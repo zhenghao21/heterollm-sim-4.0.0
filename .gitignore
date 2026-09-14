@@ -1,0 +1,43 @@
+# Generated and machine-local outputs
+.pytest_cache/
+__pycache__/
+*.pyc
+build/
+source/llama.cpp-semantic/build*/
+
+# Model weights and large profiler files
+artifacts/**/*.gguf
+artifacts/**/*.bin
+artifacts/**/*.nsys-rep
+artifacts/**/*.sqlite
+artifacts/**/*.csv
+artifacts/**/*.trace.json
+artifacts/**/*.llama.log
+artifacts/**/*.stdout.txt
+artifacts/**/*.prediction.json
+artifacts/multimodel_next/generalization_acceptance_*/
+
+# Keep compact structured evidence summaries and manifests
+!artifacts/development/
+artifacts/development/*
+!artifacts/development/*.json
+!artifacts/development/*manifest*.json
+!artifacts/development/*audit*.json
+!artifacts/development/*replay*.json
+!artifacts/development/*compare*.json
+!artifacts/development/*holdout*.json
+!artifacts/development/*diagnosis*.json
+
+# Never commit raw profiler/event payloads, even under the compact-evidence allowlist
+artifacts/**/*.trace.json
+artifacts/**/*.sqlite
+artifacts/**/*.nsys-rep
+artifacts/**/*.csv
+artifacts/**/*.llama.log
+artifacts/**/*.stdout.txt
+artifacts/**/*.prediction.json
+
+# Omit the vendored llama.cpp checkout; submit the exact modified files as patches below.
+source/llama.cpp-semantic/
+
+tmp_*.log

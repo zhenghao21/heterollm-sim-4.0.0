@@ -1,0 +1,859 @@
+<!--
+ASSUMPTIONS
+- 本页由 heterollm_sim 的同源 HTTP 服务托管；API 根路径固定为 /api。
+- 场景的服务端事实来源是 schema_version 4.0.0；界面只提交 V4 graph-only 场景，不执行旧版迁移。
+- 拓扑编辑视图写入 hardware.metadata.topology_view；分组、折叠、坐标和视口不会改变组件、链路或仿真语义。
+
+REASONING
+- 目标用户在 1440p 桌面上进行架构探索，需要同时看到步骤、拓扑、属性和验证反馈；因此采用固定顶栏、窄步骤栏、中央工作区与上下文 Inspector。
+- 暖石墨用于长时间分析环境；铜橙只强调计算/CIM，低饱和青只强调链路与 IO，绿色只用于明确成功状态。
+- 页面不伪造仿真数据。结果区在 API 返回前保持空态；所有结果标记为 ANALYTICAL。
+
+PLACEHOLDERS / BOUNDARIES
+- 新建协议链路使用协议级默认端口参数，最终合法性由 /api/validate 判定。
+- 组件 Inspector 提供 CPU/GPU/HBM/Host Memory 核心成本 profile；其余高级 profiles、metadata 与 assumptions 可通过 JSON 抽屉无损编辑。
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="data:,">
+  <title>HeteroLLM Lab</title>
+  <script src="./ui-settings-preload.js"></script>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <header class="topbar">
+      <div class="brand-block" aria-label="产品信息" data-i18n-aria-label-zh="产品信息" data-i18n-aria-label-en="Product information">
+        <div class="product-name">HeteroLLM <span>Lab</span></div>
+        <span class="evidence-badge" data-i18n-zh="分析型" data-i18n-en="ANALYTICAL">分析型</span>
+        <span class="connection-state is-checking" id="connectionState"><i></i><span data-i18n-skip>连接检查中</span></span>
+      </div>
+      <div class="scenario-identity" aria-label="修改状态" aria-live="polite">
+        <span class="dirty-mark is-clean" id="dirtyMark">未修改</span>
+      </div>
+      <div class="top-actions" aria-label="场景操作">
+        <button type="button" class="button button-quiet" id="loadReferenceButton">载入参考</button>
+        <button type="button" class="button button-quiet" id="importButton">导入 JSON</button>
+        <input type="file" id="fileInput" accept="application/json,.json" hidden>
+        <button type="button" class="button button-quiet" id="exportButton">导出 JSON</button>
+        <button type="button" class="button button-quiet" id="canonicalExportButton">导出标准 IR</button>
+        <button type="button" class="button button-quiet" id="jsonButton">查看 JSON</button>
+        <button type="button" class="button button-quiet top-settings-button" id="settingsButton" aria-haspopup="dialog" aria-controls="settingsDialog">设置</button>
+        <span class="action-divider" aria-hidden="true"></span>
+        <button type="button" class="button button-secondary" id="validateButton">校验</button>
+        <button type="button" class="button button-primary" id="runButton">运行仿真</button>
+      </div>
+    </header>
+
+    <div class="workbench">
+      <aside class="step-rail" aria-label="工作台步骤">
+        <ol class="step-list">
+          <li>
+            <button type="button" class="step-button is-active" data-view="architecture" aria-current="step">
+              <span class="step-number">01</span>
+              <span class="step-copy"><strong>架构</strong><small id="architectureStatus">待载入</small></span>
+              <span class="step-count" id="architectureCount">—</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="step-button" data-view="model">
+              <span class="step-number">02</span>
+              <span class="step-copy"><strong>模型</strong><small id="modelStatus">待载入</small></span>
+              <span class="step-count" id="modelCount">—</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="step-button" data-view="mapping">
+              <span class="step-number">03</span>
+              <span class="step-copy"><strong>映射</strong><small id="mappingStatus">待载入</small></span>
+              <span class="step-count" id="mappingCount">—</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="step-button" data-view="workload">
+              <span class="step-number">04</span>
+              <span class="step-copy"><strong>负载</strong><small id="workloadStatus">待载入</small></span>
+              <span class="step-count" id="workloadCount">—</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="step-button" data-view="playback">
+              <span class="step-number">05</span>
+              <span class="step-copy"><strong>运行回放</strong><small id="playbackStatus">未运行</small></span>
+              <span class="step-count" id="playbackCount">—</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="step-button" data-view="results">
+              <span class="step-number">06</span>
+              <span class="step-copy"><strong>结果</strong><small id="resultsStatus">未运行</small></span>
+              <span class="step-count" id="resultsCount">—</span>
+            </button>
+          </li>
+        </ol>
+        <div class="rail-footer">
+          <div class="rail-stat"><span>错误</span><strong id="errorCount">0</strong></div>
+          <div class="rail-stat"><span>警告</span><strong id="warningCount">0</strong></div>
+          <button type="button" class="diagnostic-toggle" id="diagnosticToggle" aria-expanded="false" aria-controls="diagnosticPanel">诊断面板</button>
+        </div>
+      </aside>
+
+      <main class="main-stage" id="mainStage">
+        <section class="diagnostic-panel" id="diagnosticPanel" hidden aria-label="诊断信息">
+          <div class="diagnostic-head">
+            <div><span class="eyebrow kicker">校验与网络 · VALIDATION & NETWORK</span><h2>诊断</h2></div>
+            <button type="button" class="icon-button" id="closeDiagnosticsButton" aria-label="关闭诊断">×</button>
+          </div>
+          <div id="diagnosticContent" class="diagnostic-content">
+            <p class="muted" data-i18n-zh="尚无诊断信息。运行校验可检查拓扑、映射和当前降级转换支持范围。" data-i18n-en="No diagnostics yet. Run validation to check topology, mapping, and current lowering support.">尚无诊断信息。运行校验可检查拓扑、映射和当前降级转换支持范围。</p>
+          </div>
+        </section>
+
+        <section class="view is-active architecture-view" id="view-architecture" data-view-panel="architecture" aria-labelledby="architectureTitle">
+          <div class="view-head compact-head">
+            <div>
+              <h1 id="architectureTitle" data-concept-help="hardware_topology">异构封装拓扑</h1>
+            </div>
+            <div class="view-head-meta">
+              <span id="hardwareName">—</span>
+              <span id="topologySummary">0 组件 · 0 链路</span>
+              <button type="button" class="button button-primary" id="hardwarePresetsButton" aria-haspopup="dialog" aria-controls="hardwarePresetsDialog">硬件预设库（Hardware Presets）</button>
+              <button type="button" class="button button-secondary" id="architectureScanButton" aria-haspopup="dialog" aria-controls="architectureScanDialog">候选扫描（Scan）</button>
+            </div>
+          </div>
+
+          <div class="architecture-grid">
+            <aside class="component-palette" aria-label="组件库">
+              <div class="panel-heading">
+                <div><h2>组件</h2></div>
+              </div>
+              <div class="palette-items">
+                <button type="button" class="palette-item compute" data-add-kind="gpu">
+                  <span class="component-glyph">GPU</span><span><strong data-concept-help="gpu">通用计算（GPU）</strong><small>加速器计算</small></span>
+                </button>
+                <button type="button" class="palette-item compute" data-add-kind="cpu">
+                  <span class="component-glyph">CPU</span><span><strong data-concept-help="cpu">主机 CPU（Host CPU）</strong><small>分类吞吐与调度（Categorized Throughput &amp; Dispatch）</small></span>
+                </button>
+                <button type="button" class="palette-item io" data-add-kind="hbm">
+                  <span class="component-glyph">HBM</span><span><strong data-concept-help="hbm">高带宽内存（HBM）</strong><small>专用 HBM 链路</small></span>
+                </button>
+                <button type="button" class="palette-item io" data-add-kind="host_memory">
+                  <span class="component-glyph">RAM</span><span><strong data-concept-help="host_memory">主机内存（Host Memory）</strong><small>CPU 可见内存成本（CPU-Visible Memory Cost）</small></span>
+                </button>
+                <button type="button" class="palette-item storage" data-add-kind="hbf">
+                  <span class="component-glyph">HBF</span><span><strong data-concept-help="hbf">高带宽闪存（HBF）</strong><small>约 3 TB/s 读取 · 只读优先（Read-Mostly）</small></span>
+                </button>
+                <button type="button" class="palette-item storage" data-add-kind="ssd">
+                  <span class="component-glyph">SSD</span><span><strong data-concept-help="ssd">固态硬盘（SSD）</strong><small>PCIe / CXL 存储</small></span>
+                </button>
+                <button type="button" class="palette-item storage" data-add-kind="high_io_ssd">
+                  <span class="component-glyph">HIO</span><span><strong data-concept-help="high_io_ssd">高 I/O 固态硬盘（High-I/O SSD）</strong><small>高并发 PCIe / CXL</small></span>
+                </button>
+                <button type="button" class="palette-item cim" data-add-kind="digital_sram_cim">
+                  <span class="component-glyph">CIM</span><span><strong data-concept-help="cim">数字 SRAM-CIM</strong><small>存算一体</small></span>
+                </button>
+              </div>
+              <div class="palette-note">
+                <span class="eyebrow">视图状态 · VIEW STATE</span>
+                <p>拖动节点仅调整画布坐标，不会改变 scenario JSON。</p>
+              </div>
+            </aside>
+
+            <div class="topology-workspace">
+              <div class="canvas-toolbar" aria-label="拓扑画布工具">
+                <section class="toolbar-section is-edit" data-toolbar-section="edit" data-toolbar-menu>
+                  <button type="button" class="toolbar-menu-trigger" id="topologyEditMenuButton" aria-haspopup="menu" aria-expanded="false" aria-controls="topologyEditMenu"><span id="topologyEditToolsLabel">编辑（Edit）</span><span aria-hidden="true">▾</span></button>
+                  <div class="toolbar-section-body toolbar-menu-panel" id="topologyEditMenu" role="menu" aria-labelledby="topologyEditMenuButton" hidden>
+                    <div class="tool-group">
+                      <button type="button" class="tool-button is-active" id="selectModeButton" role="menuitem" aria-pressed="true">选择（Select）</button>
+                      <button type="button" class="tool-button history-button" id="undoTopologyButton" role="menuitem" disabled aria-keyshortcuts="Control+Z Meta+Z">撤销（Undo）</button>
+                      <button type="button" class="tool-button history-button" id="redoTopologyButton" role="menuitem" disabled aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y">重做（Redo）</button>
+                      <button type="button" class="tool-button" id="copyTopologyButton" role="menuitem" disabled>复制（Copy）</button>
+                      <button type="button" class="tool-button" id="pasteTopologyButton" role="menuitem">粘贴（Paste）</button>
+                      <button type="button" class="tool-button" id="fitCanvasButton" role="menuitem">整理布局（Layout）</button>
+                    </div>
+                  </div>
+                </section>
+                <section class="toolbar-section is-group" data-toolbar-section="group" data-toolbar-menu>
+                  <button type="button" class="toolbar-menu-trigger" id="topologyGroupMenuButton" aria-haspopup="menu" aria-expanded="false" aria-controls="topologyGroupMenu"><span id="topologyGroupToolsLabel">分组（Group）</span><span aria-hidden="true">▾</span></button>
+                  <div class="toolbar-section-body toolbar-menu-panel" id="topologyGroupMenu" role="menu" aria-labelledby="topologyGroupMenuButton" hidden>
+                    <div class="tool-group topology-edit-tools">
+                      <button type="button" class="tool-button" id="createGroupButton" role="menuitem" disabled>建立组（Group）</button>
+                      <button type="button" class="tool-button" id="setGroupRootButton" role="menuitem" disabled>设为根（Set Root）</button>
+                      <button type="button" class="tool-button" id="toggleGroupButton" role="menuitem" disabled>折叠组（Collapse）</button>
+                      <button type="button" class="tool-button" id="releaseGroupButton" role="menuitem" disabled>释放组（Ungroup）</button>
+                    </div>
+                  </div>
+                </section>
+                <section class="toolbar-section is-connect" data-toolbar-section="connect" data-toolbar-menu>
+                  <button type="button" class="toolbar-menu-trigger" id="topologyConnectMenuButton" aria-haspopup="menu" aria-expanded="false" aria-controls="topologyConnectMenu"><span id="topologyConnectToolsLabel">连接（Connect）</span><span aria-hidden="true">▾</span></button>
+                  <div class="toolbar-section-body toolbar-menu-panel" id="topologyConnectMenu" role="menu" aria-labelledby="topologyConnectMenuButton" hidden>
+                    <button type="button" class="tool-button" id="connectModeButton" role="menuitem" aria-pressed="false">连接模式（Connect Mode）</button>
+                    <label class="inline-control" for="protocolSelect" role="group" aria-label="连接协议（Connection Protocol）"><span data-concept-help="protocol">协议（Protocol）</span>
+                      <select id="protocolSelect">
+                        <option value="HBM">HBM</option>
+                        <option value="PCIe">PCIe</option>
+                        <option value="CXL">CXL</option>
+                        <option value="UCIe" selected>UCIe</option>
+                        <option value="NVLink">NVLink</option>
+                        <option value="NVLink-C2C">NVLink-C2C</option>
+                        <option value="InfinityFabric">Infinity Fabric</option>
+                        <option value="RoCE">RoCE</option>
+                        <option value="LPDDR5X">LPDDR5X</option>
+                      </select>
+                    </label>
+                    <button type="button" class="tool-button protocol-catalog-button" id="protocolCatalogButton" role="menuitem" aria-haspopup="dialog" aria-controls="protocolPresetsDialog">协议目录（Catalog）</button>
+                    <div class="protocol-manual-grid" role="group" aria-label="通信协议手动覆盖">
+                      <label><span>版本</span><input id="protocolVersionInput" value="2.0" autocomplete="off"></label>
+                      <label><span data-concept-help="lanes">通道 / lane / link 数</span><input id="protocolUnitsInput" type="number" min="1" step="1" value="64"></label>
+                      <label><span data-concept-help="link_bandwidth">单向带宽（GB/s）</span><input id="protocolBandwidthInput" inputmode="decimal" value="256 GB/s"></label>
+                      <label><span data-concept-help="link_latency">时延（ns）</span><input id="protocolLatencyInput" type="number" min="0" step="any" value="20"></label>
+                      <label><span data-concept-help="payload">负载映射（Payload）</span><input id="protocolPayloadInput" value="streaming" autocomplete="off" placeholder="可留空"></label>
+                    </div>
+                    <p class="protocol-preset-selection" id="protocolPresetSelection">内置默认值 · 可手动覆盖</p>
+                    <span class="connection-hint" id="connectionHint" role="group" aria-label="连接状态">选择节点或链路查看属性</span>
+                  </div>
+                </section>
+                <div class="toolbar-status-row">
+                  <output class="zoom-value" id="topologyZoomValue" aria-label="画布缩放比例">100%</output>
+                  <span class="selection-status" id="topologySelectionStatus" role="status" aria-live="polite">未选择</span>
+                  <span class="route-status" id="topologyRouteStatus" role="alert" hidden></span>
+                </div>
+              </div>
+              <div class="topology-canvas" id="topologyCanvas" tabindex="0" aria-label="硬件拓扑画布。方向键移动所选组件，按住 Shift 加速；Ctrl 或 Command 点击多选，空白拖动框选。">
+                <div class="topology-world" id="topologyWorld">
+                  <svg class="link-layer" id="linkLayer" role="group" aria-label="Hardware protocol links; focus a link to inspect protocol and bandwidth" data-i18n-aria-label-zh="硬件协议链路；聚焦链路可查看协议与带宽" data-i18n-aria-label-en="Hardware protocol links; focus a link to inspect protocol and bandwidth"></svg>
+                  <div class="group-layer" id="groupLayer"></div>
+                  <div class="node-layer" id="nodeLayer"></div>
+                </div>
+                <div class="link-tooltip" id="topologyLinkTooltip" role="tooltip" hidden><strong data-link-tooltip-protocol>—</strong><span data-link-tooltip-bandwidth>—</span></div>
+                <div class="marquee" id="topologyMarquee" hidden></div>
+                <div class="canvas-empty" id="canvasEmpty" hidden>
+                  <strong>拓扑为空</strong><span>从左侧添加 GPU、HBM、HBF、SSD 或数字 SRAM-CIM。</span>
+                </div>
+              </div>
+              <div class="canvas-legend" aria-label="Component and protocol legend" data-i18n-aria-label-zh="组件与协议图例" data-i18n-aria-label-en="Component and protocol legend">
+                <span><i class="legend-swatch compute"></i>计算 / CIM</span>
+                <span><i class="legend-swatch io"></i>HBM</span>
+                <span><i class="legend-swatch storage"></i>分层存储 / IO</span>
+                <div class="protocol-legend" id="topologyProtocolLegend" role="list" aria-label="Link protocol line styles" data-i18n-aria-label-zh="链路协议线型" data-i18n-aria-label-en="Link protocol line styles">
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-pcie"></i>PCIe</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-cxl"></i>CXL</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-ucie"></i>UCIe</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-nvlink"></i>NVLink / C2C</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-roce"></i>RoCE</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-infinityfabric"></i>Infinity Fabric</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-hbm"></i>HBM / internal</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-lpddr5x"></i>LPDDR5X</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-unknown"></i><span data-i18n-zh="未知" data-i18n-en="Unknown">Unknown</span></span>
+                </div>
+                <span class="canvas-scale">空白框选 · Ctrl/Cmd 多选 · Space/中键平移 · Ctrl/Cmd C/V · Delete 删除</span>
+              </div>
+            </div>
+
+            <aside class="inspector" aria-label="属性检查器">
+              <div class="panel-heading">
+                <div><span class="eyebrow kicker">检查器 · INSPECTOR</span><h2 id="inspectorTitle">未选择</h2></div>
+                <button type="button" class="danger-text-button" id="deleteSelectionButton" hidden>删除</button>
+              </div>
+              <div id="inspectorContent" class="inspector-content">
+                <div class="inspector-empty"><span>选择 · SELECT</span><p>选择组件或链路以编辑常用字段。其余 Schema / metadata 字段保留在 JSON 中。</p></div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="view-model" data-view-panel="model" aria-labelledby="modelTitle" hidden>
+          <div class="view-head">
+            <div><h1 id="modelTitle" data-concept-help="model_graph">模型语义组件图（Model Graph）</h1><p data-i18n-zh="重复模式以可折叠组显示；展开可编辑权威模板算子的 Shape、DType 与组件量化参数，虚线 ×N 回线仅是视图提示。" data-i18n-en="Repeat patterns are collapsible. Expand a group to edit authoritative template operators, port Shape and DType, and per-component quantization; the dashed ×N loop is visual only.">Repeat patterns are collapsible. Expand a group to edit authoritative template operators, port Shape and DType, and per-component quantization; the dashed ×N loop is visual only.</p></div>
+            <div class="view-head-actions">
+              <button type="button" class="button button-secondary" id="modelPresetsButton" aria-haspopup="dialog" aria-controls="modelPresetsDialog">模型预设（Model Presets）</button>
+            </div>
+          </div>
+          <dl class="form-strip model-summary-strip" id="modelMetaForm" aria-label="只读模型摘要"></dl>
+          <div class="model-graph-shell">
+            <section class="model-graph-main" aria-labelledby="modelGraphCanvasTitle">
+              <div class="model-graph-toolbar" role="toolbar" aria-label="模型结构总览与端口连接工具">
+                <div class="model-graph-toolbar-group model-graph-mode-switch" aria-label="当前显示模式">
+                  <span class="model-graph-mode-badge"><strong>结构总览</strong></span>
+                  <button type="button" class="tool-button" id="modelGraphBackButton" aria-label="Back" hidden>←</button>
+                </div>
+                <span class="model-graph-status" id="modelGraphStatus" role="status" aria-live="polite" title="No component selected · expand a repeat group to inspect its authoritative template · ports can create connections" data-i18n-title-zh="未选择组件 · 展开重复组查看完整权威模板 · 端口可用于建立连接" data-i18n-title-en="No component selected · expand a repeat group to inspect its authoritative template · ports can create connections" data-i18n-zh="未选择组件 · 展开重复组查看完整权威模板 · 端口可用于建立连接" data-i18n-en="No component selected · expand a repeat group to inspect its authoritative template · ports can create connections">No component selected · expand a repeat group to inspect its authoritative template · ports can create connections</span>
+                <div class="model-graph-toolbar-group model-graph-toolbar-tools">
+                  <button type="button" class="tool-button" id="modelGraphConnectButton" aria-pressed="false">连接端口</button>
+                  <button type="button" class="tool-button" id="modelGraphAutoLayoutButton">整理</button>
+                  <button type="button" class="tool-button" id="modelGraphFitButton">适配</button>
+                  <button type="button" class="tool-button" id="modelGraphZoomOutButton" aria-label="缩小模型图">−</button>
+                  <output id="modelGraphZoomValue" class="zoom-value">100%</output>
+                  <button type="button" class="tool-button" id="modelGraphZoomInButton" aria-label="放大模型图">＋</button>
+                  <button type="button" class="tool-button" id="modelGraphUndoButton" disabled>撤销</button>
+                  <button type="button" class="tool-button" id="modelGraphRedoButton" disabled>重做</button>
+                </div>
+              </div>
+              <h2 id="modelGraphCanvasTitle" class="sr-only">模型语义组件图画布</h2>
+              <div class="model-graph-canvas" id="modelGraphCanvas" tabindex="0" aria-label="模型语义组件图。空白拖动平移，按住 Ctrl 或 Command 滚轮缩放，选择端口建立带维度连接。">
+                <div class="model-graph-world" id="modelGraphWorld">
+                  <svg class="model-graph-edge-layer" id="modelGraphEdgeLayer" aria-hidden="true"></svg>
+                  <div class="model-graph-group-layer" id="modelGraphGroupLayer"></div>
+                  <div class="model-graph-node-layer" id="modelGraphNodeLayer"></div>
+                </div>
+              </div>
+              <div class="model-graph-legend"><span><i class="model-port-swatch is-input"></i>输入端口</span><span><i class="model-port-swatch is-output"></i>输出端口</span><span><i class="model-port-swatch is-weight"></i>权重端口</span><span>提示格式：DType [Shape] / Layout</span><span>形状符号：B 批次 · T 序列 · H 隐藏维度 · I 中间维度 · V 词表</span></div>
+            </section>
+            <aside class="model-graph-inspector" aria-labelledby="modelGraphInspectorTitle">
+              <div class="panel-heading"><div><span class="eyebrow kicker">组件检查器 · COMPONENT INSPECTOR</span><h2 id="modelGraphInspectorTitle">未选择组件</h2></div></div>
+              <div id="modelGraphInspectorContent" class="inspector-content"><div class="inspector-empty"><span>选择 · SELECT</span><p>选择叶子算子后查看说明、实例数、参数和具体端口；总览框只显示名称。</p></div></div>
+            </aside>
+          </div>
+          <div class="model-graph-diagnostics" id="modelGraphDiagnostics" role="alert" aria-live="polite"></div>
+          <div class="detail-note" id="modelDetailNote">端口连接会修改权威 model.graph 并使映射过期；选择、平移、缩放和整理只改变显示状态。</div>
+        </section>
+
+        <section class="view" id="view-mapping" data-view-panel="mapping" aria-labelledby="mappingTitle" hidden>
+          <div class="view-head">
+            <div><h1 id="mappingTitle" data-concept-help="placement">运行时放置状态</h1><p>容量、放置、分配与调度由 CPU 控制平面动态决定；本页仅展示已物化结果。</p></div>
+          </div>
+          <section class="control-plane-status" id="controlPlaneStatus" aria-labelledby="controlPlaneStatusTitle" aria-live="polite">
+            <div class="control-plane-status-head">
+              <div><h2 id="controlPlaneStatusTitle">运行时控制平面（Runtime Control Plane）</h2></div>
+              <strong class="control-plane-status-badge is-idle" id="controlPlaneStatusBadge">尚未物化（Not Materialized）</strong>
+            </div>
+            <p class="control-plane-status-summary" id="controlPlaneStatusSummary">运行时放置由内部控制平面物化；此处仅显示当前只读状态。</p>
+            <dl class="control-plane-status-metrics" id="controlPlaneStatusMetrics"></dl>
+          </section>
+          <section class="effective-mapping" aria-labelledby="effectiveMappingTitle">
+            <div class="section-heading">
+              <div><h2 id="effectiveMappingTitle" data-concept-help="rank_mapping">实际 Rank 级映射（Effective Rank Mapping）</h2></div>
+              <span class="panel-meta" id="effectiveMappingMeta">以此处为 TP/PP/EP 执行依据</span>
+            </div>
+            <p class="effective-mapping-note">每一行表示内部控制平面已物化的实际执行或驻留逻辑 Rank；此视图只读。</p>
+            <dl class="effective-mapping-summary" id="effectiveMappingSummary" aria-label="Rank 映射摘要"></dl>
+            <form class="effective-mapping-filters" id="effectiveMappingFilterForm" aria-label="Rank 映射筛选">
+              <label class="field"><span>搜索算子 / 张量 / 组件</span><input type="search" id="effectiveMappingSearchInput" autocomplete="off" placeholder="名称、组件或分片语义"></label>
+              <label class="field"><span>逻辑 Rank</span><select id="effectiveMappingRankFilter"><option value="">全部 Rank</option></select></label>
+              <label class="field"><span>执行 / 存储组件</span><select id="effectiveMappingComponentFilter"><option value="">全部组件</option></select></label>
+              <button type="reset" class="button button-quiet" id="resetEffectiveMappingFiltersButton">清除筛选</button>
+            </form>
+            <div class="effective-mapping-grid">
+              <section class="effective-mapping-panel">
+                <div class="subsection-title"><strong data-concept-help="operator_targets">算子执行目标（Operator Targets）</strong><span id="effectiveOpMappingMeta">—</span></div>
+                <div class="rank-mapping-groups" id="effectiveOpMappingBody"></div>
+                <nav class="rank-mapping-pagination" aria-label="算子 Rank 映射分页"><button type="button" class="button button-quiet" id="effectiveOpPreviousButton">上一页</button><span id="effectiveOpPageStatus">—</span><button type="button" class="button button-quiet" id="effectiveOpNextButton">下一页</button></nav>
+              </section>
+              <section class="effective-mapping-panel">
+                <div class="subsection-title"><strong data-concept-help="weight_tensor_shards">权重张量分片（Weight Tensor Shards）</strong><span id="effectiveTensorShardMeta">—</span></div>
+                <div class="rank-mapping-groups" id="effectiveTensorShardBody"></div>
+                <nav class="rank-mapping-pagination" aria-label="张量 Rank 分片分页"><button type="button" class="button button-quiet" id="effectiveTensorPreviousButton">上一页</button><span id="effectiveTensorPageStatus">—</span><button type="button" class="button button-quiet" id="effectiveTensorNextButton">下一页</button></nav>
+              </section>
+            </div>
+          </section>
+          <div class="mapping-layout mapping-layout-readonly">
+            <aside class="configuration-panel">
+              <div class="panel-heading"><div><h2>并行与 KV 策略输入</h2></div></div>
+              <div id="placementControls"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="view-workload" data-view-panel="workload" aria-labelledby="workloadTitle" hidden>
+          <div class="view-head">
+            <div><h1 id="workloadTitle" data-concept-help="workload">请求负载</h1><p>支持显式 requests 或有效 synthetic workload；arrival 以纳秒表达，界面同时显示友好单位。</p></div>
+          </div>
+          <div class="workload-config-grid" id="workloadMetaForm"></div>
+          <section class="workload-config-section workload-explicit-section" data-workload-section="explicit-requests" aria-labelledby="explicitRequestsTitle">
+            <header class="workload-section-heading">
+              <div><h2 id="explicitRequestsTitle" data-concept-help="explicit_requests">显式请求</h2></div>
+              <button type="button" class="button button-secondary" id="addRequestButton">新增请求</button>
+            </header>
+            <div class="table-shell workload-request-table-shell" tabindex="0" aria-label="显式请求表，可横向滚动">
+              <table class="data-table request-input-table">
+                <colgroup>
+                  <col class="request-input-col-id">
+                  <col class="request-input-col-arrival">
+                  <col class="request-input-col-relative">
+                  <col class="request-input-col-prompt">
+                  <col class="request-input-col-output">
+                  <col class="request-input-col-priority">
+                  <col class="request-input-col-deadline">
+                  <col class="request-input-col-action">
+                </colgroup>
+                <thead><tr><th data-concept-help="request">请求 ID（Request ID）</th><th data-concept-help="arrival_time">到达时间（Arrival, ns）</th><th data-concept-help="relative_time">相对时间（Relative Time）</th><th data-concept-help="prompt_tokens">提示 Token 数（Prompt Tokens）</th><th data-concept-help="output_tokens">输出 Token 数（Output Tokens）</th><th data-concept-help="request_priority">优先级（Priority）</th><th data-concept-help="request_deadline">截止时间（Deadline, ns）</th><th><span class="sr-only">操作</span></th></tr></thead>
+                <tbody id="requestTableBody"></tbody>
+              </table>
+            </div>
+            <div class="detail-note">常用调度与 MTP 参数写入嵌套策略；SLO、抢占细节与 acceptance trace 可在高级 JSON 中继续编辑。</div>
+          </section>
+        </section>
+
+        <section class="view playback-view" id="view-playback" data-view-panel="playback" aria-labelledby="playbackTitle" hidden>
+          <div class="view-head">
+            <div><h1 id="playbackTitle" data-concept-help="trace">推理运行时回放</h1><p>按仿真事件时间展示张量分片、逻辑内存区间、协议路径、Rank 算子计算与集合通信；不伪装为 JEDEC bank/row 级仿真。</p></div>
+            <strong class="trace-fidelity-badge is-empty" id="playbackFidelity">尚无 Trace</strong>
+          </div>
+          <div class="trace-empty" id="traceEmpty">
+            <span class="result-empty-mark">回放 · TRACE</span>
+            <h2>运行仿真后生成确定性回放</h2>
+            <p>详细 DES 返回精确事件；Scalable Serving 会明确标记代表性或聚合语义。</p>
+            <button type="button" class="button button-primary" id="traceRunButton">运行当前场景</button>
+          </div>
+          <div id="traceContent" hidden>
+            <div class="trace-control-bar" aria-label="运行时回放控制">
+              <div class="trace-transport">
+                <button type="button" class="tool-button" id="traceResetButton">回到起点</button>
+                <button type="button" class="tool-button" id="tracePreviousButton" aria-label="上一个事件">上一步</button>
+                <button type="button" class="button button-primary trace-play-button" id="tracePlayButton" aria-pressed="false">播放</button>
+                <button type="button" class="tool-button" id="traceNextButton" aria-label="下一个事件">下一步</button>
+              </div>
+              <label class="inline-control trace-time-control"><span>仿真时间（Simulation Time）</span><input type="range" id="traceTimeline" min="0" max="10000" value="0" step="1" aria-describedby="playbackTime"><output id="playbackTime" aria-live="off">0 ns</output></label>
+            </div>
+            <div class="trace-filter-bar">
+              <label class="inline-control"><span data-concept-help="request">请求（Request）</span><select id="traceRequestFilter"><option value="">全部请求</option></select></label>
+              <label class="inline-control"><span data-concept-help="batch">批次（Batch）</span><select id="traceBatchFilter"><option value="">全部批次</option></select></label>
+              <label class="inline-control"><span data-concept-help="rank">逻辑 Rank</span><select id="traceRankFilter"><option value="">全部 Rank</option></select></label>
+              <span class="trace-event-meta" id="tracePlaybackMeta">—</span>
+            </div>
+            <div class="trace-page-bar" id="tracePageBar" aria-live="polite">
+              <span id="tracePageStatus">聚合回放：当前报告没有可按批次读取的任务级 Trace。</span>
+              <div class="trace-page-actions">
+                <button type="button" class="tool-button" id="tracePagePreviousButton" disabled>上一页</button>
+                <button type="button" class="tool-button" id="tracePageNextButton" disabled>下一页</button>
+              </div>
+            </div>
+            <section class="trace-narrative" aria-labelledby="traceNarrativeTitle" aria-live="polite" aria-atomic="true">
+              <div class="trace-narrative-kicker"><span class="eyebrow kicker" id="traceNarrativeTitle">此刻发生了什么</span><strong class="trace-narrative-state is-idle" id="traceNarrativeState">时间空档</strong></div>
+              <p class="trace-narrative-primary" id="traceNarrativePrimary">移动时间游标后，这里会用中文概括当前真正处于执行区间内的工作。</p>
+              <p class="trace-narrative-secondary" id="traceNarrativeSecondary">选中事件与当前活动事件会分开说明。</p>
+            </section>
+            <div class="trace-workspace">
+              <section class="trace-topology-panel" id="traceTopologyPanel" role="region" aria-labelledby="traceTopologyTitle">
+                <div class="section-heading trace-topology-heading">
+                  <div><h2 id="traceTopologyTitle">张量与算子数据流</h2></div>
+                  <div class="trace-layout-actions" role="toolbar" aria-label="数据流拓扑视图工具">
+                    <button type="button" class="tool-button" id="traceArrangeFitButton">整理并适配</button>
+                    <button type="button" class="tool-button" id="traceAutoLayoutButton">整理</button>
+                    <button type="button" class="tool-button" id="traceFitButton">适配</button>
+                    <button type="button" class="tool-button" id="traceZoomOutButton" aria-label="缩小数据流拓扑">−</button>
+                    <output class="zoom-value" id="traceZoomValue">100%</output>
+                    <button type="button" class="tool-button" id="traceZoomInButton" aria-label="放大数据流拓扑">＋</button>
+                    <button type="button" class="button button-secondary" id="traceFullscreenButton" aria-pressed="false">拓扑全屏</button>
+                  </div>
+                </div>
+                <div class="trace-topology-stage">
+                  <div class="trace-topology-canvas" id="traceTopologyCanvas" role="region" tabindex="0" aria-label="可滚动的 Trace 数据流拓扑；仅高亮当前时间实际活动的组件和链路" aria-describedby="traceTopologyKeyboardHelp" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight PageUp PageDown">
+                    <span class="sr-only" id="traceTopologyKeyboardHelp" data-i18n-zh="聚焦拓扑画布后，使用方向键滚动画布，PageUp / PageDown 翻页滚动；聚焦组件节点后，方向键浏览相邻组件，Home / End 跳到首个或末个组件。键盘操作不会改变仿真或布局。" data-i18n-en="When the topology canvas has focus, use arrow keys to scroll and PageUp / PageDown to scroll by a page. When a component node has focus, use arrow keys to browse nearby components and Home / End to jump to the first or last component. Keyboard navigation does not change the simulation or layout.">聚焦拓扑画布后，使用方向键滚动画布，PageUp / PageDown 翻页滚动；聚焦组件节点后，方向键浏览相邻组件，Home / End 跳到首个或末个组件。键盘操作不会改变仿真或布局。</span>
+                    <div class="trace-topology-world" id="traceTopologyWorld">
+                      <div class="trace-group-layer" id="traceGroupLayer" aria-label="Hardware groups" data-i18n-aria-label-zh="硬件分组" data-i18n-aria-label-en="Hardware groups"></div>
+                      <svg class="trace-link-layer" id="traceLinkLayer" role="group" aria-label="Playback protocol links; focus a link to inspect protocol and bandwidth" data-i18n-aria-label-zh="回放协议链路；聚焦链路可查看协议与带宽" data-i18n-aria-label-en="Playback protocol links; focus a link to inspect protocol and bandwidth"></svg>
+                      <div class="trace-particle-layer" id="traceParticleLayer" aria-hidden="true"></div>
+                      <div class="trace-node-layer" id="traceNodeLayer" role="list" aria-label="硬件组件"></div>
+                    </div>
+                    <div class="link-tooltip" id="traceLinkTooltip" role="tooltip" hidden><strong data-link-tooltip-protocol>—</strong><span data-link-tooltip-bandwidth>—</span></div>
+                  </div>
+                  <button type="button" class="button button-secondary trace-locate-active" id="traceLocateActiveButton" aria-controls="traceTopologyCanvas" data-i18n-zh="定位当前事件" data-i18n-en="Locate active event" hidden>定位当前事件</button>
+                </div>
+                <div class="protocol-legend trace-protocol-legend" id="traceProtocolLegend" role="list" aria-label="Playback link protocol line styles" data-i18n-aria-label-zh="回放链路协议线型" data-i18n-aria-label-en="Playback link protocol line styles">
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-pcie"></i>PCIe</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-cxl"></i>CXL</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-ucie"></i>UCIe</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-nvlink"></i>NVLink / C2C</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-roce"></i>RoCE</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-infinityfabric"></i>Infinity Fabric</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-hbm"></i>HBM / internal</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-lpddr5x"></i>LPDDR5X</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-unknown"></i><span data-i18n-zh="未知" data-i18n-en="Unknown">Unknown</span></span>
+                </div>
+              </section>
+              <aside class="trace-side-panel trace-event-drawer" id="traceEventDrawer" aria-labelledby="traceEventDetailTitle">
+                <section class="trace-detail-card" aria-labelledby="traceEventDetailTitle">
+                  <div class="section-heading"><div><h2 id="traceEventDetailTitle">选中事件</h2></div><div class="trace-detail-actions"><button type="button" class="tool-button" id="traceDiagnosticCopyButton">复制诊断信息</button><button type="button" class="icon-button trace-drawer-close" id="traceDrawerCloseButton" aria-controls="traceEventDrawer" aria-label="收起事件详情">×</button></div></div>
+                  <div id="traceEventDetails" class="trace-event-details"><p class="muted">选择事件后显示计算主体、数据流、时间并发与精确标识。</p></div>
+                </section>
+              </aside>
+            </div>
+            <button type="button" class="trace-drawer-open" id="traceDrawerOpenButton" aria-controls="traceEventDrawer" aria-expanded="true" hidden>打开事件详情</button>
+            <details class="trace-event-table-panel trace-event-stream" id="traceEventStreamDisclosure">
+              <summary class="section-heading"><div><h2 id="traceEventTableTitle">语义事件流</h2></div><span class="panel-meta" id="traceEventTableHint">默认折叠 · 展开后每页最多 50 条</span></summary>
+              <div class="trace-stream-filter-bar" role="search" aria-label="语义事件流本地筛选">
+                <label class="inline-control trace-stream-search"><span>关键词</span><input type="search" id="traceEventKeywordFilter" autocomplete="off" placeholder="事件、任务、组件、张量"></label>
+                <label class="inline-control"><span>类别</span><select id="traceEventCategoryFilter"><option value="">全部类别</option></select></label>
+                <label class="inline-control"><span>阶段</span><select id="traceEventPhaseFilter"><option value="">全部阶段</option></select></label>
+                <label class="inline-control"><span>相对时间</span><select id="traceEventTemporalFilter"><option value="">全部状态</option><option value="past">已发生</option><option value="current">正在发生</option><option value="future">尚未发生</option></select></label>
+              </div>
+              <div class="trace-stream-page-bar"><span class="trace-event-meta" id="traceEventMeta">—</span><div class="trace-stream-page-actions"><button type="button" class="tool-button" id="traceEventPreviousPageButton" disabled>上一页</button><span id="traceEventPageStatus">第 1 页</span><button type="button" class="tool-button" id="traceEventNextPageButton" disabled>下一页</button></div></div>
+              <div class="table-shell trace-table-shell"><table class="data-table compact-data-table trace-event-table" aria-describedby="traceEventTableHint"><caption class="sr-only">事件流本地筛选不改变全局回放顺序；选中状态与已发生、正在发生、尚未发生状态分别标记。</caption><colgroup><col><col><col><col><col></colgroup><thead><tr><th scope="col">时序与持续条</th><th scope="col">语义事件</th><th scope="col">计算主体 / 数据流</th><th scope="col">请求范围</th><th scope="col">状态 / 详情</th></tr></thead><tbody id="traceEventBody"></tbody></table></div>
+            </details>
+            <div class="trace-limitations" id="traceLimitations"></div>
+          </div>
+        </section>
+
+        <section class="view results-view" id="view-results" data-view-panel="results" aria-labelledby="resultsTitle" hidden>
+          <div class="view-head">
+            <div><h1 id="resultsTitle" data-concept-help="simulation_results">仿真结果</h1><p>分析模型输出，不代表已校准硅后测量。架构决策前应使用已校准 profiles。</p></div>
+            <div class="results-actions">
+              <button type="button" class="button button-secondary" id="compareButton">与 GPU 基线比较</button>
+              <button type="button" class="button button-primary" id="rerunButton">重新运行</button>
+            </div>
+          </div>
+          <div class="results-empty" id="resultsEmpty">
+            <span class="result-empty-mark">运行 · RUN</span>
+            <h2>尚无仿真报告</h2>
+            <p>校验当前场景后运行，以查看延迟、吞吐、能耗、瓶颈与关键路径。</p>
+            <button type="button" class="button button-primary" id="emptyRunButton">运行当前场景</button>
+          </div>
+          <div id="resultsContent" hidden>
+            <div class="run-manifest-bar" id="runManifestBar"></div>
+            <div class="comparison-strip" id="comparisonStrip" hidden></div>
+            <div class="metric-grid" id="metricGrid"></div>
+            <section class="result-panel component-timeseries-panel" id="componentTimeseriesPanel" aria-labelledby="componentTimeseriesTitle" hidden>
+              <div class="section-heading"><div><h2 id="componentTimeseriesTitle" data-concept-help="component_timeseries">组件与 Rank 性能时序</h2><p id="componentTimeseriesFidelity">按保留策略 fidelity 原样展示，不把聚合数据伪装为精确硬件采样。</p></div></div>
+              <div class="timeseries-filter-bar" id="componentTimeseriesFilterForm" role="toolbar" aria-label="组件利用率图表管理">
+                <span class="timeseries-point-meta" id="timeseriesPointMeta">默认显示 1 张图，最多 4 张</span>
+                <button type="button" class="button button-secondary" id="addTimeseriesChartButton">添加图表</button>
+              </div>
+              <div class="timeseries-chart-grid" id="componentTimeseriesCharts" data-chart-count="1"></div>
+            </section>
+            <div class="results-grid">
+              <section class="result-panel span-12 runtime-panel" aria-labelledby="runtimePanelTitle">
+                <div class="section-heading"><div><h2 id="runtimePanelTitle" data-concept-help="runtime_summary">推理运行时</h2></div><span class="panel-meta" id="runtimeModeMeta">—</span></div>
+                <div class="runtime-grid" id="runtimeSummary"></div>
+              </section>
+              <section class="result-panel span-7">
+                <div class="section-heading"><div><h2 data-concept-help="utilization">资源利用率</h2></div><span class="panel-meta" id="bottleneckMeta">—</span></div>
+                <div class="utilization-list" id="utilizationList"></div>
+              </section>
+              <section class="result-panel span-5">
+                <div class="section-heading"><div><h2 data-concept-help="category_time">类别时间 / 关键路径</h2></div></div>
+                <div class="category-list" id="categoryList"></div>
+              </section>
+              <section class="result-panel span-12">
+                <div class="section-heading"><div><h2 data-concept-help="request_metrics">请求明细</h2></div><span class="panel-meta" id="requestResultMeta">—</span></div>
+                <div class="table-shell request-result-table-shell" tabindex="0" aria-label="请求指标：窄屏显示为响应式卡片，桌面表格可横向滚动"><table class="data-table request-result-table">
+                  <colgroup>
+                    <col class="request-result-col-id">
+                    <col class="request-result-col-status">
+                    <col class="request-result-col-reason">
+                    <col class="request-result-col-arrival">
+                    <col class="request-result-col-ttft">
+                    <col class="request-result-col-tbt">
+                    <col class="request-result-col-tpot">
+                    <col class="request-result-col-e2e">
+                    <col class="request-result-col-visible">
+                  </colgroup>
+                  <thead><tr><th data-concept-help="request">请求（Request）</th><th>状态（Status）</th><th data-concept-help="rejection_reason">拒绝原因（Rejection Reason）</th><th data-concept-help="arrival_time">到达时间（Arrival）</th><th data-concept-help="ttft">首 Token 延迟（TTFT）</th><th data-concept-help="tbt">Token 间延迟（TBT）p<sub>50</sub> / p<sub>95</sub></th><th data-concept-help="tpot">每输出 Token 时间（TPOT）</th><th data-concept-help="e2e">端到端延迟（E2E）</th><th data-concept-help="visible_tokens">可见 Token 数（Visible Tokens）</th></tr></thead><tbody id="requestResultBody"></tbody>
+                </table></div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog class="json-dialog" id="jsonDialog" aria-labelledby="jsonDialogTitle">
+    <form method="dialog" class="dialog-shell" id="jsonDialogForm">
+      <header class="dialog-head">
+        <div><h2 id="jsonDialogTitle">当前 JSON</h2><p>应用会替换当前场景；Schema 字段与 metadata 会保留，其他扩展字段仍需通过内核解析。</p></div>
+        <button type="submit" class="icon-button" aria-label="关闭 JSON 对话框">×</button>
+      </header>
+      <div class="json-toolbar">
+        <span id="jsonStatus">JSON 可编辑</span>
+        <div>
+          <button type="button" class="button button-secondary" id="canonicalExportDialogButton">导出标准 IR</button>
+          <button type="button" class="button button-quiet" id="copyJsonButton">复制</button>
+          <button type="button" class="button button-primary" id="applyJsonButton">应用 JSON</button>
+        </div>
+      </div>
+      <label class="sr-only" for="jsonEditor">场景 JSON</label>
+      <textarea id="jsonEditor" class="json-editor" spellcheck="false"></textarea>
+    </form>
+  </dialog>
+
+  <dialog class="model-presets-dialog" id="modelPresetsDialog" aria-labelledby="modelPresetsDialogTitle" aria-describedby="modelPresetsDescription">
+    <div class="preset-dialog-shell">
+      <header class="dialog-head">
+        <div><h2 id="modelPresetsDialogTitle">模型预设（Model Presets）</h2><p id="modelPresetsDescription">选择模型后会保留并行与通用存储策略；运行时放置由内部控制平面按需重新物化，超出适用域（Out of Domain）的预设仅供查看。</p>
+          <details class="dialog-disclosure"><summary>应用预设时会清理或保留什么？（Behavior Details）</summary><p>应用预设只替换当前模型；所有以任一旧层 ID（Layer ID）为键或前缀的算子、张量及字节逐层映射都会清除，即使新模型复用同名层 ID。模型专属的层到阶段映射（Layer-to-Stage Mapping）也始终清空；TP/PP/EP 度数、Rank 映射（Rank Mapping）、集合通信算法（Collective Algorithm）等并行策略与模型权重（Model Weights）、KV 缓存（KV Cache）等通用映射保持不变。新的运行时放置会在后续内部控制平面物化时生成。</p></details>
+        </div>
+        <button type="button" class="button button-quiet preset-fullscreen-button" id="presetFullscreenButton" aria-pressed="false">全屏（Fullscreen）</button>
+        <button type="button" class="icon-button" id="closeModelPresetsButton" aria-label="关闭模型预设">×</button>
+      </header>
+      <div class="preset-mode-tabs" role="tablist" aria-label="模型目录来源">
+        <button type="button" class="tool-button is-active" id="localPresetTab" role="tab" aria-selected="true" aria-controls="localPresetPanel">本地目录（Local Catalog）</button>
+        <button type="button" class="tool-button" id="remotePresetTab" role="tab" aria-selected="false" aria-controls="remotePresetPanel">在线搜索（Remote Search）</button>
+      </div>
+      <section id="localPresetPanel" role="tabpanel" aria-labelledby="localPresetTab">
+        <form class="preset-filters" id="presetFilterForm" aria-label="模型预设筛选">
+          <label class="field preset-search"><span>服务端搜索（Search）</span><input type="search" id="presetSearchInput" autocomplete="off" placeholder="名称、系列、来源"></label>
+          <label class="field"><span>系列（Family）</span><select id="presetFamilyFilter"><option value="">全部系列（All Families）</option></select></label>
+          <label class="field"><span>模型类型（Model Kind）</span><select id="presetArchitectureFilter"><option value="">全部结构（All Model Kinds）</option><option value="dense">Dense</option><option value="moe">MoE</option></select></label>
+          <label class="field"><span>支持等级（Support Level）</span><select id="presetSupportFilter"><option value="">全部等级</option><option value="exact">精确支持（Exact）</option><option value="analytical_approximation">分析近似（Analytical Approximation）</option><option value="out_of_domain">超出适用域（Out of Domain）</option></select></label>
+          <button type="submit" class="button button-secondary">筛选（Filter）</button>
+        </form>
+        <div class="preset-status" id="presetStatus" role="status" aria-live="polite">尚未载入预设。</div>
+        <div class="preset-list" id="presetList" aria-label="本地模型预设列表"></div>
+        <nav class="preset-pagination" id="presetPagination" aria-label="模型预设分页">
+          <button type="button" class="button button-quiet" id="presetPreviousButton" disabled>上一页（Previous）</button>
+          <span id="presetPageStatus">第 1 页（Page 1）</span>
+          <button type="button" class="button button-quiet" id="presetNextButton" disabled>下一页（Next）</button>
+        </nav>
+      </section>
+      <section class="remote-preset-panel" id="remotePresetPanel" role="tabpanel" aria-labelledby="remotePresetTab" hidden>
+        <form class="remote-search-form" id="remotePresetSearchForm">
+          <label class="field"><span>在线搜索（Remote Search）</span><input type="search" id="remotePresetQueryInput" autocomplete="off" required placeholder="例如 Qwen2.5 或 repo id"></label>
+          <button type="submit" class="button button-secondary">搜索在线目录（Search）</button>
+        </form>
+        <p class="remote-network-note">只有提交搜索后才会请求在线目录；打开此对话框不会触发远程搜索。</p>
+        <form class="preset-import-form" id="presetImportForm">
+          <label class="field"><span>仓库 ID（Repo ID）</span><input type="text" id="presetRepoIdInput" required autocomplete="off" placeholder="organization/model"></label>
+          <label class="field"><span>修订（Revision，可选）</span><input type="text" id="presetRevisionInput" autocomplete="off" placeholder="main / commit"></label>
+          <button type="submit" class="button button-primary">导入到本地目录（Import）并应用（Apply）</button>
+        </form>
+        <div class="preset-status" id="remotePresetStatus" role="status" aria-live="polite">输入查询并主动搜索，或直接导入 Repo ID。</div>
+        <div class="preset-list remote-preset-list" id="remotePresetList" aria-label="在线模型候选"></div>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog class="hardware-presets-dialog" id="hardwarePresetsDialog" aria-labelledby="hardwarePresetsDialogTitle" aria-describedby="hardwarePresetsDescription">
+    <div class="hardware-preset-shell">
+      <header class="dialog-head">
+        <div>
+          <h2 id="hardwarePresetsDialogTitle">硬件预设库（Hardware Presets）</h2>
+          <p id="hardwarePresetsDescription">组件预设追加到当前拓扑；架构预设经确认后替换硬件。两套目录继续独立筛选、缓存与滚动，后端 API 保持分离。</p>
+        </div>
+        <button type="button" class="icon-button" id="closeHardwarePresetsButton" aria-label="关闭硬件预设库">×</button>
+      </header>
+      <nav class="hardware-preset-tabs" role="tablist" aria-label="硬件预设类型">
+        <button type="button" role="tab" id="hardwarePresetComponentTab" aria-controls="componentPresetsDialog" aria-selected="false" data-hardware-preset-tab="components">组件预设 · 追加</button>
+        <button type="button" role="tab" id="hardwarePresetArchitectureTab" aria-controls="architecturePresetsDialog" aria-selected="true" data-hardware-preset-tab="architectures">架构预设 · 替换</button>
+      </nav>
+      <div class="hardware-preset-panels">
+        <section class="hardware-preset-panel" id="componentPresetsDialog" role="tabpanel" aria-labelledby="hardwarePresetComponentTab" hidden>
+          <div class="hardware-preset-panel-intro"><h3 data-concept-help="component_preset">组件预设（Component Presets）</h3><p>单组件和组合拓扑均追加，不覆盖已有硬件；只产生一次撤销记录。</p></div>
+          <form class="component-preset-filters" id="componentPresetFilterForm" aria-label="组件预设筛选">
+            <label class="field component-preset-search"><span>搜索（Search）</span><input type="search" id="componentPresetSearchInput" autocomplete="off" placeholder="名称、厂商、型号或组件类型"></label>
+            <label class="field"><span>组件类型（Kind）</span><select id="componentPresetKindFilter"><option value="">全部类型</option></select></label>
+            <label class="field"><span>厂商（Vendor）</span><select id="componentPresetVendorFilter"><option value="">全部厂商</option></select></label>
+            <label class="field"><span>证据状态（Evidence）</span><select id="componentPresetEvidenceFilter"><option value="">全部状态</option></select></label>
+            <button type="submit" class="button button-secondary">筛选（Filter）</button>
+          </form>
+          <div class="component-preset-status" id="componentPresetStatus" role="status" aria-live="polite">尚未载入组件预设。</div>
+          <div class="component-preset-list" id="componentPresetList" aria-label="组件预设列表"></div>
+        </section>
+        <section class="hardware-preset-panel" id="architecturePresetsDialog" role="tabpanel" aria-labelledby="hardwarePresetArchitectureTab">
+          <div class="hardware-preset-panel-intro"><h3 data-concept-help="architecture_preset">架构预设（Architecture Presets）</h3><p>载入前需确认；替换组件、端口、链路、分组与布局，保留模型和负载。</p></div>
+          <form class="component-preset-filters architecture-preset-filters" id="architecturePresetFilterForm" aria-label="架构预设筛选">
+            <label class="field component-preset-search"><span>搜索（Search）</span><input type="search" id="architecturePresetSearchInput" autocomplete="off" placeholder="中英文名称、厂商、类别或来源"></label>
+            <label class="field"><span>类别（Category）</span><select id="architecturePresetCategoryFilter"><option value="">全部类别</option></select></label>
+            <label class="field"><span>层级（Level）</span><select id="architecturePresetLevelFilter"><option value="">全部层级</option></select></label>
+            <label class="field"><span>厂商（Vendor）</span><select id="architecturePresetVendorFilter"><option value="">全部厂商</option></select></label>
+            <label class="field"><span>支持（Support）</span><select id="architecturePresetSupportFilter"><option value="">全部支持状态</option></select></label>
+            <button type="submit" class="button button-secondary">筛选（Filter）</button>
+          </form>
+          <div class="component-preset-status" id="architecturePresetStatus" role="status" aria-live="polite">尚未载入架构预设。</div>
+          <div class="component-preset-list architecture-preset-list" id="architecturePresetList" aria-label="架构拓扑预设列表"></div>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="protocol-presets-dialog" id="protocolPresetsDialog" aria-labelledby="protocolPresetsDialogTitle" aria-describedby="protocolPresetsDescription">
+    <div class="component-preset-shell">
+      <header class="dialog-head">
+        <div>
+          <h2 id="protocolPresetsDialogTitle">通信协议目录（Protocol Catalog）</h2>
+          <p id="protocolPresetsDescription">目录区分原始线路、单向有效与双向聚合带宽；选用后写入连接工具的单向仿真默认值，仍可手动覆盖。</p>
+        </div>
+        <button type="button" class="icon-button" id="closeProtocolPresetsButton" aria-label="关闭通信协议目录">×</button>
+      </header>
+      <form class="component-preset-filters protocol-preset-filters" id="protocolPresetFilterForm" aria-label="通信协议预设筛选">
+        <label class="field component-preset-search"><span>搜索（Search）</span><input type="search" id="protocolPresetSearchInput" autocomplete="off" placeholder="协议、版本、组织或传输单元"></label>
+        <label class="field"><span data-concept-help="protocol">协议（Protocol）</span><select id="protocolPresetProtocolFilter"><option value="">全部协议</option></select></label>
+        <label class="field"><span>组织（Organization）</span><select id="protocolPresetOrganizationFilter"><option value="">全部组织</option></select></label>
+        <button type="submit" class="button button-secondary">筛选（Filter）</button>
+      </form>
+      <div class="component-preset-status" id="protocolPresetStatus" role="status" aria-live="polite">尚未载入通信协议目录。</div>
+      <div class="component-preset-list protocol-preset-list" id="protocolPresetList" aria-label="通信协议预设列表"></div>
+    </div>
+  </dialog>
+
+  <dialog class="settings-dialog" id="settingsDialog" aria-labelledby="settingsDialogTitle" aria-describedby="settingsDialogDescription">
+    <form method="dialog" class="settings-shell" id="settingsDialogForm">
+      <header class="dialog-head">
+        <div>
+          <span class="eyebrow kicker">本地外观 · LOCAL APPEARANCE</span>
+          <h2 id="settingsDialogTitle">工作台设置</h2>
+          <p id="settingsDialogDescription">界面偏好仅保存在此浏览器；运行时控制平面状态为只读，不提供客户端规划设置。</p>
+        </div>
+        <button type="submit" class="icon-button" aria-label="关闭设置">×</button>
+      </header>
+      <div class="settings-content">
+        <fieldset class="settings-group settings-language-group">
+          <legend>界面语言</legend>
+          <label class="field"><span>显示语言</span><select id="uiLanguageInput">
+            <option value="zh-CN">简体中文</option>
+            <option value="en">English</option>
+          </select></label>
+          <p class="settings-help">界面一次只显示一种语言；模型名、组件标识和标准缩写保持原样。</p>
+        </fieldset>
+        <fieldset class="settings-group settings-font-group">
+          <legend>字号（Font Scale）</legend>
+          <div class="font-scale-heading">
+            <span>全局字号与布局（Global Type & Layout）</span>
+            <output id="fontScaleValue" for="fontScaleInput fontScaleNumberInput" aria-live="polite">120%</output>
+          </div>
+          <label class="font-scale-slider" for="fontScaleInput">
+            <span class="sr-only">连续调整字体大小</span>
+            <input type="range" id="fontScaleInput" min="80" max="200" step="1" value="120" aria-describedby="fontScaleHelp">
+          </label>
+          <div class="font-scale-range" aria-hidden="true"><span>80%</span><span>200%</span></div>
+          <div class="font-scale-exact">
+            <label for="fontScaleNumberInput">精确数值（Exact Value）</label>
+            <span class="percent-input"><input type="number" id="fontScaleNumberInput" min="80" max="200" step="1" value="120" inputmode="numeric"><span>%</span></span>
+            <button type="button" class="button button-quiet" id="resetFontScaleButton">恢复 100%</button>
+          </div>
+          <p class="settings-help" id="fontScaleHelp">实时调整全部文字，并同步扩展控件、侧栏、拓扑节点和响应式布局。</p>
+        </fieldset>
+        <fieldset class="settings-group settings-runtime-group">
+          <legend>运行环境（Runtime）</legend>
+          <section class="runtime-health-card is-checking" id="runtimeHealthPanel" aria-live="polite" aria-label="运行环境与求解器诊断">
+            <div class="runtime-health-heading">
+              <span><strong>运行环境诊断</strong><small>Runtime &amp; Solver Diagnostics</small></span>
+              <span class="runtime-health-badge">正在检查</span>
+            </div>
+            <p>正在读取 Python、程序版本和 OR-Tools CP-SAT 状态…</p>
+          </section>
+          <button type="button" class="button button-quiet runtime-health-refresh" id="runtimeHealthRefreshButton">重新检查运行环境</button>
+          <p class="settings-help">显示本地仿真器、Python 与可选运行时依赖的只读诊断信息。</p>
+        </fieldset>
+        <fieldset class="settings-group">
+          <legend>完整主题（Themes）</legend>
+          <div class="choice-grid theme-choices">
+            <label class="choice-card"><input type="radio" name="settingsTheme" value="graphite"><span><i class="theme-swatch graphite" aria-hidden="true"></i><strong>石墨（Graphite）</strong></span></label>
+            <label class="choice-card"><input type="radio" name="settingsTheme" value="bluegray"><span><i class="theme-swatch bluegray" aria-hidden="true"></i><strong>蓝灰（Blue Gray）</strong></span></label>
+            <label class="choice-card"><input type="radio" name="settingsTheme" value="black"><span><i class="theme-swatch black" aria-hidden="true"></i><strong>纯黑（Black）</strong></span></label>
+            <label class="choice-card"><input type="radio" name="settingsTheme" value="ivory"><span><i class="theme-swatch ivory" aria-hidden="true"></i><strong>象牙白（Ivory）</strong></span></label>
+            <label class="choice-card"><input type="radio" name="settingsTheme" value="mist"><span><i class="theme-swatch mist" aria-hidden="true"></i><strong>雾蓝（Mist）</strong></span></label>
+            <label class="choice-card"><input type="radio" name="settingsTheme" value="softgray"><span><i class="theme-swatch softgray" aria-hidden="true"></i><strong>柔灰（Soft Gray）</strong></span></label>
+          </div>
+        </fieldset>
+        <fieldset class="settings-group settings-workspace-group">
+          <legend>工作区背景（Workspace Background）</legend>
+          <label class="settings-toggle"><span><strong>使用自定义背景（Custom Background）</strong><small>仅覆盖中央工作区，不影响图表语义色</small></span><input type="checkbox" id="customWorkspaceEnabled"></label>
+          <label class="color-control" for="workspaceBackgroundInput"><span>背景颜色（Background Color）</span><input type="color" id="workspaceBackgroundInput" value="#191816"></label>
+        </fieldset>
+        <fieldset class="settings-group">
+          <legend>布局与动效（Layout & Motion）</legend>
+          <div class="settings-toggle-list">
+            <label class="settings-toggle"><span><strong>紧凑布局（Compact Layout）</strong><small>缩短间距与表格行高（Reduce spacing and table row height）</small></span><input type="checkbox" id="compactLayoutInput"></label>
+            <label class="settings-toggle"><span><strong>拓扑网格（Topology Grid）</strong><small>显示画布辅助网格（Show the canvas alignment grid）</small></span><input type="checkbox" id="topologyGridInput"></label>
+            <label class="settings-toggle"><span><strong>减少动画（Reduce Motion）</strong><small>关闭过渡、通知与忙碌动画（Disable transitions, notification motion, and busy animation）</small></span><input type="checkbox" id="reduceMotionInput"></label>
+          </div>
+        </fieldset>
+      </div>
+      <footer class="settings-footer">
+        <button type="button" class="button button-quiet" id="resetSettingsButton">恢复默认</button>
+        <button type="submit" class="button button-primary">完成</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="architecture-scan-dialog" id="architectureScanDialog" aria-labelledby="architectureScanDialogTitle" aria-describedby="architectureScanDescription">
+    <div class="architecture-scan-shell">
+      <header class="dialog-head">
+        <div>
+          <span class="eyebrow kicker">向量化架构筛选 · VECTORIZED ARCHITECTURE SCREENING</span>
+          <h2 id="architectureScanDialogTitle" data-concept-help="roofline">架构候选扫描（Architecture Scan）</h2>
+          <p id="architectureScanDescription">基于当前真实拓扑、Rank、模型代表性 GEMM 与现有映射批量评估候选；这是 Roofline 分析扫描，不是事件仿真或完整部署计划。</p>
+        </div>
+        <button type="button" class="icon-button" id="closeArchitectureScanButton" aria-label="关闭架构候选扫描">×</button>
+      </header>
+      <div class="architecture-scan-controls">
+        <label class="field"><span>批量计算后端（Batch Backend）</span><select id="architectureScanBackend">
+          <option value="auto">自动选择（Auto）</option>
+          <option value="numpy">NumPy CPU</option>
+          <option value="cupy">CuPy CUDA（可选）</option>
+        </select></label>
+        <label class="field"><span>返回候选数（Top N）</span><input id="architectureScanTopN" type="number" min="1" max="200" step="1" value="20"></label>
+        <button type="button" class="button button-primary" id="runArchitectureScanButton">扫描当前架构（Run Scan）</button>
+      </div>
+      <div class="architecture-scan-status" id="architectureScanStatus" role="status" aria-live="polite">尚未运行候选扫描。</div>
+      <div class="architecture-scan-summary" id="architectureScanSummary"></div>
+      <div class="table-shell architecture-scan-table-shell">
+        <table class="data-table architecture-scan-table">
+          <thead><tr><th>排名（Rank）</th><th>算子（Operator）</th><th>执行组件（Component）</th><th>逻辑 Rank</th><th>局部形状（M × K × N）</th><th>瓶颈（Bound）</th><th>估算耗时（Time）</th><th>当前映射（Current）</th></tr></thead>
+          <tbody id="architectureScanBody"></tbody>
+        </table>
+      </div>
+      <details class="architecture-scan-diagnostics">
+        <summary>扫描诊断与限制（Diagnostics &amp; Limits）</summary>
+        <div id="architectureScanDiagnostics"></div>
+      </details>
+    </div>
+  </dialog>
+
+  <dialog class="run-job-dialog" id="runJobDialog" aria-labelledby="runJobDialogTitle" aria-describedby="runJobDialogDescription">
+    <div class="run-job-shell">
+      <header class="dialog-head">
+        <div>
+          <h2 id="runJobDialogTitle">后台推理仿真（Background Run）</h2>
+          <p id="runJobDialogDescription">先展示逻辑规模与推荐保留策略；运行期间可关闭此窗口继续查看场景，也可随时返回查看进度或安全取消。</p>
+        </div>
+        <button type="button" class="icon-button" id="closeRunJobDialogButton" aria-label="关闭后台仿真窗口">×</button>
+      </header>
+      <section class="run-estimate-card" aria-labelledby="runEstimateTitle">
+        <div class="run-job-section-head">
+          <div><h3 id="runEstimateTitle">运行规模估算（Run Estimate）</h3></div>
+          <strong class="run-risk-badge is-low" id="runEstimateRisk">正在估算</strong>
+        </div>
+        <dl class="run-estimate-summary" id="runEstimateSummary"></dl>
+        <div class="run-estimate-warnings" id="runEstimateWarnings"></div>
+      </section>
+      <section class="run-progress-card" id="runJobProgressPanel" aria-labelledby="runProgressTitle" aria-live="polite" hidden>
+        <div class="run-job-section-head">
+          <div><h3 id="runProgressTitle">仿真进度（Simulation Progress）</h3></div>
+          <strong class="run-job-status" id="runJobStatus">已排队</strong>
+        </div>
+        <div class="run-progress-copy"><strong id="runProgressStage">准备启动</strong><span id="runProgressCount">0 / 1</span></div>
+        <progress class="run-progress-bar" id="runProgressBar" max="1" value="0" aria-labelledby="runProgressTitle runProgressStage" aria-describedby="runProgressMessage">0%</progress>
+        <p class="run-progress-message" id="runProgressMessage">等待后台工作线程接收任务。</p>
+      </section>
+      <footer class="run-job-footer">
+        <button type="button" class="button button-quiet" id="dismissRunJobButton">关闭</button>
+        <button type="button" class="button button-danger" id="cancelRunJobButton" hidden>取消仿真（Cancel）</button>
+        <button type="button" class="button button-primary" id="startRunJobButton">开始后台仿真（Start）</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <div class="toast-region" id="toastRegion" aria-label="通知" aria-live="polite" aria-atomic="false"></div>
+  <div class="busy-overlay" id="busyOverlay" hidden aria-live="assertive" aria-busy="true">
+    <div class="busy-panel"><span class="busy-line"></span><strong id="busyTitle">正在运行分析模型</strong><small id="busyDetail">正在编译 ScheduleIR 与事件轨迹…</small></div>
+  </div>
+
+  <svg class="protocol-marker-definitions" aria-hidden="true" focusable="false">
+    <defs>
+      <marker id="protocolEndpointBar" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M3 .5V5.5" fill="none" stroke="context-stroke" stroke-width="1.4"/></marker>
+      <marker id="protocolEndpointCircle" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><circle cx="3" cy="3" r="2" fill="var(--canvas-bg)" stroke="context-stroke" stroke-width="1.2"/></marker>
+      <marker id="protocolEndpointDot" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><circle cx="3" cy="3" r="2" fill="context-stroke" stroke="context-stroke" stroke-width="1"/></marker>
+      <marker id="protocolEndpointSquare" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><rect x="1" y="1" width="4" height="4" fill="var(--canvas-bg)" stroke="context-stroke" stroke-width="1.1"/></marker>
+      <marker id="protocolEndpointDiamond" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M3 .5 5.5 3 3 5.5.5 3Z" fill="var(--canvas-bg)" stroke="context-stroke" stroke-width="1.1"/></marker>
+      <marker id="protocolEndpointCross" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="m1 1 4 4M5 1 1 5" fill="none" stroke="context-stroke" stroke-width="1.2"/></marker>
+    </defs>
+  </svg>
+
+  <template id="fieldTemplate">
+    <label class="field"><span></span><input></label>
+  </template>
+
+  <script src="./topology-core.js" defer></script>
+  <script src="./model-graph-core.js" defer></script>
+  <script src="./trace-view-core.js" defer></script>
+  <script src="./ui-i18n.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

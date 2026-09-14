@@ -1,0 +1,263 @@
+{
+  "schema": "native-evidence-manifest/v2",
+  "purpose": "immutable_native_evidence_binding",
+  "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_compare_v2.json",
+  "identity": {
+    "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\smollm2-1.7b-instruct-q4_k_m.gguf",
+    "gguf_sha256": "decd2598bc2c8ed08c19adc3c8fdd461ee19ed5708679d1c54ef54a5a30d4f33",
+    "runtime_fingerprint": "90617f319d66c9f002eaedb765665224c97af898c630d19ff1e5abdc2da153d6",
+    "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+    "prompt_fingerprint": "d64858321506286781d2cc9fb81f5c6abfb99b676fef6a730bdecab55d36ca96",
+    "configuration": {
+      "ctx": 512,
+      "parallel": 1,
+      "batch": 64,
+      "ubatch": 64,
+      "threads": 16,
+      "gpu_layers": -1,
+      "flash_attn": false,
+      "seed": 42
+    }
+  },
+  "native_contract_sha256": "48c62f144c2c3536c8b4a866ed302d9742e036b971359d285898a047bc60b978",
+  "native_measurements_sha256": "06aacd068a5e79da15916a1e857a86112b22692fbe09d32e35b4a4e83274e761",
+  "timing_contract": {
+    "id": "engine-stage+client-real-token/v3",
+    "engine_ttft": "first_engine_token-engine_request_begin;counter=t_prompt_last-t_start",
+    "engine_e2e": "last_engine_token-engine_request_begin;counter=t_gen_last-t_start",
+    "engine_tpot": "(last_engine_token-first_engine_token)/(output_tokens-1);counter=(t_gen_last-t_prompt_last)/(output_tokens-1);null_if_output_tokens<=1",
+    "ttft": "first_real_token-client_request_start",
+    "e2e": "last_real_token-client_request_start;DONE_excluded",
+    "tpot": "(last_real_token-first_real_token)/(output_tokens-1);null_if_output_tokens<=1",
+    "unit": "ms",
+    "clock": "time.perf_counter",
+    "sha256": "ffebab030539bfa5bab265adfade6b641c8518c19d89b69baff5445c17117fb4"
+  },
+  "boundaries": {
+    "engine": {
+      "status": "counter_proven",
+      "source": "llama.cpp.server_slot_stats.t_start_prompt_last_gen_last",
+      "fields": [
+        "engine_ttft_ms",
+        "engine_tpot_ms",
+        "engine_e2e_ms"
+      ],
+      "boundary": "server_slot_stats.t_start→t_prompt_last→t_gen_last",
+      "token_timestamps": {
+        "status": "captured",
+        "scope": "per_request",
+        "field": "native.requests[].request_boundary.token_chunk_times_ms"
+      },
+      "request_boundaries": {
+        "status": "captured",
+        "scope": "per_request",
+        "field": "native.requests[].request_boundary"
+      }
+    },
+    "server": {
+      "status": "unavailable"
+    },
+    "client": {
+      "status": "captured",
+      "timing_contract": {
+        "ttft": "first_real_token-client_request_start",
+        "tpot": "(last_real_token-first_real_token)/(output_tokens-1);null_if_output_tokens<=1",
+        "e2e": "last_real_token-client_request_start;DONE_excluded"
+      },
+      "request_boundaries": {
+        "status": "captured",
+        "scope": "per_request",
+        "field": "native.requests[].request_boundary"
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "role": "native.binary",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server.exe",
+      "exists": true,
+      "sha256": "0e747bd38490fec06cca72c045bd48b74c7a4af222c26da70358ed55ec2d62e4",
+      "declared_sha256": "0e747bd38490fec06cca72c045bd48b74c7a4af222c26da70358ed55ec2d62e4"
+    },
+    {
+      "role": "raw.trace",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_compare_v2.llama.log",
+      "exists": true,
+      "sha256": "fb8fe4a160c9d351fc607c84ca32cb2895f5af04254a9524cb5e1e8fa5228991",
+      "declared_sha256": "fb8fe4a160c9d351fc607c84ca32cb2895f5af04254a9524cb5e1e8fa5228991"
+    },
+    {
+      "role": "extractor",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\native_llama_compare.py",
+      "exists": true,
+      "sha256": "8e81d6841d51064c237d56d4c706940393b9999cbdfd99715bd4fb34dd7e602a",
+      "declared_sha256": "8e81d6841d51064c237d56d4c706940393b9999cbdfd99715bd4fb34dd7e602a"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server.exe",
+      "exists": true,
+      "sha256": "0e747bd38490fec06cca72c045bd48b74c7a4af222c26da70358ed55ec2d62e4",
+      "declared_sha256": "0e747bd38490fec06cca72c045bd48b74c7a4af222c26da70358ed55ec2d62e4"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-base.dll",
+      "exists": true,
+      "sha256": "588b393b56c73775ff064aaa33bca9c256d507bf703c028bb95c4edcf27a1dbd",
+      "declared_sha256": "588b393b56c73775ff064aaa33bca9c256d507bf703c028bb95c4edcf27a1dbd"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-cpu.dll",
+      "exists": true,
+      "sha256": "e0b535f2d16b5ed48d4d8737ae2148a8ab630f90d76f9eb10e005a4bf83710ac",
+      "declared_sha256": "e0b535f2d16b5ed48d4d8737ae2148a8ab630f90d76f9eb10e005a4bf83710ac"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml-cuda.dll",
+      "exists": true,
+      "sha256": "2c002e3fcc1e1a3873b970f221a7e08da4bab3e66ef456dfa371e6109e903c4a",
+      "declared_sha256": "2c002e3fcc1e1a3873b970f221a7e08da4bab3e66ef456dfa371e6109e903c4a"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\ggml.dll",
+      "exists": true,
+      "sha256": "c4de8bbdd1fddce4458224f6df65b39574cfc321bc99be17fdc29440f7de2fe1",
+      "declared_sha256": "c4de8bbdd1fddce4458224f6df65b39574cfc321bc99be17fdc29440f7de2fe1"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-batched-bench-impl.dll",
+      "exists": true,
+      "sha256": "dc2cdc701491a53313b9b74470cb842ab123415119d95157ec298e3bbdbc9d3c",
+      "declared_sha256": "dc2cdc701491a53313b9b74470cb842ab123415119d95157ec298e3bbdbc9d3c"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-bench-impl.dll",
+      "exists": true,
+      "sha256": "c97f175238b548b7eb2002620ccf90c3855383b28367d3769389dc916b6824fd",
+      "declared_sha256": "c97f175238b548b7eb2002620ccf90c3855383b28367d3769389dc916b6824fd"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-cli-impl.dll",
+      "exists": true,
+      "sha256": "755c41d9621d12995a198cf61e6b9f2d8d7e316427e5ab2c5520f92e61c8c118",
+      "declared_sha256": "755c41d9621d12995a198cf61e6b9f2d8d7e316427e5ab2c5520f92e61c8c118"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-common.dll",
+      "exists": true,
+      "sha256": "749e1c6c967981ed34cc00a387f74bf2e1d7f193a2a262902571b338ef5ef51f",
+      "declared_sha256": "749e1c6c967981ed34cc00a387f74bf2e1d7f193a2a262902571b338ef5ef51f"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-completion-impl.dll",
+      "exists": true,
+      "sha256": "71435590892c15dcd82fe80a9fbaf2904caf41d57471c04162c4a5f19e7948b7",
+      "declared_sha256": "71435590892c15dcd82fe80a9fbaf2904caf41d57471c04162c4a5f19e7948b7"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-fit-params-impl.dll",
+      "exists": true,
+      "sha256": "5bf7aa8190169b10d91c9d9189b6b4b8af5a90ba43d4a3c4c216b170f6692f11",
+      "declared_sha256": "5bf7aa8190169b10d91c9d9189b6b4b8af5a90ba43d4a3c4c216b170f6692f11"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-perplexity-impl.dll",
+      "exists": true,
+      "sha256": "dfa6c427ef46dd9bca3a21d5fda43b73c7ed83af1b545f3000c17183e7c4371f",
+      "declared_sha256": "dfa6c427ef46dd9bca3a21d5fda43b73c7ed83af1b545f3000c17183e7c4371f"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-quantize-impl.dll",
+      "exists": true,
+      "sha256": "a77066cb1b666369aacfe94ac58b7d52bda954262d9c663e04c3648b4515e8d6",
+      "declared_sha256": "a77066cb1b666369aacfe94ac58b7d52bda954262d9c663e04c3648b4515e8d6"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama-server-impl.dll",
+      "exists": true,
+      "sha256": "ff503c0a4380bdd2297c945206e61d3dbe2065e108eb07830a32ced11d82058d",
+      "declared_sha256": "ff503c0a4380bdd2297c945206e61d3dbe2065e108eb07830a32ced11d82058d"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\llama.dll",
+      "exists": true,
+      "sha256": "08d2fca79943be2383a9bf9aa410267dbfd3171185415ab0acc77ec5be6e93a5",
+      "declared_sha256": "08d2fca79943be2383a9bf9aa410267dbfd3171185415ab0acc77ec5be6e93a5"
+    },
+    {
+      "role": "native.dependency",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-hosttrace\\bin\\mtmd.dll",
+      "exists": true,
+      "sha256": "e5346fc2b7cf15c2e82a5f10a24b26473e575938bdc716d81adf25bb34e4b9a4",
+      "declared_sha256": "e5346fc2b7cf15c2e82a5f10a24b26473e575938bdc716d81adf25bb34e4b9a4"
+    },
+    {
+      "role": "prediction.pre_native",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_compare_v2.prediction.json",
+      "exists": true,
+      "sha256": "2868f3167e9857cca8e920e1edb1206fb668e007e8f294e9c5bde2afd257f5e9",
+      "declared_sha256": "2868f3167e9857cca8e920e1edb1206fb668e007e8f294e9c5bde2afd257f5e9"
+    },
+    {
+      "role": "trace.json",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_trace_v2.json",
+      "exists": true,
+      "sha256": "b07d0d5b44933988d1d6bc487d6e616e12251152deeb4ec1ee358fd04dfdca10"
+    },
+    {
+      "role": "trace.json",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p4_o2_trace_v1.json",
+      "exists": true,
+      "sha256": "cf11226efc0c8ffd00a452dc1f2432646e3f0879dba0add8dddae423f12eb6a1"
+    }
+  ],
+  "sidecar_manifests": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_profile_v2.json",
+      "exists": true,
+      "sha256": "c7fe4d8f2f9e3f17ee257fbb8e3dffdf09012a9a4935c70fa5397f065eae9c7d",
+      "schema": "native-llama-nsys-profile/v1"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p2_o2_trace_v2.json",
+      "exists": true,
+      "sha256": "b07d0d5b44933988d1d6bc487d6e616e12251152deeb4ec1ee358fd04dfdca10",
+      "schema": "native-nsys-trace/v1"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_p4_o2_trace_v1.json",
+      "exists": true,
+      "sha256": "cf11226efc0c8ffd00a452dc1f2432646e3f0879dba0add8dddae423f12eb6a1",
+      "schema": "native-nsys-trace/v1"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_marker_structure_holdout_v1.json",
+      "exists": true,
+      "sha256": "3f73b36ec3c34d5eaf414e11673a3e04ab620c42c2c0aa4b59ea266c27ce8696",
+      "schema": "smollm2-engine-marker-structure-holdout/v1"
+    }
+  ],
+  "evidence_level": "complete",
+  "prediction_before_native": {
+    "status": "valid",
+    "errors": []
+  },
+  "validation": {
+    "status": "valid",
+    "errors": []
+  }
+}

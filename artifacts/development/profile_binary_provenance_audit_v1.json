@@ -1,0 +1,180 @@
+{
+  "schema": "profile-binary-provenance-audit/v1",
+  "generated_at_utc": "2026-09-14T00:08:33.780637+00:00",
+  "policy": {
+    "require_profile_exe_sha": true,
+    "require_profile_runtime_artifacts": true,
+    "require_native_runtime_artifacts": true,
+    "current_filesystem_not_substitute": true
+  },
+  "rows": [
+    {
+      "model_key": "qwen25",
+      "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\gpu_decode_startup_profile_qwen25_v1.json",
+      "profile_exists": true,
+      "profile_apply_requested": true,
+      "native_payload": "artifacts\\development\\e_engine_probe_qwen25_gpu_v4.json",
+      "native_binary": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+        "status": "captured",
+        "sha256": "a2836bb692e613066ae5e614e6378ede57a6a3a3a238c3a3a971cf7d1157dbef",
+        "bytes": 10752
+      },
+      "gate": {
+        "status": "blocked",
+        "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\gpu_decode_startup_profile_qwen25_v1.json",
+        "reasons": [
+          "profile binary_sha256 missing or malformed",
+          "profile runtime_artifacts missing",
+          "native evidence runtime_artifacts missing"
+        ]
+      }
+    },
+    {
+      "model_key": "qwen35",
+      "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen35_hi_prompt8_prefill_scoped_calibration_v1.json",
+      "profile_exists": true,
+      "profile_apply_requested": true,
+      "native_payload": "artifacts\\development\\eengine_qwen35_p2_o4_compare_v1.json",
+      "native_binary": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+        "status": "captured",
+        "sha256": "a2836bb692e613066ae5e614e6378ede57a6a3a3a238c3a3a971cf7d1157dbef",
+        "bytes": 10752
+      },
+      "gate": {
+        "status": "blocked",
+        "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen35_hi_prompt8_prefill_scoped_calibration_v1.json",
+        "reasons": [
+          "profile/native executable SHA mismatch",
+          "profile runtime_artifacts missing",
+          "native evidence runtime_artifacts missing"
+        ]
+      }
+    },
+    {
+      "model_key": "tinyllama",
+      "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\tinyllama_semantic_calibration_phase_v2.json",
+      "profile_exists": true,
+      "profile_apply_requested": false,
+      "native_payload": "artifacts\\development\\eengine_tiny_p2_o4_compare_v1.json",
+      "native_binary": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+        "status": "captured",
+        "sha256": "a2836bb692e613066ae5e614e6378ede57a6a3a3a238c3a3a971cf7d1157dbef",
+        "bytes": 10752
+      },
+      "gate": {
+        "status": "blocked",
+        "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\tinyllama_semantic_calibration_phase_v2.json",
+        "reasons": [
+          "profile binary_sha256 missing or malformed",
+          "profile runtime_artifacts missing",
+          "native evidence runtime_artifacts missing"
+        ]
+      }
+    }
+  ],
+  "current_filesystem_exe": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+    "sha256": "a2836bb692e613066ae5e614e6378ede57a6a3a3a238c3a3a971cf7d1157dbef"
+  },
+  "current_filesystem_runtime_artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+      "status": "captured",
+      "sha256": "a2836bb692e613066ae5e614e6378ede57a6a3a3a238c3a3a971cf7d1157dbef",
+      "bytes": 10752
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-base.dll",
+      "status": "captured",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cpu.dll",
+      "status": "captured",
+      "sha256": "e8a36d9c1a66a7ac726282e18c143aa593a4cc96945e075e5904e3a9cf835c44",
+      "bytes": 956928
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cuda.dll",
+      "status": "captured",
+      "sha256": "eef90dd2e43863d2f5692ee6818c65ca036e359065332b0caf3db715b11b1f99",
+      "bytes": 26091520
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml.dll",
+      "status": "captured",
+      "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+      "bytes": 61440
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-batched-bench-impl.dll",
+      "status": "captured",
+      "sha256": "1d6db4aba1f6a71c6c3f97c72ac3bb13d1bfd86cf7efd17f90825f60c1a3e082",
+      "bytes": 129024
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-bench-impl.dll",
+      "status": "captured",
+      "sha256": "e9761b3f5c0663a93debefd92e4bcd6924cd6099a88c92f2e197f8c6a7d0901b",
+      "bytes": 903168
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-cli-impl.dll",
+      "status": "captured",
+      "sha256": "81bd21e6c0710d259adcad973e601acadcdeac872ae25f4b689e19754665b385",
+      "bytes": 873472
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-common.dll",
+      "status": "captured",
+      "sha256": "f40c793d6b6fd708bbbdc55ceb277b64748f77317ed4940bdfa34f95668cc417",
+      "bytes": 8220160
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-completion-impl.dll",
+      "status": "captured",
+      "sha256": "fd2978f9577fa9417ea6f3b9c170af169346786756098dd7c229206db3df780b",
+      "bytes": 247808
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-fit-params-impl.dll",
+      "status": "captured",
+      "sha256": "bac07d58a2e96a0c6b681b38582dcbf5b29a9e8b471985e0c6c3b92a710aa20b",
+      "bytes": 105472
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-perplexity-impl.dll",
+      "status": "captured",
+      "sha256": "81f0c3bdcec0287bc4cb3756197d3103b28d14b0c7f24dbdd49c3c5a8de92c5f",
+      "bytes": 343040
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-quantize-impl.dll",
+      "status": "captured",
+      "sha256": "73c622064356edbc95a6529188e910c94e01402878c9d5484390a9464f2d7e26",
+      "bytes": 331776
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server-impl.dll",
+      "status": "captured",
+      "sha256": "38783ec9cace5803eac0dac34c0221a23740e794e4a56db7e7d9fb068e7eddac",
+      "bytes": 6341120
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama.dll",
+      "status": "captured",
+      "sha256": "cce35c185cf5d2442a1fbea26e1771efc9ad77f3504cf75cf7cd3ffd4b1bde0f",
+      "bytes": 2633728
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\mtmd.dll",
+      "status": "captured",
+      "sha256": "1b3906980fc9e47b95234078094d549d4af89c601dc8a14616bce9f246cd74a6",
+      "bytes": 2222080
+    }
+  ]
+}

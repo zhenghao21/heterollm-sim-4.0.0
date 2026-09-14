@@ -1,0 +1,1260 @@
+{
+  "schema": "simulator-replay-candidate/v1",
+  "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\b03_qwen25_semantic_calibration_v3.json",
+  "rows": [
+    {
+      "status": "legacy_development",
+      "evidence_level": "legacy_development",
+      "acceptance_eligible": false,
+      "model_key": "qwen25",
+      "prompt_tokens": 2,
+      "output_tokens": 8,
+      "parallel": 1,
+      "native": {
+        "ttft_ms": 6.296399995335378,
+        "tpot_ms": 3.863385714274565,
+        "e2e_ms": 33.34009999525733
+      },
+      "simulator": {
+        "ttft_ms": 4.123718008060006,
+        "tpot_ms": 3.4941042982810213,
+        "e2e_ms": 28.582448096027154
+      },
+      "relative_error_pct": {
+        "ttft_ms": -34.50673383020425,
+        "tpot_ms": -9.558492040520585,
+        "e2e_ms": -14.270058877768696
+      },
+      "absolute_delta_ms": {
+        "ttft_ms": 2.1726819872753715,
+        "tpot_ms": 0.3692814159935436,
+        "e2e_ms": 4.757651899230179
+      },
+      "simulator_request_count": 1,
+      "simulator_output_tokens": [
+        8
+      ],
+      "prefill_chunk_tokens": 64,
+      "native_identity": {
+        "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "runtime_fingerprint": "aba4baabf34bf7738d0e094c27c4c3fbe5cfcfe3460b3202ea9851196dfb3eb3",
+        "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+        "prompt_fingerprint": "d64858321506286781d2cc9fb81f5c6abfb99b676fef6a730bdecab55d36ca96",
+        "configuration": {
+          "ctx": 2048,
+          "parallel": 1,
+          "batch": 64,
+          "ubatch": 64,
+          "threads": 16,
+          "gpu_layers": -1,
+          "flash_attn": false,
+          "seed": 42
+        }
+      },
+      "native_request_boundary": {
+        "mode": "sse",
+        "request_start": "client_before_http_post",
+        "first_event_ms": 6.296399995335378,
+        "first_content_ms": 6.296399995335378,
+        "request_to_first_token_ms": 6.296399995335378,
+        "request_to_last_token_ms": 33.34009999525733,
+        "request_to_end_ms": 33.34009999525733,
+        "stream_end_ms": 33.760099999199156,
+        "stream_control_overhead_ms": 0.4200000039418228,
+        "first_token_source": "stream_first_token_ids",
+        "status": "measured",
+        "token_chunk_times_ms": [
+          6.296399995335378,
+          10.975199998938479,
+          14.977699996961746,
+          18.466999994416256,
+          22.04160000110278,
+          26.83919999981299,
+          29.95309999823803,
+          33.34009999525733
+        ],
+        "chunk_count": 9,
+        "batch_start_monotonic_s": 59975.5383483,
+        "batch_end_monotonic_s": 59975.5721815,
+        "batch_client_wall_ms": 33.83320000284584,
+        "batch_client_makespan_ms": 33.34009999525733
+      },
+      "native_evidence": {
+        "identity": {
+          "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+          "runtime_fingerprint": "aba4baabf34bf7738d0e094c27c4c3fbe5cfcfe3460b3202ea9851196dfb3eb3",
+          "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+          "prompt_fingerprint": "d64858321506286781d2cc9fb81f5c6abfb99b676fef6a730bdecab55d36ca96",
+          "configuration": {
+            "ctx": 2048,
+            "parallel": 1,
+            "batch": 64,
+            "ubatch": 64,
+            "threads": 16,
+            "gpu_layers": -1,
+            "flash_attn": false,
+            "seed": 42
+          }
+        },
+        "raw_trace_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__short__short__p1__r1.llama.log",
+        "native_binary": null,
+        "extractor": null,
+        "timing_contract": null,
+        "raw_trace_sha256": "8709986490adc19e0ed481c579c34858eae48b763b115f11000e560a40a77f44",
+        "extractor_output": {
+          "prompt": [
+            {
+              "ms": 4.49,
+              "tokens": 2
+            },
+            {
+              "ms": 4.84,
+              "tokens": 2
+            }
+          ],
+          "decode": [
+            {
+              "ms": 13.7,
+              "tokens": 2
+            },
+            {
+              "ms": 27.11,
+              "tokens": 8
+            }
+          ],
+          "total": [
+            {
+              "ms": 18.2,
+              "tokens": 4
+            },
+            {
+              "ms": 31.95,
+              "tokens": 10
+            }
+          ],
+          "graphs_reused": [
+            2,
+            8
+          ]
+        },
+        "status": "complete",
+        "evidence_level": "legacy_development",
+        "errors": []
+      },
+      "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "source": "artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__short__short__p1__r1.json"
+    },
+    {
+      "status": "legacy_development",
+      "evidence_level": "legacy_development",
+      "acceptance_eligible": false,
+      "model_key": "qwen25",
+      "prompt_tokens": 15,
+      "output_tokens": 32,
+      "parallel": 2,
+      "native": {
+        "ttft_ms": 85.65220000309637,
+        "tpot_ms": 4.390106451600948,
+        "e2e_ms": 221.74550000272575
+      },
+      "simulator": {
+        "ttft_ms": 4.111723562805389,
+        "tpot_ms": 3.5446930103670766,
+        "e2e_ms": 113.99720688418478
+      },
+      "relative_error_pct": {
+        "ttft_ms": -95.19951202344276,
+        "tpot_ms": -19.2572424052627,
+        "e2e_ms": -48.590971684754145
+      },
+      "absolute_delta_ms": {
+        "ttft_ms": 81.54047644029097,
+        "tpot_ms": 0.8454134412338714,
+        "e2e_ms": 107.74829311854097
+      },
+      "simulator_request_count": 2,
+      "simulator_output_tokens": [
+        32,
+        32
+      ],
+      "prefill_chunk_tokens": 64,
+      "native_identity": {
+        "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "runtime_fingerprint": "26df63ac583f81305653a70bee2ae19fb1538a002b92fcb6b4150a3ec0e46d34",
+        "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+        "prompt_fingerprint": "f4f9df159edafabe06d00a0ceb6ef6f7105187441cc831ece19ab85c52c8310d",
+        "configuration": {
+          "ctx": 2048,
+          "parallel": 2,
+          "batch": 64,
+          "ubatch": 64,
+          "threads": 16,
+          "gpu_layers": -1,
+          "flash_attn": false,
+          "seed": 42
+        }
+      },
+      "native_request_boundary": {
+        "mode": "sse",
+        "request_start": "client_before_http_post",
+        "first_event_ms": 85.50580000155605,
+        "first_content_ms": 85.50580000155605,
+        "request_to_first_token_ms": 85.50580000155605,
+        "request_to_last_token_ms": 221.5825000021141,
+        "request_to_end_ms": 221.5825000021141,
+        "stream_end_ms": 221.949400001904,
+        "stream_control_overhead_ms": 0.3668999997898936,
+        "first_token_source": "stream_first_token_ids",
+        "status": "measured",
+        "token_chunk_times_ms": [
+          85.50580000155605,
+          91.53879999939818,
+          96.96049999911338,
+          101.49200000159908,
+          106.25659999641357,
+          112.89669999678154,
+          117.76110000209883,
+          121.57309999747667,
+          126.06770000274992,
+          131.3270000027842,
+          135.10649999807356,
+          138.9400999978534,
+          143.6558999994304,
+          148.57330000086222,
+          152.15729999908945,
+          155.72760000213748,
+          160.32650000124704,
+          164.5046999983606,
+          168.15420000057202,
+          171.75729999871692,
+          176.4645000002929,
+          181.3304999959655,
+          185.0131999963196,
+          188.7323999981163,
+          193.42199999664444,
+          198.0630999969435,
+          201.6185999964364,
+          205.25669999915408,
+          209.6622999961255,
+          214.1983999972581,
+          217.78289999929257,
+          221.5825000021141
+        ],
+        "chunk_count": 33,
+        "batch_start_monotonic_s": 60087.1315838,
+        "batch_end_monotonic_s": 60087.3543366,
+        "batch_client_wall_ms": 222.75280000030762,
+        "batch_client_makespan_ms": 221.9085000033374
+      },
+      "native_evidence": {
+        "identity": {
+          "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+          "runtime_fingerprint": "26df63ac583f81305653a70bee2ae19fb1538a002b92fcb6b4150a3ec0e46d34",
+          "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+          "prompt_fingerprint": "f4f9df159edafabe06d00a0ceb6ef6f7105187441cc831ece19ab85c52c8310d",
+          "configuration": {
+            "ctx": 2048,
+            "parallel": 2,
+            "batch": 64,
+            "ubatch": 64,
+            "threads": 16,
+            "gpu_layers": -1,
+            "flash_attn": false,
+            "seed": 42
+          }
+        },
+        "raw_trace_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__medium__medium__p2__r1.llama.log",
+        "native_binary": null,
+        "extractor": null,
+        "timing_contract": null,
+        "raw_trace_sha256": "d2da979b06d74bc8622e1fe036b2b29ee3405232c3ab7a712aada63b0a7eb86e",
+        "extractor_output": {
+          "prompt": [
+            {
+              "ms": 23.66,
+              "tokens": 15
+            },
+            {
+              "ms": 84.4,
+              "tokens": 15
+            },
+            {
+              "ms": 84.71,
+              "tokens": 15
+            }
+          ],
+          "decode": [
+            {
+              "ms": 12.35,
+              "tokens": 2
+            },
+            {
+              "ms": 136.31,
+              "tokens": 32
+            },
+            {
+              "ms": 136.19,
+              "tokens": 32
+            }
+          ],
+          "total": [
+            {
+              "ms": 36.01,
+              "tokens": 17
+            },
+            {
+              "ms": 220.71,
+              "tokens": 47
+            },
+            {
+              "ms": 220.91,
+              "tokens": 47
+            }
+          ],
+          "graphs_reused": [
+            1,
+            31,
+            31
+          ]
+        },
+        "status": "complete",
+        "evidence_level": "legacy_development",
+        "errors": []
+      },
+      "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "source": "artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__medium__medium__p2__r1.json"
+    },
+    {
+      "status": "legacy_development",
+      "evidence_level": "legacy_development",
+      "acceptance_eligible": false,
+      "model_key": "qwen25",
+      "prompt_tokens": 216,
+      "output_tokens": 128,
+      "parallel": 4,
+      "native": {
+        "ttft_ms": 67.59924999641953,
+        "tpot_ms": 4.804430708681475,
+        "e2e_ms": 677.7619499989669
+      },
+      "simulator": {
+        "ttft_ms": 276.18765439306065,
+        "tpot_ms": 3.5688332553101167,
+        "e2e_ms": 729.4294778174454
+      },
+      "relative_error_pct": {
+        "ttft_ms": 308.5661518547754,
+        "tpot_ms": -25.717874359987494,
+        "e2e_ms": 7.62325589664001
+      },
+      "absolute_delta_ms": {
+        "ttft_ms": 208.58840439664112,
+        "tpot_ms": 1.2355974533713585,
+        "e2e_ms": 51.66752781847856
+      },
+      "simulator_request_count": 4,
+      "simulator_output_tokens": [
+        128,
+        128,
+        128,
+        128
+      ],
+      "prefill_chunk_tokens": 64,
+      "native_identity": {
+        "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+        "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+        "prompt_fingerprint": "988d16d0ca7d420f97371a17a8c6eeed48426a12656f7fd6dc6c5d1473ce1df6",
+        "configuration": {
+          "ctx": 2048,
+          "parallel": 4,
+          "batch": 64,
+          "ubatch": 64,
+          "threads": 16,
+          "gpu_layers": -1,
+          "flash_attn": false,
+          "seed": 42
+        }
+      },
+      "native_request_boundary": {
+        "mode": "sse",
+        "request_start": "client_before_http_post",
+        "first_event_ms": 51.739999995334074,
+        "first_content_ms": 51.739999995334074,
+        "request_to_first_token_ms": 51.739999995334074,
+        "request_to_last_token_ms": 669.045599999663,
+        "request_to_end_ms": 669.045599999663,
+        "stream_end_ms": 669.580900001165,
+        "stream_control_overhead_ms": 0.535300001502037,
+        "first_token_source": "stream_first_token_ids",
+        "status": "measured",
+        "token_chunk_times_ms": [
+          51.739999995334074,
+          60.33989999559708,
+          67.38999999652151,
+          75.99350000236882,
+          82.97339999990072,
+          91.01319999899715,
+          98.5443999961717,
+          106.39010000159033,
+          115.64699999871664,
+          120.76420000084909,
+          126.65169999672798,
+          130.66799999796785,
+          134.5727000007173,
+          138.92530000157421,
+          144.41419999639038,
+          148.2763000021805,
+          152.18319999985397,
+          157.45420000166632,
+          162.2533999980078,
+          167.12249999545747,
+          172.3827000023448,
+          177.2382999988622,
+          181.14789999526693,
+          185.02459999581333,
+          189.67619999602903,
+          194.5475999964401,
+          198.51019999623531,
+          203.01330000074813,
+          208.61380000133067,
+          212.69549999851733,
+          216.80670000205282,
+          220.64610000234097,
+          226.11309999774676,
+          230.00479999609524,
+          233.94189999817172,
+          238.65680000017164,
+          244.09989999548998,
+          247.96029999561142,
+          251.7370999994455,
+          256.82529999903636,
+          261.3809999966179,
+          266.440599996713,
+          271.86670000082813,
+          277.80060000077356,
+          282.1112999954494,
+          286.9027999986429,
+          292.62500000186265,
+          296.5983999965829,
+          301.57519999920623,
+          306.9326999975601,
+          311.2106999979005,
+          316.1848000017926,
+          321.82920000195736,
+          327.290000001085,
+          331.41719999548513,
+          335.4012999989209,
+          340.4404999964754,
+          344.57149999798276,
+          348.61629999795696,
+          352.5828999991063,
+          358.48319999786327,
+          362.42050000146264,
+          366.4056999987224,
+          370.5249999984517,
+          375.99719999707304,
+          379.9637999982224,
+          383.8391999961459,
+          388.5069999960251,
+          393.8835000008112,
+          397.8127000009408,
+          401.7755000022589,
+          406.76829999574693,
+          411.499099995126,
+          415.5124999961117,
+          419.39199999615084,
+          423.5408999957144,
+          427.8395000001183,
+          431.7998999977135,
+          435.8852000004845,
+          441.4944000018295,
+          445.5337999970652,
+          449.52660000126343,
+          453.35720000002766,
+          459.45449999999255,
+          463.5342999972636,
+          467.480200000864,
+          472.19439999753376,
+          477.46750000078464,
+          481.69310000230325,
+          486.7085000005318,
+          493.1152999997721,
+          497.17299999610987,
+          501.06699999741977,
+          505.7457000002614,
+          511.00639999640407,
+          514.9949999977252,
+          518.9967999976943,
+          523.0519999968237,
+          528.0166000011377,
+          533.1451000020024,
+          538.695800001733,
+          544.1520999956992,
+          548.0172999959905,
+          551.9063999963691,
+          555.8652999970946,
+          561.2697999968077,
+          565.1027999992948,
+          569.4318000023486,
+          574.9159999977564,
+          578.9765000008629,
+          583.0027999982121,
+          587.0251000014832,
+          592.9157999999006,
+          597.9073999988032,
+          602.9295999978785,
+          608.8734000004479,
+          613.9563999968232,
+          619.0416999961599,
+          624.5340000023134,
+          628.7087999953656,
+          632.7617999995709,
+          636.816699996416,
+          642.7298999988125,
+          646.6975000003004,
+          650.8107999979984,
+          659.1793999978108,
+          664.1402000022936,
+          669.045599999663
+        ],
+        "chunk_count": 129,
+        "batch_start_monotonic_s": 60231.9907485,
+        "batch_end_monotonic_s": 60232.6917994,
+        "batch_client_wall_ms": 701.0509000028833,
+        "batch_client_makespan_ms": 699.679000004835
+      },
+      "native_evidence": {
+        "identity": {
+          "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+          "runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+          "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+          "prompt_fingerprint": "988d16d0ca7d420f97371a17a8c6eeed48426a12656f7fd6dc6c5d1473ce1df6",
+          "configuration": {
+            "ctx": 2048,
+            "parallel": 4,
+            "batch": 64,
+            "ubatch": 64,
+            "threads": 16,
+            "gpu_layers": -1,
+            "flash_attn": false,
+            "seed": 42
+          }
+        },
+        "raw_trace_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__long__long__p4__r1.llama.log",
+        "native_binary": null,
+        "extractor": null,
+        "timing_contract": null,
+        "raw_trace_sha256": "46d8705d3d8006125937681a9f2ecfdf093a7a8783e16083e8b476bff72b7b70",
+        "extractor_output": {
+          "prompt": [
+            {
+              "ms": 111.62,
+              "tokens": 216
+            },
+            {
+              "ms": 28.57,
+              "tokens": 216
+            },
+            {
+              "ms": 32.27,
+              "tokens": 216
+            },
+            {
+              "ms": 38.68,
+              "tokens": 216
+            },
+            {
+              "ms": 30.87,
+              "tokens": 216
+            }
+          ],
+          "decode": [
+            {
+              "ms": 12.26,
+              "tokens": 2
+            },
+            {
+              "ms": 620.35,
+              "tokens": 128
+            },
+            {
+              "ms": 617.36,
+              "tokens": 128
+            },
+            {
+              "ms": 603.04,
+              "tokens": 128
+            },
+            {
+              "ms": 592.85,
+              "tokens": 128
+            }
+          ],
+          "total": [
+            {
+              "ms": 123.89,
+              "tokens": 218
+            },
+            {
+              "ms": 648.92,
+              "tokens": 344
+            },
+            {
+              "ms": 649.62,
+              "tokens": 344
+            },
+            {
+              "ms": 641.72,
+              "tokens": 344
+            },
+            {
+              "ms": 623.72,
+              "tokens": 344
+            }
+          ],
+          "graphs_reused": [
+            3,
+            124,
+            126,
+            129,
+            131
+          ]
+        },
+        "status": "complete",
+        "evidence_level": "legacy_development",
+        "errors": []
+      },
+      "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "source": "artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__long__long__p4__r1.json"
+    },
+    {
+      "status": "legacy_development",
+      "evidence_level": "legacy_development",
+      "acceptance_eligible": false,
+      "model_key": "qwen25",
+      "prompt_tokens": 2,
+      "output_tokens": 128,
+      "parallel": 2,
+      "native": {
+        "ttft_ms": 8.491000000503846,
+        "tpot_ms": 4.181478346476156,
+        "e2e_ms": 539.5387500029756
+      },
+      "simulator": {
+        "ttft_ms": 4.1637765055275615,
+        "tpot_ms": 3.5486972413708555,
+        "e2e_ms": 454.8483261596262
+      },
+      "relative_error_pct": {
+        "ttft_ms": -50.96247196701816,
+        "tpot_ms": -15.132951857530525,
+        "e2e_ms": -15.696819522765011
+      },
+      "absolute_delta_ms": {
+        "ttft_ms": 4.327223494976284,
+        "tpot_ms": 0.6327811051053001,
+        "e2e_ms": 84.69042384334938
+      },
+      "simulator_request_count": 2,
+      "simulator_output_tokens": [
+        128,
+        128
+      ],
+      "prefill_chunk_tokens": 64,
+      "native_identity": {
+        "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "runtime_fingerprint": "26df63ac583f81305653a70bee2ae19fb1538a002b92fcb6b4150a3ec0e46d34",
+        "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+        "prompt_fingerprint": "d64858321506286781d2cc9fb81f5c6abfb99b676fef6a730bdecab55d36ca96",
+        "configuration": {
+          "ctx": 2048,
+          "parallel": 2,
+          "batch": 64,
+          "ubatch": 64,
+          "threads": 16,
+          "gpu_layers": -1,
+          "flash_attn": false,
+          "seed": 42
+        }
+      },
+      "native_request_boundary": {
+        "mode": "sse",
+        "request_start": "client_before_http_post",
+        "first_event_ms": 8.464200000162236,
+        "first_content_ms": 8.464200000162236,
+        "request_to_first_token_ms": 8.464200000162236,
+        "request_to_last_token_ms": 539.4699000025867,
+        "request_to_end_ms": 539.4699000025867,
+        "stream_end_ms": 539.8618999970495,
+        "stream_control_overhead_ms": 0.39199999446282163,
+        "first_token_source": "stream_first_token_ids",
+        "status": "measured",
+        "token_chunk_times_ms": [
+          8.464200000162236,
+          13.153300002159085,
+          18.03759999893373,
+          21.539200002735015,
+          25.130100002570543,
+          29.39190000324743,
+          33.97250000125496,
+          38.032700002077036,
+          41.582500001823064,
+          45.13700000097742,
+          50.61810000188416,
+          54.38300000241725,
+          58.165100002952386,
+          61.82650000118883,
+          67.02680000307737,
+          70.66130000021076,
+          74.40089999727206,
+          78.066599999147,
+          82.64429999690037,
+          87.01809999911347,
+          90.53300000232412,
+          94.12349999911385,
+          98.45769999810727,
+          103.17429999849992,
+          106.97010000149021,
+          110.7343999974546,
+          116.53880000085337,
+          120.0405999989016,
+          123.57979999796953,
+          127.18660000246018,
+          131.94990000192774,
+          135.8029000039096,
+          140.55070000176784,
+          145.2047999991919,
+          150.83269999740878,
+          154.45090000139317,
+          159.25070000230335,
+          163.86809999676188,
+          168.73109999869484,
+          172.34710000047926,
+          175.99640000116779,
+          180.44779999763705,
+          185.54240000230493,
+          189.45289999828674,
+          193.59650000114925,
+          198.502200000803,
+          202.45160000195028,
+          206.0051000007661,
+          209.64169999933802,
+          213.95460000348976,
+          218.8691999981529,
+          222.58839999994962,
+          226.07160000188742,
+          229.77009999885922,
+          234.52849999739556,
+          238.10239999875193,
+          241.8785999980173,
+          246.31899999803863,
+          251.10410000343109,
+          254.91429999965476,
+          258.5865000000922,
+          262.90919999883045,
+          267.78750000084983,
+          271.2896000011824,
+          274.75950000371085,
+          278.39700000185985,
+          283.8705000031041,
+          287.41379999701167,
+          291.00450000260025,
+          294.4506999992882,
+          299.43009999988135,
+          303.6738000009791,
+          307.3791999995592,
+          311.0631000017747,
+          315.8785999985412,
+          319.80530000146246,
+          323.4754000004614,
+          326.9549999968149,
+          331.5965000001597,
+          336.0783000025549,
+          339.749099999608,
+          343.3835999967414,
+          347.67640000063693,
+          353.838299997733,
+          357.37410000001546,
+          361.1326000027475,
+          366.4344999997411,
+          370.27759999909904,
+          373.8646999991033,
+          377.4950000006356,
+          382.21969999722205,
+          387.0303000003332,
+          390.63829999940936,
+          394.3968000021414,
+          399.5894999970915,
+          403.20100000099046,
+          406.70910000335425,
+          410.30619999946794,
+          415.07519999868236,
+          419.27749999740627,
+          424.0785000001779,
+          428.90369999804534,
+          434.37899999844376,
+          439.4060999984504,
+          444.39199999760604,
+          449.96959999843966,
+          453.8505000018631,
+          457.61299999867333,
+          461.2085999979172,
+          465.93140000186395,
+          470.2344000033918,
+          473.9564999981667,
+          477.591199996823,
+          482.6826999997138,
+          486.881099997845,
+          490.3850999980932,
+          493.93189999682363,
+          498.86790000164183,
+          502.8690999970422,
+          506.439999997383,
+          510.1492000030703,
+          514.6205999990343,
+          519.3320999969728,
+          522.995200000878,
+          526.6111000019009,
+          530.841200001305,
+          535.5332999970415,
+          539.4699000025867
+        ],
+        "chunk_count": 129,
+        "batch_start_monotonic_s": 60026.8252615,
+        "batch_end_monotonic_s": 60027.3662314,
+        "batch_client_wall_ms": 540.9699000010733,
+        "batch_client_makespan_ms": 539.6076000033645
+      },
+      "native_evidence": {
+        "identity": {
+          "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+          "runtime_fingerprint": "26df63ac583f81305653a70bee2ae19fb1538a002b92fcb6b4150a3ec0e46d34",
+          "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+          "prompt_fingerprint": "d64858321506286781d2cc9fb81f5c6abfb99b676fef6a730bdecab55d36ca96",
+          "configuration": {
+            "ctx": 2048,
+            "parallel": 2,
+            "batch": 64,
+            "ubatch": 64,
+            "threads": 16,
+            "gpu_layers": -1,
+            "flash_attn": false,
+            "seed": 42
+          }
+        },
+        "raw_trace_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__short__long__p2__r1.llama.log",
+        "native_binary": null,
+        "extractor": null,
+        "timing_contract": null,
+        "raw_trace_sha256": "08a2d6504f9b6a95156d055ea38dca0524d56d67f2560ff34800c17eea4e81b1",
+        "extractor_output": {
+          "prompt": [
+            {
+              "ms": 4.73,
+              "tokens": 2
+            },
+            {
+              "ms": 7.29,
+              "tokens": 2
+            },
+            {
+              "ms": 7.58,
+              "tokens": 2
+            }
+          ],
+          "decode": [
+            {
+              "ms": 11.86,
+              "tokens": 2
+            },
+            {
+              "ms": 531.17,
+              "tokens": 128
+            },
+            {
+              "ms": 530.98,
+              "tokens": 128
+            }
+          ],
+          "total": [
+            {
+              "ms": 16.59,
+              "tokens": 4
+            },
+            {
+              "ms": 538.46,
+              "tokens": 130
+            },
+            {
+              "ms": 538.56,
+              "tokens": 130
+            }
+          ],
+          "graphs_reused": [
+            2,
+            127,
+            127
+          ]
+        },
+        "status": "complete",
+        "evidence_level": "legacy_development",
+        "errors": []
+      },
+      "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "source": "artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__short__long__p2__r1.json"
+    },
+    {
+      "status": "legacy_development",
+      "evidence_level": "legacy_development",
+      "acceptance_eligible": false,
+      "model_key": "qwen25",
+      "prompt_tokens": 216,
+      "output_tokens": 8,
+      "parallel": 2,
+      "native": {
+        "ttft_ms": 42.98259999995935,
+        "tpot_ms": 4.928271428590441,
+        "e2e_ms": 77.48050000009243
+      },
+      "simulator": {
+        "ttft_ms": 25.739656166239286,
+        "tpot_ms": 3.56463065783225,
+        "e2e_ms": 50.69207077106503
+      },
+      "relative_error_pct": {
+        "ttft_ms": -40.1161024082684,
+        "tpot_ms": -27.66975785561008,
+        "e2e_ms": -34.5744145029981
+      },
+      "absolute_delta_ms": {
+        "ttft_ms": 17.242943833720062,
+        "tpot_ms": 1.3636407707581908,
+        "e2e_ms": 26.7884292290274
+      },
+      "simulator_request_count": 2,
+      "simulator_output_tokens": [
+        8,
+        8
+      ],
+      "prefill_chunk_tokens": 64,
+      "native_identity": {
+        "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "runtime_fingerprint": "26df63ac583f81305653a70bee2ae19fb1538a002b92fcb6b4150a3ec0e46d34",
+        "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+        "prompt_fingerprint": "988d16d0ca7d420f97371a17a8c6eeed48426a12656f7fd6dc6c5d1473ce1df6",
+        "configuration": {
+          "ctx": 2048,
+          "parallel": 2,
+          "batch": 64,
+          "ubatch": 64,
+          "threads": 16,
+          "gpu_layers": -1,
+          "flash_attn": false,
+          "seed": 42
+        }
+      },
+      "native_request_boundary": {
+        "mode": "sse",
+        "request_start": "client_before_http_post",
+        "first_event_ms": 31.591799997841008,
+        "first_content_ms": 31.591799997841008,
+        "request_to_first_token_ms": 31.591799997841008,
+        "request_to_last_token_ms": 71.27749999926891,
+        "request_to_end_ms": 71.27749999926891,
+        "stream_end_ms": 71.75360000110231,
+        "stream_control_overhead_ms": 0.4761000018334016,
+        "first_token_source": "stream_first_token_ids",
+        "status": "measured",
+        "token_chunk_times_ms": [
+          31.591799997841008,
+          38.151699998707045,
+          46.18810000101803,
+          53.89409999770578,
+          59.55569999787258,
+          63.23089999932563,
+          67.6861000029021,
+          71.27749999926891
+        ],
+        "chunk_count": 9,
+        "batch_start_monotonic_s": 60162.6469021,
+        "batch_end_monotonic_s": 60162.7317395,
+        "batch_client_wall_ms": 84.83739999792306,
+        "batch_client_makespan_ms": 83.68350000091596
+      },
+      "native_evidence": {
+        "identity": {
+          "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+          "runtime_fingerprint": "26df63ac583f81305653a70bee2ae19fb1538a002b92fcb6b4150a3ec0e46d34",
+          "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+          "prompt_fingerprint": "988d16d0ca7d420f97371a17a8c6eeed48426a12656f7fd6dc6c5d1473ce1df6",
+          "configuration": {
+            "ctx": 2048,
+            "parallel": 2,
+            "batch": 64,
+            "ubatch": 64,
+            "threads": 16,
+            "gpu_layers": -1,
+            "flash_attn": false,
+            "seed": 42
+          }
+        },
+        "raw_trace_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__long__short__p2__r1.llama.log",
+        "native_binary": null,
+        "extractor": null,
+        "timing_contract": null,
+        "raw_trace_sha256": "a08fea8429a8537cec6c54871dab27e7ee74d49ca7c75cc0d74d856c12cd1067",
+        "extractor_output": {
+          "prompt": [
+            {
+              "ms": 129.8,
+              "tokens": 216
+            },
+            {
+              "ms": 29.84,
+              "tokens": 216
+            },
+            {
+              "ms": 34.48,
+              "tokens": 216
+            }
+          ],
+          "decode": [
+            {
+              "ms": 13.04,
+              "tokens": 2
+            },
+            {
+              "ms": 39.85,
+              "tokens": 8
+            },
+            {
+              "ms": 29.32,
+              "tokens": 8
+            }
+          ],
+          "total": [
+            {
+              "ms": 142.84,
+              "tokens": 218
+            },
+            {
+              "ms": 69.69,
+              "tokens": 224
+            },
+            {
+              "ms": 63.8,
+              "tokens": 224
+            }
+          ],
+          "graphs_reused": [
+            3,
+            10,
+            12
+          ]
+        },
+        "status": "complete",
+        "evidence_level": "legacy_development",
+        "errors": []
+      },
+      "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "source": "artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__long__short__p2__r1.json"
+    },
+    {
+      "status": "legacy_development",
+      "evidence_level": "legacy_development",
+      "acceptance_eligible": false,
+      "model_key": "qwen25",
+      "prompt_tokens": 15,
+      "output_tokens": 8,
+      "parallel": 4,
+      "native": {
+        "ttft_ms": 83.43070000046282,
+        "tpot_ms": 5.175500000145154,
+        "e2e_ms": 119.6592000014789
+      },
+      "simulator": {
+        "ttft_ms": 4.083033262568305,
+        "tpot_ms": 3.615432377488245,
+        "e2e_ms": 29.391059904986022
+      },
+      "relative_error_pct": {
+        "ttft_ms": -95.10607814324266,
+        "tpot_ms": -30.143321855147416,
+        "e2e_ms": -75.43769312796445
+      },
+      "absolute_delta_ms": {
+        "ttft_ms": 79.34766673789451,
+        "tpot_ms": 1.5600676226569088,
+        "e2e_ms": 90.26814009649287
+      },
+      "simulator_request_count": 4,
+      "simulator_output_tokens": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "prefill_chunk_tokens": 64,
+      "native_identity": {
+        "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+        "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+        "prompt_fingerprint": "f4f9df159edafabe06d00a0ceb6ef6f7105187441cc831ece19ab85c52c8310d",
+        "configuration": {
+          "ctx": 2048,
+          "parallel": 4,
+          "batch": 64,
+          "ubatch": 64,
+          "threads": 16,
+          "gpu_layers": -1,
+          "flash_attn": false,
+          "seed": 42
+        }
+      },
+      "native_request_boundary": {
+        "mode": "sse",
+        "request_start": "client_before_http_post",
+        "first_event_ms": 83.08190000389004,
+        "first_content_ms": 83.08190000389004,
+        "request_to_first_token_ms": 83.08190000389004,
+        "request_to_last_token_ms": 119.37079999916023,
+        "request_to_end_ms": 119.37079999916023,
+        "stream_end_ms": 120.09340000076918,
+        "stream_control_overhead_ms": 0.7226000016089529,
+        "first_token_source": "stream_first_token_ids",
+        "status": "measured",
+        "token_chunk_times_ms": [
+          83.08190000389004,
+          91.91600000485778,
+          97.87240000150632,
+          101.93370000342838,
+          105.85230000287993,
+          110.61980000522453,
+          114.89119999896502,
+          119.37079999916023
+        ],
+        "chunk_count": 9,
+        "batch_start_monotonic_s": 60069.5312413,
+        "batch_end_monotonic_s": 60069.6522219,
+        "batch_client_wall_ms": 120.98060000425903,
+        "batch_client_makespan_ms": 119.72429999877932
+      },
+      "native_evidence": {
+        "identity": {
+          "model_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+          "runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+          "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+          "prompt_fingerprint": "f4f9df159edafabe06d00a0ceb6ef6f7105187441cc831ece19ab85c52c8310d",
+          "configuration": {
+            "ctx": 2048,
+            "parallel": 4,
+            "batch": 64,
+            "ubatch": 64,
+            "threads": 16,
+            "gpu_layers": -1,
+            "flash_attn": false,
+            "seed": 42
+          }
+        },
+        "raw_trace_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__medium__short__p4__r1.llama.log",
+        "native_binary": null,
+        "extractor": null,
+        "timing_contract": null,
+        "raw_trace_sha256": "187b835ba427767f15f2983036af2c118733ee4463ec675808de2632a337aa3c",
+        "extractor_output": {
+          "prompt": [
+            {
+              "ms": 24.43,
+              "tokens": 15
+            },
+            {
+              "ms": 81.7,
+              "tokens": 15
+            },
+            {
+              "ms": 82.02,
+              "tokens": 15
+            },
+            {
+              "ms": 82.3,
+              "tokens": 15
+            },
+            {
+              "ms": 82.6,
+              "tokens": 15
+            }
+          ],
+          "decode": [
+            {
+              "ms": 13.06,
+              "tokens": 2
+            },
+            {
+              "ms": 36.47,
+              "tokens": 8
+            },
+            {
+              "ms": 36.3,
+              "tokens": 8
+            },
+            {
+              "ms": 36.17,
+              "tokens": 8
+            },
+            {
+              "ms": 36.04,
+              "tokens": 8
+            }
+          ],
+          "total": [
+            {
+              "ms": 37.49,
+              "tokens": 17
+            },
+            {
+              "ms": 118.17,
+              "tokens": 23
+            },
+            {
+              "ms": 118.32,
+              "tokens": 23
+            },
+            {
+              "ms": 118.47,
+              "tokens": 23
+            },
+            {
+              "ms": 118.64,
+              "tokens": 23
+            }
+          ],
+          "graphs_reused": [
+            1,
+            7,
+            7,
+            7,
+            7
+          ]
+        },
+        "status": "complete",
+        "evidence_level": "legacy_development",
+        "errors": []
+      },
+      "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "source": "artifacts\\multimodel_next\\generalization_acceptance_v4_l9_r2\\qwen25__medium__short__p4__r1.json"
+    }
+  ]
+}

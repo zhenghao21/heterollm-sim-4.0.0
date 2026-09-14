@@ -1,0 +1,378 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const vm = require("node:vm");
+
+const webui = path.join(__dirname, "..", "src", "heterollm_sim", "webui");
+const appPath = path.join(webui, "app.js");
+const source = fs.readFileSync(appPath, "utf8");
+const ModelGraphCore = require(path.join(webui, "model-graph-core.js"));
+const TopologyCore = require(path.join(webui, "topology-core.js"));
+const TraceViewCore = require(path.join(webui, "trace-view-core.js"));
+
+class FakeClassList {
+  constructor(element) {
+    this.element = element;
+    this.values = new Set();
+  }
+
+  add(...names) {
+    names.forEach((name) => this.values.add(String(name)));
+    this.sync();
+  }
+
+  remove(...names) {
+    names.forEach((name) => this.values.delete(String(name)));
+    this.sync();
+  }
+
+  toggle(name, force) {
+    const value = String(name);
+    const enabled = force === undefined ? !this.values.has(value) : Boolean(force);
+    if (enabled) this.values.add(value);
+    else this.values.delete(value);
+    this.sync();
+    return enabled;
+  }
+
+  sync() {
+    if (this.values.size) this.element.className = Array.from(this.values).join(" ");
+  }
+}
+
+class FakeHTMLElement {
+  constructor(id = "") {
+    this.id = id;
+    this.isConnected = true;
+    this.open = false;
+    this.hidden = false;
+    this.disabled = false;
+    this.textContent = "";
+    this.innerHTML = "";
+    this.value = "";
+    this.className = "";
+    this.dataset = {};
+    this.attributes = {};
+    this.children = [];
+    this.listeners = {};
+    this.ownerDocument = null;
+    this.classList = new FakeClassList(this);
+  }
+
+  addEventListener(type, listener) {
+    (this.listeners[type] ||= []).push(listener);
+  }
+
+  dispatch(type, event = {}) {
+    const payload = {
+      target: this,
+      currentTarget: this,
+      preventDefault() {},
+      stopPropagation() {},
+      ...event,
+    };
+    for (const listener of this.listeners[type] || []) listener(payload);
+  }
+
+  querySelector(selector) {
+    if (selector === "span") return this.children.find((item) => item.tagName === "span") || null;
+    if (selector === "button, input, select, textarea") return this.children[0] || null;
+    return null;
+  }
+
+  querySelectorAll() {
+    return [];
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  }
+
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
+
+  focus() {
+    this.focused = true;
+    if (this.ownerDocument) this.ownerDocument.activeElement = this;
+  }
+}
+
+class FakeDialog extends FakeHTMLElement {
+  showModal() {
+    this.open = true;
+  }
+
+  close(returnValue = "") {
+    this.open = false;
+    this.returnValue = returnValue;
+    this.dispatch("close", { target: this });
+  }
+}
+
+function response(status, payload) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => "application/json" },
+    async json() { return payload; },
+    async text() { return JSON.stringify(payload); },
+  };
+}
+
+function minimalModelGraph() {
+  return ModelGraphCore.buildModelGraphFromLayerSpecs([{
+    schema_version: "4.0.0",
+    layer_id: "layer0",
+    kind: "dense",
+    hidden_size: 512,
+    intermediate_size: 2048,
+    attention_heads: 8,
+    kv_heads: 8,
+    attention_head_dim: 64,
+    sequence_mixer: "full_attention",
+    dtype: "bf16",
+    num_experts: 1,
+    experts_per_token: 1,
+  }], { name: "first-click-model", schema_version: "4.0.0", vocabulary_size: 32000 });
+}
+
+function scenario() {
+  return {
+    schema_version: "4.0.0",
+    hardware: {
+      metadata: {},
+      components: [
+        { component_id: "gpu0", kind: "gpu", cost_profile_id: "gpu-default", peak_ops_per_s: 120e12, ports: [] },
+        { component_id: "hbm0", kind: "hbm", cost_profile_id: "hbm-default", read_bandwidth_gbps: 4096, ports: [] },
+        { component_id: "cpu0", kind: "cpu", cost_profile_id: "cpu-default", peak_ops_per_s: 100e9, ports: [] },
+        { component_id: "ram0", kind: "host_memory", cost_profile_id: "host-memory-default", read_bandwidth_gbps: 1600, ports: [] },
+      ],
+      links: [],
+    },
+    model: { graph: minimalModelGraph() },
+    placement: {},
+    workload: {
+      requests: [],
+      request_count: 1,
+      prompt_tokens: 16,
+      output_tokens: 4,
+    },
+    profiles: {
+      components: {
+        gpu: { "gpu-default": { tensor_core: { sm_count: 1 }, cache_hierarchy: { levels: [{}] } } },
+        hbm: { "hbm-default": { bandwidth_gb_s: 1 } },
+        cpu: { "cpu-default": { pipeline: { core_count: 1 }, cache_hierarchy: { levels: [{}] } } },
+        host_memory: { "host-memory-default": { bandwidth_gb_s: 1 } },
+      },
+      host_orchestration: {
+        cpu_component_id: "cpu0",
+        gpu_component_id: "gpu0",
+        scheduler_resource_id: "cpu0.scheduler",
+        pack_resource_id: "cpu0.pack",
+        dma_resource_id: "cpu0.dma",
+        submission_resource_id: "gpu0.queue",
+      },
+    },
+  };
+}
+
+function estimatePayload() {
+  return {
+    schema_version: "1.0",
+    risk_level: "low",
+    risk_level_zh: "低",
+    request_count: 1,
+    prompt_tokens: 16,
+    output_tokens: 4,
+    layer_count: 1,
+    world_size: 1,
+    estimated_cohort_count: 1,
+    estimated_event_task_count: 12,
+    recommended_retention_policy: "exact",
+    warnings: [],
+  };
+}
+
+function loadRunHarness(fetchImpl) {
+  const documentListeners = {};
+  const document = {
+    activeElement: null,
+    addEventListener(type, listener) {
+      (documentListeners[type] ||= []).push(listener);
+    },
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+  };
+  const context = vm.createContext({
+    AbortController,
+    CSS: { escape: (value) => String(value) },
+    HTMLElement: FakeHTMLElement,
+    Intl,
+    Map,
+    ModelGraphCore,
+    Option: class Option { constructor(text, value) { this.text = text; this.value = value; } },
+    Promise,
+    Set,
+    TopologyCore,
+    TraceViewCore,
+    URL,
+    URLSearchParams,
+    clearTimeout,
+    console,
+    document,
+    fetch: (...args) => fetchImpl(...args),
+    localStorage: { getItem() { return null; }, removeItem() {}, setItem() {} },
+    requestAnimationFrame(callback) { callback(0); return 1; },
+    setTimeout,
+    structuredClone,
+    window: { clearTimeout, setTimeout },
+  });
+  vm.runInContext(`${source}
+    const __toasts = [];
+    const __operationErrors = [];
+    renderSteps = () => {};
+    renderDiagnostics = () => {};
+    openDiagnostics = () => {};
+    renderRuntimeHealth = () => {};
+    renderAll = () => {};
+    toast = (title, message = "", kind = "info") => { __toasts.push({ title, message, kind }); };
+    showOperationError = (title, error) => { __operationErrors.push({ title, code: error?.code, message: error?.message }); };
+    globalThis.__runHarness = {
+      state,
+      dom,
+      runScenario,
+      bindModalDialogLifecycle,
+      toasts: __toasts,
+      operationErrors: __operationErrors,
+    };`, context, { filename: appPath });
+  const ui = context.__runHarness;
+  const ids = [
+    "runButton", "rerunButton", "emptyRunButton", "compareButton", "validateButton",
+    "loadReferenceButton", "canonicalExportButton", "canonicalExportDialogButton",
+    "busyOverlay", "busyTitle", "busyDetail",
+    "runEstimateRisk", "runEstimateSummary", "runEstimateWarnings",
+    "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount",
+    "runProgressBar", "runProgressMessage", "dismissRunJobButton",
+    "cancelRunJobButton", "startRunJobButton",
+  ];
+  ids.forEach((id) => {
+    ui.dom[id] = new FakeHTMLElement(id);
+    ui.dom[id].ownerDocument = document;
+  });
+  ui.dom.runJobDialog = new FakeDialog("runJobDialog");
+  ui.dom.runJobDialog.ownerDocument = document;
+  ui.dom.runJobDialog.children.push(ui.dom.startRunJobButton);
+  const connectionLabel = new FakeHTMLElement("connectionStateLabel");
+  connectionLabel.tagName = "span";
+  ui.dom.connectionState = new FakeHTMLElement("connectionState");
+  ui.dom.connectionState.children.push(connectionLabel);
+  ui.dom.connectionState.ownerDocument = document;
+  ui.bindModalDialogLifecycle();
+  ui.state.scenario = scenario();
+  return ui;
+}
+
+test("topbar run first click estimates first, opens the run dialog, and does not start a job", async () => {
+  assert.match(source, /dom\.runButton\.addEventListener\("click", runScenario\)/);
+
+  const calls = [];
+  const ui = loadRunHarness(async (url, options = {}) => {
+    calls.push({ url, method: options.method || "GET", body: options.body || "" });
+    if (url === "/api/validate") {
+      return response(200, {
+        validation: { valid: true, errors: [], warnings: [], information: [] },
+        input_fingerprint: "fp-first-click",
+        current_input_fingerprint: "fp-first-click",
+      });
+    }
+    if (url === "/api/run-estimate") return response(200, estimatePayload());
+    throw new TypeError(`unexpected fetch: ${url}`);
+  });
+
+  await ui.runScenario({ currentTarget: ui.dom.runButton });
+
+  assert.deepEqual(calls.map((item) => `${item.method} ${item.url}`), [
+    "POST /api/validate",
+    "POST /api/run-estimate",
+  ]);
+  assert.equal(calls.some((item) => item.url === "/api/run" || item.url === "/api/run-jobs"), false);
+  assert.equal(ui.operationErrors.length, 0);
+  assert.equal(ui.state.connection.status, "online");
+  assert.equal(ui.dom.runJobDialog.open, true);
+  assert.equal(ui.dom.startRunJobButton.disabled, false);
+  assert.match(ui.dom.runEstimateRisk.textContent, /风险：低/);
+  assert.match(ui.dom.runEstimateSummary.innerHTML, /请求数（Requests）/);
+});
+
+test("a first-click transport reset keeps a reachable API online and leaves run retryable", async () => {
+  const calls = [];
+  let failEstimateOnce = true;
+  const ui = loadRunHarness(async (url, options = {}) => {
+    calls.push({ url, method: options.method || "GET" });
+    if (url === "/api/validate") {
+      return response(200, { validation: { valid: true, errors: [], warnings: [], information: [] } });
+    }
+    if (url === "/api/run-estimate" && failEstimateOnce) {
+      failEstimateOnce = false;
+      throw new TypeError("offline package transiently refused the first estimate request");
+    }
+    if (url === "/api/health") return response(200, { ok: true });
+    if (url === "/api/run-estimate") return response(200, estimatePayload());
+    throw new TypeError(`unexpected fetch: ${url}`);
+  });
+
+  await ui.runScenario({ currentTarget: ui.dom.runButton });
+
+  assert.equal(ui.dom.runJobDialog.open, false);
+  assert.equal(ui.operationErrors.at(-1)?.code, "request_transport_error");
+  assert.equal(ui.state.busy, false);
+  assert.equal(ui.dom.runButton.disabled, false);
+  assert.equal(ui.state.connection.status, "online");
+
+  await ui.runScenario({ currentTarget: ui.dom.runButton });
+
+  assert.deepEqual(calls.map((item) => `${item.method} ${item.url}`), [
+    "POST /api/validate",
+    "POST /api/run-estimate",
+    "GET /api/health",
+    "POST /api/validate",
+    "POST /api/run-estimate",
+  ]);
+  assert.equal(ui.operationErrors.length, 1);
+  assert.equal(ui.state.connection.status, "online");
+  assert.equal(ui.dom.runJobDialog.open, true);
+  assert.equal(ui.dom.startRunJobButton.disabled, false);
+});
+
+test("a failed health probe does not mislabel the API as online", async () => {
+  const calls = [];
+  const ui = loadRunHarness(async (url, options = {}) => {
+    calls.push({ url, method: options.method || "GET" });
+    if (url === "/api/validate") {
+      throw new TypeError("connection reset during upload");
+    }
+    if (url === "/api/health") {
+      return response(500, { ok: false, error: "unhealthy" });
+    }
+    throw new TypeError(`unexpected fetch: ${url}`);
+  });
+
+  await ui.runScenario({ currentTarget: ui.dom.runButton });
+
+  assert.deepEqual(calls.map((item) => `${item.method} ${item.url}`), [
+    "POST /api/validate",
+    "GET /api/health",
+  ]);
+  assert.equal(ui.operationErrors.at(-1)?.code, "network_error");
+  assert.equal(ui.state.connection.status, "offline");
+  assert.equal(ui.dom.runJobDialog.open, false);
+  assert.equal(ui.state.busy, false);
+});

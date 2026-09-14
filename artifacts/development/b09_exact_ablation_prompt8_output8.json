@@ -1,0 +1,42 @@
+{
+  "schema": "b09-exact-ablation/v1",
+  "scope": "development_only",
+  "native_execution_count": 0,
+  "prompt_tokens": 8,
+  "requested_output_tokens": 8,
+  "configuration": {
+    "ctx": 512,
+    "parallel": 1,
+    "batch": 64,
+    "ubatch": 64,
+    "threads": 16,
+    "gpu_layers": -1
+  },
+  "rows": [
+    {
+      "label": "analytical_baseline",
+      "ttft_ms": 7.621495524974851,
+      "tpot_ms": 7.493008446474954,
+      "e2e_ms": 60.07255465029953,
+      "prompt_tokens": 8,
+      "output_tokens": 8
+    },
+    {
+      "label": "exact_gate_blocked_profile",
+      "ttft_ms": 7.621495524974851,
+      "tpot_ms": 7.493008446474954,
+      "e2e_ms": 60.07255465029953,
+      "prompt_tokens": 8,
+      "output_tokens": 8
+    }
+  ],
+  "comparison": {
+    "delta_ms": {
+      "ttft_ms": 0.0,
+      "tpot_ms": 0.0,
+      "e2e_ms": 0.0
+    },
+    "identical": true
+  },
+  "result": "no exact keys applied; profile remains blocked due missing planner semantic_layout evidence"
+}

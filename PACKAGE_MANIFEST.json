@@ -1,0 +1,746 @@
+{
+  "schema_version": "heterollm.clean-package/v1",
+  "source_revision": "102cbf45d46a64adf2cf9db8f674c586fda30bfb",
+  "root": "heterollm-sim-4.0.0-clean",
+  "excluded": [
+    "accuracy_closure_benchmark",
+    "activation_representation_study",
+    "activation_storage_contract",
+    "bionic_adapter",
+    "bionic_benchmark_runner",
+    "bionic_c2_scheduler_regression",
+    "bionic_study_script",
+    "collect_approved_f32_holdout",
+    "collect_qwen35_attention_holdout",
+    "combined_planner_refinements",
+    "combined_serving_refinements",
+    "control_plane_dag",
+    "control_plane_runtime_integration",
+    "decode_batch_sharing",
+    "generalization_study",
+    "gpu_load_dependency",
+    "gpu_local_store",
+    "gpu_mixed_execution",
+    "host_output_tail",
+    "host_sampler_work",
+    "hybrid_v04",
+    "kv_scan_lower_bound",
+    "local_simulation",
+    "measured_tensor_get_service",
+    "measurement_comparison",
+    "mmq_native_int8_worker_directory",
+    "mmvq_dependency_extract",
+    "mmvq_dependency_replay",
+    "mmvq_finite_timing",
+    "mmvq_full_extract",
+    "mmvq_grid_replay",
+    "mmvq_timing_candidate",
+    "modeling_gap_audit",
+    "native_llama_runner",
+    "native_local_memory_analysis",
+    "native_matrix_measurement",
+    "native_mmvq",
+    "native_timing_trace",
+    "offline_dependencies",
+    "offline_pipeline_061",
+    "packaging",
+    "parameter_shared_service",
+    "performance_scaling",
+    "planner_compilation_context",
+    "planner_quantization",
+    "planner_task_segment_cache",
+    "pre_wait_instructions",
+    "probe_cache_copy_instruction_work",
+    "prompt_cache_driver_copy_issue",
+    "prompt_cache_fragmentation",
+    "prompt_cache_host_state_work",
+    "prompt_cache_native_io",
+    "prompt_cache_owner_payload",
+    "prompt_cache_recurrent_payload",
+    "q4_kv_materialization",
+    "q5_0_cpu_route_audit",
+    "qwen35_attention_planner",
+    "qwen35_attention_study_bindings",
+    "qwen35_attention_work",
+    "readback_capture_tools",
+    "readback_gpu_signal",
+    "readback_hwqueue",
+    "readback_kernel_analysis",
+    "readback_kernel_reader",
+    "readback_paging_queue",
+    "readback_state_type",
+    "readback_sync_object",
+    "readback_syscall_work",
+    "reporting_backends",
+    "run_bionic_comparison",
+    "run_last_layer_output_selection_study",
+    "run_mmq_execution_study",
+    "run_qwen35_attention_study",
+    "run_recurrent_objects_study",
+    "scalable_serving",
+    "serving",
+    "simulated_subtargets",
+    "syscall_counter_capture",
+    "syscall_counter_pairing",
+    "syscall_counter_reader",
+    "v12_reasonable_scenarios"
+  ],
+  "files": [
+    {
+      "path": "docs/ARCHITECTURE_V1.md",
+      "sha256": "e80a7bd2d502537f0d8344be794c9713019498770c923d674513891f0facbcc7"
+    },
+    {
+      "path": "docs/BACKEND_SIMULATORS.md",
+      "sha256": "5833ef4814f32765ccc10982451c530df40dba44369dbc0febca653fbbc4a4ec"
+    },
+    {
+      "path": "docs/DESIGN.md",
+      "sha256": "ef60f8a7d1e41cf0f29ef8d3e09670e83cad37c52bc18981948e1540b426b535"
+    },
+    {
+      "path": "docs/SIMULATION_PRINCIPLES.md",
+      "sha256": "a2fff0373139a167b3001eeca9f035dc85eb32519c94278106827c3076734463"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "9a307a497f996afe00a55183aa3b7f22b8bb2e17a5734ca29b6d87656aee787b"
+    },
+    {
+      "path": "README.md",
+      "sha256": "5fafbd83c9411a63e75998dba339a76f06ea8e543818138427c916f868bf94df"
+    },
+    {
+      "path": "src/heterollm_sim/__init__.py",
+      "sha256": "7dbc66816480e661a38d52c247ea11a493ee22b9b049037f0520759aaf0af4b9"
+    },
+    {
+      "path": "src/heterollm_sim/__main__.py",
+      "sha256": "e014c07c71c5daede3fe8520fd696eaaed07cb19d77c01c14147273d0f9ed71b"
+    },
+    {
+      "path": "src/heterollm_sim/architecture_presets.py",
+      "sha256": "8e4e1589340594da625e770de493d092898267831fa1886d703e7cc0d5eeec1b"
+    },
+    {
+      "path": "src/heterollm_sim/architecture_scan.py",
+      "sha256": "e8968b0fc07d3f940db2439a902de0cfbb37c46f0b6338e30d7b0d7e9ac086d3"
+    },
+    {
+      "path": "src/heterollm_sim/batched_accelerator.py",
+      "sha256": "52c5ed07b4fce0b525da409286bb911b77aeb7dc2c4912c7aceaa568b7ab890a"
+    },
+    {
+      "path": "src/heterollm_sim/cli.py",
+      "sha256": "a9455f5e27f3661a2333eea6c88e2911962ed59b7a1f4ac13c91bc0e8f871e04"
+    },
+    {
+      "path": "src/heterollm_sim/communication.py",
+      "sha256": "5779711be8edd913d3255862c76be7e33fb16a125e2bb88d3f740f35f895eb6f"
+    },
+    {
+      "path": "src/heterollm_sim/compiler_ir.py",
+      "sha256": "432a4898af9e0d8aa3ed3f4026664c9e407acd82ac186da99e147e3a3fcfb127"
+    },
+    {
+      "path": "src/heterollm_sim/component_presets.py",
+      "sha256": "4b9df1d6e95a6b6894222994affca32ed45035b9b77e338477432ef648a0d993"
+    },
+    {
+      "path": "src/heterollm_sim/config.py",
+      "sha256": "c6de98619baf1927dc01abcb81266ff9a797fa1b391516f9a363cf19d18c6e8f"
+    },
+    {
+      "path": "src/heterollm_sim/contracts.py",
+      "sha256": "0eeb9ab48ea32d5bcae5117360068d4b663336edc202ce50dd89658735e74565"
+    },
+    {
+      "path": "src/heterollm_sim/control_plane.py",
+      "sha256": "963111dbab15c04c65a902c442db5ff4cb5698516d975debaca987d1595b9de4"
+    },
+    {
+      "path": "src/heterollm_sim/control_plane_planner.py",
+      "sha256": "6d3cda1b81fdb7c266afb9391cbe48997818866edf7cf5b16b4f7c571b05927d"
+    },
+    {
+      "path": "src/heterollm_sim/control_plane_state.py",
+      "sha256": "7c32c017fcc2f1e9418fdcefe6a77a66d41cdba8d28c4dddb06c97e318ec892f"
+    },
+    {
+      "path": "src/heterollm_sim/cost_models.py",
+      "sha256": "c42130eba4081e572bc27cf3a7cf906b0aedb995300c119969f016485fc3cd3d"
+    },
+    {
+      "path": "src/heterollm_sim/engine.py",
+      "sha256": "8686461eb8c2e3e0fab65d93af07ac9e3a7ae2f219d7cf7b3be21b2721b1f176"
+    },
+    {
+      "path": "src/heterollm_sim/event_kernel.py",
+      "sha256": "e1c3a42e24a32eeefec7335dc9cf0c3b8aa888697c8c9910655c170f792bbae1"
+    },
+    {
+      "path": "src/heterollm_sim/execution_control.py",
+      "sha256": "4db9e288721acc7be8f4095fcc80703667eb3c7358debaaeafb3547ad2664524"
+    },
+    {
+      "path": "src/heterollm_sim/final_layer_output_selection.py",
+      "sha256": "e40ea6150727fb0e0c74abab4dad0a67c89fc75516fade9f08c3fef590c2aaf2"
+    },
+    {
+      "path": "src/heterollm_sim/ir.py",
+      "sha256": "90bcc803f37db1a3a15de6b49983a7a3987aaf1d1efdfdfdb135d96011bd2373"
+    },
+    {
+      "path": "src/heterollm_sim/metrics.py",
+      "sha256": "771393fbd0e7cb5db9fa05c5270ed7afcf470be26040a0eb03cca65a228b806e"
+    },
+    {
+      "path": "src/heterollm_sim/mmq_work.py",
+      "sha256": "01410193cf209cca8a1a0aef798b6f5ac2bb4a75b4b530405de1d3ba29dc1c42"
+    },
+    {
+      "path": "src/heterollm_sim/model_catalog.py",
+      "sha256": "f7044b34fb8408d428219b73eb6b335580900ac632f013e7cfd4aea916f36f31"
+    },
+    {
+      "path": "src/heterollm_sim/model_presets.py",
+      "sha256": "947f10ff4887d6fa5b32784182cb2a7b65212653397f5f2666e1395007f2dfe3"
+    },
+    {
+      "path": "src/heterollm_sim/model_presets_shas.py",
+      "sha256": "a414c877aa955189d814e73a57543518da83bc8e6de6cc052d614cc0cc5231d1"
+    },
+    {
+      "path": "src/heterollm_sim/mtp.py",
+      "sha256": "32ff8f9bf64f2da4a232c7cb8fc5b6f4d9b3d3cd46c951173aa2cb574bfccac2"
+    },
+    {
+      "path": "src/heterollm_sim/parallel.py",
+      "sha256": "c9c292902acda57a7074f3b8c63b6aa944ffa801ceac23a70dc157ad3c973f31"
+    },
+    {
+      "path": "src/heterollm_sim/planner.py",
+      "sha256": "b94682b37eb984f07c4bb6386c769af325739d6c55073d04bf7ba6ff2d9cea9a"
+    },
+    {
+      "path": "src/heterollm_sim/precision.py",
+      "sha256": "4ade37a3e133e850676f813c0513b2e429c75cc5cc10e34d010437f1a4f0f34a"
+    },
+    {
+      "path": "src/heterollm_sim/projection_descriptors.py",
+      "sha256": "1cabd4dc874a9ce3a811ee43a41a10d172b0375057cbc6fb18a6edac981f8a16"
+    },
+    {
+      "path": "src/heterollm_sim/protocol_presets.py",
+      "sha256": "ac6177334c22378040815b7c25d7b8545681dde6c9173e3496ea61dda5e5e990"
+    },
+    {
+      "path": "src/heterollm_sim/qwen35_attention_work.py",
+      "sha256": "06722fe65f679fd840daa0dc8c570fafeb0b9efa2b283ea39730775027b376ed"
+    },
+    {
+      "path": "src/heterollm_sim/reference.py",
+      "sha256": "90dad69a6c5ff3d6f607ffda4341be541bd28950a66fad43d7fe383d052f59c9"
+    },
+    {
+      "path": "src/heterollm_sim/reporting.py",
+      "sha256": "d83cc2820dbecd29be3796262d2461b328ccf65f9e9df9c32b85eb8677360732"
+    },
+    {
+      "path": "src/heterollm_sim/residency.py",
+      "sha256": "e5b0ec3744cded0cfc4b3fc1ddc8651fa8cab47e97a9d2f89f867789d43b56f1"
+    },
+    {
+      "path": "src/heterollm_sim/run_estimation.py",
+      "sha256": "9983e0fb76cef63295a684b36040bd648645a78b17cef36a38b5a148949028ca"
+    },
+    {
+      "path": "src/heterollm_sim/run_jobs.py",
+      "sha256": "46922e762bf6cca70fad65e9c074497241ef13d426b00eefac13c832a8e8b704"
+    },
+    {
+      "path": "src/heterollm_sim/runtime.py",
+      "sha256": "4487033093601a2c0d574107b8cd883dca70ca43589d0b1245ab853d6d0d309a"
+    },
+    {
+      "path": "src/heterollm_sim/runtime_adapters.py",
+      "sha256": "1b7ed8ad356b3c02415ce5d4b416a22f1881aa96ad881c8855e589815bed12c2"
+    },
+    {
+      "path": "src/heterollm_sim/runtime_diagnostics.py",
+      "sha256": "d0528c4d8bd352620e1b65a73c097a8388a0a8cf218552449ff563f2b4cae771"
+    },
+    {
+      "path": "src/heterollm_sim/runtime_ir.py",
+      "sha256": "8bf4847f07c78eef91c39a84b62c00e261ca94323d43d469f98aaaca6957b1ed"
+    },
+    {
+      "path": "src/heterollm_sim/runtime_lowering.py",
+      "sha256": "dd8a92e45748f4e7258f2ffb97ef9ef6caf83b10d543cf73218200e031df7dc6"
+    },
+    {
+      "path": "src/heterollm_sim/runtime_state.py",
+      "sha256": "6d70d59e9520427783481bc4a773952465018d0ef00d01bc3c150c3e109e135e"
+    },
+    {
+      "path": "src/heterollm_sim/scalable_serving.py",
+      "sha256": "3380e8f46f64c7932fada9c5143c9a0e91da80f736d75a26666e38bb203ec870"
+    },
+    {
+      "path": "src/heterollm_sim/schema_v1.py",
+      "sha256": "b80dabebdfc26a8bb494d519b003db3c0bce60f4295ed19dac15655789111924"
+    },
+    {
+      "path": "src/heterollm_sim/schema_v4.py",
+      "sha256": "b4178fd757944fdbedbd9e1c03dc8f566e5188276809495dd6dd20914bee82c6"
+    },
+    {
+      "path": "src/heterollm_sim/serde.py",
+      "sha256": "6cd393107ee43e3b77c0d891e7f14da7cf497e6df8dd49b48c6e17a4c82f7768"
+    },
+    {
+      "path": "src/heterollm_sim/serving.py",
+      "sha256": "6acf6b359cc9c365e49318ea92c152ef7227599d6ac28906e94e6239e2b2a0ed"
+    },
+    {
+      "path": "src/heterollm_sim/streaming_des.py",
+      "sha256": "5cd282b5b1c216bb0eabe501c570c1112873573980fe1ce36dfa48b5861a86ea"
+    },
+    {
+      "path": "src/heterollm_sim/topology.py",
+      "sha256": "80835c549c210b0b9844e135346af7e11e86ade5fd153c10d95f8d55d7e66c38"
+    },
+    {
+      "path": "src/heterollm_sim/web.py",
+      "sha256": "5ce4b14a7099af27ba73813d03c25c670452a6c059be1cf3c70dabbae3d6ca3a"
+    },
+    {
+      "path": "src/heterollm_sim/webui/app.js",
+      "sha256": "6d2b9ab20d56c21cacd1845f1d224d3930dcb53da0f5996d78da0eb5142f00b1"
+    },
+    {
+      "path": "src/heterollm_sim/webui/index.html",
+      "sha256": "fcc1477393c7ab7ec81974344499d07066b111591ed162dcb3dc1a5d3a29a5fa"
+    },
+    {
+      "path": "src/heterollm_sim/webui/model-graph-core.js",
+      "sha256": "55ad530e6b24903d5b84cb3f91a8a9912eb29083ee1f59deb3e8fb5f85b39c7a"
+    },
+    {
+      "path": "src/heterollm_sim/webui/styles.css",
+      "sha256": "65f2070edfa081e36b70163a9d8acc6647b56477f657dfb52e7fec764ce7398a"
+    },
+    {
+      "path": "src/heterollm_sim/webui/topology-core.js",
+      "sha256": "905478e4c868e2ebb7f9e5d4dc287187c6fe8e41391c8d478b347bc3f86226b0"
+    },
+    {
+      "path": "src/heterollm_sim/webui/trace-view-core.js",
+      "sha256": "6d350f57fd32a9de6f9262b675a3901400f433bc69606100124437fde1016241"
+    },
+    {
+      "path": "src/heterollm_sim/webui/ui-i18n.js",
+      "sha256": "33de15b7b1b86870c4106b36a244f540c9faf41fae87d13fdea17f3e5abe151e"
+    },
+    {
+      "path": "src/heterollm_sim/webui/ui-settings-preload.js",
+      "sha256": "b80e513ff86280829f3ab6e1045868aa709a6efa7ae45b969eaa18bb36ce061d"
+    },
+    {
+      "path": "tests/model_helpers.py",
+      "sha256": "3b43fb9dab310e67e997ff91fc9b464cc13acba24e17e3e6a19d04ac405da832"
+    },
+    {
+      "path": "tests/README.md",
+      "sha256": "33046b12c30d60ec14d148797e5df95d0ad3e7f9e26daf6bcdb73b4c9c3a88e9"
+    },
+    {
+      "path": "tests/test_architecture_presets.py",
+      "sha256": "9f98d09f27ceefa8637fca6a69096c67d05b579ba65592ea68b7583b2d72004c"
+    },
+    {
+      "path": "tests/test_architecture_scan.py",
+      "sha256": "b4f01bda511f125dd07376555091889ce44c06e811f981eea7fb97f57a36cf35"
+    },
+    {
+      "path": "tests/test_attention_query_storage.py",
+      "sha256": "c8cf2d6bf2d7a393eefceb656c98a189eb32de683054eecaeff96da3047dd26c"
+    },
+    {
+      "path": "tests/test_authoring_schema_registry.py",
+      "sha256": "9ce681b6f09f88efa1b2739737e0a6d66e971fd38e40a14ecf1358d45de77f10"
+    },
+    {
+      "path": "tests/test_batched_accelerator.py",
+      "sha256": "1df4fe395869497a3f3eb6918419c94aef3392632f82c8c4c67e32f1b3b3f353"
+    },
+    {
+      "path": "tests/test_clean_path.py",
+      "sha256": "1a5554d9bdff168c178fafaae2fbc0c49f55e753c26cee748030f6e4676807df"
+    },
+    {
+      "path": "tests/test_cli_canonical_export.py",
+      "sha256": "8e0a0bcb868ddeae0bec5aff9abd519c0880b0e92f05834bb0050771eb97ba35"
+    },
+    {
+      "path": "tests/test_cli_i18n.py",
+      "sha256": "d6a1c5923b9a439a02548bffc4c93bf11815469916e6c8531cf227ad6b328f27"
+    },
+    {
+      "path": "tests/test_combined_cost_refinements.py",
+      "sha256": "9b5152b2695f977f4bae2171a508ef5df3e864a0a4883b2895e21cfb2085e8c9"
+    },
+    {
+      "path": "tests/test_communication.py",
+      "sha256": "615b6b798329667c9885bd1803ebe2bd2ae9c9517aeb1a90559c5f2a5c5be33e"
+    },
+    {
+      "path": "tests/test_component_presets.py",
+      "sha256": "c98835d0d85ad3a6d2a99022ae320d454d5a27195622c70a4a24b11647e5aa29"
+    },
+    {
+      "path": "tests/test_component_timeseries.py",
+      "sha256": "3153ec1575970d28299f1f14cee78db1dd31b869718e21b97e1cdd96829a3953"
+    },
+    {
+      "path": "tests/test_config_v02.py",
+      "sha256": "333e0c8a0f13530601066dc68c69b80f445b34ca9399d2820b20185e64f1d6d0"
+    },
+    {
+      "path": "tests/test_config_v05.py",
+      "sha256": "67009626c24867236fc377b0a515d82c092b2a40ac9360fe684f700b1e86126c"
+    },
+    {
+      "path": "tests/test_contracts.py",
+      "sha256": "8cf21169eeb7c1c6e15acb8d36b04d21c5170a64b5591019a74f3b5902eeadce"
+    },
+    {
+      "path": "tests/test_control_plane_fusion.py",
+      "sha256": "b4e223364c1a8bf9b61abc54f48e3f3be441274d87534e7ce5ed32889ee22ab2"
+    },
+    {
+      "path": "tests/test_control_plane_planner.py",
+      "sha256": "2a35b4a0570ba5d30539b2490bc3efa93b4473e1d41ffcf73d274ed224b4c80c"
+    },
+    {
+      "path": "tests/test_control_plane_projection_descriptors.py",
+      "sha256": "0b7e5708d2fdf0e6a5210ead10392e8d0605204572b66ae0d648ec154c0a9dfb"
+    },
+    {
+      "path": "tests/test_cost_models.py",
+      "sha256": "e91e607aba701b33c414f63e73bf2c4caac776207743a538739db1da6e4b707c"
+    },
+    {
+      "path": "tests/test_end_to_end.py",
+      "sha256": "1dbacca1908801754fd895aa5032ae369f677618237e34fce6a9e21f41a1a615"
+    },
+    {
+      "path": "tests/test_engine_metrics.py",
+      "sha256": "3a5bf8a358e6ae8aa54673442c00daf22cc927a88de5da9886a6d351f37bfb90"
+    },
+    {
+      "path": "tests/test_event_kernel.py",
+      "sha256": "251b948067fe7529f80c2057281afa9d146f1db6745a4cdda357b9c2b60cd067"
+    },
+    {
+      "path": "tests/test_final_layer_output_selection.py",
+      "sha256": "9d3caecd357362c486993be4cd6081e8985f33b8c95620e3786dd2999edecf47"
+    },
+    {
+      "path": "tests/test_final_layer_output_selection_planner.py",
+      "sha256": "5917a625913cba9b7ed92ba1c5382e9d32e428321e74faa04cca7e7d0e5e9d3a"
+    },
+    {
+      "path": "tests/test_graph_execution_coverage_gate.py",
+      "sha256": "7c46df8c18702ebe23ec9686a602942ac340ec2698ab2b7cea75d0b25ba04d7a"
+    },
+    {
+      "path": "tests/test_mmq_device_boundary.py",
+      "sha256": "6736ad9e605895f6176be2c37a9c059ae870bf58bf769e369768e7c20a29b202"
+    },
+    {
+      "path": "tests/test_mmq_planner.py",
+      "sha256": "2c782ef8c5afa7a44a7ce2980203ef00829845a1db3b129d0a48b64450975dea"
+    },
+    {
+      "path": "tests/test_mmq_runtime.py",
+      "sha256": "34d9fc2f0a0dbc08d7660ac4c3930d2f2f2141e7c82c2fbfd80fd97807e13fb4"
+    },
+    {
+      "path": "tests/test_mmq_work.py",
+      "sha256": "380049711c870a11aa470c998cc7a8f9aa30f4734a589a72fe6e36dca3317543"
+    },
+    {
+      "path": "tests/test_model_graph_v15.py",
+      "sha256": "ab0b54494fc27e5261fd084fef56e5d49775fc4f4935fbbb44d25294ca12fd65"
+    },
+    {
+      "path": "tests/test_model_presets.py",
+      "sha256": "7c9fcfcd3a978a2611f3eb78c556fed0f27daf642da0175ab852526a37b08cd7"
+    },
+    {
+      "path": "tests/test_mtp.py",
+      "sha256": "f41ec3603316d42155487ffb2cb9d18d4bd2fd97d58500f985f76b19dd14f4c7"
+    },
+    {
+      "path": "tests/test_native_kv_writeback.py",
+      "sha256": "e0f746944afe502489837279799d3945bf54073d5881a3270dc6aea1c25e382e"
+    },
+    {
+      "path": "tests/test_operator_class_mapping.py",
+      "sha256": "28b2ef13a17f11ccd2fd549e69b6464938de67340e5319f59001e30d06993877"
+    },
+    {
+      "path": "tests/test_output_selection_segment_forward_edges.py",
+      "sha256": "eaece0c6a8fcc52a852aba48bd96f84f1eac986e28e0eb5abecccdb3603462af"
+    },
+    {
+      "path": "tests/test_parallel.py",
+      "sha256": "4c5812de77acf6b17e54cf8cf71d5dc84ac49b8fd794fb1da12ba4c1c39e058e"
+    },
+    {
+      "path": "tests/test_physical_projection_invocations.py",
+      "sha256": "18501263d4f34c68446e7a89054da4fc5b8e4b4ec152dea5cd412bb638f1503f"
+    },
+    {
+      "path": "tests/test_planner_artifact_workload_cache.py",
+      "sha256": "d667c0d439ebade6e9b767f222fc2f32d4185040641336b715976872930603aa"
+    },
+    {
+      "path": "tests/test_planner_mapping_fail_closed.py",
+      "sha256": "febd02371f1edd597e34dc23165fd3aeb363955858fdc170e5cb67fc339385b9"
+    },
+    {
+      "path": "tests/test_planner_v3_microarchitecture.py",
+      "sha256": "100bb791dcb81c144e3ad94e339f57f8a604247199005e9982b5d0789626d357"
+    },
+    {
+      "path": "tests/test_precision.py",
+      "sha256": "d8bd57ebb5e58ba4dbcfc7dbaeb4bbf55fdeb47e2f487e143b2766248ab4c2d5"
+    },
+    {
+      "path": "tests/test_projection_descriptors.py",
+      "sha256": "cd6561d3e5e239d92f7ca7a12dc9a22fa5aa5f465ee452062fadb107f686f8a3"
+    },
+    {
+      "path": "tests/test_protocol_presets.py",
+      "sha256": "78bbbd2a48b9399ea5431cfcd16aab70a571c6ad41c344dbe6293f9f5dfe61d0"
+    },
+    {
+      "path": "tests/test_residency.py",
+      "sha256": "2587e5dbff7fe914bcd46ce62662ecfa668d4c39f6416aaf8dc279aee2b6604a"
+    },
+    {
+      "path": "tests/test_run_jobs.py",
+      "sha256": "0f5953b7da976275a6738e2c07abb0e3bf1e9e20d2c39829c6ff9f3c339179ce"
+    },
+    {
+      "path": "tests/test_runtime_diagnostics.py",
+      "sha256": "40bd52bfe9d468d2ee15ab689bcd165ebcbad4835045f6d9652e458e30adb106"
+    },
+    {
+      "path": "tests/test_schema_v1.py",
+      "sha256": "71024321d18a97f14e2d64e912f37ae8ebe2939b6f8d12c6a5e0930bf54f108e"
+    },
+    {
+      "path": "tests/test_serde.py",
+      "sha256": "cc80d8d986708931588fa63eabec596b63f6fbbd95d5897c277ab723966eb3ad"
+    },
+    {
+      "path": "tests/test_storage_v03.py",
+      "sha256": "b5dd8ed5872f620026eaebdf0534c2cca6a8ec05fe725f2f4968cf13b416c906"
+    },
+    {
+      "path": "tests/test_streaming_des.py",
+      "sha256": "c2ed0cd2e4ee0d23ed7f43b1ec750c8efe63dbf0efc0dc66b255fdbd65078a69"
+    },
+    {
+      "path": "tests/test_topology.py",
+      "sha256": "aae883c49d02fc11551adfac6ab505528b0bf51fb305473c1ef704c11cc6d57b"
+    },
+    {
+      "path": "tests/test_typed_execution_v151.py",
+      "sha256": "d25c4b1da09908c259d8e8b3cd120ca60653349a71067fb362151f2c7a5369da"
+    },
+    {
+      "path": "tests/test_ui_v03.py",
+      "sha256": "bb1ceff7b8d91da067f0f034a3d9d867eae872b3c6020e26f492f6b06a629da0"
+    },
+    {
+      "path": "tests/test_unified_backends.py",
+      "sha256": "2cb17f78449072446bea70d8a8ff9c0e2af4c034c150d5deb69210d336a301c1"
+    },
+    {
+      "path": "tests/test_v05_core_contracts.py",
+      "sha256": "95b3932ee2d4934dbe43e3f698c4c409863aeffaedc49334da7ce07500868371"
+    },
+    {
+      "path": "tests/test_v05_regressions.py",
+      "sha256": "f58d5acb8300034d9088eb21dce7c00f2334dc2d672f808be8b9e6ae07fbbab7"
+    },
+    {
+      "path": "tests/test_v12_architecture_api.py",
+      "sha256": "2ba8302910de39389a94e3c285ca34f09253cd4fad5ed5114147efd83a3aee61"
+    },
+    {
+      "path": "tests/test_v12_architecture_cli.py",
+      "sha256": "62bb8a45017854ddb6797ee86b919c55d41e0b6486aea741721f6283e25de1ce"
+    },
+    {
+      "path": "tests/test_v12_kv_compat.py",
+      "sha256": "1d5ebe5b69a0a41123fe36b26659bc14ef2fdf411aae74a9f1d227e54526b4b3"
+    },
+    {
+      "path": "tests/test_v12_web_errors.py",
+      "sha256": "e23b4026e45f0c5adf8c267f6e81d1bcc0e346e634eff5dcb1513fa68112ffa9"
+    },
+    {
+      "path": "tests/test_v14_catalog_workflow.py",
+      "sha256": "30bb8cea6bb8139ba1f9d6a727bafdbf2ab8d1836e382c9e6e726074f42d96df"
+    },
+    {
+      "path": "tests/test_v4_importer.py",
+      "sha256": "b469b0eb07e10c60ce57e42faab5b68b145440cda925c10f12dd8a70a9dda841"
+    },
+    {
+      "path": "tests/test_web.py",
+      "sha256": "218b73028d68fb34a5f7cf0e7bc4edfa1e0a4ea37ba9e3921b2033d0902f1e69"
+    },
+    {
+      "path": "tests/webui_architecture_presets.test.cjs",
+      "sha256": "c5fc46944287882a5ee9006bb1e4bc1b6acadcb1a7194649c9499008a91cdad4"
+    },
+    {
+      "path": "tests/webui_architecture_scan.test.cjs",
+      "sha256": "81fa53b556ef42a39116f3c5899d037798841b54ddaa3663296238445bd0ad28"
+    },
+    {
+      "path": "tests/webui_concept_help_192.test.cjs",
+      "sha256": "714ebc15ba6ca7dec7bd8eb31a804adc0c4dd2dd4f20da3a5ade8f1736f029be"
+    },
+    {
+      "path": "tests/webui_connection_status.test.cjs",
+      "sha256": "f913edae0a1faad2e6a1bcd2143f9a6159694eaf134a0c6e90a9360caaa05f6b"
+    },
+    {
+      "path": "tests/webui_control_plane_status.test.cjs",
+      "sha256": "31acb505f862dfe70c3cefc7d66a6c12ab093aaf61450ab8f9ff96c5989996a7"
+    },
+    {
+      "path": "tests/webui_english_i18n_fixes.test.cjs",
+      "sha256": "3cc19a0f67f97bcaf202860d0c2b2781df58ccb213c4da90adc84c888a06404c"
+    },
+    {
+      "path": "tests/webui_extreme_layout.test.cjs",
+      "sha256": "36e91ac8e1b9f96048e4386a5338efaa919119c54c33535406639d969e129e69"
+    },
+    {
+      "path": "tests/webui_interaction_performance.test.cjs",
+      "sha256": "e4e3bab7981a3afd6920417c127e10416ee1e0c9ee27ecc6e8213eb2a9b7df3f"
+    },
+    {
+      "path": "tests/webui_language_and_help.test.cjs",
+      "sha256": "8baf79a8df0307de2bb1fb1c5801fb0bdd502c2e0b833e981d47222dc62f5f50"
+    },
+    {
+      "path": "tests/webui_model_graph_core.test.cjs",
+      "sha256": "59285415078588a497c13775ec82576fef569b3fa073f64ae4ef8fedce9f04f5"
+    },
+    {
+      "path": "tests/webui_model_overview_regression.test.cjs",
+      "sha256": "9c43b942177861cf4a648f0760965dfa9b73bf86f7a622c5ba2df18a3c905176"
+    },
+    {
+      "path": "tests/webui_model_overview_style.test.cjs",
+      "sha256": "50bc9499ceead0e62f30062b75212a7e9ae2d23455aff5960032f3ef228ec13e"
+    },
+    {
+      "path": "tests/webui_pass02_polish.test.cjs",
+      "sha256": "a25f3baab70bca3efcc3f5486d29b8678ffdde013a222476f489c3e5ef6f9029"
+    },
+    {
+      "path": "tests/webui_pass03_layout.test.cjs",
+      "sha256": "a024c29262ac6dbf19bc4da3b8675a6d9ecc32ac7ca9774362b56aebd47cdc74"
+    },
+    {
+      "path": "tests/webui_pass03_localization.test.cjs",
+      "sha256": "a7f492661673e370fa7f21f7767d12c1ffddc90155083e36296d873672797da9"
+    },
+    {
+      "path": "tests/webui_pass04_accessibility.test.cjs",
+      "sha256": "817713abe3d5903c61cec947b30c0a1a39c652159959ed07523404201d01703b"
+    },
+    {
+      "path": "tests/webui_pass05_layout_help.test.cjs",
+      "sha256": "fd3ab8b789fc9f5af295a34e833ccdc3186a28e402228285e2a2e3e70ffa427b"
+    },
+    {
+      "path": "tests/webui_pass06_trace_usability.test.cjs",
+      "sha256": "003a5a79dc75e39e1c6b72b5f6bf6ed7167905090229dc4467fe8a3bb4bfefc9"
+    },
+    {
+      "path": "tests/webui_pass07_cross_page_usability.test.cjs",
+      "sha256": "97a776d17c4963f8093346a86e3626c1178bda68392aa1db9da88de2c8b33476"
+    },
+    {
+      "path": "tests/webui_pass08_architecture_playback.test.cjs",
+      "sha256": "dd513864f7f65a498dc9f7094ed6ef570eba963d012d60c25b962a36badbefbf"
+    },
+    {
+      "path": "tests/webui_pass08_trace_accessibility.test.cjs",
+      "sha256": "7567d2ba558fba4ab636bf76e536e12acece5550582c34291ed7fc4b7056aa9f"
+    },
+    {
+      "path": "tests/webui_pass09_model_refinement.test.cjs",
+      "sha256": "d626f1f218d319f835624ffd6f5362e0752f2bff867c93d8ef0d72763a48b8dd"
+    },
+    {
+      "path": "tests/webui_pass10_responsive_semantics.test.cjs",
+      "sha256": "8441e391fc8127fdc213a112f19d66a0b54652d6ba7e4dee30410a9579411d13"
+    },
+    {
+      "path": "tests/webui_pass11_concept_fullscreen.test.cjs",
+      "sha256": "435f5937ecd72c506af7e1013aba343ed613c355fa93222b65875a713e94f55a"
+    },
+    {
+      "path": "tests/webui_run_estimate_first_click.test.cjs",
+      "sha256": "6478c087d6cb2663e14409e1f7e8caa33d2ef21fb1304978f446ab57b4a71ed0"
+    },
+    {
+      "path": "tests/webui_topology_core.test.cjs",
+      "sha256": "91f3607e8dfd0df95aa0b1ee14bfa86034980662629b83190b6011fdd16490e4"
+    },
+    {
+      "path": "tests/webui_trace_playback.test.cjs",
+      "sha256": "b2282c503264810663073df76655d083ebf602154b98adb62105bd3bb8bb2fbd"
+    },
+    {
+      "path": "tests/webui_trace_view_core.test.cjs",
+      "sha256": "d53bdd3577a97f9bbc1201832e983fa588a9017dbd0b31aa507bf76c5c7629bb"
+    },
+    {
+      "path": "tests/webui_ui_i18n.test.cjs",
+      "sha256": "ab8f8114e460d72075620ca61b92627b5b051ff2b6b10152a769e457d3c828c6"
+    },
+    {
+      "path": "tests/webui_v070.test.cjs",
+      "sha256": "bc81f749b74e956d67d61e159b14033e9f94ec502cb3fcb4d0bc6a35b6b0d3e3"
+    },
+    {
+      "path": "tests/webui_v150.test.cjs",
+      "sha256": "bdd22e2f10b06f4135df12e354331fd3f1dd1ce4d94924ac5334d2f98f95836a"
+    },
+    {
+      "path": "tests/webui_v151.test.cjs",
+      "sha256": "c8c52d8c61d7f203a4475d6939bccd6adfe5a4374c9f822b29f1e914565ca7e0"
+    },
+    {
+      "path": "tests/webui_v190.test.cjs",
+      "sha256": "c73768e7d439f6617fb751cc46e721707955bafc9069657f4988167b335146a6"
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "5461226f66f3f16a70fbdb3c23abbc403ef7fc0d8b2140d0ca81d971f20c2476"
+    }
+  ]
+}

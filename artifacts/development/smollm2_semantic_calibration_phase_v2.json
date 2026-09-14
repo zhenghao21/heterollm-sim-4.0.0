@@ -1,0 +1,572 @@
+{
+  "schema": "native-calibration/v1",
+  "prompt_ns_per_token": null,
+  "decode_ns_per_token": null,
+  "launch_ns_per_call": null,
+  "prefill_launch_ns_per_call": null,
+  "decode_launch_ns_per_call": null,
+  "synchronize_ns_per_call": null,
+  "decode_first_invocation_extra_ns": null,
+  "decode_first_invocation_policy": null,
+  "decode_first_invocation_evidence": null,
+  "phase_boundary_ns_per_invocation": {
+    "prefill": 2324457.0,
+    "decode": 1971225.5
+  },
+  "phase_boundary_policy": "one_task_per_phase_invocation",
+  "request_marker_ns": null,
+  "request_marker_policy": null,
+  "request_marker_evidence": null,
+  "request_shape": {
+    "prompt_tokens": 2,
+    "output_tokens": 2,
+    "output_mode": "fixed"
+  },
+  "d2h_ns_per_byte": null,
+  "source": "independent SmolLM2 fixed-output=2 train/holdout CUDA API phase aggregates",
+  "source_sha256": "f864dd9d75e0e593779bfac5d79d81b3c8040e8f0043a5784a5183d9f97ccf89",
+  "kernel_stage_mapping": {
+    "schema": "native-kernel-mapping/v1",
+    "records": [
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)12, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 1508315.0,
+        "instances": 141,
+        "avg_ns": 10697.3,
+        "median_ns": 6336.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 901155.0,
+        "instances": 61,
+        "avg_ns": 14773.0,
+        "median_ns": 13440.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "quantize_q8_1(const float *, void *, long long, long long, long long, long long, long long, unsigned int, uint3)",
+        "stage": "quantize",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 290567.0,
+        "instances": 313,
+        "avg_ns": 928.3,
+        "median_ns": 928.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)14, (int)2, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 276233.0,
+        "instances": 24,
+        "avg_ns": 11509.7,
+        "median_ns": 11632.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 246760.0,
+        "instances": 14,
+        "avg_ns": 17625.7,
+        "median_ns": 5200.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rms_norm_f32<(int)1024, (bool)1, (bool)0>(const float *, float *, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3)",
+        "stage": "normalization",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 239269.0,
+        "instances": 98,
+        "avg_ns": 2441.5,
+        "median_ns": 2432.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 237324.0,
+        "instances": 61,
+        "avg_ns": 3890.6,
+        "median_ns": 3840.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 208681.0,
+        "instances": 12,
+        "avg_ns": 17390.1,
+        "median_ns": 17360.5,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_f<__half, float, (int)1, (int)32, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 202118.0,
+        "instances": 24,
+        "avg_ns": 8421.6,
+        "median_ns": 8416.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_f<__half, __half, (int)1, (int)128, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 77090.0,
+        "instances": 24,
+        "avg_ns": 3212.1,
+        "median_ns": 3168.5,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_f<__half2, (int)32, (int)2, (int)2, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 76098.0,
+        "instances": 24,
+        "avg_ns": 3170.8,
+        "median_ns": 3120.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void soft_max_f32<(bool)1, (int)256, (int)256, float>(const float *, const T4 *, const float *, float *, soft_max_params)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 64868.0,
+        "instances": 48,
+        "avg_ns": 1351.4,
+        "median_ns": 1344.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_f<__half2, (int)32, (int)2, (int)1, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 61891.0,
+        "instances": 24,
+        "avg_ns": 2578.8,
+        "median_ns": 2528.5,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_set_rows<float, long long, __half>(const T1 *, const T2 *, T3 *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, uint3, uint3, uint3, uint3, uint3)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 53731.0,
+        "instances": 48,
+        "avg_ns": 1119.4,
+        "median_ns": 1088.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rope_norm<(bool)1, (bool)0, float, __half>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+        "stage": "attention_qkv",
+        "confidence": 0.91,
+        "reason": "kernel name marker",
+        "total_ns": 53440.0,
+        "instances": 48,
+        "avg_ns": 1113.3,
+        "median_ns": 1120.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_bin_bcast<&op_add, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 48545.0,
+        "instances": 48,
+        "avg_ns": 1011.4,
+        "median_ns": 992.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rope_norm<(bool)1, (bool)0, float, float>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+        "stage": "attention_qkv",
+        "confidence": 0.91,
+        "reason": "kernel name marker",
+        "total_ns": 47713.0,
+        "instances": 48,
+        "avg_ns": 994.0,
+        "median_ns": 992.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void cpy_scalar<&cpy_1_scalar<float, float>>(const char *, char *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 28896.0,
+        "instances": 24,
+        "avg_ns": 1204.0,
+        "median_ns": 1216.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void unary_gated_op_kernel<&op_silu, float>(const T2 *, const T2 *, T2 *, long long, long long, long long, long long)",
+        "stage": "ffn",
+        "confidence": 0.92,
+        "reason": "kernel name marker",
+        "total_ns": 20385.0,
+        "instances": 23,
+        "avg_ns": 886.3,
+        "median_ns": 896.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long long, long long, uint3, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)",
+        "stage": "lm_head",
+        "confidence": 0.92,
+        "reason": "kernel name marker",
+        "total_ns": 4416.0,
+        "instances": 4,
+        "avg_ns": 1104.0,
+        "median_ns": 1104.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_profile_v2.kernel.csv"
+      }
+    ],
+    "aggregate": {
+      "attention_qkv": {
+        "stage": "attention_qkv",
+        "kernel_count": 2,
+        "instances": 96,
+        "total_ns": 101153.0,
+        "weighted_avg_ns": 1053.6499999999999,
+        "confidence_min": 0.91,
+        "confidence_mean": 0.91,
+        "share": 0.02176505838091273
+      },
+      "attention_output": {
+        "stage": "attention_output",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "ffn": {
+        "stage": "ffn",
+        "kernel_count": 1,
+        "instances": 23,
+        "total_ns": 20385.0,
+        "weighted_avg_ns": 886.3,
+        "confidence_min": 0.92,
+        "confidence_mean": 0.92,
+        "share": 0.004386233874377487
+      },
+      "kv": {
+        "stage": "kv",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "lm_head": {
+        "stage": "lm_head",
+        "kernel_count": 1,
+        "instances": 4,
+        "total_ns": 4416.0,
+        "weighted_avg_ns": 1104.0,
+        "confidence_min": 0.92,
+        "confidence_mean": 0.92,
+        "share": 0.0009501892955237176
+      },
+      "output": {
+        "stage": "output",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "normalization": {
+        "stage": "normalization",
+        "kernel_count": 1,
+        "instances": 98,
+        "total_ns": 239269.0,
+        "weighted_avg_ns": 2441.5,
+        "confidence_min": 0.98,
+        "confidence_mean": 0.98,
+        "share": 0.051483433548610597
+      },
+      "quantize": {
+        "stage": "quantize",
+        "kernel_count": 1,
+        "instances": 313,
+        "total_ns": 290567.0,
+        "weighted_avg_ns": 928.2999999999998,
+        "confidence_min": 0.98,
+        "confidence_mean": 0.98,
+        "share": 0.06252120766133154
+      },
+      "linear_attention_aux": {
+        "stage": "linear_attention_aux",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "unknown": {
+        "stage": "unknown",
+        "kernel_count": 14,
+        "instances": 577,
+        "total_ns": 3991705.0,
+        "weighted_avg_ns": 6918.04766031196,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.8588938772392439
+      }
+    }
+  },
+  "model_sha256": "decd2598bc2c8ed08c19adc3c8fdd461ee19ed5708679d1c54ef54a5a30d4f33",
+  "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+  "runtime_fingerprint": "90617f319d66c9f002eaedb765665224c97af898c630d19ff1e5abdc2da153d6",
+  "backend_version": null,
+  "coverage_status": "covered",
+  "identity_mismatch": false,
+  "calibration_basis": "phase_api_fixed_output2_train_holdout",
+  "parameter_evidence": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_api_phase_v2.json",
+      "sha256": "e197f710cec9ab7d7576d13d7300d736b9439148ca363737b59427c8c5dc0fdc"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_smollm2_p2_o2_api_phase_v3.json",
+      "sha256": "2e78398b1e9a4bd927292d36a9a15b5a5a360857e1d96c15e7cba4abe97c21a7"
+    }
+  ],
+  "native_binary_artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+      "status": "captured",
+      "sha256": "a2836bb692e613066ae5e614e6378ede57a6a3a3a238c3a3a971cf7d1157dbef",
+      "bytes": 10752
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-base.dll",
+      "status": "captured",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cpu.dll",
+      "status": "captured",
+      "sha256": "e8a36d9c1a66a7ac726282e18c143aa593a4cc96945e075e5904e3a9cf835c44",
+      "bytes": 956928
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cuda.dll",
+      "status": "captured",
+      "sha256": "eef90dd2e43863d2f5692ee6818c65ca036e359065332b0caf3db715b11b1f99",
+      "bytes": 26091520
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml.dll",
+      "status": "captured",
+      "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+      "bytes": 61440
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-batched-bench-impl.dll",
+      "status": "captured",
+      "sha256": "1d6db4aba1f6a71c6c3f97c72ac3bb13d1bfd86cf7efd17f90825f60c1a3e082",
+      "bytes": 129024
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-bench-impl.dll",
+      "status": "captured",
+      "sha256": "e9761b3f5c0663a93debefd92e4bcd6924cd6099a88c92f2e197f8c6a7d0901b",
+      "bytes": 903168
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-cli-impl.dll",
+      "status": "captured",
+      "sha256": "81bd21e6c0710d259adcad973e601acadcdeac872ae25f4b689e19754665b385",
+      "bytes": 873472
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-common.dll",
+      "status": "captured",
+      "sha256": "f40c793d6b6fd708bbbdc55ceb277b64748f77317ed4940bdfa34f95668cc417",
+      "bytes": 8220160
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-completion-impl.dll",
+      "status": "captured",
+      "sha256": "fd2978f9577fa9417ea6f3b9c170af169346786756098dd7c229206db3df780b",
+      "bytes": 247808
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-fit-params-impl.dll",
+      "status": "captured",
+      "sha256": "bac07d58a2e96a0c6b681b38582dcbf5b29a9e8b471985e0c6c3b92a710aa20b",
+      "bytes": 105472
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-perplexity-impl.dll",
+      "status": "captured",
+      "sha256": "81f0c3bdcec0287bc4cb3756197d3103b28d14b0c7f24dbdd49c3c5a8de92c5f",
+      "bytes": 343040
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-quantize-impl.dll",
+      "status": "captured",
+      "sha256": "73c622064356edbc95a6529188e910c94e01402878c9d5484390a9464f2d7e26",
+      "bytes": 331776
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server-impl.dll",
+      "status": "captured",
+      "sha256": "38783ec9cace5803eac0dac34c0221a23740e794e4a56db7e7d9fb068e7eddac",
+      "bytes": 6341120
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama.dll",
+      "status": "captured",
+      "sha256": "cce35c185cf5d2442a1fbea26e1771efc9ad77f3504cf75cf7cd3ffd4b1bde0f",
+      "bytes": 2633728
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\mtmd.dll",
+      "status": "captured",
+      "sha256": "1b3906980fc9e47b95234078094d549d4af89c601dc8a14616bce9f246cd74a6",
+      "bytes": 2222080
+    }
+  ],
+  "runtime_artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+      "status": "captured",
+      "sha256": "a2836bb692e613066ae5e614e6378ede57a6a3a3a238c3a3a971cf7d1157dbef",
+      "bytes": 10752
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-base.dll",
+      "status": "captured",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cpu.dll",
+      "status": "captured",
+      "sha256": "e8a36d9c1a66a7ac726282e18c143aa593a4cc96945e075e5904e3a9cf835c44",
+      "bytes": 956928
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cuda.dll",
+      "status": "captured",
+      "sha256": "eef90dd2e43863d2f5692ee6818c65ca036e359065332b0caf3db715b11b1f99",
+      "bytes": 26091520
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml.dll",
+      "status": "captured",
+      "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+      "bytes": 61440
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-batched-bench-impl.dll",
+      "status": "captured",
+      "sha256": "1d6db4aba1f6a71c6c3f97c72ac3bb13d1bfd86cf7efd17f90825f60c1a3e082",
+      "bytes": 129024
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-bench-impl.dll",
+      "status": "captured",
+      "sha256": "e9761b3f5c0663a93debefd92e4bcd6924cd6099a88c92f2e197f8c6a7d0901b",
+      "bytes": 903168
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-cli-impl.dll",
+      "status": "captured",
+      "sha256": "81bd21e6c0710d259adcad973e601acadcdeac872ae25f4b689e19754665b385",
+      "bytes": 873472
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-common.dll",
+      "status": "captured",
+      "sha256": "f40c793d6b6fd708bbbdc55ceb277b64748f77317ed4940bdfa34f95668cc417",
+      "bytes": 8220160
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-completion-impl.dll",
+      "status": "captured",
+      "sha256": "fd2978f9577fa9417ea6f3b9c170af169346786756098dd7c229206db3df780b",
+      "bytes": 247808
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-fit-params-impl.dll",
+      "status": "captured",
+      "sha256": "bac07d58a2e96a0c6b681b38582dcbf5b29a9e8b471985e0c6c3b92a710aa20b",
+      "bytes": 105472
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-perplexity-impl.dll",
+      "status": "captured",
+      "sha256": "81f0c3bdcec0287bc4cb3756197d3103b28d14b0c7f24dbdd49c3c5a8de92c5f",
+      "bytes": 343040
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-quantize-impl.dll",
+      "status": "captured",
+      "sha256": "73c622064356edbc95a6529188e910c94e01402878c9d5484390a9464f2d7e26",
+      "bytes": 331776
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server-impl.dll",
+      "status": "captured",
+      "sha256": "38783ec9cace5803eac0dac34c0221a23740e794e4a56db7e7d9fb068e7eddac",
+      "bytes": 6341120
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama.dll",
+      "status": "captured",
+      "sha256": "cce35c185cf5d2442a1fbea26e1771efc9ad77f3504cf75cf7cd3ffd4b1bde0f",
+      "bytes": 2633728
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\mtmd.dll",
+      "status": "captured",
+      "sha256": "1b3906980fc9e47b95234078094d549d4af89c601dc8a14616bce9f246cd74a6",
+      "bytes": 2222080
+    }
+  ],
+  "parameter_source": "mean of two independent fixed-output=2 traces (v2/v3), same current exe+15 DLLs, per-phase launch+synchronize API wall; diagnostic only until engine marker boundary validation",
+  "target_final_latency_fitting": false,
+  "acceptance_eligible": false,
+  "application_status": "diagnostic_only"
+}

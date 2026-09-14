@@ -1,0 +1,17231 @@
+"use strict";
+
+const API_ROOT = "/api";
+const AUTHORING_SCHEMA_VERSION = "4.0.0";
+const STORAGE_SCENARIO = "heterollm-lab:scenario:v4";
+const STORAGE_UI_SETTINGS = "heterollm-lab:ui-settings:v3";
+const MIN_FONT_SCALE = 80;
+const MAX_FONT_SCALE = 200;
+const CONNECTION_RECOVERY_PROBE_TIMEOUT_MS = 1500;
+const TOPOLOGY_HISTORY_LIMIT = 100;
+let Topology = globalThis.TopologyCore || null;
+const topologyCoreReady = Topology
+  ? Promise.resolve(Topology)
+  : import("./topology-core.js").then(() => globalThis.TopologyCore);
+let ModelGraph = globalThis.ModelGraphCore;
+const modelGraphCoreReady = Promise.resolve(ModelGraph);
+let TraceView = globalThis.TraceViewCore;
+const traceViewCoreReady = Promise.resolve(TraceView);
+const UI_LANGUAGES = Object.freeze(["zh-CN", "en"]);
+const UI_THEMES = Object.freeze(["graphite", "bluegray", "black", "ivory", "mist", "softgray"]);
+const LIGHT_THEMES = new Set(["ivory", "mist", "softgray"]);
+const COMPONENT_KINDS = Object.freeze([
+  "gpu", "generic_accelerator", "digital_sram_cim", "pim_accelerator",
+  "hbm", "hbm_stack", "host_memory", "cxl_memory", "hbf", "ssd", "high_io_ssd",
+  "cpu", "fabric_switch", "io_die",
+]);
+const TRACE_PAGE_CACHE_LIMIT = 8;
+const TRACE_PLAYBACK_STEP_MS = 1000;
+const TRACE_PARTICLES_PER_ROUTE = 3;
+const TRACE_EVENT_STREAM_PAGE_SIZE = 50;
+const MODEL_GRAPH_CONNECTION_PREVIEW_WATCHDOG_MS = 30000;
+// Trace payload values are stable backend identifiers. Keep their presentation
+// in one bilingual dictionary so raw identifiers remain available only to the
+// diagnostic copy action, never as user-facing prose.
+const TRACE_FRIENDLY_TERMS = Object.freeze({
+  compute: ["计算", "Compute"], computation: ["计算", "Compute"], communication: ["通信", "Communication"],
+  synchronization: ["同步", "Synchronization"], transfer: ["数据传输", "Data transfer"], memory: ["内存访问", "Memory access"],
+  batch: ["批次", "Batch"], task: ["任务", "Task"], policy: ["策略", "Policy"],
+  scheduling: ["调度", "Scheduling"], scheduler: ["调度器", "Scheduler"],
+  prefill: ["提示词处理", "Prefill"], decode: ["逐词生成", "Decode"],
+  forward: ["前向计算", "Forward compute"], backward: ["反向计算", "Backward compute"],
+  operator: ["算子", "Operator"], marker: ["运行标记", "Runtime marker"],
+  token_emit: ["输出一个词元", "Emit one Token"], token: ["词元", "Token"],
+  kernel_launch: ["启动计算内核", "Kernel launch"], gpu_gemm: ["GPU 矩阵乘法", "GPU GEMM"],
+  gemm: ["矩阵乘法", "GEMM"], kv_read: ["读取 KV 缓存", "KV cache read"],
+  kv_write: ["写入 KV 缓存", "KV cache write"], kv_read_skipped: ["跳过 KV 缓存读取", "KV cache read skipped"],
+  serving_cohort_start: ["开始服务批次", "Serving cohort start"], serving_cohort_end: ["结束服务批次", "Serving cohort end"],
+  request_admission: ["接纳请求", "Request admission"], queue_wait: ["等待调度", "Scheduler queue wait"],
+  all_reduce: ["All-Reduce 集合通信", "All-Reduce collective"], all_gather: ["All-Gather 集合通信", "All-Gather collective"],
+  reduce_scatter: ["Reduce-Scatter 集合通信", "Reduce-Scatter collective"], all_to_all: ["All-to-All 集合通信", "All-to-All collective"],
+  exact: ["精确记录", "Exact record"], representative: ["代表性记录", "Representative record"], aggregate: ["聚合记录", "Aggregate record"],
+  exclusive_service: ["独占服务区间", "Exclusive service interval"], exact_exclusive_service: ["精确的独占服务区间", "Exact exclusive service interval"],
+  aggregate_batch_with_selected_items: ["聚合批次，仅保留部分代表工作", "Aggregate batch retaining representative work only"],
+  aggregate_route_without_hop_timing: ["聚合路径，不含逐跳精确时间", "Aggregate path without exact per-hop timing"],
+  aggregate_busy_within_batch_envelope: ["批次时间范围内的聚合忙碌区间", "Aggregate busy interval within the batch envelope"],
+  exact_task: ["精确任务事件", "Exact task event"], exact_event: ["精确事件", "Exact event"],
+  representative_task: ["代表性任务事件", "Representative task event"],
+  past: ["已发生", "Past"], current: ["正在发生", "Current"], future: ["尚未发生", "Future"],
+});
+const TRACE_LIMITATION_TEXT = Object.freeze({
+  "聚合回放仅展示批次包络；不会将批次伪装成逐层、逐算子或逐 Rank 的任务事件。": "Aggregate replay shows only batch envelopes; it does not present them as per-layer, per-operator, or per-Rank task events.",
+  "这是代表性批次 lowering 后任务图的精确回放；不会重新执行调度准入，也不会改变聚合运行指标。": "This is an exact replay of the task graph produced after representative-batch lowering; it does not rerun admission scheduling or change aggregate runtime metrics.",
+  "长短不齐的请求上下文继续沿用在线 lowerer 的加权平均批次语义。": "Requests with different context lengths retain the online lowerer's weighted-average batch semantics.",
+  "KV read 仅表示外部持久化 KV Cache 读取；prefill/recompute 的历史 prompt 注意力仍保留在 causal pairs、算力及普通 attention/activation 流量中。": "KV read denotes only reads from externally persisted KV Cache; historical-prompt attention during prefill or recompute remains represented by causal pairs, compute, and regular attention/activation traffic.",
+  "KV read 仅表示外部持久化 KV Cache 读取；prefill/recompute 的历史 prompt 注意力仍计入 causal pairs、算力及普通 attention/activation 流量。": "KV read denotes only reads from externally persisted KV Cache; historical-prompt attention during prefill or recompute remains included in causal pairs, compute, and regular attention/activation traffic.",
+  "内存区间是组件本地的确定性逻辑字节区间，不是 JEDEC 物理地址。": "Memory intervals are deterministic component-local logical byte ranges, not JEDEC physical addresses.",
+  "内存偏移是组件本地的确定性逻辑字节区间；未建模 JEDEC bank/row/column 物理寻址。": "Memory offsets are deterministic component-local logical byte ranges; JEDEC bank/row/column physical addressing is not modeled.",
+  "可扩展在线推理仅公开已实现的批次包络和聚合资源计数，无法据此反推算子执行区间。": "Scalable online inference exposes implemented batch envelopes and aggregate resource counts only; per-operator execution intervals cannot be reconstructed from them.",
+  "聚合路由 hop 保留拓扑、链路和协议标识，但不声称逐 hop 的开始/结束时间。": "Aggregate route hops preserve topology, link, and protocol identity without claiming per-hop start or end times.",
+  "transfer.kind 固定为 data 或 instruction；instruction 的拓扑 hop 仅表示路由身份，不声称链路服务时间，无法路由时保留端点并返回空 hops。": "transfer.kind is always data or instruction; topology hops for instruction identify the route only and do not claim link service time. Unroutable transfers retain their endpoints and return empty hops.",
+  "仅当后台任务仍保留在管理器的有界完成历史中时，才能读取回放。": "Replay remains readable only while the background task is retained in the manager's bounded completion history.",
+});
+const TIMESERIES_METRIC_LABELS = Object.freeze({
+  busy_fraction: ["组件忙碌占比", "Component busy fraction"],
+  modeled_compute_utilization: ["建模计算利用率", "Modeled compute utilization"],
+  weight_residency_bytes: ["权重驻留量", "Weight residency"],
+  kv_cache_residency_bytes: ["KV 缓存驻留量", "KV cache residency"],
+  linear_state_residency_bytes: ["线性状态驻留量", "Linear-state residency"],
+  activation_residency_bytes: ["激活驻留量", "Activation residency"],
+  temporary_residency_bytes: ["临时缓冲驻留量", "Temporary-buffer residency"],
+  memory_read_bandwidth_utilization: ["内存读取带宽利用率", "Memory-read bandwidth utilization"],
+  memory_write_bandwidth_utilization: ["内存写入带宽利用率", "Memory-write bandwidth utilization"],
+  storage_occupancy_bytes: ["存储占用量", "Storage occupancy"],
+  storage_io_utilization: ["存储 I/O 活跃度", "Storage I/O activity"],
+  storage_read_bandwidth_utilization: ["存储介质读取带宽利用率", "Storage-media read bandwidth utilization"],
+  storage_write_bandwidth_utilization: ["存储介质写入带宽利用率", "Storage-media write bandwidth utilization"],
+  dma_engine_utilization: ["DMA 引擎利用率", "DMA engine utilization"],
+  fabric_bandwidth_utilization: ["互连结构带宽利用率", "Fabric bandwidth utilization"],
+  link_bandwidth_utilization: ["链路带宽利用率", "Link bandwidth utilization"],
+});
+const RUN_ESTIMATE_WARNING_TEXT = Object.freeze({
+  "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。": "This estimate does not include wall-clock seconds; actual runtime depends on the host, concurrency, and scenario details.",
+  "逻辑规模较大；建议限制并发 Job 数并保留取消能力。": "The logical scale is large; limit concurrent jobs and keep cancellation available.",
+  "该连续场景不建议保留完整事件历史。": "Keeping the complete event history is not recommended for this continuous scenario.",
+  "如需逐任务完整回放，可显式选择 exact，但内存将随逻辑任务数增长。": "Select exact explicitly for complete per-task replay, but memory grows with the logical task count.",
+  "高风险：这是无抢占基线；长 batch 与 starvation 阈值的相对关系未知，实际batch可因抢占/重算显著放大。": "High risk: this is a no-preemption baseline. The relationship between long batches and the starvation threshold is unknown, and preemption or recomputation can greatly increase the actual batch count.",
+});
+const RUN_PROGRESS_MESSAGE_TEXT = Object.freeze({
+  "仿真任务已排队": ["仿真任务已排队", "Simulation job queued"],
+  "正在安全取消仿真任务": ["正在安全取消仿真任务", "Safely cancelling simulation job"],
+  "正在启动仿真任务": ["正在启动仿真任务", "Starting simulation job"],
+  "正在校验场景": ["正在校验场景", "Validating scenario"],
+  "场景校验完成": ["场景校验完成", "Scenario validation complete"],
+  "正在编译统一执行计划": ["正在编译统一执行计划", "Compiling unified execution schedule"],
+  "统一执行计划编译完成": ["统一执行计划编译完成", "Unified execution schedule compiled"],
+  "开始执行详细离散事件计划": ["开始执行详细离散事件计划", "Starting detailed discrete-event schedule"],
+  "正在执行详细离散事件计划": ["正在执行详细离散事件计划", "Running detailed discrete-event schedule"],
+  "详细离散事件计划执行完成": ["详细离散事件计划执行完成", "Detailed discrete-event schedule completed"],
+  "开始执行统一事件计划": ["开始执行统一事件计划", "Starting unified event schedule"],
+  "正在执行统一事件计划": ["正在执行统一事件计划", "Running unified event schedule"],
+  "统一事件计划执行完成": ["统一事件计划执行完成", "Unified event schedule completed"],
+  "正在推进在线批次": ["正在推进在线批次", "Advancing online cohorts"],
+  "正在执行批次拓扑任务": ["正在执行批次拓扑任务", "Running topology tasks for the current cohort"],
+  "online serving started": ["在线服务已启动", "Online serving started"],
+  "online serving completed": ["在线服务已完成", "Online serving completed"],
+  "仿真任务执行失败": ["仿真任务执行失败", "Simulation job failed"],
+  "仿真任务已完成": ["仿真任务已完成", "Simulation job completed"],
+  "仿真任务已取消": ["仿真任务已取消", "Simulation job cancelled"],
+});
+const EFFECTIVE_MAPPING_PAGE_SIZE = 6;
+
+function uiText(zh, en, parameters = {}) {
+  if (globalThis.UiI18n?.pair) return globalThis.UiI18n.pair(zh, en, parameters);
+  return String(zh ?? "").replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => (
+    Object.hasOwn(parameters, key) ? String(parameters[key]) : match
+  ));
+}
+
+function traceLimitationText(value) {
+  const source = String(value ?? "");
+  const english = TRACE_LIMITATION_TEXT[source];
+  if (english) return uiText(source, english);
+  const representativeItems = source.match(/^每个批次最多序列化\s+(\d+)\s+个代表性条目。$/u);
+  if (representativeItems) {
+    return uiText(source, "At most {count} representative items are serialized per batch.", { count: representativeItems[1] });
+  }
+  return source;
+}
+
+function runEstimateWarningText(value) {
+  const source = String(value ?? "");
+  const english = RUN_ESTIMATE_WARNING_TEXT[source];
+  return english ? uiText(source, english) : source;
+}
+
+function runProgressMessageText(value) {
+  const source = String(value ?? "");
+  const localized = RUN_PROGRESS_MESSAGE_TEXT[source];
+  return localized ? uiText(localized[0], localized[1]) : source;
+}
+
+const CONCEPT_HELP_ZH = Object.freeze({
+  ir: "IR（Intermediate Representation，中间表示）是前端编辑、校验、映射和仿真共同读取的规范结构；界面视图不是另一份执行真相。",
+  dag: "DAG（有向无环图）用于表达算子和张量依赖。新增连接必须保持无环，否则模型不能形成合法执行顺序。",
+  hbm: "HBM（High-Bandwidth Memory，高带宽内存）是靠近加速器的高带宽易失性主存；本项目将它与 HBF 后备闪存严格区分。",
+  hbf: "HBF（High-Bandwidth Flash，高带宽闪存）在本项目中表示只读优先的 NAND 高带宽后备存储，不是 HBM。未知或未声明的写带宽不能被当作零成本写入，也不能据此用于 KV Cache 或线性 state offload。",
+  cim: "CIM（Compute-In-Memory，存算一体）表示在存储阵列附近或内部执行受支持计算的组件；当前数字 SRAM-CIM 仍受显式算子、容量和互连约束。",
+  chiplet: "Chiplet（芯粒）是封装内可独立设计并通过 die-to-die 互连组合的裸片。分组框只表达封装视图，不会自动改变执行或带宽语义。",
+  pcie: "PCIe 是通用外设互连。本项目按所选端口和链路的单向带宽、时延、lane 数与载荷参数建模，不把协议峰值直接当作应用吞吐。",
+  cxl: "CXL 是建立在 PCIe 物理层上的一致性互连族；本项目仅按场景中显式声明的 CXL 端口、链路和存储路径建模。",
+  ucie: "UCIe 是面向封装内 die-to-die 连接的互连标准；这里的版本、通道、单向带宽和时延都来自当前协议预设或人工覆盖。",
+  nvlink: "NVLink / NVLink-C2C 是 NVIDIA 高带宽互连名称；仿真只使用当前链路显式声明的方向、带宽、时延和拓扑路径。",
+  roce: "RoCE（RDMA over Converged Ethernet）在以太网上承载 RDMA。当前模型以端到端协议链路表示它，不伪造交换机队列或逐包行为。",
+  sram: "SRAM 是静态随机存取存储器。数字 SRAM-CIM 在本项目中是带容量与计算能力的显式硬件组件，不等同于普通片外内存。",
+  dma: "DMA（Direct Memory Access）表示无需由处理器逐字节搬运的数据传输机制；这里的 DMA 延迟是分析参数，不是完整控制器时序。",
+  read_latency: "读取延迟是组件完成一次建模读取所增加的固定分析时延；它与按传输字节数和带宽计算的可变传输时间分开累计。",
+  write_latency: "写入延迟是组件完成一次建模写入所增加的固定分析时延；它不包含由写入字节数、链路带宽或排队产生的时间。",
+  transfer_granularity: "传输粒度是一次数据搬移按模型计费或对齐的最小字节块；小于该粒度的传输仍可能按完整块占用容量或带宽。",
+  dma_latency: "DMA 延迟是启动一次直接内存访问搬移所需的固定分析开销；实际搬移时间还要叠加传输粒度、字节数、带宽与路径时延。",
+  dma_bandwidth: "DMA 带宽是组件 DMA 引擎可持续搬移的单向分析吞吐上限，独立于介质读写带宽和拓扑链路带宽；一次传输受三者中最慢阶段约束。",
+  dma_energy: "DMA 能耗按每字节 pJ 累计，只覆盖声明的 DMA 搬移阶段；填 0 表示当前分析不计该项，并不代表实测能耗为零。",
+  dma_resource: "DMA 资源 ID 决定哪些搬移共享同一串行资源。留空时后端按组件生成独立资源；不同组件若显式使用同一 ID，会产生资源竞争。",
+  outstanding_requests: "最大并发请求数只允许多个存储事务的固定启动延迟重叠，不会提高介质串行带宽、DMA 带宽或链路带宽。",
+  cpu: "CPU（Central Processing Unit）在本项目中是具有独立 GEMM、逐元素、归约吞吐和 Host Memory 成本的执行组件，不沿用 GPU 峰值。",
+  cost_profile: "成本 Profile 是组件执行、内存与能耗参数的权威集合；组件通过 cost_profile_id 绑定同类 Profile，多个组件可以共享，也可以显式复制后独立调整。",
+  cache_hierarchy: "Cache Hierarchy 描述组件内部各级缓存的容量、Cache Line、命中延迟、带宽、端口和并发限制；它不会由组件峰值带宽自动推断。",
+  tensor_core: "Tensor Core / MMA 参数用 SM 数、每 SM 单元数、频率、M/N/K 几何与每次 MMA 周期推导矩阵乘法能力，而不是直接填写一项无来源的 TOPS。",
+  occupancy: "Occupancy（占用率）表示 GPU 可用于隐藏延迟并保持并行工作的有效驻留比例，取值大于 0 且不超过 1；它不是结果页的资源忙碌率。",
+  attainable_efficiency: "Attainable Efficiency（可达效率）是分析模型对理论微架构能力施加的可实现比例，取值大于 0 且不超过 1；它不会消除带宽、启动或调度瓶颈。",
+  pipeline: "CPU Pipeline 参数共同描述乱序前端、SIMD 宽度、发射/退休宽度、ROB、LSQ 与内存级并行能力；任何单个宽度都不等于整颗 CPU 的最终吞吐。",
+  noc: "NoC（Network-on-Chip，片上网络）描述 CIM 阵列、累加器与外围阶段之间的片上传输带宽、单跳延迟、归约扇入和能耗；它与外部 UCIe/PCIe 链路分开建模。",
+  link_bandwidth: "链路单向带宽是一个显式拓扑连接在指定方向上的传输上限；它与组件介质带宽、端口声明值和应用吞吐分别建模。",
+  protocol: "协议定义互连端点的身份、版本、方向、通道与载荷契约；界面只按场景中显式声明的端口和链路语义建模，不会由名称推断完整协议栈行为。",
+  bandwidth_semantics: "协议带宽口径区分原始线路速率、扣除编码与载荷开销后的单向有效带宽，以及两个方向相加的双向聚合值；三者不能互换为同一条链路的可用吞吐。",
+  model_graph: "模型语义组件图是唯一执行结构。端口记录方向、数据类型、形状和布局；执行层成本几何由图严格派生。",
+  vocabulary_size: "词表大小是模型可表示的离散 Token 数量，决定 Embedding 与 LM Head 的词表维度，并直接影响相关权重容量和 Logits 计算量。",
+  max_sequence_length: "最大序列长度是模型结构允许的 Token 上限；它约束请求上下文但不等于当前请求的实际 Context Length，也不会自动预分配同等规模的运行时状态。",
+  embedding: "词嵌入（Embedding）把离散 Token ID 映射为连续隐藏向量，是模型计算主干的入口算子。",
+  residual_add: "残差相加（Residual Add）把旁路输入与变换结果逐元素相加；两路张量必须具有兼容的 dtype、shape 与 layout。",
+  dense_mlp: "稠密 MLP 是前馈网络算子，每个 Token 都使用同一组上投影、激活与下投影权重。",
+  linear_attention: "线性注意力用可递推状态近似或重写 Token 依赖，状态语义与传统全注意力的 KV Cache 不同。",
+  lm_head: "语言模型头（LM Head）把最终隐藏状态投影到词表 Logits，用于选择下一个 Token。",
+  typed_port: "带类型端口（Typed Port）声明输入、输出或权重方向，以及 dtype、shape 与 layout。只有维度逐项兼容的端口才能直接连接。",
+  tensor_shape: "张量形状使用符号维度：B 为批次，T 为序列长度，H 为隐藏维度，I 为中间维度，V 为词表大小；整数表示固定维度。",
+  explicit_transform: "显式变换（Transform）用于 reshape、transpose、cast 等真实语义变化。界面不会为修复维度不匹配而静默插入变换。",
+  layer_group: "重复 Block 组保存 repeat、layer_template 和逐层 overrides。折叠只改变视图；组参数修改会使映射过期。",
+  dense: "Dense 前馈层的每个 Token 都经过同一组 MLP 权重；其 experts=1、top-k=1。",
+  moe: "MoE（Mixture of Experts）由 Router 为每个 Token 选择部分专家；专家总数、Top-K、共享专家及路由策略共同影响容量和通信。",
+  attention: "Attention 根据 Query、Key、Value 建模 Token 间依赖。Attention Heads 与 KV Heads 共同决定 GQA/MQA 分组和张量维度。",
+  qkv: "Q / K / V 分别是 Attention 中的 Query、Key、Value 投影。当前总览只在检查器中解释其派生关系，不把派生节点伪装成新增执行 IR。",
+  gqa: "GQA（Grouped-Query Attention）让多组 Query 头共享较少的 Key/Value 头；attention_heads 与 kv_heads 的比例决定分组。",
+  mqa: "MQA（Multi-Query Attention）让全部 Query 头共享一组 Key/Value 头，通常对应 kv_heads=1；它仍产生真实 KV Cache。",
+  rmsnorm: "RMSNorm 通过均方根归一化隐藏状态，不执行均值中心化；在模型图中它是独立算子，而不是可忽略的样式标签。",
+  rope: "RoPE（Rotary Position Embedding，旋转位置编码）把位置信息作用到 Attention 的 Q/K 表示；未在 IR 中声明时界面不会暗中补入。",
+  kv_heads: "KV Heads 是 Key/Value 头数。它可以少于 Attention Heads 以表示 GQA/MQA，但不得大于 Attention Heads。",
+  dtype: "DType 是计算或存储数据类型，例如 BF16、FP16、FP8、INT8；它与量化方案不是同一字段。",
+  quantization: "量化（Quantization）描述权重/激活的缩放与位宽方案；空值表示不声明额外量化，不会自动猜测。",
+  rank_mapping: "Rank 是并行执行中的逻辑工作单元。这里按 TP / PP / EP 坐标展示实际执行与驻留位置；筛选和分页只改变视图，不会删减控制平面中的逐 Rank 数据。",
+  rank_shard: "同一算子或张量可覆盖多个逻辑 Rank。折叠组保留组内全部 Rank；展开后可核对每个 Rank 的组件、并行坐标与分片语义。",
+  operator_targets: "算子执行目标列出每个算子组实际覆盖的逻辑 Rank 与执行组件，不表示权重张量的物理分片。",
+  weight_tensor_shards: "权重张量分片列出每个权重张量在各逻辑 Rank 上的组件、字节范围与分片语义，不表示算子执行目标。",
+  placement: "Placement IR 把模型算子与张量映射到硬件组件；它是部署决策，不等于硬件拓扑或运行时调度。",
+  control_plane: "运行时控制平面根据容量、拓扑与并行策略动态物化算子和张量放置；结果仅供查看，不能回写为新的部署输入。",
+  mapping_fingerprint: "映射输入指纹由服务端对模型、硬件、并行、驻留和结构性策略计算。界面布局与负载请求不会改变部署映射指纹。",
+  mapping_stale: "映射过期表示当前模型、硬件、并行或驻留输入已不同于生成映射时的输入；运行会被阻止，直到重新映射并通过校验。",
+  objective: "映射目标（Objective）决定求解器偏好的代价，例如平衡、TTFT、TPOT 或吞吐；它不改变场景的正确性约束。",
+  optimality_gap: "Gap 是当前可行解与求解下界之间的相对差距。只有服务端明确 optimality_proven=true 才能称为全局最优。",
+  solver: "Solver 是内部控制平面的求解后端；内置求解器与 OR-Tools 的最优性证明能力可能不同。",
+  cp_sat: "CP-SAT 是 OR-Tools 的约束规划 / SAT 求解器。这里用于受容量、拓扑与并行策略约束的离散放置搜索，超时只表示返回当前可行状态。",
+  tp: "TP（Tensor Parallel）把单个算子的张量维度分片到多个 Rank，并通常需要集合通信。",
+  pp: "PP（Pipeline Parallel）把连续模型层分配到不同阶段；layer_to_stage 必须覆盖连续且合法的层段。",
+  ep: "EP（Expert Parallel）把 MoE 专家分布到多个 Rank，并可能引入 All-to-All 通信。",
+  parallel_strategy: "并行策略集中配置 TP、PP、EP、集合通信算法与 Rank 同址规则；这些设置会改变逻辑执行范围并使旧映射过期。",
+  tp_degree: "TP Degree 是张量并行 Rank 数，必须为正整数；它不是 TPOT，也不表示每输出 Token 的时间。",
+  pp_degree: "PP Degree 是流水线阶段数，必须为正整数；修改它还会清空旧的层到阶段映射。",
+  ep_degree: "EP Degree 是专家并行 Rank 数，必须为正整数；它只影响适用的 MoE 专家分布。",
+  collective_algorithm: "集合通信算法选择 auto、ring 或 tree 等 Rank 间通信组织方式；它与 TP/PP/EP 并行度是不同配置。",
+  colocated_ranks: "同组件多逻辑 Rank 允许多个逻辑 Rank 共享同一合格执行组件，但不会新增硬件容量或链路。",
+  kv_cache_component: "KV 缓存组件是 KV Cache 的首选活动驻留位置；它必须满足容量和执行路径约束。",
+  kv_offload_component: "KV 卸载组件是在活动缓存容量不足时承接 KV 页的目标；不卸载是一个显式特殊值。",
+  kv_policy: "KV Policy 决定 KV Cache 的主存储、卸载、分页粒度、预取与抢占行为。它会影响容量和传输成本。",
+  kv_residency_policy: "KV 驻留策略指定 KV Cache 的主缓存组件、可选卸载组件和分页粒度；它约束运行时容量、换入换出路径与重计算选择。",
+  kv_cache: "KV Cache 保存 full-attention 已处理 Token 的 Key/Value 历史。它与线性注意力 recurrent state、卷积 state 和模型权重是不同的驻留对象。",
+  model_weights_backing: "模型权重后备存储展示内部控制平面对 cold_stream_per_use 权重物化的来源组件及容量；HBF 走 UCIe，SSD 类组件走 PCIe / CXL。",
+  backing_component: "后备存储组件是内部控制平面为 cold_stream_per_use 权重物化的实际来源组件；尚未物化时只显示未指定。",
+  model_weight_capacity: "模型权重容量展示控制平面为 Rank 分片物化的逻辑或物理字节数；它用于解释当前容量证据，不等同于活动 HBM 权重占用。",
+  weights_resident: "Weights Resident 明确权重生命周期：勾选为 preloaded_resident（运行前预加载到活动 HBM/CIM，运行图无 HBF/SSD 后备读取）；取消为 cold_stream_per_use（每个物理 Rank 每次静态 RHS GEMM 从已解析后备流式读取一次，不按 batch、Token 或 MTP 候选重复）。",
+  capacity: "容量支持 B、KiB、MiB、GiB、TiB、PiB；界面使用二进制容量单位，场景 JSON 保留精确字节数。",
+  // In V4, each cost-bearing component binds a Profile registry entry.
+  peak_ops: "峰值运算率是组件级分析与报告镜像，并非实测应用吞吐。CPU 执行以 cost_profile_id 绑定的 profiles.components.cpu Profile 为权威；fabric 与 I/O die 不执行算子。",
+  gemm_throughput: "GEMM 吞吐是矩阵乘法 [M,K]×[K,N]→[M,N] 的分类计算能力；GPU/CPU 均从当前组件绑定的成本 Profile 推导。",
+  elementwise_throughput: "逐元素吞吐（GOP/s）是激活、门控和逐元素变换等非矩阵乘法工作的分类计算能力；GPU 与 CPU 都独立于 GEMM 吞吐。",
+  reduction_throughput: "归约吞吐（GOP/s）是 Softmax、Norm 统计和局部归并等 reduction 工作的分类计算能力；它与 GEMM 和逐元素吞吐分别建模。",
+  bandwidth: "带宽使用十进制 MB/s、GB/s、TB/s 展示；场景边界字段仍按既有 schema 保存。组件带宽与端口/链路带宽含义不同。",
+  port_parameters: "端口参数描述协议端点的版本、通道数、载荷与单向带宽。CPU 执行成本来自组件绑定的 Profile，组件间通信仍由拓扑端口与链路配置；fabric 与 I/O die 不因此获得执行或队列模型。",
+  component_preset: "组件预设以追加方式加入当前拓扑；单组件保持未连接，组合拓扑原子追加组件、内部链路与分组。",
+  architecture_preset: "架构预设在确认后替换当前硬件、链路、分组和布局；模型与负载保留，引用旧组件的映射会清空并标记过期。",
+  workload: "Workload 描述请求、到达时间、Prompt/Output Token、调度、MTP 与 SLO；它影响报告，但普通负载编辑不改变部署映射指纹。",
+  request: "Request 是一次推理请求，可声明到达时间、Prompt Token、最大输出 Token、优先级和 SLO。",
+  explicit_requests: "显式请求是逐行声明的权威请求集合；只要该集合非空，运行时就不会使用合成请求生成参数替代它。",
+  request_generation: "请求生成是负载配置区，决定合成请求的数量、默认 Token 长度与随机种子；它不是已经生成的请求数。",
+  synthetic_workload: "Synthetic Workload 用固定请求数、Token 长度与随机种子生成可复现的合成请求；显式 requests 存在时以显式请求为准。",
+  synthetic_request_count: "合成请求数是没有显式 requests 时要生成的请求条目数量；它与结果中的达标请求数、请求率均不同。",
+  synthetic_prompt_tokens: "合成提示 Token 数是每个生成请求的默认 Prompt 长度；显式请求行可拥有各自的 Prompt Token 数。",
+  synthetic_output_tokens: "合成输出 Token 数是每个生成请求的最大输出长度；它不是报告中实际提交或可见的 Token 数。",
+  arrival_time: "Arrival Time 是请求进入调度器的绝对仿真时间戳，单位为 ns；它决定调度先后，不是相对时间格式化列。",
+  relative_time: "相对时间是把请求到达时间换算为更易读的持续时间文本；它是只读展示，不是第二个可编辑时间戳。",
+  prompt_tokens: "Prompt Tokens 是请求在 Prefill 阶段输入的 Token 数，决定初始注意力计算与 KV Cache 建立规模。",
+  output_tokens: "Output Tokens 是请求允许生成的最大可见 Token 数；实际数量仍可能受 EOS、MTP 接受率或 SLO 影响。",
+  random_seed: "Random Seed 固定合成到达与随机决策，使相同场景可以重复生成同一负载。",
+  scheduler: "Scheduler 决定请求如何组成批次、Prefill/Decode 优先级、Token 预算、抢占与饥饿保护。",
+  max_sequences: "Max Sequences 限制同一时刻可参与调度的活动序列数，并不等同于单次批次的 Token 总量。",
+  batched_tokens: "Max Batched Tokens 是一次调度步可处理的 Token 总预算；Prefill 与 Decode 会共同占用该预算。",
+  prefill_chunk_tokens: "Prefill Chunk Tokens 是连续批处理时单个预填分块的 Token 上限；它受批处理 Token 总预算约束但不是同一字段。",
+  preemption: "Preemption 允许调度器暂时移出请求以让更高优先级或更紧迫的请求运行，并可能引入状态交换成本。",
+  prefill: "Prefill 对全部 Prompt Token 建立初始 KV 状态，通常是计算密集阶段。",
+  decode: "Decode 逐步生成输出 Token，通常受 KV 访问、批处理和调度延迟影响。",
+  mtp: "MTP（Multi-Token Prediction）一次提出多个候选 Token，并由接受模型决定实际可见 Token；提案开销与接受率会共同影响收益。",
+  mtp_enabled: "启用多 Token 预测控制是否创建 MTP 提议与接受模型；关闭时不会产生 MTP 候选统计。",
+  mtp_candidates: "Candidate Tokens 是每次 MTP 提议的候选 Token 数；候选越多不代表可见输出一定等比例增加。",
+  acceptance_rate: "Acceptance Rate 是 MTP 候选被验证接受的分析比例；它影响有效输出与额外提议成本。",
+  proposal_cost: "Proposal Cost Scale 是 MTP 提议阶段相对于基准 Decode 的分析成本系数。",
+  slo: "SLO（Service-Level Objective）是请求的延迟或服务目标。未校准的分析模型不能等同于生产 SLA 承诺。",
+  trace: "Trace 是仿真事件区间与标记的规范化回放。Detailed DES 可提供精确任务区间；Scalable Serving 只能提供代表性或聚合语义。",
+  des: "DES（Discrete-Event Simulation，离散事件仿真）按事件时间推进资源竞争与依赖，不按浏览器帧率推进；回放只是 DES 结果的可视化。",
+  roofline: "Roofline 是用峰值计算率与内存带宽上界筛选候选的分析模型；它不是有序事件仿真，也不证明真实硬件性能。",
+  playback_speed: "Playback Speed 只改变浏览器动画推进速度，不改变仿真时间、事件顺序或报告指标。",
+  selected_event: "选中事件是用户固定查看的事件；它可以不在当前时间游标的活动区间内，因此与“此刻活动事件”分开显示。",
+  active_event: "活动事件满足半开区间 [start, end) 的当前时间判定；多个组件、链路与 Rank 可以同时活动。",
+  simulation_time: "Simulation Time 是仿真内部时间轴，单位通常为 ns；它不是浏览器播放的墙钟时间。",
+  event_interval: "事件区间采用半开区间 [start, end)；零时长 marker 只在精确时间点可见。",
+  logical_memory: "逻辑内存布局表示组件本地的逻辑字节区间，不是 JEDEC bank/row 地址，也不保证包含所有临时张量生命周期。",
+  fidelity: "Fidelity 表明数据是 exact、representative 还是 aggregate。界面始终明示该口径，不把估算或批次包络伪装成硬件采样。",
+  analytical_report: "ANALYTICAL 结果由当前选定后端按声明的分析模型生成；徽标中的任务数是本次报告的任务规模，不是请求数或硬件实测样本。",
+  batch: "Batch 是调度器在一段时间内共同推进的请求集合；聚合批次包络不等于批次内每个算子的精确事件。",
+  collective: "集合通信（Collective）包括 All-Reduce、All-Gather、Reduce-Scatter、All-to-All 等多个 Rank 共同参与的数据交换。",
+  protocol_path: "协议路径由一个或多个物理/逻辑链路 hop 构成；路径高亮只表示当前事件使用的连接。",
+  component_timeseries: "组件时序由后端按 change-point 合并并限制每条曲线约 500 点。默认显示一张大图，最多并排管理四张；每张图独立选择组件、指标 / Rank、纵轴尺度与线条颜色。",
+  busy_fraction: "Busy Fraction 表示资源在时间区间内是否被占用；它与按 OPS/峰值计算的 modeled compute utilization 不是同一指标。",
+  compute_utilization: "Modeled Compute Utilization 以分析工作量除以组件峰值运算率和区间时长；它是模型估算，不是硬件计数器。",
+  memory_residency: "Memory Residency 是权重、KV Cache 或 Linear State 在组件容量中的逻辑驻留字节；未知 Activation/Temporary 生命周期不会被伪造。",
+  bandwidth_utilization: "Bandwidth Utilization 以区间传输字节数相对于声明带宽估算；读、写、存储 I/O 与链路带宽分开呈现。",
+  storage_occupancy: "Storage Occupancy 表示 SSD/HBF 等存储层的逻辑占用容量；它不同于 I/O 带宽利用率。",
+  run_manifest: "Run Manifest 记录运行标识、后端、模型版本、证据、限制和任务规模，用于判断报告能否复现及其适用边界。",
+  ttft: "TTFT（Time to First Token）是请求到达后首个可见输出 Token 的延迟。",
+  tbt: "TBT（Time Between Tokens）是相邻可见输出 Token 的时间间隔；p50/p95 表示分位数。",
+  tpot: "TPOT（Time Per Output Token）是输出阶段的平均每 Token 时间，口径可能与逐 Token TBT 分位数不同。",
+  e2e: "E2E（End-to-End Latency）从请求到达到完成的总延迟，包括排队、Prefill、Decode、传输与调度开销。",
+  throughput: "吞吐量表示单位时间完成的请求或生成的 Token；必须结合批次、延迟和拒绝率一起解释。",
+  request_throughput: "请求吞吐是单位时间完成的全部请求数，单位 req/s；它与 Token 吞吐和满足资格条件的 Goodput 请求率不同。",
+  token_throughput: "Token 吞吐是单位时间产生的全部可见输出 Token 数，单位 tok/s；它与请求吞吐和 Goodput Token 率不同。",
+  simulation_results: "仿真结果页汇总当前报告的运行清单、延迟、吞吐、运行时行为、利用率与请求明细；它本身不是 Fidelity 指标。",
+  runtime_summary: "推理运行时汇总只读呈现本次报告的并行、批处理、KV、MTP 与 Goodput 统计。",
+  kv_traffic_summary: "KV 读写流量汇总 Prefill 与 Decode 阶段的逻辑/物理读取和写入字节；它不包含页迁移事件。",
+  kv_movement_summary: "KV 迁移与限制汇总 Offload、Prefetch、Migration、Recompute、Swap Transfer 与预取距离；它与 KV 读写流量分组不同。",
+  runtime_execution_mode: "运行时执行模式说明报告使用静态批处理还是连续批处理；它不是 TP/PP/EP 并行度。",
+  total_batches: "批次数是调度器在整次运行中实际形成的批次总数；它不表示任一时刻的峰值批次大小。",
+  peak_batch: "峰值批次是单个批次达到的最大序列数与 Token 数；它不是整次运行的批次数。",
+  preemption_count: "抢占次数是调度器暂停活动序列的事件总数；它不等同于被拒绝请求数。",
+  preemption_breakdown: "优先级 / 内存抢占分别统计由优先级与内存压力触发的抢占事件；两项合成展示但语义独立于抢占总数。",
+  kv_peak_occupancy: "KV 峰值占用是运行期间活动 KV Cache 使用字节数的最大值；它不是组件总容量或页容量。",
+  kv_max_live_tokens: "单请求最大存活 Token 是任一请求同时驻留在 KV Cache 中的最大 Token 数；它不是上下文配置上限。",
+  kv_swap_summary: "KV 交换汇总同时显示换入换出事件数和字节数；它不同于仅统计传输耗时的 Swap Transfer。",
+  kv_capacity_pages: "KV 页容量是当前缓存可容纳的页总数；它由字节容量与每页 Token/字节口径派生，不是单页大小。",
+  kv_prefill_read_traffic: "预填读取流量分别显示 Prefill 的逻辑与物理 KV 读取字节数。",
+  kv_prefill_write_traffic: "预填写入流量分别显示 Prefill 的逻辑与物理 KV 写入字节数。",
+  kv_decode_read_traffic: "解码读取流量分别显示 Decode 的逻辑与物理 KV 读取字节数。",
+  kv_decode_append_traffic: "解码追加流量分别显示 Decode 新增 KV 状态的逻辑与物理字节数。",
+  kv_offload_total: "KV 卸载合计是从活动缓存移出的事件数与字节数；它不包括随后发生的调入。",
+  kv_prefetch_total: "KV 调入 / 预取合计是移回活动缓存的事件数与字节数；它不等同于策略中的预取距离。",
+  kv_migration_total: "KV 迁移合计汇总全部 KV 页移动事件与字节数；它不是 Offload 或 Prefetch 任一子项。",
+  kv_recompute: "KV 重计算统计因不保留状态而重新执行的事件数与 Token 数；它不是数据迁移。",
+  kv_swap_transfer_time: "交换传输时间是 KV swap 数据搬移累计占用的仿真时间；事件数和字节数在交换汇总中另行显示。",
+  kv_prefetch_distance: "预取距离说明后端是否显式建模提前多少步调入 KV 页；仅策略元数据不代表产生了精确预取事件。",
+  mtp_proposed_tokens: "MTP 提议数是提议器产生的候选 Token 总数，不等于接受、提交或可见 Token 数。",
+  mtp_accepted_tokens: "MTP 接受数是验证阶段通过的候选 Token 总数，仍可能与最终提交数不同。",
+  mtp_committed_tokens: "MTP 提交数是最终写入生成序列的 Token 总数；它是 MTP 内部统计，不等同于全报告可见 Token。",
+  mtp_rejected_tokens: "MTP 拒绝数是候选中未通过验证的 Token 总数；它与请求拒绝原因无关。",
+  mtp_effective_rate: "MTP 有效接受率是接受候选数相对提议数的报告比例；它不是配置中的期望 Acceptance Rate。",
+  goodput: "Goodput 只统计满足当前服务资格口径的有效输出，和未筛选的原始吞吐量不同。",
+  goodput_request_rate: "Goodput 请求率是单位时间完成且达标的请求数，单位 req/s；它不是合成请求数量。",
+  goodput_token_rate: "Goodput Token 率是单位时间产生的达标可见输出 Token 数，单位 tok/s；它不是请求率。",
+  goodput_qualified_requests: "达标请求是满足 Goodput 资格条件的请求总数；它不是每秒请求率。",
+  category_time: "类别时间按任务类别累计服务时间，并同时对照关键路径类别时间；两者不要求相加等于 Makespan。",
+  request_metrics: "请求明细逐请求展示状态、拒绝原因、到达时间、TTFT、TBT、TPOT、E2E 与实际可见 Token。",
+  visible_tokens: "可见 Token 数是请求最终对用户可见的实际输出数量；它可能少于配置的最大输出 Token 数。",
+  makespan: "Makespan 是本次仿真从最早开始到最后完成的总时间跨度，不等同于任一单请求的端到端延迟。",
+  energy: "Total Energy 是分析模型按任务与资源累计的能耗估算；在 profiles 未校准时不代表实测功耗或电费。",
+  rejection_reason: "Rejection Reason 说明请求未被服务的准入、容量、SLO 或调度原因；空值仅表示报告未声明原因。",
+  percentile: "p50 / p95 是样本分位数：p50 表示中位水平，p95 表示 95% 样本不超过该值；样本为空时不生成数值。",
+  critical_path: "关键路径是事件依赖图中决定总完成时间的最长路径；类别累计时间不一定等于关键路径时间。",
+  bottleneck: "瓶颈是当前分析模型下限制性能的资源或阶段；它随映射、负载、容量和带宽假设变化。",
+  utilization: "资源利用率按 0%–100% 显示。超出范围或非有限值会安全钳制；0% 使用空闲纹理，避免与缺失图形混淆。",
+  evidence: "证据字段说明参数来自标准、厂商公开资料、推导还是实验假设；缺失时不推断更高可信度。",
+  gpu: "GPU（Graphics Processing Unit）是执行张量计算的并行加速器；这里只使用场景声明的容量、峰值运算率、带宽和端口，不推断具体微架构。",
+  accelerator: "加速器（Accelerator）是可承载模型算子的计算组件统称，是否能执行某种算子由组件类型、能力和映射约束共同决定。",
+  hbm_stack: "HBM Stack 表示一颗可独立计量容量与带宽的物理高带宽内存堆栈；多个 Stack 不会自动合并成一份容量。",
+  host_memory: "Host Memory 是主机侧易失性内存，可作为显式数据来源或卸载目标；它不等同于加速器本地 HBM。",
+  cxl_memory: "CXL Memory 是通过显式 CXL 路径访问的扩展内存；容量、带宽与时延均由对应组件和链路声明。",
+  ssd: "SSD 是基于闪存的块存储后备层；模型只在存在适用 PCIe/CXL 路径时计算其装载、卸载与带宽成本。",
+  high_io_ssd: "High-I/O SSD 是具有较高声明 I/O 能力的 SSD 类组件，但仍受容量、协议路径、单向带宽与启动时延约束。",
+  fabric_switch: "Fabric Switch 是互连转发组件；当前模型用于表达可达路径，不虚构交换缓存、拥塞控制或逐包队列。",
+  io_die: "I/O Die 是封装内承载端口或互连功能的裸片；除非场景显式赋予计算能力，否则它不执行模型算子。",
+  hardware_topology: "硬件拓扑（Hardware Topology）由组件、端口和链路组成，决定放置候选之间是否可达以及数据经过哪些 hop。",
+  physical_link: "物理链路（Physical Link）连接两个具体端口，并声明协议、方向、带宽、时延和通道；画布曲线只是该链路的视觉路径。",
+  link_latency: "链路时延（Link Latency）是一次经过该连接的固定传播或协议分析开销，与按字节和带宽计算的传输时间分开累计。",
+  lanes: "Lanes 表示端口或链路并行通道数；它是协议能力的一部分，不会在缺少带宽证据时自动推导吞吐。",
+  payload: "Payload 描述端口或链路承载的数据语义或协议载荷；端点载荷不兼容时不能建立有效连接。",
+  bidirectional_link: "双向链路（Bidirectional Link）允许两个方向传输，但每个方向仍按声明带宽、时延和资源占用独立解释。",
+  operator: "算子（Operator）是模型图中的可执行语义节点，具有稳定 ID、类型、参数以及绑定张量的带类型端口。",
+  tensor: "张量（Tensor）是算子之间传递或保存的数据值，记录 producer、consumer、DType、Shape、Layout 与可选逻辑字节数。",
+  tensor_layout: "Tensor Layout 描述张量维度在逻辑或物理存储中的排列约定；布局变化必须由显式 Transform 表达。",
+  repeat_pattern: "重复模式（Repeat Pattern）是连续出现且结构与端口合同一致的子图周期；总览只压缩显示，不把视觉回线写成执行环。",
+  group_collapse: "组折叠（Group Collapse）只隐藏重复组成员和内部连线，并保留组名与边界端口；它不会删减权威模型图。",
+  logits: "Logits 是语言模型头输出的未归一化词表分数，通常在采样或解码策略中转换为下一 Token 的选择依据。",
+  softmax: "Softmax 把一组分数归一化为总和为 1 的权重；在 Attention 派生说明中它作用于缩放和掩码后的 QK 分数。",
+  expert_router: "Expert Router 为每个 Token 选择 MoE 专家并产生路由权重；Top-K、专家数和并行放置会影响通信与负载均衡。",
+  layer_override: "Layer Override 为重复组中的具体层实例覆盖模板参数；改变结构或端口合同的覆盖不能被视觉重复标记吞没。",
+  sequence_mixer: "Sequence Mixer 指模型层处理 Token 间依赖的机制，例如全注意力或线性注意力；不同机制具有不同状态与成本语义。",
+  hidden_size: "Hidden Size 是模型隐藏向量宽度 H，参与激活形状、权重矩阵尺寸、容量和算力需求计算。",
+  intermediate_size: "Intermediate Size 是前馈网络中间维度 I，决定 MLP 或专家权重与中间激活的主要规模。",
+  attention_heads: "Attention Heads 是并行 Query 头数；它与 KV Heads 和 Head Dim 一起决定 Q/K/V 形状及 GQA/MQA 分组。",
+  rank: "Rank 是 TP/PP/EP 并行计划中的逻辑执行单元；多个 Rank 可以共置于同一物理组件，但语义身份仍然独立。",
+  shard: "Shard 是张量或权重在某个 Rank 上的逻辑分片，记录分片索引、总分片数、轴与物理字节数。",
+  fully_placed: "Fully Placed 表示所有必需的算子目标、张量分片和驻留对象都已获得合法硬件位置，而不是仅找到部分候选。",
+  feasible_solution: "可行解（Feasible Solution）满足当前硬约束但未必达到全局最优；求解超时时可以返回可行解及其证据。",
+  infeasible_mapping: "映射不可行（Infeasible Mapping）表示容量、可达性、并行度与能力约束之间不存在同时满足的放置。",
+  solver_time_limit: "求解时间上限限制内部放置规划所用墙钟秒数；到时返回的状态可能是最优、可行、不可行或尚未证明。",
+  lower_bound: "Lower Bound 是求解器对最优目标值的理论下界；它与当前可行目标值共同用于计算 Optimality Gap。",
+  residency: "Residency 表示权重、KV、线性状态或张量副本当前驻留在哪类存储及物理组件上。",
+  capacity_gate: "容量门禁（Capacity Gate）在运行前核对组件可用字节数是否覆盖权重、缓存、状态、分片和必要冗余。",
+  topology_connectivity: "拓扑连通性（Topology Connectivity）要求需要通信的源和目标之间存在方向、协议与端口均兼容的显式路径。",
+  mapping_diagnostic: "映射诊断（Mapping Diagnostic）记录失败阶段、稳定错误代码、具体原因和修复建议，用于区分输入错误、约束冲突与求解状态。",
+  continuous_batching: "连续批处理（Continuous Batching）在每个调度步动态接纳、推进或移出请求，而不是等待整个静态批次完成。",
+  token_budget: "Token Budget 是一次调度步可处理的 Token 总上限，Prefill 块和 Decode Token 会共同消耗该预算。",
+  request_deadline: "请求截止时间（Deadline）是相对于仿真时间轴的完成期限；空值表示未声明硬截止时间。",
+  request_priority: "请求优先级（Priority）为调度器提供相对服务顺序信号，但仍受容量、Token 预算和防饥饿规则约束。",
+  starvation_protection: "防饥饿（Starvation Protection）限制低优先级请求持续等待的时间或次数，避免它们被高优先级流量永久推迟。",
+  eos: "EOS（End of Sequence）是生成终止标记；命中 EOS 时实际可见输出 Token 可以少于请求声明的最大值。",
+  request_admission: "请求准入（Admission）在调度前检查活动序列、容量、SLO 和资源条件，失败时产生明确拒绝原因。",
+  queue_wait: "Queue Wait 是请求到达后尚未获得执行资源的等待区间，计入 TTFT 与端到端延迟。",
+  offload: "Offload 把权重、KV 或状态从主活动存储移到较慢层级，释放容量但增加传输和后续恢复成本。",
+  prefetch: "Prefetch 在预计使用前把数据搬回目标存储；只有存在显式可达路径和足够容量时才可能隐藏部分等待。",
+  swap: "Swap 是运行时在存储层级之间换出或换入请求状态的操作，可能占用 DMA、链路和端点读写资源。",
+  page_size: "Page Size 表示 KV Cache 等分页对象每页包含的 Token 数或字节粒度，影响碎片、搬移次数与容量取整。",
+  context_length: "Context Length 是请求当前可见的历史 Token 长度，影响全注意力工作量、KV Cache 规模和可接受的最大序列边界。",
+  runtime_event: "运行事件（Runtime Event）是带开始时间、结束时间、资源与语义类别的规范记录；不同 Fidelity 可能只提供代表或聚合事件。",
+  event_marker: "事件标记（Event Marker）表示某个精确时间点发生的状态变化，零时长标记不应被解释为持续资源占用。",
+  time_cursor: "时间游标（Time Cursor）是回放界面当前查看的仿真时刻，只改变高亮和叙事，不改变事件本身。",
+  resource_contention: "资源竞争（Resource Contention）发生在多个任务同时请求同一计算、存储或链路资源时，由离散事件调度决定先后。",
+  change_point: "Change Point 是时序值发生变化的时间点；后端合并连续相同区间以压缩曲线而不伪造中间采样。",
+  route_hop: "Route Hop 是协议路径中的一段源端口到目标端口连接；多个 hop 的带宽与时延共同组成端到端传输。",
+});
+const CONCEPT_HELP_EN = Object.freeze({
+  ir: "IR (Intermediate Representation) is the canonical structure shared by editing, validation, placement, and simulation; a UI projection is not a second execution truth.",
+  dag: "A DAG is the directed acyclic operator-and-tensor dependency graph. New connections must preserve acyclicity to keep a valid execution order.",
+  hbm: "HBM is high-bandwidth volatile memory close to an accelerator. This project keeps it strictly distinct from HBF backing flash.",
+  hbf: "HBF means read-mostly NAND High-Bandwidth Flash in this project, not HBM. Unknown or undeclared write bandwidth is not zero-cost writing and does not authorize KV-cache or linear-state offload.",
+  cim: "Compute-In-Memory executes supported work near or inside a memory array. Digital SRAM-CIM remains subject to explicit operators, capacity, and links.",
+  chiplet: "A Chiplet is a separately designed die combined with others through package die-to-die links. A visual group alone does not change execution semantics.",
+  pcie: "PCIe is a general peripheral interconnect. The simulator uses explicit one-way bandwidth, latency, lane count, and payload rather than protocol peak as application throughput.",
+  cxl: "CXL is a coherent interconnect family built on the PCIe physical layer. Only explicitly declared CXL ports, links, and storage paths are modeled here.",
+  ucie: "UCIe is a package die-to-die interconnect standard. Version, lanes, one-way bandwidth, and latency come from the selected preset or manual override.",
+  nvlink: "NVLink and NVLink-C2C are NVIDIA interconnect names. Simulation uses only the direction, bandwidth, latency, and route declared by the current link.",
+  roce: "RoCE carries RDMA over Ethernet. The current model treats it as an end-to-end protocol link and does not fabricate switch queues or packet timing.",
+  sram: "SRAM is static random-access memory. Digital SRAM-CIM is an explicit capacity-and-compute component here, not ordinary off-chip memory.",
+  dma: "DMA moves data without processor-managed byte-by-byte copies. DMA latency here is an analytical parameter, not a full controller timeline.",
+  read_latency: "Read latency is the fixed analytical delay added to a modeled component read. It is accumulated separately from byte-and-bandwidth transfer time.",
+  write_latency: "Write latency is the fixed analytical delay added to a modeled component write. It excludes time caused by byte count, link bandwidth, or queueing.",
+  transfer_granularity: "Transfer granularity is the smallest byte block charged or aligned for a modeled movement. A smaller payload may still consume a full block of capacity or bandwidth.",
+  dma_latency: "DMA latency is the fixed analytical startup overhead for one direct-memory-access movement. Total movement time also includes granularity, bytes, bandwidth, and route latency.",
+  dma_bandwidth: "DMA bandwidth is the analytical one-way sustained limit of a component DMA engine, separate from media and topology-link bandwidth. The slowest stage constrains a transfer.",
+  dma_energy: "DMA energy accumulates in pJ per byte for the declared DMA phase only. Zero means this analytical term is currently omitted, not measured zero energy.",
+  dma_resource: "A DMA resource ID controls which movements contend for the same serialized resource. If omitted, the backend derives a component-local resource; reusing an explicit ID creates contention.",
+  outstanding_requests: "Maximum outstanding requests overlaps only fixed storage-transaction startup latency. It does not increase media, DMA, or link bandwidth.",
+  cpu: "A CPU (Central Processing Unit) is an execution component with independent GEMM, element-wise, reduction, and Host Memory costs; it never inherits GPU peak rate.",
+  cost_profile: "A Cost Profile is the authoritative set of execution, memory, and energy parameters for a component. Components bind same-kind profiles through cost_profile_id and may share or explicitly duplicate them.",
+  cache_hierarchy: "Cache Hierarchy declares each internal cache level's capacity, Cache Line, hit latency, bandwidth, ports, and concurrency limits; none are inferred from component peak bandwidth.",
+  tensor_core: "Tensor Core and MMA parameters derive matrix-multiply capability from SM count, units per SM, frequency, M/N/K geometry, and cycles per MMA instead of an ungrounded TOPS field.",
+  occupancy: "Occupancy is the effective resident fraction available to hide latency and sustain GPU parallel work. It is greater than zero and at most one, and is not the report's resource busy fraction.",
+  attainable_efficiency: "Attainable Efficiency is the achievable fraction applied to theoretical microarchitecture capability. It is greater than zero and at most one and does not erase bandwidth, launch, or scheduling bottlenecks.",
+  pipeline: "CPU Pipeline parameters jointly describe the out-of-order front end, SIMD width, issue/retire width, ROB, LSQ, and memory-level parallelism; no single width is final CPU throughput.",
+  noc: "A Network-on-Chip (NoC) models on-chip bandwidth, hop latency, reduction fan-in, and energy between CIM arrays, accumulators, and peripheral stages, separately from external UCIe or PCIe links.",
+  link_bandwidth: "One-way link bandwidth is the transfer limit of an explicit topology connection in one direction; it is modeled separately from media, port, and application throughput.",
+  protocol: "A protocol defines interconnect endpoint identity, version, direction, lanes, and payload contract. The UI models only explicitly declared port and link semantics and does not infer full protocol-stack behavior from a name.",
+  bandwidth_semantics: "Protocol bandwidth distinguishes raw line rate, effective one-way bandwidth after encoding and payload overhead, and aggregate bidirectional bandwidth summed across both directions; these values are not interchangeable as one link's usable throughput.",
+  model_graph: "The model semantic graph is the sole executable operator, tensor, and transform structure; execution-layer cost geometry is derived from it strictly.",
+  vocabulary_size: "Vocabulary Size is the count of discrete Tokens the model can represent. It sets the vocabulary dimension of Embedding and the LM Head and directly affects their weight capacity and Logits work.",
+  max_sequence_length: "Max Sequence Length is the structural Token limit supported by the model. It constrains request context but is not the current request's actual Context Length and does not preallocate equally large runtime state by itself.",
+  embedding: "Embedding maps discrete Token IDs to continuous hidden vectors and is the entry operator of the model compute trunk.",
+  residual_add: "Residual Add sums a bypass input with a transformed result element by element; both tensors need compatible dtype, shape, and layout.",
+  dense_mlp: "A Dense MLP is a feed-forward operator that applies the same up-projection, activation, and down-projection weights to each Token.",
+  linear_attention: "Linear Attention uses recurrent state to approximate or reformulate Token dependencies; that state is not a conventional full-attention KV Cache.",
+  lm_head: "The Language Model Head projects final hidden state to vocabulary logits used to select the next Token.",
+  typed_port: "A Typed Port declares input, output, or weight direction together with dtype, shape, and layout. Direct connections require compatible dimensions.",
+  tensor_shape: "Tensor shapes use symbolic dimensions such as B, T, H, I, and V; integers represent fixed dimensions.",
+  explicit_transform: "An explicit Transform records a real reshape, transpose, or cast. The editor never inserts one silently to hide an incompatible connection.",
+  layer_group: "A repeated Block group stores repeat count, a layer template, and per-layer overrides. Collapsing changes only the view.",
+  dense: "A Dense feed-forward layer applies the same MLP weights to every Token; its execution projection uses experts=1 and top-k=1.",
+  moe: "Mixture of Experts routes each Token to selected experts. Expert count, Top-K, shared experts, and routing policy affect capacity and communication.",
+  attention: "Attention models dependencies through Query, Key, and Value. Attention Heads and KV Heads determine GQA/MQA grouping and tensor dimensions.",
+  qkv: "Q, K, and V are the Query, Key, and Value projections in Attention. Their derived inspector explanation does not add execution operators to the IR.",
+  gqa: "Grouped-Query Attention shares fewer Key/Value heads among groups of Query heads; the attention_heads to kv_heads ratio determines grouping.",
+  mqa: "Multi-Query Attention shares one Key/Value head across all Query heads, typically kv_heads=1, while still producing a real KV Cache.",
+  rmsnorm: "RMSNorm normalizes hidden state by its root mean square without mean centering. It is an explicit model operator here.",
+  rope: "Rotary Position Embedding applies position information to Attention Q/K representations; the UI never inserts it when the IR does not declare it.",
+  kv_heads: "KV Heads is the Key/Value head count. It may be lower than Attention Heads for GQA/MQA, but never higher.",
+  dtype: "DType is a compute or storage data type such as BF16, FP16, FP8, or INT8; it is distinct from the quantization scheme.",
+  quantization: "Quantization describes weight or activation scaling and bit-width. An empty value does not imply an automatically inferred scheme.",
+  rank_mapping: "A Rank is a logical parallel worker. This view shows actual TP, PP, and EP coordinates without deleting hidden or paged Rank data.",
+  rank_shard: "An operator or tensor may span several logical Ranks. Expanded rows expose each Rank's component, parallel coordinates, and shard semantics.",
+  operator_targets: "Operator Targets list the logical Ranks and execution components actually covered by each operator group; they are not physical weight-tensor shards.",
+  weight_tensor_shards: "Weight Tensor Shards list component, byte range, and shard semantics for each weight tensor on each logical Rank; they are not operator targets.",
+  placement: "Placement IR maps model operators and tensors onto hardware components. It is a deployment decision, not the hardware topology or runtime schedule.",
+  control_plane: "The runtime control plane dynamically materializes operator and tensor placement from capacity, topology, and parallel policy. Results are read-only and cannot be fed back as new placement inputs.",
+  mapping_fingerprint: "The server computes the mapping-input fingerprint from model, hardware, parallelism, residency, and structural policy inputs.",
+  mapping_stale: "A stale mapping was produced from different model, hardware, parallelism, or residency inputs. Re-map and validate before running.",
+  objective: "The mapping Objective selects the solver preference, such as balance, TTFT, TPOT, or throughput; correctness constraints remain unchanged.",
+  optimality_gap: "Gap is the relative distance between a feasible solution and the solver lower bound. Global optimality requires optimality_proven=true.",
+  solver: "Solver is an internal control-plane backend; proof capabilities can differ between built-in and OR-Tools solvers.",
+  cp_sat: "CP-SAT is the OR-Tools constraint-programming/SAT solver used for discrete placement under capacity, topology, and parallel-policy constraints.",
+  tp: "Tensor Parallel shards an operator's tensor dimensions across Ranks and usually requires collective communication.",
+  pp: "Pipeline Parallel assigns consecutive model layers to stages; layer_to_stage must cover valid contiguous layer ranges.",
+  ep: "Expert Parallel distributes MoE experts across Ranks and can introduce All-to-All communication.",
+  parallel_strategy: "Parallel strategy configures TP, PP, EP, collective algorithm, and Rank colocation together; these settings change execution scope and invalidate old placement.",
+  tp_degree: "TP Degree is the positive-integer Tensor Parallel Rank count. It is not TPOT and never means time per output Token.",
+  pp_degree: "PP Degree is the positive-integer pipeline-stage count; changing it also clears the old layer-to-stage mapping.",
+  ep_degree: "EP Degree is the positive-integer Expert Parallel Rank count and affects only applicable MoE expert distribution.",
+  collective_algorithm: "Collective Algorithm selects an organization such as auto, ring, or tree for inter-Rank communication; it is separate from TP/PP/EP degree.",
+  colocated_ranks: "Allowing colocated logical Ranks lets multiple logical Ranks share one eligible execution component, but adds no hardware capacity or links.",
+  kv_cache_component: "The KV Cache Component is the preferred active residency location for KV state and must satisfy capacity and execution-path constraints.",
+  kv_offload_component: "The KV Offload Component receives KV pages under active-cache pressure; No Offload is an explicit special value.",
+  kv_policy: "KV Policy controls primary KV Cache storage, offload, page granularity, prefetch, and eviction behavior, affecting capacity and transfer cost.",
+  kv_residency_policy: "KV residency policy selects the primary KV Cache component, optional offload component, and page granularity, constraining runtime capacity, swap paths, and recomputation choices.",
+  kv_cache: "KV Cache stores Key/Value history for processed full-attention Tokens. It is distinct from linear-attention state, convolution state, and model weights.",
+  model_weights_backing: "Model Weights Backing shows the source component and capacity materialized by the internal control plane for cold_stream_per_use weights. HBF uses UCIe; SSD-class components use PCIe/CXL.",
+  backing_component: "The Backing Component is the source materialized by the internal control plane for cold_stream_per_use weights; an unmaterialized decision is shown as Unspecified.",
+  model_weight_capacity: "Model Weight Capacity shows logical or physical bytes materialized for Rank shards by the control plane; it explains current capacity evidence and is not active-HBM weight occupancy.",
+  weights_resident: "Weights Resident fixes the weight lifecycle: checked means preloaded_resident (weights are loaded into active HBM/CIM before execution and the run graph has no HBF/SSD backing reads); unchecked means cold_stream_per_use (each physical Rank reads once from the resolved backing for each static RHS GEMM use, without multiplying by batch items, Tokens, or MTP candidate Tokens).",
+  capacity: "Capacity accepts B, KiB, MiB, GiB, TiB, and PiB. The UI uses binary units while scenario JSON preserves exact bytes.",
+  peak_ops: "Peak operations rate is a component-level analytical and reporting mirror, not measured application throughput. CPU execution is authoritative in the Profile selected by cost_profile_id; fabric and I/O dies do not execute operators.",
+  gemm_throughput: "GEMM throughput is the categorized compute rate for matrix multiplication [M,K]×[K,N]→[M,N], derived from the target GPU or CPU component's bound cost Profile.",
+  elementwise_throughput: "Element-wise throughput (GOP/s) is the categorized compute rate for activation, gating, and other non-matrix-multiply work; GPU and CPU keep it independent from GEMM throughput.",
+  reduction_throughput: "Reduction throughput (GOP/s) is the categorized compute rate for Softmax, norm statistics, and local reductions; it is modeled separately from GEMM and element-wise throughput.",
+  bandwidth: "Bandwidth is displayed in decimal MB/s, GB/s, or TB/s. Component, port, and link bandwidth have different meanings.",
+  port_parameters: "Port parameters describe protocol version, lane count, payload, and one-way bandwidth. CPU execution cost comes from the component-bound Profile, while inter-component communication remains configured by topology ports and links.",
+  component_preset: "A component preset appends to the current topology. Composite presets atomically add components, internal links, and groups.",
+  architecture_preset: "After confirmation, an architecture preset replaces hardware, links, groups, and layout while preserving model and workload.",
+  workload: "Workload describes requests, arrivals, Prompt/Output Tokens, scheduling, MTP, and SLO. Ordinary workload edits do not alter the placement fingerprint.",
+  request: "A Request is one inference request with arrival time, Prompt Tokens, maximum Output Tokens, priority, and optional SLO.",
+  explicit_requests: "Explicit Requests are the authoritative row-by-row request set. Whenever non-empty, runtime does not replace them with synthetic-generation parameters.",
+  request_generation: "Request Generation is the configuration area for synthetic count, default Token lengths, and random seed; it is not the number already generated.",
+  synthetic_workload: "Synthetic Workload generates reproducible requests from counts, Token lengths, and a seed. Explicit requests take precedence.",
+  synthetic_request_count: "Synthetic Request Count is the number of rows generated only when explicit requests are absent; it is neither qualified-request count nor request rate.",
+  synthetic_prompt_tokens: "Synthetic Prompt Tokens is the default Prompt length of each generated request; explicit request rows can each use a different Prompt length.",
+  synthetic_output_tokens: "Synthetic Output Tokens is the maximum output length of each generated request; it is not the reported committed or visible Token count.",
+  arrival_time: "Arrival Time is the absolute simulated timestamp at which a request enters the scheduler in ns; it determines ordering and is not the relative-time display column.",
+  relative_time: "Relative Time formats a request arrival as a human-readable duration. It is read-only presentation, not a second editable timestamp.",
+  prompt_tokens: "Prompt Tokens are processed during Prefill and determine initial attention work and KV Cache construction.",
+  output_tokens: "Output Tokens is the maximum visible generation length; EOS, MTP acceptance, or SLO behavior can reduce the actual count.",
+  random_seed: "Random Seed fixes synthetic arrivals and randomized decisions so the same scenario can reproduce a workload.",
+  scheduler: "Scheduler controls batching, Prefill/Decode priority, Token budgets, preemption, and starvation protection.",
+  max_sequences: "Max Sequences limits simultaneously schedulable active sequences; it is not the total Token count of one batch.",
+  batched_tokens: "Max Batched Tokens is the Token budget of one scheduling step, shared by Prefill and Decode.",
+  prefill_chunk_tokens: "Prefill Chunk Tokens is the per-chunk Prefill Token limit under continuous batching; it is constrained by, but distinct from, the total batched-Token budget.",
+  preemption: "Preemption temporarily removes work so a higher-priority or more urgent request can run, potentially adding state-transfer cost.",
+  prefill: "Prefill builds initial KV state for all Prompt Tokens and is usually compute intensive.",
+  decode: "Decode generates output Tokens step by step and is often sensitive to KV access, batching, and scheduling delay.",
+  mtp: "Multi-Token Prediction proposes several candidate Tokens and verifies the visible output; proposal cost and acceptance rate jointly determine benefit.",
+  mtp_enabled: "Enable MTP controls whether the proposal and acceptance model exists; disabling it produces no MTP candidate statistics.",
+  mtp_candidates: "Candidate Tokens is the number proposed per MTP step; more candidates do not guarantee proportionally more visible output.",
+  acceptance_rate: "Acceptance Rate is the analytical fraction of MTP candidates accepted during verification.",
+  proposal_cost: "Proposal Cost Scale is the analytical MTP proposal cost relative to baseline Decode.",
+  slo: "A Service-Level Objective is a request latency or service target. An uncalibrated analytical model is not a production SLA promise.",
+  trace: "Trace is the normalized interval and marker replay. Detailed DES can be exact; Scalable Serving may be representative or aggregate.",
+  des: "Discrete-Event Simulation advances resource contention and dependencies by event time, not browser frame rate; playback only visualizes its result.",
+  roofline: "Roofline screens candidates against peak compute and memory-bandwidth ceilings. It is not ordered event simulation and does not prove measured performance.",
+  playback_speed: "Playback advances one globally filtered event per wall-clock second; this does not change simulation time, ordering, or metrics.",
+  selected_event: "The selected event is pinned by the user and may differ from events active at the current time cursor.",
+  active_event: "An active event contains the current time under the half-open interval [start, end); several resources and Ranks may be active together.",
+  simulation_time: "Simulation Time is the internal nanosecond timeline, not the browser's wall-clock playback time.",
+  event_interval: "Event intervals use [start, end). A zero-duration marker appears only at its exact timestamp.",
+  logical_memory: "Logical memory layout describes component-local byte intervals, not JEDEC bank/row addresses or guaranteed temporary-tensor lifetimes.",
+  fidelity: "Fidelity identifies exact, representative, or aggregate evidence so estimates are never presented as hardware samples.",
+  analytical_report: "ANALYTICAL results are produced by the selected backend under the declared analytical model; the badge task count is this report's task scale, not request count or measured hardware samples.",
+  batch: "A Batch is a set of requests advanced together by the scheduler; an aggregate batch envelope is not an exact operator trace.",
+  collective: "Collective communication includes All-Reduce, All-Gather, Reduce-Scatter, and All-to-All exchanges among Ranks.",
+  protocol_path: "A protocol path contains one or more physical or logical link hops; highlighting means the current event uses that connection.",
+  component_timeseries: "Server-generated component series are change-point merged and bounded. Each chart independently selects component, metric or Rank, scale, and color.",
+  busy_fraction: "Busy Fraction indicates occupancy over an interval and is distinct from modeled compute utilization derived from OPS and peak rate.",
+  compute_utilization: "Modeled Compute Utilization divides analytical work by peak rate and interval duration; it is not a hardware counter.",
+  memory_residency: "Memory Residency is logical capacity occupied by weights, KV Cache, or Linear State; unknown temporary lifetimes are not fabricated.",
+  bandwidth_utilization: "Bandwidth Utilization estimates interval bytes against declared bandwidth, keeping reads, writes, storage I/O, and links separate.",
+  storage_occupancy: "Storage Occupancy is logical used capacity in SSD/HBF tiers and differs from I/O bandwidth utilization.",
+  run_manifest: "Run Manifest records run identity, backend, model version, evidence, limitations, and scale for reproducibility and scope assessment.",
+  ttft: "Time to First Token is the delay from request arrival to the first visible output Token.",
+  tbt: "Time Between Tokens is the interval between adjacent visible output Tokens; p50 and p95 are sample percentiles.",
+  tpot: "Time Per Output Token is the mean output-stage time per Token and may use a different scope from per-Token TBT percentiles.",
+  e2e: "End-to-End Latency runs from request arrival to completion, including queueing, Prefill, Decode, transfer, and scheduling overhead.",
+  throughput: "Throughput is completed requests or generated Tokens per unit time and must be interpreted with latency, batching, and rejection rate.",
+  request_throughput: "Request Throughput is all completed requests per second in req/s; it differs from Token Throughput and qualified Goodput Request Rate.",
+  token_throughput: "Token Throughput is all visible output Tokens per second in tok/s; it differs from Request Throughput and qualified Goodput Token Rate.",
+  simulation_results: "Simulation Results summarize manifest, latency, throughput, runtime behavior, utilization, and request detail for the current report; the page itself is not Fidelity.",
+  runtime_summary: "Inference Runtime is a read-only summary of parallelism, batching, KV, MTP, and Goodput statistics from this report.",
+  kv_traffic_summary: "KV Traffic summarizes logical and physical read/write bytes for Prefill and Decode; it excludes page-movement events.",
+  kv_movement_summary: "KV Movement summarizes Offload, Prefetch, Migration, Recompute, Swap Transfer, and Prefetch Distance; it differs from KV Traffic.",
+  runtime_execution_mode: "Runtime Execution Mode states whether the report used static or continuous batching; it is not TP/PP/EP degree.",
+  total_batches: "Total Batches is the number of batches formed over the whole run; it is not the peak size of any one batch.",
+  peak_batch: "Peak Batch is the maximum sequence and Token count reached by one batch; it is not the run's total batch count.",
+  preemption_count: "Preemption Count is the total number of times active sequences were paused by the scheduler; it is not rejected-request count.",
+  preemption_breakdown: "Priority / Memory Preemptions separately count priority- and memory-pressure triggers; the paired display remains distinct from total preemptions.",
+  kv_peak_occupancy: "KV Peak Occupancy is the maximum active KV Cache bytes used during the run; it is neither component capacity nor page capacity.",
+  kv_max_live_tokens: "Max Live Tokens per Request is the maximum Token count simultaneously resident for any request; it is not the configured context limit.",
+  kv_swap_summary: "KV Swap Summary combines swap event count and bytes; it is distinct from Swap Transfer Time.",
+  kv_capacity_pages: "KV Capacity Pages is the total number of pages the cache can hold, derived from byte capacity and page sizing; it is not the size of one page.",
+  kv_prefill_read_traffic: "Prefill Read Traffic reports logical and physical KV bytes read during Prefill.",
+  kv_prefill_write_traffic: "Prefill Write Traffic reports logical and physical KV bytes written during Prefill.",
+  kv_decode_read_traffic: "Decode Read Traffic reports logical and physical KV bytes read during Decode.",
+  kv_decode_append_traffic: "Decode Append Traffic reports logical and physical bytes added as new KV state during Decode.",
+  kv_offload_total: "KV Offload Total combines events and bytes moved out of active cache and excludes later prefetches.",
+  kv_prefetch_total: "KV Prefetch Total combines events and bytes moved back into active cache; it is not the policy's Prefetch Distance.",
+  kv_migration_total: "KV Migration Total combines all KV page-movement events and bytes; it is not either Offload or Prefetch alone.",
+  kv_recompute: "KV Recompute reports events and Tokens recomputed because state was not retained; it is not data migration.",
+  kv_swap_transfer_time: "Swap Transfer Time is accumulated simulated time spent moving swapped KV data; events and bytes appear in Swap Summary.",
+  kv_prefetch_distance: "Prefetch Distance states whether and how far ahead KV-page prefetching is explicitly modeled; policy metadata alone is not an exact event.",
+  mtp_proposed_tokens: "MTP Proposed Tokens is the total candidates emitted by the proposer, not accepted, committed, or visible Tokens.",
+  mtp_accepted_tokens: "MTP Accepted Tokens is the total candidates passing verification and may still differ from committed count.",
+  mtp_committed_tokens: "MTP Committed Tokens is the total written to generated sequences; it is an internal MTP statistic, not report-wide visible output.",
+  mtp_rejected_tokens: "MTP Rejected Tokens is the candidate count failing verification and is unrelated to request rejection reasons.",
+  mtp_effective_rate: "MTP Effective Acceptance Rate is the reported accepted-to-proposed ratio; it is not the configured expected Acceptance Rate.",
+  goodput: "Goodput counts only effective output meeting the current qualification rule and differs from unfiltered raw throughput.",
+  goodput_request_rate: "Goodput Request Rate is qualified completed requests per second in req/s; it is not synthetic request count.",
+  goodput_token_rate: "Goodput Token Rate is qualified visible output Tokens per second in tok/s; it is not request rate.",
+  goodput_qualified_requests: "Qualified Requests is the total request count meeting Goodput criteria; it is not requests per second.",
+  category_time: "Category Time accumulates service time by task category alongside critical-path category time; neither must sum to Makespan.",
+  request_metrics: "Request Metrics shows per-request status, rejection reason, arrival, TTFT, TBT, TPOT, E2E, and actual visible Tokens.",
+  visible_tokens: "Visible Tokens is the actual output count exposed to the user and can be lower than configured maximum Output Tokens.",
+  makespan: "Makespan is the span from the earliest start to final completion, not the end-to-end latency of one request.",
+  energy: "Total Energy is an analytical accumulation over tasks and resources; without calibrated profiles it is not measured power or cost.",
+  rejection_reason: "Rejection Reason explains admission, capacity, SLO, or scheduling failure. An empty value only means the report did not state one.",
+  percentile: "p50 is the median and p95 is the value not exceeded by 95% of samples; empty samples produce no value.",
+  critical_path: "The critical path is the longest dependency path determining completion time; category totals need not equal it.",
+  bottleneck: "A bottleneck is the limiting resource or phase under the current analytical assumptions and changes with placement, load, capacity, and bandwidth.",
+  utilization: "Utilization is safely clamped to 0–100%; zero uses an idle texture so it is not confused with a missing graphic.",
+  evidence: "Evidence states whether a parameter comes from a standard, public vendor material, derivation, or experimental assumption.",
+  gpu: "A GPU is a parallel accelerator for tensor computation. Only declared capacity, peak rate, bandwidth, and ports are used; microarchitecture is not inferred.",
+  accelerator: "An Accelerator is any compute component eligible to host model operators, subject to its kind, capabilities, and placement constraints.",
+  hbm_stack: "An HBM Stack is a physical high-bandwidth-memory stack with independently accounted capacity and bandwidth; multiple stacks are not merged implicitly.",
+  host_memory: "Host Memory is volatile CPU-side memory that may be an explicit data source or offload target; it is not accelerator-local HBM.",
+  cxl_memory: "CXL Memory is expanded memory reached through an explicit CXL path, with capacity, bandwidth, and latency declared by its component and links.",
+  ssd: "An SSD is a flash block-storage backing tier. Loads and offloads are modeled only when an applicable PCIe or CXL path exists.",
+  high_io_ssd: "A High-I/O SSD declares greater storage I/O capability but remains constrained by capacity, protocol reachability, one-way bandwidth, and startup latency.",
+  fabric_switch: "A Fabric Switch forwards traffic through the topology. The current model expresses reachability without inventing switch buffers, congestion control, or packet queues.",
+  io_die: "An I/O Die hosts package ports or interconnect functions and does not execute model operators unless compute capability is explicitly declared.",
+  hardware_topology: "Hardware Topology is the component-port-link graph that determines which placement targets are reachable and which hops carry data.",
+  physical_link: "A Physical Link joins two concrete ports and declares protocol, direction, bandwidth, latency, and lanes; its canvas curve is visual only.",
+  link_latency: "Link Latency is the fixed propagation or protocol delay for traversing a connection, accounted separately from byte-over-bandwidth transfer time.",
+  lanes: "Lanes is the number of parallel protocol channels. It is one capability input and does not infer throughput when bandwidth evidence is missing.",
+  payload: "Payload describes the protocol or data semantic carried by a port or link; incompatible endpoint payloads cannot form a valid connection.",
+  bidirectional_link: "A Bidirectional Link permits both directions, while each direction still follows declared bandwidth, latency, and resource occupancy.",
+  operator: "An Operator is an executable semantic node with a stable ID, kind, parameters, and typed ports bound to tensors.",
+  tensor: "A Tensor is a produced, consumed, or resident value recording producer, consumers, DType, Shape, Layout, and optional logical bytes.",
+  tensor_layout: "Tensor Layout describes the logical or physical ordering of dimensions; a layout change must be represented by an explicit Transform.",
+  repeat_pattern: "A Repeat Pattern is a consecutive subgraph period with matching structure and port contracts; overview compression never turns its visual loop into an execution cycle.",
+  group_collapse: "Group Collapse hides repeated-group members and internal edges while retaining the name and boundary ports; authority is not removed.",
+  logits: "Logits are unnormalized vocabulary scores from the language-model head and feed the sampling or decoding policy for the next Token.",
+  softmax: "Softmax normalizes scores to weights summing to one; in the Attention derivation it follows scaling and masking of QK scores.",
+  expert_router: "An Expert Router selects MoE experts per Token and emits routing weights; Top-K, expert count, and placement affect communication and balance.",
+  layer_override: "A Layer Override changes the repeated template for one concrete layer instance; structural or contract-changing overrides must remain visible.",
+  sequence_mixer: "A Sequence Mixer is the mechanism handling dependencies between Tokens, such as full or linear attention, with distinct state and cost semantics.",
+  hidden_size: "Hidden Size is vector width H and contributes to activation shapes, weight matrices, capacity, and compute requirements.",
+  intermediate_size: "Intermediate Size is feed-forward width I and determines the dominant size of MLP or expert weights and intermediate activations.",
+  attention_heads: "Attention Heads is the Query-head count; together with KV Heads and Head Dim it determines Q/K/V shapes and GQA/MQA grouping.",
+  rank: "A Rank is a logical TP/PP/EP worker. Several Ranks may be colocated on one physical component while keeping distinct semantic identities.",
+  shard: "A Shard is the logical part of a tensor or weight assigned to a Rank, with shard index, count, axis, and physical bytes.",
+  fully_placed: "Fully Placed means every required operator target, tensor shard, and residency object has a valid hardware location, not merely a partial candidate.",
+  feasible_solution: "A Feasible Solution satisfies all current hard constraints but may not be globally optimal; a timeout can return one with evidence.",
+  infeasible_mapping: "Infeasible Mapping means capacity, reachability, parallelism, and capability constraints cannot be satisfied simultaneously.",
+  solver_time_limit: "Solver Time Limit bounds internal placement-planning wall-clock search. At expiry the state may be optimal, feasible, infeasible, or still unproven.",
+  lower_bound: "Lower Bound is the solver's theoretical bound on the optimal objective and combines with the incumbent objective to compute Optimality Gap.",
+  residency: "Residency identifies the storage class and physical component holding weights, KV, linear state, or tensor replicas.",
+  capacity_gate: "A Capacity Gate verifies before execution that available bytes cover weights, caches, states, shards, and required redundancy.",
+  topology_connectivity: "Topology Connectivity requires an explicit direction-, protocol-, and port-compatible path between endpoints that must communicate.",
+  mapping_diagnostic: "A Mapping Diagnostic records failure stage, stable error code, concrete cause, and remediation so input errors, conflicts, and solver states remain distinct.",
+  continuous_batching: "Continuous Batching dynamically admits, advances, or removes requests at each scheduling step instead of waiting for one static batch to finish.",
+  token_budget: "Token Budget is the total Tokens allowed in one scheduling step and is shared by Prefill chunks and Decode Tokens.",
+  request_deadline: "A request Deadline is its completion limit on the simulation timeline; empty means no hard deadline was declared.",
+  request_priority: "Request Priority guides relative service order while remaining constrained by capacity, Token budget, and starvation protection.",
+  starvation_protection: "Starvation Protection bounds how long or how often lower-priority requests can be postponed by higher-priority traffic.",
+  eos: "EOS is the End-of-Sequence marker. Reaching it can make actual visible Output Tokens lower than the declared maximum.",
+  request_admission: "Request Admission checks active-sequence, capacity, SLO, and resource conditions before scheduling and emits an explicit rejection reason on failure.",
+  queue_wait: "Queue Wait is the interval after arrival before a request receives execution resources and contributes to TTFT and end-to-end latency.",
+  offload: "Offload moves weights, KV, or state from primary active memory to a slower tier, freeing capacity at transfer and restore cost.",
+  prefetch: "Prefetch moves data back before predicted use and can hide waiting only when an explicit route and sufficient capacity exist.",
+  swap: "Swap is a runtime state eviction or restore across storage tiers and may occupy DMA, links, and endpoint read/write resources.",
+  page_size: "Page Size is the Token or byte granularity of paged objects such as KV Cache and affects fragmentation, movement count, and capacity rounding.",
+  context_length: "Context Length is the currently visible Token history and affects full-attention work, KV Cache size, and maximum-sequence limits.",
+  runtime_event: "A Runtime Event is a normalized record with start, end, resource, and semantic category; some Fidelity modes provide only representative or aggregate events.",
+  event_marker: "An Event Marker records a state change at one exact timestamp; a zero-duration marker is not sustained resource occupancy.",
+  time_cursor: "The Time Cursor is the simulated instant currently inspected by playback and changes highlighting, not the underlying events.",
+  resource_contention: "Resource Contention occurs when tasks request the same compute, storage, or link resource and is ordered by discrete-event scheduling.",
+  change_point: "A Change Point is when a series value changes; the backend merges equal intervals to compress charts without fabricating samples.",
+  route_hop: "A Route Hop is one source-port to target-port segment of a protocol path; hop bandwidths and latencies compose end-to-end transfer.",
+});
+const CONCEPT_HELP = Object.freeze(Object.fromEntries(Object.entries(CONCEPT_HELP_ZH).map(([key, zh]) => [
+  key,
+  Object.freeze({ "zh-CN": zh, en: CONCEPT_HELP_EN[key] || "This concept is documented by the current analytical interface." }),
+])));
+const CONCEPT_HELP_SECTION_LABELS = Object.freeze([
+  Object.freeze(["定义", "Definition"]),
+  Object.freeze(["在模拟器中的作用", "Role in the simulator"]),
+  Object.freeze(["可填 / 可选内容", "Accepted or displayed values"]),
+  Object.freeze(["单位、范围与特殊值", "Units, range, and special values"]),
+  Object.freeze(["影响", "Impact"]),
+  Object.freeze(["限制与示例", "Limits and example"]),
+]);
+const CONCEPT_HELP_DISPLAY_KEYS = new Set([
+  "bandwidth_utilization", "bottleneck", "busy_fraction", "compute_utilization", "critical_path", "e2e",
+  "energy", "makespan", "memory_residency", "optimality_gap", "percentile", "rejection_reason",
+  "storage_occupancy", "tbt", "throughput", "request_throughput", "token_throughput", "tpot", "ttft", "utilization", "simulation_results",
+  "runtime_summary", "kv_traffic_summary", "kv_movement_summary", "runtime_execution_mode", "total_batches", "peak_batch", "preemption_count",
+  "preemption_breakdown", "kv_peak_occupancy", "kv_max_live_tokens", "kv_swap_summary", "kv_capacity_pages",
+  "kv_prefill_read_traffic", "kv_prefill_write_traffic", "kv_decode_read_traffic", "kv_decode_append_traffic",
+  "kv_offload_total", "kv_prefetch_total", "kv_migration_total", "kv_recompute", "kv_swap_transfer_time",
+  "kv_prefetch_distance", "mtp_proposed_tokens", "mtp_accepted_tokens", "mtp_committed_tokens",
+  "mtp_rejected_tokens", "mtp_effective_rate", "goodput", "goodput_request_rate", "goodput_token_rate",
+  "goodput_qualified_requests", "category_time", "request_metrics", "visible_tokens", "analytical_report",
+]);
+const CONCEPT_HELP_PROFILE_KEYS = Object.freeze({
+  hardware: new Set([
+    "hbm", "hbf", "cim", "chiplet", "pcie", "cxl", "ucie", "nvlink", "roce", "sram", "dma",
+    "read_latency", "write_latency", "transfer_granularity", "dma_latency", "dma_bandwidth", "dma_energy",
+    "dma_resource", "outstanding_requests", "capacity", "peak_ops", "gemm_throughput",
+    "elementwise_throughput", "reduction_throughput", "bandwidth", "protocol", "bandwidth_semantics",
+    "cost_profile", "cache_hierarchy", "tensor_core", "occupancy", "attainable_efficiency", "pipeline", "noc",
+    "port_parameters", "component_preset", "architecture_preset", "evidence", "gpu", "accelerator", "hbm_stack",
+    "host_memory", "cxl_memory", "ssd", "high_io_ssd", "fabric_switch", "io_die", "hardware_topology",
+    "physical_link", "link_latency", "link_bandwidth", "lanes", "payload", "bidirectional_link", "cpu",
+  ]),
+  model: new Set([
+    "ir", "dag", "model_graph", "embedding", "residual_add", "dense_mlp", "linear_attention", "lm_head",
+    "typed_port", "tensor_shape", "explicit_transform", "layer_group", "dense", "moe", "attention", "qkv",
+    "gqa", "mqa", "rmsnorm", "rope", "kv_heads", "dtype", "quantization", "operator", "tensor",
+    "tensor_layout", "repeat_pattern", "group_collapse", "logits", "softmax", "expert_router", "layer_override",
+    "sequence_mixer", "hidden_size", "intermediate_size", "attention_heads", "vocabulary_size", "max_sequence_length",
+  ]),
+  mapping: new Set([
+    "rank_mapping", "rank_shard", "placement", "control_plane", "mapping_fingerprint", "mapping_stale", "objective",
+    "solver", "cp_sat", "tp", "pp", "ep", "kv_policy", "kv_residency_policy", "kv_cache",
+    "model_weights_backing", "weights_resident", "rank", "shard", "fully_placed", "feasible_solution",
+    "infeasible_mapping", "solver_time_limit", "lower_bound", "residency", "capacity_gate", "topology_connectivity",
+    "mapping_diagnostic", "operator_targets", "weight_tensor_shards", "parallel_strategy", "tp_degree", "pp_degree",
+    "ep_degree", "collective_algorithm", "colocated_ranks", "kv_cache_component", "kv_offload_component",
+    "backing_component", "model_weight_capacity",
+  ]),
+  workload: new Set([
+    "workload", "request", "synthetic_workload", "arrival_time", "prompt_tokens", "output_tokens", "random_seed",
+    "scheduler", "max_sequences", "batched_tokens", "preemption", "prefill", "decode", "mtp", "mtp_candidates",
+    "acceptance_rate", "proposal_cost", "slo", "continuous_batching", "token_budget", "request_deadline",
+    "request_priority", "starvation_protection", "eos", "request_admission", "queue_wait", "offload", "prefetch",
+    "swap", "page_size", "context_length", "explicit_requests", "request_generation", "synthetic_request_count",
+    "synthetic_prompt_tokens", "synthetic_output_tokens", "prefill_chunk_tokens", "mtp_enabled", "relative_time",
+  ]),
+  replay: new Set([
+    "trace", "des", "roofline", "playback_speed", "selected_event", "active_event", "simulation_time",
+    "event_interval", "logical_memory", "fidelity", "batch", "collective", "protocol_path", "component_timeseries",
+    "run_manifest", "runtime_event", "event_marker", "time_cursor", "resource_contention", "change_point", "route_hop", "rank",
+  ]),
+  metric: CONCEPT_HELP_DISPLAY_KEYS,
+});
+const CONCEPT_HELP_DETAIL_PROFILES = Object.freeze({
+  hardware: Object.freeze({
+    "zh-CN": Object.freeze([
+      "硬件与协议字段进入容量、算力和可达路径约束；模拟器只使用当前组件、端口、链路与证据中显式声明的值。",
+      "可编辑检查器接受组件能力、协议版本、lane、载荷、延迟与带宽；标准名和预设说明是只读，预设应用仍需确认或校验。",
+      "容量使用 B/KiB…PiB，带宽显示 MB/s、GB/s、TB/s，时延使用 ns，运算率使用 OPS/s；0、空值与 auto 仅在对应控件明确允许时有效。",
+      "修改能力或互连参数会使映射过期，并可改变容量门禁、路由、传输时间、瓶颈和能耗估算。",
+      "不建模未声明的缓存、队列或协议效率。例如端口峰值不会自动成为端到端应用吞吐。",
+    ]),
+    en: Object.freeze([
+      "Hardware and protocol fields feed capacity, compute, and reachability constraints; the simulator uses only values explicitly declared by current components, ports, links, and evidence.",
+      "Editable inspectors accept component capabilities, protocol version, lanes, payload, latency, and bandwidth. Standard names and preset notes are read-only, and applying a preset still requires confirmation or validation.",
+      "Capacity uses B/KiB through PiB, bandwidth uses MB/s, GB/s, or TB/s, latency uses ns, and compute rate uses OPS/s. Zero, empty, and auto are valid only where the control explicitly allows them.",
+      "Changing capability or interconnect values invalidates placement and can alter capacity gates, routes, transfer time, bottlenecks, and energy estimates.",
+      "Undeclared caches, queues, and protocol efficiency are not modeled. For example, port peak rate does not automatically become end-to-end application throughput.",
+    ]),
+  }),
+  model: Object.freeze({
+    "zh-CN": Object.freeze([
+      "模型结构字段形成唯一的 operator / typed-port / tensor 执行 DAG；总览和执行成本几何均由该图派生。",
+      "可编辑项包括算子类型与参数、端口方向、DType、Shape、Layout、重复次数和显式变换；检查器中的派生 Q/K/V 说明为只读。",
+      "重复次数与头数使用正整数，符号形状常用 B/T/H/I/V，DType 和 Layout 从受支持字符串中选择；空值不会触发静默推断。",
+      "语义修改会重新校验 DAG 与端口契约并使旧映射过期；折叠、坐标和缩放只改变视图。",
+      "界面不会自动插入 reshape/cast 来掩盖不兼容。例如 BF16 [B,T,H] 不能直接连接到维度不一致的输入端口。",
+    ]),
+    en: Object.freeze([
+      "Model-structure fields form the sole operator, typed-port, and tensor execution DAG; both the overview and execution cost geometry are derived from it.",
+      "Editable values include operator kind and parameters, port direction, DType, Shape, Layout, repeat count, and explicit transforms. Derived Q/K/V inspector explanations are read-only.",
+      "Repeat and head counts are positive integers, symbolic shapes commonly use B/T/H/I/V, and DType/Layout use supported strings. Empty values do not trigger silent inference.",
+      "Semantic edits revalidate the DAG and port contracts and invalidate old placement; collapse, coordinates, and zoom change only the view.",
+      "The editor never inserts reshape or cast to conceal incompatibility. For example, BF16 [B,T,H] cannot connect directly to a dimensionally incompatible input.",
+    ]),
+  }),
+  mapping: Object.freeze({
+    "zh-CN": Object.freeze([
+      "运行时放置根据模型算子、权重、KV 与逻辑 TP/PP/EP Rank 约束当前硬件；结果还受容量、路径与控制平面策略门禁。",
+      "用户可配置并行、驻留与策略输入；Effective Rank/Shard、Gap 和求解证据均为控制平面的只读结果。",
+      "并行度为大于等于 1 的整数，时间上限为 1–3600 s，Gap 通常为非负比值；auto、未指定与 NA 的含义以对应字段为准。",
+      "结构性映射输入变化会更新指纹并阻止使用旧结果；只有 fully placed、校验通过且未过期的映射可以运行。",
+      "超时可返回可行解但不等于全局最优。例如只有 optimality_proven=true 时才能把 Gap 对应的结果称为已证明最优。",
+    ]),
+    en: Object.freeze([
+      "Runtime placement constrains model operators, weights, KV, and logical TP/PP/EP Ranks to current hardware under capacity, path, and control-plane policy gates.",
+      "Users configure parallel, residency, and policy inputs. Effective Rank/Shard rows, Gap, and solver evidence are read-only control-plane results.",
+      "Parallel degrees are integers of at least 1, time limit is 1–3600 s, and Gap is normally a non-negative ratio. Auto, Unspecified, and NA retain field-specific meanings.",
+      "A structural placement-input change updates the fingerprint and blocks stale results; only fully placed, validated, current placement may run.",
+      "A timeout may return a feasible solution but not global optimality. Only optimality_proven=true, for example, proves the result represented by Gap optimal.",
+    ]),
+  }),
+  workload: Object.freeze({
+    "zh-CN": Object.freeze([
+      "负载字段驱动请求到达、Prefill/Decode、连续批处理、抢占、MTP 与 SLO 判定；普通负载修改不会改变部署映射指纹。",
+      "请求数、Token 数、优先级和调度预算使用整数；到达/截止时间、接受率、提议成本及开关按可见控件填写，显式请求优先于合成请求。",
+      "时间使用 ns，Token/序列数通常为非负整数，最大序列数和批处理预算至少为 1，接受率范围 0–1；空截止时间和空接受率表示未声明。",
+      "这些值会改变排队、批次组成、KV 压力、抢占次数、TTFT/TPOT、吞吐与拒绝结果。",
+      "分析调度器不是生产 SLA 保证。例如候选 Token 数增加时，若接受率下降，MTP 不一定提高有效吞吐。",
+    ]),
+    en: Object.freeze([
+      "Workload fields drive arrivals, Prefill/Decode, continuous batching, preemption, MTP, and SLO evaluation. Ordinary workload edits do not change the deployment fingerprint.",
+      "Request counts, Token counts, priority, and scheduling budgets use integers. Enter arrival/deadline time, acceptance rate, proposal cost, and switches through visible controls; explicit requests override synthetic generation.",
+      "Time uses ns, Token/sequence counts are normally non-negative integers, maximum sequences and batch budget are at least 1, and acceptance rate is 0–1. Empty deadline and acceptance rate mean unspecified.",
+      "These values change queueing, batch composition, KV pressure, preemption count, TTFT/TPOT, throughput, and rejection outcomes.",
+      "The analytical scheduler is not a production SLA guarantee. More candidate Tokens, for example, may not improve goodput when acceptance rate falls.",
+    ]),
+  }),
+  replay: Object.freeze({
+    "zh-CN": Object.freeze([
+      "回放字段把后端事件、组件、Rank、协议 hop 和逻辑内存区间投影到同一仿真时间轴，不改变原始报告。",
+      "事件与清单内容只读；用户可选择事件、筛选、翻页、缩放或控制播放，这些操作仅改变当前视图。",
+      "时间通常为 ns，事件使用半开区间 [start,end)，Fidelity 为 exact/representative/aggregate；缺失 hop 时序不会被补造。",
+      "视图选择影响高亮、叙事和可见曲线，但不会改变任务顺序、仿真时间或结果指标。",
+      "聚合批次不能解读为逐算子精确采样。例如 representative 路径只证明选中工作使用该路径，不证明每个 hop 的精确占用时刻。",
+    ]),
+    en: Object.freeze([
+      "Replay fields project backend events, components, Ranks, protocol hops, and logical-memory intervals onto one simulation timeline without changing the report.",
+      "Events and manifest data are read-only. Event selection, filters, paging, zoom, and playback controls change only the current view.",
+      "Time normally uses ns, events use half-open [start,end) intervals, and Fidelity is exact, representative, or aggregate. Missing hop timing is never fabricated.",
+      "View choices affect highlighting, narrative, and visible series, but not task order, simulation time, or result metrics.",
+      "An aggregate batch is not exact per-operator sampling. A representative route, for example, proves route usage but not exact occupancy time for every hop.",
+    ]),
+  }),
+  metric: Object.freeze({
+    "zh-CN": Object.freeze([
+      "后端从当前仿真报告产生该只读指标；界面保留原始口径、分位数、保真度和缺失状态。",
+      "用户不能直接填写结果值；筛选、比较或图表尺度只改变呈现，重新运行才会生成新指标。",
+      "单位随指标显示，常见为 ns、%、tok/s、req/s、B 或 pJ；NA 表示后端未提供可验证值，不能当作 0。",
+      "指标用于比较延迟、吞吐、容量、资源压力和能耗，应与负载、映射、样本数及 Fidelity 一起解释。",
+      "分析结果不是无条件适用的硬件实测。例如 p95 需要足够样本，未校准能耗也不能直接推导电费。",
+    ]),
+    en: Object.freeze([
+      "The backend produces this read-only metric from the current simulation report, and the UI preserves its scope, percentile, fidelity, and missing state.",
+      "Users cannot enter the result directly. Filters, comparison, and chart scale change presentation only; rerunning produces new metrics.",
+      "Units are printed with the metric and commonly include ns, %, tok/s, req/s, B, or pJ. NA means no verifiable backend value and is not zero.",
+      "Use the metric to compare latency, throughput, capacity, resource pressure, and energy together with workload, placement, sample count, and Fidelity.",
+      "An analytical result is not an unconditional hardware measurement. For example, p95 needs enough samples, and uncalibrated energy cannot directly determine cost.",
+    ]),
+  }),
+});
+const conceptHelp220Detail = (zh, en) => Object.freeze({
+  "zh-CN": Object.freeze(zh.split("｜")),
+  en: Object.freeze(en.split("|")),
+});
+const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
+  cpu: conceptHelp220Detail(
+    "来源是 hardware CPU 组件与 cost_profile_id 绑定的 profiles.components.cpu Profile。｜配置分类 GEMM/逐元素/归约吞吐、效率与 Cache 成本。｜吞吐和时间单位按字段标注。｜它可承载允许的算子并参与 roofline。｜CPU 不继承 GPU Profile，fabric/I/O die 也不会因此执行算子。",
+    "Source: hardware CPU components and their cost_profile_id-bound profiles.components.cpu entries.|Configure categorized GEMM, element-wise, reduction, efficiency, and cache costs.|Units are stated on each field.|It can host eligible operators and participate in roofline cost.|A CPU never inherits a GPU Profile, and fabric/I/O dies do not become executors.",
+  ),
+  link_bandwidth: conceptHelp220Detail(
+    "来源是当前物理链路的 bandwidth_gbps。｜填写指定方向的正有限传输上限。｜场景边界为 Gbps，界面按 MB/s–TB/s 显示。｜它限制经过该 hop 的传输时间与利用率。｜它不是组件介质带宽、端口峰值或应用吞吐。",
+    "Source: bandwidth_gbps on the current physical link.|Enter a positive finite transfer ceiling for the stated direction.|Scenario boundary: Gbps; UI: MB/s through TB/s.|It limits transfer time and utilization on that hop.|It is not media bandwidth, port peak, or application throughput.",
+  ),
+  operator_targets: conceptHelp220Detail(
+    "来源是内部控制平面的 operator rank mapping。｜显示算子组、逻辑 Rank 与目标执行组件，只读。｜数量按算子组和 Rank 计，不使用字节单位。｜映射或并行度变化会重建这些行。｜它不描述权重的字节分片；同一算子可有多个目标。",
+    "Source: the internal control plane's operator Rank mapping.|Displays operator group, logical Rank, and execution component; read-only.|Counts operator groups and Ranks, with no byte unit.|Placement or parallel-degree changes rebuild these rows.|It does not describe weight-byte shards; one operator may have several targets.",
+  ),
+  weight_tensor_shards: conceptHelp220Detail(
+    "来源是内部控制平面的 weight tensor shard ledger。｜显示张量键、Rank、组件与分片范围，只读。｜容量按 B/KiB…PiB 解释，Rank 为非负整数。｜分片变化会改变逐组件权重容量与可执行性。｜它不代表算子执行位置；复制权重与切分权重必须区分。",
+    "Source: the internal control plane's weight-tensor shard ledger.|Displays tensor key, Rank, component, and shard range; read-only.|Capacity uses B/KiB through PiB and Rank is a non-negative integer.|Shard changes alter per-component weight capacity and executability.|It is not operator execution placement; replicated and partitioned weights must remain distinct.",
+  ),
+  tp_degree: conceptHelp220Detail(
+    "来源是 placement.parallel.tp_degree，报告可镜像实际值。｜填写大于等于 1 的整数。｜单位是逻辑 TP Rank 数，无时间单位。｜增大它会增加张量分片与集合通信范围。｜TP Degree 不是 TPOT；例如 4 表示四路张量并行。",
+    "Source: placement.parallel.tp_degree, optionally mirrored by the report.|Enter an integer of at least 1.|Unit: logical TP Ranks, never time.|Increasing it expands tensor sharding and collective scope.|TP Degree is not TPOT; 4 means four-way Tensor Parallelism.",
+  ),
+  pp_degree: conceptHelp220Detail(
+    "来源是 placement.parallel.pp_degree，报告可镜像实际值。｜填写大于等于 1 的整数。｜单位是流水线阶段数。｜修改它会清空旧 layer_to_stage 并要求重新映射。｜它不表示微批次数；2 表示两个流水线阶段。",
+    "Source: placement.parallel.pp_degree, optionally mirrored by the report.|Enter an integer of at least 1.|Unit: pipeline stages.|Changing it clears old layer_to_stage data and requires remapping.|It is not microbatch count; 2 means two pipeline stages.",
+  ),
+  ep_degree: conceptHelp220Detail(
+    "来源是 placement.parallel.ep_degree，报告可镜像实际值。｜填写大于等于 1 的整数。｜单位是专家并行 Rank 数。｜增大它会重分布 MoE 专家并可能增加 All-to-All。｜Dense 层不会因 EP 增大而自动分片。",
+    "Source: placement.parallel.ep_degree, optionally mirrored by the report.|Enter an integer of at least 1.|Unit: Expert Parallel Ranks.|Increasing it redistributes MoE experts and may add All-to-All traffic.|Dense layers are not automatically sharded by a larger EP degree.",
+  ),
+  parallel_strategy: conceptHelp220Detail(
+    "来源是 placement.parallel 及其兼容镜像。｜配置 TP/PP/EP、集合通信算法与同址开关。｜Degree 均为大于等于 1 的整数。｜任何结构性修改都会清理不兼容 Rank 映射。｜策略不自动增加 GPU、HBM 或互连。",
+    "Source: placement.parallel.|Configures TP/PP/EP, collective algorithm, and colocation.|Every degree is an integer of at least 1.|Structural edits clear incompatible Rank mappings.|The strategy never adds GPUs, HBM, or links automatically.",
+  ),
+  collective_algorithm: conceptHelp220Detail(
+    "来源是 placement.parallel.collective_algorithm。｜选择 auto、ring 或 tree。｜值是枚举，无数值单位。｜它改变集合通信的组织与潜在路径成本。｜auto 不保证特定算法，也不改变 Degree。",
+    "Source: placement.parallel.collective_algorithm.|Select auto, ring, or tree.|Enumerated value with no numeric unit.|It changes collective organization and potential route cost.|Auto does not promise one algorithm and never changes any Degree.",
+  ),
+  colocated_ranks: conceptHelp220Detail(
+    "来源是 placement metadata 的同址开关。｜布尔选择是否允许多个逻辑 Rank 共享合格 GPU。｜值为开/关，无数值单位。｜开启可在 GPU 数少于 world size 时生成完整逻辑映射。｜它不增加物理算力、容量或带宽。",
+    "Source: the placement metadata colocation switch.|Boolean choice allowing several logical Ranks on one eligible GPU.|On/off value with no numeric unit.|Enabling it can build a complete logical mapping when GPUs are fewer than world size.|It adds no physical compute, capacity, or bandwidth.",
+  ),
+  kv_cache_component: conceptHelp220Detail(
+    "来源是 placement.kv_policy.cache_component。｜选择活动 KV Cache 首选组件或未指定。｜值是组件 ID。｜它决定容量门禁、读写位置与迁移起点。｜目标必须可达且适合 KV 写入，HBF 不可被静默选作可写缓存。",
+    "Source: placement.kv_policy.cache_component.|Select the preferred active KV Cache component or Unspecified.|Value: component ID.|It determines capacity gating, read/write location, and migration source.|The target must be reachable and writable; HBF is never silently treated as writable KV cache.",
+  ),
+  kv_offload_component: conceptHelp220Detail(
+    "来源是 placement.kv_policy.offload_component。｜选择卸载目标或不卸载。｜值是组件 ID 或显式空值。｜它决定内存压力下的 KV 外移路径和成本。｜不可达、不可写或容量不足的目标会校验失败。",
+    "Source: placement.kv_policy.offload_component.|Select an offload target or No Offload.|Value: component ID or explicit empty value.|It determines KV eviction route and cost under memory pressure.|Unreachable, unwritable, or undersized targets fail validation.",
+  ),
+  page_size: conceptHelp220Detail(
+    "来源是 placement.kv_policy.tokens_per_page。｜填写每个 KV 页容纳的正整数 Token 数。｜单位是 Token/page，最小值 1。｜它会改变页数、内部碎片与换入换出粒度。｜单页大小不是报告中的 Capacity Pages；例如 16 表示每页 16 Token。",
+    "Source: placement.kv_policy.tokens_per_page.|Enter the positive Token count held by one KV page.|Unit: Tokens/page; minimum 1.|It changes page count, internal fragmentation, and swap granularity.|Page size is not reported Capacity Pages; 16 means 16 Tokens per page.",
+  ),
+  backing_component: conceptHelp220Detail(
+    "来源是 placement.metadata.control_plane.decision.rank_weight_shards 的 storage_component_id。｜只读显示内部控制平面为 cold_stream_per_use 权重物化的来源组件；尚未物化时显示未指定。｜值是组件 ID，无数值单位。｜它来自当前模型、硬件与并行约束的运行时决策，不是客户端 placement 输入。｜多个 Rank 可以共享同一后备组件，但每条分片仍单独记录容量与来源。",
+    "Source: storage_component_id in placement.metadata.control_plane.decision.rank_weight_shards.|Read-only view of the source component materialized by the internal control plane for cold_stream_per_use weights; an unmaterialized decision is shown as Unspecified.|Value: component ID, with no numeric unit.|It is a runtime decision from the current model, hardware, and parallel constraints, not a client placement input.|Several Ranks may share one backing component, but each shard still records its own capacity and source.",
+  ),
+  model_weight_capacity: conceptHelp220Detail(
+    "来源是 placement.metadata.control_plane.decision.rank_weight_shards 的 physical_bytes / logical_bytes。｜只读显示内部控制平面为 Rank 分片物化的容量证据。｜单位支持 B/KiB…PiB。｜它用于解释当前 cold 权重分片容量，不可直接写入场景，也不等于活动 HBM/CIM 中的权重占用。｜容量证据不会反向创建客户端放置字段。",
+    "Source: physical_bytes / logical_bytes in placement.metadata.control_plane.decision.rank_weight_shards.|Read-only capacity evidence materialized for Rank shards by the internal control plane.|Units: B/KiB through PiB.|It explains current cold-weight shard capacity, cannot be written directly to the scenario, and is not weight occupancy in active HBM/CIM.|Capacity evidence never writes back into client-authored placement fields.",
+  ),
+  explicit_requests: conceptHelp220Detail(
+    "来源是 workload.requests 数组。｜逐行填写请求 ID、到达、Token、优先级与截止时间。｜时间为 ns，Token 为非负整数。｜只要数组非空，它就覆盖合成请求生成。｜删除全部显式行后才会回退到有效 synthetic workload。",
+    "Source: the workload.requests array.|Enter request ID, arrival, Tokens, priority, and deadline per row.|Time uses ns; Token counts are non-negative integers.|Any non-empty array overrides synthetic generation.|Only deleting every explicit row permits fallback to a valid synthetic workload.",
+  ),
+  request_generation: conceptHelp220Detail(
+    "来源是 Workload 页的合成生成配置区。｜配置名称、合成数量、默认 Token 长度与随机种子。｜计数为非负整数，种子为整数。｜它决定没有显式 requests 时生成何种请求集。｜它是配置入口，不是 Synthetic Request Count 本身。",
+    "Source: the Workload page's synthetic-generation section.|Configures name, synthetic count, default Token lengths, and seed.|Counts are non-negative integers and the seed is integral.|It determines the request set only when explicit requests are absent.|It is a configuration section, not Synthetic Request Count itself.",
+  ),
+  synthetic_request_count: conceptHelp220Detail(
+    "来源是 workload.request_count。｜填写要生成的请求条目数。｜单位是 requests，取非负整数。｜它线性影响合成负载规模与样本数。｜它不是批次数、达标请求数或 Requests/s。",
+    "Source: workload.request_count.|Enter the number of request rows to generate.|Unit: requests; non-negative integer.|It scales synthetic workload size and sample count.|It is not batch count, qualified requests, or Requests/s.",
+  ),
+  synthetic_prompt_tokens: conceptHelp220Detail(
+    "来源是 workload.prompt_tokens。｜填写每个合成请求的默认 Prompt 长度。｜单位是 Token，取非负整数。｜它影响 Prefill 工作与初始 KV 容量。｜显式请求的 Prompt Tokens 不受此默认值覆盖。",
+    "Source: workload.prompt_tokens.|Enter the default Prompt length of each synthetic request.|Unit: Tokens; non-negative integer.|It affects Prefill work and initial KV capacity.|It never overwrites Prompt Tokens on explicit requests.",
+  ),
+  synthetic_output_tokens: conceptHelp220Detail(
+    "来源是 workload.output_tokens。｜填写每个合成请求的最大输出长度。｜单位是 Token，取非负整数。｜它影响 Decode 上限与预期完成时间。｜它不是最终 Visible Tokens、MTP Committed 或 Token/s。",
+    "Source: workload.output_tokens.|Enter the maximum output length of each synthetic request.|Unit: Tokens; non-negative integer.|It affects the Decode limit and expected completion time.|It is not final Visible Tokens, MTP Committed Tokens, or Tokens/s.",
+  ),
+  relative_time: conceptHelp220Detail(
+    "来源是 Arrival ns 的前端格式化结果。｜只读显示友好时间，不可单独编辑。｜自动选择 ns/µs/ms/s 等显示单位。｜它只改善可读性，不改变调度顺序。｜它不是第二个到达字段；修改 Arrival 后会同步刷新。",
+    "Source: frontend formatting of Arrival ns.|Read-only human-friendly display; not independently editable.|Display automatically selects ns, µs, ms, or s.|It improves readability without changing scheduling order.|It is not a second arrival field and refreshes when Arrival changes.",
+  ),
+  prefill_chunk_tokens: conceptHelp220Detail(
+    "来源是 workload.scheduler.prefill_chunk_tokens。｜填写连续调度中单个 Prefill chunk 的正整数 Token 上限。｜单位是 Token/chunk，最小值 1。｜较小值可增加交错机会但也增加调度步。｜它受 Max Batched Tokens 限制，但两者不可共用定义。",
+    "Source: workload.scheduler.prefill_chunk_tokens.|Enter the positive Token limit of one Prefill chunk under continuous scheduling.|Unit: Tokens/chunk; minimum 1.|Smaller chunks can improve interleaving but add scheduling steps.|It is constrained by Max Batched Tokens but is not the same field.",
+  ),
+  mtp_enabled: conceptHelp220Detail(
+    "来源是 workload.mtp 是否为 null。｜开关控制是否启用候选提议与接受模型。｜值是布尔状态。｜开启会产生额外提议成本及 MTP 统计。｜关闭时 Candidate/Acceptance/Proposal 控件禁用，不能伪造 MTP 结果。",
+    "Source: whether workload.mtp is null.|Toggle candidate proposal and acceptance modeling.|Boolean state.|Enabling it adds proposal cost and MTP statistics.|When disabled, Candidate/Acceptance/Proposal controls are disabled and MTP results cannot be fabricated.",
+  ),
+  simulation_results: conceptHelp220Detail(
+    "来源是当前完成的仿真 report。｜只读汇总清单、指标、运行时、时序和请求明细。｜各卡片保留自己的 ns、%、rate、bytes 或 pJ 单位。｜它支持比较与诊断但不修改场景。｜结果页标题不是 Fidelity；精确度由每项证据另行声明。",
+    "Source: the current completed simulation report.|Read-only manifest, metrics, runtime, series, and request detail.|Each card retains its own ns, percent, rate, byte, or pJ unit.|It supports comparison and diagnosis without editing the scenario.|The page title is not Fidelity; evidence quality is declared per result.",
+  ),
+  runtime_summary: conceptHelp220Detail(
+    "来源是 report 的 parallel、scheduler、kv_cache、mtp 与 goodput 对象。｜只读分组展示运行时统计。｜每项保留 events、Tokens、bytes、ns 或 rate 单位。｜它把配置结果与实际调度行为并列。｜缺失字段显示 NA/—，不会由相邻指标推断。",
+    "Source: report parallel, scheduler, kv_cache, mtp, and goodput objects.|Read-only grouped runtime statistics.|Each item retains events, Tokens, bytes, ns, or rate units.|It juxtaposes configuration outcomes with actual scheduling behavior.|Missing fields show NA or — and are never inferred from neighbors.",
+  ),
+  kv_traffic_summary: conceptHelp220Detail(
+    "来源是 report.kv_cache 的 Prefill/Decode logical 与 physical byte 字段。｜只读汇总四类读写流量卡。｜所有流量使用 bytes 并按 B/KiB…PiB 格式化。｜它揭示阶段读写与页粒度放大。｜该组不包含 Offload、Prefetch、Migration 或 Recompute。",
+    "Source: Prefill/Decode logical and physical byte fields in report.kv_cache.|Read-only summary of four read/write traffic cards.|Every traffic value uses bytes formatted as B/KiB through PiB.|It exposes phase I/O and page-granularity amplification.|This group excludes Offload, Prefetch, Migration, and Recompute.",
+  ),
+  kv_movement_summary: conceptHelp220Detail(
+    "来源是 report.kv_cache 的迁移、重计算、交换时间与预取建模字段。｜只读汇总六类 KV 移动与限制统计。｜成员分别使用 events、bytes、Tokens、ns 或布尔状态。｜它揭示容量压力的缓解方式与代价。｜该组不重复 Prefill/Decode 逻辑物理读写流量。",
+    "Source: migration, recomputation, swap-time, and prefetch-modeling fields in report.kv_cache.|Read-only summary of six KV movement and constraint statistics.|Members use events, bytes, Tokens, ns, or Boolean state as appropriate.|It exposes capacity-pressure mitigation and cost.|This group does not repeat logical/physical Prefill or Decode traffic.",
+  ),
+  runtime_execution_mode: conceptHelp220Detail(
+    "来源是 report.execution_mode 或调度器模式回退。｜只读显示 Static 或 Continuous Batching。｜值是枚举，无数值单位。｜模式决定是否形成连续调度统计。｜它不表示 TP/PP/EP Degree。",
+    "Source: report.execution_mode with scheduler-mode fallback.|Read-only Static or Continuous Batching display.|Enumerated value with no numeric unit.|The mode determines whether continuous-scheduling statistics exist.|It does not represent TP, PP, or EP Degree.",
+  ),
+  total_batches: conceptHelp220Detail(
+    "来源是 report.scheduler.total_batches。｜只读统计整次运行形成的批次总数。｜单位是 batches，取非负整数或 NA。｜它反映调度步数量并影响摊销解释。｜它不是 Peak Batch 的序列数或 Token 数。",
+    "Source: report.scheduler.total_batches.|Read-only total batches formed over the entire run.|Unit: batches; non-negative integer or NA.|It indicates scheduling-step count and amortization context.|It is not the sequence or Token size of Peak Batch.",
+  ),
+  peak_batch: conceptHelp220Detail(
+    "来源是 scheduler.max_batch_sequences 与 max_batch_tokens。｜只读成对显示峰值 seq / tok。｜单位分别是 sequences 与 Tokens。｜它揭示单批容量压力与并行度。｜它不是整次运行的 Batches 总数。",
+    "Source: scheduler.max_batch_sequences and max_batch_tokens.|Read-only paired peak seq/tok display.|Units: sequences and Tokens respectively.|It exposes maximum single-batch capacity pressure and parallelism.|It is not the run-wide Batches count.",
+  ),
+  preemption_count: conceptHelp220Detail(
+    "来源是 report.scheduler.preemptions。｜只读显示全部抢占事件数。｜单位是 events，取非负整数或 NA。｜较高值可能增加排队与 KV 移动成本。｜它不等于请求拒绝数，也不说明触发类型。",
+    "Source: report.scheduler.preemptions.|Read-only count of all preemption events.|Unit: events; non-negative integer or NA.|A higher count can add queueing and KV movement cost.|It is not rejected requests and does not identify trigger type.",
+  ),
+  preemption_breakdown: conceptHelp220Detail(
+    "来源是 priority_preemptions 与 memory_preemptions。｜只读成对显示优先级和内存触发次数。｜两项单位均是 events。｜它帮助区分策略竞争与容量压力。｜两项缺失时为 NA，不能由总抢占数猜测。",
+    "Source: priority_preemptions and memory_preemptions.|Read-only paired priority and memory trigger counts.|Both values use events.|It separates policy competition from capacity pressure.|When absent, values are NA and must not be inferred from total preemptions.",
+  ),
+  kv_peak_occupancy: conceptHelp220Detail(
+    "来源是 report.kv_cache.peak_used_bytes。｜只读显示运行期 KV 使用字节峰值。｜单位按 B/KiB…PiB 格式化。｜它用于判断活动缓存容量余量。｜它不是硬件 Capacity，也不是 Capacity Pages。",
+    "Source: report.kv_cache.peak_used_bytes.|Read-only maximum KV bytes used during the run.|Formatted in B/KiB through PiB.|It indicates active-cache capacity headroom.|It is neither hardware Capacity nor Capacity Pages.",
+  ),
+  kv_max_live_tokens: conceptHelp220Detail(
+    "来源是 max_live_tokens_per_request。｜只读显示任一请求的最大同时存活 Token。｜单位是 Tokens/request。｜它连接请求行为与 KV 峰值压力。｜它不是配置的 Context Length 上限。",
+    "Source: max_live_tokens_per_request.|Read-only maximum simultaneously live Tokens for any request.|Unit: Tokens/request.|It connects request behavior to KV peak pressure.|It is not the configured Context Length limit.",
+  ),
+  kv_swap_summary: conceptHelp220Detail(
+    "来源是 kv.swap_events 与 kv.swap_bytes。｜只读合并事件数和搬移字节数。｜单位是 events 与 B/KiB…PiB。｜它量化交换频率与流量。｜它不包含 Swap Transfer 的累计时间。",
+    "Source: kv.swap_events and kv.swap_bytes.|Read-only combined event and moved-byte display.|Units: events and B/KiB through PiB.|It quantifies swap frequency and traffic.|It excludes accumulated Swap Transfer Time.",
+  ),
+  kv_capacity_pages: conceptHelp220Detail(
+    "来源是 report.kv_cache.capacity_pages。｜只读显示活动 KV 缓存可容纳的总页数。｜单位是 pages，取非负整数或 NA。｜它限制并发驻留并触发 offload/recompute。｜它不是 Tokens per Page；两者相乘才参与总量解释。",
+    "Source: report.kv_cache.capacity_pages.|Read-only total pages held by active KV cache.|Unit: pages; non-negative integer or NA.|It limits concurrent residency and can trigger offload or recompute.|It is not Tokens per Page; both are needed to interpret total capacity.",
+  ),
+  kv_prefill_read_traffic: conceptHelp220Detail(
+    "来源是 logical/physical_prefill_read_bytes。｜只读成对显示 Prefill 逻辑与物理读取。｜单位是字节并按二进制容量格式化。｜逻辑物理差值揭示页粒度放大。｜它不包含 Prefill 写入或 Decode 流量。",
+    "Source: logical/physical_prefill_read_bytes.|Read-only logical and physical Prefill reads.|Unit: bytes formatted in binary capacity units.|The logical/physical gap exposes page-granularity amplification.|It excludes Prefill writes and all Decode traffic.",
+  ),
+  kv_prefill_write_traffic: conceptHelp220Detail(
+    "来源是 logical/physical_prefill_write_bytes。｜只读成对显示 Prefill 逻辑与物理写入。｜单位是字节并按二进制容量格式化。｜它反映初始 KV 建立的写流量。｜它不包含 Prefill 读取或 Decode Append。",
+    "Source: logical/physical_prefill_write_bytes.|Read-only logical and physical Prefill writes.|Unit: bytes formatted in binary capacity units.|It represents write traffic for initial KV construction.|It excludes Prefill reads and Decode Append.",
+  ),
+  kv_decode_read_traffic: conceptHelp220Detail(
+    "来源是 logical/physical_decode_read_bytes。｜只读成对显示 Decode KV 读取。｜单位是字节并按二进制容量格式化。｜它通常随存活上下文增长并影响 TPOT。｜它不包含 Decode Append 写入。",
+    "Source: logical/physical_decode_read_bytes.|Read-only logical and physical Decode KV reads.|Unit: bytes formatted in binary capacity units.|It usually grows with live context and can affect TPOT.|It excludes Decode Append writes.",
+  ),
+  kv_decode_append_traffic: conceptHelp220Detail(
+    "来源是 logical/physical_decode_append_bytes。｜只读成对显示 Decode 新 KV 追加写入。｜单位是字节并按二进制容量格式化。｜它推动 KV 占用增长与写带宽。｜它不是 Decode Read，也不是已提交 Token 计数。",
+    "Source: logical/physical_decode_append_bytes.|Read-only logical and physical bytes appended by Decode.|Unit: bytes formatted in binary capacity units.|It grows KV occupancy and write-bandwidth demand.|It is neither Decode Read nor committed-Token count.",
+  ),
+  kv_offload_total: conceptHelp220Detail(
+    "来源是 offload_events 与 offload_bytes。｜只读合并移出活动缓存的次数和字节。｜单位是 events 与 bytes。｜它反映容量压力造成的外移成本。｜不包含反向 Prefetch，也不等于 Migration Total。",
+    "Source: offload_events and offload_bytes.|Read-only count and bytes moved out of active cache.|Units: events and bytes.|It represents outward movement cost under capacity pressure.|It excludes reverse Prefetch and is not Migration Total.",
+  ),
+  kv_prefetch_total: conceptHelp220Detail(
+    "来源是 prefetch_events 与 prefetch_bytes。｜只读合并调回活动缓存的次数和字节。｜单位是 events 与 bytes。｜及时预取可减少阻塞但占用链路。｜它不是 Prefetch Distance 策略元数据。",
+    "Source: prefetch_events and prefetch_bytes.|Read-only count and bytes brought back to active cache.|Units: events and bytes.|Timely prefetch can reduce stalls while consuming links.|It is not Prefetch Distance policy metadata.",
+  ),
+  kv_migration_total: conceptHelp220Detail(
+    "来源是 migration_events 与 migration_bytes。｜只读汇总全部 KV 页迁移。｜单位是 events 与 bytes。｜它用于评价整体迁移放大与链路压力。｜Offload/Prefetch 是方向子项，不能与总计共用解释。",
+    "Source: migration_events and migration_bytes.|Read-only total of all KV page migrations.|Units: events and bytes.|It evaluates aggregate movement amplification and link pressure.|Offload and Prefetch are directional subsets and need separate interpretation.",
+  ),
+  kv_recompute: conceptHelp220Detail(
+    "来源是 recompute_events 与 recompute_tokens。｜只读合并重执行次数与 Token 数。｜单位是 events 与 Tokens。｜它以额外计算换取较低 KV 驻留。｜它不是数据迁移，不能与 Migration Bytes 相加。",
+    "Source: recompute_events and recompute_tokens.|Read-only recomputation events and Tokens.|Units: events and Tokens.|It trades extra compute for lower KV residency.|It is not data migration and cannot be added to Migration Bytes.",
+  ),
+  kv_swap_transfer_time: conceptHelp220Detail(
+    "来源是 swap_transfer_time_ns。｜只读显示全部 KV 交换搬移累计时间。｜原始单位 ns，界面自适应格式化。｜它直接贡献延迟和关键路径候选。｜它不重复表示 swap 事件数或字节数。",
+    "Source: swap_transfer_time_ns.|Read-only accumulated KV swap movement time.|Raw unit: ns, adaptively formatted.|It contributes directly to latency and potential critical path.|It does not repeat swap event or byte counts.",
+  ),
+  kv_prefetch_distance: conceptHelp220Detail(
+    "来源是 prefetch_distance_modeled。｜只读显示预取距离是否被显式建模。｜值是布尔建模状态，无数值单位。｜显式建模会影响预取事件时机。｜未显式建模表示仅有策略元数据，不能伪造距离值。",
+    "Source: prefetch_distance_modeled.|Read-only indication of explicit distance modeling.|Boolean modeling state with no numeric unit.|Explicit modeling affects prefetch event timing.|False means policy metadata only; no numeric distance may be fabricated.",
+  ),
+  mtp_proposed_tokens: conceptHelp220Detail(
+    "来源是 summary.mtp.proposed_tokens。｜只读统计提议器产生的全部候选。｜单位是 Tokens。｜它是接受率分母并体现提议工作量。｜不等于 Accepted、Committed 或 Visible Tokens。",
+    "Source: summary.mtp.proposed_tokens.|Read-only total candidates emitted by the proposer.|Unit: Tokens.|It is the acceptance-rate denominator and proposal workload.|It is not Accepted, Committed, or Visible Tokens.",
+  ),
+  mtp_accepted_tokens: conceptHelp220Detail(
+    "来源是 summary.mtp.accepted_tokens。｜只读统计通过验证的候选。｜单位是 Tokens。｜它决定有效接受率并影响 MTP 收益。｜通过验证仍不保证全部最终提交。",
+    "Source: summary.mtp.accepted_tokens.|Read-only candidates passing verification.|Unit: Tokens.|It determines effective acceptance and MTP benefit.|Passing verification still does not guarantee every Token is committed.",
+  ),
+  mtp_committed_tokens: conceptHelp220Detail(
+    "来源是 summary.mtp.committed_tokens。｜只读统计实际提交到序列的 MTP Token。｜单位是 Tokens。｜它最接近 MTP 对有效输出的贡献。｜它仍不是报告全部 Visible Tokens。",
+    "Source: summary.mtp.committed_tokens.|Read-only MTP Tokens actually committed to sequences.|Unit: Tokens.|It most closely represents MTP's effective-output contribution.|It is still not report-wide Visible Tokens.",
+  ),
+  mtp_rejected_tokens: conceptHelp220Detail(
+    "来源是 summary.mtp.rejected_tokens。｜只读统计验证失败的候选 Token。｜单位是 Tokens。｜较高值会放大无效提议成本。｜它与整个请求的 Rejection Reason 无关。",
+    "Source: summary.mtp.rejected_tokens.|Read-only candidate Tokens failing verification.|Unit: Tokens.|A high value amplifies wasted proposal cost.|It is unrelated to whole-request Rejection Reason.",
+  ),
+  mtp_effective_rate: conceptHelp220Detail(
+    "来源是 summary.mtp.effective_acceptance_rate。｜只读显示本次运行实得接受比例。｜范围通常 0–1，界面显示百分比或 NA。｜它决定提议 Token 转化效率。｜它不是输入配置的期望 Acceptance Rate。",
+    "Source: summary.mtp.effective_acceptance_rate.|Read-only realized acceptance ratio for this run.|Normally 0–1, displayed as percent or NA.|It determines candidate conversion efficiency.|It is not the configured expected Acceptance Rate.",
+  ),
+  goodput_request_rate: conceptHelp220Detail(
+    "来源是 summary.goodput.requests_per_s。｜只读显示达标完成请求速率。｜单位 req/s，可缩放为 kreq/s。｜它衡量服务目标下的有效请求能力。｜它不是 Synthetic Request Count 或 Qualified 总数。",
+    "Source: summary.goodput.requests_per_s.|Read-only qualified completed-request rate.|Unit: req/s, optionally scaled to kreq/s.|It measures effective request capacity under qualification rules.|It is not Synthetic Request Count or the Qualified total.",
+  ),
+  goodput_token_rate: conceptHelp220Detail(
+    "来源是 summary.goodput.visible_output_tokens_per_s。｜只读显示达标可见输出 Token 速率。｜单位 tok/s，可缩放为 ktok/s。｜它衡量有效生成能力。｜它不是 Requests/s、配置 Output Tokens 或 MTP Proposed。",
+    "Source: summary.goodput.visible_output_tokens_per_s.|Read-only qualified visible-output Token rate.|Unit: tok/s, optionally scaled to ktok/s.|It measures effective generation capacity.|It is not Requests/s, configured Output Tokens, or MTP Proposed Tokens.",
+  ),
+  goodput_qualified_requests: conceptHelp220Detail(
+    "来源是 summary.goodput.qualified_requests。｜只读显示满足 Goodput 条件的请求总数。｜单位是 requests。｜它提供速率分子的样本规模语境。｜它不是每秒速率，也不是合成生成数量。",
+    "Source: summary.goodput.qualified_requests.|Read-only total requests satisfying Goodput criteria.|Unit: requests.|It supplies sample-size context for the rate numerator.|It is neither a per-second rate nor synthetic generation count.",
+  ),
+  goodput: conceptHelp220Detail(
+    "来源是 summary.goodput 资格统计。｜只读分组展示达标请求率、Token 率与达标总数。｜速率分别使用 req/s 与 tok/s，总数使用 requests。｜它衡量满足当前资格口径的有效产出。｜它不是未筛选 Throughput，三项也不能共用一个 canonical key。",
+    "Source: qualification statistics in summary.goodput.|Read-only qualified request rate, Token rate, and qualified total.|Rates use req/s and tok/s; total uses requests.|It measures effective output meeting the current qualification rule.|It is not unfiltered Throughput, and its three members need separate canonical keys.",
+  ),
+  request_throughput: conceptHelp220Detail(
+    "来源是 summary.throughput.requests_per_s。｜只读显示全部完成请求的速率。｜单位 req/s，可自动缩放。｜它用于比较总体请求服务能力。｜它不应用 Goodput 资格筛选，也不是 Synthetic Request Count。",
+    "Source: summary.throughput.requests_per_s.|Read-only rate of all completed requests.|Unit: req/s with adaptive scaling.|It compares overall request-serving capacity.|It applies no Goodput qualification and is not Synthetic Request Count.",
+  ),
+  token_throughput: conceptHelp220Detail(
+    "来源是 summary.throughput.visible_output_tokens_per_s。｜只读显示全部可见输出 Token 的速率。｜单位 tok/s，可自动缩放。｜它用于比较总体生成能力。｜它不是 Request Throughput，也不应用 Goodput 资格筛选。",
+    "Source: summary.throughput.visible_output_tokens_per_s.|Read-only rate of all visible output Tokens.|Unit: tok/s with adaptive scaling.|It compares overall generation capacity.|It is not Request Throughput and applies no Goodput qualification.",
+  ),
+  tpot: conceptHelp220Detail(
+    "来源是每请求 tpot_ns 并在结果卡计算分位值。｜只读显示输出阶段每 Token 平均时间。｜原始单位 ns/Token，界面格式化持续时间。｜较低 TPOT 通常表示更快稳态 Decode。｜它不是 TP Degree，也不同于相邻 Token 的 TBT 分位数。",
+    "Source: per-request tpot_ns, with result-card percentile aggregation.|Read-only mean output-stage time per Token.|Raw unit: ns/Token, formatted as duration.|Lower TPOT usually means faster steady-state Decode.|It is not TP Degree and differs from adjacent-Token TBT percentiles.",
+  ),
+  category_time: conceptHelp220Detail(
+    "来源是 category_time_ns 与 critical_path_category_ns。｜只读并列总类别时间和关键路径类别时间。｜原始单位 ns，界面格式化持续时间。｜它帮助定位阶段成本与关键路径贡献。｜类别总计可能重叠，不能要求相加等于 Makespan。",
+    "Source: category_time_ns and critical_path_category_ns.|Read-only total and critical-path time by category.|Raw unit: ns, formatted as duration.|It locates phase cost and critical-path contribution.|Category totals may overlap and need not sum to Makespan.",
+  ),
+  request_metrics: conceptHelp220Detail(
+    "来源是 report.requests。｜逐请求只读显示状态、拒绝、Arrival、TTFT、TBT、TPOT、E2E 和 Visible Tokens。｜延迟为 ns，Token 为计数。｜它揭示汇总分位数背后的离散样本。｜缺失请求行不会由 summary 反推。",
+    "Source: report.requests.|Read-only status, rejection, Arrival, TTFT, TBT, TPOT, E2E, and Visible Tokens per request.|Latency uses ns and Tokens are counts.|It exposes discrete samples behind aggregate percentiles.|Missing request rows are never reconstructed from summary values.",
+  ),
+  visible_tokens: conceptHelp220Detail(
+    "来源是每请求 visible_output_tokens。｜只读显示最终对用户可见的实际输出数。｜单位是 Tokens，取非负整数或 NA。｜它参与 Token Throughput 与 Goodput 计算。｜它不是配置的最大 Output Tokens，也不是 MTP Proposed。",
+    "Source: per-request visible_output_tokens.|Read-only actual output exposed to the user.|Unit: Tokens; non-negative integer or NA.|It contributes to Token Throughput and Goodput.|It is not configured maximum Output Tokens or MTP Proposed Tokens.",
+  ),
+});
+const CONCEPT_HELP_DETAIL_OVERRIDES = Object.freeze({
+  ...CONCEPT_HELP_220_DETAIL_OVERRIDES,
+  analytical_report: conceptHelp220Detail(
+    "来源是当前报告的 manifest、选定后端与任务汇总。｜只读说明 ANALYTICAL 保真度、后端边界以及徽标中的任务规模。｜任务数为报告任务计数，无时间或字节单位；后端与 evidence 使用字符串。｜它帮助判断结果是否可复现、可比较以及是否需要结合 exact/representative/aggregate 口径解读。｜任务数不是请求数、浏览器事件数或硬件实测样本；ANALYTICAL 也不是生产 SLA。",
+    "Source: the current report manifest, selected backend, and task summary.|Read-only explanation of ANALYTICAL fidelity, backend scope, and the task scale shown in the badge.|Task count is a report count with no time or byte unit; backend and evidence are strings.|It helps assess reproducibility, comparability, and whether exact, representative, or aggregate scope must be considered.|Task count is not request count, browser-event count, or measured hardware samples, and ANALYTICAL is not a production SLA.",
+  ),
+  vocabulary_size: conceptHelp220Detail(
+    "来源是 model.vocabulary_size。｜只读显示模型可表示的离散 Token 总数。｜单位为 Token classes，必须为正整数。｜它决定 Embedding、LM Head 与 Logits 的词表维度及相关权重容量。｜它不是当前请求 Token 数；例如 248320 表示 248320 个词表项。",
+    "Source: model.vocabulary_size.|Read-only total count of discrete Tokens represented by the model.|Unit: Token classes; positive integer.|It sets the vocabulary dimension and related weight capacity for Embedding, the LM Head, and Logits.|It is not a request Token count; 248320 means 248320 vocabulary entries.",
+  ),
+  max_sequence_length: conceptHelp220Detail(
+    "来源是 model.max_sequence_length。｜只读显示模型结构支持的最大 Token 序列。｜单位为 Tokens，必须为正整数。｜它为请求上下文、位置编码和 full-attention 状态提供上限。｜它不是当前 Context Length，也不表示运行时一定预分配全部长度。",
+    "Source: model.max_sequence_length.|Read-only structural maximum Token sequence supported by the model.|Unit: Tokens; positive integer.|It bounds request context, positional encoding, and full-attention state.|It is not the current Context Length and does not imply full-size runtime preallocation.",
+  ),
+  softmax: conceptHelp220Detail(
+    "来源是模型图中的显式 Softmax 或 Attention 派生说明。｜只读解释缩放、掩码后的分数归一化阶段。｜输入输出沿同一注意力轴，权重和为 1。｜它进入 reduction 成本与 Attention 数据流说明。｜派生 Softmax 仅用于解释，不会被写回为新的权威 IR 算子。",
+    "Source: an explicit Softmax operator or the Attention derived explanation.|Read-only normalization stage after score scaling and masking.|Input and output share the attention axis; weights sum to one.|It contributes to reduction cost and the Attention data-flow explanation.|A derived Softmax is explanatory only and is not written back as a new authoritative IR operator.",
+  ),
+  expert_router: conceptHelp220Detail(
+    "来源是 MoE Router 算子及专家配置。｜只读解释每个 Token 的专家选择与路由权重。｜专家数和 Top-K 为正整数，路由权重按模型语义处理。｜它影响专家负载、EP 通信与 All-to-All 路径。｜Router 不是普通 Dense 层，界面不会把折叠 MoE 误写成单一专家。",
+    "Source: the MoE Router operator and expert configuration.|Read-only explanation of per-Token expert choice and routing weights.|Expert count and Top-K are positive integers; routing weights follow model semantics.|It affects expert load, EP communication, and All-to-All paths.|A Router is not a Dense layer, and a collapsed MoE is never rewritten as one expert.",
+  ),
+  kv_cache: conceptHelp220Detail(
+    "来源是 full-attention 运行状态与 report.kv_cache。｜配置和结果分别展示驻留策略、容量、流量与迁移。｜容量使用 bytes/pages，长度使用 Tokens，时间使用 ns。｜它影响 Decode 读取、内存压力、卸载与重计算。｜它不包含线性注意力 recurrent state、卷积 state 或模型权重。",
+    "Source: full-attention runtime state and report.kv_cache.|Configuration and results expose residency policy, capacity, traffic, and movement separately.|Capacity uses bytes/pages, length uses Tokens, and time uses ns.|It affects Decode reads, memory pressure, offload, and recomputation.|It excludes linear-attention recurrent state, convolution state, and model weights.",
+  ),
+  logical_memory: conceptHelp220Detail(
+    "来源是 Trace 事件张量的 offset_bytes 与 length_bytes。｜只读显示组件本地逻辑字节区间。｜单位为 bytes，起止范围按容量单位格式化。｜它用于核对同一时间的数据驻留与搬移对象。｜它不是物理地址、JEDEC bank/row，也不保证覆盖所有临时生命周期。",
+    "Source: offset_bytes and length_bytes on Trace-event tensors.|Read-only component-local logical byte interval.|Unit: bytes, with endpoints formatted as capacity values.|It helps verify the data object resident or moving at the current time.|It is not a physical address or JEDEC bank/row and does not guarantee every temporary lifetime.",
+  ),
+  rank: conceptHelp220Detail(
+    "来源是 placement.parallel 与运行事件的 rank 坐标。｜只读显示逻辑 Rank 及 TP/PP/EP 坐标和执行组件。｜Rank 与各并行坐标均为非负整数。｜它决定逻辑执行身份、集合通信成员与映射检查。｜多个 Rank 可同址，但不会因此合并为一个 Rank 或增加硬件容量。",
+    "Source: placement.parallel and rank coordinates on runtime events.|Read-only logical Rank with TP/PP/EP coordinates and execution component.|Rank and parallel coordinates are non-negative integers.|It determines logical execution identity, collective membership, and placement inspection.|Ranks may be colocated but are not merged and do not create hardware capacity.",
+  ),
+  protocol: conceptHelp220Detail(
+    "来源是硬件端口、拓扑链路与协议预设。｜选择或查看协议身份、版本、方向、通道和载荷契约。｜版本与载荷是字符串，通道为正整数，方向由端口或链路声明。｜它决定可达路径及带宽、时延参数的解释。｜协议名称不会自动补造交换、队列、一致性或逐包行为。",
+    "Source: hardware ports, topology links, and protocol presets.|Select or inspect protocol identity, version, direction, lanes, and payload contract.|Version and payload are strings, lanes are positive integers, and direction comes from the port or link.|It determines reachable paths and how bandwidth and latency parameters are interpreted.|A protocol name does not invent switching, queueing, coherence, or packet-level behavior.",
+  ),
+  bandwidth_semantics: conceptHelp220Detail(
+    "来源是协议目录的 bandwidth 与 displayed_bandwidth_scope。｜只读并列原始线路、单向有效和双向聚合口径。｜单位统一格式化为 MB/s、GB/s 或 TB/s。｜映射与传输时间必须使用声明的单向可用容量。｜双向聚合不是单方向可用带宽；例如 512 GB/s 聚合可能对应每向 256 GB/s。",
+    "Source: protocol-catalog bandwidth and displayed_bandwidth_scope.|Read-only comparison of raw line, effective one-way, and aggregate bidirectional values.|Units are formatted as MB/s, GB/s, or TB/s.|Placement and transfer time must use the declared one-way usable capacity.|Aggregate bidirectional is not one-direction bandwidth; 512 GB/s aggregate may mean 256 GB/s each way.",
+  ),
+  read_latency: Object.freeze({
+    "zh-CN": Object.freeze([
+      "后端把它加到适用组件的每次建模读取上，并与带宽传输时间分别计算。",
+      "填写大于等于 0 的有限数；0 表示不增加固定读取开销，而不是读取免费。",
+      "单位为 ns，最小值 0，界面默认 0；不支持 auto 或空字符串作为特殊值。",
+      "增大它会拉长访存密集任务，可能抬高 TTFT、TPOT 与关键路径时间。",
+      "它不是实测随机 / 顺序访问分布。例如 80 表示每次适用读取先增加 80 ns，再计算传输时间。",
+    ]),
+    en: Object.freeze([
+      "The backend adds it to every applicable modeled component read and accounts for bandwidth transfer time separately.",
+      "Enter a finite number greater than or equal to 0. Zero removes the fixed read overhead; it does not make the transfer free.",
+      "Unit: ns; minimum: 0; UI default: 0. Neither auto nor an empty string is a supported special value.",
+      "Increasing it lengthens memory-intensive work and can raise TTFT, TPOT, and critical-path time.",
+      "It is not a measured random/sequential latency distribution. For example, 80 adds 80 ns before transfer time for each applicable read.",
+    ]),
+  }),
+  write_latency: Object.freeze({
+    "zh-CN": Object.freeze([
+      "后端把它加到适用组件的每次建模写入上；链路、带宽与排队开销另行累计。",
+      "填写大于等于 0 的有限数；0 表示没有额外固定写入开销。",
+      "单位为 ns，最小值 0，界面默认 0；不接受负数或非有限值。",
+      "增大它会提高 KV 追加、卸载和中间结果落盘等写密集路径的时延。",
+      "它不建模耐久度、写放大或控制器队列。例如 120 表示每次适用写入增加 120 ns 固定开销。",
+    ]),
+    en: Object.freeze([
+      "The backend adds it to every applicable modeled component write; route, bandwidth, and queueing costs are accumulated separately.",
+      "Enter a finite number greater than or equal to 0. Zero means no additional fixed write overhead.",
+      "Unit: ns; minimum: 0; UI default: 0. Negative and non-finite values are invalid.",
+      "Increasing it raises latency on write-heavy paths such as KV append, offload, and intermediate-result persistence.",
+      "It does not model endurance, write amplification, or controller queues. For example, 120 adds a fixed 120 ns to each applicable write.",
+    ]),
+  }),
+  transfer_granularity: Object.freeze({
+    "zh-CN": Object.freeze([
+      "模拟器用它将数据搬移向最小块大小取整，避免把任意小负载当作零成本传输。",
+      "填写带二进制容量单位的非负值，例如 64 B、4 KiB；0 表示不额外按块取整。",
+      "支持 B、KiB、MiB、GiB、TiB、PiB；界面默认 0 B，保存为精确字节数。",
+      "较大的粒度会放大小张量或尾块的有效传输字节数，从而增加带宽占用和 DMA 时间。",
+      "它不是协议 MTU、缓存行或 NAND 页的自动推断。例如 4 KiB 粒度下，1 KiB 搬移按 4 KiB 计。",
+    ]),
+    en: Object.freeze([
+      "The simulator rounds data movement to this minimum block so arbitrarily small payloads are not treated as cost-free transfers.",
+      "Enter a non-negative binary capacity such as 64 B or 4 KiB. Zero disables additional block rounding.",
+      "Supported units: B, KiB, MiB, GiB, TiB, PiB. UI default: 0 B; the scenario stores exact bytes.",
+      "A larger granularity amplifies effective bytes for small tensors or tail blocks, increasing bandwidth occupancy and DMA time.",
+      "It is not an inferred protocol MTU, cache line, or NAND page. At 4 KiB granularity, for example, a 1 KiB move is charged as 4 KiB.",
+    ]),
+  }),
+  dma_latency: Object.freeze({
+    "zh-CN": Object.freeze([
+      "后端为每次适用 DMA 搬移增加一次启动开销，然后再计算取整字节数和路径传输时间。",
+      "填写大于等于 0 的有限数；0 表示忽略固定 DMA 启动开销。",
+      "单位为 ns，最小值 0，界面默认 0；每次搬移计一次，而不是每字节计一次。",
+      "大量小搬移对该值最敏感；增大它可能改变卸载、预取与后备存储路径的瓶颈判断。",
+      "它不模拟描述符队列、并发通道或中断。例如 500 表示每次 DMA 在传输时间外增加 500 ns。",
+    ]),
+    en: Object.freeze([
+      "The backend adds one startup overhead to each applicable DMA movement, then computes rounded bytes and route transfer time.",
+      "Enter a finite number greater than or equal to 0. Zero ignores fixed DMA startup overhead.",
+      "Unit: ns; minimum: 0; UI default: 0. It is charged once per movement, not once per byte.",
+      "Many small movements are most sensitive to this value; increasing it can change bottleneck conclusions for offload, prefetch, and backing paths.",
+      "It does not simulate descriptor queues, concurrent channels, or interrupts. For example, 500 adds 500 ns beyond transfer time to each DMA.",
+    ]),
+  }),
+  kv_residency_policy: Object.freeze({
+    "zh-CN": Object.freeze([
+      "映射和运行时用该策略确定 KV Cache 首选驻留位置、容量页以及内存不足时的卸载目标。",
+      "缓存组件应选择适用 HBM；卸载组件可留空表示不卸载，或选择显式可达组件；每页 Token 数为大于等于 1 的整数。",
+      "组件选项来自当前硬件拓扑；空缓存表示未指定，空卸载表示不卸载；每页 Token 默认由当前场景 schema 提供。",
+      "选择会改变容量门禁、KV 读写流量、迁移次数、传输时间以及可能的重计算。",
+      "界面不会自动创建缺失硬件或链路。例如选择 HBM0 + SSD0 只有在两者存在可达协议路径时才形成有效卸载方案。",
+    ]),
+    en: Object.freeze([
+      "Placement and runtime use this policy to choose primary KV Cache residency, capacity pages, and the offload target under memory pressure.",
+      "Choose an applicable HBM cache component; leave offload empty for no offload or select an explicitly reachable component; Tokens per Page must be an integer of at least 1.",
+      "Component choices come from the current topology. Empty cache means unspecified; empty offload means disabled; the current scenario schema supplies the page-size default.",
+      "The selection changes capacity gates, KV traffic, migration counts, transfer time, and possible recomputation.",
+      "The UI does not create missing hardware or links. HBM0 + SSD0 is valid only when an explicit reachable protocol path exists between them.",
+    ]),
+  }),
+  model_weights_backing: Object.freeze({
+    "zh-CN": Object.freeze([
+      "映射器和运行时用它确定 cold_stream_per_use 权重的来源组件、可用容量以及加载权重所走的协议路径。",
+      "仅当“权重常驻”关闭时，内部控制平面才会从当前拓扑选择 HBF / SSD / 高 I/O SSD 作为运行时读取来源；勾选时运行图不读取后备。冷流式来源与容量由物化的 Rank 分片证据说明。",
+      "容量支持 B、KiB、MiB、GiB、TiB、PiB；空组件是特殊值“未指定”，容量字段随之禁用。",
+      "它会影响冷流式权重的容量校验、每次静态 RHS GEMM 的装载、TTFT 和存储 / 链路流量；修改后映射会过期。",
+      "HBF 仅按显式 UCIe 路径，SSD 类仅按显式 PCIe / CXL 路径建模。例如选择 HBF0 但没有 UCIe 路径会在校验中失败。",
+    ]),
+    en: Object.freeze([
+      "Placement and runtime use it to identify the source component, available capacity, and protocol path for cold_stream_per_use weights.",
+      "Only unchecked Weights Resident allows the internal control plane to choose HBF, SSD, or high-I/O SSD in the current topology as a runtime source; checked runs do not read backing. Materialized Rank-shard evidence describes the cold source and capacity.",
+      "Capacity units: B, KiB, MiB, GiB, TiB, PiB. An empty component is the special Unspecified value and disables the capacity field.",
+      "It affects cold-weight capacity validation, one load per static RHS GEMM use, TTFT, and storage/link traffic; changing it invalidates placement.",
+      "HBF is modeled only over explicit UCIe paths, and SSD-class storage only over explicit PCIe/CXL paths. Selecting HBF0 without UCIe fails validation.",
+    ]),
+  }),
+  weights_resident: Object.freeze({
+    "zh-CN": Object.freeze([
+      "勾选表示 preloaded_resident：运行开始前，模型权重已经预加载到活动 HBM/CIM；运行图不产生 HBF / SSD 后备读取。",
+      "取消表示 cold_stream_per_use：每个物理 Rank 在每次静态 RHS GEMM 使用权重时，从已解析后备组件流式读取一次。",
+      "冷流式读取按物理 Rank 和静态 RHS GEMM 使用计费，不按 batch item、Token 或 MTP candidate Token 重复放大。",
+      "无论是否勾选，活动 HBM/CIM 的权重容量都独立接受容量门禁；勾选只改变权重读取生命周期，不绕过容量校验。",
+      "取消勾选时，内部控制平面必须物化可达的后备来源与协议路径；当前 Rank 分片证据会显示实际来源。",
+    ]),
+    en: Object.freeze([
+      "Checked means preloaded_resident: model weights are preloaded into active HBM/CIM before execution, and the run graph emits no HBF/SSD backing reads.",
+      "Unchecked means cold_stream_per_use: each physical Rank reads once from the resolved backing whenever it uses the weights for a static RHS GEMM.",
+      "Cold-stream traffic is charged per physical Rank and static RHS GEMM use; it is not multiplied by batch items, Tokens, or MTP candidate Tokens.",
+      "Active HBM/CIM weight capacity is checked independently in both modes; checking the box changes the weight-read lifecycle but never bypasses capacity validation.",
+      "When unchecked, the internal control plane must materialize a reachable backing source and protocol path; current Rank-shard evidence shows the resolved source.",
+    ]),
+  }),
+  gemm_throughput: Object.freeze({
+    "zh-CN": Object.freeze([
+      "它对应 [M,K]×[K,N]→[M,N] 的矩阵乘法计算阶段；成本来自目标组件通过 cost_profile_id 绑定的 Profile。",
+      "GPU 填写 GEMM 峰值 TOPS 与可达效率；CPU 填写 GEMM GOP/s 与可达效率；这些值属于计算成本 Profile。",
+      "GPU 峰值单位为 TOPS，CPU 分类吞吐单位为 GOP/s；可达计算率还要乘以 (0,1] 范围内的 attainable_efficiency。",
+      "提高该值会降低 GEMM 的计算服务时间，但阶段仍取计算与 HBM/HostMemory 传输 roofline 的较大值。",
+      "它不适用于逐元素或归约算子；CPU GEMM 吞吐不会自动成为 element-wise 或 reduction 吞吐。",
+    ]),
+    en: Object.freeze([
+      "It covers the matrix-multiplication stage [M,K]×[K,N]→[M,N]; cost comes from the target component's cost_profile_id-bound Profile.",
+      "Enter GPU GEMM peak TOPS with attainable efficiency, or CPU GEMM GOP/s with attainable efficiency; these are compute-profile inputs.",
+      "GPU peak uses TOPS and CPU categorized throughput uses GOP/s; attainable rate also multiplies attainable_efficiency in (0,1].",
+      "Increasing it reduces GEMM compute service time, but the stage still takes the larger compute or HBM/HostMemory roofline.",
+      "It does not apply to element-wise or reduction operators; CPU GEMM throughput does not silently become either scalar rate.",
+    ]),
+  }),
+  elementwise_throughput: Object.freeze({
+    "zh-CN": Object.freeze([
+      "它对应激活、门控和逐元素变换等非矩阵乘法工作；GPU 与 CPU 都独立维护该分类吞吐。",
+      "在 GPU 或 CPU 成本 Profile 中填写 elementwise GOP/s；估算器还会读取对应 HBM 或 HostMemory 的流量。",
+      "逐元素吞吐的单位为 GOP/s（ops/ns），数值必须为正；可达值按 Profile 的 attainable_efficiency 计算。",
+      "提高该值只降低逐元素计算需求；内存带宽、kernel/dispatch 开销和批次仍可能主导阶段时间。",
+      "不要用 GEMM TOPS 代填；激活张量的逐元素运算不会因为 Tensor-Core 峰值高而自动获得同样吞吐。",
+    ]),
+    en: Object.freeze([
+      "It covers non-matrix-multiply work such as activation, gating, and element-wise transforms; GPU and CPU keep this rate independent.",
+      "Enter elementwise GOP/s in the GPU or CPU cost profile; the estimator also accounts for the corresponding HBM or HostMemory traffic.",
+      "Element-wise throughput uses GOP/s (ops/ns); the value must be positive, and the attainable rate uses the profile's attainable_efficiency.",
+      "Increasing it only reduces element-wise compute demand; memory bandwidth, kernel/dispatch overhead, or batching may still dominate.",
+      "Do not substitute GEMM TOPS: element-wise activation work does not inherit Tensor-Core peak throughput automatically.",
+    ]),
+  }),
+  reduction_throughput: Object.freeze({
+    "zh-CN": Object.freeze([
+      "它对应 Softmax、Norm 统计和局部归并等 reduction 工作；该吞吐与 GEMM、逐元素吞吐独立。",
+      "在 GPU 或 CPU 成本 Profile 中填写 reduction GOP/s；后端把它与 HBM 或 HostMemory 读写放入同一 roofline 阶段。",
+      "归约吞吐的单位为 GOP/s（ops/ns），数值必须为正；可达值按 Profile 的 attainable_efficiency 计算。",
+      "提高该值会缩短 reduction 的计算服务时间，但内存读写、启动或调度开销仍可能成为瓶颈。",
+      "不要把 GEMM 或逐元素吞吐当作归约吞吐；归约宽度和中间结果流量仍由 workload 决定。",
+    ]),
+    en: Object.freeze([
+      "It covers reduction work such as Softmax, norm statistics, and local combines; this rate is independent of GEMM and element-wise throughput.",
+      "Enter reduction GOP/s in the GPU or CPU cost profile; the backend places it with HBM or HostMemory reads and writes in one roofline stage.",
+      "Reduction throughput uses GOP/s (ops/ns); the value must be positive, and the attainable rate uses the profile's attainable_efficiency.",
+      "Increasing it shortens reduction compute service time, but memory traffic, launch, or dispatch overhead may remain the bottleneck.",
+      "Do not use GEMM or element-wise throughput for reductions; reduction width and intermediate traffic still come from the workload.",
+    ]),
+  }),
+});
+const CONCEPT_HELP_COVERAGE_BY_VIEW = Object.freeze({
+  architecture: Object.freeze([
+    "hardware_topology", "gpu", "cpu", "accelerator", "hbm", "hbm_stack", "host_memory", "cxl_memory", "hbf", "ssd",
+    "high_io_ssd", "cim", "sram", "fabric_switch", "io_die", "chiplet", "physical_link", "bidirectional_link",
+    "pcie", "cxl", "ucie", "nvlink", "roce", "lanes", "payload", "bandwidth", "link_bandwidth", "link_latency", "capacity",
+    "peak_ops", "gemm_throughput", "elementwise_throughput", "reduction_throughput", "read_latency", "write_latency", "transfer_granularity", "dma", "dma_latency", "dma_bandwidth", "dma_energy",
+    "dma_resource", "outstanding_requests", "cost_profile", "cache_hierarchy", "tensor_core", "occupancy", "attainable_efficiency", "pipeline", "noc", "component_preset",
+    "architecture_preset", "evidence", "protocol", "bandwidth_semantics", "roofline",
+  ]),
+  model: Object.freeze([
+    "model_graph", "ir", "dag", "operator", "tensor", "typed_port", "tensor_shape", "tensor_layout", "dtype",
+    "quantization", "explicit_transform", "repeat_pattern", "layer_group", "group_collapse", "layer_override", "embedding",
+    "sequence_mixer", "attention", "attention_heads", "kv_heads", "qkv", "gqa", "mqa", "rope", "rmsnorm",
+    "residual_add", "softmax", "dense", "dense_mlp", "linear_attention", "expert_router", "moe", "hidden_size",
+    "intermediate_size", "lm_head", "logits", "port_parameters", "vocabulary_size", "max_sequence_length",
+  ]),
+  mapping: Object.freeze([
+    "placement", "control_plane", "mapping_diagnostic", "mapping_fingerprint", "mapping_stale", "fully_placed",
+    "feasible_solution", "infeasible_mapping", "solver", "cp_sat", "solver_time_limit", "objective", "lower_bound",
+    "optimality_gap", "rank", "rank_mapping", "shard", "rank_shard", "operator_targets", "weight_tensor_shards",
+    "parallel_strategy", "tp", "tp_degree", "pp", "pp_degree", "ep", "ep_degree", "collective_algorithm",
+    "colocated_ranks", "capacity_gate",
+    "topology_connectivity", "residency", "kv_policy", "kv_residency_policy", "kv_cache", "model_weights_backing",
+    "weights_resident", "backing_component", "model_weight_capacity", "kv_cache_component", "kv_offload_component",
+  ]),
+  workload: Object.freeze([
+    "workload", "request", "explicit_requests", "request_generation", "synthetic_workload", "synthetic_request_count",
+    "synthetic_prompt_tokens", "synthetic_output_tokens", "request_admission", "arrival_time", "relative_time", "request_deadline", "request_priority",
+    "prompt_tokens", "output_tokens", "context_length", "eos", "random_seed", "continuous_batching", "scheduler",
+    "max_sequences", "token_budget", "batched_tokens", "prefill_chunk_tokens", "preemption", "starvation_protection", "queue_wait", "prefill",
+    "decode", "mtp", "mtp_enabled", "mtp_candidates", "acceptance_rate", "proposal_cost", "page_size", "offload", "prefetch", "swap", "slo",
+  ]),
+  playback: Object.freeze([
+    "trace", "des", "runtime_event", "event_marker", "event_interval", "time_cursor", "simulation_time", "selected_event",
+    "active_event", "resource_contention", "change_point", "route_hop", "protocol_path", "collective", "batch", "rank",
+    "logical_memory", "playback_speed", "fidelity", "run_manifest",
+  ]),
+  results: Object.freeze([
+    "simulation_results", "runtime_summary", "kv_traffic_summary", "kv_movement_summary", "runtime_execution_mode", "total_batches", "peak_batch", "preemption_count",
+    "preemption_breakdown", "kv_peak_occupancy", "kv_max_live_tokens", "kv_swap_summary", "kv_capacity_pages",
+    "kv_prefill_read_traffic", "kv_prefill_write_traffic", "kv_decode_read_traffic", "kv_decode_append_traffic",
+    "kv_offload_total", "kv_prefetch_total", "kv_migration_total", "kv_recompute", "kv_swap_transfer_time", "kv_prefetch_distance",
+    "mtp_proposed_tokens", "mtp_accepted_tokens", "mtp_committed_tokens", "mtp_rejected_tokens", "mtp_effective_rate",
+    "goodput", "goodput_request_rate", "goodput_token_rate", "goodput_qualified_requests", "category_time", "request_metrics",
+    "visible_tokens", "ttft", "tbt", "tpot", "e2e", "throughput", "request_throughput", "token_throughput", "makespan", "energy", "percentile", "rejection_reason",
+    "critical_path", "bottleneck", "utilization", "busy_fraction", "compute_utilization", "memory_residency",
+    "storage_occupancy", "bandwidth_utilization", "component_timeseries", "roofline", "fidelity", "analytical_report", "run_manifest",
+  ]),
+});
+const CONCEPT_HELP_VISIBLE_LABEL_BINDINGS = Object.freeze([
+  ["词表大小（Vocabulary Size）", "vocabulary_size"], ["Vocabulary Size", "vocabulary_size"],
+  ["最大序列长度（Max Sequence Length）", "max_sequence_length"], ["Max Sequence Length", "max_sequence_length"],
+  ["协议（Protocol）", "protocol"], ["Protocol", "protocol"],
+  ["逻辑地址范围", "logical_memory"], ["Logical address range", "logical_memory"],
+  ["执行位置", "rank"], ["Execution location", "rank"],
+  ["请求生成", "request_generation"], ["Request Generation", "request_generation"],
+  ["合成请求数", "synthetic_request_count"], ["Synthetic Request Count", "synthetic_request_count"],
+  ["合成提示 Token 数", "synthetic_prompt_tokens"], ["Synthetic Prompt Tokens", "synthetic_prompt_tokens"],
+  ["合成输出 Token 数", "synthetic_output_tokens"], ["Synthetic Output Tokens", "synthetic_output_tokens"],
+  ["预填充分块 Token 数", "prefill_chunk_tokens"], ["Prefill Chunk Tokens", "prefill_chunk_tokens"],
+  ["张量并行度（TP Degree）", "tp_degree"], ["TP Degree", "tp_degree"],
+  ["流水线并行度（PP Degree）", "pp_degree"], ["PP Degree", "pp_degree"],
+  ["专家并行度（EP Degree）", "ep_degree"], ["EP Degree", "ep_degree"],
+  ["页容量（Capacity Pages）", "kv_capacity_pages"], ["Capacity Pages", "kv_capacity_pages"],
+  ["峰值占用（Peak）", "kv_peak_occupancy"], ["Peak Occupancy", "kv_peak_occupancy"],
+  ["迁移合计（Migration）", "kv_migration_total"], ["Migration Total", "kv_migration_total"],
+  ["重计算（Recompute）", "kv_recompute"], ["Recompute", "kv_recompute"],
+  ["批次数（Batches）", "total_batches"], ["Batches", "total_batches"],
+  ["峰值批次（Peak Batch）", "peak_batch"], ["Peak Batch", "peak_batch"],
+  ["Token 率（Tokens / s）", "goodput_token_rate"], ["Tokens / s", "goodput_token_rate"],
+  ["请求率（Requests / s）", "goodput_request_rate"], ["Requests / s", "goodput_request_rate"],
+  ["每输出 Token 时间（TPOT）", "tpot"], ["Time Per Output Token (TPOT)", "tpot"],
+  ["相对时间（Relative Time）", "relative_time"], ["Relative Time", "relative_time"],
+  ["请求吞吐（Request Throughput）", "request_throughput"], ["Request Throughput", "request_throughput"],
+  ["Token 吞吐（Token Throughput）", "token_throughput"], ["Token Throughput", "token_throughput"],
+  ["算子执行目标（Operator Targets）", "operator_targets"], ["Operator Targets", "operator_targets"],
+  ["权重张量分片（Weight Tensor Shards）", "weight_tensor_shards"], ["Weight Tensor Shards", "weight_tensor_shards"],
+  ["KV 读写流量（KV Traffic）", "kv_traffic_summary"], ["KV Traffic", "kv_traffic_summary"],
+  ["KV 迁移与限制（KV Movement）", "kv_movement_summary"], ["KV Movement", "kv_movement_summary"],
+]);
+const CONCEPT_HELP_SHARED_LABEL_ALLOWLIST = Object.freeze({
+  request: Object.freeze(["请求 ID（Request ID）", "请求（Request）"]),
+  arrival_time: Object.freeze(["到达时间（Arrival, ns）", "到达时间（Arrival）"]),
+});
+function normalizedConceptHelpLabel(value) {
+  return String(value || "").replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US");
+}
+const CONCEPT_HELP_LABEL_BINDING_MAP = new Map(CONCEPT_HELP_VISIBLE_LABEL_BINDINGS.map(([label, key]) => [normalizedConceptHelpLabel(label), key]));
+const CONCEPT_TERM_PATTERNS = Object.freeze([
+  ["cost_profile", /成本\s*Profile|Cost\s*Profile|V4\s*(?:执行|Execution)\s*(?:成本\s*)?Profile/iu],
+  ["runtime_execution_mode", /^(?:模式（Mode）|Mode)$/iu],
+  ["kv_traffic_summary", /^(?:KV 读写流量（KV Traffic）|KV Traffic)$/iu],
+  ["kv_movement_summary", /^(?:KV 迁移与限制（KV Movement）|KV Movement)$/iu],
+  ["tp_degree", /^(?:张量并行度（TP Degree）|TP Degree)$/iu], ["pp_degree", /^(?:流水线并行度（PP Degree）|PP Degree)$/iu],
+  ["ep_degree", /^(?:专家并行度（EP Degree）|EP Degree)$/iu], ["total_batches", /^(?:批次数（Batches）|Batches)$/iu],
+  ["peak_batch", /^(?:峰值批次（Peak Batch）|Peak Batch)$/iu], ["preemption_count", /^(?:抢占次数（Preemptions）|Preemptions)$/iu],
+  ["preemption_breakdown", /^(?:优先级\s*\/\s*内存（Priority\s*\/\s*Memory）|Priority\s*\/\s*Memory)$/iu],
+  ["kv_peak_occupancy", /^(?:峰值占用（Peak）|Peak Occupancy)$/iu],
+  ["kv_max_live_tokens", /^(?:单请求最大存活 Token（Max Live Tokens）|Max Live Tokens)$/iu],
+  ["kv_swap_summary", /^(?:交换（Swap）|Swap)$/iu], ["kv_capacity_pages", /^(?:页容量（Capacity Pages）|Capacity Pages)$/iu],
+  ["kv_prefill_read_traffic", /^(?:预填读取（Prefill Read）|Prefill Read)$/iu],
+  ["kv_prefill_write_traffic", /^(?:预填写入（Prefill Write）|Prefill Write)$/iu],
+  ["kv_decode_read_traffic", /^(?:解码读取（Decode Read）|Decode Read)$/iu],
+  ["kv_decode_append_traffic", /^(?:解码追加（Decode Append）|Decode Append)$/iu],
+  ["kv_offload_total", /^(?:卸载（Offload）|Offload Total)$/iu], ["kv_prefetch_total", /^(?:调入\s*\/\s*预取（Prefetch）|Prefetch Total)$/iu],
+  ["kv_migration_total", /^(?:迁移合计（Migration）|Migration Total)$/iu], ["kv_recompute", /^(?:重计算（Recompute）|Recompute)$/iu],
+  ["kv_swap_transfer_time", /^(?:交换传输时间（Swap Transfer）|Swap Transfer Time)$/iu],
+  ["kv_prefetch_distance", /^(?:预取距离（Prefetch Distance）|Prefetch Distance)$/iu],
+  ["mtp_proposed_tokens", /^(?:提议数（Proposed）|Proposed)$/iu], ["mtp_accepted_tokens", /^(?:接受数（Accepted）|Accepted)$/iu],
+  ["mtp_committed_tokens", /^(?:提交数（Committed）|Committed)$/iu], ["mtp_rejected_tokens", /^(?:拒绝数（Rejected）|Rejected)$/iu],
+  ["mtp_effective_rate", /^(?:有效接受率（Effective Rate）|Effective Rate)$/iu],
+  ["goodput_request_rate", /^(?:请求率（Requests\s*\/\s*s）|Requests\s*\/\s*s)$/iu],
+  ["goodput_token_rate", /^(?:Token 率（Tokens\s*\/\s*s）|Tokens\s*\/\s*s)$/iu],
+  ["goodput_qualified_requests", /^(?:达标请求（Qualified）|Qualified Requests)$/iu],
+  ["request_throughput", /请求吞吐（Request Throughput）|^Request Throughput$/iu],
+  ["token_throughput", /Token 吞吐（Token Throughput）|^Token Throughput$/iu],
+  ["request_generation", /^(?:请求生成|Request Generation)$/iu],
+  ["goodput", /^(?:有效吞吐（Goodput）|Goodput)$/iu],
+  ["model_weight_capacity", /模型权重容量|Model Weight Capacity/iu],
+  ["mtp_enabled", /启用多 Token 预测|Enable MTP/iu],
+  ["synthetic_request_count", /^(?:合成请求数|Synthetic Request Count)$/iu],
+  ["synthetic_prompt_tokens", /^(?:合成提示 Token 数|Synthetic Prompt Tokens)$/iu],
+  ["synthetic_output_tokens", /^(?:合成输出 Token 数|Synthetic Output Tokens)$/iu],
+  ["prefill_chunk_tokens", /^(?:预填充分块 Token 数|Prefill Chunk Tokens)$/iu],
+  ["relative_time", /^(?:相对时间（Relative Time）|Relative Time)$/iu],
+  ["hbm_stack", /HBM\s*(?:Stack|堆栈)/iu], ["high_io_ssd", /高\s*I\/O\s*SSD|High[- ]I\/O SSD/iu],
+  ["cxl_memory", /CXL\s*(?:Memory|内存)/iu], ["host_memory", /主机内存|Host Memory/iu], ["ssd", /(?:固态硬盘|\bSSD\b)/iu],
+  ["fabric_switch", /互连交换机|Fabric Switch/iu], ["io_die", /I\/O\s*(?:Die|裸片)/iu], ["gpu", /\bGPU(?:s)?\b|图形处理器/iu],
+  ["accelerator", /加速器|Accelerator/iu], ["hardware_topology", /硬件拓扑|封装拓扑|Hardware Topology|Package Topology/iu],
+  ["physical_link", /物理链路|Physical Link/iu], ["link_latency", /链路时延|Link Latency/iu],
+  ["bidirectional_link", /双向链路|Bidirectional Link/iu], ["lanes", /通道数|\bLanes?\b/iu], ["payload", /载荷语义|\bPayload\b/iu],
+  ["capacity_gate", /容量门禁|Capacity Gate/iu],
+  ["hbf", /高带宽闪存|\bHBF\b/iu], ["hbm", /高带宽内存|\bHBM\b/iu], ["cim", /存算一体|SRAM[- ]?CIM|\bCIM\b/iu],
+  ["chiplet", /芯粒|\bChiplet(?:s)?\b|异构封装/iu], ["pcie", /\bPCIe\b/iu], ["cxl", /\bCXL\b/iu], ["ucie", /\bUCIe\b/iu],
+  ["nvlink", /\bNVLink(?:-C2C)?\b/iu], ["roce", /\bRoCE\b/iu], ["sram", /\bSRAM\b/iu],
+  ["read_latency", /读取延迟|Read Latency/iu], ["write_latency", /写入延迟|Write Latency/iu],
+  ["transfer_granularity", /传输粒度|Transfer Granularity/iu], ["dma_latency", /DMA 延迟|DMA Latency/iu],
+  ["dma_bandwidth", /DMA 带宽|DMA Bandwidth/iu], ["dma_energy", /DMA 能耗|DMA Energy/iu],
+  ["dma_resource", /DMA 资源(?: ID)?|DMA Resource(?: ID)?/iu],
+  ["outstanding_requests", /最大并发请求|Max(?:imum)? Outstanding Requests/iu], ["dma", /\bDMA\b/iu],
+  ["cache_hierarchy", /Cache\s*(?:Hierarchy|Level|Line)|缓存层级/iu],
+  ["tensor_core", /Tensor\s*Core|\bMMA\b/iu],
+  ["occupancy", /占用率|\bOccupancy\b/iu],
+  ["attainable_efficiency", /可达效率|Attainable\s*Efficiency/iu],
+  ["pipeline", /(?:乱序\s*)?Pipeline|\bSIMD\b|Decode\s*Width|Issue\s*Width|Retire\s*Width|ROB\s*Entries|LSQ\s*Entries|Memory-level\s*Parallelism/iu],
+  ["noc", /\bNoC\b|片上网络|Network-on-Chip/iu],
+  ["gemm_throughput", /GEMM\s*(?:峰值|吞吐|Peak|Throughput)/iu],
+  ["elementwise_throughput", /逐元素吞吐|Element[- ]?wise\s+Throughput/iu],
+  ["reduction_throughput", /归约吞吐|Reduction\s+Throughput/iu],
+  ["capacity", /^(?:容量|Capacity)(?:\s*\([^)]*\))?$/iu], ["peak_ops", /峰值运算率|Peak OPS|\b[TP]OPS\b/iu], ["bandwidth", /^(?:带宽|Bandwidth)(?:\s*\([^)]*\))?$/iu],
+  ["port_parameters", /端口参数|Port Parameters|通道数|Lanes|载荷语义|Payload/iu],
+  ["protocol", /^(?:协议(?:（Protocol）)?|Protocol)$/iu],
+  ["bandwidth_semantics", /原始线路|单向有效|双向聚合|Raw Line|Effective One[- ]Way|Aggregate Bidirectional/iu],
+  ["component_preset", /组件预设|Component Presets?/iu], ["architecture_preset", /架构预设|Architecture Presets?/iu],
+  ["evidence", /证据等级|Evidence Status|Evidence Level/iu],
+  ["repeat_pattern", /重复模式|Repeat Pattern/iu], ["group_collapse", /组折叠|折叠组|Group Collapse/iu],
+  ["layer_override", /逐层覆盖|层覆盖|Layer Override/iu], ["sequence_mixer", /序列混合器|Sequence Mixer/iu],
+  ["attention_heads", /Attention Heads|注意力头数|Query 头数/iu], ["hidden_size", /隐藏维度|Hidden Size/iu],
+  ["vocabulary_size", /词表大小|Vocabulary Size/iu], ["max_sequence_length", /最大序列长度|Max Sequence Length/iu],
+  ["intermediate_size", /中间维度|Intermediate Size/iu], ["expert_router", /Expert Router|MoE 路由器/iu],
+  ["tensor_layout", /Tensor Layout|张量布局/iu], ["operator", /算子|Operator/iu], ["tensor", /张量|Tensor/iu],
+  ["logits", /\bLogits?\b|词表分数/iu], ["softmax", /\bSoftmax\b/iu],
+  ["embedding", /词嵌入|Embedding/iu], ["residual_add", /残差相加|Residual Add/iu],
+  ["dense_mlp", /稠密 MLP|Dense MLP/iu], ["linear_attention", /线性注意力|Linear Attention/iu], ["lm_head", /语言模型头|LM Head/iu],
+  ["qkv", /\bQ\s*\/\s*K\s*\/\s*V\b|Query\s*\/\s*Key\s*\/\s*Value|查询.*键.*值/iu], ["gqa", /\bGQA\b|Grouped[- ]Query/iu],
+  ["mqa", /\bMQA\b|Multi[- ]Query/iu], ["rmsnorm", /\bRMSNorm\b/iu], ["rope", /\bRoPE\b|旋转位置/iu],
+  ["cp_sat", /\bCP-SAT\b/iu], ["kv_cache", /KV\s*(?:缓存|Cache)/iu], ["des", /\bDES\b|离散事件仿真|Discrete[- ]Event/iu],
+  ["roofline", /\bRoofline\b/iu], ["dag", /\bDAG\b|有向无环图/iu], ["ir", /(?:模型图|硬件|放置|执行)?\s*IR\b|中间表示/iu],
+  ["mapping_diagnostic", /映射诊断|Mapping Diagnostic/iu], ["fully_placed", /\bfully placed\b|完整放置/iu],
+  ["infeasible_mapping", /映射不可行|Infeasible Mapping|\binfeasible\b/iu], ["feasible_solution", /可行解|Feasible Solution/iu],
+  ["solver_time_limit", /求解时间上限|Solver Time Limit|Time Limit/iu], ["lower_bound", /下界|Lower Bound/iu],
+  ["topology_connectivity", /拓扑连通性|Topology Connectivity/iu],
+  ["mapping_stale", /映射已过期|映射过期/iu], ["mapping_fingerprint", /指纹|Fingerprint/iu],
+  ["control_plane", /控制平面|Control Plane|Runtime Placement/iu], ["placement", /放置|Placement/iu], ["rank_mapping", /Rank 映射|Rank Mapping|逻辑 Rank/iu],
+  ["rank_shard", /Rank 分片|Rank Shard/iu], ["shard", /分片|\bShard\b/iu], ["rank", /逻辑 Rank|\bRank\b/iu],
+  ["objective", /目标值|Objective/iu], ["optimality_gap", /\bGap\b|Optimality Gap/iu],
+  ["solver", /求解器|Solver|CP-SAT/iu], ["tp", /\bTP\b|Tensor Parallel/iu],
+  ["pp", /\bPP\b|Pipeline Parallel/iu], ["ep", /\bEP\b|Expert Parallel/iu],
+  ["model_weights_backing", /模型权重后备存储|Model Weights Backing/iu],
+  ["backing_component", /后备存储组件|Backing Component/iu],
+  ["kv_residency_policy", /KV 驻留策略|KV residency strategy/iu], ["kv_policy", /KV Policy|KV 策略|KV 缓存|KV Cache/iu],
+  ["weights_resident", /权重驻留|Weights Resident/iu], ["residency", /驻留|Residency/iu],
+  ["request_admission", /请求准入|Request Admission|Admission/iu], ["queue_wait", /队列等待|Queue Wait/iu],
+  ["request_deadline", /截止时间|Deadline/iu], ["request_priority", /请求优先级|Request Priority|Priority/iu],
+  ["starvation_protection", /防饥饿|Starvation Protection/iu], ["continuous_batching", /连续批处理|Continuous Batching/iu],
+  ["token_budget", /调度步 Token 预算|Token Budget/iu], ["context_length", /上下文长度|Context Length/iu],
+  ["page_size", /每页 Token|Page Size|Tokens per Page/iu], ["offload", /卸载|Offload/iu], ["prefetch", /预取|Prefetch/iu],
+  ["swap", /换入|换出|\bSwap\b/iu], ["eos", /\bEOS\b|End of Sequence/iu],
+  ["synthetic_workload", /^(?:合成负载|Synthetic Workload)$/iu], ["workload", /^(?:请求负载|负载|Workload)$/iu],
+  ["arrival_time", /到达时间|Arrival Time/iu], ["prompt_tokens", /提示 Token|Prompt Tokens/iu],
+  ["tpot", /\bTPOT\b|每输出 Token/iu], ["visible_tokens", /可见 Token 数|Visible Tokens/iu], ["output_tokens", /输出 Token 数|Output Tokens/iu],
+  ["random_seed", /随机种子|Random Seed/iu], ["throughput", /^(?:有效吞吐(?:（Goodput）)?|Goodput|吞吐(?:量)?|Throughput)$/iu],
+  ["request", /^(?:请求|Request|请求 ID（Request ID）)$/iu], ["max_sequences", /最大序列数|Max Sequences\b/iu], ["batched_tokens", /最大批处理 Token 数|Max Batched Tokens/iu],
+  ["preemption", /抢占|Preemption/iu], ["scheduler", /调度|Scheduler/iu], ["prefill", /Prefill|预填充/iu], ["decode", /Decode|解码/iu], ["mtp_candidates", /候选 Token|Candidate Tokens/iu],
+  ["acceptance_rate", /接受率|Acceptance Rate/iu], ["proposal_cost", /提议成本|Proposal Cost/iu], ["mtp", /\bMTP\b|Multi-Token/iu],
+  ["slo", /\bSLO\b|Service.Level/iu], ["fidelity", /Fidelity|保真度|精确事件|代表性|聚合语义/iu],
+  ["runtime_event", /运行事件|Runtime Event/iu], ["event_marker", /事件标记|Event Marker/iu],
+  ["time_cursor", /时间游标|Time Cursor/iu], ["resource_contention", /资源竞争|Resource Contention/iu],
+  ["change_point", /变化点|Change Point/iu], ["route_hop", /Route Hop|路径 Hop|链路 Hop/iu],
+  ["trace", /运行时回放|Trace 回放|Event.Driven Trace/iu], ["playback_speed", /回放速度|Playback Speed/iu], ["selected_event", /选中事件|Selected Event/iu], ["active_event", /此刻活动|活动事件|Active Event/iu],
+  ["simulation_time", /仿真时间|Simulation Time/iu], ["event_interval", /事件区间|持续条|Event Interval/iu],
+  ["logical_memory", /逻辑内存|逻辑地址范围|Logical Memory|Logical Address Range/iu], ["batch", /^(?:批次|Batch)$/iu], ["collective", /集合通信|Collective/iu],
+  ["protocol_path", /协议路径|协议链路|Protocol Path|Protocol Link|数据流/iu], ["busy_fraction", /Busy Fraction|资源忙碌/iu],
+  ["compute_utilization", /Compute Utilization|计算利用率|GPU busy/iu], ["storage_occupancy", /Storage Occupancy|存储占用/iu], ["memory_residency", /Residency|容量驻留/iu],
+  ["bandwidth_utilization", /Bandwidth Utilization|带宽利用率/iu], ["run_manifest", /Run Manifest|运行清单/iu],
+  ["ttft", /\bTTFT\b|首 Token/iu], ["tbt", /\bTBT\b|Token 间/iu],
+  ["e2e", /\bE2E\b|端到端/iu], ["makespan", /总历时|Makespan/iu], ["energy", /总能耗|Total Energy/iu],
+  ["rejection_reason", /拒绝原因|Rejection Reason/iu], ["percentile", /\bp(?:50|95|99)\b|分位数|Percentile/iu], ["critical_path", /关键路径|Critical Path/iu],
+  ["bottleneck", /瓶颈|Bottleneck/iu], ["utilization", /利用率|Utilization/iu], ["model_graph", /模型语义组件图|Model Graph/iu],
+  ["typed_port", /端口|Port/iu], ["tensor_shape", /形状|Shape|维度/iu], ["explicit_transform", /显式变换|Transform/iu],
+  ["layer_group", /重复 Block|Block 组|Layer Group/iu], ["moe", /\bMoE\b|Experts|专家/iu], ["dense", /\bDense\b/iu],
+  ["attention", /Attention|注意力/iu], ["kv_heads", /KV Heads|KV 头/iu], ["dtype", /DType|数据类型/iu],
+  ["quantization", /Quantization|量化/iu],
+]);
+const DEFAULT_UI_SETTINGS = Object.freeze({
+  language: "zh-CN",
+  fontScale: 120,
+  theme: "graphite",
+  workspaceBackground: null,
+  compact: false,
+  topologyGrid: true,
+  reduceMotion: false,
+});
+
+const DEFAULT_CONNECTION_STATE = Object.freeze({
+  status: "checking",
+  labels: Object.freeze({ zh: "连接检查中", en: "Checking connection" }),
+});
+const CONNECTION_LABELS = Object.freeze({
+  unreachable: Object.freeze({ zh: "API 不可达", en: "API unreachable" }),
+  responseError: Object.freeze({ zh: "API 响应异常", en: "API response error" }),
+});
+
+const MAX_TIMESERIES_CHARTS = 4;
+const TIMESERIES_DEFAULT_COLORS = Object.freeze(["#5eb6c0", "#d57a3b", "#8e78d6", "#62a66f"]);
+
+const state = {
+  scenario: null,
+  view: "architecture",
+  dirty: false,
+  busy: false,
+  selected: null,
+  modelGraphEditor: {
+    selectedOperatorId: null,
+    selectedOverviewId: null,
+    connectSource: null,
+    connectMode: false,
+    connectPreview: null,
+    connectPointer: null,
+    connectPreviewWatchdog: null,
+    suppressPortClick: false,
+    diagnostics: [],
+    history: { undo: [], redo: [], restoring: false },
+    drag: null,
+    pan: null,
+    layoutKey: "",
+    overviewLayoutKey: "",
+    overviewCanvasWidth: 0,
+    overviewResizeTarget: 0,
+  },
+  connectMode: false,
+  connectSource: null,
+  validation: { errors: [], warnings: [], information: [] },
+  report: null,
+  comparison: null,
+  componentTimeseriesView: {
+    reportRef: null,
+    slots: [],
+    nextSlotId: 1,
+  },
+  tracePlayback: {
+    data: null,
+    events: [],
+    filteredEvents: [],
+    timeNs: 0,
+    startNs: 0,
+    endNs: 0,
+    selectedEventId: null,
+    selectedIndex: -1,
+    playing: false,
+    requestFilter: "",
+    batchFilter: "",
+    rankFilter: "",
+    aggregateData: null,
+    batchTraceIndex: [],
+    pageCache: new Map(),
+    pagePending: new Map(),
+    page: null,
+    loading: false,
+    loadError: "",
+    mode: "aggregate",
+    topologyLayout: null,
+    measuredNodeSizes: {},
+    layoutView: { positions: {}, zoom: 1, offsetX: 0, offsetY: 0, autoFitKey: "" },
+    topologyGroups: null,
+    collapsedGroupIds: [],
+    groupCollapseInitialized: false,
+    drawerOpen: true,
+    fullscreen: false,
+    activeSignature: "",
+    autoLoadFirstBatch: true,
+    semanticStreamOpen: false,
+    semanticQuery: "",
+    semanticCategory: "",
+    semanticPhase: "",
+    semanticTemporal: "",
+    semanticPage: 0,
+  },
+  runEstimate: null,
+  runEstimateScenarioGeneration: null,
+  runEstimateMappingGeneration: null,
+  runEstimateInputFingerprint: "",
+  runJob: null,
+  runJobSubmitting: false,
+  runJobScenarioGeneration: null,
+  runJobMappingGeneration: null,
+  runJobInputFingerprint: "",
+  runJobPollFailures: 0,
+  architectureScanResult: null,
+  architectureScanRunning: false,
+  architectureScanScenarioGeneration: null,
+  mappingStale: false,
+  mappingStaleReason: "",
+  mappingInputFingerprint: "",
+  currentInputFingerprint: "",
+  scenarioGeneration: 0,
+  mappingGeneration: 0,
+  reportStale: false,
+  nodePositions: {},
+  topologyView: null,
+  selectedComponents: new Set(),
+  selectedDisplayLinkId: null,
+  topologyTool: "select",
+  spacePressed: false,
+  marquee: null,
+  pan: null,
+  clipboardPayload: null,
+  nodeSizes: {},
+  groupBounds: {},
+  topologyProjection: { visibleComponentIds: [], links: [] },
+  topologyRouteErrors: [],
+  drag: null,
+  topologyHistory: { undo: [], redo: [], restoring: false },
+  pendingGroupLabelRename: null,
+  suppressNodeClick: false,
+  topologyLayoutPending: false,
+  modelPresets: [],
+  modelPresetsLoaded: false,
+  modelPresetsLoading: false,
+  presetMode: "local",
+  presetCatalog: { total: 0, offset: 0, limit: 12, nextOffset: null, catalogVersion: "", cutoffAt: "" },
+  remotePresets: [],
+  selectedPresetId: null,
+  componentPresets: [],
+  componentPresetsLoaded: false,
+  componentPresetsLoading: false,
+  componentPresetDetails: new Map(),
+  selectedComponentPresetId: null,
+  architecturePresets: [],
+  architecturePresetsLoaded: false,
+  architecturePresetsLoading: false,
+  architecturePresetDetails: new Map(),
+  architecturePresetCatalog: {},
+  selectedArchitecturePresetId: null,
+  hardwarePresetTab: "architectures",
+  hardwarePresetScroll: { components: 0, architectures: 0 },
+  effectiveMappingView: { query: "", rank: "", component: "", operatorPage: 0, tensorPage: 0 },
+  protocolPresets: [],
+  protocolPresetsLoaded: false,
+  protocolPresetsLoading: false,
+  protocolPresetDetails: new Map(),
+  selectedProtocolPresetId: null,
+  runtimeHealth: null,
+  connection: {
+    status: DEFAULT_CONNECTION_STATE.status,
+    labels: DEFAULT_CONNECTION_STATE.labels,
+  },
+  settings: { ...DEFAULT_UI_SETTINGS },
+  dialogOpeners: new WeakMap(),
+};
+
+const dom = {};
+let settingsStoreTimer = null;
+let topologyRelayoutTimer = null;
+let topologyCanvasFrame = null;
+let topologyCanvasPendingPointer = null;
+let topologyResizeObserver = null;
+let topologyResizeFrame = null;
+let topologyObservedSize = "";
+let traceTopologyResizeObserver = null;
+let traceTopologyResizeFrame = null;
+let traceTopologyObservedSize = "";
+let modelGraphResizeObserver = null;
+let modelGraphResizeFrame = null;
+let modelGraphViewportSaveTimer = null;
+let presetSearchTimer = null;
+let presetCatalogGeneration = 0;
+let presetCatalogController = null;
+let componentPresetSearchTimer = null;
+let architecturePresetSearchTimer = null;
+let protocolPresetSearchTimer = null;
+let fieldHelpSerial = 0;
+let fieldHelpPortal = null;
+let activeFieldHelp = null;
+let runtimeTrackAlignmentFrame = null;
+let runtimeTrackResizeObserver = null;
+let runtimeTrackObservedWidth = null;
+let componentTimeseriesResizeObserver = null;
+let componentTimeseriesResizeFrame = null;
+let componentTimeseriesObservedWidth = null;
+let connectionEventsBound = false;
+let validationRequestGeneration = 0;
+let runEstimateRequestGeneration = 0;
+let runJobPollTimer = null;
+let traceAnimationFrame = null;
+let traceAnimationMode = "static";
+let traceParticleFrame = null;
+let traceParticleMode = "static";
+let traceParticleRoutes = [];
+let traceInteractionFrame = null;
+let tracePendingPointer = null;
+let tracePageLoadSerial = 0;
+let traceFullscreenPreviousFocus = null;
+
+function $(selector, root = document) {
+  return root.querySelector(selector);
+}
+
+function $$(selector, root = document) {
+  return Array.from(root.querySelectorAll(selector));
+}
+
+function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function mappingFingerprintFrom(value) {
+  const root = asObject(value);
+  const placement = asObject(root.placement);
+  const metadata = asObject(placement.metadata);
+  const controlPlane = asObject(asObject(metadata.control_plane).evidence);
+  const nestedResult = asObject(root.result);
+  const nestedValidation = asObject(root.validation);
+  return String(
+    root.input_fingerprint
+    || root.mapping_input_fingerprint
+    || root.mapping_fingerprint
+    || nestedResult.input_fingerprint
+    || nestedValidation.input_fingerprint
+    || controlPlane.input_fingerprint
+    || controlPlane.mapping_fingerprint
+    || "",
+  );
+}
+
+function currentMappingFingerprintFrom(value) {
+  const root = asObject(value);
+  const nestedResult = asObject(root.result);
+  const nestedValidation = asObject(root.validation);
+  return String(
+    root.current_input_fingerprint
+    || root.current_mapping_fingerprint
+    || nestedResult.current_input_fingerprint
+    || nestedValidation.current_input_fingerprint
+    || "",
+  );
+}
+
+function scenarioRequestSnapshot() {
+  return {
+    scenario: state.scenario,
+    scenarioGeneration: state.scenarioGeneration,
+    mappingGeneration: state.mappingGeneration,
+    inputFingerprint: String(state.mappingInputFingerprint || mappingFingerprintFrom(state.scenario)),
+    currentFingerprint: String(state.currentInputFingerprint || currentMappingFingerprintFrom(state.scenario)),
+  };
+}
+
+function scenarioRequestIsCurrent(snapshot, { mappingSensitive = true } = {}) {
+  if (!snapshot || snapshot.scenario !== state.scenario || snapshot.scenarioGeneration !== state.scenarioGeneration) return false;
+  if (mappingSensitive && snapshot.mappingGeneration !== state.mappingGeneration) return false;
+  const inputFingerprint = String(state.mappingInputFingerprint || mappingFingerprintFrom(state.scenario));
+  const currentFingerprint = String(state.currentInputFingerprint || currentMappingFingerprintFrom(state.scenario));
+  if (snapshot.inputFingerprint && inputFingerprint && snapshot.inputFingerprint !== inputFingerprint) return false;
+  if (snapshot.currentFingerprint && currentFingerprint && snapshot.currentFingerprint !== currentFingerprint) return false;
+  return true;
+}
+
+function mappingRunReadiness() {
+  if (!state.scenario) return { ready: false, code: "scenario_missing", reason: uiText("当前没有可运行场景。", "There is no scenario available to run.") };
+  if (state.mappingStale) {
+    const staleReason = state.mappingStaleReason || uiText(
+      "当前映射与模型、硬件、并行或驻留输入不一致。",
+      "The current mapping does not match the model, hardware, parallelism, or residency inputs.",
+    );
+    return {
+      ready: false,
+      code: "mapping_stale",
+      reason: state.settings.language === "en"
+        ? localizedBackendValue(
+          { code: "mapping_stale", message: staleReason },
+          staleReason,
+          "The mapping is stale; refresh the runtime placement and validate again.",
+        )
+        : staleReason,
+    };
+  }
+  const decision = controlPlaneDecision(state.scenario?.placement);
+  if (decision.fully_placed === false) {
+    const unplaced = asArray(decision.unplaced).length;
+    return {
+      ready: false,
+      code: "mapping_incomplete",
+      reason: unplaced
+        ? uiText("运行时放置仍有 {count} 项未完成，不能运行。", "Runtime placement left {count} items unresolved; the scenario cannot run.", { count: unplaced })
+        : uiText("运行时控制平面尚未确认全部算子与张量均已放置。", "The runtime control plane has not confirmed complete operator and tensor placement."),
+    };
+  }
+  const expected = String(state.mappingInputFingerprint || "");
+  const current = String(state.currentInputFingerprint || "");
+  if (expected && current && expected !== current) {
+    return {
+      ready: false,
+      code: "mapping_fingerprint_mismatch",
+      reason: uiText("服务端映射输入指纹与当前输入指纹不一致。", "The server mapping-input fingerprint does not match the current input fingerprint."),
+    };
+  }
+  return { ready: true, code: "", reason: "" };
+}
+
+function blockRunForMapping(readiness, action = "运行") {
+  const actionCopy = {
+    运行: ["运行", "Run"],
+    后台仿真: ["后台仿真", "Background simulation"],
+  }[action] || [String(action), String(action)];
+  const gateReason = readiness?.reason || uiText("映射尚未通过运行门禁。", "The mapping has not passed the run gate.");
+  const reason = uiText(
+    "{reason} 请先刷新运行时放置并重新校验。",
+    "{reason} Refresh runtime placement and validate again first.",
+    { reason: gateReason },
+  );
+  switchView("mapping");
+  renderControlPlaneStatus();
+  toast(
+    uiText("映射门禁未通过，已阻止{action}", "{action} blocked by the mapping gate", { action: uiText(actionCopy[0], actionCopy[1]) }),
+    reason,
+    "warning",
+    8000,
+  );
+}
+
+function mappingStaleFrom(value) {
+  const root = asObject(value);
+  const nestedResult = asObject(root.result);
+  const nestedValidation = asObject(root.validation);
+  if (typeof root.mapping_stale === "boolean") return root.mapping_stale;
+  if (typeof nestedResult.mapping_stale === "boolean") return nestedResult.mapping_stale;
+  if (typeof nestedValidation.mapping_stale === "boolean") return nestedValidation.mapping_stale;
+  const expected = mappingFingerprintFrom(root);
+  const current = currentMappingFingerprintFrom(root);
+  return Boolean(expected && current && expected !== current);
+}
+
+function reconcileMappingFingerprint(value, { mapped = false } = {}) {
+  const expected = mappingFingerprintFrom(value) || (mapped ? mappingFingerprintFrom(state.scenario) : state.mappingInputFingerprint);
+  const current = currentMappingFingerprintFrom(value);
+  if (expected) state.mappingInputFingerprint = expected;
+  if (current) state.currentInputFingerprint = current;
+  if (mapped && expected && !current) state.currentInputFingerprint = expected;
+  if (mapped) {
+    state.mappingStale = false;
+    state.mappingStaleReason = "";
+    // A successful runtime placement response is the server's canonical
+    // mapping artifact. Keep its fingerprint in the read-only control-plane
+    // evidence so a subsequent V4 transport round-trip does not fall back to
+    // the pre-materialization value. Never copy placement decisions or policy
+    // into authoring fields here.
+    if (expected && state.scenario?.placement) {
+      const placement = state.scenario.placement;
+      const metadata = asObject(placement.metadata);
+      const controlPlane = asObject(metadata.control_plane);
+      const evidence = asObject(controlPlane.evidence);
+      evidence.input_fingerprint = expected;
+      if (value?.fingerprint_schema) evidence.fingerprint_schema = String(value.fingerprint_schema);
+      if (value?.fingerprint_algorithm) evidence.fingerprint_algorithm = String(value.fingerprint_algorithm);
+      controlPlane.evidence = evidence;
+      metadata.control_plane = controlPlane;
+      placement.metadata = metadata;
+    }
+  }
+  if (mappingStaleFrom(value)) {
+    state.mappingStale = true;
+    state.mappingStaleReason = "服务端指纹表明当前映射与模型、硬件、并行或驻留策略不一致。";
+  } else if (expected && current && expected === current) {
+    state.mappingStale = false;
+    state.mappingStaleReason = "";
+  }
+  if (state.scenario?.placement) {
+    const ui = placementUiMetadata(state.scenario.placement, { create: true });
+    ui.mapping_stale = state.mappingStale;
+    if (state.mappingStaleReason) ui.mapping_stale_reason = state.mappingStaleReason;
+    else delete ui.mapping_stale_reason;
+    localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  }
+  return !state.mappingStale;
+}
+
+function markMappingStale(reason = "影响映射的场景输入已修改。") {
+  state.mappingStale = true;
+  state.mappingStaleReason = reason;
+  state.currentInputFingerprint = "";
+  if (state.scenario?.placement) {
+    const ui = placementUiMetadata(state.scenario.placement, { create: true });
+    ui.mapping_stale = true;
+    ui.mapping_stale_reason = reason;
+    localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  }
+}
+
+function mappingRelevantModelView(modelValue) {
+  const model = deepClone(asObject(modelValue));
+  const graph = model.graph;
+  if (graph && typeof graph === "object" && !Array.isArray(graph)) {
+    const attributes = graph.attributes;
+    if (attributes && typeof attributes === "object" && !Array.isArray(attributes)) {
+      delete attributes.ui;
+      if (!Object.keys(attributes).length) delete graph.attributes;
+    }
+  }
+  return model;
+}
+
+function stableMappingValue(value) {
+  if (Array.isArray(value)) return value.map(stableMappingValue);
+  if (value && typeof value === "object") {
+    const sorted = {};
+    Object.keys(value).sort().forEach((key) => {
+      const nextValue = stableMappingValue(value[key]);
+      if (nextValue !== undefined) sorted[key] = nextValue;
+    });
+    return sorted;
+  }
+  return value;
+}
+
+function stableMappingString(value) {
+  return JSON.stringify(stableMappingValue(value));
+}
+
+function mappingImpactView(scenario) {
+  const source = asObject(scenario);
+  const hardware = deepClone(asObject(source.hardware));
+  hardware.metadata = asObject(hardware.metadata);
+  delete hardware.metadata.topology_view;
+  const placement = asObject(source.placement);
+  const profiles = asObject(source.profiles);
+  const policy = controlPlanePolicy(placement);
+  return {
+    hardware,
+    model: mappingRelevantModelView(source.model),
+    profiles: {
+      components: deepClone(profiles.components ?? {}),
+      host_orchestration: deepClone(profiles.host_orchestration ?? null),
+      fusion: deepClone(profiles.fusion ?? null),
+      cim_interconnect: deepClone(profiles.cim_interconnect ?? null),
+    },
+    weights_resident: source.weights_resident,
+    placement_inputs: {
+      model_name: placement.model_name ?? "",
+      hardware_name: placement.hardware_name ?? "",
+      parallel: deepClone(asObject(placement.parallel)),
+      kv_policy: deepClone(asObject(placement.kv_policy)),
+    },
+    policy: deepClone(asObject(policy.options)),
+  };
+}
+
+function mappingInputsChanged(previous, next) {
+  return stableMappingString(mappingImpactView(previous)) !== stableMappingString(mappingImpactView(next));
+}
+
+function resetTopologyHistory() {
+  state.topologyHistory = { undo: [], redo: [], restoring: false };
+  updateTopologyHistoryControls();
+}
+
+function topologyHistorySnapshot() {
+  if (!state.scenario || !state.topologyView) return null;
+  const topologyView = deepClone(state.topologyView);
+  delete topologyView.viewport;
+  return {
+    hardware: deepClone(state.scenario.hardware),
+    placement: deepClone(state.scenario.placement),
+    profiles: deepClone(asObject(state.scenario.profiles)),
+    weights_resident: state.scenario.weights_resident,
+    topologyView,
+    mappingState: {
+      stale: state.mappingStale,
+      reason: state.mappingStaleReason,
+      inputFingerprint: state.mappingInputFingerprint,
+      currentFingerprint: state.currentInputFingerprint,
+    },
+  };
+}
+
+function topologySnapshotsEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function commitTopologyHistory(before, label, { mappingImpact = false } = {}) {
+  if (!before || state.topologyHistory.restoring) return false;
+  const after = topologyHistorySnapshot();
+  if (topologySnapshotsEqual(before, after)) return false;
+  state.topologyHistory.undo.push({ label: String(label || "拓扑编辑"), snapshot: before, mappingImpact });
+  if (state.topologyHistory.undo.length > TOPOLOGY_HISTORY_LIMIT) state.topologyHistory.undo.shift();
+  state.topologyHistory.redo = [];
+  updateTopologyHistoryControls();
+  return true;
+}
+
+function updateTopologyHistoryControls() {
+  if (!dom.undoTopologyButton || !dom.redoTopologyButton) return;
+  const undo = state.topologyHistory.undo.at(-1);
+  const redo = state.topologyHistory.redo.at(-1);
+  dom.undoTopologyButton.disabled = !undo;
+  dom.redoTopologyButton.disabled = !redo;
+  dom.undoTopologyButton.title = undo ? `撤销：${undo.label}` : "没有可撤销的拓扑编辑";
+  dom.redoTopologyButton.title = redo ? `重做：${redo.label}` : "没有可重做的拓扑编辑";
+}
+
+function restoreTopologyHistorySnapshot(snapshot, { restorePlacement = true } = {}) {
+  if (!snapshot || !state.scenario) return;
+  const viewport = deepClone(state.topologyView?.viewport || { x: 0, y: 0, scale: 1 });
+  state.scenario.hardware = deepClone(snapshot.hardware);
+  if (snapshot.profiles && typeof snapshot.profiles === "object" && !Array.isArray(snapshot.profiles)) {
+    state.scenario.profiles = deepClone(snapshot.profiles);
+  }
+  const hasPlacementSnapshot = snapshot.placement && typeof snapshot.placement === "object" && !Array.isArray(snapshot.placement);
+  if (restorePlacement && !hasPlacementSnapshot) {
+    throw new TypeError("V4 topology history snapshots with mapping impact require placement");
+  }
+  if (restorePlacement) {
+    state.scenario.placement = deepClone(snapshot.placement);
+    if (typeof snapshot.weights_resident === "boolean") state.scenario.weights_resident = snapshot.weights_resident;
+    const mappingState = asObject(snapshot.mappingState);
+    state.mappingStale = mappingState.stale === true;
+    state.mappingStaleReason = String(mappingState.reason || "");
+    state.mappingInputFingerprint = String(mappingState.inputFingerprint || mappingFingerprintFrom(state.scenario));
+    state.currentInputFingerprint = String(mappingState.currentFingerprint || "");
+  }
+  state.topologyView = Topology.normalizeTopologyView(
+    { ...deepClone(snapshot.topologyView), viewport },
+    state.scenario.hardware.components.map((component) => component.component_id),
+  );
+  state.nodePositions = state.topologyView.layout.positions;
+  state.scenario.hardware.metadata = asObject(state.scenario.hardware.metadata);
+  state.scenario.hardware.metadata.topology_view = deepClone(state.topologyView);
+  state.selected = null;
+  state.selectedComponents = new Set();
+  state.selectedDisplayLinkId = null;
+  state.nodeSizes = {};
+  saveTopologyView();
+}
+
+function travelTopologyHistory(direction) {
+  if (!state.scenario || state.topologyHistory.restoring) return false;
+  commitPendingGroupLabel();
+  const source = direction === "redo" ? state.topologyHistory.redo : state.topologyHistory.undo;
+  const target = direction === "redo" ? state.topologyHistory.undo : state.topologyHistory.redo;
+  const entry = source.pop();
+  if (!entry) return false;
+  target.push({ label: entry.label, snapshot: topologyHistorySnapshot(), mappingImpact: entry.mappingImpact });
+  state.topologyHistory.restoring = true;
+  try {
+    restoreTopologyHistorySnapshot(entry.snapshot, { restorePlacement: entry.mappingImpact });
+    if (entry.mappingImpact) {
+      markScenarioChanged("", {
+        mappingImpact: false,
+      });
+    } else {
+      state.dirty = true;
+      localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+      renderAll();
+    }
+  } finally {
+    state.topologyHistory.restoring = false;
+  }
+  updateTopologyHistoryControls();
+  toast(direction === "redo" ? "已重做拓扑编辑" : "已撤销拓扑编辑", entry.label, "info", 2600);
+  return true;
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function asObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function hasChineseText(value) {
+  return /[\u3400-\u9fff]/.test(String(value ?? ""));
+}
+
+function chineseMessage(value, fallback = "操作失败，未提供中文说明。") {
+  if (typeof value === "string") return hasChineseText(value) ? value : fallback;
+  const item = asObject(value);
+  const candidates = [item.message_zh, item.detail_zh, item.reason_zh, item.message, item.detail, item.reason];
+  return candidates.find((candidate) => candidate && hasChineseText(candidate)) || fallback;
+}
+
+const ISSUE_MESSAGE_BY_CODE = Object.freeze({
+  mapping_stale: { "zh-CN": "映射已过期；请刷新运行时放置并校验。", en: "The mapping is stale; refresh runtime placement and validate again." },
+  stale_mapping: { "zh-CN": "映射已过期；请刷新运行时放置并校验。", en: "The mapping is stale; refresh runtime placement and validate again." },
+  invalid_scenario: { "zh-CN": "场景未通过校验；请检查诊断中标出的字段。", en: "The scenario failed validation; inspect the fields identified in diagnostics." },
+  validation_error: { "zh-CN": "场景未通过校验；请检查诊断中标出的字段。", en: "The scenario failed validation; inspect the fields identified in diagnostics." },
+  import_error: { "zh-CN": "无法导入该场景；请检查文件格式与 schema。", en: "The scenario could not be imported; check the file format and schema." },
+  request_error: { "zh-CN": "请求失败；请检查后端状态与诊断编号。", en: "The request failed; check backend status and the diagnostic ID." },
+  run_job_failed: { "zh-CN": "后台仿真失败；请查看运行诊断。", en: "The background simulation failed; inspect the run diagnostics." },
+});
+
+function localizedBackendValue(value, fallbackZh = "操作失败，未提供本地化说明。", fallbackEn = "The operation failed without a localized explanation.") {
+  if (typeof value === "string") {
+    if ((state?.settings?.language || "zh-CN") === "en") return hasChineseText(value) ? fallbackEn : value;
+    return hasChineseText(value) ? value : fallbackZh;
+  }
+  const item = asObject(value);
+  const language = state?.settings?.language === "en" ? "en" : "zh-CN";
+  const localizedCandidates = language === "en"
+    ? [item.message_en, item.detail_en, item.reason_en]
+    : [item.message_zh, item.detail_zh, item.reason_zh];
+  const localized = localizedCandidates.find((candidate) => String(candidate || "").trim());
+  if (localized) return String(localized);
+  const stable = ISSUE_MESSAGE_BY_CODE[String(item.code || "")];
+  if (stable) return stable[language];
+  const generic = [item.message, item.detail, item.reason].find((candidate) => String(candidate || "").trim());
+  if (generic && (language === "en") !== hasChineseText(generic)) return String(generic);
+  return language === "en" ? fallbackEn : fallbackZh;
+}
+
+function collectBackendDiagnosticItems(value, depth = 0) {
+  if (depth > 5) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => collectBackendDiagnosticItems(item, depth + 1));
+  const item = asObject(value);
+  if (!Object.keys(item).length) return [];
+  const isDiagnostic = ["field_path_zh", "path_zh", "location_zh", "detail_zh", "message_zh", "field_path_en", "path_en", "location_en", "detail_en", "message_en"]
+    .some((key) => item[key]);
+  const nested = ["diagnostics", "errors", "validation", "scenario", "topology", "issues"]
+    .flatMap((key) => collectBackendDiagnosticItems(item[key], depth + 1));
+  return isDiagnostic ? [item, ...nested] : nested;
+}
+
+function backendChineseMessage(value, fallback = "操作失败，未提供中文说明。") {
+  const root = asObject(value);
+  const details = asObject(root.details);
+  const diagnostics = collectBackendDiagnosticItems(details);
+  const english = state?.settings?.language === "en";
+  const specificCandidates = english
+    ? [...diagnostics.flatMap((item) => [item.field_path_en, item.path_en, item.location_en, item.detail_en, item.message_en]), details.field_path_en, details.path_en, details.location_en, details.detail_en, details.message_en]
+    : [...diagnostics.flatMap((item) => [item.field_path_zh, item.path_zh, item.location_zh, item.detail_zh, item.message_zh]), details.field_path_zh, details.path_zh, details.location_zh, details.detail_zh, details.message_zh];
+  const specific = specificCandidates.find((candidate) => String(candidate || "").trim());
+  if (specific) return String(specific);
+  return localizedBackendValue(root, fallback, "The operation failed; inspect the error code and diagnostic ID.");
+}
+
+// Keep the editable/transport representation compact without erasing fields
+// that can still affect topology transfers.  Component capability fields are
+// deliberately handled separately from metadata: latency, DMA, granularity,
+// queue bounds, evidence, and source metadata are runtime-sensitive and must
+// survive even when the inspector does not show them for a particular kind.
+function sanitizeV4ComponentCapabilities(component) {
+  if (!component || typeof component !== "object" || Array.isArray(component)) return component;
+  const kind = normalizedComponentKind(component.kind);
+  if (["cpu", "fabric_switch", "io_die"].includes(kind)) delete component.capacity_bytes;
+  if (["fabric_switch", "io_die"].includes(kind)) delete component.peak_ops_per_s;
+  if (["gpu", "generic_accelerator"].includes(kind)) {
+    for (const field of ["capacity_bytes", "peak_ops_per_s", "read_bandwidth_gbps", "write_bandwidth_gbps"]) {
+      if (component[field] === 0) delete component[field];
+    }
+  }
+  return component;
+}
+
+function sanitizeV4ScenarioCapabilities(scenario) {
+  if (!scenario || typeof scenario !== "object" || Array.isArray(scenario)) return scenario;
+  asArray(scenario.hardware?.components).forEach(sanitizeV4ComponentCapabilities);
+  return scenario;
+}
+
+function scenarioPayloadForTransport(scenario = state.scenario) {
+  if (!scenario) return null;
+  const payload = ensureScenarioShape(deepClone(scenario));
+  const orchestrationIssue = hostOrchestrationReferenceIssue(payload);
+  if (orchestrationIssue) throw new Error(orchestrationIssue);
+  return payload;
+}
+
+function objectArray(value, label) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error(`${label} 必须是数组`);
+  if (value.some((item) => !item || typeof item !== "object" || Array.isArray(item))) {
+    throw new Error(`${label} 的每一项必须是对象`);
+  }
+  return value;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function slug(value) {
+  return String(value || "item")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "item";
+}
+
+function normalizeConnectionLabels(label, labelEn = "") {
+  if (label && typeof label === "object" && !Array.isArray(label)) {
+    const zh = String(label.zh ?? label["zh-CN"] ?? "");
+    const en = String((label.en ?? label["en-US"] ?? labelEn) || zh);
+    return { zh, en };
+  }
+  const zh = String(label ?? "");
+  return { zh, en: String(labelEn || zh) };
+}
+
+function connectionLanguage() {
+  return globalThis.UiI18n?.language?.() || state.settings?.language || "zh-CN";
+}
+
+function renderConnectionState() {
+  if (!dom.connectionState) return;
+  const connection = state.connection || DEFAULT_CONNECTION_STATE;
+  dom.connectionState.className = `connection-state is-${connection.status}`;
+  const label = $("span", dom.connectionState);
+  if (label) {
+    label.textContent = connectionLanguage() === "en" ? connection.labels.en : connection.labels.zh;
+  }
+}
+
+function setConnection(status, label, labelEn = "") {
+  state.connection = {
+    status: String(status || DEFAULT_CONNECTION_STATE.status),
+    labels: normalizeConnectionLabels(label, labelEn),
+  };
+  renderConnectionState();
+}
+
+function runtimeHealthView(payload) {
+  const health = asObject(payload);
+  const runtime = asObject(health.runtime || health.python);
+  const ortools = asObject(health.ortools);
+  const solverPayload = asObject(health.solvers);
+  const availableSolvers = asArray(health.available_solvers || solverPayload.available)
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  let ortoolsAvailable = ortools.available;
+  if (typeof ortoolsAvailable !== "boolean") ortoolsAvailable = ortools.cp_sat_available;
+  if (typeof ortoolsAvailable !== "boolean") ortoolsAvailable = availableSolvers.includes("ortools");
+  const rawError = ortools.error_zh || ortools.import_error_zh || ortools.detail_zh
+    || ortools.error || ortools.import_error || ortools.detail || "";
+  const ortoolsError = ortoolsAvailable === true
+    ? ""
+    : chineseMessage(
+      {
+        message_zh: ortools.error_zh || ortools.import_error_zh,
+        detail_zh: ortools.detail_zh,
+        message: rawError,
+      },
+      "OR-Tools CP-SAT 无法导入；请运行离线包中的安装诊断脚本。",
+    );
+  return {
+    ok: health.ok === true,
+    serviceVersion: String(health.version || "—"),
+    pythonVersion: String(runtime.python_version || health.python_version || "—"),
+    pythonExecutable: String(runtime.executable || health.python_executable || "—"),
+    architectureBits: Number(runtime.architecture_bits || health.architecture_bits || runtime.bits || 0),
+    platform: String(runtime.platform || health.platform || "—"),
+    ortoolsAvailable: ortoolsAvailable === true,
+    ortoolsVersion: String(ortools.version || "—"),
+    ortoolsProbeOk: ortools.probe_ok !== false && ortools.cp_sat_available !== false,
+    ortoolsError,
+    availableSolvers: availableSolvers.length ? availableSolvers : ["auto", "builtin"],
+    diagnosticLogPath: String(
+      health.diagnostic_log_path || asObject(health.diagnostics).log_path || "",
+    ),
+  };
+}
+
+function runtimeConnectionLabel() {
+  const health = state.runtimeHealth;
+  if (!health) return { zh: "本地 API 已连接", en: "Local API connected" };
+  const solver = health.ortoolsAvailable
+    ? `OR-Tools ${health.ortoolsVersion}`
+    : "内置求解器";
+  const solverEn = health.ortoolsAvailable
+    ? `OR-Tools ${health.ortoolsVersion}`
+    : "Built-in solver";
+  return {
+    zh: `本地 API · v${health.serviceVersion} · ${solver}`,
+    en: `Local API · v${health.serviceVersion} · ${solverEn}`,
+  };
+}
+
+function renderRuntimeHealth() {
+  if (!dom.runtimeHealthPanel) return;
+  const health = state.runtimeHealth;
+  if (!health) {
+    dom.runtimeHealthPanel.className = "runtime-health-card is-checking";
+    dom.runtimeHealthPanel.innerHTML = `
+      <div class="runtime-health-heading"><span><strong>${escapeHtml(uiText("运行环境诊断", "Runtime diagnostics"))}</strong><small>${escapeHtml(uiText("运行环境与求解器诊断", "Runtime & Solver Diagnostics"))}</small></span><span class="runtime-health-badge">${escapeHtml(uiText("正在检查", "Checking"))}</span></div>
+      <p>${escapeHtml(uiText("正在读取 Python、程序版本和 OR-Tools CP-SAT 状态…", "Reading Python, application version, and OR-Tools CP-SAT status…"))}</p>`;
+    return;
+  }
+  const healthy = health.ok && health.ortoolsAvailable && health.ortoolsProbeOk;
+  dom.runtimeHealthPanel.className = `runtime-health-card ${healthy ? "is-healthy" : health.ok ? "is-degraded" : "is-error"}`;
+  const bits = health.architectureBits
+    ? uiText("{bits} 位", "{bits}-bit", { bits: health.architectureBits })
+    : "—";
+  dom.runtimeHealthPanel.innerHTML = `
+    <div class="runtime-health-heading">
+      <span><strong>${escapeHtml(uiText("运行环境诊断", "Runtime diagnostics"))}</strong><small>${escapeHtml(uiText("运行环境与求解器诊断", "Runtime & Solver Diagnostics"))}</small></span>
+      <span class="runtime-health-badge">${escapeHtml(healthy ? uiText("可用", "Available") : uiText("需要处理", "Needs attention"))}</span>
+    </div>
+    <dl class="runtime-health-grid">
+      <dt>${escapeHtml(uiText("仿真器版本", "Simulator version"))}</dt><dd>${escapeHtml(health.serviceVersion)}</dd>
+      <dt>${escapeHtml(uiText("Python", "Python"))}</dt><dd>${escapeHtml(health.pythonVersion)} · ${escapeHtml(bits)}</dd>
+      <dt>${escapeHtml(uiText("解释器路径", "Interpreter path"))}</dt><dd>${escapeHtml(health.pythonExecutable)}</dd>
+      <dt>${escapeHtml(uiText("OR-Tools CP-SAT", "OR-Tools CP-SAT"))}</dt><dd>${health.ortoolsAvailable ? `${escapeHtml(health.ortoolsVersion)} · ${escapeHtml(uiText("可用", "Available"))}` : escapeHtml(uiText("不可用", "Unavailable"))}</dd>
+      <dt>${escapeHtml(uiText("可用求解器", "Available solvers"))}</dt><dd>${escapeHtml(health.availableSolvers.join(" / "))}</dd>
+      ${health.diagnosticLogPath ? `<dt>${escapeHtml(uiText("诊断日志", "Diagnostic log"))}</dt><dd>${escapeHtml(health.diagnosticLogPath)}</dd>` : ""}
+    </dl>
+    ${health.ortoolsError ? `<p class="runtime-health-error">${escapeHtml(health.ortoolsError)}</p>` : ""}`;
+}
+
+function applyRuntimeHealth(payload, { notify = false } = {}) {
+  state.runtimeHealth = runtimeHealthView(payload);
+  if (notify && !state.runtimeHealth.ortoolsAvailable) {
+    toast("OR-Tools 不可用", "运行环境诊断已刷新；内部控制平面会选择可用的运行时实现。", "warning", 7500);
+  }
+  renderRuntimeHealth();
+  setConnection("online", runtimeConnectionLabel());
+  return state.runtimeHealth;
+}
+
+function setBusy(active, title = "正在运行分析模型", detail = "正在编译 ScheduleIR 与事件轨迹…") {
+  state.busy = active;
+  dom.busyOverlay.hidden = !active;
+  dom.busyTitle.textContent = title;
+  dom.busyDetail.textContent = detail;
+  [dom.runButton, dom.rerunButton, dom.emptyRunButton, dom.compareButton, dom.validateButton, dom.loadReferenceButton, dom.canonicalExportButton, dom.canonicalExportDialogButton]
+    .filter(Boolean)
+    .forEach((button) => { button.disabled = active; });
+  syncRunButtons();
+}
+
+function toast(title, message = "", kind = "info", timeout = 4200) {
+  const node = document.createElement("div");
+  const closeLabel = uiText("关闭通知", "Close notification");
+  node.className = `toast ${kind}`;
+  node.setAttribute("role", kind === "error" ? "alert" : "status");
+  node.setAttribute("aria-atomic", "true");
+  node.innerHTML = `
+    <span class="toast-accent" aria-hidden="true"></span>
+    <div class="toast-copy"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(message)}</span></div>
+    <button type="button" class="toast-close" aria-label="${escapeHtml(closeLabel)}" data-i18n-aria-label-zh="关闭通知" data-i18n-aria-label-en="Close notification">×</button>`;
+  $(".toast-close", node).addEventListener("click", () => node.remove());
+  dom.toastRegion.append(node);
+  while (dom.toastRegion.children.length > 3) {
+    dom.toastRegion.firstElementChild?.remove();
+  }
+  window.setTimeout(() => node.remove(), timeout);
+}
+
+function readStoredJson(key, fallback = {}) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function clampFontScale(value, fallback = DEFAULT_UI_SETTINGS.fontScale) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(MAX_FONT_SCALE, Math.max(MIN_FONT_SCALE, Math.round(number)));
+}
+
+function layoutScaleForFont(fontScale) {
+  const ratio = clampFontScale(fontScale) / 100;
+  return Math.min(4, Math.max(0.85, 1 + (ratio - 1) * 0.75));
+}
+
+function fontScaleBand(fontScale) {
+  if (fontScale >= 190) return "extreme";
+  if (fontScale > 150) return "large";
+  return "normal";
+}
+
+function normalizeUiSettings(value) {
+  const source = asObject(value);
+  return {
+    language: UI_LANGUAGES.includes(source.language) ? source.language : DEFAULT_UI_SETTINGS.language,
+    fontScale: clampFontScale(source.fontScale),
+    theme: UI_THEMES.includes(source.theme) ? source.theme : DEFAULT_UI_SETTINGS.theme,
+    workspaceBackground: /^#[0-9a-f]{6}$/i.test(source.workspaceBackground || "") ? source.workspaceBackground.toLowerCase() : null,
+    compact: source.compact === true,
+    topologyGrid: source.topologyGrid !== false,
+    reduceMotion: source.reduceMotion === true,
+  };
+}
+
+function applyUiSettings(settings) {
+  const root = document.documentElement;
+  const fontRatio = settings.fontScale / 100;
+  root.dataset.fontScale = String(settings.fontScale);
+  root.dataset.fontBand = fontScaleBand(settings.fontScale);
+  root.style.setProperty("--font-scale", fontRatio.toFixed(2));
+  root.style.setProperty("--layout-scale", layoutScaleForFont(settings.fontScale).toFixed(3));
+  root.dataset.theme = settings.theme;
+  root.style.colorScheme = LIGHT_THEMES.has(settings.theme) ? "light" : "dark";
+  root.dataset.density = settings.compact ? "compact" : "standard";
+  root.dataset.topologyGrid = settings.topologyGrid ? "on" : "off";
+  root.dataset.reduceMotion = settings.reduceMotion ? "true" : "false";
+  root.lang = settings.language;
+  root.dataset.language = settings.language;
+  if (settings.workspaceBackground) {
+    root.dataset.customWorkspace = "true";
+    root.style.setProperty("--workspace-bg-custom", settings.workspaceBackground);
+  } else {
+    delete root.dataset.customWorkspace;
+    root.style.removeProperty("--workspace-bg-custom");
+  }
+  if (dom.runtimeSummary) scheduleRuntimeSharedTracks();
+  if (state.scenario && state.view === "architecture" && dom.topologyCanvas) requestAnimationFrame(renderLinks);
+}
+
+function storeUiSettings() {
+  if (settingsStoreTimer) {
+    window.clearTimeout(settingsStoreTimer);
+    settingsStoreTimer = null;
+  }
+  localStorage.setItem(STORAGE_UI_SETTINGS, JSON.stringify(state.settings));
+}
+
+function scheduleStoreUiSettings() {
+  if (settingsStoreTimer) window.clearTimeout(settingsStoreTimer);
+  settingsStoreTimer = window.setTimeout(storeUiSettings, 160);
+}
+
+function syncSettingsForm() {
+  if (!dom.settingsDialog) return;
+  const theme = $(`input[name="settingsTheme"][value="${state.settings.theme}"]`, dom.settingsDialog);
+  dom.fontScaleInput.value = String(state.settings.fontScale);
+  if (dom.uiLanguageInput) dom.uiLanguageInput.value = state.settings.language;
+  dom.fontScaleInput.setAttribute("aria-valuetext", `${state.settings.fontScale}%`);
+  dom.fontScaleNumberInput.value = String(state.settings.fontScale);
+  dom.fontScaleValue.textContent = `${state.settings.fontScale}%`;
+  if (theme) theme.checked = true;
+  dom.customWorkspaceEnabled.checked = Boolean(state.settings.workspaceBackground);
+  dom.workspaceBackgroundInput.disabled = !state.settings.workspaceBackground;
+  dom.workspaceBackgroundInput.value = state.settings.workspaceBackground || defaultWorkspaceColor(state.settings.theme);
+  dom.compactLayoutInput.checked = state.settings.compact;
+  dom.topologyGridInput.checked = state.settings.topologyGrid;
+  dom.reduceMotionInput.checked = state.settings.reduceMotion;
+  renderRuntimeHealth();
+}
+
+function defaultWorkspaceColor(theme) {
+  return {
+    graphite: "#191816",
+    bluegray: "#131a22",
+    black: "#050505",
+    ivory: "#f4efe4",
+    mist: "#edf3f5",
+    softgray: "#eeeeec",
+  }[theme] || "#191816";
+}
+
+function scheduleTopologyRelayout() {
+  state.topologyLayoutPending = true;
+  if (topologyRelayoutTimer) window.clearTimeout(topologyRelayoutTimer);
+  topologyRelayoutTimer = window.setTimeout(() => {
+    topologyRelayoutTimer = null;
+    if (state.scenario && state.view === "architecture") renderArchitecture();
+    if (state.scenario && state.view === "model") {
+      renderModelGraph();
+    }
+    if (state.scenario && state.view === "playback") {
+      if (state.tracePlayback) state.tracePlayback.topologyLayout = null;
+      renderTraceTopology();
+    }
+  }, 140);
+}
+
+function updateUiSettings(patch, { deferStore = false } = {}) {
+  const previousSettings = state.settings;
+  const previousFontScale = state.settings.fontScale;
+  const previousLanguage = state.settings.language;
+  state.settings = normalizeUiSettings({ ...state.settings, ...patch });
+  const resultsLayoutChanged = state.settings.fontScale !== previousFontScale
+    || state.settings.compact !== previousSettings.compact;
+  applyUiSettings(state.settings);
+  if (state.settings.fontScale !== previousFontScale) scheduleTopologyRelayout();
+  if (resultsLayoutChanged) {
+    componentTimeseriesObservedWidth = null;
+    if (state.report && state.view === "results") scheduleComponentTimeseriesResizeRender();
+  }
+  if (deferStore) scheduleStoreUiSettings();
+  else storeUiSettings();
+  syncSettingsForm();
+  if (state.settings.language !== previousLanguage) {
+    globalThis.UiI18n?.setLanguage?.(state.settings.language, document);
+    if (state.scenario) renderAll();
+    renderRuntimeHealth();
+    syncRunButtons();
+  }
+}
+
+function resetFontScale() {
+  updateUiSettings({ fontScale: 100 });
+}
+
+function resetUiSettings() {
+  updateUiSettings({ ...DEFAULT_UI_SETTINGS });
+  toast("界面设置已恢复", "界面设置已恢复默认值。", "success", 2600);
+}
+
+function showModalDialog(dialog, opener, initialFocus = null) {
+  if (!dialog || dialog.open) return;
+  state.dialogOpeners.set(dialog, opener || document.activeElement);
+  dialog.showModal();
+  requestAnimationFrame(() => {
+    const focusTarget = initialFocus || $("button, input, select, textarea", dialog);
+    if (!focusTarget) return;
+    try {
+      focusTarget.focus({ preventScroll: true });
+    } catch (_error) {
+      focusTarget.focus();
+    }
+  });
+}
+
+function restoreDialogFocus(dialog) {
+  const opener = state.dialogOpeners.get(dialog);
+  state.dialogOpeners.delete(dialog);
+  if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+}
+
+function modalDialogs() {
+  return [
+    dom.jsonDialog,
+    dom.modelPresetsDialog,
+    dom.hardwarePresetsDialog,
+    dom.protocolPresetsDialog,
+    dom.settingsDialog,
+    dom.architectureScanDialog,
+    dom.runJobDialog,
+  ].filter(Boolean);
+}
+
+function bindModalDialogLifecycle() {
+  for (const dialog of modalDialogs()) {
+    dialog.addEventListener("close", () => restoreDialogFocus(dialog));
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close("backdrop");
+    });
+  }
+}
+
+function hasOpenModalDialog() {
+  return modalDialogs().some((dialog) => dialog.open);
+}
+
+function toolbarMenuItems(panel) {
+  return $$('button[role="menuitem"]:not([disabled])', panel).filter((item) => !item.hidden);
+}
+
+function positionToolbarMenu(section) {
+  const trigger = $(".toolbar-menu-trigger", section);
+  const panel = $(".toolbar-menu-panel", section);
+  if (!trigger || !panel || panel.hidden) return;
+  const rect = trigger.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const width = Math.min(Math.max(rect.width, 220), Math.max(220, viewportWidth - 16));
+  panel.style.width = `${width}px`;
+  panel.style.left = `${Math.max(8, Math.min(rect.left, viewportWidth - width - 8))}px`;
+  panel.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - 48)}px`;
+  panel.style.maxHeight = `${Math.max(120, window.innerHeight - rect.bottom - 12)}px`;
+}
+
+function closeToolbarMenus({ except = null, returnFocus = false } = {}) {
+  let closed = false;
+  $$('[data-toolbar-menu]').forEach((section) => {
+    if (section === except) return;
+    const trigger = $(".toolbar-menu-trigger", section);
+    const panel = $(".toolbar-menu-panel", section);
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (returnFocus) trigger.focus();
+    closed = true;
+  });
+  return closed;
+}
+
+function setToolbarMenuOpen(section, open, { focus = "none" } = {}) {
+  const trigger = $(".toolbar-menu-trigger", section);
+  const panel = $(".toolbar-menu-panel", section);
+  if (!trigger || !panel) return;
+  closeToolbarMenus({ except: open ? section : null });
+  panel.hidden = !open;
+  trigger.setAttribute("aria-expanded", String(open));
+  if (!open) {
+    if (focus === "trigger") trigger.focus();
+    return;
+  }
+  positionToolbarMenu(section);
+  const items = toolbarMenuItems(panel);
+  if (focus === "first") items[0]?.focus();
+  if (focus === "last") items.at(-1)?.focus();
+}
+
+function bindToolbarMenus() {
+  const sections = $$('[data-toolbar-menu]');
+  sections.forEach((section, sectionIndex) => {
+    const trigger = $(".toolbar-menu-trigger", section);
+    const panel = $(".toolbar-menu-panel", section);
+    trigger.addEventListener("click", () => setToolbarMenuOpen(section, panel.hidden));
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !panel.hidden) {
+        event.preventDefault();
+        setToolbarMenuOpen(section, false, { focus: "trigger" });
+      } else if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        setToolbarMenuOpen(section, true, { focus: event.key === "ArrowDown" ? "first" : "last" });
+      } else if (["ArrowLeft", "ArrowRight"].includes(event.key)) {
+        event.preventDefault();
+        const offset = event.key === "ArrowRight" ? 1 : -1;
+        const next = sections[(sectionIndex + offset + sections.length) % sections.length];
+        $(".toolbar-menu-trigger", next)?.focus();
+      }
+    });
+    panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setToolbarMenuOpen(section, false, { focus: "trigger" });
+        return;
+      }
+      const item = event.target.closest?.('button[role="menuitem"]');
+      if (!item || item.disabled || !panel.contains(item) || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const items = toolbarMenuItems(panel);
+      const index = items.indexOf(item);
+      event.preventDefault();
+      let next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : index;
+      if (event.key === "ArrowDown") next = (Math.max(-1, index) + 1) % items.length;
+      if (event.key === "ArrowUp") next = (index <= 0 ? items.length : index) - 1;
+      items[next]?.focus();
+    });
+    $$('button:not(.toolbar-menu-trigger)', panel).forEach((button) => button.addEventListener("click", () => {
+      setToolbarMenuOpen(section, false, { focus: "trigger" });
+    }));
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!event.target.closest?.('[data-toolbar-menu]')) closeToolbarMenus();
+    if (!fieldHelpContainsTarget(event.target)) closeFieldHelp();
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!event.target.closest?.('[data-toolbar-menu]')) closeToolbarMenus();
+    if (!fieldHelpContainsTarget(event.target)) closeFieldHelp();
+  });
+  window.addEventListener("resize", () => {
+    const open = $$('[data-toolbar-menu]').find((section) => !$(".toolbar-menu-panel", section).hidden);
+    if (open) positionToolbarMenu(open);
+  });
+}
+
+function openSettingsDialog() {
+  syncSettingsForm();
+  showModalDialog(dom.settingsDialog, dom.settingsButton, dom.fontScaleInput);
+}
+
+function requireScenarioSchemaV4(value, label, { inherited = false } = {}) {
+  if (!Object.hasOwn(value, "schema_version")) {
+    if (inherited) value.schema_version = AUTHORING_SCHEMA_VERSION;
+    else throw new Error(`${label}.schema_version 是必填字段，且必须严格等于 ${AUTHORING_SCHEMA_VERSION}`);
+  }
+  if (value.schema_version !== AUTHORING_SCHEMA_VERSION) {
+    throw new Error(`${label}.schema_version 必须严格等于 ${AUTHORING_SCHEMA_VERSION}`);
+  }
+}
+
+function normalizeV4ModelAuthoring(modelValue, graphValue = undefined) {
+  const model = asObject(modelValue);
+  const retiredFields = [
+    "architecture", "vocabulary_size", "max_sequence_length", "embedding_weight_bytes",
+    "layers", "mtp_prediction_layers", "mtp_aux_head",
+    "mtp_prediction_layer_weight_bytes", "mtp_aux_head_weight_bytes",
+  ].filter((field) => Object.hasOwn(model, field));
+  if (retiredFields.length) {
+    throw new Error(`V4 model 只接受 model.graph；已退役字段不可迁移：${retiredFields.map((field) => `model.${field}`).join("、")}`);
+  }
+  model.graph = normalizeModelGraphPayload(graphValue ?? model.graph, model);
+  return model;
+}
+
+function ensureScenarioShape(scenario) {
+  if (!scenario || typeof scenario !== "object" || Array.isArray(scenario)) {
+    throw new Error("场景 JSON 顶层必须是对象");
+  }
+  requireScenarioSchemaV4(scenario, "scenario");
+  scenario.name ??= "untitled-scenario";
+  scenario.assumptions = asArray(scenario.assumptions);
+  scenario.weights_resident ??= true;
+
+  scenario.hardware = asObject(scenario.hardware);
+  requireScenarioSchemaV4(scenario.hardware, "hardware", { inherited: true });
+  scenario.hardware.name ??= "untitled-hardware";
+  scenario.hardware.metadata = asObject(scenario.hardware.metadata);
+  scenario.hardware.components = objectArray(scenario.hardware.components, "硬件组件（hardware.components）");
+  scenario.hardware.components.forEach((component, componentIndex) => {
+    requireScenarioSchemaV4(component, `hardware.components[${componentIndex}]`, { inherited: true });
+    component.ports = objectArray(component.ports, `组件 ${component.component_id || "<未知>"} 的端口（ports）`);
+    component.ports.forEach((port, portIndex) => requireScenarioSchemaV4(
+      port,
+      `hardware.components[${componentIndex}].ports[${portIndex}]`,
+      { inherited: true },
+    ));
+    if (String(component.kind || "").toLowerCase().replaceAll("-", "_") === "hbf") {
+      component.metadata = asObject(component.metadata);
+      const declaredWritable = Number(component.write_bandwidth_gbps) > 0;
+      component.metadata.read_only ??= !declaredWritable;
+      component.metadata.writable ??= declaredWritable;
+    }
+  });
+  scenario.hardware.links = objectArray(scenario.hardware.links, "硬件链路（hardware.links）");
+  scenario.hardware.links.forEach((link, linkIndex) => requireScenarioSchemaV4(
+    link,
+    `hardware.links[${linkIndex}]`,
+    { inherited: true },
+  ));
+
+  scenario.model = asObject(scenario.model);
+  requireScenarioSchemaV4(scenario.model, "model", { inherited: true });
+  scenario.model.name ??= "untitled-model";
+  normalizeV4ModelAuthoring(scenario.model);
+
+  scenario.placement = asObject(scenario.placement);
+  requireScenarioSchemaV4(scenario.placement, "placement", { inherited: true });
+  for (const field of ["tp_degree", "pp_degree", "ep_degree", "kv_cache_component", "kv_offload_component"]) {
+    if (Object.hasOwn(scenario.placement, field)) throw new Error(`placement.${field} 已从 V4 schema 删除`);
+  }
+  scenario.placement.model_name ??= scenario.model.name;
+  scenario.placement.hardware_name ??= scenario.hardware.name;
+  scenario.placement.op_to_component = asObject(scenario.placement.op_to_component);
+  scenario.placement.tensor_to_component = asObject(scenario.placement.tensor_to_component);
+  scenario.placement.tensor_bytes = asObject(scenario.placement.tensor_bytes);
+  const retiredPlacementFields = ["op_to_component", "tensor_to_component", "tensor_bytes"]
+    .filter((field) => Object.keys(scenario.placement[field]).length);
+  if (retiredPlacementFields.length) {
+    throw new Error(`V4 authoring 不接受人工 placement：${retiredPlacementFields.map((field) => `placement.${field}`).join("、")}`);
+  }
+  scenario.placement.parallel = asObject(scenario.placement.parallel);
+  const parallel = scenario.placement.parallel;
+  parallel.tp_degree ??= 1;
+  parallel.pp_degree ??= 1;
+  parallel.ep_degree ??= 1;
+  parallel.rank_mapping = objectArray(parallel.rank_mapping, "并行 Rank 映射（placement.parallel.rank_mapping）");
+  parallel.layer_to_stage = asObject(parallel.layer_to_stage);
+  parallel.collective_algorithm ??= "auto";
+  parallel.routing_policy ??= "lowest_latency";
+  parallel.allow_padding ??= true;
+  scenario.placement.metadata = asObject(scenario.placement.metadata);
+  const controlPlanePolicyValue = asObject(asObject(scenario.placement.metadata.control_plane).policy);
+  const retiredControlPlaneFields = ["locked_op_keys", "locked_tensor_ids"]
+    .filter((field) => Object.hasOwn(controlPlanePolicyValue, field));
+  if (retiredControlPlaneFields.length) {
+    throw new Error(`V4 authoring 不接受已退役控制平面字段：${retiredControlPlaneFields.map((field) => `placement.metadata.control_plane.policy.${field}`).join("、")}`);
+  }
+  scenario.placement.metadata.ui = asObject(scenario.placement.metadata.ui);
+  scenario.placement.metadata.ui.allow_colocated_logical_ranks ??= false;
+  scenario.placement.kv_policy = asObject(scenario.placement.kv_policy);
+  const kvPolicy = scenario.placement.kv_policy;
+  kvPolicy.cache_component ??= null;
+  kvPolicy.offload_component ??= null;
+  kvPolicy.tokens_per_page ??= 16;
+  if (!Object.hasOwn(kvPolicy, "dtype")) kvPolicy.dtype = null;
+  kvPolicy.offload_ratio ??= 1;
+  kvPolicy.allocation_policy ??= "lazy";
+  kvPolicy.preemption_mode ??= "auto";
+  kvPolicy.prefetch_distance ??= 0;
+
+  scenario.workload = asObject(scenario.workload);
+  requireScenarioSchemaV4(scenario.workload, "workload", { inherited: true });
+  for (const field of ["max_batch_size", "mtp_acceptance_rate"]) {
+    if (Object.hasOwn(scenario.workload, field)) throw new Error(`workload.${field} 已从 V4 schema 删除`);
+  }
+  scenario.workload.name ??= "untitled-workload";
+  scenario.workload.requests = objectArray(scenario.workload.requests, "请求列表（workload.requests）");
+  scenario.workload.requests.forEach((request, requestIndex) => requireScenarioSchemaV4(
+    request,
+    `workload.requests[${requestIndex}]`,
+    { inherited: true },
+  ));
+  scenario.workload.request_count ??= 1;
+  scenario.workload.prompt_tokens ??= 0;
+  scenario.workload.output_tokens ??= 0;
+  scenario.workload.random_seed ??= 0;
+  scenario.workload.scheduler = asObject(scenario.workload.scheduler);
+  const scheduler = scenario.workload.scheduler;
+  scheduler.mode ??= "static";
+  scheduler.max_num_seqs ??= 1;
+  scheduler.max_num_batched_tokens ??= 2048;
+  scheduler.prefill_chunk_tokens ??= 512;
+  scheduler.policy ??= "decode_first";
+  scheduler.starvation_ns ??= 5_000_000;
+  scheduler.preemption_enabled ??= true;
+  scheduler.preemption_granularity ??= "boundary";
+  scheduler.preemption_policy ??= "auto";
+  if (scenario.workload.mtp === undefined) scenario.workload.mtp = null;
+  if (scenario.workload.mtp !== null) {
+    scenario.workload.mtp = asObject(scenario.workload.mtp);
+    const mtp = scenario.workload.mtp;
+    mtp.method ??= "head_based";
+    mtp.candidate_tokens ??= 4;
+    mtp.acceptance_model ??= "expected";
+    if (!Object.hasOwn(mtp, "acceptance_rate")) mtp.acceptance_rate = null;
+    mtp.proposal_cost_scale ??= 0.15;
+    mtp.acceptance_trace = asArray(mtp.acceptance_trace);
+  }
+
+  scenario.profiles = asObject(scenario.profiles);
+  rejectLegacyComponentProfiles(scenario);
+  materializeRequiredV4Profiles(scenario);
+  for (const component of scenario.hardware.components) {
+    const profileKey = costProfileKeyForComponentKind(component.kind);
+    if (!profileKey) continue;
+    const issue = componentProfileBindingIssue(component, scenario);
+    if (issue) throw new Error(issue);
+    const profile = boundCostProfile(profileKey, component, scenario);
+    if (profileKey === "gpu" && (!Object.keys(asObject(profile.tensor_core)).length
+        || !asArray(profile.cache_hierarchy?.levels).length)) {
+      throw new Error(`组件 ${component.component_id} 绑定的 GPU Profile ${component.cost_profile_id} 必须使用 tensor_core/cache_hierarchy 嵌套结构`);
+    }
+    if (profileKey === "cpu" && (!Object.keys(asObject(profile.pipeline)).length
+        || !asArray(profile.cache_hierarchy?.levels).length)) {
+      throw new Error(`组件 ${component.component_id} 绑定的 CPU Profile ${component.cost_profile_id} 必须使用 pipeline/cache_hierarchy 嵌套结构`);
+    }
+  }
+  sanitizeV4ScenarioCapabilities(scenario);
+  return scenario;
+}
+
+function setScenario(incoming, { dirty = false, message = "" } = {}) {
+  const scenario = ensureScenarioShape(deepClone(incoming));
+  state.scenario = scenario;
+  state.scenarioGeneration += 1;
+  state.mappingGeneration += 1;
+  state.dirty = dirty;
+  state.selected = null;
+  state.selectedComponents = new Set();
+  state.selectedDisplayLinkId = null;
+  state.modelGraphEditor = {
+    selectedOperatorId: null,
+    selectedOverviewId: null,
+    connectSource: null,
+    connectMode: false,
+    connectPreview: null,
+    connectPointer: null,
+    connectPreviewWatchdog: null,
+    suppressPortClick: false,
+    diagnostics: [],
+    history: { undo: [], redo: [], restoring: false },
+    drag: null,
+    pan: null,
+    layoutKey: "",
+    overviewLayoutKey: "",
+    overviewCanvasWidth: 0,
+    overviewResizeTarget: 0,
+  };
+  state.connectSource = null;
+  state.validation = { errors: [], warnings: [], information: [] };
+  state.report = null;
+  state.comparison = null;
+  state.runEstimate = null;
+  state.runEstimateScenarioGeneration = null;
+  state.runEstimateMappingGeneration = null;
+  state.runEstimateInputFingerprint = "";
+  resetTracePlaybackState();
+  state.architectureScanResult = null;
+  state.architectureScanRunning = false;
+  state.mappingInputFingerprint = mappingFingerprintFrom(scenario);
+  state.currentInputFingerprint = "";
+  const mappingUi = placementUiMetadata(scenario.placement);
+  state.mappingStale = mappingStaleFrom(scenario) || mappingUi.mapping_stale === true;
+  state.mappingStaleReason = state.mappingStale
+    ? String(mappingUi.mapping_stale_reason || "载入场景声明当前映射已过期。")
+    : "";
+  state.reportStale = false;
+  state.topologyView = Topology.normalizeTopologyView(
+    scenario.hardware.metadata.topology_view,
+    scenario.hardware.components.map((component) => component.component_id),
+  );
+  scenario.hardware.metadata.topology_view = deepClone(state.topologyView);
+  state.nodePositions = state.topologyView.layout.positions;
+  resetTopologyHistory();
+  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(scenario));
+  renderAll();
+  if (message) toast(message, scenario.name, "success");
+}
+
+function markScenarioChanged(message = "", {
+  mappingImpact = true,
+  mappingReason = "影响映射的模型、拓扑、并行、驻留或结构性优化输入已修改。",
+} = {}) {
+  if (!state.scenario) return;
+  state.architectureScanResult = null;
+  if (mappingImpact) markMappingStale(mappingReason);
+  if (mappingImpact) state.mappingGeneration += 1;
+  state.scenarioGeneration += 1;
+  state.dirty = true;
+  state.reportStale = state.reportStale || Boolean(state.report);
+  state.report = null;
+  state.comparison = null;
+  state.runEstimate = null;
+  state.runEstimateScenarioGeneration = null;
+  state.runEstimateMappingGeneration = null;
+  state.runEstimateInputFingerprint = "";
+  resetTracePlaybackState();
+  state.validation = { errors: [], warnings: [], information: [] };
+  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  renderAll();
+  if (message) toast("场景已更新", message, "info", 2600);
+}
+
+function saveTopologyView() {
+  if (!state.scenario || !state.topologyView) return;
+  state.topologyView.layout.positions = state.nodePositions;
+  state.scenario.hardware.metadata = asObject(state.scenario.hardware.metadata);
+  state.scenario.hardware.metadata.topology_view = deepClone(state.topologyView);
+  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+}
+
+function savePositions() {
+  if (!state.scenario) return;
+  saveTopologyView();
+}
+
+async function apiRequest(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${API_ROOT}${path}`, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options,
+    });
+  } catch (cause) {
+    if (cause?.name === "AbortError") throw cause;
+    if (path !== "/health" && await apiReachableAfterRequestFailure()) {
+      setConnection("online", runtimeConnectionLabel());
+      const error = new Error("当前请求连接被中断，但本地 API 仍可达。请重试；若场景较大，请查看服务端返回的请求体限制。");
+      error.code = "request_transport_error";
+      error.cause = cause;
+      throw error;
+    }
+    setConnection("offline", CONNECTION_LABELS.unreachable);
+    const error = new Error("无法连接本地 API。请确认界面服务仍在运行，然后重试。");
+    error.code = "network_error";
+    error.cause = cause;
+    throw error;
+  }
+
+  let payload = null;
+  const contentType = response.headers.get("content-type") || "";
+  try {
+    payload = contentType.includes("json") ? await response.json() : await response.text();
+  } catch (_error) {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const envelope = asObject(payload).error;
+    const serverMessage = backendChineseMessage(
+      envelope && typeof envelope === "object" ? envelope : asObject(payload),
+      `请求失败（HTTP ${response.status}）。请根据错误代码检查输入。`,
+    );
+    const error = new Error(
+      serverMessage,
+    );
+    error.code = envelope?.code || asObject(payload).code || `http_${response.status}`;
+    error.message_zh = envelope?.message_zh || asObject(payload).message_zh || "";
+    error.details = envelope?.details || asObject(payload).details || null;
+    error.diagnosticId = envelope?.diagnostic_id || asObject(payload).diagnostic_id || asObject(error.details).diagnostic_id || "";
+    error.errorType = envelope?.exception_type || envelope?.error_type || asObject(payload).exception_type || asObject(payload).error_type || "";
+    error.status = response.status;
+    const connection = runtimeConnectionLabel();
+    setConnection("online", {
+      zh: `${connection.zh} · HTTP ${response.status}`,
+      en: `${connection.en} · HTTP ${response.status}`,
+    });
+    throw error;
+  }
+
+  setConnection("online", runtimeConnectionLabel());
+  return payload;
+}
+
+async function apiReachableAfterRequestFailure() {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(
+    () => controller.abort(),
+    CONNECTION_RECOVERY_PROBE_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetch(`${API_ROOT}/health`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      await response.text();
+      return false;
+    }
+    const payload = await response.json();
+    return payload?.ok === true;
+  } catch (_error) {
+    return false;
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
+function placementControlPlaneMetadata(placement) {
+  if (!placement || typeof placement !== "object" || Array.isArray(placement)) return {};
+  const metadata = asObject(placement.metadata);
+  return asObject(metadata.control_plane);
+}
+
+function controlPlanePolicy(placement) {
+  const controlPlane = placementControlPlaneMetadata(placement);
+  return asObject(controlPlane.policy);
+}
+
+function controlPlaneDecision(placement) {
+  const controlPlane = placementControlPlaneMetadata(placement);
+  return asObject(controlPlane.decision);
+}
+
+function controlPlaneEvidence(placement) {
+  const controlPlane = placementControlPlaneMetadata(placement);
+  return asObject(controlPlane.evidence);
+}
+
+function placementUiMetadata(placement, { create = false } = {}) {
+  if (!placement || typeof placement !== "object" || Array.isArray(placement)) return {};
+  const metadata = asObject(placement.metadata);
+  const ui = asObject(metadata.ui);
+  if (create) {
+    placement.metadata = metadata;
+    metadata.ui = ui;
+  }
+  return ui;
+}
+
+function allowColocatedRanksEnabled(placement = state.scenario?.placement) {
+  return placementUiMetadata(placement).allow_colocated_logical_ranks === true;
+}
+
+function setAllowColocatedRanks(enabled, placement = state.scenario?.placement) {
+  const ui = placementUiMetadata(placement, { create: true });
+  ui.allow_colocated_logical_ranks = enabled === true;
+}
+
+function clearParallelLayerToStage(placement) {
+  const parallel = asObject(placement?.parallel);
+  const current = asObject(parallel.layer_to_stage);
+  const removed = Object.keys(current).length;
+  // PP segmentation is model-specific. Keep TP/PP/EP degrees, rank mapping,
+  // collective and routing policy, but never carry layer IDs into a new model.
+  parallel.layer_to_stage = {};
+  if (placement && typeof placement === "object" && !Array.isArray(placement)) placement.parallel = parallel;
+  return { removed, preserved: 0 };
+}
+
+function mappingMessageText(value) {
+  if (typeof value === "string") return chineseMessage(value, "求解器返回了未本地化的说明，请根据错误代码检查输入。");
+  const item = asObject(value);
+  const executionTargets = Array.from(new Set(asArray(item.execution_component_ids).filter(Boolean)));
+  const targetLabel = executionTargets.length
+    ? `${executionTargets.join(" + ")}（${executionTargets.length} 个执行目标）`
+    : item.component_id || item.component || item.target_component || item.target;
+  const rawItemId = item.item_id || item.operator || item.op || item.tensor_id || item.tensor || item.layer_id;
+  const itemLabel = String(rawItemId || "") === "scenario_validation"
+    ? uiText("场景校验", "Scenario validation")
+    : rawItemId;
+  let lead = [itemLabel, targetLabel]
+    .filter(Boolean)
+    .join(" → ");
+  const shards = asArray(item.rank_tensor_shards);
+  if (shards.length) {
+    const shardSummary = shards
+      .map((shard) => `${shard.compute_component_id || `Rank ${shard.rank}`}↔${shard.storage_component_id || "未指定存储"}`)
+      .join("、");
+    lead += `；Rank 本地权重分片：${shardSummary}`;
+  }
+  const reason = localizedBackendValue({
+    code: item.code,
+    message_zh: item.reason_zh || item.message_zh,
+    message_en: item.reason_en || item.message_en,
+    message: item.reason || item.message,
+  }, "", "") || String(item.reason || item.message || "");
+  const suggestion = localizedBackendValue({
+    message_zh: item.suggestion_zh,
+    message_en: item.suggestion_en,
+  }, "", "");
+  const diagnostic = Boolean(item.code || item.stage || suggestion);
+  if (diagnostic) {
+    const language = state?.settings?.language === "en" ? "en" : "zh-CN";
+    const stage = controlPlaneStageLabel(item.stage, language);
+    const parts = [];
+    if (item.code) parts.push(`[${String(item.code)}]`);
+    if (stage) parts.push(language === "en" ? `Stage: ${stage}` : `阶段：${stage}`);
+    if (reason) parts.push(language === "en" ? `Cause: ${reason}` : `原因：${reason}`);
+    if (suggestion) parts.push(language === "en" ? `Next step: ${suggestion}` : `建议：${suggestion}`);
+    const detail = parts.join(" · ");
+    if (lead && detail) return uiText("{lead}：{detail}", "{lead}: {detail}", { lead, detail });
+    if (detail) return detail;
+  }
+  if (lead && reason) return uiText("{lead}：{reason}", "{lead}: {reason}", { lead, reason });
+  if (reason) return String(reason);
+  if (lead) return lead;
+  return uiText("求解器返回了结构化说明，请根据相邻错误代码检查输入。", "The solver returned structured details; inspect the adjacent error code and input.");
+}
+
+function controlPlaneStageLabel(stage, language = state?.settings?.language === "en" ? "en" : "zh-CN") {
+  const key = String(stage || "").trim();
+  if (!key) return "";
+  const labels = {
+    request_validation: ["请求校验", "Request validation"],
+    scenario_parse: ["场景解析", "Scenario parsing"],
+    options_validation: ["选项校验", "Option validation"],
+    model_graph_validation: ["模型图校验", "Model graph validation"],
+    parallel_plan: ["并行计划", "Parallel planning"],
+    cim_compatibility: ["CIM 兼容性检查", "CIM compatibility"],
+    capacity_check: ["容量检查", "Capacity check"],
+    route_check: ["拓扑路由检查", "Topology routing"],
+    target_validation: ["组件目标校验", "Component target validation"],
+    constraint_validation: ["约束校验", "Constraint validation"],
+    solver_start: ["求解器启动", "Solver startup"],
+    request_transport: ["请求传输", "Request transport"],
+    request_wait: ["请求等待", "Request wait"],
+    mapping_execution: ["映射执行", "Mapping execution"],
+  };
+  const label = labels[key];
+  return label ? label[language === "en" ? 1 : 0] : key;
+}
+
+function controlPlaneDecisionValue(decision, key, fallback = "—") {
+  return Object.hasOwn(decision, key) && decision[key] != null ? decision[key] : fallback;
+}
+
+function controlPlaneMetricValueMarkup(value, formatter = "") {
+  if (value?.html != null) return value.html;
+  if (formatter === "percent" && value !== "—" && value != null && value !== "") {
+    return formatResultPercent(value).html;
+  }
+  return typeof value === "number" ? formatResultNumber(value).html : escapeHtml(value ?? "—");
+}
+
+function controlPlaneStatusView(scenario = state.scenario) {
+  if (!scenario) {
+    return {
+      status: "idle",
+      label: uiText("尚未载入", "Not loaded"),
+      summary: uiText("载入场景后可查看内部运行时控制平面状态。", "Load a scenario to inspect the internal runtime control-plane state."),
+      metrics: [],
+    };
+  }
+  const placement = asObject(scenario.placement);
+  const policy = controlPlanePolicy(placement);
+  const decision = controlPlaneDecision(placement);
+  const evidence = controlPlaneEvidence(placement);
+  const operatorTargets = asObject(decision.operator_execution_targets);
+  const shardLedger = asObject(decision.rank_weight_shards);
+  const shardCount = Object.values(shardLedger).reduce((total, entries) => total + asArray(entries).length, 0);
+  const materialized = Boolean(
+    evidence.input_fingerprint
+    || Object.keys(operatorTargets).length
+    || Object.keys(shardLedger).length
+    || asArray(decision.generated_op_keys).length
+    || asArray(decision.generated_tensor_ids).length
+  );
+  let status = "ready";
+  let label = uiText("已物化", "Materialized");
+  let summary = uiText(
+    "运行时放置已由内部控制平面物化；此视图为只读。",
+    "Runtime placement has been materialized by the internal control plane; this view is read-only.",
+  );
+  if (state.mappingStale) {
+    status = "stale";
+    label = uiText("已过期", "Stale");
+    summary = state.mappingStaleReason || uiText(
+      "控制平面证据与当前模型、硬件、并行或驻留输入不一致。",
+      "Control-plane evidence does not match the current model, hardware, parallelism, or residency inputs.",
+    );
+  } else if (!materialized) {
+    status = "idle";
+    label = uiText("尚未物化", "Not materialized");
+    summary = uiText(
+      "尚无内部运行时放置决策。控制平面会在需要执行时物化；此处不提供手动规划操作。",
+      "No internal runtime placement decision is materialized yet. The control plane materializes it when execution requires it; no manual planning action is exposed here.",
+    );
+  } else if (decision.fully_placed === false) {
+    status = "incomplete";
+    label = uiText("放置不完整", "Placement incomplete");
+    summary = uiText(
+      "内部控制平面报告放置不完整；请检查场景诊断。",
+      "The internal control plane reports incomplete placement; inspect scenario diagnostics.",
+    );
+  }
+  const metrics = materialized ? [
+    [uiText("指纹架构", "Fingerprint schema"), evidence.fingerprint_schema || "—", "mapping_fingerprint"],
+    [uiText("策略模式", "Policy mode"), policy.mode || asObject(policy.options).mode || "—", "control_plane"],
+    [uiText("目标", "Objective"), decision.objective || policy.objective || asObject(policy.options).objective || "—", "objective"],
+    [uiText("求解器", "Solver"), decision.solver || policy.solver || asObject(policy.options).solver || "—", "solver"],
+    [uiText("目标值", "Objective value"), controlPlaneDecisionValue(decision, "objective_value"), "objective"],
+    [uiText("下界", "Lower Bound"), controlPlaneDecisionValue(decision, "lower_bound"), "lower_bound"],
+    [uiText("Gap", "Optimality Gap"), controlPlaneDecisionValue(decision, "gap"), "optimality_gap", "percent"],
+    [uiText("算子 Rank 目标", "Operator Rank targets"), Object.keys(operatorTargets).length, "operator_targets"],
+    [uiText("张量分片", "Tensor shards"), shardCount, "weight_tensor_shards"],
+  ] : [];
+  return { status, label, summary, metrics, materialized };
+}
+
+function renderControlPlaneStatus() {
+  if (!dom.controlPlaneStatus) return;
+  const view = controlPlaneStatusView();
+  dom.controlPlaneStatusBadge.className = `control-plane-status-badge is-${view.status}`;
+  dom.controlPlaneStatusBadge.textContent = view.label;
+  dom.controlPlaneStatusSummary.textContent = view.summary;
+  dom.controlPlaneStatusMetrics.innerHTML = view.metrics.map(([label, value, helpKey, formatter]) => {
+    const helpAttribute = helpKey ? ` data-concept-help="${escapeHtml(helpKey)}"` : "";
+    return `<div><dt${helpAttribute}>${escapeHtml(label)}</dt><dd>${controlPlaneMetricValueMarkup(value, formatter)}</dd></div>`;
+  }).join("");
+  if (dom.controlPlaneStatusMetrics.querySelectorAll) hydrateConceptHelp(dom.controlPlaneStatusMetrics);
+}
+
+async function loadReference({ quiet = false } = {}) {
+  setBusy(true, "正在载入参考场景", "GET /api/reference");
+  try {
+    const payload = await apiRequest("/reference", { method: "GET", headers: {} });
+    const scenario = asObject(payload).scenario || asObject(payload).reference || payload;
+    setScenario(scenario, { dirty: false, message: quiet ? "" : "参考场景已载入" });
+  } catch (error) {
+    showOperationError("参考场景载入失败", error);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function normalizeIssue(issue, source, severity) {
+  if (typeof issue === "string") {
+    return {
+      severity, source, code: source, location: "",
+      message_zh: hasChineseText(issue) ? issue : "",
+      message_en: hasChineseText(issue) ? "" : issue,
+      message: issue,
+    };
+  }
+  const value = asObject(issue);
+  const details = asObject(value.details);
+  const structured = { ...details, ...value };
+  const location = value.link_id
+    || [value.component_id, value.port_id].filter(Boolean).join(".")
+    || value.sub_operator_id
+    || value.operator_id
+    || value.requested_mapping_key
+    || "";
+  const normalized = {
+    severity,
+    source,
+    code: value.code || source,
+    message_zh: value.message_zh || value.detail_zh || value.reason_zh || "",
+    message_en: value.message_en || value.detail_en || value.reason_en || "",
+    message: value.message || value.detail || value.reason || "",
+    location,
+  };
+  for (const key of [
+    "stage",
+    "operator_id",
+    "sub_operator_id",
+    "operator_class",
+    "requested_target",
+    "resolved_target",
+    "resolution_applied",
+    "requested_mapping_key",
+    "rank_id",
+    "suggestion_zh",
+    "suggestion_en",
+  ]) {
+    if (Object.hasOwn(structured, key)) normalized[key] = structured[key];
+  }
+  return normalized;
+}
+
+function diagnosticContextText(issue) {
+  const item = asObject(issue);
+  const parts = [];
+  if (item.stage) {
+    const stageLabel = controlPlaneStageLabel(item.stage);
+    parts.push(`stage=${String(item.stage)}${stageLabel && stageLabel !== item.stage ? ` (${stageLabel})` : ""}`);
+  }
+  for (const key of [
+    "operator_id",
+    "sub_operator_id",
+    "operator_class",
+    "requested_target",
+    "resolved_target",
+    "resolution_applied",
+    "requested_mapping_key",
+    "rank_id",
+  ]) {
+    if (!Object.hasOwn(item, key) || item[key] === null || item[key] === "") continue;
+    parts.push(`${key}=${String(item[key])}`);
+  }
+  const suggestion = localizedBackendValue({
+    message_zh: item.suggestion_zh,
+    message_en: item.suggestion_en,
+  }, "", "");
+  if (suggestion) parts.push(`${uiText("建议", "Next step")}=${suggestion}`);
+  return parts.join(" · ");
+}
+
+function localizedIssueMessage(issue) {
+  return localizedBackendValue(
+    issue,
+    "未提供本地化诊断说明，请根据错误代码检查输入。",
+    "No localized diagnostic was provided; inspect the input using the error code.",
+  );
+}
+
+function normalizeValidation(payload) {
+  const root = asObject(payload).validation || asObject(payload);
+  const errorsRoot = root.errors;
+  const warningsRoot = root.warnings;
+  const informationRoot = Object.hasOwn(root, "information") ? root.information : root.infos;
+  const errors = [];
+  const warnings = [];
+  const information = [];
+
+  const collect = (target, value, severity, source = "scenario") => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => target.push(normalizeIssue(item, source, severity)));
+    } else if (value && typeof value === "object") {
+      Object.entries(value).forEach(([key, items]) => collect(target, items, severity, key));
+    } else if (value) {
+      target.push(normalizeIssue(value, source, severity));
+    }
+  };
+
+  collect(errors, errorsRoot, "error");
+  collect(warnings, warningsRoot, "warning");
+  collect(information, informationRoot, "information");
+
+  if (!errors.length && Array.isArray(root.validation_errors)) collect(errors, root.validation_errors, "error");
+  if (!warnings.length && Array.isArray(root.validation_warnings)) collect(warnings, root.validation_warnings, "warning");
+  if (!information.length && Array.isArray(root.validation_information)) collect(information, root.validation_information, "information");
+
+  const valid = typeof root.valid === "boolean"
+    ? root.valid
+    : typeof root.is_valid === "boolean"
+      ? root.is_valid
+      : errors.length === 0;
+  return { valid, errors, warnings, information };
+}
+
+async function validateScenario({ quiet = false } = {}) {
+  if (!state.scenario) return null;
+  const requestGeneration = ++validationRequestGeneration;
+  const requestSnapshot = scenarioRequestSnapshot();
+  const requestPayload = scenarioPayloadForTransport();
+  setBusy(true, uiText("正在校验场景", "Validating scenario"), uiText("检查拓扑、容量、映射与降级转换支持范围…", "Checking topology, capacity, mapping, and current lowering support…"));
+  try {
+    const payload = await apiRequest("/validate", {
+      method: "POST",
+      body: JSON.stringify(requestPayload),
+    });
+    if (requestGeneration !== validationRequestGeneration || !scenarioRequestIsCurrent(requestSnapshot)) {
+      if (!quiet) {
+        toast(
+          uiText("已忽略过期校验响应", "Stale validation response ignored"),
+          uiText("场景或映射在校验期间发生变化，请重新校验当前版本。", "The scenario or mapping changed during validation; validate the current version again."),
+          "info",
+          5200,
+        );
+      }
+      return null;
+    }
+    reconcileMappingFingerprint(payload);
+    const validation = normalizeValidation(payload);
+    state.validation = { errors: validation.errors, warnings: validation.warnings, information: validation.information };
+    renderSteps();
+    renderDiagnostics();
+    if (!quiet || !validation.valid) openDiagnostics();
+    if (validation.valid) {
+      const warningCount = validation.warnings.length;
+      toast(
+        uiText("校验通过", "Validation passed"),
+        warningCount
+          ? uiText("{count} 条警告", "{count} warning{suffix}", { count: warningCount, suffix: warningCount === 1 ? "" : "s" })
+          : uiText("未发现错误", "No errors found"),
+        "success",
+      );
+    } else {
+      const errorCount = validation.errors.length;
+      toast(
+        uiText("校验未通过", "Validation failed"),
+        uiText("{count} 条错误", "{count} error{suffix}", { count: errorCount, suffix: errorCount === 1 ? "" : "s" }),
+        "error",
+      );
+    }
+    return validation;
+  } catch (error) {
+    if (requestGeneration !== validationRequestGeneration || !scenarioRequestIsCurrent(requestSnapshot)) return null;
+    showOperationError(uiText("校验请求失败", "Validation request failed"), error);
+    return null;
+  } finally {
+    if (requestGeneration === validationRequestGeneration) setBusy(false);
+  }
+}
+
+function runJobIsActive(job = state.runJob) {
+  return ["queued", "running"].includes(String(asObject(job).status || ""));
+}
+
+function retentionPolicyLabel(value) {
+  return {
+    exact: uiText("完整事件保留（Exact）", "Complete event retention (Exact)"),
+    streaming: uiText("有界事件保留（Streaming）", "Bounded event retention (Streaming)"),
+    aggregate: uiText("仅聚合指标（Aggregate）", "Aggregate metrics only"),
+  }[String(value || "")] || String(value || "—").replaceAll("_", " ");
+}
+
+function numericalBackendLabel(value) {
+  return {
+    auto: uiText("自动选择（Auto）", "Automatic selection (Auto)"),
+    numpy: "NumPy",
+    cupy: "CuPy",
+  }[String(value || "")] || String(value || "—").replaceAll("_", " ");
+}
+
+function runStageLabel(value) {
+  return {
+    queued: uiText("排队等待（Queued）", "Queued"),
+    starting: uiText("正在启动（Starting）", "Starting"),
+    validation: uiText("场景校验（Validation）", "Scenario validation"),
+    compiling: uiText("正在编译（Compiling）", "Compiling"),
+    compilation: uiText("执行计划编译（Compilation）", "Schedule compilation"),
+    serving_cohorts: uiText("在线批次推进（Serving Cohorts）", "Advancing online cohorts"),
+    serving_complete: uiText("在线服务完成（Serving Complete）", "Online serving complete"),
+    cohort_tasks: uiText("拓扑成本校验（Topology Cost Validation）", "Topology cost validation"),
+    schedule: uiText("事件计划执行（Event Schedule）", "Event schedule"),
+    simulating: uiText("事件仿真（Simulation）", "Event simulation"),
+    reporting: uiText("报告汇总（Reporting）", "Report aggregation"),
+    cancelling: uiText("正在安全取消（Cancelling）", "Safely cancelling"),
+    cancelled: uiText("已取消（Cancelled）", "Cancelled"),
+    completed: uiText("已完成（Completed）", "Completed"),
+    failed: uiText("执行失败（Failed）", "Failed"),
+  }[String(value || "")] || String(value || uiText("仿真处理中", "Simulation in progress")).replaceAll("_", " ");
+}
+
+function runStatusLabel(value) {
+  return {
+    queued: uiText("已排队", "Queued"),
+    running: uiText("运行中", "Running"),
+    completed: uiText("已完成", "Completed"),
+    failed: uiText("失败", "Failed"),
+    cancelled: uiText("已取消", "Cancelled"),
+  }[String(value || "")] || uiText("等待启动", "Awaiting start");
+}
+
+function runProgressUnit(progressValue) {
+  const progress = asObject(progressValue);
+  return progress.unit ? String(progress.unit) : "work_units";
+}
+
+function runProgressCountText(progressValue) {
+  const progress = asObject(progressValue);
+  const completed = Math.max(0, Number(progress.completed) || 0);
+  const total = progress.total == null ? null : Math.max(0, Number(progress.total) || 0);
+  const unit = runProgressUnit(progress);
+  const completedText = formatNumber(completed);
+  const totalText = total == null ? "" : formatNumber(total);
+  if (unit === "serving_batches") {
+    return total == null
+      ? uiText("已执行 {completed} 个在线批次（总数未知）", "Executed {completed} online cohorts (total unknown)", { completed: completedText })
+      : uiText("已执行 {completed} / {total} 个在线批次", "Executed {completed} / {total} online cohorts", { completed: completedText, total: totalText });
+  }
+  if (unit === "schedule_tasks") {
+    return total == null
+      ? uiText("已执行 {completed} 个拓扑任务（总数未知）", "Executed {completed} topology tasks (total unknown)", { completed: completedText })
+      : uiText("{completed} / {total} 个拓扑任务", "{completed} / {total} topology tasks", { completed: completedText, total: totalText });
+  }
+  return total == null
+    ? uiText("{completed} 已完成", "{completed} completed", { completed: completedText })
+    : `${completedText} / ${totalText}`;
+}
+
+function runProgressDetailText(progressValue) {
+  const progress = asObject(progressValue);
+  if (!["serving_cohorts", "serving_complete"].includes(String(progress.stage || ""))) return "";
+  const detail = asObject(progress.detail);
+  if (!detail.stage || runProgressUnit(detail) !== "schedule_tasks") return "";
+  const completed = Math.max(0, Number(detail.completed) || 0);
+  const total = detail.total == null ? null : Math.max(0, Number(detail.total) || 0);
+  return total == null
+    ? uiText("当前批次内已执行 {completed} 个拓扑任务（总数未知）", "Executed {completed} topology tasks in the current cohort (total unknown)", { completed: formatNumber(completed) })
+    : uiText("当前批次内 {completed}/{total} 个拓扑任务", "Current cohort: {completed}/{total} topology tasks", { completed: formatNumber(completed), total: formatNumber(total) });
+}
+
+function syncRunButtons() {
+  const active = runJobIsActive() || state.runJobSubmitting;
+  if (dom.runButton) dom.runButton.textContent = active ? uiText("查看仿真进度", "View simulation progress") : uiText("运行仿真", "Run simulation");
+  if (dom.rerunButton) dom.rerunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("重新运行", "Run again");
+  if (dom.emptyRunButton) dom.emptyRunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("运行当前场景", "Run current scenario");
+  for (const button of [dom.runButton, dom.rerunButton, dom.emptyRunButton]) {
+    if (button) button.disabled = state.busy;
+  }
+  if (dom.compareButton) dom.compareButton.disabled = state.busy || active;
+}
+
+function renderRunJobDialog() {
+  if (!dom.runJobDialog) return;
+  const estimate = asObject(state.runEstimate);
+  const job = asObject(state.runJob);
+  const risk = ["low", "medium", "high", "critical"].includes(estimate.risk_level)
+    ? estimate.risk_level
+    : "low";
+  dom.runEstimateRisk.className = `run-risk-badge is-${risk}`;
+  const riskZh = String(estimate.risk_level_zh || ({ low: "低", medium: "中", high: "高", critical: "极高" }[risk]));
+  const riskEn = ({ low: "Low", medium: "Medium", high: "High", critical: "Critical" }[risk]);
+  dom.runEstimateRisk.textContent = estimate.risk_level
+    ? uiText(`风险：${riskZh}`, `Risk: ${riskEn}`)
+    : uiText("等待估算", "Awaiting estimate");
+  const facts = [
+    [uiText("请求数（Requests）", "Requests"), estimate.request_count],
+    [uiText("输入 Token（Prompt Tokens）", "Prompt Tokens"), estimate.prompt_tokens],
+    [uiText("输出 Token（Output Tokens）", "Output Tokens"), estimate.output_tokens],
+    [uiText("模型层数（Layers）", "Model Layers"), estimate.layer_count],
+    [uiText("并行规模（World Size）", "World Size"), estimate.world_size],
+    [uiText("预计批次数（Cohorts）", "Estimated Cohorts"), estimate.estimated_cohort_count],
+    [uiText("详细事件等价任务数（DES Tasks）", "Detailed-event Equivalent Tasks (DES)"), estimate.estimated_event_task_count],
+    [uiText("推荐保留策略（Retention Policy）", "Recommended Retention Policy"), retentionPolicyLabel(estimate.recommended_retention_policy)],
+  ];
+  dom.runEstimateSummary.innerHTML = facts.map(([label, value]) => {
+    const display = typeof value === "number" ? formatResultNumber(value).html : escapeHtml(value ?? "—");
+    return `<div><dt>${escapeHtml(label)}</dt><dd>${display}</dd></div>`;
+  }).join("");
+  const warnings = asArray(estimate.warnings);
+  dom.runEstimateWarnings.innerHTML = warnings.length
+    ? warnings.map((item) => `<p>${escapeHtml(runEstimateWarningText(item))}</p>`).join("")
+    : `<p>${escapeHtml(uiText("未发现需要额外提示的运行规模风险。", "No additional run-scale risks were identified."))}</p>`;
+
+  const hasJob = Boolean(job.job_id);
+  dom.runJobProgressPanel.hidden = !hasJob;
+  if (hasJob) {
+    const progress = asObject(job.progress);
+    const completed = Math.max(0, Number(progress.completed) || 0);
+    const total = progress.total == null ? null : Math.max(0, Number(progress.total) || 0);
+    const ratio = progress.ratio == null
+      ? (total > 0 ? completed / total : null)
+      : Math.min(1, Math.max(0, Number(progress.ratio) || 0));
+    const safeStatus = ["queued", "running", "completed", "failed", "cancelled"].includes(job.status)
+      ? job.status
+      : "waiting";
+    dom.runJobStatus.textContent = runStatusLabel(job.status);
+    dom.runJobStatus.className = `run-job-status is-${safeStatus}`;
+    dom.runProgressStage.textContent = runStageLabel(progress.stage || job.status);
+    dom.runProgressCount.textContent = runProgressCountText(progress);
+    if (ratio == null) dom.runProgressBar.removeAttribute("value");
+    else dom.runProgressBar.value = ratio;
+    dom.runProgressBar.textContent = ratio == null ? uiText("运行中", "Running") : `${formatNumber(ratio * 100)}%`;
+    const progressMessage = progress.message
+      ? runProgressMessageText(progress.message)
+      : uiText("后台仿真正在运行。", "The background simulation is running.");
+    const detailMessage = runProgressDetailText(progress);
+    dom.runProgressMessage.textContent = detailMessage
+      ? uiText("{detail}。{message}", "{detail}. {message}", { detail: detailMessage, message: progressMessage })
+      : progressMessage;
+    dom.runProgressBar.setAttribute(
+      "aria-valuetext",
+      uiText("{stage}：{count}。{message}", "{stage}: {count}. {message}", {
+        stage: runStageLabel(progress.stage || job.status),
+        count: dom.runProgressCount.textContent,
+        message: dom.runProgressMessage.textContent,
+      }),
+    );
+  }
+
+  const active = runJobIsActive(job);
+  dom.startRunJobButton.hidden = active || Boolean(job.job_id && ["completed", "failed", "cancelled"].includes(job.status));
+  dom.startRunJobButton.disabled = state.runJobSubmitting || !estimate.schema_version;
+  dom.cancelRunJobButton.hidden = !active;
+  dom.cancelRunJobButton.disabled = job.cancellation_requested === true;
+  dom.cancelRunJobButton.textContent = job.cancellation_requested
+    ? uiText("正在取消（Cancelling）", "Cancelling")
+    : uiText("取消仿真（Cancel）", "Cancel simulation");
+  dom.dismissRunJobButton.textContent = active ? uiText("转入后台", "Continue in background") : uiText("关闭", "Close");
+  syncRunButtons();
+}
+
+function openRunJobDialog(opener = dom.runButton) {
+  renderRunJobDialog();
+  const focus = runJobIsActive() ? dom.cancelRunJobButton : dom.startRunJobButton;
+  showModalDialog(dom.runJobDialog, opener, focus);
+}
+
+function scheduleRunJobPoll(jobId, delay = 240) {
+  if (runJobPollTimer !== null) window.clearTimeout(runJobPollTimer);
+  runJobPollTimer = window.setTimeout(() => { void pollRunJob(jobId); }, delay);
+}
+
+function finishRunJob(snapshot) {
+  if (runJobPollTimer !== null) window.clearTimeout(runJobPollTimer);
+  runJobPollTimer = null;
+  state.runJob = snapshot;
+  state.runJobSubmitting = false;
+  renderRunJobDialog();
+  if (snapshot.status === "completed") {
+    const report = asObject(snapshot.report).report || snapshot.report;
+    const reportFingerprint = mappingFingerprintFrom(report);
+    const scenarioChanged = state.runJobScenarioGeneration !== state.scenarioGeneration
+      || state.runJobMappingGeneration !== state.mappingGeneration
+      || Boolean(state.runJobInputFingerprint && state.mappingInputFingerprint && state.runJobInputFingerprint !== state.mappingInputFingerprint)
+      || Boolean(reportFingerprint && state.runJobInputFingerprint && reportFingerprint !== state.runJobInputFingerprint);
+    if (!scenarioChanged) reconcileMappingFingerprint(report);
+    state.report = report;
+    state.comparison = null;
+    state.reportStale = scenarioChanged;
+    if (!scenarioChanged) {
+      state.dirty = false;
+      state.validation = {
+        errors: [],
+        warnings: asArray(asObject(report).validation_warnings).map((item) => normalizeIssue(item, "scenario", "warning")),
+        information: asArray(asObject(report).validation_information).map((item) => normalizeIssue(item, "scenario", "information")),
+      };
+    }
+    renderAll();
+    switchView("results");
+    if (dom.runJobDialog.open) dom.runJobDialog.close("completed");
+    toast(
+      scenarioChanged
+        ? uiText("后台仿真完成（当前场景已修改）", "Background simulation completed (current scenario changed)")
+        : uiText("仿真完成", "Simulation completed"),
+      scenarioChanged
+        ? uiText("报告来自启动时的场景，已标记为过期；请重新运行当前场景。", "The report comes from the scenario at launch and is marked stale; rerun the current scenario.")
+        : uiText("运行标识：{runId}", "Run ID: {runId}", { runId: asObject(report).manifest?.run_id || "—" }),
+      scenarioChanged ? "warning" : "success",
+      7500,
+    );
+  } else if (snapshot.status === "cancelled") {
+    toast(
+      uiText("仿真已取消", "Simulation cancelled"),
+      uiText("后台任务已安全停止，未生成不完整报告。", "The background job stopped safely; no incomplete report was produced."),
+      "warning",
+      5200,
+    );
+  } else if (snapshot.status === "failed") {
+    showOperationError(uiText("后台仿真失败", "Background simulation failed"), { ...asObject(snapshot.error), code: "run_job_failed" });
+  }
+  syncRunButtons();
+}
+
+async function pollRunJob(jobId) {
+  runJobPollTimer = null;
+  if (String(asObject(state.runJob).job_id || "") !== String(jobId)) return;
+  try {
+    const snapshot = await apiRequest(`/run-jobs/${encodeURIComponent(jobId)}`, { method: "GET", headers: {} });
+    if (String(asObject(state.runJob).job_id || "") !== String(jobId)) return;
+    state.runJob = asObject(snapshot);
+    state.runJobPollFailures = 0;
+    renderRunJobDialog();
+    if (["completed", "failed", "cancelled"].includes(state.runJob.status)) {
+      finishRunJob(state.runJob);
+      return;
+    }
+    scheduleRunJobPoll(jobId);
+  } catch (error) {
+    state.runJobPollFailures += 1;
+    if (state.runJobPollFailures < 5) {
+      scheduleRunJobPoll(jobId, Math.min(2000, 300 * (2 ** state.runJobPollFailures)));
+      return;
+    }
+    state.runJobSubmitting = false;
+    syncRunButtons();
+    showOperationError(uiText("无法读取后台仿真进度", "Unable to read background simulation progress"), error);
+  }
+}
+
+async function startRunJob() {
+  if (!state.scenario || !state.runEstimate || state.runJobSubmitting || runJobIsActive()) return;
+  const readiness = mappingRunReadiness();
+  if (!readiness.ready) {
+    dom.runJobDialog?.close("mapping-blocked");
+    blockRunForMapping(readiness, "后台仿真");
+    return;
+  }
+  const estimateCurrent = state.runEstimateScenarioGeneration === state.scenarioGeneration
+    && state.runEstimateMappingGeneration === state.mappingGeneration
+    && (!state.runEstimateInputFingerprint || !state.mappingInputFingerprint || state.runEstimateInputFingerprint === state.mappingInputFingerprint);
+  if (!estimateCurrent) {
+    state.runEstimate = null;
+    renderRunJobDialog();
+    toast(
+      uiText("运行估算已过期", "Run estimate is stale"),
+      uiText("场景或映射已改变，请重新点击“运行仿真”生成当前版本的估算。", "The scenario or mapping changed. Select Run simulation again to generate a current estimate."),
+      "warning",
+      7000,
+    );
+    return;
+  }
+  const requestSnapshot = scenarioRequestSnapshot();
+  const requestPayload = scenarioPayloadForTransport();
+  state.runJobSubmitting = true;
+  state.runJobScenarioGeneration = requestSnapshot.scenarioGeneration;
+  state.runJobMappingGeneration = requestSnapshot.mappingGeneration;
+  state.runJobInputFingerprint = requestSnapshot.inputFingerprint;
+  state.runJobPollFailures = 0;
+  renderRunJobDialog();
+  try {
+    const snapshot = await apiRequest("/run-jobs", {
+      method: "POST",
+      body: JSON.stringify({
+        scenario: requestPayload,
+        retention_policy: String(state.runEstimate.recommended_retention_policy),
+      }),
+    });
+    state.runJob = asObject(snapshot);
+    state.runJobSubmitting = false;
+    renderRunJobDialog();
+    const current = scenarioRequestIsCurrent(requestSnapshot);
+    toast(
+      current
+        ? uiText("后台仿真已启动", "Background simulation started")
+        : uiText("后台仿真已启动（当前场景已修改）", "Background simulation started (current scenario changed)"),
+      current
+        ? uiText("任务标识：{jobId}", "Job ID: {jobId}", { jobId: state.runJob.job_id })
+        : uiText(
+          "任务标识：{jobId}；完成报告会标记为过期，不会覆盖当前映射状态。",
+          "Job ID: {jobId}. The completed report will be marked stale and will not overwrite the current mapping state.",
+          { jobId: state.runJob.job_id },
+        ),
+      current ? "success" : "warning",
+      5200,
+    );
+    scheduleRunJobPoll(state.runJob.job_id, 80);
+  } catch (error) {
+    state.runJobSubmitting = false;
+    renderRunJobDialog();
+    showOperationError(uiText("后台仿真启动失败", "Failed to start background simulation"), error);
+  }
+}
+
+async function cancelRunJob() {
+  const jobId = String(asObject(state.runJob).job_id || "");
+  if (!jobId || !runJobIsActive()) return;
+  dom.cancelRunJobButton.disabled = true;
+  dom.cancelRunJobButton.textContent = uiText("正在取消（Cancelling）", "Cancelling");
+  try {
+    const snapshot = await apiRequest(`/run-jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+      body: "{}",
+    });
+    state.runJob = asObject(snapshot);
+    renderRunJobDialog();
+    scheduleRunJobPoll(jobId, 80);
+  } catch (error) {
+    renderRunJobDialog();
+    showOperationError(uiText("取消后台仿真失败", "Failed to cancel background simulation"), error);
+  }
+}
+
+async function runScenario(event = null) {
+  if (!state.scenario || state.busy) return;
+  if (runJobIsActive() || state.runJobSubmitting) {
+    const jobId = String(asObject(state.runJob).job_id || "");
+    if (jobId && runJobPollTimer === null) scheduleRunJobPoll(jobId, 80);
+    openRunJobDialog(event?.currentTarget || dom.runButton);
+    return;
+  }
+  const readiness = mappingRunReadiness();
+  if (!readiness.ready) return blockRunForMapping(readiness, "运行");
+  const validation = await validateScenario({ quiet: true });
+  if (!validation?.valid) {
+    if (validation) {
+      toast(
+        uiText("运行门禁未通过", "Run gate not passed"),
+        uiText(
+          "场景仍有 {count} 条错误，请先处理诊断。",
+          "The scenario still has {count} error{suffix}; inspect the diagnostics first.",
+          { count: validation.errors.length, suffix: validation.errors.length === 1 ? "" : "s" },
+        ),
+        "warning",
+        7200,
+      );
+    }
+    return;
+  }
+  const validatedReadiness = mappingRunReadiness();
+  if (!validatedReadiness.ready) return blockRunForMapping(validatedReadiness, "运行");
+  const requestGeneration = ++runEstimateRequestGeneration;
+  const requestSnapshot = scenarioRequestSnapshot();
+  const requestPayload = scenarioPayloadForTransport();
+  setBusy(
+    true,
+    uiText("正在估算仿真规模", "Estimating simulation scale"),
+    uiText(
+      "正在分析请求数、Token、模型层数、并行规模与详细事件等价任务数…",
+      "Analyzing request count, Tokens, model layers, parallel scale, and detailed-event-equivalent task count…",
+    ),
+  );
+  let estimate = null;
+  try {
+    estimate = await apiRequest("/run-estimate", {
+      method: "POST",
+      body: JSON.stringify(requestPayload),
+    });
+    if (requestGeneration !== runEstimateRequestGeneration || !scenarioRequestIsCurrent(requestSnapshot)) {
+      toast(
+        uiText("已忽略过期运行估算", "Stale run estimate ignored"),
+        uiText("场景或映射在估算期间发生变化，请重新运行当前版本。", "The scenario or mapping changed during estimation; run the current version again."),
+        "info",
+        5200,
+      );
+      estimate = null;
+    }
+  } catch (error) {
+    if (requestGeneration === runEstimateRequestGeneration && scenarioRequestIsCurrent(requestSnapshot)) {
+      showOperationError(uiText("仿真规模估算失败", "Simulation scale estimation failed"), error);
+    }
+  } finally {
+    if (requestGeneration === runEstimateRequestGeneration) setBusy(false);
+  }
+  if (!estimate) return;
+  state.runEstimate = asObject(estimate);
+  state.runEstimateScenarioGeneration = requestSnapshot.scenarioGeneration;
+  state.runEstimateMappingGeneration = requestSnapshot.mappingGeneration;
+  state.runEstimateInputFingerprint = requestSnapshot.inputFingerprint;
+  state.runJob = null;
+  renderRunJobDialog();
+  openRunJobDialog(event?.currentTarget || dom.runButton);
+}
+
+async function compareScenario() {
+  if (!state.scenario || state.busy) return;
+  if (state.mappingStale) {
+    const staleReason = mappingRunReadiness().reason || uiText("当前映射与输入不一致。", "The current mapping does not match the inputs.");
+    const reason = uiText("{reason} 请先刷新运行时放置。", "{reason} Refresh runtime placement first.", { reason: staleReason });
+    switchView("mapping");
+    renderControlPlaneStatus();
+    toast(uiText("映射已过期，已阻止比较", "Comparison blocked because the mapping is stale"), reason, "warning", 7500);
+    return;
+  }
+  setBusy(true, "正在构建 GPU 基线", "POST /api/compare · 候选场景与 GPU-only placement 分析…");
+  try {
+    const payload = await apiRequest("/compare", {
+      method: "POST",
+      body: JSON.stringify(scenarioPayloadForTransport()),
+    });
+    reconcileMappingFingerprint(payload);
+    state.comparison = payload;
+    state.report = payload.candidate;
+    state.runJob = null;
+    state.runJobScenarioGeneration = null;
+    state.reportStale = false;
+    state.dirty = false;
+    renderAll();
+    switchView("results");
+    toast("基线比较完成", "已生成候选与 GPU 基线的分析报告", "success");
+  } catch (error) {
+    showOperationError("GPU 基线比较失败", error);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function showOperationError(title, error) {
+  const details = asObject(error.details);
+  const baseMessage = backendChineseMessage(
+    { ...asObject(error), message: error?.message, details },
+    "操作失败，未提供中文说明；请根据错误代码检查输入。",
+  );
+  const diagnosticId = String(error?.diagnosticId || details.diagnostic_id || "").trim();
+  const diagnosticSuffix = uiText(`（诊断编号：${diagnosticId}）`, ` (Diagnostic ID: ${diagnosticId})`);
+  const message = diagnosticId ? `${baseMessage}${diagnosticSuffix}` : baseMessage;
+  reconcileMappingFingerprint(details);
+  if (error.code === "mapping_stale" || error.code === "stale_mapping" || details.mapping_stale === true) {
+    markMappingStale(localizedBackendValue(
+      { code: "mapping_stale", message_zh: details.message_zh, message_en: details.message_en, message: details.message },
+      "服务端拒绝了过期映射；请刷新运行时放置。",
+      "The server rejected stale placement; refresh runtime placement.",
+    ));
+    if (dom.controlPlaneStatus) renderControlPlaneStatus();
+  }
+  const validationDetails = details.validation || (details.errors || details.warnings || details.information || details.infos ? details : null);
+  if (validationDetails) {
+    const validation = normalizeValidation(validationDetails);
+    state.validation = { errors: validation.errors, warnings: validation.warnings, information: validation.information };
+  } else {
+    state.validation = {
+      errors: operationErrorIssues(error, message),
+      warnings: [],
+      information: [],
+    };
+  }
+  renderSteps();
+  renderDiagnostics();
+  openDiagnostics();
+  toast(title, message, "error", 6500);
+}
+
+function operationErrorIssues(error, fallbackMessage) {
+  const details = asObject(error?.details);
+  const diagnostics = asArray(details.diagnostics);
+  if (diagnostics.length) {
+    return diagnostics.map((rawItem) => {
+      const item = asObject(rawItem);
+      return normalizeIssue({
+        ...item,
+        code: item.code || error?.code,
+        message_zh: item.reason_zh || item.detail_zh || item.message_zh,
+        message_en: item.reason_en || item.detail_en || item.message_en,
+        message: item.reason || item.detail || item.message || fallbackMessage,
+      }, "control_plane", "error");
+    });
+  }
+  return [normalizeIssue({
+    code: error?.code || "request_error",
+    message_zh: hasChineseText(fallbackMessage) ? fallbackMessage : "",
+    message_en: hasChineseText(fallbackMessage) ? "" : fallbackMessage,
+    message: fallbackMessage,
+  }, "network", "error")];
+}
+
+function openDiagnostics() {
+  dom.diagnosticPanel.hidden = false;
+  dom.diagnosticToggle.setAttribute("aria-expanded", "true");
+}
+
+function closeDiagnostics() {
+  dom.diagnosticPanel.hidden = true;
+  dom.diagnosticToggle.setAttribute("aria-expanded", "false");
+}
+
+function renderDiagnostics() {
+  const { errors, warnings, information = [] } = state.validation;
+  if (!errors.length && !warnings.length && !information.length) {
+    dom.diagnosticContent.innerHTML = `<div class="diagnostic-group success"><h3>${escapeHtml(uiText("无活动诊断", "No active diagnostics"))}</h3><div class="diagnostic-item">${escapeHtml(uiText("运行校验可检查当前场景。成功状态只代表结构与当前降级转换约束通过。", "Run validation to check the current scenario. Success only means the structure and current lowering constraints passed."))}</div></div>`;
+    return;
+  }
+  const renderGroup = (items, kind, title) => items.length ? `
+    <section class="diagnostic-group ${kind}">
+      <h3>${escapeHtml(title)} · ${items.length}</h3>
+      ${items.map((item) => {
+        const context = diagnosticContextText(item);
+        return `<div class="diagnostic-item"><strong>${escapeHtml(item.code)}</strong>${item.location ? ` · ${escapeHtml(item.location)}` : ""}\n${escapeHtml(localizedIssueMessage(item))}${context ? `\n${escapeHtml(context)}` : ""}</div>`;
+      }).join("")}
+    </section>` : "";
+  dom.diagnosticContent.innerHTML = renderGroup(errors, "error", uiText("错误", "Errors"))
+    + renderGroup(warnings, "warning", uiText("警告", "Warnings"))
+    + renderGroup(information, "information", uiText("信息", "Information"));
+}
+
+function switchView(viewName) {
+  if (viewName !== "playback") clearTraceFullscreenState();
+  state.view = viewName;
+  $$('[data-view-panel]').forEach((panel) => {
+    const active = panel.dataset.viewPanel === viewName;
+    panel.hidden = !active;
+    panel.classList.toggle("is-active", active);
+  });
+  $$(".step-button").forEach((button) => {
+    const active = button.dataset.view === viewName;
+    button.classList.toggle("is-active", active);
+    if (active) button.setAttribute("aria-current", "step");
+    else button.removeAttribute("aria-current");
+  });
+  if (viewName === "architecture") requestAnimationFrame(() => {
+    ensureNodePositions(false);
+    renderTopology();
+  });
+  if (viewName === "model") requestAnimationFrame(() => {
+    if (!scheduleModelGraphOverviewResize()) renderModelGraph();
+  });
+  if (viewName === "results") renderResults();
+  if (viewName === "playback") renderTracePlayback();
+}
+
+function renderAll() {
+  if (!state.scenario) return;
+  dom.dirtyMark.textContent = state.dirty ? uiText("已修改", "Modified") : uiText("未修改", "Unmodified");
+  dom.dirtyMark.classList?.toggle("is-dirty", state.dirty);
+  dom.dirtyMark.classList?.toggle("is-clean", !state.dirty);
+  ensureTracePlaybackData();
+  renderSteps();
+  renderArchitecture();
+  renderModel();
+  renderMapping();
+  renderWorkload();
+  renderTracePlayback();
+  renderResults();
+  renderDiagnostics();
+  hydrateConceptHelp();
+  globalThis.UiI18n?.localize?.(document);
+  // Static localization attributes on the live status element are useful
+  // before the scenario is ready, but must not replace its current selection.
+  renderModelGraphDiagnostics();
+  renderConnectionState();
+}
+
+function traceStepSummary() {
+  const playback = state.tracePlayback;
+  const batchCount = asArray(playback.batchTraceIndex).length;
+  const taskEventCount = playback.mode === "task" && playback.page
+    ? Math.max(0, Number(playback.page.total) || 0)
+    : null;
+  const aggregateEventCount = Math.max(0, Number(playback.data?.total_events) || playback.events.length || 0);
+  if (taskEventCount != null) {
+    return {
+      count: taskEventCount,
+      label: taskEventCount
+        ? uiText("{count} 个任务事件", "{count} task events", { count: formatNumber(taskEventCount) })
+        : uiText("当前批次无任务事件", "No task events in the current batch"),
+    };
+  }
+  if (batchCount) {
+    return {
+      count: batchCount,
+      label: uiText("{count} 个批次摘要", "{count} batch summaries", { count: formatNumber(batchCount) }),
+    };
+  }
+  return {
+    count: aggregateEventCount,
+    label: aggregateEventCount
+      ? uiText("{count} 个聚合事件", "{count} aggregate events", { count: formatNumber(aggregateEventCount) })
+      : uiText("无可回放事件", "No replayable events"),
+  };
+}
+
+function renderTraceStepSummary() {
+  const summary = traceStepSummary();
+  dom.playbackCount.textContent = state.report ? formatNumber(summary.count) : "—";
+  dom.playbackStatus.textContent = state.report
+    ? summary.label
+    : state.reportStale
+      ? uiText("结果已过期", "Results stale")
+      : uiText("未运行", "Not run");
+}
+
+function renderSteps() {
+  const scenario = state.scenario;
+  const errors = state.validation.errors.length;
+  const warnings = state.validation.warnings.length;
+  dom.errorCount.textContent = String(errors);
+  dom.warningCount.textContent = String(warnings);
+  if (!scenario) return;
+  const components = asArray(scenario.hardware?.components).length;
+  const links = asArray(scenario.hardware?.links).length;
+  const layerSummary = modelExecutionLayerSummary(scenario.model);
+  const placementDecision = controlPlaneDecision(scenario.placement);
+  const opMappings = Object.keys(asObject(placementDecision.operator_execution_targets)).length;
+  const tensorMappings = Object.keys(asObject(placementDecision.rank_weight_shards)).length;
+  const requests = asArray(scenario.workload?.requests).length;
+  const groups = asArray(state.topologyView?.groups).length;
+  dom.architectureCount.textContent = `${components}/${links}`;
+  dom.modelCount.textContent = layerSummary.count == null ? "—" : String(layerSummary.count);
+  dom.mappingCount.textContent = String(opMappings + tensorMappings);
+  dom.workloadCount.textContent = String(requests);
+  renderTraceStepSummary();
+  dom.resultsCount.innerHTML = state.report ? formatResultNumber(Object.keys(asObject(state.report.requests)).length).html : "—";
+  dom.architectureStatus.textContent = uiText(`${components} 组件 · ${links} 链路 · ${groups} 组`, `${components} components · ${links} links · ${groups} groups`);
+  dom.modelStatus.textContent = layerSummary.count == null ? "—" : uiText(`${layerSummary.count} 层`, `${layerSummary.count} layers`);
+  dom.modelStatus.title = layerSummary.reason || "";
+  dom.mappingStatus.textContent = state.mappingStale
+    ? uiText(`已过期 · ${opMappings} 算子 · ${tensorMappings} 张量`, `Stale · ${opMappings} operators · ${tensorMappings} tensors`)
+    : uiText(`${opMappings} 算子 · ${tensorMappings} 张量`, `${opMappings} operators · ${tensorMappings} tensors`);
+  dom.mappingStatus.classList.toggle("is-stale", state.mappingStale);
+  dom.workloadStatus.textContent = uiText(`${requests} 请求`, `${requests} requests`);
+  dom.resultsStatus.textContent = state.report ? uiText("报告就绪", "Report ready") : state.reportStale ? uiText("结果已过期", "Results stale") : uiText("未运行", "Not run");
+  $$(".step-count").forEach((node) => node.classList.toggle("has-errors", errors > 0));
+}
+
+function componentKindClass(kind) {
+  const normalized = String(kind || "").toLowerCase().replaceAll("-", "_");
+  if (normalized.includes("cim")) return "cim";
+  if (["hbm", "hbm_stack", "host_memory", "cxl_memory"].includes(normalized)) return "io";
+  if (["hbf", "ssd", "high_io_ssd"].includes(normalized)) return "storage";
+  if (["gpu", "cpu", "generic_accelerator", "pim_accelerator"].includes(normalized) || normalized.includes("compute")) return "compute";
+  if (["fabric_switch", "io_die"].includes(normalized)) return "transport";
+  return "neutral";
+}
+
+function normalizedComponentKind(kind) {
+  return String(kind || "").toLowerCase().replaceAll("-", "_");
+}
+
+function isDedicatedHbm(kind) {
+  return ["hbm", "hbm_stack"].includes(normalizedComponentKind(kind));
+}
+
+function isWritableActiveRankMemory(component) {
+  const metadata = asObject(component?.metadata);
+  return isDedicatedHbm(component?.kind)
+    && metadata.read_only !== true
+    && metadata.writable !== false;
+}
+
+function isFlashStorage(kind) {
+  return ["hbf", "ssd", "high_io_ssd"].includes(normalizedComponentKind(kind));
+}
+
+function componentCanHostOperator(component) {
+  return ["compute", "cim"].includes(componentKindClass(component?.kind));
+}
+
+function kindLabel(kind) {
+  const labels = {
+    gpu: ["通用计算（GPU）", "GPU Compute"],
+    hbm: ["高带宽内存（HBM）", "High-Bandwidth Memory (HBM)"],
+    hbm_stack: ["高带宽内存堆栈（HBM）", "HBM Stack"],
+    hbf: ["高带宽闪存（HBF）", "High-Bandwidth Flash (HBF)"],
+    ssd: ["固态硬盘（SSD）", "Solid-State Drive (SSD)"],
+    high_io_ssd: ["高 I/O 固态硬盘", "High-I/O SSD"],
+    digital_sram_cim: ["数字 SRAM-CIM", "Digital SRAM-CIM"],
+    generic_accelerator: ["通用加速器", "Generic Accelerator"],
+    pim_accelerator: ["存内计算加速器（PIM）", "PIM Accelerator"],
+    host_memory: ["主机内存", "Host Memory"],
+    cxl_memory: ["CXL 内存", "CXL Memory"],
+    cpu: ["主机 CPU", "Host CPU"],
+    fabric_switch: ["互连交换结构", "Fabric Switch"],
+    io_die: ["I/O 裸片", "I/O Die"],
+  };
+  const normalized = normalizedComponentKind(kind);
+  if (labels[normalized]) return uiText(labels[normalized][0], labels[normalized][1]);
+  return String(kind || "COMPONENT").toUpperCase();
+}
+
+const BYTE_UNITS = Object.freeze(["B", "KiB", "MiB", "GiB", "TiB", "PiB"]);
+const OPS_UNITS = Object.freeze(["OPS", "KOPS", "MOPS", "GOPS", "TOPS", "POPS"]);
+const BANDWIDTH_UNITS = Object.freeze(["MB/s", "GB/s", "TB/s"]);
+
+function formatScaledQuantity(value, units, radix) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
+  let scaled = Math.abs(numeric);
+  let unit = 0;
+  while (scaled >= radix && unit < units.length - 1) {
+    scaled /= radix;
+    unit += 1;
+  }
+  if (numeric < 0) scaled *= -1;
+  return `${formatNumber(scaled, 4)} ${units[unit]}`;
+}
+
+function formatBytes(value) {
+  return formatScaledQuantity(value, BYTE_UNITS, 1024);
+}
+
+function formatOps(value) {
+  return formatScaledQuantity(value, OPS_UNITS, 1000);
+}
+
+function parseScaledQuantity(value, units, radix) {
+  const text = String(value ?? "").trim();
+  const match = /^([+]?[0-9.,]+(?:e[+-]?\d+)?)\s*([a-z]+)?$/i.exec(text);
+  if (!match) return null;
+  const numericText = match[1];
+  const validNumber = numericText.includes(",")
+    ? /^[+]?\d{1,3}(?:,\d{3})+(?:\.\d*)?(?:e[+-]?\d+)?$/i.test(numericText)
+    : /^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(numericText);
+  if (!validNumber) return null;
+  const suffix = (match[2] || units[0]).toUpperCase();
+  const index = units.findIndex((unit) => unit.toUpperCase() === suffix);
+  if (index < 0) return null;
+  const parsed = Number(numericText.replaceAll(",", "")) * radix ** index;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseBytes(value) {
+  const parsed = parseScaledQuantity(value, BYTE_UNITS, 1024);
+  if (parsed == null) return null;
+  const rounded = Math.round(parsed);
+  return Number.isSafeInteger(rounded) ? rounded : null;
+}
+
+function parseOps(value) {
+  return parseScaledQuantity(value, OPS_UNITS, 1000);
+}
+
+function formatBandwidthGbps(value) {
+  const gbps = Number(value);
+  if (!Number.isFinite(gbps)) return "—";
+  const bytesPerSecond = gbps * 1_000_000_000 / 8;
+  const absolute = Math.abs(bytesPerSecond);
+  const unitIndex = absolute >= 1_000_000_000_000 ? 2 : absolute >= 1_000_000_000 ? 1 : 0;
+  return `${formatNumber(bytesPerSecond / [1_000_000, 1_000_000_000, 1_000_000_000_000][unitIndex], 4)} ${BANDWIDTH_UNITS[unitIndex]}`;
+}
+
+function parseBandwidthToGbps(value) {
+  const text = String(value ?? "").trim();
+  const match = /^([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(MB\/s|GB\/s|TB\/s)?$/.exec(text);
+  if (!match) return null;
+  const numeric = Number(match[1]);
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+  const unit = (match[2] || "GB/s").toUpperCase();
+  const multipliers = { "MB/S": 1_000_000, "GB/S": 1_000_000_000, "TB/S": 1_000_000_000_000 };
+  return numeric * multipliers[unit] * 8 / 1_000_000_000;
+}
+
+function formatNumber(value, significantDigits = 4) {
+  if (value == null || value === "") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  const precision = Math.max(1, Math.min(12, Math.trunc(significantDigits) || 4));
+  const absolute = Math.abs(number);
+  if (absolute >= 1_000_000 || (absolute > 0 && absolute < 0.001)) {
+    const [coefficient, exponent] = number.toExponential(precision - 1).split("e");
+    const compactCoefficient = coefficient.replace(/(?:\.0+|(?:(\.\d*?[1-9]))0+)$/, "$1");
+    return `${compactCoefficient}e${Number(exponent)}`;
+  }
+  return new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: precision }).format(number);
+}
+
+function renderArchitectureScan() {
+  if (!dom.architectureScanDialog) return;
+  const result = asObject(state.architectureScanResult);
+  const counts = asObject(result.counts);
+  dom.runArchitectureScanButton.disabled = state.architectureScanRunning;
+  dom.architectureScanBackend.disabled = state.architectureScanRunning;
+  dom.architectureScanTopN.disabled = state.architectureScanRunning;
+  if (state.architectureScanRunning) {
+    dom.architectureScanStatus.textContent = "正在批量评估当前拓扑中的代表性 GEMM 候选…";
+  } else if (result.analysis_kind) {
+    dom.architectureScanStatus.textContent = `扫描完成：使用 ${numericalBackendLabel(result.backend_used)}；本结果不是事件仿真。`;
+  } else {
+    dom.architectureScanStatus.textContent = "尚未运行候选扫描。";
+  }
+
+  if (!result.analysis_kind) {
+    dom.architectureScanSummary.innerHTML = "";
+    dom.architectureScanBody.innerHTML = '<tr><td colspan="8" class="empty-row">运行扫描后显示当前架构的候选排序。</td></tr>';
+    dom.architectureScanDiagnostics.innerHTML = "";
+    return;
+  }
+
+  const summary = [
+    ["数值后端（Numerical Backend）", numericalBackendLabel(result.backend_used)],
+    ["候选数（Candidates）", counts.candidates],
+    ["可用计算组件（Eligible）", counts.components_eligible],
+    ["代表算子（Operators）", counts.operators],
+    ["逻辑 Rank", counts.ranks],
+  ];
+  dom.architectureScanSummary.innerHTML = summary.map(([label, value]) => {
+    const display = typeof value === "number" ? formatResultNumber(value).html : escapeHtml(value ?? "—");
+    return `<div><span>${escapeHtml(label)}</span><strong>${display}</strong></div>`;
+  }).join("");
+
+  const rows = asArray(result.top_results);
+  dom.architectureScanBody.innerHTML = rows.length ? rows.map((row) => {
+    const localShape = [row.m, row.k, row.n].map((value) => formatResultNumber(value).html).join(" × ");
+    const rank = row.logical_rank == null ? "—" : formatResultNumber(row.logical_rank).html;
+    const bound = row.bound === "compute" ? "计算受限" : row.bound === "memory" ? "带宽受限" : String(row.bound || "—");
+    const time = formatResultDurationNs(row.total_ns).html;
+    return `<tr>
+      <td>${formatResultNumber(row.position).html}</td>
+      <td><strong>${escapeHtml(row.operator_id || "—")}</strong><small>${escapeHtml(row.operator_kind || "")}</small></td>
+      <td><strong>${escapeHtml(row.component_id || "—")}</strong><small>${escapeHtml(row.component_kind || "")}</small></td>
+      <td>${rank}</td>
+      <td class="mono-cell">${localShape}</td>
+      <td>${escapeHtml(bound)}</td>
+      <td>${time}</td>
+      <td>${row.is_current_placement ? '<span class="request-status is-success">是</span>' : "否"}</td>
+    </tr>`;
+  }).join("") : '<tr><td colspan="8" class="empty-row">当前架构没有可评估的 GPU / 数字 SRAM-CIM 候选。</td></tr>';
+  dom.architectureScanDiagnostics.innerHTML = asArray(result.diagnostics)
+    .map((item) => `<p>${escapeHtml(item)}</p>`)
+    .join("");
+}
+
+async function runArchitectureScan() {
+  if (!state.scenario || state.architectureScanRunning) return;
+  const generation = state.scenarioGeneration;
+  const scenarioReference = state.scenario;
+  const backend = String(dom.architectureScanBackend.value || "auto");
+  const topN = Math.min(200, Math.max(1, Math.trunc(Number(dom.architectureScanTopN.value)) || 20));
+  dom.architectureScanTopN.value = String(topN);
+  state.architectureScanRunning = true;
+  state.architectureScanScenarioGeneration = generation;
+  renderArchitectureScan();
+  try {
+    // Architecture scan uses the same complete ScenarioConfig contract as the
+    // backend validator; sanitize only the transport copy's inapplicable
+    // component capabilities.
+    const requestPayload = sanitizeV4ScenarioCapabilities(deepClone(scenarioReference));
+    const result = await apiRequest("/architecture-scan", {
+      method: "POST",
+      body: JSON.stringify({ scenario: requestPayload, backend, top_n: topN }),
+    });
+    if (scenarioReference !== state.scenario || generation !== state.scenarioGeneration) {
+      toast("扫描结果已丢弃", "扫描期间当前场景已修改，请重新运行候选扫描。", "warning", 5200);
+      return;
+    }
+    state.architectureScanResult = asObject(result);
+    toast(
+      "架构候选扫描完成",
+      `${formatNumber(asObject(result.counts).candidates || 0)} 个候选 · ${numericalBackendLabel(result.backend_used)}`,
+      "success",
+      4200,
+    );
+  } catch (error) {
+    dom.architectureScanStatus.textContent = "架构候选扫描失败；请查看诊断信息。";
+    showOperationError("架构候选扫描失败", error);
+  } finally {
+    state.architectureScanRunning = false;
+    renderArchitectureScan();
+  }
+}
+
+function openArchitectureScanDialog() {
+  renderArchitectureScan();
+  showModalDialog(
+    dom.architectureScanDialog,
+    dom.architectureScanButton,
+    dom.runArchitectureScanButton,
+  );
+  if (!state.architectureScanResult) void runArchitectureScan();
+}
+
+function renderArchitecture() {
+  const hardware = state.scenario.hardware;
+  dom.hardwareName.textContent = hardware.name || "—";
+  dom.topologySummary.textContent = uiText(
+    `${hardware.components.length} 组件 · ${hardware.links.length} 链路 · ${state.topologyView.groups.length} 组`,
+    `${hardware.components.length} components · ${hardware.links.length} links · ${state.topologyView.groups.length} groups`,
+  );
+  const relayout = state.topologyLayoutPending;
+  state.topologyLayoutPending = false;
+  renderTopology({ relayout });
+  renderInspector();
+}
+
+function topologyLayoutMetrics(fontScale = state.settings.fontScale) {
+  const scale = layoutScaleForFont(fontScale);
+  const routeClearance = Math.round(16 * scale);
+  return {
+    nodeW: Math.round(68 * scale),
+    nodeH: Math.round(36 * scale),
+    // An endpoint escapes by routeClearance while unrelated nodes expand by
+    // the same amount, so adjacent boxes need a strictly wider shared lane.
+    nodeGap: Math.max(Math.round(30 * scale), routeClearance * 2 + 2),
+    layerGap: Math.round(120 * scale),
+    rowGap: Math.round(68 * scale),
+    routeClearance,
+    parallelSpacing: Math.round(20 * scale),
+    routeSpacing: Math.round(16 * scale),
+    cornerRadius: Math.round(9 * scale),
+    shortCurveDistance: Math.round(230 * scale),
+  };
+}
+
+function topologyNodeFallbackSize(component, fontScale = state.settings.fontScale) {
+  const scale = layoutScaleForFont(fontScale);
+  const fontRatio = clampFontScale(fontScale) / 100;
+  const id = String(component?.component_id || "");
+  return {
+    width: Math.ceil(Math.max(48 * scale, id.length * 7.2 * fontRatio + 30 * scale)),
+    height: Math.ceil(34 * scale),
+  };
+}
+
+function topologyPlacementSizes(positions, overrides = {}) {
+  const { nodeW, nodeH } = topologyLayoutMetrics();
+  const components = new Map(asArray(state.scenario?.hardware?.components).map((component) => [String(component.component_id), component]));
+  return Object.fromEntries(Object.keys(positions).map((id) => [
+    id,
+    overrides[id] || state.nodeSizes[id] || (components.has(id) ? topologyNodeFallbackSize(components.get(id)) : { width: nodeW, height: nodeH }),
+  ]));
+}
+
+function collapsedHiddenComponentIds() {
+  const hidden = new Set();
+  asArray(state.topologyView?.groups).forEach((group) => {
+    if (!group.collapsed) return;
+    asArray(group.members).forEach((id) => { if (id !== group.root) hidden.add(id); });
+  });
+  return hidden;
+}
+
+function visibleTopologyPositions(positions = state.nodePositions) {
+  const hidden = collapsedHiddenComponentIds();
+  return Object.fromEntries(Object.entries(asObject(positions)).filter(([id]) => !hidden.has(id)));
+}
+
+function syncCollapsedFollowers(movedPositions, previousPositions, requestedIds) {
+  const result = { ...movedPositions };
+  const requested = new Set(requestedIds);
+  asArray(state.topologyView?.groups).forEach((group) => {
+    if (!group.collapsed || !requested.has(group.root) || !result[group.root] || !previousPositions[group.root]) return;
+    const dx = result[group.root].x - previousPositions[group.root].x;
+    const dy = result[group.root].y - previousPositions[group.root].y;
+    asArray(group.members).forEach((id) => {
+      if (id === group.root || !previousPositions[id]) return;
+      result[id] = { x: previousPositions[id].x + dx, y: previousPositions[id].y + dy };
+    });
+  });
+  return result;
+}
+
+function resolveTopologyPlacement(allPositions, desiredPositions, sizeOverrides = {}) {
+  const hidden = collapsedHiddenComponentIds();
+  const visiblePositions = Object.fromEntries(Object.entries(allPositions).filter(([id]) => !hidden.has(id)));
+  const visibleDesired = Object.fromEntries(Object.entries(desiredPositions).filter(([id]) => !hidden.has(id)));
+  const placement = Topology.resolveCollisionPlacement(
+    visiblePositions,
+    topologyPlacementSizes(visiblePositions, sizeOverrides),
+    visibleDesired,
+    {
+      gap: Math.round(14 * layoutScaleForFont(state.settings.fontScale)),
+      step: Math.round(22 * layoutScaleForFont(state.settings.fontScale)),
+      maxRings: 96,
+    },
+  );
+  placement.positions = syncCollapsedFollowers(placement.positions, allPositions, Object.keys(visibleDesired));
+  return placement;
+}
+
+function ensureNodePositions(force) {
+  if (!state.scenario || state.view !== "architecture") return;
+  const components = state.scenario.hardware.components;
+  const projection = Topology.collapseProjection(components, state.scenario.hardware.links, state.topologyView.groups);
+  const visibleIds = new Set(projection.visibleComponentIds);
+  const visibleComponents = components.filter((component) => visibleIds.has(component.component_id));
+  const missing = visibleComponents.some((component) => !state.nodePositions[component.component_id]);
+  if (!force && !missing) return;
+  const metrics = topologyLayoutMetrics();
+  const { nodeW, nodeH } = metrics;
+  const sizes = {};
+  visibleComponents.forEach((component) => {
+    sizes[component.component_id] = state.nodeSizes[component.component_id] || topologyNodeFallbackSize(component);
+  });
+  const layoutGroups = state.topologyView.groups.map((group) => group.collapsed ? { ...group, members: [group.root] } : group);
+  const layout = Topology.layoutGraph(visibleComponents, projection.links, layoutGroups, sizes, {
+    nodeGap: metrics.nodeGap,
+    layerGap: metrics.layerGap,
+    rowGap: metrics.rowGap,
+    viewportWidth: Math.max(0, Number(dom.topologyCanvas?.clientWidth) || 0),
+    viewportHeight: Math.max(0, Number(dom.topologyCanvas?.clientHeight) || 0),
+    fillViewport: true,
+  });
+  const previousPositions = state.nodePositions;
+  const layoutPositions = syncCollapsedFollowers(layout.positions, previousPositions, Object.keys(layout.positions));
+  state.nodePositions = { ...previousPositions, ...layoutPositions };
+  state.topologyView.groups.filter((group) => group.collapsed).forEach((group) => {
+    const root = state.nodePositions[group.root] || { x: 42, y: 42 };
+    group.members.forEach((id, index) => {
+      if (state.nodePositions[id]) return;
+      state.nodePositions[id] = { x: root.x + 32 + index * 18, y: root.y + 32 + index * 14 };
+    });
+  });
+  state.groupBounds = layout.groupBounds;
+  state.topologyView.layout.positions = state.nodePositions;
+  state.topologyView.layout.bounds = layout.bounds;
+  savePositions();
+}
+
+function createTopologyNode() {
+  const node = document.createElement("button");
+  node.type = "button";
+  node.className = "topology-node";
+  const accent = document.createElement("span");
+  accent.className = "node-accent";
+  accent.setAttribute("aria-hidden", "true");
+  const body = document.createElement("span");
+  body.className = "node-body";
+  const title = document.createElement("span");
+  title.className = "node-title";
+  body.append(title);
+  node.append(accent, body);
+  node.addEventListener("pointerdown", beginNodeDrag);
+  node.addEventListener("click", handleTopologyNodeClick);
+  return node;
+}
+
+function updateTopologyNode(node, component) {
+  const id = component.component_id;
+  node.dataset.componentId = id;
+  node.classList.remove("compute", "io", "storage", "cim");
+  node.classList.add(componentKindClass(component.kind));
+  node.setAttribute("aria-label", uiText(
+    "组件 {id}，{kind}。Ctrl 或 Command 点击切换多选。",
+    "Component {id}, {kind}. Ctrl or Command-click to toggle multi-selection.",
+    { id, kind: kindLabel(component.kind) },
+  ));
+  $(".node-title", node).textContent = id;
+  const position = state.nodePositions[id] || { x: 24, y: 24 };
+  node.style.left = `${position.x}px`;
+  node.style.top = `${position.y}px`;
+}
+
+function measureTopologyNodes() {
+  let changed = false;
+  $$(".topology-node", dom.nodeLayer).forEach((node) => {
+    if (node.hidden || !node.offsetWidth || !node.offsetHeight) return;
+    const id = node.dataset.componentId;
+    const measured = { width: node.offsetWidth, height: node.offsetHeight };
+    const previous = state.nodeSizes[id];
+    if (!previous || Math.abs(previous.width - measured.width) > 0.5 || Math.abs(previous.height - measured.height) > 0.5) changed = true;
+    state.nodeSizes[id] = measured;
+  });
+  return changed;
+}
+
+function renderTopology({ relayout = false } = {}) {
+  if (!state.scenario) return;
+  const components = state.scenario.hardware.components;
+  const needsMeasuredLayout = relayout || components.some((component) => !state.nodePositions[component.component_id]);
+  if (needsMeasuredLayout) state.topologyOverlayRects = [];
+  ensureNodePositions(relayout);
+  state.topologyProjection = Topology.collapseProjection(components, state.scenario.hardware.links, state.topologyView.groups);
+  const visible = new Set(state.topologyProjection.visibleComponentIds);
+  const existing = new Map($$(".topology-node", dom.nodeLayer).map((node) => [node.dataset.componentId, node]));
+  const componentIds = new Set();
+  components.forEach((component) => {
+    componentIds.add(component.component_id);
+    const node = existing.get(component.component_id) || createTopologyNode();
+    updateTopologyNode(node, component);
+    node.hidden = !visible.has(component.component_id);
+    if (!node.isConnected) dom.nodeLayer.append(node);
+  });
+  existing.forEach((node, id) => { if (!componentIds.has(id)) node.remove(); });
+  dom.canvasEmpty.hidden = components.length > 0;
+  requestAnimationFrame(() => {
+    const sizesChanged = measureTopologyNodes();
+    if (needsMeasuredLayout || sizesChanged) {
+      ensureNodePositions(true);
+      $$(".topology-node", dom.nodeLayer).forEach((node) => {
+        const position = state.nodePositions[node.dataset.componentId];
+        if (!position) return;
+        node.style.left = `${position.x}px`;
+        node.style.top = `${position.y}px`;
+      });
+    }
+    renderGroups();
+    updateWorldBounds();
+    syncTopologyViewport();
+    renderLinks();
+    applyTopologySelection();
+    if (needsMeasuredLayout || sizesChanged) requestAnimationFrame(() => fitTopologyViewport({ save: false }));
+  });
+}
+
+function observedElementSize(element) {
+  return `${Math.round(Number(element?.clientWidth) || 0)}x${Math.round(Number(element?.clientHeight) || 0)}`;
+}
+
+function scheduleTopologyResponsiveLayout() {
+  if (topologyResizeFrame != null) return;
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+  topologyResizeFrame = requestFrame(() => {
+    topologyResizeFrame = null;
+    if (state.view !== "architecture" || !dom.topologyCanvas || state.drag || state.pan) return;
+    const size = observedElementSize(dom.topologyCanvas);
+    if (size === topologyObservedSize) return;
+    topologyObservedSize = size;
+    // A viewport resize is not an edit. Keep every stored/manual coordinate,
+    // remeasure the actual boxes, and only rebuild dependent geometry.
+    measureTopologyNodes();
+    renderGroups();
+    renderLinks({ normalizeWorld: false });
+    requestAnimationFrame(() => fitTopologyViewport({ save: false, normalizeWorld: false }));
+  });
+}
+
+function bindTopologyResizeObservers() {
+  if (typeof globalThis.ResizeObserver !== "function") return;
+  if (dom.topologyCanvas && !topologyResizeObserver) {
+    topologyObservedSize = observedElementSize(dom.topologyCanvas);
+    topologyResizeObserver = new globalThis.ResizeObserver(scheduleTopologyResponsiveLayout);
+    topologyResizeObserver.observe(dom.topologyCanvas);
+  }
+  if (dom.traceTopologyCanvas && !traceTopologyResizeObserver) {
+    traceTopologyObservedSize = observedElementSize(dom.traceTopologyCanvas);
+    traceTopologyResizeObserver = new globalThis.ResizeObserver(() => {
+      if (traceTopologyResizeFrame != null) return;
+      const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+      traceTopologyResizeFrame = requestFrame(() => {
+        traceTopologyResizeFrame = null;
+        if (state.view !== "playback" || !dom.traceTopologyCanvas || state.tracePlayback.layoutDrag || state.tracePlayback.layoutPan) return;
+        const size = observedElementSize(dom.traceTopologyCanvas);
+        if (size === traceTopologyObservedSize) return;
+        traceTopologyObservedSize = size;
+        state.tracePlayback.topologyLayout = null;
+        renderTraceTopology();
+        requestAnimationFrame(() => fitTraceLayout({ render: true, auto: true }));
+      });
+    });
+    traceTopologyResizeObserver.observe(dom.traceTopologyCanvas);
+  }
+}
+
+function topologyNodeRect(id, positions = state.nodePositions) {
+  return Topology.rectForNode(id, positions, state.nodeSizes);
+}
+
+function calculateGroupBounds(positions = state.nodePositions, { commit = true } = {}) {
+  const bounds = {};
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const groups = Array.isArray(state.topologyView?.groups) ? state.topologyView.groups : [];
+  groups.forEach((group) => {
+    const members = group.collapsed ? [group.root] : group.members;
+    // Array.map passes (value, index, array). Passing topologyNodeRect by
+    // reference accidentally treated the numeric index as the positions map,
+    // collapsing every group around the origin. Only the member id belongs in
+    // this call; topologyNodeRect reads the current position map by default.
+    const rects = members.filter((id) => positions[id]).map((id) => topologyNodeRect(id, positions));
+    if (!rects.length) return;
+    const padding = 18 * scale;
+    const header = 28 * scale;
+    const minX = Math.min(...rects.map((rect) => rect.x)) - padding;
+    const minY = Math.min(...rects.map((rect) => rect.y)) - padding - header;
+    const maxX = Math.max(...rects.map((rect) => rect.x + rect.width)) + padding;
+    const maxY = Math.max(...rects.map((rect) => rect.y + rect.height)) + padding;
+    bounds[group.group_id] = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  });
+  if (commit) state.groupBounds = bounds;
+  return bounds;
+}
+
+function previewTopologyGroupBounds(positions, changedComponentIds) {
+  if (!dom.groupLayer) return;
+  const changed = new Set(changedComponentIds);
+  const bounds = calculateGroupBounds(positions, { commit: false });
+  const groups = Array.isArray(state.topologyView?.groups) ? state.topologyView.groups : [];
+  groups.forEach((group) => {
+    if (!asArray(group.members).some((id) => changed.has(id))) return;
+    const rect = bounds[group.group_id];
+    const element = dom.groupLayer.querySelector(`[data-group-id="${CSS.escape(group.group_id)}"]`);
+    if (!rect || !element) return;
+    element.style.left = `${rect.x}px`;
+    element.style.top = `${rect.y}px`;
+    element.style.width = `${rect.width}px`;
+    element.style.height = `${rect.height}px`;
+  });
+}
+
+function createGroupElement() {
+  const shell = document.createElement("div");
+  shell.className = "topology-group";
+  const label = document.createElement("button");
+  label.type = "button";
+  label.className = "topology-group-label";
+  label.addEventListener("click", (event) => {
+    event.stopPropagation();
+    selectTopologyGroup(shell.dataset.groupId);
+  });
+  label.addEventListener("dblclick", (event) => {
+    event.stopPropagation();
+    void toggleSelectedGroup();
+  });
+  shell.append(label);
+  return shell;
+}
+
+function updateGroupLabelElement(group, element, visibleLabel = group.label) {
+  if (!element) return;
+  const label = $(".topology-group-label", element);
+  if (!label) return;
+  const text = String(visibleLabel ?? "");
+  const memberCount = group.members.length;
+  label.textContent = `${group.collapsed ? "▸" : "▾"} ${text} · ${memberCount}`;
+  label.setAttribute("aria-label", uiText(
+    "{label}，{count} 个成员，根组件 {root}，{state}",
+    "{label}, {count} {members}, root component {root}, {state}",
+    {
+      label: text,
+      count: memberCount,
+      members: memberCount === 1 ? "member" : "members",
+      root: group.root,
+      state: group.collapsed ? uiText("已折叠", "collapsed") : uiText("已展开", "expanded"),
+    },
+  ));
+}
+
+function updateGroupLabelPresentation(group, visibleLabel = group.label) {
+  const element = dom.groupLayer
+    ? $$(".topology-group", dom.groupLayer).find((candidate) => candidate.dataset.groupId === group.group_id)
+    : null;
+  updateGroupLabelElement(group, element, visibleLabel);
+  if (state.selected?.type === "group" && state.selected.id === group.group_id && dom.inspectorTitle) {
+    dom.inspectorTitle.textContent = String(visibleLabel ?? "");
+  }
+}
+
+function renderGroups() {
+  const bounds = calculateGroupBounds();
+  const existing = new Map($$(".topology-group", dom.groupLayer).map((element) => [element.dataset.groupId, element]));
+  const ids = new Set();
+  const groups = Array.isArray(state.topologyView?.groups) ? state.topologyView.groups : [];
+  groups.forEach((group) => {
+    const rect = bounds[group.group_id];
+    if (!rect) return;
+    ids.add(group.group_id);
+    const element = existing.get(group.group_id) || createGroupElement();
+    element.dataset.groupId = group.group_id;
+    element.classList.toggle("is-collapsed", group.collapsed);
+    element.style.left = `${rect.x}px`;
+    element.style.top = `${rect.y}px`;
+    element.style.width = `${rect.width}px`;
+    element.style.height = `${rect.height}px`;
+    const pending = state.pendingGroupLabelRename?.groupId === group.group_id
+      ? state.pendingGroupLabelRename.value
+      : group.label;
+    updateGroupLabelElement(group, element, pending);
+    if (!element.isConnected) dom.groupLayer.append(element);
+  });
+  existing.forEach((element, id) => { if (!ids.has(id)) element.remove(); });
+}
+
+function updateWorldBounds({ normalize = true, persistNormalization = true } = {}) {
+  const visiblePositions = visibleTopologyPositions();
+  const overlayBounds = Object.fromEntries(asArray(state.topologyOverlayRects).map((rect, index) => [`overlay:${index}`, rect]));
+  const worldPadding = Math.round(32 * layoutScaleForFont(state.settings.fontScale));
+  let bounds = Topology.computeWorldBounds(visiblePositions, topologyPlacementSizes(visiblePositions), { ...state.groupBounds, ...overlayBounds }, worldPadding);
+  const normalized = normalize
+    ? Topology.normalizeWorldOrigin(visiblePositions, bounds, state.topologyView.viewport)
+    : { bounds, viewport: state.topologyView.viewport, shift: { x: 0, y: 0 } };
+  if (normalized.shift.x || normalized.shift.y) {
+    state.nodePositions = Object.fromEntries(Object.entries(state.nodePositions).map(([id, position]) => [id, {
+      x: position.x + normalized.shift.x,
+      y: position.y + normalized.shift.y,
+    }]));
+    state.topologyView.layout.positions = state.nodePositions;
+    state.topologyView.viewport = normalized.viewport;
+    state.groupBounds = Object.fromEntries(Object.entries(state.groupBounds).map(([id, rect]) => [id, {
+      ...rect,
+      x: rect.x + normalized.shift.x,
+      y: rect.y + normalized.shift.y,
+    }]));
+    state.topologyOverlayRects = asArray(state.topologyOverlayRects).map((rect) => ({
+      ...rect,
+      x: rect.x + normalized.shift.x,
+      y: rect.y + normalized.shift.y,
+    }));
+    $$(".topology-node", dom.nodeLayer).forEach((node) => {
+      const position = state.nodePositions[node.dataset.componentId];
+      if (!position) return;
+      node.style.left = `${position.x}px`;
+      node.style.top = `${position.y}px`;
+    });
+    $$(".topology-group", dom.groupLayer).forEach((element) => {
+      const rect = state.groupBounds[element.dataset.groupId];
+      if (!rect) return;
+      element.style.left = `${rect.x}px`;
+      element.style.top = `${rect.y}px`;
+    });
+    bounds = normalized.bounds;
+    syncTopologyViewport();
+    if (persistNormalization) saveTopologyView();
+  }
+  const viewportScale = Math.max(0.01, Number(state.topologyView.viewport?.scale) || 1);
+  bounds.width = Math.max(bounds.width, (dom.topologyCanvas?.clientWidth || 0) / viewportScale);
+  bounds.height = Math.max(bounds.height, (dom.topologyCanvas?.clientHeight || 0) / viewportScale);
+  state.topologyView.layout.bounds = bounds;
+  dom.topologyWorld.style.width = `${Math.ceil(bounds.width)}px`;
+  dom.topologyWorld.style.height = `${Math.ceil(bounds.height)}px`;
+  dom.linkLayer.setAttribute("viewBox", `0 0 ${Math.ceil(bounds.width)} ${Math.ceil(bounds.height)}`);
+  return normalized.shift;
+}
+
+function syncTopologyViewport() {
+  const viewport = state.topologyView.viewport;
+  dom.topologyWorld.style.transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`;
+  dom.topologyCanvas.style.backgroundPosition = `${viewport.x}px ${viewport.y}px`;
+  dom.topologyCanvas.style.backgroundSize = `${80 * viewport.scale}px ${80 * viewport.scale}px, ${80 * viewport.scale}px ${80 * viewport.scale}px, ${16 * viewport.scale}px ${16 * viewport.scale}px, ${16 * viewport.scale}px ${16 * viewport.scale}px`;
+  dom.topologyZoomValue.textContent = `${Math.round(viewport.scale * 100)}%`;
+}
+
+function topologyContentBounds() {
+  const positions = visibleTopologyPositions();
+  const rects = [
+    ...Object.keys(positions).map((id) => topologyNodeRect(id, positions)),
+    ...Object.values(asObject(state.groupBounds)),
+    ...asArray(state.topologyOverlayRects),
+  ].filter((rect) => rect && [rect.x, rect.y, rect.width, rect.height].every((value) => Number.isFinite(Number(value))));
+  if (!rects.length) return { x: 0, y: 0, width: 1, height: 1 };
+  const left = Math.min(...rects.map((rect) => Number(rect.x)));
+  const top = Math.min(...rects.map((rect) => Number(rect.y)));
+  const right = Math.max(...rects.map((rect) => Number(rect.x) + Number(rect.width)));
+  const bottom = Math.max(...rects.map((rect) => Number(rect.y) + Number(rect.height)));
+  return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+}
+
+function svgElement(name, className = "") {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+  if (className) element.setAttribute("class", className);
+  return element;
+}
+
+function createLinkElement() {
+  const group = svgElement("g", "topology-link");
+  const hit = svgElement("path", "topology-link-hit");
+  const line = svgElement("path", "topology-link-line");
+  const title = svgElement("title");
+  group.append(hit, line, title);
+  group.setAttribute("tabindex", "0");
+  group.setAttribute("role", "button");
+  group.addEventListener("pointerdown", (event) => event.stopPropagation());
+  group.addEventListener("pointerenter", (event) => showLinkTooltip(dom.topologyLinkTooltip, group, event));
+  group.addEventListener("pointermove", (event) => showLinkTooltip(dom.topologyLinkTooltip, group, event));
+  group.addEventListener("pointerleave", () => hideLinkTooltip(dom.topologyLinkTooltip));
+  group.addEventListener("focus", (event) => showLinkTooltip(dom.topologyLinkTooltip, group, event));
+  group.addEventListener("blur", () => hideLinkTooltip(dom.topologyLinkTooltip));
+  const activate = (event) => {
+    event.stopPropagation();
+    state.selectedDisplayLinkId = group.dataset.linkId;
+    const original = (group.dataset.originalLinkIds || "").split("\u001f").filter(Boolean)[0];
+    selectItem("link", original || group.dataset.linkId);
+  };
+  group.addEventListener("click", activate);
+  group.addEventListener("keydown", (event) => {
+    if (!["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    activate(event);
+  });
+  return group;
+}
+
+function topologyDisplayLinkId(link, fallback = "") {
+  return String(link?.display_id || link?.link_id || fallback);
+}
+
+function topologyProtocolClass(protocol) {
+  const normalized = slug(protocol).replace(/-+/g, "-");
+  const compact = normalized.replaceAll("-", "");
+  if (compact.includes("nvlinkc2c")) return "nvlink-c2c";
+  if (compact.includes("infinityfabric")) return "infinityfabric";
+  if (compact.includes("lpddr5x")) return "lpddr5x";
+  if (compact.includes("nvlink")) return "nvlink";
+  if (compact.includes("pcie")) return "pcie";
+  if (compact.includes("ucie")) return "ucie";
+  if (compact.includes("roce")) return "roce";
+  if (compact.includes("cxl")) return "cxl";
+  if (compact.includes("hbm")) return "hbm";
+  if (compact.includes("internal")) return "internal";
+  return "unknown";
+}
+
+function topologyLinkTooltipText(link) {
+  const protocol = String(link?.protocol || uiText("未知协议", "Unknown protocol"));
+  const bandwidth = formatBandwidthGbps(Number(link?.bandwidth_gbps) || 0);
+  const count = Math.max(1, Number(link?.aggregate_count) || asArray(link?.original_link_ids).length || 1);
+  return uiText(
+    `协议：${protocol} · 带宽：${bandwidth} · 聚合数量：${formatNumber(count)}`,
+    `Protocol: ${protocol} · Bandwidth: ${bandwidth} · Aggregated links: ${formatNumber(count)}`,
+  );
+}
+
+function linkTooltipClientPoint(element, event) {
+  if (Number.isFinite(Number(event?.clientX)) && Number.isFinite(Number(event?.clientY)) && (Number(event.clientX) || Number(event.clientY))) {
+    return { x: Number(event.clientX), y: Number(event.clientY) };
+  }
+  const rect = element?.getBoundingClientRect?.();
+  return rect
+    ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+    : { x: 16, y: 16 };
+}
+
+function showLinkTooltip(tooltip, element, event = null) {
+  const link = element?._topologyLinkData;
+  if (!tooltip || !link) return;
+  const point = linkTooltipClientPoint(element, event);
+  // A hidden tooltip has no offsetParent on its first hover/focus. Its direct
+  // parent is the positioned canvas in both topology views, so use that as
+  // the coordinate frame instead of accidentally treating viewport pixels as
+  // canvas-local pixels.
+  const offsetParent = tooltip.offsetParent || tooltip.parentElement;
+  const parentRect = offsetParent?.getBoundingClientRect?.() || { left: 0, top: 0 };
+  const scrollLeft = Number(offsetParent?.scrollLeft) || 0;
+  const scrollTop = Number(offsetParent?.scrollTop) || 0;
+  const protocol = String(link?.protocol || uiText("未知协议", "Unknown protocol"));
+  const count = Math.max(1, Number(link?.aggregate_count) || asArray(link?.original_link_ids).length || 1);
+  const protocolTarget = tooltip.querySelector?.("[data-link-tooltip-protocol]");
+  const bandwidthTarget = tooltip.querySelector?.("[data-link-tooltip-bandwidth]");
+  if (protocolTarget && bandwidthTarget) {
+    protocolTarget.textContent = protocol;
+    bandwidthTarget.textContent = uiText(
+      `${formatBandwidthGbps(Number(link?.bandwidth_gbps) || 0)} · 聚合 ${formatNumber(count)} 条链路`,
+      `${formatBandwidthGbps(Number(link?.bandwidth_gbps) || 0)} · ${formatNumber(count)} aggregated link(s)`,
+    );
+  } else {
+    tooltip.textContent = topologyLinkTooltipText(link);
+  }
+  Array.from(tooltip.classList || []).filter((name) => name.startsWith("protocol-")).forEach((name) => tooltip.classList.remove(name));
+  tooltip.classList?.add(`protocol-${topologyProtocolClass(link.protocol)}`);
+  tooltip.hidden = false;
+  tooltip.setAttribute("aria-hidden", "false");
+  tooltip.style.setProperty("--link-tooltip-x", `${Math.round(point.x - parentRect.left + scrollLeft)}px`);
+  tooltip.style.setProperty("--link-tooltip-y", `${Math.round(point.y - parentRect.top + scrollTop)}px`);
+}
+
+function hideLinkTooltip(tooltip) {
+  if (!tooltip) return;
+  tooltip.hidden = true;
+  tooltip.setAttribute("aria-hidden", "true");
+}
+
+function topologyStoredRouteSegments(element) {
+  if (!element || !Topology?.routeSegments) return [];
+  try {
+    const points = JSON.parse(element.dataset.topologyRoutePoints || "[]");
+    if (!Array.isArray(points) || points.length < 2) return [];
+    return Topology.routeSegments(points, {
+      sourcePortKey: element.dataset.topologyRouteSourcePortKey || "",
+      targetPortKey: element.dataset.topologyRouteTargetPortKey || "",
+      routeId: element.dataset.linkId || "",
+    });
+  } catch (_error) {
+    return [];
+  }
+}
+
+function planTopologyRoutesAtPositions(positions, metrics, { routeIds = null, occupiedSegments = [] } = {}) {
+  const projection = state.topologyProjection;
+  const visibleRects = projection.visibleComponentIds.map((id) => topologyNodeRect(id, positions));
+  try {
+    return Topology.planOrthogonalRoutes(projection.links, visibleRects, {
+      clearance: metrics.routeClearance,
+      parallelSpacing: metrics.parallelSpacing,
+      routeSpacing: metrics.routeSpacing,
+      cornerRadius: metrics.cornerRadius,
+      shortCurveDistance: metrics.shortCurveDistance,
+      renderGeometry: true,
+      allowCurves: true,
+      routeIds,
+      occupiedSegments,
+    });
+  } catch (error) {
+    const links = routeIds
+      ? projection.links.filter((link) => routeIds.has(topologyDisplayLinkId(link)))
+      : projection.links;
+    return {
+      routes: [],
+      errors: links.map((link) => ({
+        link,
+        linkId: topologyDisplayLinkId(link),
+        error,
+      })),
+    };
+  }
+}
+
+function repaintTopologyRoutes(routePlan) {
+  asArray(routePlan?.routes).forEach((route) => {
+    const element = dom.linkLayer.querySelector(`[data-link-id="${CSS.escape(String(route.linkId))}"]`);
+    if (!element) return;
+    const path = route.path || Topology.pathToSvg(route.points);
+    element.dataset.topologyRoutePoints = JSON.stringify(route.points);
+    element.dataset.topologyRouteSourcePortKey = route.sourcePortKey;
+    element.dataset.topologyRouteTargetPortKey = route.targetPortKey;
+    element.classList.toggle("is-curved", route.kind === "curve");
+    element.classList.toggle("is-orthogonal", route.kind !== "curve");
+    $(".topology-link-hit", element).setAttribute("d", path);
+    $(".topology-link-line", element).setAttribute("d", path);
+  });
+}
+
+function topologyRouteErrors(routePlan) {
+  return asArray(routePlan?.errors).map((record) => ({
+    id: record.linkId,
+    message: chineseMessage(record.error, "无法生成安全且不重叠的正交连线路径。"),
+    originalLinkIds: record.link?.original_link_ids,
+  }));
+}
+
+function updateTopologyRouteStatus(routeErrors) {
+  state.topologyRouteErrors = routeErrors;
+  dom.topologyRouteStatus.hidden = !routeErrors.length;
+  dom.topologyRouteStatus.textContent = routeErrors.length
+    ? uiText("{count} 条链路无法安全布线", "{count} links could not be routed safely", { count: routeErrors.length })
+    : "";
+  dom.topologyRouteStatus.title = routeErrors.map((error) => `${error.id}: ${error.message}`).join("\n");
+  dom.topologyCanvas.classList.toggle("has-route-errors", Boolean(routeErrors.length));
+}
+
+function renderLinks({ positions = state.nodePositions, changedComponentIds = null, normalizeWorld = true } = {}) {
+  if (!state.scenario || state.view !== "architecture") return;
+  const projection = state.topologyProjection;
+  const changedIds = changedComponentIds ? new Set(changedComponentIds) : null;
+  const preview = Boolean(changedIds);
+  const links = preview
+    ? projection.links.filter((link) => changedIds.has(link.source_component) || changedIds.has(link.target_component))
+    : projection.links;
+  const existing = new Map($$(".topology-link", dom.linkLayer).map((element) => [element.dataset.linkId, element]));
+  const ids = preview ? null : new Set();
+  const routeIds = preview ? new Set(links.map((link) => topologyDisplayLinkId(link))) : null;
+  const occupiedSegments = [];
+  if (preview) {
+    existing.forEach((element, id) => {
+      if (routeIds.has(id)) return;
+      occupiedSegments.push(...topologyStoredRouteSegments(element));
+    });
+  }
+  const metrics = topologyLayoutMetrics();
+  let routePlan = planTopologyRoutesAtPositions(positions, metrics, { routeIds, occupiedSegments });
+  const plannedRoutes = new Map(routePlan.routes.map((route) => [route.linkId, route]));
+  let routeErrors = preview ? null : topologyRouteErrors(routePlan);
+  links.forEach((link) => {
+    const id = topologyDisplayLinkId(link);
+    const source = positions[link.source_component];
+    const target = positions[link.target_component];
+    if (!source || !target) {
+      if (!preview) {
+        if (!routeErrors.some((error) => error.id === id)) routeErrors.push({ id, message: "端点坐标缺失" });
+        existing.get(id)?.remove();
+      }
+      return;
+    }
+    const planned = plannedRoutes.get(id);
+    if (!planned) {
+      if (!preview) {
+        if (!routeErrors.some((error) => error.id === id)) routeErrors.push({ id, message: "无法生成安全且不重叠的正交连线路径。", originalLinkIds: link.original_link_ids });
+        existing.get(id)?.remove();
+      }
+      return;
+    }
+    const points = planned.points;
+    if (!preview) ids.add(id);
+    const path = planned.path || Topology.pathToSvg(points);
+    const element = existing.get(id) || createLinkElement();
+    element.dataset.linkId = id;
+    element.dataset.originalLinkIds = link.original_link_ids.join("\u001f");
+    element.dataset.topologyRoutePoints = JSON.stringify(points);
+    element.dataset.topologyRouteSourcePortKey = planned.sourcePortKey;
+    element.dataset.topologyRouteTargetPortKey = planned.targetPortKey;
+    element._topologyLinkData = link;
+    element.classList.toggle("is-projected", link.projected);
+    element.classList.toggle("is-curved", planned.kind === "curve");
+    element.classList.toggle("is-orthogonal", planned.kind !== "curve");
+    const hit = $(".topology-link-hit", element);
+    const line = $(".topology-link-line", element);
+    hit.setAttribute("d", path);
+    line.setAttribute("d", path);
+    line.setAttribute("class", `topology-link-line protocol-${topologyProtocolClass(link.protocol)}`);
+    const accessibleText = topologyLinkTooltipText(link);
+    element.setAttribute("aria-label", accessibleText);
+    $("title", element).textContent = accessibleText;
+    if (!element.isConnected) dom.linkLayer.append(element);
+  });
+  if (preview) return;
+  existing.forEach((element, id) => { if (!ids.has(id)) element.remove(); });
+  state.topologyOverlayRects = [
+    ...routePlan.routes.map((route) => Topology.pointsBounds(route.points, metrics.routeClearance)).filter(Boolean),
+  ];
+  updateTopologyRouteStatus(routeErrors);
+  const shift = updateWorldBounds({ normalize: normalizeWorld });
+  if (normalizeWorld && (shift.x || shift.y)) {
+    routePlan = planTopologyRoutesAtPositions(state.nodePositions, metrics);
+    repaintTopologyRoutes(routePlan);
+    state.topologyOverlayRects = routePlan.routes
+      .map((route) => Topology.pointsBounds(route.points, metrics.routeClearance))
+      .filter(Boolean);
+    routeErrors = topologyRouteErrors(routePlan);
+    updateTopologyRouteStatus(routeErrors);
+    updateWorldBounds();
+  }
+  applyTopologySelection();
+}
+
+function handleTopologyNodeClick(event) {
+  event.stopPropagation();
+  if (state.suppressNodeClick) {
+    state.suppressNodeClick = false;
+    return;
+  }
+  const componentId = event.currentTarget.dataset.componentId;
+  if (state.connectMode) handleConnectNode(componentId);
+  else if (event.detail === 0) updateComponentSelection(componentId, event.ctrlKey || event.metaKey);
+}
+
+function beginNodeDrag(event) {
+  if ((event.button !== 0 && event.button !== 1) || state.connectMode) return;
+  if (event.button === 1 || state.spacePressed || state.topologyTool === "pan") {
+    beginCanvasPan(event);
+    return;
+  }
+  const node = event.currentTarget;
+  const id = node.dataset.componentId;
+  const additive = event.ctrlKey || event.metaKey;
+  if (additive) updateComponentSelection(id, true);
+  else if (!state.selectedComponents.has(id)) setComponentSelection([id], id);
+  if (!state.selectedComponents.has(id)) return;
+  const origins = {};
+  state.selectedComponents.forEach((componentId) => { origins[componentId] = { ...state.nodePositions[componentId] }; });
+  state.drag = {
+    id,
+    node,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    origins,
+    historyBefore: topologyHistorySnapshot(),
+    pendingPointer: null,
+    frame: null,
+    previewPositions: null,
+    moved: false,
+  };
+  event.stopPropagation();
+  node.setPointerCapture(event.pointerId);
+  node.addEventListener("pointermove", moveNodeDrag);
+  node.addEventListener("pointerup", endNodeDrag, { once: true });
+  node.addEventListener("pointercancel", endNodeDrag, { once: true });
+  node.addEventListener("lostpointercapture", endNodeDrag, { once: true });
+}
+
+function cancelNodeDragFrame(drag = state.drag) {
+  if (!drag || drag.frame == null) return;
+  const cancelFrame = globalThis.cancelAnimationFrame || clearTimeout;
+  cancelFrame(drag.frame);
+  drag.frame = null;
+}
+
+function applyNodeDragFrame(pointValue = null) {
+  const drag = state.drag;
+  const point = pointValue || drag?.pendingPointer;
+  if (!drag || !point || drag.pointerId !== point.pointerId) return;
+  drag.pendingPointer = null;
+  const scale = state.topologyView.viewport.scale;
+  const dx = (point.clientX - drag.startX) / scale;
+  const dy = (point.clientY - drag.startY) / scale;
+  if (Math.abs(point.clientX - drag.startX) + Math.abs(point.clientY - drag.startY) > 3) drag.moved = true;
+  const desired = Object.fromEntries(Object.entries(drag.origins).map(([id, origin]) => [id, { x: Math.round(origin.x + dx), y: Math.round(origin.y + dy) }]));
+  drag.previewPositions = desired;
+  Object.entries(desired).forEach(([id, position]) => {
+    const origin = drag.origins[id];
+    const element = dom.nodeLayer.querySelector(`[data-component-id="${CSS.escape(id)}"]`);
+    if (element && origin) element.style.transform = `translate(${position.x - origin.x}px, ${position.y - origin.y}px)`;
+  });
+  const previewPositions = { ...state.nodePositions, ...desired };
+  previewTopologyGroupBounds(previewPositions, Object.keys(desired));
+  renderLinks({
+    positions: previewPositions,
+    changedComponentIds: Object.keys(desired),
+  });
+}
+
+function scheduleNodeDragFrame(event) {
+  const drag = state.drag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  drag.pendingPointer = { pointerId: event.pointerId, clientX: Number(event.clientX), clientY: Number(event.clientY) };
+  if (drag.frame != null) return;
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+  drag.frame = requestFrame(() => {
+    drag.frame = null;
+    applyNodeDragFrame();
+  });
+}
+
+function moveNodeDrag(event) {
+  if (!state.drag || state.drag.pointerId !== event.pointerId) return;
+  scheduleNodeDragFrame(event);
+  event.preventDefault();
+}
+
+function endNodeDrag(event) {
+  const drag = state.drag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  const cancelled = event.type === "pointercancel" || event.type === "lostpointercapture";
+  cancelNodeDragFrame(drag);
+  if (!cancelled) applyNodeDragFrame({ pointerId: event.pointerId, clientX: Number(event.clientX), clientY: Number(event.clientY) });
+  drag.node.removeEventListener("pointermove", moveNodeDrag);
+  drag.node.removeEventListener("lostpointercapture", endNodeDrag);
+  if (drag.node.hasPointerCapture?.(event.pointerId)) drag.node.releasePointerCapture(event.pointerId);
+  const clearPreview = () => Object.keys(drag.origins).forEach((id) => {
+    const element = dom.nodeLayer.querySelector(`[data-component-id="${CSS.escape(id)}"]`);
+    if (element) element.style.transform = "";
+  });
+  if (!cancelled && drag.moved && drag.previewPositions) {
+    let placement;
+    try {
+      placement = resolveTopologyPlacement(state.nodePositions, drag.previewPositions);
+    } catch (error) {
+      drag.blocked = chineseMessage(error, "当前位置与其他组件冲突，无法完成移动。");
+    }
+    clearPreview();
+    if (placement) {
+      drag.adjusted = placement.adjusted;
+      Object.assign(state.nodePositions, placement.positions);
+      state.topologyView.layout.positions = state.nodePositions;
+      Object.entries(placement.positions).forEach(([id, position]) => {
+        const element = dom.nodeLayer.querySelector(`[data-component-id="${CSS.escape(id)}"]`);
+        if (!element) return;
+        element.style.left = `${position.x}px`;
+        element.style.top = `${position.y}px`;
+      });
+      renderGroups();
+      updateWorldBounds();
+      renderLinks();
+      savePositions();
+    } else {
+      renderGroups();
+      renderLinks();
+    }
+    state.suppressNodeClick = true;
+    if (placement) commitTopologyHistory(drag.historyBefore, "移动组件");
+    if (drag.adjusted) toast("已避让重叠", "所选组件保持相对位置，并移动到最近可用空位。", "info", 3200);
+    else if (drag.blocked) toast("移动受阻", drag.blocked, "warning", 4200);
+  } else if (drag.previewPositions) {
+    clearPreview();
+    renderGroups();
+    renderLinks();
+  }
+  state.drag = null;
+}
+
+function selectItem(type, id) {
+  commitPendingGroupLabel();
+  if (type !== "component") state.selectedComponents = new Set();
+  state.selected = { type, id };
+  if (type !== "link") state.selectedDisplayLinkId = null;
+  renderInspector();
+  applyTopologySelection();
+}
+
+function setComponentSelection(ids, focusId = null) {
+  commitPendingGroupLabel();
+  state.selectedComponents = new Set(ids);
+  state.selectedDisplayLinkId = null;
+  if (state.selectedComponents.size === 1) {
+    const id = focusId && state.selectedComponents.has(focusId) ? focusId : Array.from(state.selectedComponents)[0];
+    state.selected = { type: "component", id };
+  } else if (state.selectedComponents.size > 1) {
+    state.selected = { type: "components", ids: Array.from(state.selectedComponents) };
+  } else {
+    state.selected = null;
+  }
+  renderInspector();
+  applyTopologySelection();
+}
+
+function updateComponentSelection(id, toggle) {
+  const selected = new Set(state.selectedComponents);
+  if (toggle && selected.has(id)) selected.delete(id);
+  else {
+    if (!toggle) selected.clear();
+    selected.add(id);
+  }
+  setComponentSelection(Array.from(selected), id);
+}
+
+function selectTopologyGroup(groupId) {
+  commitPendingGroupLabel();
+  const group = state.topologyView.groups.find((item) => item.group_id === groupId);
+  if (!group) return;
+  state.selectedComponents = new Set(group.members);
+  state.selected = { type: "group", id: groupId };
+  state.selectedDisplayLinkId = null;
+  renderInspector();
+  applyTopologySelection();
+}
+
+function applyTopologySelection() {
+  const selected = state.selected;
+  const adjacentIds = new Set();
+  const adjacentLinks = new Set();
+  const selectedIds = state.selectedComponents;
+  if (selectedIds.size) {
+    state.scenario.hardware.links.forEach((link) => {
+      if (selectedIds.has(link.source_component) || selectedIds.has(link.target_component)) {
+        adjacentLinks.add(link.link_id);
+        adjacentIds.add(link.source_component);
+        adjacentIds.add(link.target_component);
+      }
+    });
+  } else if (selected?.type === "link") {
+    const link = state.scenario.hardware.links.find((item) => item.link_id === selected.id);
+    if (link) {
+      adjacentIds.add(link.source_component);
+      adjacentIds.add(link.target_component);
+      adjacentLinks.add(link.link_id);
+    }
+  }
+  const hasSelection = Boolean(selected);
+  $$(".topology-node", dom.nodeLayer).forEach((node) => {
+    const id = node.dataset.componentId;
+    node.classList.toggle("is-selected", selectedIds.has(id));
+    node.setAttribute("aria-pressed", String(selectedIds.has(id)));
+    node.classList.toggle("is-adjacent", hasSelection && adjacentIds.has(id) && !selectedIds.has(id));
+    node.classList.toggle("is-dimmed", hasSelection && !adjacentIds.has(id) && !selectedIds.has(id) && selected?.type !== "group");
+    node.classList.toggle("is-connect-source", state.connectSource === id);
+  });
+  $$(".topology-link", dom.linkLayer).forEach((link) => {
+    const id = link.dataset.linkId;
+    const originals = new Set((link.dataset.originalLinkIds || "").split("\u001f"));
+    link.classList.toggle("is-selected", selected?.type === "link" && (state.selectedDisplayLinkId === id || originals.has(selected.id)));
+    link.classList.toggle("is-adjacent", Array.from(originals).some((original) => adjacentLinks.has(original)));
+    link.classList.toggle("is-dimmed", hasSelection && !Array.from(originals).some((original) => adjacentLinks.has(original)) && selected?.type !== "link");
+  });
+  $$(".topology-group", dom.groupLayer).forEach((element) => element.classList.toggle("is-selected", selected?.type === "group" && selected.id === element.dataset.groupId));
+  updateTopologyToolbar();
+}
+
+function selectedGroup() {
+  if (state.selected?.type === "group") return state.topologyView.groups.find((group) => group.group_id === state.selected.id) || null;
+  if (state.selectedComponents.size === 1) return Topology.groupForComponent(state.topologyView.groups, Array.from(state.selectedComponents)[0]);
+  const groups = new Set(Array.from(state.selectedComponents).map((id) => Topology.groupForComponent(state.topologyView.groups, id)?.group_id).filter(Boolean));
+  return groups.size === 1 ? state.topologyView.groups.find((group) => group.group_id === Array.from(groups)[0]) : null;
+}
+
+function updateTopologyToolbar() {
+  if (!dom.createGroupButton) return;
+  const group = selectedGroup();
+  dom.createGroupButton.disabled = state.selectedComponents.size < 1 || Array.from(state.selectedComponents).some((id) => Topology.groupForComponent(state.topologyView.groups, id));
+  dom.setGroupRootButton.disabled = state.selectedComponents.size !== 1 || !group;
+  dom.toggleGroupButton.disabled = !group;
+  dom.releaseGroupButton.disabled = !group;
+  dom.toggleGroupButton.textContent = group?.collapsed
+    ? uiText("展开组（Expand）", "Expand group")
+    : uiText("折叠组（Collapse）", "Collapse group");
+  dom.copyTopologyButton.disabled = !state.selectedComponents.size && state.selected?.type !== "group";
+  dom.topologySelectionStatus.textContent = state.selected?.type === "group"
+    ? uiText("组 {label} · 根 {root}", "Group {label} · root {root}", {
+      label: group?.label || state.selected.id,
+      root: group?.root || "—",
+    })
+    : state.selectedComponents.size
+      ? uiText("已选 {count} 个组件", "{count} components selected", { count: state.selectedComponents.size })
+      : state.selected?.type === "link"
+        ? uiText("已选链路", "Link selected")
+        : uiText("未选择", "No selection");
+}
+
+function setTopologyTool(tool) {
+  state.topologyTool = tool;
+  state.connectMode = tool === "connect";
+  state.connectSource = null;
+  dom.selectModeButton.classList.toggle("is-active", tool === "select");
+  dom.connectModeButton.classList.toggle("is-active", tool === "connect");
+  dom.selectModeButton.setAttribute("aria-pressed", String(tool === "select"));
+  dom.connectModeButton.setAttribute("aria-pressed", String(tool === "connect"));
+  dom.connectionHint.textContent = tool === "connect"
+    ? uiText("连接模式 · {protocol} · 请选择第一个组件", "Connect mode · {protocol} · select the first component", { protocol: dom.protocolSelect.value })
+    : uiText("选择节点或链路查看属性", "Select a node or link to inspect its properties");
+  applyTopologySelection();
+}
+
+function canvasScreenPoint(event) {
+  const rect = dom.topologyCanvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left + (Number(dom.topologyCanvas.scrollLeft) || 0),
+    y: event.clientY - rect.top + (Number(dom.topologyCanvas.scrollTop) || 0),
+  };
+}
+
+function topologyCanvasCenterPoint(canvas = dom.topologyCanvas) {
+  return {
+    x: (Number(canvas?.scrollLeft) || 0) + Math.max(1, Number(canvas?.clientWidth) || 1) / 2,
+    y: (Number(canvas?.scrollTop) || 0) + Math.max(1, Number(canvas?.clientHeight) || 1) / 2,
+  };
+}
+
+function beginCanvasPan(event) {
+  cancelTopologyCanvasFrame();
+  topologyCanvasPendingPointer = null;
+  if (!dom.topologyCanvas.hasPointerCapture?.(event.pointerId)) dom.topologyCanvas.setPointerCapture(event.pointerId);
+  state.pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: state.topologyView.viewport.x, y: state.topologyView.viewport.y, moved: false };
+  dom.topologyCanvas.classList.add("is-panning");
+  event.preventDefault();
+}
+
+function beginCanvasPointer(event) {
+  if (event.target.closest?.(".topology-node, .topology-link, .topology-group-label")) return;
+  if (event.button === 1 || (event.button === 0 && (state.spacePressed || state.topologyTool === "pan"))) {
+    beginCanvasPan(event);
+    return;
+  }
+  if (event.button !== 0 || state.topologyTool !== "select") return;
+  cancelTopologyCanvasFrame();
+  topologyCanvasPendingPointer = null;
+  const start = canvasScreenPoint(event);
+  state.marquee = { pointerId: event.pointerId, start, current: start, toggle: event.ctrlKey || event.metaKey, moved: false };
+  dom.topologyCanvas.setPointerCapture(event.pointerId);
+  dom.topologyMarquee.hidden = false;
+  updateMarqueeElement();
+  event.preventDefault();
+}
+
+function updateMarqueeElement() {
+  const marquee = state.marquee;
+  if (!marquee) return;
+  const rect = Topology.normalizedRect(marquee.start, marquee.current);
+  dom.topologyMarquee.style.left = `${rect.x}px`;
+  dom.topologyMarquee.style.top = `${rect.y}px`;
+  dom.topologyMarquee.style.width = `${rect.width}px`;
+  dom.topologyMarquee.style.height = `${rect.height}px`;
+}
+
+function cancelTopologyCanvasFrame() {
+  if (topologyCanvasFrame == null) return;
+  const cancelFrame = globalThis.cancelAnimationFrame || clearTimeout;
+  cancelFrame(topologyCanvasFrame);
+  topologyCanvasFrame = null;
+}
+
+function applyTopologyCanvasPointerFrame(point = topologyCanvasPendingPointer) {
+  topologyCanvasPendingPointer = null;
+  if (!point) return;
+  if (state.pan?.pointerId === point.pointerId) {
+    const pan = state.pan;
+    const dx = point.clientX - pan.startX;
+    const dy = point.clientY - pan.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 2) pan.moved = true;
+    state.topologyView.viewport.x = pan.x + dx;
+    state.topologyView.viewport.y = pan.y + dy;
+    syncTopologyViewport();
+    return;
+  }
+  if (state.marquee?.pointerId === point.pointerId) {
+    state.marquee.current = canvasScreenPoint(point);
+    state.marquee.moved = Math.abs(state.marquee.current.x - state.marquee.start.x) + Math.abs(state.marquee.current.y - state.marquee.start.y) > 3;
+    updateMarqueeElement();
+  }
+}
+
+function scheduleTopologyCanvasPointerFrame(event) {
+  topologyCanvasPendingPointer = { pointerId: event.pointerId, clientX: Number(event.clientX), clientY: Number(event.clientY) };
+  if (topologyCanvasFrame != null) return;
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+  topologyCanvasFrame = requestFrame(() => {
+    topologyCanvasFrame = null;
+    applyTopologyCanvasPointerFrame();
+  });
+}
+
+function moveCanvasPointer(event) {
+  if (state.pan?.pointerId !== event.pointerId && state.marquee?.pointerId !== event.pointerId) return;
+  scheduleTopologyCanvasPointerFrame(event);
+  event.preventDefault();
+}
+
+function endCanvasPointer(event) {
+  const hasPan = state.pan?.pointerId === event.pointerId;
+  const hasMarquee = state.marquee?.pointerId === event.pointerId;
+  if (!hasPan && !hasMarquee) return;
+  const cancelled = event.type === "pointercancel" || event.type === "lostpointercapture";
+  cancelTopologyCanvasFrame();
+  topologyCanvasPendingPointer = null;
+  if (!cancelled) applyTopologyCanvasPointerFrame({ pointerId: event.pointerId, clientX: Number(event.clientX), clientY: Number(event.clientY) });
+  if (state.pan?.pointerId === event.pointerId) {
+    const pan = state.pan;
+    const moved = pan.moved;
+    state.pan = null;
+    dom.topologyCanvas.classList.remove("is-panning");
+    if (cancelled) {
+      state.topologyView.viewport.x = pan.x;
+      state.topologyView.viewport.y = pan.y;
+      syncTopologyViewport();
+    } else if (moved) saveTopologyView();
+  }
+  if (state.marquee?.pointerId === event.pointerId) {
+    const marquee = state.marquee;
+    state.marquee = null;
+    dom.topologyMarquee.hidden = true;
+    if (!cancelled && marquee.moved) {
+      const rects = {};
+      state.topologyProjection.visibleComponentIds.forEach((id) => { rects[id] = topologyNodeRect(id); });
+      const ids = Topology.marqueeSelection(marquee.start, marquee.current, state.topologyView.viewport, rects, marquee.toggle ? "toggle" : "replace", Array.from(state.selectedComponents));
+      setComponentSelection(ids, ids[ids.length - 1]);
+    } else if (!cancelled && !marquee.toggle) {
+      setComponentSelection([]);
+    }
+  }
+  if (dom.topologyCanvas.hasPointerCapture?.(event.pointerId)) dom.topologyCanvas.releasePointerCapture(event.pointerId);
+}
+
+function zoomTopology(factor, anchor = null) {
+  const viewport = state.topologyView.viewport;
+  const screen = anchor || topologyCanvasCenterPoint();
+  const world = Topology.screenToWorld(screen, viewport);
+  viewport.scale = Math.min(4, Math.max(0.25, viewport.scale * factor));
+  viewport.x = screen.x - world.x * viewport.scale;
+  viewport.y = screen.y - world.y * viewport.scale;
+  syncTopologyViewport();
+  saveTopologyView();
+}
+
+function fitTopologyViewport({ save = true, normalizeWorld = true } = {}) {
+  if (!dom.topologyCanvas) return;
+  const bounds = topologyContentBounds();
+  const padding = Math.round(24 * layoutScaleForFont(state.settings.fontScale));
+  const viewport = {
+    width: Math.max(1, Number(dom.topologyCanvas.clientWidth) || 1),
+    height: Math.max(1, Number(dom.topologyCanvas.clientHeight) || 1),
+  };
+  const fit = Topology.computeAutoFitScale(bounds, viewport, {
+    minScale: 0.8,
+    maxScale: 1,
+    padding,
+  });
+  const scale = fit.scale;
+  const contentWidth = bounds.width * scale;
+  const contentHeight = bounds.height * scale;
+  const worldWidth = Math.max(viewport.width, Math.ceil(contentWidth + padding * 2));
+  const worldHeight = Math.max(viewport.height, Math.ceil(contentHeight + padding * 2));
+  state.topologyView.viewport = {
+    x: (worldWidth - contentWidth) / 2 - bounds.x * scale,
+    y: (worldHeight - contentHeight) / 2 - bounds.y * scale,
+    scale,
+  };
+  updateWorldBounds({ normalize: normalizeWorld, persistNormalization: save });
+  syncTopologyViewport();
+  const left = Math.max(0, (worldWidth - viewport.width) / 2);
+  const top = Math.max(0, (worldHeight - viewport.height) / 2);
+  if (typeof dom.topologyCanvas.scrollTo === "function") dom.topologyCanvas.scrollTo({ left, top, behavior: "auto" });
+  else {
+    dom.topologyCanvas.scrollLeft = left;
+    dom.topologyCanvas.scrollTop = top;
+  }
+  if (save) saveTopologyView();
+}
+
+function createSelectedGroup() {
+  const historyBefore = topologyHistorySnapshot();
+  try {
+    const result = Topology.createGroup(state.topologyView, Array.from(state.selectedComponents), Array.from(state.selectedComponents)[0]);
+    state.topologyView = result.view;
+    state.nodePositions = state.topologyView.layout.positions;
+    saveTopologyView();
+    commitTopologyHistory(historyBefore, "建立视觉分组");
+    selectTopologyGroup(result.group.group_id);
+    renderAll();
+    toast("视觉分组已建立", `${result.group.label} · 根组件 ${result.group.root}；硬件与链路未改变`, "success");
+  } catch (error) {
+    toast("无法建立分组", chineseMessage(error), "error");
+  }
+}
+
+function setSelectedGroupRoot() {
+  commitPendingGroupLabel();
+  const group = selectedGroup();
+  const componentId = Array.from(state.selectedComponents)[0];
+  if (!group || state.selectedComponents.size !== 1) return;
+  const historyBefore = topologyHistorySnapshot();
+  try {
+    state.topologyView = Topology.setGroupRoot(state.topologyView, group.group_id, componentId);
+    state.nodePositions = state.topologyView.layout.positions;
+    saveTopologyView();
+    commitTopologyHistory(historyBefore, "设置分组根组件");
+    renderTopology();
+    toast("组根已更新", `${group.group_id} → ${componentId}`, "success");
+  } catch (error) {
+    toast("无法设置组根", chineseMessage(error), "error");
+  }
+}
+
+async function toggleSelectedGroup() {
+  commitPendingGroupLabel();
+  const group = selectedGroup();
+  if (!group) return;
+  const historyBefore = topologyHistorySnapshot();
+  const collapsing = !group.collapsed;
+  const rootNode = dom.nodeLayer.querySelector(`[data-component-id="${CSS.escape(group.root)}"]`);
+  const duration = Topology.motionDuration(state.settings.reduceMotion, 190);
+  if (collapsing && duration && rootNode) {
+    const rootRect = rootNode.getBoundingClientRect();
+    const animations = group.members.filter((id) => id !== group.root).map((id) => {
+      const element = dom.nodeLayer.querySelector(`[data-component-id="${CSS.escape(id)}"]`);
+      if (!element || element.hidden || typeof element.animate !== "function") return null;
+      const rect = element.getBoundingClientRect();
+      return element.animate([
+        { transform: "translate(0, 0)", opacity: 1 },
+        { transform: `translate(${rootRect.left - rect.left}px, ${rootRect.top - rect.top}px)`, opacity: 0 },
+      ], { duration, easing: "cubic-bezier(.2,.8,.2,1)", fill: "none" }).finished.catch(() => null);
+    }).filter(Boolean);
+    await Promise.all(animations);
+  }
+  state.topologyView = Topology.setGroupCollapsed(state.topologyView, group.group_id, collapsing);
+  state.nodePositions = state.topologyView.layout.positions;
+  saveTopologyView();
+  commitTopologyHistory(historyBefore, collapsing ? "折叠视觉分组" : "展开视觉分组");
+  // Expanded preset members may only have compact coordinates that were safe
+  // while hidden. Force the existing measured-layout pass so their real DOM
+  // boxes are used before links are routed.
+  renderTopology({ relayout: !collapsing });
+  renderGroupInspector(group.group_id);
+  if (!collapsing && duration && rootNode) requestAnimationFrame(() => {
+    const rootRect = dom.nodeLayer.querySelector(`[data-component-id="${CSS.escape(group.root)}"]`)?.getBoundingClientRect();
+    if (!rootRect) return;
+    group.members.filter((id) => id !== group.root).forEach((id) => {
+      const element = dom.nodeLayer.querySelector(`[data-component-id="${CSS.escape(id)}"]`);
+      if (!element || typeof element.animate !== "function") return;
+      const rect = element.getBoundingClientRect();
+      element.animate([
+        { transform: `translate(${rootRect.left - rect.left}px, ${rootRect.top - rect.top}px)`, opacity: 0 },
+        { transform: "translate(0, 0)", opacity: 1 },
+      ], { duration, easing: "cubic-bezier(.2,.8,.2,1)" });
+    });
+  });
+}
+
+function releaseSelectedGroup() {
+  commitPendingGroupLabel();
+  const group = selectedGroup();
+  if (!group) return;
+  const historyBefore = topologyHistorySnapshot();
+  state.topologyView = Topology.removeGroup(state.topologyView, group.group_id);
+  state.nodePositions = state.topologyView.layout.positions;
+  saveTopologyView();
+  commitTopologyHistory(historyBefore, "释放视觉分组");
+  setComponentSelection(group.members, group.root);
+  renderAll();
+  toast("视觉分组已释放", `${group.label}；组件与链路保持不变`, "info");
+}
+
+async function copyTopologySelection() {
+  const payload = Topology.copySelection(state.scenario.hardware, state.topologyView, Array.from(state.selectedComponents), state.selected?.type === "group" ? state.selected.id : null);
+  if (!payload) return;
+  try {
+    Topology.validateClipboardPayload(payload);
+  } catch (error) {
+    toast("无法复制", chineseMessage(error), "error", 6500);
+    return;
+  }
+  state.clipboardPayload = payload;
+  const text = JSON.stringify(payload);
+  try { await navigator.clipboard?.writeText(text); } catch (_error) { /* Internal clipboard remains available. */ }
+  toast("拓扑选择已复制", `${payload.components.length} 个组件 · ${payload.links.length} 条内部链路；未复制 placement / rank / KV / tensor 映射`, "success");
+}
+
+async function pasteTopologySelection() {
+  let payload = state.clipboardPayload;
+  try {
+    const text = await navigator.clipboard?.readText();
+    if (text?.trim()) {
+      let external = null;
+      try { external = JSON.parse(text); } catch (_error) { external = null; }
+      if (external?.type === Topology.CLIPBOARD_TYPE) {
+        try {
+          Topology.validateClipboardPayload(external);
+          payload = external;
+        } catch (error) {
+          toast("剪贴板内容无效", chineseMessage(error), "error", 6500);
+          return;
+        }
+      }
+    }
+  } catch (_error) { /* Browsers may deny clipboard reads; use the internal copy. */ }
+  if (!payload) {
+    toast("没有可粘贴的拓扑", "请先复制组件、多选或分组", "warning");
+    return;
+  }
+  try {
+    const historyBefore = topologyHistorySnapshot();
+    const centerScreen = topologyCanvasCenterPoint();
+    const target = Topology.screenToWorld(centerScreen, state.topologyView.viewport);
+    const result = Topology.pasteSelection(state.scenario.hardware, state.topologyView, payload, target);
+    const desired = Object.fromEntries(result.pastedIds.map((id) => [id, result.topologyView.layout.positions[id]]));
+    const { nodeW, nodeH } = topologyLayoutMetrics();
+    const sizeOverrides = Object.fromEntries(result.pastedIds.map((id) => [id, { width: nodeW, height: nodeH }]));
+    const placement = resolveTopologyPlacement(result.topologyView.layout.positions, desired, sizeOverrides);
+    Object.assign(result.topologyView.layout.positions, placement.positions);
+    state.scenario.hardware = result.hardware;
+    state.topologyView = result.topologyView;
+    state.scenario.hardware.metadata = asObject(state.scenario.hardware.metadata);
+    state.nodePositions = state.topologyView.layout.positions;
+    saveTopologyView();
+    commitTopologyHistory(historyBefore, "粘贴拓扑", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "已粘贴新的硬件组件或链路，映射需要重新生成。" });
+    setComponentSelection(result.pastedIds, result.pastedIds[0]);
+    renderAll();
+    toast("拓扑已粘贴", `${result.pastedIds.length} 个组件；所有组件、端口、链路与分组 ID 已重新映射${placement.adjusted ? "，并自动放置到最近空位" : ""}`, "success");
+  } catch (error) {
+    toast("无法粘贴拓扑", chineseMessage(error), "error");
+  }
+}
+
+function handleConnectNode(componentId) {
+  if (!state.connectSource) {
+    state.connectSource = componentId;
+    dom.connectionHint.textContent = uiText(
+      "起点 {componentId} · 请选择第二个组件",
+      "Source {componentId} · select the second component",
+      { componentId },
+    );
+    applyTopologySelection();
+    return;
+  }
+  if (state.connectSource === componentId) {
+    toast("无法创建链路", "链路必须连接两个不同组件", "error");
+    return;
+  }
+  try {
+    createProtocolLink(state.connectSource, componentId, dom.protocolSelect.value);
+    state.connectSource = null;
+    dom.connectionHint.textContent = uiText(
+      "连接已创建 · 请选择下一个起点，或按 Esc 退出",
+      "Connection created · select the next source, or press Esc to exit",
+    );
+    renderArchitecture();
+  } catch (error) {
+    toast("无法创建链路", chineseMessage(error), "error", 6500);
+  }
+}
+
+const PROTOCOL_DEFAULTS = {
+  HBM: { preset_id: "hbm3-6_4-1024", version: "HBM3", lanes: 16, bandwidth_gbps: 6553.6, latency_ns: 40 },
+  PCIe: { preset_id: "pcie-5_0-x16", version: "5.0", lanes: 16, bandwidth_gbps: 504.12307692307695, latency_ns: 150 },
+  CXL: { preset_id: "cxl-3_0-x16", version: "3.0", lanes: 16, bandwidth_gbps: 1024, latency_ns: 180 },
+  UCIe: { preset_id: "ucie-2_0-standard-x64", version: "2.0", lanes: 64, bandwidth_gbps: 2048, latency_ns: 20, payload: "streaming" },
+  NVLink: { preset_id: "nvlink-4-h100-18", version: "4.0", lanes: 18, bandwidth_gbps: 3600, latency_ns: 100 },
+  "NVLink-C2C": { preset_id: "nvlink-c2c-gh200", version: "GH200", lanes: 1, bandwidth_gbps: 3600, latency_ns: 50 },
+  InfinityFabric: { preset_id: "infinity-fabric-mi300x-envelope", version: "MI300X", lanes: 8, bandwidth_gbps: 3584, latency_ns: 100 },
+  RoCE: { preset_id: "roce-v2-gaudi3-8x200gbe-envelope", version: "v2", lanes: 8, bandwidth_gbps: 1600, latency_ns: 800 },
+  LPDDR5X: { preset_id: "lpddr5x-gh200-aggregate", version: "GH200", lanes: 1, bandwidth_gbps: 4000, latency_ns: 80 },
+};
+
+function syncProtocolManualControls(defaults, presetId = null) {
+  const values = asObject(defaults);
+  dom.protocolVersionInput.value = String(values.version ?? "1.0");
+  dom.protocolUnitsInput.value = String(Math.max(1, Math.trunc(Number(values.lanes) || 1)));
+  dom.protocolBandwidthInput.value = formatBandwidthGbps(Number(values.bandwidth_gbps) || 0);
+  dom.protocolLatencyInput.value = String(Math.max(0, Number(values.latency_ns) || 0));
+  dom.protocolPayloadInput.value = String(values.payload ?? "");
+  state.selectedProtocolPresetId = presetId;
+  dom.protocolPresetSelection.textContent = presetId
+    ? uiText("已选 {presetId} · 下列字段可手动覆盖", "Selected {presetId} · fields below can be overridden manually", { presetId })
+    : uiText("内置默认值 · 可手动覆盖", "Built-in defaults · can be overridden manually");
+}
+
+function currentProtocolConnectionDefaults() {
+  const protocol = dom.protocolSelect.value;
+  const fallback = PROTOCOL_DEFAULTS[protocol] || { version: "1.0", lanes: 1, bandwidth_gbps: 0, latency_ns: 0 };
+  const parsedBandwidth = parseBandwidthToGbps(dom.protocolBandwidthInput.value);
+  const lanes = Math.trunc(Number(dom.protocolUnitsInput.value));
+  const latency = Number(dom.protocolLatencyInput.value);
+  return {
+    protocol,
+    version: String(dom.protocolVersionInput.value || fallback.version).trim() || fallback.version,
+    lanes: Number.isInteger(lanes) && lanes > 0 ? lanes : fallback.lanes,
+    bandwidth_gbps: parsedBandwidth == null ? fallback.bandwidth_gbps : parsedBandwidth,
+    latency_ns: Number.isFinite(latency) && latency >= 0 ? latency : fallback.latency_ns,
+    payload: String(dom.protocolPayloadInput.value || "").trim() || null,
+    protocol_preset_id: state.selectedProtocolPresetId,
+  };
+}
+
+function uniquePortId(component, protocol) {
+  const base = slug(protocol).replaceAll("-", "") || "port";
+  const used = new Set(asArray(component.ports).map((port) => port.port_id));
+  let index = 0;
+  while (used.has(`${base}${index}`)) index += 1;
+  return `${base}${index}`;
+}
+
+function uniqueLinkId(source, target, protocol) {
+  const base = `${slug(source)}-${slug(target)}-${slug(protocol)}`;
+  const used = new Set(state.scenario.hardware.links.map((link) => link.link_id));
+  if (!used.has(base)) return base;
+  let index = 2;
+  while (used.has(`${base}-${index}`)) index += 1;
+  return `${base}-${index}`;
+}
+
+function createProtocolLink(sourceId, targetId, protocol) {
+  const components = state.scenario.hardware.components;
+  let source = components.find((item) => item.component_id === sourceId);
+  let target = components.find((item) => item.component_id === targetId);
+  if (!source || !target) throw new Error("所选组件不存在");
+  const sourceClass = componentKindClass(source.kind);
+  const targetClass = componentKindClass(target.kind);
+  const sourceIsGpu = sourceClass === "compute";
+  const targetIsGpu = targetClass === "compute";
+  const sourceIsHbm = isDedicatedHbm(source.kind);
+  const targetIsHbm = isDedicatedHbm(target.kind);
+  const sourceKind = normalizedComponentKind(source.kind);
+  const targetKind = normalizedComponentKind(target.kind);
+  const hasHbf = sourceKind === "hbf" || targetKind === "hbf";
+  const hasSsd = [sourceKind, targetKind].some((kind) => ["ssd", "high_io_ssd"].includes(kind));
+
+  if (protocol === "HBM") {
+    if (sourceIsHbm === targetIsHbm) throw new Error("HBM 链路必须且只能连接一个 HBM 组件");
+    if (sourceIsHbm) [source, target] = [target, source];
+  } else {
+    if (sourceIsHbm || targetIsHbm) throw new Error("HBM 组件只能使用专用 HBM 链路");
+    if (hasHbf && protocol !== "UCIe") throw new Error("高带宽闪存（HBF）连接应使用 UCIe");
+    if (hasSsd && !["PCIe", "CXL"].includes(protocol)) throw new Error("SSD 与高 I/O SSD 连接应使用 PCIe 或 CXL");
+    if (["PCIe", "CXL"].includes(protocol) && targetIsGpu && !sourceIsGpu) [source, target] = [target, source];
+  }
+  if (protocol === "UCIe") {
+    if (!source.package_id || !target.package_id || source.package_id !== target.package_id) {
+      throw new Error("UCIe 要求两个端点声明相同 package_id");
+    }
+    if (!source.die_id || !target.die_id || source.die_id === target.die_id) {
+      throw new Error("UCIe 要求两个端点位于不同 die_id");
+    }
+  }
+
+  const defaults = currentProtocolConnectionDefaults();
+  const historyBefore = topologyHistorySnapshot();
+  const sourcePortId = uniquePortId(source, protocol);
+  const targetPortId = uniquePortId(target, protocol);
+  let sourceRole = "endpoint";
+  let targetRole = "endpoint";
+  if (protocol === "HBM") [sourceRole, targetRole] = ["controller", "device"];
+  if (protocol === "PCIe") [sourceRole, targetRole] = ["root", "endpoint"];
+  if (protocol === "CXL") [sourceRole, targetRole] = ["host", "device"];
+  const makePort = (portId, role) => ({
+    schema_version: AUTHORING_SCHEMA_VERSION,
+    port_id: portId,
+    protocol,
+    role,
+    direction: "bidirectional",
+    version: defaults.version,
+    lanes: defaults.lanes,
+    bandwidth_gbps: defaults.bandwidth_gbps,
+    max_links: 1,
+    ...(defaults.payload ? { payload: defaults.payload } : {}),
+    metadata: {
+      ...(defaults.protocol_preset_id ? { protocol_preset_id: defaults.protocol_preset_id } : {}),
+      bandwidth_semantics: "one_way_capacity",
+      manual_override_allowed: true,
+    },
+  });
+  source.ports ??= [];
+  target.ports ??= [];
+  source.ports.push(makePort(sourcePortId, sourceRole));
+  target.ports.push(makePort(targetPortId, targetRole));
+  const link = {
+    schema_version: AUTHORING_SCHEMA_VERSION,
+    link_id: uniqueLinkId(source.component_id, target.component_id, protocol),
+    source_component: source.component_id,
+    source_port: sourcePortId,
+    target_component: target.component_id,
+    target_port: targetPortId,
+    protocol,
+    version: defaults.version,
+    lanes: defaults.lanes,
+    bandwidth_gbps: defaults.bandwidth_gbps,
+    latency_ns: defaults.latency_ns,
+    bidirectional: true,
+    ...(defaults.payload ? { payload: defaults.payload } : {}),
+    metadata: {
+      ...(defaults.protocol_preset_id ? { protocol_preset_id: defaults.protocol_preset_id } : {}),
+      bandwidth_semantics: "one_way_capacity",
+      manual_override_allowed: true,
+    },
+  };
+  state.scenario.hardware.links.push(link);
+  state.selected = { type: "link", id: link.link_id };
+  refreshColocatedRankMapping();
+  commitTopologyHistory(historyBefore, "新增链路", { mappingImpact: true });
+  markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件链路已新增，映射需要重新生成。" });
+  toast("链路已创建", `${link.link_id} · ${protocol} 默认参数，建议运行校验`, "success");
+}
+
+function addComponent(kind) {
+  const components = state.scenario.hardware.components;
+  const base = kind === "digital_sram_cim" ? "cim" : kind;
+  let index = 0;
+  const ids = new Set(components.map((component) => component.component_id));
+  while (ids.has(`${base}${index}`)) index += 1;
+  const id = `${base}${index}`;
+  const defaults = {
+    gpu: { capacity_bytes: 64 * 1024 * 1024, peak_ops_per_s: 120e12, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", read_latency_ns: 0, write_latency_ns: 0, transfer_granularity_bytes: 0, dma_latency_ns: 0 } },
+    cpu: { capacity_bytes: 0, peak_ops_per_s: 100e9, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "editable-reference-default" } },
+    hbm: { capacity_bytes: 16 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 4096, write_bandwidth_gbps: 4096, metadata: { evidence_status: "analytical", read_latency_ns: 40, write_latency_ns: 40, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
+    host_memory: { capacity_bytes: 128 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 1600, write_bandwidth_gbps: 1600, metadata: { evidence_status: "analytical", source: "editable-reference-default", read_latency_ns: 100, write_latency_ns: 100, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
+    hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 24000, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "official-reference-upper-bound", dma_parameter_basis: "editable analytical assumption bounded by the default UCIe path", reference_capacity: "512 GiB", reference_read_bandwidth: "approximately 3 TB/s", read_only: true, writable: false, read_latency_ns: 2500, write_latency_ns: 0, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 2048, dma_latency_ns: 800, dma_energy_pj_per_byte: 0 } },
+    ssd: { capacity_bytes: 4 * 1024 ** 4, peak_ops_per_s: 0, read_bandwidth_gbps: 64, write_bandwidth_gbps: 48, metadata: { evidence_status: "analytical", source: "reference-default", dma_parameter_basis: "editable analytical storage-controller assumption", read_latency_ns: 80000, write_latency_ns: 100000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 64, dma_latency_ns: 2000, dma_energy_pj_per_byte: 0 } },
+    high_io_ssd: { capacity_bytes: 8 * 1024 ** 4, peak_ops_per_s: 0, read_bandwidth_gbps: 448, write_bandwidth_gbps: 224, metadata: { evidence_status: "analytical", source: "reference-default", dma_parameter_basis: "editable analytical high-I/O controller assumption", read_latency_ns: 25000, write_latency_ns: 40000, transfer_granularity_bytes: 4096, max_outstanding_requests: 64, dma_bandwidth_gbps: 448, dma_latency_ns: 1200, dma_energy_pj_per_byte: 0 } },
+    digital_sram_cim: { capacity_bytes: 512 * 1024 * 1024, peak_ops_per_s: 0, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", read_latency_ns: 5, write_latency_ns: 5, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
+  }[kind];
+  if (!defaults) {
+    toast("无法添加组件", `未知 kind：${kind}`, "error");
+    return;
+  }
+  const component = {
+    schema_version: AUTHORING_SCHEMA_VERSION,
+    component_id: id,
+    kind,
+    package_id: "package0",
+    die_id: `${id}_die`,
+    capacity_bytes: defaults.capacity_bytes,
+    peak_ops_per_s: defaults.peak_ops_per_s,
+    read_bandwidth_gbps: defaults.read_bandwidth_gbps,
+    write_bandwidth_gbps: defaults.write_bandwidth_gbps,
+    metadata: deepClone(defaults.metadata),
+    ports: [],
+  };
+  const canvas = dom.topologyCanvas;
+  const historyBefore = topologyHistorySnapshot();
+  const { nodeW, nodeH } = topologyLayoutMetrics();
+  const center = Topology.screenToWorld(topologyCanvasCenterPoint(canvas), state.topologyView.viewport);
+  const desired = {
+    x: center.x - nodeW / 2 + ((components.length + 1) % 3) * 18,
+    y: center.y - nodeH / 2 + ((components.length + 1) % 4) * 16,
+  };
+  const candidatePositions = { ...state.nodePositions, [id]: desired };
+  const placement = resolveTopologyPlacement(candidatePositions, { [id]: desired }, { [id]: { width: nodeW, height: nodeH } });
+  components.push(component);
+  materializeMissingCostProfiles([component]);
+  state.nodePositions[id] = placement.positions[id];
+  state.selectedComponents = new Set([id]);
+  state.selected = { type: "component", id };
+  refreshColocatedRankMapping();
+  savePositions();
+  commitTopologyHistory(historyBefore, "新增组件", { mappingImpact: true });
+  markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件组件已新增，映射需要重新生成。" });
+  toast("组件已添加", `${id} 尚未连接${placement.adjusted ? "；已自动放置到最近空位" : ""}，校验会提示拓扑连通性`, "success");
+}
+
+function deleteSelection() {
+  commitPendingGroupLabel();
+  const selected = state.selected;
+  if (!selected) return;
+  if (selected.type === "link") {
+    deleteLink(selected.id);
+    return;
+  }
+  const ids = Array.from(state.selectedComponents);
+  if (ids.length <= 1) {
+    deleteComponent(ids[0] || selected.id, { historyBefore: topologyHistorySnapshot() });
+    return;
+  }
+  const historyBefore = topologyHistorySnapshot();
+  let links = 0;
+  ids.forEach((id) => { links += deleteComponent(id, { deferRender: true, quiet: true }); });
+  state.selectedComponents = new Set();
+  state.selected = null;
+  refreshColocatedRankMapping();
+  commitTopologyHistory(historyBefore, "删除多个组件", { mappingImpact: true });
+  markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件组件已删除，映射需要重新生成。" });
+  toast("组件已删除", `${ids.length} 个组件 · ${links} 条关联链路，并清理相关映射`, "warning", 6000);
+}
+
+function deleteLink(linkId) {
+  const hardware = state.scenario.hardware;
+  const link = hardware.links.find((item) => item.link_id === linkId);
+  if (!link) return;
+  const historyBefore = topologyHistorySnapshot();
+  hardware.links = hardware.links.filter((item) => item.link_id !== linkId);
+  for (const [componentId, portId] of [[link.source_component, link.source_port], [link.target_component, link.target_port]]) {
+    const component = hardware.components.find((item) => item.component_id === componentId);
+    if (!component) continue;
+    const stillUsed = hardware.links.some((item) =>
+      (item.source_component === componentId && item.source_port === portId) ||
+      (item.target_component === componentId && item.target_port === portId));
+    if (!stillUsed) component.ports = asArray(component.ports).filter((port) => port.port_id !== portId);
+  }
+  state.selected = null;
+  refreshColocatedRankMapping();
+  commitTopologyHistory(historyBefore, "删除链路", { mappingImpact: true });
+  markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件链路已删除，映射需要重新生成。" });
+  toast("链路已删除", linkId, "warning");
+}
+
+function deleteComponent(componentId, { deferRender = false, quiet = false, historyBefore = null } = {}) {
+  const hardware = state.scenario.hardware;
+  const relatedLinkIds = hardware.links
+    .filter((link) => link.source_component === componentId || link.target_component === componentId)
+    .map((link) => link.link_id);
+  hardware.links = hardware.links.filter((link) => !relatedLinkIds.includes(link.link_id));
+  hardware.components = hardware.components.filter((component) => component.component_id !== componentId);
+  const placement = state.scenario.placement;
+  const kvPolicy = asObject(placement.kv_policy);
+  if (kvPolicy.cache_component === componentId) kvPolicy.cache_component = null;
+  if (kvPolicy.offload_component === componentId) kvPolicy.offload_component = null;
+  const parallel = asObject(placement.parallel);
+  const ranks = asArray(parallel.rank_mapping);
+  if (ranks.some((rank) => rank.component_id === componentId)) {
+    parallel.rank_mapping = [];
+  } else {
+    ranks.forEach((rank) => {
+      if (rank.memory_component_id === componentId) delete rank.memory_component_id;
+      if (rank.cim_component_id === componentId) delete rank.cim_component_id;
+    });
+  }
+  delete state.nodePositions[componentId];
+  delete state.nodeSizes[componentId];
+  state.topologyView.groups = state.topologyView.groups.map((group) => {
+    if (!group.members.includes(componentId)) return group;
+    const members = group.members.filter((id) => id !== componentId);
+    return { ...group, members, root: group.root === componentId ? members[0] : group.root };
+  }).filter((group) => group.members.length);
+  state.selectedComponents.delete(componentId);
+  refreshColocatedRankMapping();
+  savePositions();
+  state.selected = null;
+  if (!deferRender) {
+    commitTopologyHistory(historyBefore, "删除组件", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件组件已删除，映射需要重新生成。" });
+  }
+  if (!quiet) toast("组件已删除", `${componentId} · 同时删除 ${relatedLinkIds.length} 条关联链路并清理映射`, "warning", 6000);
+  return relatedLinkIds.length;
+}
+
+function renderInspector() {
+  const selected = state.selected;
+  dom.deleteSelectionButton.hidden = !selected;
+  if (!selected) {
+    dom.inspectorTitle.textContent = "未选择";
+    dom.inspectorContent.innerHTML = `<div class="inspector-empty"><span>选择 · SELECT</span><p>选择组件或链路以编辑常用字段。其余 Schema / metadata 字段保留在 JSON 中。</p></div>`;
+    return;
+  }
+  if (selected.type === "component") renderComponentInspector(selected.id);
+  else if (selected.type === "link") renderLinkInspector(selected.id);
+  else if (selected.type === "group") renderGroupInspector(selected.id);
+  else renderMultiSelectionInspector();
+}
+
+function renderMultiSelectionInspector() {
+  const ids = Array.from(state.selectedComponents).sort();
+  dom.inspectorTitle.textContent = `${ids.length} 个组件`;
+  dom.inspectorContent.innerHTML = `<section class="inspector-section"><h3>多选（Multi-selection）</h3><p class="muted">拖动任一已选组件可整体移动。复制会包含这些组件、内部链路、相对位置与完整包含的视觉组，不包含 placement / rank / KV / tensor 映射。</p>${ids.map((id) => `<div class="readout"><span>组件</span><strong>${escapeHtml(id)}</strong></div>`).join("")}</section>`;
+}
+
+function previewGroupLabel(groupId, rawValue) {
+  const group = state.topologyView?.groups.find((item) => item.group_id === groupId);
+  if (!group) return false;
+  const value = String(rawValue ?? "");
+  if (state.pendingGroupLabelRename?.groupId !== groupId) {
+    state.pendingGroupLabelRename = {
+      groupId,
+      value,
+      historyBefore: topologyHistorySnapshot(),
+    };
+  } else {
+    state.pendingGroupLabelRename.value = value;
+  }
+  updateGroupLabelPresentation(group, value);
+  return true;
+}
+
+function commitPendingGroupLabel(groupId = state.pendingGroupLabelRename?.groupId, rawValue = undefined) {
+  if (!groupId) return false;
+  const group = state.topologyView?.groups.find((item) => item.group_id === groupId);
+  if (!group) {
+    if (state.pendingGroupLabelRename?.groupId === groupId) state.pendingGroupLabelRename = null;
+    return false;
+  }
+  if (rawValue !== undefined) previewGroupLabel(groupId, rawValue);
+  const pending = state.pendingGroupLabelRename?.groupId === groupId
+    ? state.pendingGroupLabelRename
+    : null;
+  if (!pending) return false;
+  state.pendingGroupLabelRename = null;
+  const label = pending.value.trim();
+  const control = dom.inspectorContent ? $("[data-group-label]", dom.inspectorContent) : null;
+  if (!label) {
+    if (control) control.value = group.label;
+    updateGroupLabelPresentation(group);
+    toast("组标签无效", "组标签不能为空。", "error");
+    return false;
+  }
+  if (label === group.label) {
+    if (control) control.value = group.label;
+    updateGroupLabelPresentation(group);
+    return false;
+  }
+  group.label = label;
+  saveTopologyView();
+  const committed = commitTopologyHistory(pending.historyBefore, "重命名分组标签");
+  updateGroupLabelPresentation(group);
+  renderArchitecture();
+  return committed;
+}
+
+function renderGroupInspector(groupId) {
+  const group = state.topologyView.groups.find((item) => item.group_id === groupId);
+  if (!group) {
+    setComponentSelection([]);
+    return;
+  }
+  const visibleLabel = state.pendingGroupLabelRename?.groupId === groupId
+    ? state.pendingGroupLabelRename.value
+    : group.label;
+  dom.inspectorTitle.textContent = visibleLabel;
+  dom.inspectorContent.innerHTML = `<section class="inspector-section"><h3>视觉分组（Visual Group）</h3><label class="field"><span>组标签（Group Label）</span><input type="text" data-group-label value="${escapeHtml(visibleLabel)}"></label><div class="readout"><span>组 ID（Group ID）</span><strong>${escapeHtml(group.group_id)}</strong></div><div class="readout"><span>根组件（Root Component）</span><strong>${escapeHtml(group.root)}</strong></div><div class="readout"><span>显示状态（Display State）</span><strong>${group.collapsed ? "已折叠（Collapsed）" : "已展开（Expanded）"}</strong></div><p class="muted">分组只影响画布。折叠时内部成员与内部边隐藏，外部边投影到根组件并保留原链路信息。</p>${group.members.map((id) => `<div class="readout"><span>${id === group.root ? "根（Root）" : "成员（Member）"}</span><strong>${escapeHtml(id)}</strong></div>`).join("")}</section>`;
+  const control = $("[data-group-label]", dom.inspectorContent);
+  control.addEventListener("input", () => previewGroupLabel(groupId, control.value));
+  control.addEventListener("change", () => commitPendingGroupLabel(groupId, control.value));
+  control.addEventListener("blur", () => commitPendingGroupLabel(groupId, control.value));
+  control.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    commitPendingGroupLabel(groupId, control.value);
+  });
+  if (dom.inspectorContent?.querySelectorAll) hydrateConceptHelp(dom.inspectorContent);
+}
+
+function inputField(label, field, value, { type = "text", min = "", step = "", options = null, optionLabels = {}, scope = "component", helpKey = "" } = {}) {
+  const attrs = [
+    `data-inspector-scope="${scope}"`,
+    `data-inspector-field="${field}"`,
+    type === "number" ? `type="number"` : `type="text"`,
+    min !== "" ? `min="${min}"` : "",
+    step !== "" ? `step="${step}"` : "",
+  ].filter(Boolean).join(" ");
+  const title = helpKey ? fieldTitleMarkup(label, helpKey) : `<span>${escapeHtml(label)}</span>`;
+  if (options) {
+    const values = options.includes(String(value)) ? options : [String(value), ...options];
+    return `<label class="field">${title}<select ${attrs}>${values.map((option) => `<option value="${escapeHtml(option)}" ${String(option) === String(value) ? "selected" : ""}>${escapeHtml(optionLabels[option] || option)}</option>`).join("")}</select></label>`;
+  }
+  return `<label class="field">${title}<input ${attrs} value="${escapeHtml(value ?? "")}"></label>`;
+}
+
+function metadataField(label, field, value, { type = "number", min = 0, step = "any", helpKey = "" } = {}) {
+  const title = helpKey ? fieldTitleMarkup(label, helpKey) : `<span>${escapeHtml(label)}</span>`;
+  return `<label class="field">${title}<input type="${escapeHtml(type)}" min="${escapeHtml(min)}" step="${escapeHtml(step)}" data-inspector-metadata-field="${escapeHtml(field)}" value="${escapeHtml(value ?? "")}"></label>`;
+}
+
+function conceptHelpText(keyOrText) {
+  const entry = CONCEPT_HELP[String(keyOrText)];
+  if (!entry) return String(keyOrText || "");
+  return uiText(entry["zh-CN"], entry.en);
+}
+
+function conceptHelpProfileName(helpKey) {
+  if (CONCEPT_HELP_DISPLAY_KEYS.has(helpKey)) return "metric";
+  return Object.entries(CONCEPT_HELP_PROFILE_KEYS)
+    .find(([name, keys]) => name !== "metric" && keys.has(helpKey))?.[0] || "model";
+}
+
+function conceptHelpSubjectBase(language, definitionValue) {
+  const definition = String(definitionValue || "").trim();
+  const separator = language === "en"
+    ? /\s+(?:is|are|means|describes|identifies|records|controls|selects|maps|limits|moves|generates|normalizes|forwards|joins|permits|verifies|requires|occurs|dynamically)\s+/iu
+    : /(?:是|表示|描述|说明|记录|决定|控制|选择|映射|限制|移动|生成|归一化|连接|允许|验证|要求|发生|动态)/u;
+  const candidate = definition.split(separator)[0].replace(/[。；;:,，：]+$/u, "").trim();
+  return candidate && Array.from(candidate).length <= 72 ? candidate : "";
+}
+
+function conceptHelpSubject(helpKey, language, definitionValue) {
+  const key = String(helpKey || "concept");
+  const candidate = conceptHelpSubjectBase(language, definitionValue) || key.replaceAll("_", " ");
+  const collisions = Object.entries(CONCEPT_HELP).filter(([, entry]) => (
+    conceptHelpSubjectBase(language, entry?.[language]) === candidate
+  ));
+  return collisions.length > 1 ? `${candidate} · ${key.replaceAll("_", " ")}` : candidate;
+}
+
+function conceptHelpProfileDetails(helpKey, language, profileValue, definitionValue) {
+  const profile = asArray(profileValue);
+  const subject = conceptHelpSubject(helpKey, language, definitionValue);
+  const templates = language === "en"
+    ? [
+      (body) => `${subject} has this simulator boundary: ${body}`,
+      (body) => `Accepted or displayed ${subject} values follow this rule: ${body}`,
+      (body) => `Units, ranges, and special values for ${subject} follow the field contract: ${body}`,
+      (body) => `Changing or filtering ${subject} has this impact: ${body}`,
+      (body) => `Interpret ${subject} with this limit and example: ${body}`,
+    ]
+    : [
+      (body) => `${subject}在模拟器中的具体边界是：${body}`,
+      (body) => `${subject}的可填或只读内容遵循：${body}`,
+      (body) => `${subject}的单位、范围与特殊值以字段合同为准：${body}`,
+      (body) => `修改或筛选${subject}会产生以下影响：${body}`,
+      (body) => `解读${subject}时需遵守以下限制与示例：${body}`,
+    ];
+  return templates.map((format, index) => format(String(profile[index] || "")));
+}
+
+function conceptHelpSections(keyOrText) {
+  const key = String(keyOrText || "");
+  const definition = conceptHelpText(keyOrText);
+  const language = state.settings?.language === "en" ? "en" : "zh-CN";
+  const detailed = CONCEPT_HELP_DETAIL_OVERRIDES[key]?.[language];
+  const profile = CONCEPT_HELP_DETAIL_PROFILES[conceptHelpProfileName(key)]?.[language];
+  const fallback = profile || CONCEPT_HELP_DETAIL_PROFILES.model[language];
+  const detail = detailed
+    ? (Object.hasOwn(CONCEPT_HELP_220_DETAIL_OVERRIDES, key)
+      ? detailed.map((body) => `${conceptHelpSubject(key, language, definition)}：${body}`)
+      : detailed)
+    : conceptHelpProfileDetails(key, language, fallback, definition);
+  return [definition, ...detail].map((body, index) => ({
+    title: uiText(CONCEPT_HELP_SECTION_LABELS[index][0], CONCEPT_HELP_SECTION_LABELS[index][1]),
+    body,
+  }));
+}
+
+function conceptHelpBodyMarkup(helpKey) {
+  return `<span class="field-help-card">${conceptHelpSections(helpKey).map((section) => `<span class="field-help-section"><span class="field-help-section-title">${escapeHtml(section.title)}</span><span class="field-help-section-body">${escapeHtml(section.body)}</span></span>`).join("")}</span>`;
+}
+
+function fieldHelpMarkup(helpKey) {
+  const id = `field-help-${++fieldHelpSerial}`;
+  const dictionaryKey = Object.hasOwn(CONCEPT_HELP, String(helpKey)) ? String(helpKey) : "";
+  return `<span class="field-help-popover" id="${id}" role="tooltip" hidden${dictionaryKey ? ` data-concept-key="${escapeHtml(dictionaryKey)}"` : ""}>
+    ${conceptHelpBodyMarkup(helpKey)}
+  </span>`;
+}
+
+function hydrateConceptHelpHeading(title) {
+  if (!title?.matches?.("h1, h2, h3, h4, h5, h6") || !title.parentNode?.insertBefore || !document?.createElement) return false;
+  const label = String(title.textContent || "").trim();
+  const helpKey = String(title.dataset.conceptHelp || "");
+  const id = `field-help-${fieldHelpSerial + 1}`;
+  const shell = document.createElement("div");
+  const trigger = document.createElement("button");
+  shell.className = "concept-help-heading-shell";
+  shell.setAttribute("data-field-help", "");
+  shell.setAttribute("data-concept-key", helpKey);
+  trigger.type = "button";
+  trigger.className = "concept-help-heading-trigger field-help-trigger";
+  trigger.setAttribute("aria-label", uiText("查看“{label}”概念说明", "Show concept help for {label}", { label }));
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-describedby", id);
+  trigger.setAttribute("aria-controls", id);
+  title.classList.add("concept-help-heading");
+  title.parentNode.insertBefore(shell, title);
+  shell.appendChild(title);
+  shell.appendChild(trigger);
+  shell.insertAdjacentHTML("beforeend", fieldHelpMarkup(helpKey));
+  return true;
+}
+
+function refreshConceptHelpLanguage(root = document) {
+  $$(".field-help-popover[data-concept-key]", root).forEach((popover) => {
+    popover.innerHTML = conceptHelpBodyMarkup(popover.dataset.conceptKey);
+  });
+  $$('[data-field-help][data-concept-key]', root).forEach((help) => {
+    const trigger = fieldHelpTrigger(help) || help;
+    const term = trigger.querySelector?.(".concept-help-term");
+    let label = String(term?.textContent || "").trim();
+    if (!label && help.cloneNode) {
+      const clone = help.cloneNode(true);
+      clone.querySelectorAll?.('.field-help-popover, [role="tooltip"]').forEach((popover) => popover.remove?.());
+      label = String(clone.textContent || "").trim();
+    }
+    if (!label) label = String(trigger.textContent || "").trim();
+    if (label) trigger.setAttribute("aria-label", uiText("查看“{label}”概念说明", "Show concept help for {label}", { label }));
+  });
+  if (fieldHelpPortal && !fieldHelpPortal.hidden && activeFieldHelp) showFieldHelp(activeFieldHelp);
+}
+
+function fieldTitleMarkup(label, helpKey = "") {
+  if (!helpKey) return `<span class="field-title"><span>${escapeHtml(label)}</span></span>`;
+  const id = `field-help-${fieldHelpSerial + 1}`;
+  const accessibleLabel = uiText("查看“{label}”概念说明", "Show concept help for {label}", { label });
+  return `<span class="field-title concept-help-title field-help-trigger" data-field-help data-concept-key="${escapeHtml(helpKey)}" role="button" tabindex="0" aria-label="${escapeHtml(accessibleLabel)}" aria-expanded="false" aria-describedby="${id}"><span class="concept-help-term">${escapeHtml(label)}</span>${fieldHelpMarkup(helpKey)}</span>`;
+}
+
+function quantityField(label, field, value, quantity, { metadata = false, helpKey = "" } = {}) {
+  const formatted = quantity === "ops" ? formatOps(value) : formatBytes(value);
+  const resolvedHelpKey = helpKey || (quantity === "ops" ? "peak_ops" : "capacity");
+  const inputId = `inspector-${slug(field)}-input`;
+  return `<div class="field quantity-field">${fieldTitleMarkup(label, resolvedHelpKey)}<label class="sr-only" for="${inputId}">${escapeHtml(label)}</label><input id="${inputId}" type="text" inputmode="decimal" data-inspector-quantity-field="${escapeHtml(field)}" data-inspector-quantity="${escapeHtml(quantity)}" ${metadata ? 'data-inspector-quantity-metadata="true"' : ""} value="${escapeHtml(formatted)}"></div>`;
+}
+
+function bandwidthField(label, field, value, { scope = "component" } = {}) {
+  const inputId = `inspector-${scope}-${slug(field)}-input`;
+  return `<div class="field bandwidth-field">${fieldTitleMarkup(label, "bandwidth")}<label class="sr-only" for="${inputId}">${escapeHtml(label)}</label><input id="${inputId}" type="text" inputmode="decimal" data-inspector-scope="${escapeHtml(scope)}" data-inspector-field="${escapeHtml(field)}" data-inspector-bandwidth="true" value="${escapeHtml(formatBandwidthGbps(value))}"></div>`;
+}
+
+function ensureFieldHelpPortal() {
+  if (fieldHelpPortal?.isConnected) return fieldHelpPortal;
+  if (!document?.body?.appendChild || !document.createElement) return null;
+  fieldHelpPortal = document.createElement("div");
+  fieldHelpPortal.className = "field-help-viewport-popover";
+  fieldHelpPortal.setAttribute("role", "tooltip");
+  fieldHelpPortal.setAttribute("data-field-help-portal", "");
+  fieldHelpPortal.hidden = true;
+  document.body.appendChild(fieldHelpPortal);
+  return fieldHelpPortal;
+}
+
+function fieldHelpTrigger(help) {
+  if (!help) return null;
+  return help?.matches?.(".field-help-trigger") ? help : $(".field-help-trigger", help);
+}
+
+function fieldHelpContainsTarget(target) {
+  return Boolean(target?.closest?.('[data-field-help]') || fieldHelpPortal?.contains?.(target));
+}
+
+function positionFieldHelp(trigger, portal) {
+  if (!trigger?.getBoundingClientRect || !portal?.getBoundingClientRect) return;
+  const margin = 10;
+  const gap = 7;
+  const triggerRect = trigger.getBoundingClientRect();
+  const portalRect = portal.getBoundingClientRect();
+  const viewportWidth = Math.max(0, globalThis.innerWidth || document.documentElement?.clientWidth || 0);
+  const viewportHeight = Math.max(0, globalThis.innerHeight || document.documentElement?.clientHeight || 0);
+  const left = Math.min(
+    Math.max(margin, triggerRect.right - portalRect.width),
+    Math.max(margin, viewportWidth - portalRect.width - margin),
+  );
+  const roomBelow = viewportHeight - triggerRect.bottom - gap;
+  const top = roomBelow >= portalRect.height || triggerRect.top < portalRect.height + gap
+    ? Math.min(viewportHeight - portalRect.height - margin, triggerRect.bottom + gap)
+    : Math.max(margin, triggerRect.top - portalRect.height - gap);
+  portal.style.left = `${Math.round(left)}px`;
+  portal.style.top = `${Math.round(Math.max(margin, top))}px`;
+}
+
+function showFieldHelp(help) {
+  const portal = ensureFieldHelpPortal();
+  const trigger = fieldHelpTrigger(help);
+  const source = $(".field-help-popover", help);
+  if (!trigger) return;
+  if (activeFieldHelp && activeFieldHelp !== help) fieldHelpTrigger(activeFieldHelp)?.setAttribute("aria-expanded", "false");
+  activeFieldHelp = help;
+  trigger.setAttribute("aria-expanded", "true");
+  if (!portal || !source) return;
+  portal.innerHTML = source.innerHTML;
+  portal.hidden = false;
+  portal.dataset.visible = "true";
+  positionFieldHelp(trigger, portal);
+}
+
+function hideFieldHelpPortal(help = null) {
+  if (help && activeFieldHelp && help !== activeFieldHelp) return;
+  const closingHelp = activeFieldHelp || help;
+  fieldHelpTrigger(closingHelp)?.setAttribute("aria-expanded", "false");
+  activeFieldHelp = null;
+  if (!fieldHelpPortal) return;
+  fieldHelpPortal.hidden = true;
+  delete fieldHelpPortal.dataset.visible;
+}
+
+function hydrateConceptHelp(root = document) {
+  const scopedRoots = root === document
+    ? [document]
+    : [root];
+  scopedRoots.forEach((scopeRoot) => {
+    $$('h1, h2, h3, h4, th, dt, legend, summary strong, .control-section-title, .field > span, .inline-control > span, .workload-field-label > span, .readout > span, .subsection-title strong, .panel-meta, .metric-cell > :is(span, strong), .result-metric-label, .canvas-legend > span, .model-graph-legend > span, .trace-legend > span, .trace-fidelity-badge, .runtime-health-heading strong, .model-port-contract > :is(strong, span), .inspector-note, .runtime-stat dt, .preset-fact dt', scopeRoot).forEach((title) => {
+      if (title.dataset.conceptHelp || title.dataset.conceptHelpBound === "true" || title.closest?.('[data-field-help]')) return;
+      const text = String(title.textContent || "").trim();
+      const explicitKey = CONCEPT_HELP_LABEL_BINDING_MAP.get(normalizedConceptHelpLabel(text));
+      const match = explicitKey ? [explicitKey] : CONCEPT_TERM_PATTERNS.find(([, pattern]) => pattern.test(text));
+      if (match) title.dataset.conceptHelp = match[0];
+    });
+  });
+  $$('[data-concept-help]', root).forEach((title) => {
+    if (title.dataset.conceptHelpBound === "true" || !title.insertAdjacentHTML || title.closest?.('[data-field-help]')) return;
+    title.dataset.conceptHelpBound = "true";
+    if (hydrateConceptHelpHeading(title)) return;
+    title.classList.add("concept-help-title");
+    title.classList.add("field-help-trigger");
+    title.setAttribute("data-field-help", "");
+    title.setAttribute("data-concept-key", title.dataset.conceptHelp);
+    title.setAttribute("role", "button");
+    if (!title.hasAttribute("tabindex")) title.setAttribute("tabindex", "0");
+    if (!title.hasAttribute("aria-label")) {
+      title.setAttribute("aria-label", uiText("查看“{label}”概念说明", "Show concept help for {label}", { label: String(title.textContent || "").trim() }));
+    }
+    title.setAttribute("aria-expanded", "false");
+    const id = `field-help-${fieldHelpSerial + 1}`;
+    title.setAttribute("aria-describedby", id);
+    title.insertAdjacentHTML("beforeend", fieldHelpMarkup(title.dataset.conceptHelp));
+  });
+  refreshConceptHelpLanguage(root);
+  bindFieldHelp(root);
+}
+
+function closeFieldHelp({ except = null, returnFocus = false } = {}) {
+  let closed = false;
+  $$('[data-field-help]').forEach((help) => {
+    if (help === except) return;
+    const trigger = fieldHelpTrigger(help);
+    const focused = help.contains?.(document.activeElement);
+    const open = help.dataset.open === "true" || trigger?.getAttribute("aria-expanded") === "true";
+    if (!open && !focused) return;
+    delete help.dataset.open;
+    if (focused || returnFocus) help.dataset.focusClosed = "true";
+    else delete help.dataset.focusClosed;
+    trigger?.setAttribute("aria-expanded", "false");
+    if (returnFocus) trigger?.focus();
+    closed = true;
+  });
+  if (!except || activeFieldHelp !== except) hideFieldHelpPortal();
+  return closed;
+}
+
+function bindFieldHelp(root = document) {
+  $$('[data-field-help]', root).forEach((help) => {
+    if (help.dataset.bound === "true") return;
+    help.dataset.bound = "true";
+    const trigger = fieldHelpTrigger(help);
+    if (!trigger) return;
+    const toggle = (event) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      const opening = help.dataset.open !== "true";
+      closeFieldHelp({ except: help });
+      if (opening) {
+        help.dataset.open = "true";
+        delete help.dataset.focusClosed;
+        showFieldHelp(help);
+      } else {
+        delete help.dataset.open;
+        help.dataset.focusClosed = "true";
+        hideFieldHelpPortal(help);
+      }
+      trigger.setAttribute("aria-expanded", String(opening));
+    };
+    trigger.addEventListener("click", toggle);
+    trigger.addEventListener("pointerenter", () => {
+      if (help.dataset.focusClosed === "true") return;
+      closeFieldHelp({ except: help });
+      showFieldHelp(help);
+    });
+    trigger.addEventListener("pointerleave", () => {
+      if (help.dataset.open !== "true" && !help.contains?.(document.activeElement)) hideFieldHelpPortal(help);
+    });
+    trigger.addEventListener("focus", () => {
+      if (help.dataset.focusClosed !== "true") {
+        closeFieldHelp({ except: help });
+        showFieldHelp(help);
+      }
+    });
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        toggle(event);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeFieldHelp({ returnFocus: true });
+      }
+    });
+    trigger.addEventListener("blur", () => {
+      delete help.dataset.focusClosed;
+      if (help.dataset.open !== "true") hideFieldHelpPortal(help);
+    });
+  });
+}
+
+function componentInspectorEvidence(metadata) {
+  const record = asObject(metadata);
+  return String(record.evidence_status || record.evidence_level || "unspecified");
+}
+
+function componentInspectorSource(metadata) {
+  const record = asObject(metadata);
+  const direct = String(record.source ?? "").trim();
+  if (direct) return direct;
+  return asArray(record.sources)
+    .map((source) => {
+      const item = asObject(source);
+      return [item.publisher, item.title].filter(Boolean).join(" · ");
+    })
+    .filter(Boolean)
+    .join("；") || "—";
+}
+
+const COST_PROFILE_FIELD_RULES = Object.freeze({
+  gpu: Object.freeze({
+    "tensor_core.sm_count": "positive_integer", "tensor_core.tensor_cores_per_sm": "positive_integer",
+    "tensor_core.frequency_ghz": "positive", "tensor_core.mma_m": "positive_integer",
+    "tensor_core.mma_n": "positive_integer", "tensor_core.mma_k": "positive_integer",
+    "tensor_core.cycles_per_mma": "positive", "tensor_core.resource_id": "text",
+    scalar_lanes_per_sm: "positive_integer", scalar_ops_per_cycle: "positive",
+    reduction_ops_per_cycle_per_sm: "positive", special_function_units_per_sm: "positive_integer",
+    special_function_ops_per_cycle: "positive", occupancy: "efficiency",
+    attainable_efficiency: "efficiency", kernel_launch_ns: "nonnegative",
+    tensor_energy_pj_per_op: "nonnegative", scalar_energy_pj_per_op: "nonnegative",
+    special_function_energy_pj_per_op: "nonnegative", launch_energy_pj: "nonnegative",
+    scalar_resource_id: "text", special_function_resource_id: "text", launch_resource_id: "text", name: "text",
+  }),
+  hbm: Object.freeze({ bandwidth_gb_s: "positive", efficiency: "efficiency", energy_pj_per_byte: "nonnegative", resource_id: "text" }),
+  cpu: Object.freeze({
+    "pipeline.core_count": "positive_integer", "pipeline.frequency_ghz": "positive",
+    "pipeline.simd_width_bits": "positive_integer", "pipeline.decode_width": "positive_integer",
+    "pipeline.issue_width": "positive_integer", "pipeline.retire_width": "positive_integer",
+    "pipeline.vector_fma_units_per_core": "positive_integer", "pipeline.vector_alu_units_per_core": "positive_integer",
+    "pipeline.load_units_per_core": "positive_integer", "pipeline.store_units_per_core": "positive_integer",
+    "pipeline.branch_units_per_core": "positive_integer", "pipeline.special_function_units_per_core": "positive_integer",
+    "pipeline.special_function_cycles_per_vector": "positive", "pipeline.reorder_buffer_entries": "positive_integer",
+    "pipeline.load_store_queue_entries": "positive_integer", "pipeline.memory_level_parallelism": "positive_integer",
+    "pipeline.branch_mispredict_ns": "nonnegative", "pipeline.resource_id": "text",
+    attainable_efficiency: "efficiency", dispatch_ns: "nonnegative",
+    gemm_energy_pj_per_op: "nonnegative", elementwise_energy_pj_per_op: "nonnegative",
+    reduction_energy_pj_per_op: "nonnegative", special_function_energy_pj_per_op: "nonnegative",
+    dispatch_energy_pj: "nonnegative", name: "text",
+  }),
+  host_memory: Object.freeze({ bandwidth_gb_s: "positive", efficiency: "efficiency", energy_pj_per_byte: "nonnegative", resource_id: "text", name: "text" }),
+  cim: Object.freeze({
+    array_count: "positive_integer", p_m: "positive_integer", p_k: "positive_integer", p_n: "positive_integer",
+    frequency_ghz: "positive", input_parallel_bits: "positive_integer", weight_parallel_bits: "positive_integer",
+    cycles_per_eval: "positive_integer", weight_capacity_bytes: "positive_integer", max_m_replication: "positive_integer",
+    load_bandwidth_gb_s: "positive", activation_bandwidth_gb_s: "positive", output_bandwidth_gb_s: "positive",
+    noc_bandwidth_gb_s: "positive", accumulator_outputs_per_cycle: "positive", peripheral_elements_per_cycle: "positive",
+    load_latency_ns: "nonnegative", noc_hop_latency_ns: "nonnegative", noc_reduce_fan_in: "positive_integer",
+    peripheral_latency_ns: "nonnegative", accumulator_bits: "positive_integer", accumulator_guard_bits: "nonnegative_integer",
+    eval_energy_pj: "nonnegative", load_energy_pj_per_byte: "nonnegative", activation_energy_pj_per_byte: "nonnegative",
+    output_energy_pj_per_byte: "nonnegative", noc_energy_pj_per_byte: "nonnegative",
+    accumulator_energy_pj_per_op: "nonnegative", peripheral_energy_pj_per_element: "nonnegative",
+    array_resource_id: "text", load_resource_id: "text", activation_resource_id: "text", noc_resource_id: "text",
+    accumulator_resource_id: "text", peripheral_resource_id: "text", name: "text",
+  }),
+});
+
+function costProfileKeyForComponentKind(kindValue) {
+  const kind = normalizedComponentKind(kindValue);
+  if (kind === "gpu") return "gpu";
+  if (kind === "cpu") return "cpu";
+  if (isDedicatedHbm(kind)) return "hbm";
+  if (["host_memory", "dram", "ddr", "ddr_memory", "cxl_memory"].includes(kind)) return "host_memory";
+  if (kind === "cim" || kind.includes("cim") || kind.includes("compute_in_memory")) return "cim";
+  return "";
+}
+
+function componentProfileRegistries(scenario = state.scenario, { create = false } = {}) {
+  const profiles = asObject(scenario?.profiles);
+  const registries = asObject(profiles.components);
+  if (create && scenario) {
+    scenario.profiles = profiles;
+    profiles.components = registries;
+  }
+  return registries;
+}
+
+function componentProfileRegistry(profileKey, scenario = state.scenario, { create = false } = {}) {
+  const registries = componentProfileRegistries(scenario, { create });
+  const registry = asObject(registries[profileKey]);
+  if (create) registries[profileKey] = registry;
+  return registry;
+}
+
+function boundCostProfile(profileKey, component, scenario = state.scenario) {
+  const registry = componentProfileRegistry(profileKey, scenario);
+  const requested = String(component?.cost_profile_id || "");
+  if (requested && Object.hasOwn(registry, requested)) return asObject(registry[requested]);
+  return {};
+}
+
+function nextCostProfileId(profileKey, component, registry) {
+  const base = `${slug(component?.component_id || profileKey)}-${profileKey}`;
+  let candidate = base;
+  let suffix = 2;
+  while (Object.hasOwn(registry, candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function rejectLegacyComponentProfiles(scenario) {
+  scenario.profiles = asObject(scenario.profiles);
+  const profiles = scenario.profiles;
+  const retiredFields = ["gpu", "hbm", "cpu", "host_memory", "cim"]
+    .filter((field) => Object.hasOwn(profiles, field));
+  if (retiredFields.length) {
+    throw new Error(`V4 profiles 只接受 profiles.components registry；旧字段不可迁移：${retiredFields.map((field) => `profiles.${field}`).join("、")}`);
+  }
+  return scenario;
+}
+
+function componentProfileBindingIssue(component, scenario = state.scenario) {
+  const componentId = String(component?.component_id || uiText("<未知>", "<unknown>"));
+  const profileKey = costProfileKeyForComponentKind(component?.kind);
+  if (!profileKey) return "";
+  const profileId = String(component?.cost_profile_id || "").trim();
+  if (!profileId) {
+    return uiText(
+      "组件 {id} ({kind}) 必须显式声明 cost_profile_id。",
+      "Component {id} ({kind}) must explicitly declare cost_profile_id.",
+      { id: componentId, kind: component?.kind || "unknown" },
+    );
+  }
+  const registry = componentProfileRegistry(profileKey, scenario);
+  if (!Object.hasOwn(registry, profileId)) {
+    return uiText(
+      "组件 {id} 的 cost_profile_id={profileId} 未在 profiles.components.{profileKey} 中声明。",
+      "Component {id} uses cost_profile_id={profileId}, which is not declared in profiles.components.{profileKey}.",
+      { id: componentId, profileId, profileKey },
+    );
+  }
+  const profile = registry[profileId];
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+    return uiText(
+      "profiles.components.{profileKey}.{profileId} 必须是对象。",
+      "profiles.components.{profileKey}.{profileId} must be an object.",
+      { profileKey, profileId },
+    );
+  }
+  return "";
+}
+
+function positiveProfileNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function nonnegativeProfileNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function efficiencyProfileNumber(value, fallback = 1) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 && number <= 1 ? number : fallback;
+}
+
+function selectedGpuTensorDtype(profile) {
+  const tensorCore = profile?.tensor_core || {};
+  const supported = Array.isArray(tensorCore.supported_dtypes)
+    ? tensorCore.supported_dtypes.map(String)
+    : [];
+  const requested = String(profile?.default_tensor_dtype || "");
+  return supported.includes(requested) ? requested : (supported[0] || "");
+}
+
+function denseGpuThroughputTops(profile, dtypeName = selectedGpuTensorDtype(profile)) {
+  const tensorCore = profile?.tensor_core || {};
+  const scales = tensorCore.dtype_throughput_scale || {};
+  const supported = Array.isArray(tensorCore.supported_dtypes) ? tensorCore.supported_dtypes.map(String) : [];
+  if (!supported.includes(String(dtypeName))) return null;
+  const values = [
+    tensorCore.sm_count,
+    tensorCore.tensor_cores_per_sm,
+    tensorCore.frequency_ghz,
+    tensorCore.mma_m,
+    tensorCore.mma_n,
+    tensorCore.mma_k,
+    tensorCore.cycles_per_mma,
+    scales[dtypeName] ?? 1,
+  ].map(Number);
+  if (!dtypeName || values.some((value) => !Number.isFinite(value) || value <= 0)) return null;
+  const [smCount, tensorCoresPerSm, frequencyGhz, mmaM, mmaN, mmaK, cyclesPerMma, dtypeScale] = values;
+  const operationsPerMma = 2 * mmaM * mmaN * mmaK;
+  const throughput = smCount * tensorCoresPerSm * frequencyGhz * operationsPerMma * dtypeScale
+    / cyclesPerMma / 1000;
+  return Number.isFinite(throughput) && throughput > 0 ? throughput : null;
+}
+
+function denseGpuThroughputUnit(dtypeName) {
+  return /^(?:fp|bf)/i.test(String(dtypeName || "")) ? "TFLOPS" : "TOPS";
+}
+
+function denseGpuCyclesForThroughput(profile, throughputTops, dtypeName = selectedGpuTensorDtype(profile)) {
+  const tensorCore = profile?.tensor_core || {};
+  const scales = tensorCore.dtype_throughput_scale || {};
+  const supported = Array.isArray(tensorCore.supported_dtypes) ? tensorCore.supported_dtypes.map(String) : [];
+  if (!supported.includes(String(dtypeName))) return null;
+  const throughput = Number(throughputTops);
+  const values = [
+    tensorCore.sm_count,
+    tensorCore.tensor_cores_per_sm,
+    tensorCore.frequency_ghz,
+    tensorCore.mma_m,
+    tensorCore.mma_n,
+    tensorCore.mma_k,
+    scales[dtypeName] ?? 1,
+  ].map(Number);
+  if (!dtypeName || !Number.isFinite(throughput) || throughput <= 0
+      || values.some((value) => !Number.isFinite(value) || value <= 0)) return null;
+  const [smCount, tensorCoresPerSm, frequencyGhz, mmaM, mmaN, mmaK, dtypeScale] = values;
+  const operationsPerMma = 2 * mmaM * mmaN * mmaK;
+  const cycles = smCount * tensorCoresPerSm * frequencyGhz * operationsPerMma * dtypeScale
+    / (throughput * 1000);
+  return Number.isFinite(cycles) && cycles > 0 ? cycles : null;
+}
+
+function profilePublicSources(profileKey, component) {
+  const metadata = asObject(component?.metadata);
+  const sources = asArray(metadata.sources).map((source) => {
+    const item = asObject(source);
+    return { title: String(item.title || item.publisher || "公开来源"), url: String(item.url || "") };
+  });
+  const provenance = asObject(asObject(state.scenario?.hardware?.metadata).provenance);
+  const productSpecifications = asObject(provenance.product_specifications);
+  const specKeys = profileKey === "gpu"
+    ? ["rtx_5080"]
+    : profileKey === "cpu" || profileKey === "host_memory"
+      ? ["host_memory_channels"]
+      : [];
+  specKeys.forEach((key) => {
+    const spec = asObject(productSpecifications[key]);
+    if (spec.url) sources.push({ title: String(spec.source || key), url: String(spec.url) });
+  });
+  const seen = new Set();
+  return sources.filter((source) => source.url && !seen.has(source.url) && seen.add(source.url));
+}
+
+function costProfileProvenanceMarkup(profileKey, component) {
+  const sources = profilePublicSources(profileKey, component);
+  const links = sources.length
+    ? sources.map((source) => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title)}</a>`).join(" · ")
+    : "当前场景未声明公开来源（No public source declared in this scenario）";
+  return `<p class="muted profile-provenance-note"><strong>来源与假设（Source &amp; assumptions）</strong>：公开产品事实可由以下来源核对：${links}。占用率、可达效率、缓存时序、能耗与 Pipeline issue 参数是分析/校准值，不是厂商规格（analytical defaults, not vendor facts）。</p>`;
+}
+
+function costProfileComponent(profileKey, selectedComponent, scenario = state.scenario) {
+  const components = asArray(scenario?.hardware?.components);
+  if (costProfileKeyForComponentKind(selectedComponent?.kind) === profileKey) return selectedComponent;
+  return components.find((item) => costProfileKeyForComponentKind(item.kind) === profileKey) || null;
+}
+
+function costProfileDraft(profileKey, selectedComponent, scenario = state.scenario) {
+  const component = costProfileComponent(profileKey, selectedComponent, scenario) || {};
+  const current = boundCostProfile(profileKey, component, scenario);
+  const componentId = String(component.component_id || profileKey);
+  if (profileKey === "gpu") {
+    const tensorCore = asObject(current.tensor_core);
+    const cacheHierarchy = asObject(current.cache_hierarchy);
+    const hostGemmOffload = asObject(current.host_gemm_offload);
+    const defaultCacheLevels = [
+      { name: "l1_shared", capacity_bytes: 30 * 1024 ** 2, line_bytes: 128, hit_latency_ns: 20, bandwidth_gb_s: 24000, associativity: 16, banks: 3840, read_ports: 2, write_ports: 1, max_outstanding: 32, energy_pj_per_byte: 0.15, resource_id: `${componentId}.l1_shared` },
+      { name: "l2", capacity_bytes: 50 * 1024 ** 2, line_bytes: 128, hit_latency_ns: 120, bandwidth_gb_s: 12000, associativity: 16, banks: 128, read_ports: 2, write_ports: 1, max_outstanding: 128, energy_pj_per_byte: 0.6, resource_id: `${componentId}.l2` },
+    ];
+    const currentLevels = asArray(cacheHierarchy.levels);
+    return {
+      tensor_core: {
+        sm_count: positiveProfileNumber(tensorCore.sm_count, 120),
+        tensor_cores_per_sm: positiveProfileNumber(tensorCore.tensor_cores_per_sm, 4),
+        frequency_ghz: positiveProfileNumber(tensorCore.frequency_ghz, 1.5),
+        mma_m: positiveProfileNumber(tensorCore.mma_m, 16),
+        mma_n: positiveProfileNumber(tensorCore.mma_n, 16),
+        mma_k: positiveProfileNumber(tensorCore.mma_k, 16),
+        cycles_per_mma: positiveProfileNumber(tensorCore.cycles_per_mma, 49.152),
+        supported_dtypes: asArray(tensorCore.supported_dtypes).length ? asArray(tensorCore.supported_dtypes).map(String) : ["fp16", "bf16", "int8"],
+        dtype_throughput_scale: Object.keys(asObject(tensorCore.dtype_throughput_scale)).length ? deepClone(tensorCore.dtype_throughput_scale) : { fp16: 0.5, bf16: 0.5, int8: 1 },
+        resource_id: String(tensorCore.resource_id || `${componentId}.tensor_core`),
+      },
+      cache_hierarchy: {
+        levels: (currentLevels.length ? currentLevels : defaultCacheLevels).map((level, index) => ({
+          ...defaultCacheLevels[Math.min(index, defaultCacheLevels.length - 1)],
+          ...deepClone(asObject(level)),
+        })),
+        write_back: cacheHierarchy.write_back !== false,
+        write_allocate: cacheHierarchy.write_allocate !== false,
+      },
+      scalar_lanes_per_sm: positiveProfileNumber(current.scalar_lanes_per_sm, 128),
+      scalar_ops_per_cycle: positiveProfileNumber(current.scalar_ops_per_cycle, 1),
+      reduction_ops_per_cycle_per_sm: positiveProfileNumber(current.reduction_ops_per_cycle_per_sm, 64),
+      special_function_units_per_sm: positiveProfileNumber(current.special_function_units_per_sm, 16),
+      special_function_ops_per_cycle: positiveProfileNumber(current.special_function_ops_per_cycle, 1),
+      host_gemm_offload: Object.keys(hostGemmOffload).length ? {
+        minimum_m: positiveProfileNumber(hostGemmOffload.minimum_m, 1),
+        evidence: String(hostGemmOffload.evidence || ""),
+      } : null,
+      quantized_matmul_capabilities: asArray(current.quantized_matmul_capabilities)
+        .map((capability) => deepClone(asObject(capability))),
+      occupancy: efficiencyProfileNumber(current.occupancy, 0.85),
+      attainable_efficiency: efficiencyProfileNumber(current.attainable_efficiency, 0.65),
+      kernel_launch_ns: nonnegativeProfileNumber(current.kernel_launch_ns),
+      tensor_energy_pj_per_op: nonnegativeProfileNumber(current.tensor_energy_pj_per_op, 0.2),
+      scalar_energy_pj_per_op: nonnegativeProfileNumber(current.scalar_energy_pj_per_op, 0.35),
+      special_function_energy_pj_per_op: nonnegativeProfileNumber(current.special_function_energy_pj_per_op, 1.2),
+      launch_energy_pj: nonnegativeProfileNumber(current.launch_energy_pj),
+      scalar_resource_id: String(current.scalar_resource_id || `${componentId}.scalar`),
+      special_function_resource_id: String(current.special_function_resource_id || `${componentId}.sfu`),
+      launch_resource_id: String(current.launch_resource_id || `${componentId}.frontend`),
+      default_tensor_dtype: String(current.default_tensor_dtype || "int8"),
+      name: String(current.name || `${componentId}-gpu-profile`),
+    };
+  }
+  if (profileKey === "hbm") {
+    const aggregateGbS = asArray(scenario?.hardware?.components)
+      .filter((item) => isDedicatedHbm(item.kind))
+      .reduce((sum, item) => sum + nonnegativeProfileNumber(item.read_bandwidth_gbps) / 8, 0);
+    return {
+      ...current,
+      bandwidth_gb_s: positiveProfileNumber(current.bandwidth_gb_s, positiveProfileNumber(aggregateGbS, 1)),
+      efficiency: efficiencyProfileNumber(current.efficiency, 1),
+      energy_pj_per_byte: nonnegativeProfileNumber(current.energy_pj_per_byte),
+      resource_id: String(current.resource_id || `${componentId}.hbm_fabric`),
+    };
+  }
+  if (profileKey === "cpu") {
+    const pipeline = asObject(current.pipeline);
+    const cacheHierarchy = asObject(current.cache_hierarchy);
+    const defaultCacheLevels = [
+      { name: "l1d", capacity_bytes: 16 * 48 * 1024, line_bytes: 64, hit_latency_ns: 1, bandwidth_gb_s: 3000, associativity: 12, banks: 128, read_ports: 3, write_ports: 2, max_outstanding: 16, energy_pj_per_byte: 0.2, resource_id: `${componentId}.l1d` },
+      { name: "l2", capacity_bytes: 16 * 2 * 1024 ** 2, line_bytes: 64, hit_latency_ns: 4, bandwidth_gb_s: 1500, associativity: 16, banks: 128, read_ports: 2, write_ports: 1, max_outstanding: 32, energy_pj_per_byte: 0.8, resource_id: `${componentId}.l2` },
+      { name: "l3", capacity_bytes: 64 * 1024 ** 2, line_bytes: 64, hit_latency_ns: 18, bandwidth_gb_s: 800, associativity: 16, banks: 64, read_ports: 2, write_ports: 1, max_outstanding: 64, energy_pj_per_byte: 2, resource_id: `${componentId}.l3` },
+    ];
+    const currentLevels = asArray(cacheHierarchy.levels);
+    return {
+      pipeline: {
+        core_count: positiveProfileNumber(pipeline.core_count, 16),
+        frequency_ghz: positiveProfileNumber(pipeline.frequency_ghz, 3.2),
+        simd_width_bits: positiveProfileNumber(pipeline.simd_width_bits, 512),
+        decode_width: positiveProfileNumber(pipeline.decode_width, 6),
+        issue_width: positiveProfileNumber(pipeline.issue_width, 8),
+        retire_width: positiveProfileNumber(pipeline.retire_width, 6),
+        vector_fma_units_per_core: positiveProfileNumber(pipeline.vector_fma_units_per_core, 2),
+        vector_alu_units_per_core: positiveProfileNumber(pipeline.vector_alu_units_per_core, 2),
+        load_units_per_core: positiveProfileNumber(pipeline.load_units_per_core, 3),
+        store_units_per_core: positiveProfileNumber(pipeline.store_units_per_core, 2),
+        branch_units_per_core: positiveProfileNumber(pipeline.branch_units_per_core, 2),
+        special_function_units_per_core: positiveProfileNumber(pipeline.special_function_units_per_core, 1),
+        special_function_cycles_per_vector: positiveProfileNumber(pipeline.special_function_cycles_per_vector, 12),
+        reorder_buffer_entries: positiveProfileNumber(pipeline.reorder_buffer_entries, 352),
+        load_store_queue_entries: positiveProfileNumber(pipeline.load_store_queue_entries, 192),
+        memory_level_parallelism: positiveProfileNumber(pipeline.memory_level_parallelism, 16),
+        branch_mispredict_ns: nonnegativeProfileNumber(pipeline.branch_mispredict_ns, 5),
+        resource_id: String(pipeline.resource_id || `${componentId}.pipeline`),
+      },
+      cache_hierarchy: {
+        levels: (currentLevels.length ? currentLevels : defaultCacheLevels).map((level, index) => ({
+          ...defaultCacheLevels[Math.min(index, defaultCacheLevels.length - 1)],
+          ...deepClone(asObject(level)),
+        })),
+        write_back: cacheHierarchy.write_back !== false,
+        write_allocate: cacheHierarchy.write_allocate !== false,
+      },
+      quantized_dot_capabilities: asArray(current.quantized_dot_capabilities)
+        .map((capability) => deepClone(asObject(capability))),
+      attainable_efficiency: efficiencyProfileNumber(current.attainable_efficiency, 0.72),
+      dispatch_ns: nonnegativeProfileNumber(current.dispatch_ns),
+      gemm_energy_pj_per_op: nonnegativeProfileNumber(current.gemm_energy_pj_per_op, 1.5),
+      elementwise_energy_pj_per_op: nonnegativeProfileNumber(current.elementwise_energy_pj_per_op, 1),
+      reduction_energy_pj_per_op: nonnegativeProfileNumber(current.reduction_energy_pj_per_op, 1.2),
+      special_function_energy_pj_per_op: nonnegativeProfileNumber(current.special_function_energy_pj_per_op, 4),
+      dispatch_energy_pj: nonnegativeProfileNumber(current.dispatch_energy_pj, 800),
+      name: String(current.name || `${componentId}-cpu-profile`),
+    };
+  }
+  if (profileKey === "host_memory") {
+    const bandwidthGbS = positiveProfileNumber(Number(component.read_bandwidth_gbps) / 8, 1);
+    return {
+      ...current,
+      bandwidth_gb_s: positiveProfileNumber(current.bandwidth_gb_s, bandwidthGbS),
+      efficiency: efficiencyProfileNumber(current.efficiency, 1),
+      energy_pj_per_byte: nonnegativeProfileNumber(current.energy_pj_per_byte),
+      resource_id: String(current.resource_id || `${componentId}.memory`),
+      name: String(current.name || `${componentId}-memory-profile`),
+    };
+  }
+  if (profileKey === "cim") {
+    return {
+      array_count: positiveProfileNumber(current.array_count, 64),
+      p_m: positiveProfileNumber(current.p_m, 1),
+      p_k: positiveProfileNumber(current.p_k, 128),
+      p_n: positiveProfileNumber(current.p_n, 128),
+      frequency_ghz: positiveProfileNumber(current.frequency_ghz, 1),
+      input_parallel_bits: positiveProfileNumber(current.input_parallel_bits, 1),
+      weight_parallel_bits: positiveProfileNumber(current.weight_parallel_bits, 1),
+      cycles_per_eval: positiveProfileNumber(current.cycles_per_eval, 1),
+      weight_capacity_bytes: positiveProfileNumber(current.weight_capacity_bytes, 64 * 1024 ** 2),
+      max_m_replication: positiveProfileNumber(current.max_m_replication, 1),
+      load_bandwidth_gb_s: positiveProfileNumber(current.load_bandwidth_gb_s, 512),
+      activation_bandwidth_gb_s: positiveProfileNumber(current.activation_bandwidth_gb_s, 1024),
+      output_bandwidth_gb_s: positiveProfileNumber(current.output_bandwidth_gb_s, 1024),
+      noc_bandwidth_gb_s: positiveProfileNumber(current.noc_bandwidth_gb_s, 2048),
+      accumulator_outputs_per_cycle: positiveProfileNumber(current.accumulator_outputs_per_cycle, 1024),
+      peripheral_elements_per_cycle: positiveProfileNumber(current.peripheral_elements_per_cycle, 1024),
+      load_latency_ns: nonnegativeProfileNumber(current.load_latency_ns),
+      noc_hop_latency_ns: nonnegativeProfileNumber(current.noc_hop_latency_ns),
+      noc_reduce_fan_in: positiveProfileNumber(current.noc_reduce_fan_in, 4),
+      peripheral_latency_ns: nonnegativeProfileNumber(current.peripheral_latency_ns),
+      accumulator_bits: positiveProfileNumber(current.accumulator_bits, 32),
+      accumulator_guard_bits: nonnegativeProfileNumber(current.accumulator_guard_bits),
+      supported_activation_bits: asArray(current.supported_activation_bits).length ? deepClone(current.supported_activation_bits) : [1, 2, 4, 8, 16],
+      supported_weight_bits: asArray(current.supported_weight_bits).length ? deepClone(current.supported_weight_bits) : [1, 2, 4, 8, 16],
+      eval_energy_pj: nonnegativeProfileNumber(current.eval_energy_pj),
+      load_energy_pj_per_byte: nonnegativeProfileNumber(current.load_energy_pj_per_byte),
+      activation_energy_pj_per_byte: nonnegativeProfileNumber(current.activation_energy_pj_per_byte),
+      output_energy_pj_per_byte: nonnegativeProfileNumber(current.output_energy_pj_per_byte),
+      noc_energy_pj_per_byte: nonnegativeProfileNumber(current.noc_energy_pj_per_byte),
+      accumulator_energy_pj_per_op: nonnegativeProfileNumber(current.accumulator_energy_pj_per_op),
+      peripheral_energy_pj_per_element: nonnegativeProfileNumber(current.peripheral_energy_pj_per_element),
+      array_resource_id: String(current.array_resource_id || `${componentId}.array`),
+      load_resource_id: String(current.load_resource_id || `${componentId}.load`),
+      activation_resource_id: String(current.activation_resource_id || `${componentId}.activation`),
+      noc_resource_id: String(current.noc_resource_id || `${componentId}.noc`),
+      accumulator_resource_id: String(current.accumulator_resource_id || `${componentId}.accumulator`),
+      peripheral_resource_id: String(current.peripheral_resource_id || `${componentId}.peripheral`),
+      name: String(current.name || `${componentId}-digital-sram-cim-profile`),
+    };
+  }
+  return { ...current };
+}
+
+function hostOrchestrationProfileDraft(scenario = state.scenario, currentProfile = null) {
+  const components = asArray(scenario?.hardware?.components);
+  const firstOfKind = (kind) => components.find((component) => normalizedComponentKind(component.kind) === kind) || null;
+  const cpu = firstOfKind("cpu");
+  const gpu = firstOfKind("gpu");
+  if (!cpu || !gpu) return null;
+  const current = asObject(currentProfile ?? scenario?.profiles?.host_orchestration);
+  const cpuId = String(cpu.component_id);
+  const gpuId = String(gpu.component_id);
+  return {
+    request_parse_ns: nonnegativeProfileNumber(current.request_parse_ns, 180),
+    batch_fixed_ns: nonnegativeProfileNumber(current.batch_fixed_ns, 350),
+    token_pack_ns: nonnegativeProfileNumber(current.token_pack_ns, 12),
+    submission_ns: nonnegativeProfileNumber(current.submission_ns, 250),
+    descriptor_bytes_per_request: positiveProfileNumber(current.descriptor_bytes_per_request, 96),
+    token_bytes: positiveProfileNumber(current.token_bytes, 4),
+    dma_bandwidth_gb_s: positiveProfileNumber(current.dma_bandwidth_gb_s, 48),
+    dma_latency_ns: nonnegativeProfileNumber(current.dma_latency_ns, 800),
+    max_inflight_batches: positiveProfileNumber(current.max_inflight_batches, 4),
+    pinned_memory: typeof current.pinned_memory === "boolean" ? current.pinned_memory : true,
+    kv_page_lookup_ns: nonnegativeProfileNumber(current.kv_page_lookup_ns, 8),
+    kv_descriptor_ns: nonnegativeProfileNumber(current.kv_descriptor_ns, 4),
+    kv_descriptor_bytes: positiveProfileNumber(current.kv_descriptor_bytes, 32),
+    cpu_component_id: cpuId,
+    gpu_component_id: gpuId,
+    scheduler_resource_id: `${cpuId}.scheduler`,
+    pack_resource_id: `${cpuId}.pack`,
+    dma_resource_id: `${cpuId}.h2d_dma`,
+    submission_resource_id: `${gpuId}.command_queue`,
+  };
+}
+
+function hostOrchestrationReferenceIssue(scenario = state.scenario) {
+  const orchestration = asObject(scenario?.profiles?.host_orchestration);
+  const required = ["cpu_component_id", "gpu_component_id", "scheduler_resource_id", "pack_resource_id", "dma_resource_id", "submission_resource_id"];
+  if (!required.every((field) => typeof orchestration[field] === "string" && orchestration[field].trim())) {
+    return uiText(
+      "V4 场景必须声明包含 CPU 的完整 profiles.host_orchestration（cpu_component_id）。",
+      "A V4 scenario must declare a complete profiles.host_orchestration object with a CPU via cpu_component_id.",
+    );
+  }
+  const componentMap = new Map(asArray(scenario?.hardware?.components).map((component) => [String(component.component_id), normalizedComponentKind(component.kind)]));
+  const cpuId = String(orchestration.cpu_component_id);
+  const gpuId = String(orchestration.gpu_component_id);
+  if (!componentMap.has(cpuId)) {
+    return uiText(
+      "profiles.host_orchestration.cpu_component_id 引用了拓扑中不存在的组件 {id}。",
+      "profiles.host_orchestration.cpu_component_id references component {id}, which does not exist in the topology.",
+      { id: cpuId },
+    );
+  }
+  if (componentMap.get(cpuId) !== "cpu") {
+    return uiText(
+      "profiles.host_orchestration.cpu_component_id 必须引用 CPU，当前 {id} 的 kind={kind}。",
+      "profiles.host_orchestration.cpu_component_id must reference a CPU; {id} currently has kind={kind}.",
+      { id: cpuId, kind: componentMap.get(cpuId) || "unknown" },
+    );
+  }
+  if (!componentMap.has(gpuId)) {
+    return uiText(
+      "profiles.host_orchestration.gpu_component_id 引用了拓扑中不存在的组件 {id}。",
+      "profiles.host_orchestration.gpu_component_id references component {id}, which does not exist in the topology.",
+      { id: gpuId },
+    );
+  }
+  if (componentMap.get(gpuId) !== "gpu") {
+    return uiText(
+      "profiles.host_orchestration.gpu_component_id 必须引用 GPU，当前 {id} 的 kind={kind}。",
+      "profiles.host_orchestration.gpu_component_id must reference a GPU; {id} currently has kind={kind}.",
+      { id: gpuId, kind: componentMap.get(gpuId) || "unknown" },
+    );
+  }
+  return "";
+}
+
+function reconcileHostOrchestrationProfile(scenario = state.scenario, { force = false } = {}) {
+  if (!scenario || typeof scenario !== "object") return false;
+  scenario.profiles = asObject(scenario.profiles);
+  const current = asObject(scenario.profiles.host_orchestration);
+  if (!force && Object.keys(current).length && !hostOrchestrationReferenceIssue(scenario)) return false;
+  const draft = hostOrchestrationProfileDraft(scenario, current);
+  if (draft) {
+    scenario.profiles.host_orchestration = draft;
+    return true;
+  }
+  delete scenario.profiles.host_orchestration;
+  return false;
+}
+
+function materializeRequiredV4Profiles(scenario) {
+  const profiles = asObject(scenario.profiles);
+  scenario.profiles = profiles;
+  componentProfileRegistries(scenario, { create: true });
+  for (const component of asArray(scenario.hardware?.components)) {
+    const profileKey = costProfileKeyForComponentKind(component?.kind);
+    if (!profileKey) continue;
+    const registry = componentProfileRegistry(profileKey, scenario, { create: true });
+    const requested = String(component.cost_profile_id || "").trim();
+    if (requested) {
+      if (!Object.hasOwn(registry, requested)) {
+        throw new Error(`组件 ${component.component_id} 的 cost_profile_id=${requested} 未在 profiles.components.${profileKey} 中声明。`);
+      }
+      continue;
+    }
+    const ids = Object.keys(registry);
+    if (ids.length > 1) {
+      throw new Error(`组件 ${component.component_id} (${component.kind}) 未声明 cost_profile_id，但 profiles.components.${profileKey} 有 ${ids.length} 个候选。`);
+    }
+    if (ids.length === 1) {
+      component.cost_profile_id = ids[0];
+      continue;
+    }
+    const profileId = nextCostProfileId(profileKey, component, registry);
+    component.cost_profile_id = profileId;
+    registry[profileId] = costProfileDraft(profileKey, component, scenario);
+  }
+  if (!Object.hasOwn(profiles, "host_orchestration") || profiles.host_orchestration == null) {
+    const orchestration = hostOrchestrationProfileDraft(scenario);
+    if (orchestration) profiles.host_orchestration = orchestration;
+  }
+  if (!Object.hasOwn(profiles, "fusion") || profiles.fusion == null) {
+    profiles.fusion = {
+      qkv_rope: true,
+      flash_attention: true,
+      gemm_epilogue_activation: true,
+      residual_norm: true,
+      max_fused_working_set_bytes: 30 * 1024 ** 2,
+    };
+  }
+}
+
+function materializeMissingCostProfiles(components, scenario = state.scenario) {
+  if (!scenario || typeof scenario !== "object") return [];
+  scenario.profiles = asObject(scenario.profiles);
+  componentProfileRegistries(scenario, { create: true });
+  const created = [];
+  for (const component of asArray(components)) {
+    const profileKey = costProfileKeyForComponentKind(component?.kind);
+    if (!profileKey) {
+      delete component.cost_profile_id;
+      continue;
+    }
+    const registry = componentProfileRegistry(profileKey, scenario, { create: true });
+    const requested = String(component.cost_profile_id || "").trim();
+    if (requested && Object.hasOwn(registry, requested)) continue;
+    if (requested) delete component.cost_profile_id;
+    const ids = Object.keys(registry);
+    if (ids.length === 1) {
+      component.cost_profile_id = ids[0];
+      continue;
+    }
+    const profileId = nextCostProfileId(profileKey, component, registry);
+    component.cost_profile_id = profileId;
+    registry[profileId] = costProfileDraft(profileKey, component, scenario);
+    created.push(`${profileKey}.${profileId}`);
+  }
+  if (reconcileHostOrchestrationProfile(scenario)) created.push("host_orchestration");
+  return created;
+}
+
+function resetArchitectureDependentProfiles(scenario = state.scenario) {
+  if (!scenario || typeof scenario !== "object") return [];
+  scenario.profiles = asObject(scenario.profiles);
+  for (const profileKey of ["components", "host_orchestration", "cim_interconnect"]) {
+    delete scenario.profiles[profileKey];
+  }
+  asArray(scenario.hardware?.components).forEach((component) => { delete component.cost_profile_id; });
+  return materializeMissingCostProfiles(
+    asArray(scenario.hardware?.components),
+    scenario,
+  );
+}
+
+function costProfileNumberField(label, profileKey, field, value, rule = "nonnegative", helpKey = "") {
+  const min = rule === "positive" || rule === "efficiency" ? "0" : "0";
+  const max = rule === "efficiency" ? ' max="1"' : "";
+  const title = helpKey ? fieldTitleMarkup(label, helpKey) : `<span>${escapeHtml(label)}</span>`;
+  return `<label class="field">${title}<input type="number" min="${min}"${max} step="any" data-cost-profile-key="${escapeHtml(profileKey)}" data-cost-profile-field="${escapeHtml(field)}" data-cost-profile-rule="${escapeHtml(rule)}" value="${escapeHtml(value)}"></label>`;
+}
+
+function costProfileTextField(label, profileKey, field, value) {
+  return `<label class="field"><span>${escapeHtml(label)}</span><input type="text" data-cost-profile-key="${escapeHtml(profileKey)}" data-cost-profile-field="${escapeHtml(field)}" data-cost-profile-rule="text" value="${escapeHtml(value)}"></label>`;
+}
+
+function cacheHierarchyCostProfileMarkup(profileKey, profile) {
+  return asArray(profile.cache_hierarchy?.levels).map((level, index) => `
+    <section class="inspector-subsection">
+      <h4>Cache Level ${index + 1}</h4>
+      <div class="field-grid-2">
+        ${costProfileTextField("层名称", profileKey, `cache_hierarchy.levels.${index}.name`, level.name)}
+        ${costProfileNumberField("容量（B）", profileKey, `cache_hierarchy.levels.${index}.capacity_bytes`, level.capacity_bytes, "positive_integer")}
+        ${costProfileNumberField("Cache Line（B）", profileKey, `cache_hierarchy.levels.${index}.line_bytes`, level.line_bytes, "positive_integer")}
+        ${costProfileNumberField("命中延迟（ns）", profileKey, `cache_hierarchy.levels.${index}.hit_latency_ns`, level.hit_latency_ns)}
+        ${costProfileNumberField("带宽（GB/s）", profileKey, `cache_hierarchy.levels.${index}.bandwidth_gb_s`, level.bandwidth_gb_s, "positive")}
+        ${costProfileNumberField("组相联度（ways）", profileKey, `cache_hierarchy.levels.${index}.associativity`, level.associativity, "positive_integer")}
+        ${costProfileNumberField("Banks（count）", profileKey, `cache_hierarchy.levels.${index}.banks`, level.banks, "positive_integer")}
+        ${costProfileNumberField("读端口（ports）", profileKey, `cache_hierarchy.levels.${index}.read_ports`, level.read_ports, "positive_integer")}
+        ${costProfileNumberField("写端口（ports）", profileKey, `cache_hierarchy.levels.${index}.write_ports`, level.write_ports, "positive_integer")}
+        ${costProfileNumberField("最大并发请求（requests）", profileKey, `cache_hierarchy.levels.${index}.max_outstanding`, level.max_outstanding, "positive_integer")}
+        ${costProfileNumberField("能耗（pJ/B）", profileKey, `cache_hierarchy.levels.${index}.energy_pj_per_byte`, level.energy_pj_per_byte)}
+        ${costProfileTextField("Cache 资源 ID", profileKey, `cache_hierarchy.levels.${index}.resource_id`, level.resource_id)}
+      </div>
+    </section>`).join("");
+}
+
+function gpuDenseThroughputMarkup(profile) {
+  const dtype = selectedGpuTensorDtype(profile);
+  const unit = denseGpuThroughputUnit(dtype);
+  const throughput = denseGpuThroughputTops(profile, dtype);
+  const value = throughput == null ? "" : String(Number(throughput.toFixed(6)));
+  const cycles = Number(profile?.tensor_core?.cycles_per_mma);
+  return `<section class="inspector-subsection gpu-dense-throughput-helper">
+    <h4>公开 Dense ${escapeHtml(dtype || "Tensor") } 吞吐便利输入（Public Dense Throughput）</h4>
+    <p class="muted">当前选择 DType（selected dtype）：<strong>${escapeHtml(dtype || "未声明")}</strong>。输入所选精度的公开稠密峰值，不使用结构化稀疏峰值。自动换算吞吐等效参数；该参数不是指令级延迟。</p>
+    <label class="field"><span>公开 Dense ${escapeHtml(dtype || "Tensor")} 吞吐（${unit}）</span><input type="number" min="0" step="any" data-gpu-dense-throughput-input value="${escapeHtml(value)}"></label>
+    <div class="readout"><span>派生 cycles_per_mma（Derived）</span><strong>${Number.isFinite(cycles) && cycles > 0 ? escapeHtml(String(cycles)) : "—"}</strong></div>
+  </section>`;
+}
+
+function memoryCostProfileMarkup(profileKey, component) {
+  const profile = costProfileDraft(profileKey, component);
+  const title = profileKey === "hbm" ? "GPU 内存成本 Profile（HBM）" : "CPU 主机内存成本 Profile";
+  return `<section class="inspector-section cost-profile-section" data-profile-section="${escapeHtml(profileKey)}">
+    <h3>${title}</h3>
+    ${costProfileProvenanceMarkup(profileKey, component)}
+    <div class="field-grid-2">
+      ${costProfileNumberField("内存带宽（GB/s）", profileKey, "bandwidth_gb_s", profile.bandwidth_gb_s, "positive")}
+    </div>
+    <details class="inspector-advanced-profile">
+      <summary>内部内存分析参数（Optional analytical parameters）</summary>
+      <p class="muted">可达效率、能耗与资源标识用于仿真成本分解；它们通常需要本地校准或明确假设。</p>
+      <div class="field-grid-2">
+        ${costProfileNumberField("可达效率（0–1）", profileKey, "efficiency", profile.efficiency, "efficiency")}
+        ${costProfileNumberField("内存能耗（pJ/B）", profileKey, "energy_pj_per_byte", profile.energy_pj_per_byte)}
+        ${costProfileTextField("内存资源 ID", profileKey, "resource_id", profile.resource_id)}
+        ${profileKey === "host_memory" ? costProfileTextField("Profile 名称", profileKey, "name", profile.name) : ""}
+      </div>
+    </details>
+  </section>`;
+}
+
+function gpuCostProfileMarkup(component) {
+  const profile = costProfileDraft("gpu", component);
+  const tensorCore = profile.tensor_core;
+  const hostGemmOffload = profile.host_gemm_offload;
+  const hostGemmOffloadMarkup = hostGemmOffload
+    ? `<section class="inspector-subsection">
+      <h4>Host GEMM GPU Offload Capability</h4>
+      <p class="muted">仅适用于 GEMM：physical M 达到阈值时可在此 GPU 执行；Host/CPU 权重的静态所有权保持不变。</p>
+      <div class="field-grid-2">
+        ${costProfileNumberField("最小 Physical M（elements）", "gpu", "host_gemm_offload.minimum_m", hostGemmOffload.minimum_m, "positive_integer")}
+        ${costProfileTextField("运行时证据（Evidence）", "gpu", "host_gemm_offload.evidence", hostGemmOffload.evidence)}
+      </div>
+    </section>`
+    : `<div class="readout"><span>Host GEMM GPU Offload Capability</span><strong>未声明（Disabled）</strong></div>`;
+  return `<section class="inspector-section cost-profile-section" data-profile-section="gpu">
+    <h3>GPU V4 执行成本 Profile</h3>
+    ${costProfileProvenanceMarkup("gpu", component)}
+    <p class="muted">Tensor Core 吞吐由 SM/MMA 几何推导；标量、SFU、启动与 Cache 层级使用独立资源参数。Dense 与 sparse 峰值必须分开记录。</p>
+    <div class="field-grid-2">
+      ${costProfileNumberField("SM 数（count）", "gpu", "tensor_core.sm_count", tensorCore.sm_count, "positive_integer")}
+      ${costProfileNumberField("每 SM Tensor Core 数（count/SM）", "gpu", "tensor_core.tensor_cores_per_sm", tensorCore.tensor_cores_per_sm, "positive_integer")}
+      ${costProfileNumberField("Tensor Core 频率（GHz）", "gpu", "tensor_core.frequency_ghz", tensorCore.frequency_ghz, "positive")}
+    </div>
+    ${gpuDenseThroughputMarkup(profile)}
+    <details class="inspector-advanced-profile">
+      <summary>内部 GPU 分析参数（Optional analytical parameters）</summary>
+      <p class="muted">以下字段保留为可编辑高级参数。占用率、可达效率、标量/SFU 速率、Cache 时序、启动开销、能耗与资源 ID 不是上述公开 Dense 峰值的替代值。</p>
+      <div class="field-grid-2">
+        ${costProfileNumberField("MMA M（elements）", "gpu", "tensor_core.mma_m", tensorCore.mma_m, "positive_integer")}
+        ${costProfileNumberField("MMA N（elements）", "gpu", "tensor_core.mma_n", tensorCore.mma_n, "positive_integer")}
+        ${costProfileNumberField("MMA K（elements）", "gpu", "tensor_core.mma_k", tensorCore.mma_k, "positive_integer")}
+        ${costProfileNumberField("每次 MMA 周期（cycles/MMA）", "gpu", "tensor_core.cycles_per_mma", tensorCore.cycles_per_mma, "positive")}
+        ${costProfileTextField("Tensor Core 资源 ID", "gpu", "tensor_core.resource_id", tensorCore.resource_id)}
+        ${costProfileNumberField("标量 Lane / SM（lanes/SM）", "gpu", "scalar_lanes_per_sm", profile.scalar_lanes_per_sm, "positive_integer")}
+        ${costProfileNumberField("标量 Ops / Cycle（OPS/cycle）", "gpu", "scalar_ops_per_cycle", profile.scalar_ops_per_cycle, "positive")}
+        ${costProfileNumberField("归约 Ops / Cycle / SM（OPS/cycle/SM）", "gpu", "reduction_ops_per_cycle_per_sm", profile.reduction_ops_per_cycle_per_sm, "positive")}
+        ${costProfileNumberField("SFU / SM（units/SM）", "gpu", "special_function_units_per_sm", profile.special_function_units_per_sm, "positive_integer")}
+        ${costProfileNumberField("SFU Ops / Cycle（OPS/cycle）", "gpu", "special_function_ops_per_cycle", profile.special_function_ops_per_cycle, "positive")}
+        ${costProfileNumberField("占用率（ratio 0–1）", "gpu", "occupancy", profile.occupancy, "efficiency")}
+        ${costProfileNumberField("可达效率（ratio 0–1）", "gpu", "attainable_efficiency", profile.attainable_efficiency, "efficiency")}
+        ${costProfileNumberField("Kernel 启动（ns）", "gpu", "kernel_launch_ns", profile.kernel_launch_ns)}
+        ${costProfileNumberField("Tensor 能耗（pJ/op）", "gpu", "tensor_energy_pj_per_op", profile.tensor_energy_pj_per_op)}
+        ${costProfileNumberField("标量能耗（pJ/op）", "gpu", "scalar_energy_pj_per_op", profile.scalar_energy_pj_per_op)}
+        ${costProfileNumberField("SFU 能耗（pJ/op）", "gpu", "special_function_energy_pj_per_op", profile.special_function_energy_pj_per_op)}
+        ${costProfileNumberField("启动能耗（pJ）", "gpu", "launch_energy_pj", profile.launch_energy_pj)}
+        ${costProfileTextField("标量资源 ID", "gpu", "scalar_resource_id", profile.scalar_resource_id)}
+        ${costProfileTextField("SFU 资源 ID", "gpu", "special_function_resource_id", profile.special_function_resource_id)}
+        ${costProfileTextField("启动资源 ID", "gpu", "launch_resource_id", profile.launch_resource_id)}
+        ${costProfileTextField("Profile 名称", "gpu", "name", profile.name)}
+      </div>
+      ${cacheHierarchyCostProfileMarkup("gpu", profile)}
+    </details>
+    ${hostGemmOffloadMarkup}
+  </section>`;
+}
+
+function cpuCostProfileMarkup(component) {
+  const profile = costProfileDraft("cpu", component);
+  const pipeline = profile.pipeline;
+  const quantizedDotCapabilities = asArray(profile.quantized_dot_capabilities);
+  const quantizedDotSummary = quantizedDotCapabilities.length
+    ? quantizedDotCapabilities.map((capability) => {
+      const name = String(capability?.name || "unnamed");
+      const formats = asArray(capability?.supported_weight_formats).map(String).join(", ");
+      return `${name}: ${formats || "no formats"}`;
+    }).join("; ")
+    : "未声明（使用 legacy GEMM schedule）";
+  return `<section class="inspector-section cost-profile-section" data-profile-section="cpu">
+    <h3>CPU V4 执行成本 Profile</h3>
+    ${costProfileProvenanceMarkup("cpu", component)}
+    <p class="muted">执行能力由乱序 Pipeline、SIMD 单元和 SRAM Cache 层级推导；组件 Peak OPS 仅用于报告。Profile 的参与计算核心数会受运行时线程设置限制，不能替代硬件 metadata 中的物理核心/线程拓扑。</p>
+    <div class="field-grid-2">
+      ${costProfileNumberField("参与计算的核心数（active compute cores）", "cpu", "pipeline.core_count", pipeline.core_count, "positive_integer")}
+      ${costProfileNumberField("频率（GHz）", "cpu", "pipeline.frequency_ghz", pipeline.frequency_ghz, "positive")}
+      ${costProfileNumberField("SIMD 宽度（bits）", "cpu", "pipeline.simd_width_bits", pipeline.simd_width_bits, "positive_integer")}
+    </div>
+    <div class="readout"><span>量化 Dot Capability</span><strong>${escapeHtml(quantizedDotSummary)}</strong></div>
+    <details class="inspector-advanced-profile">
+      <summary>内部 CPU Pipeline / Cache 参数（Optional analytical parameters）</summary>
+      <p class="muted">Decode/Issue/Retire 宽度、执行单元数、ROB/LSQ/MLP、可达效率、Dispatch、Cache 时序与能耗通常需要微架构资料或本地校准。</p>
+      <div class="field-grid-2">
+        ${costProfileNumberField("Decode Width（instructions/cycle）", "cpu", "pipeline.decode_width", pipeline.decode_width, "positive_integer")}
+        ${costProfileNumberField("Issue Width（instructions/cycle）", "cpu", "pipeline.issue_width", pipeline.issue_width, "positive_integer")}
+        ${costProfileNumberField("Retire Width（instructions/cycle）", "cpu", "pipeline.retire_width", pipeline.retire_width, "positive_integer")}
+        ${costProfileNumberField("Vector FMA / Core（units/core）", "cpu", "pipeline.vector_fma_units_per_core", pipeline.vector_fma_units_per_core, "positive_integer")}
+        ${costProfileNumberField("Vector ALU / Core（units/core）", "cpu", "pipeline.vector_alu_units_per_core", pipeline.vector_alu_units_per_core, "positive_integer")}
+        ${costProfileNumberField("Load Units / Core（units/core）", "cpu", "pipeline.load_units_per_core", pipeline.load_units_per_core, "positive_integer")}
+        ${costProfileNumberField("Store Units / Core（units/core）", "cpu", "pipeline.store_units_per_core", pipeline.store_units_per_core, "positive_integer")}
+        ${costProfileNumberField("Branch Units / Core（units/core）", "cpu", "pipeline.branch_units_per_core", pipeline.branch_units_per_core, "positive_integer")}
+        ${costProfileNumberField("SFU / Core（units/core）", "cpu", "pipeline.special_function_units_per_core", pipeline.special_function_units_per_core, "positive_integer")}
+        ${costProfileNumberField("SFU Cycles / Vector（cycles/vector）", "cpu", "pipeline.special_function_cycles_per_vector", pipeline.special_function_cycles_per_vector, "positive")}
+        ${costProfileNumberField("ROB Entries（entries）", "cpu", "pipeline.reorder_buffer_entries", pipeline.reorder_buffer_entries, "positive_integer")}
+        ${costProfileNumberField("LSQ Entries（entries）", "cpu", "pipeline.load_store_queue_entries", pipeline.load_store_queue_entries, "positive_integer")}
+        ${costProfileNumberField("Memory-level Parallelism（inflight ops）", "cpu", "pipeline.memory_level_parallelism", pipeline.memory_level_parallelism, "positive_integer")}
+        ${costProfileNumberField("分支误预测（ns）", "cpu", "pipeline.branch_mispredict_ns", pipeline.branch_mispredict_ns)}
+        ${costProfileTextField("Pipeline 资源 ID", "cpu", "pipeline.resource_id", pipeline.resource_id)}
+        ${costProfileNumberField("可达效率（ratio 0–1）", "cpu", "attainable_efficiency", profile.attainable_efficiency, "efficiency")}
+        ${costProfileNumberField("Dispatch 延迟（ns）", "cpu", "dispatch_ns", profile.dispatch_ns)}
+        ${costProfileNumberField("GEMM 能耗（pJ/op）", "cpu", "gemm_energy_pj_per_op", profile.gemm_energy_pj_per_op)}
+        ${costProfileNumberField("逐元素能耗（pJ/op）", "cpu", "elementwise_energy_pj_per_op", profile.elementwise_energy_pj_per_op)}
+        ${costProfileNumberField("归约能耗（pJ/op）", "cpu", "reduction_energy_pj_per_op", profile.reduction_energy_pj_per_op)}
+        ${costProfileNumberField("SFU 能耗（pJ/op）", "cpu", "special_function_energy_pj_per_op", profile.special_function_energy_pj_per_op)}
+        ${costProfileNumberField("Dispatch 能耗（pJ）", "cpu", "dispatch_energy_pj", profile.dispatch_energy_pj)}
+        ${costProfileTextField("Profile 名称", "cpu", "name", profile.name)}
+      </div>
+      ${cacheHierarchyCostProfileMarkup("cpu", profile)}
+    </details>
+  </section>`;
+}
+
+function cimCostProfileMarkup(component) {
+  const profile = costProfileDraft("cim", component);
+  return `<section class="inspector-section cost-profile-section" data-profile-section="cim">
+    <h3>Digital SRAM-CIM V4 执行成本 Profile</h3>
+    <p class="muted">CIM 只承载 GEMM primitive；阵列、搬入、激活、NoC、累加与外围阶段分别计费。所有带宽均为 GB/s，延迟为 ns，能耗按字段标注。</p>
+    <div class="field-grid-2">
+      ${costProfileNumberField("阵列数量（arrays）", "cim", "array_count", profile.array_count, "positive_integer")}
+      ${costProfileNumberField("P_M（rows/eval）", "cim", "p_m", profile.p_m, "positive_integer")}
+      ${costProfileNumberField("P_K（elements/eval）", "cim", "p_k", profile.p_k, "positive_integer")}
+      ${costProfileNumberField("P_N（columns/eval）", "cim", "p_n", profile.p_n, "positive_integer")}
+      ${costProfileNumberField("阵列频率（GHz）", "cim", "frequency_ghz", profile.frequency_ghz, "positive")}
+      ${costProfileNumberField("输入并行位宽（bits）", "cim", "input_parallel_bits", profile.input_parallel_bits, "positive_integer")}
+      ${costProfileNumberField("权重并行位宽（bits）", "cim", "weight_parallel_bits", profile.weight_parallel_bits, "positive_integer")}
+      ${costProfileNumberField("每次评估周期（cycles/eval）", "cim", "cycles_per_eval", profile.cycles_per_eval, "positive_integer")}
+      ${costProfileNumberField("权重容量（B）", "cim", "weight_capacity_bytes", profile.weight_capacity_bytes, "positive_integer")}
+      ${costProfileNumberField("最大 M 复制（replicas）", "cim", "max_m_replication", profile.max_m_replication, "positive_integer")}
+      ${costProfileNumberField("权重装载带宽（GB/s）", "cim", "load_bandwidth_gb_s", profile.load_bandwidth_gb_s, "positive")}
+      ${costProfileNumberField("激活带宽（GB/s）", "cim", "activation_bandwidth_gb_s", profile.activation_bandwidth_gb_s, "positive")}
+      ${costProfileNumberField("输出带宽（GB/s）", "cim", "output_bandwidth_gb_s", profile.output_bandwidth_gb_s, "positive")}
+      ${costProfileNumberField("NoC 带宽（GB/s）", "cim", "noc_bandwidth_gb_s", profile.noc_bandwidth_gb_s, "positive")}
+      ${costProfileNumberField("累加吞吐（outputs/cycle）", "cim", "accumulator_outputs_per_cycle", profile.accumulator_outputs_per_cycle, "positive")}
+      ${costProfileNumberField("外围吞吐（elements/cycle）", "cim", "peripheral_elements_per_cycle", profile.peripheral_elements_per_cycle, "positive")}
+      ${costProfileNumberField("权重装载延迟（ns）", "cim", "load_latency_ns", profile.load_latency_ns)}
+      ${costProfileNumberField("NoC 单跳延迟（ns/hop）", "cim", "noc_hop_latency_ns", profile.noc_hop_latency_ns)}
+      ${costProfileNumberField("NoC 归约扇入（inputs）", "cim", "noc_reduce_fan_in", profile.noc_reduce_fan_in, "positive_integer")}
+      ${costProfileNumberField("外围延迟（ns）", "cim", "peripheral_latency_ns", profile.peripheral_latency_ns)}
+      ${costProfileNumberField("累加器位宽（bits）", "cim", "accumulator_bits", profile.accumulator_bits, "positive_integer")}
+      ${costProfileNumberField("累加器保护位（bits）", "cim", "accumulator_guard_bits", profile.accumulator_guard_bits, "nonnegative_integer")}
+      ${costProfileNumberField("阵列评估能耗（pJ/eval）", "cim", "eval_energy_pj", profile.eval_energy_pj)}
+      ${costProfileNumberField("权重装载能耗（pJ/B）", "cim", "load_energy_pj_per_byte", profile.load_energy_pj_per_byte)}
+      ${costProfileNumberField("激活搬运能耗（pJ/B）", "cim", "activation_energy_pj_per_byte", profile.activation_energy_pj_per_byte)}
+      ${costProfileNumberField("输出搬运能耗（pJ/B）", "cim", "output_energy_pj_per_byte", profile.output_energy_pj_per_byte)}
+      ${costProfileNumberField("NoC 能耗（pJ/B）", "cim", "noc_energy_pj_per_byte", profile.noc_energy_pj_per_byte)}
+      ${costProfileNumberField("累加能耗（pJ/op）", "cim", "accumulator_energy_pj_per_op", profile.accumulator_energy_pj_per_op)}
+      ${costProfileNumberField("外围能耗（pJ/element）", "cim", "peripheral_energy_pj_per_element", profile.peripheral_energy_pj_per_element)}
+      ${costProfileTextField("阵列资源 ID", "cim", "array_resource_id", profile.array_resource_id)}
+      ${costProfileTextField("装载资源 ID", "cim", "load_resource_id", profile.load_resource_id)}
+      ${costProfileTextField("激活资源 ID", "cim", "activation_resource_id", profile.activation_resource_id)}
+      ${costProfileTextField("NoC 资源 ID", "cim", "noc_resource_id", profile.noc_resource_id)}
+      ${costProfileTextField("累加器资源 ID", "cim", "accumulator_resource_id", profile.accumulator_resource_id)}
+      ${costProfileTextField("外围资源 ID", "cim", "peripheral_resource_id", profile.peripheral_resource_id)}
+      ${costProfileTextField("Profile 名称", "cim", "name", profile.name)}
+    </div>
+    <div class="readout"><span>支持激活位宽（bits）</span><strong>${escapeHtml(asArray(profile.supported_activation_bits).join(", "))}</strong></div>
+    <div class="readout"><span>支持权重位宽（bits）</span><strong>${escapeHtml(asArray(profile.supported_weight_bits).join(", "))}</strong></div>
+  </section>`;
+}
+
+function componentProfileBindingMarkup(profileKey, component) {
+  const registry = componentProfileRegistry(profileKey);
+  const selectedId = String(component?.cost_profile_id || "");
+  const options = Object.keys(registry).sort().map((profileId) => `<option value="${escapeHtml(profileId)}"${profileId === selectedId ? " selected" : ""}>${escapeHtml(profileId)}</option>`).join("");
+  return `<section class="inspector-section inspector-profile-scope">
+    <h3>组件 → Profile 绑定</h3>
+    <label class="field"><span>成本 Profile ID</span><select data-cost-profile-binding="${escapeHtml(profileKey)}">${options}</select></label>
+    <button type="button" class="secondary-button" data-duplicate-cost-profile="${escapeHtml(profileKey)}">复制为当前组件专用 Profile</button>
+    <p class="muted">绑定写入 hardware.components[].cost_profile_id；同类组件可共享 Profile，也可显式绑定不同 Profile。映射、校验与仿真始终按目标组件解析。</p>
+  </section>`;
+}
+
+function componentCostProfileMarkup(component) {
+  const normalized = normalizedComponentKind(component?.kind);
+  const profileKey = costProfileKeyForComponentKind(normalized);
+  let markup = "";
+  if (normalized === "gpu") markup = gpuCostProfileMarkup(component);
+  else if (normalized === "cpu") markup = cpuCostProfileMarkup(component);
+  else if (profileKey === "host_memory") markup = memoryCostProfileMarkup("host_memory", component);
+  else if (profileKey === "hbm") markup = memoryCostProfileMarkup("hbm", component);
+  else if (profileKey === "cim") markup = cimCostProfileMarkup(component);
+  if (!markup) return "";
+  return `${componentProfileBindingMarkup(profileKey, component)}${markup}`;
+}
+
+function profileValueAtPath(profile, path) {
+  return String(path).split(".").reduce((value, key) => value?.[key], profile);
+}
+
+function setProfileValueAtPath(profile, path, value) {
+  const keys = String(path).split(".");
+  let target = profile;
+  keys.slice(0, -1).forEach((key, index) => {
+    const nextKey = keys[index + 1];
+    if (target[key] == null || typeof target[key] !== "object") target[key] = /^\d+$/.test(nextKey) ? [] : {};
+    target = target[key];
+  });
+  target[keys.at(-1)] = value;
+}
+
+function bindCostProfileFields(component) {
+  $$('[data-cost-profile-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
+    const profileKey = control.dataset.costProfileKey;
+    const field = control.dataset.costProfileField;
+    const rule = control.dataset.costProfileRule || COST_PROFILE_FIELD_RULES[profileKey]?.[field];
+    let value = control.value.trim();
+    let valid = Boolean(rule);
+    if (rule === "text") valid = Boolean(value);
+    else {
+      value = Number(value);
+      valid = Number.isFinite(value)
+        && (["positive", "positive_integer", "efficiency"].includes(rule) ? value > 0 : value >= 0)
+        && (!["positive_integer", "nonnegative_integer"].includes(rule) || Number.isSafeInteger(value))
+        && (rule !== "efficiency" || value <= 1);
+    }
+    if (!valid) {
+      toast("成本 Profile 值无效", rule === "efficiency" ? "效率必须大于 0 且不超过 1。" : rule === "positive" || rule === "positive_integer" ? "该字段必须是大于 0 的有限数；结构计数字段还必须是整数。" : rule === "text" ? "资源 ID 与 Profile 名称不能为空。" : "该字段必须是非负有限数。", "error", 6000);
+      renderComponentInspector(component.component_id);
+      return;
+    }
+    const profileId = String(component.cost_profile_id || "");
+    const registry = componentProfileRegistry(profileKey, state.scenario, { create: true });
+    const previous = asObject(registry[profileId]);
+    const previousValue = profileValueAtPath(previous, field);
+    if (Object.is(previousValue, value) || String(previousValue) === String(value)) return;
+    const historyBefore = topologyHistorySnapshot();
+    const next = costProfileDraft(profileKey, component);
+    setProfileValueAtPath(next, field, value);
+    registry[profileId] = next;
+    commitTopologyHistory(historyBefore, "编辑成本 Profile", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: `组件 ${component.component_id} 绑定的 ${profileKey} Profile 已修改，映射需要重新生成。` });
+  }));
+}
+
+function bindGpuDenseThroughputControl(component) {
+  const input = $("[data-gpu-dense-throughput-input]", dom.inspectorContent);
+  if (!input) return;
+  const dtype = selectedGpuTensorDtype(costProfileDraft("gpu", component));
+  input.addEventListener("change", () => {
+    const profile = costProfileDraft("gpu", component);
+    const cycles = denseGpuCyclesForThroughput(profile, input.value, dtype);
+    if (cycles == null) {
+      toast("公开 Dense 吞吐值无效", "请输入大于 0 的有限稠密峰值数值。", "error", 6000);
+      renderComponentInspector(component.component_id);
+      return;
+    }
+    const profileId = String(component.cost_profile_id || "");
+    const registry = componentProfileRegistry("gpu", state.scenario, { create: true });
+    const previous = asObject(registry[profileId]);
+    const previousValue = profileValueAtPath(previous, "tensor_core.cycles_per_mma");
+    if (Object.is(Number(previousValue), cycles)) return;
+    const historyBefore = topologyHistorySnapshot();
+    const next = costProfileDraft("gpu", component);
+    next.tensor_core.cycles_per_mma = cycles;
+    registry[profileId] = next;
+    commitTopologyHistory(historyBefore, "按公开 Dense 吞吐推导 GPU MMA 参数", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: `组件 ${component.component_id} 的 Dense ${dtype || "Tensor"} 吞吐已推导 cycles_per_mma，映射需要重新生成。` });
+    renderComponentInspector(component.component_id);
+  });
+}
+
+function bindCostProfileBindingControls(component) {
+  const selector = $("[data-cost-profile-binding]", dom.inspectorContent);
+  if (selector) selector.addEventListener("change", () => {
+    const profileKey = selector.dataset.costProfileBinding;
+    const profileId = selector.value;
+    const registry = componentProfileRegistry(profileKey);
+    if (!Object.hasOwn(registry, profileId) || component.cost_profile_id === profileId) return;
+    const historyBefore = topologyHistorySnapshot();
+    component.cost_profile_id = profileId;
+    commitTopologyHistory(historyBefore, "切换组件成本 Profile", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: `组件 ${component.component_id} 已切换到 ${profileKey}.${profileId}，映射需要重新生成。` });
+    renderComponentInspector(component.component_id);
+  });
+  const duplicate = $("[data-duplicate-cost-profile]", dom.inspectorContent);
+  if (duplicate) duplicate.addEventListener("click", () => {
+    const profileKey = duplicate.dataset.duplicateCostProfile;
+    const registry = componentProfileRegistry(profileKey, state.scenario, { create: true });
+    const source = boundCostProfile(profileKey, component);
+    const historyBefore = topologyHistorySnapshot();
+    const profileId = nextCostProfileId(profileKey, component, registry);
+    registry[profileId] = deepClone(source);
+    component.cost_profile_id = profileId;
+    commitTopologyHistory(historyBefore, "复制并绑定组件成本 Profile", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: `组件 ${component.component_id} 已绑定独立 ${profileKey}.${profileId}，映射需要重新生成。` });
+    renderComponentInspector(component.component_id);
+    toast("Profile 已复制", `${component.component_id} → ${profileKey}.${profileId}`, "success", 3600);
+  });
+}
+
+function componentInspectorProfile(kind, component = {}) {
+  const normalized = normalizedComponentKind(kind);
+  const cpu = normalized === "cpu";
+  const transportOnly = ["fabric_switch", "io_die"].includes(normalized);
+  const compute = ["gpu", "cpu", "generic_accelerator", "pim_accelerator", "digital_sram_cim"].includes(normalized);
+  const memory = ["hbm", "hbm_stack", "host_memory", "cxl_memory", "hbf", "ssd", "high_io_ssd"].includes(normalized);
+  const cim = ["digital_sram_cim", "pim_accelerator"].includes(normalized);
+  const known = transportOnly || compute || memory;
+  return {
+    transportOnly,
+    capacity: !cpu && !transportOnly && (memory || cim || Number(component.capacity_bytes) > 0 || !known),
+    peakOps: !transportOnly && (compute || Number(component.peak_ops_per_s) > 0 || !known),
+    componentBandwidth: !cpu && !transportOnly && (memory || cim || Number(component.read_bandwidth_gbps) > 0 || Number(component.write_bandwidth_gbps) > 0 || !known),
+    latencyDma: !cpu && !transportOnly && (memory || cim || !known),
+  };
+}
+
+function inspectorPortMarkup(port, index, { expanded = false } = {}) {
+  const portId = String(port.port_id || `port${index}`);
+  const label = [port.protocol, port.role].filter(Boolean).join(" · ") || "未声明协议/角色";
+  return `<details class="inspector-port" ${expanded ? "open" : ""}>
+    <summary><span><strong>${escapeHtml(portId)}</strong><small>${escapeHtml(label)}</small></span><span>${escapeHtml(formatBandwidthGbps(port.bandwidth_gbps))}</span></summary>
+    <div class="inspector-port-fields">
+      <div class="readout"><span data-concept-help="protocol">协议 / 角色</span><strong>${escapeHtml(label)}</strong></div>
+      <div class="field-grid-2">
+        <label class="field"><span>版本（Version）</span><input type="text" data-inspector-port-index="${index}" data-inspector-port-field="version" value="${escapeHtml(port.version ?? "")}"></label>
+        <label class="field"><span>通道数（Lanes）</span><input type="number" min="1" step="1" data-inspector-port-index="${index}" data-inspector-port-field="lanes" value="${escapeHtml(port.lanes ?? 1)}"></label>
+      </div>
+      <div class="field bandwidth-field">${fieldTitleMarkup("端口单向带宽（Port Bandwidth, MB/s–TB/s）", "bandwidth")}<input type="text" inputmode="decimal" data-inspector-port-index="${index}" data-inspector-port-field="bandwidth_gbps" data-inspector-bandwidth="true" value="${escapeHtml(formatBandwidthGbps(port.bandwidth_gbps ?? 0))}"></div>
+      <label class="field"><span>载荷语义（Payload）</span><input type="text" data-inspector-port-index="${index}" data-inspector-port-field="payload" value="${escapeHtml(port.payload ?? "")}"></label>
+    </div>
+  </details>`;
+}
+
+function componentCapacityFieldLabel(component) {
+  const normalized = normalizedComponentKind(component?.kind);
+  if (normalized === "gpu") return "片上/组件容量（On-chip Component Capacity, B/KiB…PiB）";
+  if (isDedicatedHbm(normalized)) return "独立设备内存容量（Separate Device Memory Capacity, B/KiB…PiB）";
+  return "物理容量（Physical Capacity, B/KiB…PiB）";
+}
+
+function componentCapacityNote(component) {
+  const normalized = normalizedComponentKind(component?.kind);
+  if (normalized === "gpu") {
+    return "GPU 组件容量描述片上或组件本地容量；独立显存容量与带宽由拓扑中的 HBM/设备内存组件提供。";
+  }
+  if (isDedicatedHbm(normalized)) {
+    return "这是独立设备内存组件的容量；GPU 计算组件的片上容量不会自动等同于这里的显存容量。";
+  }
+  return "";
+}
+
+function renderComponentInspector(componentId) {
+  const component = state.scenario.hardware.components.find((item) => item.component_id === componentId);
+  if (!component) {
+    state.selected = null;
+    renderInspector();
+    return;
+  }
+  dom.inspectorTitle.textContent = component.component_id;
+  const ports = asArray(component.ports);
+  const metadata = asObject(component.metadata);
+  const evidence = componentInspectorEvidence(metadata);
+  const source = componentInspectorSource(metadata);
+  const profile = componentInspectorProfile(component.kind, component);
+  const costProfileMarkup = componentCostProfileMarkup(component);
+  const storageTransportProfile = ["hbf", "ssd", "high_io_ssd"].includes(normalizedComponentKind(component.kind));
+  const capacityNote = componentCapacityNote(component);
+  const hbfReadOnlyNote = normalizedComponentKind(component.kind) === "hbf"
+    ? `<p class="muted"><strong>只读优先：</strong>HBF 是 High Bandwidth Flash 后备层，不是 HBM。写入带宽为 0 表示未知/未声明写能力，不表示零成本写入；没有显式可写证据与路径时，不应把它作为 KV Cache 或线性 state 的 offload 目标。</p>`
+    : "";
+  const kindOptionLabels = Object.fromEntries(COMPONENT_KINDS.map((kind) => [kind, kindLabel(kind)]));
+  const capabilityFields = [
+    profile.capacity ? quantityField(componentCapacityFieldLabel(component), "capacity_bytes", component.capacity_bytes ?? 0, "bytes") : "",
+    profile.peakOps ? quantityField("硬件峰值运算率（Physical Peak OPS/s）", "peak_ops_per_s", component.peak_ops_per_s ?? 0, "ops") : "",
+    profile.componentBandwidth ? `<div class="field-grid-2">${bandwidthField("物理读取带宽（Physical Read Bandwidth, MB/s–TB/s）", "read_bandwidth_gbps", component.read_bandwidth_gbps ?? 0)}${bandwidthField("物理写入带宽（Physical Write Bandwidth, MB/s–TB/s）", "write_bandwidth_gbps", component.write_bandwidth_gbps ?? 0)}</div>` : "",
+  ].filter(Boolean).join("");
+  dom.inspectorContent.innerHTML = `
+    <section class="inspector-section">
+      <h3>身份与物理位置</h3>
+      ${inputField("组件 ID（Component ID）", "component_id", component.component_id)}
+      ${inputField("组件类型（Kind）", "kind", component.kind, { options: COMPONENT_KINDS, optionLabels: kindOptionLabels })}
+      <div class="field-grid-2">
+        ${inputField("封装 ID（Package ID）", "package_id", component.package_id || "")}
+        ${inputField("裸片 ID（Die ID）", "die_id", component.die_id || "")}
+      </div>
+    </section>
+    ${capabilityFields ? `<section class="inspector-section"><h3>物理容量与传输能力（Physical Capacity & Transport Capability）</h3>${capabilityFields}${capacityNote ? `<p class="muted">${capacityNote}</p>` : ""}${hbfReadOnlyNote}</section>` : ""}
+    ${costProfileMarkup}
+    ${profile.latencyDma ? `<section class="inspector-section">
+      <h3>延迟与数据搬移（Latency & DMA）</h3>
+      <div class="field-grid-2">
+        ${metadataField("读取延迟（Read Latency, ns）", "read_latency_ns", metadata.read_latency_ns ?? 0, { helpKey: "read_latency" })}
+        ${metadataField("写入延迟（Write Latency, ns）", "write_latency_ns", metadata.write_latency_ns ?? 0, { helpKey: "write_latency" })}
+        ${quantityField("传输粒度（Transfer Granularity, B/KiB…PiB）", "transfer_granularity_bytes", metadata.transfer_granularity_bytes ?? 0, "bytes", { metadata: true, helpKey: "transfer_granularity" })}
+        ${metadataField("DMA 带宽（DMA Bandwidth, Gbps）", "dma_bandwidth_gbps", metadata.dma_bandwidth_gbps ?? 0, { helpKey: "dma_bandwidth" })}
+        ${metadataField("DMA 延迟（DMA Latency, ns）", "dma_latency_ns", metadata.dma_latency_ns ?? 0, { helpKey: "dma_latency" })}
+        ${metadataField("DMA 能耗（DMA Energy, pJ/byte）", "dma_energy_pj_per_byte", metadata.dma_energy_pj_per_byte ?? 0, { helpKey: "dma_energy" })}
+        ${metadataField("DMA 资源 ID（DMA Resource ID）", "dma_resource_id", metadata.dma_resource_id ?? `component.${component.component_id}.dma`, { type: "text", min: "", step: "", helpKey: "dma_resource" })}
+        ${storageTransportProfile ? metadataField("最大并发请求（Max Outstanding Requests）", "max_outstanding_requests", metadata.max_outstanding_requests ?? 1, { min: 1, step: 1, helpKey: "outstanding_requests" }) : ""}
+      </div>
+      ${storageTransportProfile ? `<p class="muted">存储端点、DMA 和拓扑链路是三个独立串行阶段；默认 DMA 数值属于可编辑分析假设。最大并发请求只重叠事务启动延迟。</p>` : ""}
+      <div class="readout"><span>证据等级（Evidence Status）</span><strong>${escapeHtml(evidence)}</strong></div>
+      <div class="readout"><span>来源（Source）</span><strong>${escapeHtml(source)}</strong></div>
+    </section>` : `<section class="inspector-section"><h3>证据与来源</h3><div class="readout"><span>证据等级（Evidence Status）</span><strong>${escapeHtml(evidence)}</strong></div><div class="readout"><span>来源（Source）</span><strong>${escapeHtml(source)}</strong></div></section>`}
+    <section class="inspector-section">
+      <h3>${fieldTitleMarkup(`适用端口参数 · ${ports.length}`, "port_parameters")}</h3>
+      ${ports.length ? ports.map((port, index) => inspectorPortMarkup(port, index, { expanded: profile.transportOnly })).join("") : `<p class="muted">暂无端口。使用连接模式自动创建协议匹配端口。</p>`}
+    </section>
+    <p class="muted inspector-capability-note">能力字段描述物理容量与端点传输能力；Profile 是执行/内存成本权威。运行时 metadata（延迟、DMA、传输粒度与并发上限）会保留在场景 JSON 中，即使当前 Kind 的编辑器没有单独显示。</p>`;
+  bindInspectorFields();
+  bindInspectorQuantityFields(component);
+  bindInspectorPortFields(component);
+  bindCostProfileBindingControls(component);
+  bindCostProfileFields(component);
+  bindGpuDenseThroughputControl(component);
+  hydrateConceptHelp(dom.inspectorContent);
+  $$('[data-inspector-metadata-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
+    component.metadata = asObject(component.metadata);
+    const field = control.dataset.inspectorMetadataField;
+    const value = control.type === "number" ? Number(control.value) : control.value.trim();
+    const integerField = field === "max_outstanding_requests";
+    const valid = control.type !== "number"
+      ? Boolean(value)
+      : Number.isFinite(value) && value >= (integerField ? 1 : 0) && (!integerField || Number.isSafeInteger(value));
+    if (!valid) {
+      toast("组件属性无效", integerField ? "最大并发请求必须是大于等于 1 的整数。" : control.type === "number" ? "该字段必须是非负有限数。" : "资源 ID 不能为空。", "error", 6000);
+      renderComponentInspector(component.component_id);
+      return;
+    }
+    if (Object.is(component.metadata[field], value) || String(component.metadata[field] ?? "") === String(value ?? "")) return;
+    const historyBefore = topologyHistorySnapshot();
+    component.metadata[field] = value;
+    commitTopologyHistory(historyBefore, "编辑组件属性", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "组件能力或延迟已修改，映射需要重新生成。" });
+  }));
+}
+
+function bindInspectorPortFields(component) {
+  $$('[data-inspector-port-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
+    const port = asArray(component.ports)[Number(control.dataset.inspectorPortIndex)];
+    if (!port) return;
+    const field = control.dataset.inspectorPortField;
+    let value = control.value.trim();
+    if (control.dataset.inspectorBandwidth === "true") {
+      value = parseBandwidthToGbps(value);
+      if (value == null) {
+        toast("端口带宽格式无效", "请输入非负数，并使用十进制 MB/s、GB/s 或 TB/s。", "error", 6000);
+        renderComponentInspector(component.component_id);
+        return;
+      }
+    } else if (control.type === "number") {
+      value = Number(value);
+      if (!Number.isSafeInteger(value) || value < 1) {
+        toast("端口通道数无效", "Lanes 必须是大于等于 1 的整数。", "error", 6000);
+        renderComponentInspector(component.component_id);
+        return;
+      }
+    }
+    if (Object.is(port[field], value) || String(port[field] ?? "") === String(value ?? "")) return;
+    const historyBefore = topologyHistorySnapshot();
+    port[field] = value;
+    state.scenario.hardware.links.forEach((link) => {
+      const connected = (link.source_component === component.component_id && link.source_port === port.port_id)
+        || (link.target_component === component.component_id && link.target_port === port.port_id);
+      if (connected && ["version", "lanes", "bandwidth_gbps", "payload"].includes(field)) link[field] = value;
+    });
+    commitTopologyHistory(historyBefore, "编辑组件端口", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "组件端口参数已修改，相关链路与映射需要重新校验。" });
+  }));
+}
+
+function bindInspectorQuantityFields(component) {
+  $$('[data-inspector-quantity-field]', dom.inspectorContent).forEach((control) => {
+    let finalized = false;
+    control.addEventListener("focus", () => {
+      finalized = false;
+    });
+    const finalize = () => {
+      if (finalized) return;
+      finalized = true;
+      const quantity = control.dataset.inspectorQuantity;
+      const parsed = quantity === "ops" ? parseOps(control.value) : parseBytes(control.value);
+      if (parsed == null) {
+        const guidance = quantity === "ops"
+          ? "请输入非负数，并使用 OPS、KOPS、MOPS、GOPS、TOPS 或 POPS。"
+          : "请输入非负数，并使用 B、KiB、MiB、GiB、TiB 或 PiB。";
+        toast("数值或单位无效", guidance, "error", 6000);
+        renderComponentInspector(component.component_id);
+        return;
+      }
+      const historyBefore = topologyHistorySnapshot();
+      const field = control.dataset.inspectorQuantityField;
+      const target = control.dataset.inspectorQuantityMetadata === "true" ? asObject(component.metadata) : component;
+      if (Number(target[field]) === Number(parsed)) return;
+      if (control.dataset.inspectorQuantityMetadata === "true") {
+        component.metadata = asObject(component.metadata);
+        component.metadata[field] = parsed;
+      } else {
+        component[field] = parsed;
+      }
+      commitTopologyHistory(historyBefore, "编辑组件能力", { mappingImpact: true });
+      markScenarioChanged("", { mappingImpact: true, mappingReason: "组件容量、运算率或传输粒度已修改，映射需要重新生成。" });
+    };
+    control.addEventListener("change", finalize);
+    control.addEventListener("blur", finalize);
+    control.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      control.blur();
+    });
+  });
+}
+
+function renderLinkInspector(linkId) {
+  const link = state.scenario.hardware.links.find((item) => item.link_id === linkId);
+  if (!link) {
+    state.selected = null;
+    renderInspector();
+    return;
+  }
+  dom.inspectorTitle.textContent = link.link_id;
+  dom.inspectorContent.innerHTML = `
+    <section class="inspector-section">
+      <h3>链路身份</h3>
+      ${inputField("链路 ID（Link ID）", "link_id", link.link_id, { scope: "link" })}
+      <div class="readout"><span data-concept-help="protocol">协议（Protocol）</span><strong>${escapeHtml(link.protocol)} · 删除后重建可更换</strong></div>
+      <div class="field-grid-2">
+        ${inputField("版本（Version）", "version", link.version ?? "1.0", { scope: "link" })}
+        ${inputField("通道数（Lanes）", "lanes", link.lanes ?? 1, { scope: "link", type: "number", min: 1, step: 1 })}
+      </div>
+    </section>
+    <section class="inspector-section">
+      <h3>端点</h3>
+       <div class="readout"><span>源端点（Source）</span><strong>${escapeHtml(link.source_component)}.${escapeHtml(link.source_port)}</strong></div>
+       <div class="readout"><span>目标端点（Target）</span><strong>${escapeHtml(link.target_component)}.${escapeHtml(link.target_port)}</strong></div>
+       ${link.payload !== undefined ? inputField("载荷（Payload）", "payload", link.payload || "", { scope: "link" }) : ""}
+    </section>
+    <section class="inspector-section">
+      <h3>传输</h3>
+      ${bandwidthField("带宽（Bandwidth, MB/s–TB/s）", "bandwidth_gbps", link.bandwidth_gbps ?? 0, { scope: "link" })}
+      ${inputField("延迟（Latency, ns）", "latency_ns", link.latency_ns ?? 0, { scope: "link", type: "number", min: 0, step: "any", helpKey: "link_latency" })}
+      <label class="checkbox-field"><span data-concept-help="bidirectional_link">双向传输（Bidirectional）</span><input type="checkbox" data-inspector-scope="link" data-inspector-field="bidirectional" ${link.bidirectional !== false ? "checked" : ""}></label>
+    </section>`;
+  bindInspectorFields();
+  hydrateConceptHelp(dom.inspectorContent);
+}
+
+function bindInspectorFields() {
+  $$('[data-inspector-field]', dom.inspectorContent).forEach((control) => {
+    control.addEventListener("change", () => {
+      const scope = control.dataset.inspectorScope;
+      const field = control.dataset.inspectorField;
+      const selected = state.selected;
+      if (!selected || selected.type !== scope) return;
+      const collection = scope === "component" ? state.scenario.hardware.components : state.scenario.hardware.links;
+      const idField = scope === "component" ? "component_id" : "link_id";
+      const idLabel = scope === "component" ? "组件 ID" : "链路 ID";
+      const item = collection.find((entry) => entry[idField] === selected.id);
+      if (!item) return;
+      const historyBefore = topologyHistorySnapshot();
+      let value;
+      if (control.type === "checkbox") value = control.checked;
+      else if (control.dataset.inspectorBandwidth === "true") {
+        value = parseBandwidthToGbps(control.value);
+        if (value == null) {
+          toast("带宽格式无效", "请输入非负数，并使用十进制 MB/s、GB/s 或 TB/s。", "error", 6000);
+          renderInspector();
+          return;
+        }
+      } else if (control.type === "number") value = Number(control.value);
+      else value = control.value.trim();
+      if (field !== idField && (Object.is(item[field], value) || String(item[field] ?? "") === String(value ?? ""))) return;
+      if (field === idField && String(item[idField]) === String(value)) return;
+      if (field === idField) {
+        if (!value) {
+          toast("字段无效", `${idLabel} 不能为空。`, "error");
+          renderInspector();
+          return;
+        }
+        if (collection.some((entry) => entry !== item && entry[idField] === value)) {
+          toast("字段无效", `${value} 已存在`, "error");
+          renderInspector();
+          return;
+        }
+        if (scope === "component") renameComponent(item, value);
+        else {
+          item.link_id = value;
+          state.selected.id = value;
+        }
+      } else {
+        const previousProfileKey = scope === "component" && field === "kind"
+          ? costProfileKeyForComponentKind(item.kind)
+          : "";
+        item[field] = value;
+        if (scope === "component" && field === "kind") {
+          const nextProfileKey = costProfileKeyForComponentKind(item.kind);
+          if (previousProfileKey !== nextProfileKey) delete item.cost_profile_id;
+          sanitizeV4ComponentCapabilities(item);
+          materializeMissingCostProfiles([item]);
+        }
+        if (scope === "link") synchronizeLinkPortField(item, field, value);
+      }
+      refreshColocatedRankMapping();
+      commitTopologyHistory(historyBefore, scope === "component" ? "编辑组件" : "编辑链路", { mappingImpact: true });
+      markScenarioChanged("", { mappingImpact: true, mappingReason: `${scope === "component" ? "组件" : "链路"}属性已修改，映射需要重新生成。` });
+    });
+  });
+}
+
+function synchronizeLinkPortField(link, field, value) {
+  const portFields = new Set(["version", "lanes", "bandwidth_gbps", "payload"]);
+  if (!portFields.has(field)) return;
+  const hardware = state.scenario.hardware;
+  for (const [componentId, portId] of [
+    [link.source_component, link.source_port],
+    [link.target_component, link.target_port],
+  ]) {
+    const component = hardware.components.find((entry) => entry.component_id === componentId);
+    const port = asArray(component?.ports).find((entry) => entry.port_id === portId);
+    if (port) port[field] = value;
+  }
+}
+
+function renameComponent(component, nextId) {
+  const previousId = component.component_id;
+  component.component_id = nextId;
+  state.scenario.hardware.links.forEach((link) => {
+    if (link.source_component === previousId) link.source_component = nextId;
+    if (link.target_component === previousId) link.target_component = nextId;
+  });
+  const placement = state.scenario.placement;
+  const kvPolicy = asObject(placement.kv_policy);
+  if (kvPolicy.cache_component === previousId) kvPolicy.cache_component = nextId;
+  if (kvPolicy.offload_component === previousId) kvPolicy.offload_component = nextId;
+  const orchestration = asObject(state.scenario.profiles?.host_orchestration);
+  if (orchestration.cpu_component_id === previousId) orchestration.cpu_component_id = nextId;
+  if (orchestration.gpu_component_id === previousId) orchestration.gpu_component_id = nextId;
+  asArray(placement.parallel?.rank_mapping).forEach((rank) => {
+    for (const field of ["component_id", "memory_component_id", "cim_component_id"]) {
+      if (rank[field] === previousId) rank[field] = nextId;
+    }
+  });
+  if (state.nodePositions[previousId]) {
+    state.nodePositions[nextId] = state.nodePositions[previousId];
+    delete state.nodePositions[previousId];
+    savePositions();
+  }
+  if (state.nodeSizes[previousId]) {
+    state.nodeSizes[nextId] = state.nodeSizes[previousId];
+    delete state.nodeSizes[previousId];
+  }
+  state.topologyView.groups.forEach((group) => {
+    group.members = group.members.map((id) => id === previousId ? nextId : id);
+    if (group.root === previousId) group.root = nextId;
+  });
+  if (state.selectedComponents.has(previousId)) {
+    state.selectedComponents.delete(previousId);
+    state.selectedComponents.add(nextId);
+  }
+  state.selected.id = nextId;
+  saveTopologyView();
+}
+
+function presetId(preset) {
+  return String(preset.id ?? preset.preset_id ?? preset.slug ?? "");
+}
+
+function presetSupportLevel(preset) {
+  const raw = String(preset.support_level ?? preset.support ?? preset.evidence_status ?? "out_of_domain").toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+  if (["exact", "verified", "calibrated"].includes(raw)) return "exact";
+  if (["analytical", "approximation", "analytical_approximation", "approx"].includes(raw)) return "analytical_approximation";
+  return "out_of_domain";
+}
+
+function presetSupportCopy(level) {
+  return {
+    exact: "精确支持（Exact）",
+    analytical_approximation: "分析近似（Analytical Approximation）",
+    out_of_domain: "超出适用域（Out of Domain）",
+  }[level] || level;
+}
+
+function architectureEvidenceCopy(status) {
+  return {
+    diagram_verified: "官方架构图已核验（Diagram Verified）",
+    config_verified_no_official_diagram: "官方配置已核验，未找到独立架构图",
+    unpinned_source: "来源未固定版本（Unpinned Source）",
+    gated_config: "官方配置受访问限制（Gated Config）",
+    metadata_only_unsupported_ir: "仅元数据，当前 IR 不完整支持",
+  }[String(status || "")] || "架构证据状态未知";
+}
+
+function presetText(preset, keys, fallback = "—") {
+  for (const key of keys) {
+    const value = preset[key];
+    if (value !== undefined && value !== null && value !== "") return String(value);
+  }
+  return fallback;
+}
+
+function componentPresetId(preset) {
+  return String(preset?.preset_id ?? preset?.id ?? preset?.slug ?? preset?.name ?? "").trim();
+}
+
+function componentPresetEnvelopeItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  return asArray(payload?.items ?? payload?.presets ?? payload?.component_presets ?? payload?.results);
+}
+
+function componentPresetDetailItem(payload) {
+  if (Object.keys(asObject(payload?.preset)).length && asArray(payload?.components).length) {
+    return {
+      ...asObject(payload.preset),
+      components: asArray(payload.components),
+      links: asArray(payload.links),
+      group: asObject(payload.group),
+      catalog: asObject(payload.catalog),
+      usage_hint: payload.usage_hint,
+    };
+  }
+  if (Object.keys(asObject(payload?.preset)).length && Object.keys(asObject(payload?.component)).length) {
+    return { ...asObject(payload.preset), component: asObject(payload.component), catalog: asObject(payload.catalog), usage_hint: payload.usage_hint };
+  }
+  return asObject(payload?.item ?? payload?.preset ?? payload?.component_preset ?? payload);
+}
+
+function componentPresetType(preset) {
+  return String(preset?.preset_type ?? (asArray(preset?.components).length ? "topology_bundle" : "component"));
+}
+
+function isTopologyBundlePreset(preset) {
+  return componentPresetType(preset) === "topology_bundle";
+}
+
+function componentPresetVendor(preset) {
+  const metadata = asObject(preset?.metadata);
+  const sources = asArray(preset?.sources);
+  return String(asObject(sources[0]).publisher ?? preset?.vendor ?? preset?.manufacturer ?? preset?.vendor_name ?? metadata.vendor ?? preset?.family ?? "未注明厂商");
+}
+
+function componentPresetEvidence(preset) {
+  const metadata = asObject(preset?.metadata);
+  const provenance = asObject(preset?.provenance);
+  return String(preset?.evidence_level ?? preset?.evidence_status ?? preset?.evidence ?? provenance.evidence_level ?? provenance.evidence_status ?? metadata.evidence_level ?? metadata.evidence_status ?? "unspecified");
+}
+
+function componentPresetEvidenceLabel(value) {
+  const raw = String(value || "unspecified");
+  return {
+    S1_STANDARD: "S1 · 标准规范",
+    S2_VENDOR_DECLARED: "S2 · 厂商声明",
+    S3_VENDOR_PREPRODUCTION: "S3 · 厂商预生产",
+    S4_PRIMARY_RESEARCH: "S4 · 一手研究",
+    A_ANALYTICAL: "A · 分析推导",
+    unspecified: "未注明证据",
+  }[raw] || raw;
+}
+
+function componentPresetSpec(preset) {
+  const candidate = preset?.component ?? preset?.component_spec ?? preset?.spec ?? preset?.hardware_component;
+  const source = Object.keys(asObject(candidate)).length ? asObject(candidate) : asObject(preset);
+  return deepClone(source);
+}
+
+function componentPresetKind(preset) {
+  const spec = componentPresetSpec(preset);
+  return normalizedComponentKind(spec.kind ?? preset?.kind ?? preset?.component_kind ?? "unknown");
+}
+
+function componentPresetDisplayName(preset) {
+  const spec = componentPresetSpec(preset);
+  const value = preset?.display_name ?? preset?.name ?? preset?.model ?? spec.display_name ?? spec.component_id ?? componentPresetId(preset);
+  return String(value || "未命名组件预设");
+}
+
+function componentPresetSources(preset) {
+  const provenance = asObject(preset?.provenance);
+  const metadata = asObject(preset?.metadata);
+  const sources = asArray(preset?.sources ?? metadata.sources);
+  if (sources.length) return sources.map((source) => asObject(source));
+  const fallback = preset?.source ?? provenance.source ?? metadata.source;
+  return fallback ? [{ title: String(fallback) }] : [];
+}
+
+function componentPresetSource(preset) {
+  const sources = componentPresetSources(preset);
+  if (!sources.length) return "—";
+  return sources.map((source) => [source.publisher, source.title].filter(Boolean).join(" · ")).filter(Boolean).join("；") || "—";
+}
+
+function safeComponentSourceUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!/^https?:\/\//i.test(raw)) return "";
+  try {
+    const parsed = new URL(raw);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function componentPresetSourceMarkup(preset) {
+  const sources = componentPresetSources(preset);
+  if (!sources.length) return `<p class="component-preset-source">—</p>`;
+  return `<ul class="component-preset-sources">${sources.map((source) => {
+    const label = [source.publisher, source.title].filter(Boolean).join(" · ") || "未命名来源";
+    const url = safeComponentSourceUrl(source.url);
+    return `<li>${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>` : `<span>${escapeHtml(label)}</span>`}</li>`;
+  }).join("")}</ul>`;
+}
+
+function normalizePresetBandwidthText(value) {
+  const convert = (_match, numeric, prefix) => {
+    const scalar = Number(numeric);
+    const normalized = prefix.toUpperCase();
+    const factor = normalized === "M" ? 0.001 : normalized === "T" ? 1000 : 1;
+    return formatBandwidthGbps(scalar * factor);
+  };
+  return String(value)
+    .replace(/([+]?(?:\d+(?:\.\d*)?|\.\d+))\s*([MGT])(?:bit\/s|bps)\b/gi, convert)
+    .replace(/([+]?(?:\d+(?:\.\d*)?|\.\d+))\s*([MGTmgt])b\/s\b/g, convert);
+}
+
+function componentPresetFactLabel(key) {
+  const raw = String(key);
+  const labels = {
+    measurement_basis: "测量依据（Measurement Basis）",
+    derived_formula: "推导公式（Derived Formula）",
+    conditions: "适用条件（Conditions）",
+    technology: "技术信息（Technology）",
+    evidence_level: "证据等级（Evidence Level）",
+    publisher: "发布方（Publisher）",
+    published_at: "发布日期（Published At）",
+    accessed_at: "访问日期（Accessed At）",
+    title: "来源标题（Source Title）",
+    url: "来源网址（Source URL）",
+    value_scope: "数值范围（Value Scope）",
+    applicability: "适用范围（Applicability）",
+    applicability_limitations: "适用限制（Applicability Limitations）",
+    notes: "说明（Notes）",
+    revision: "修订版本（Revision）",
+    read_bandwidth_gbps: "读取带宽（Read Bandwidth, MB/s–TB/s）",
+    write_bandwidth_gbps: "写入带宽（Write Bandwidth, MB/s–TB/s）",
+    bandwidth_gbps: "带宽（Bandwidth, MB/s–TB/s）",
+    dma_bandwidth_gbps: "DMA 带宽（DMA Bandwidth, MB/s–TB/s）",
+    capacity_bytes: "容量（Capacity, B/KiB…PiB）",
+    peak_ops_per_s: "峰值运算率（Peak OPS/s）",
+    read_latency_ns: "读取延迟（Read Latency, ns）",
+    write_latency_ns: "写入延迟（Write Latency, ns）",
+    transfer_granularity_bytes: "传输粒度（Transfer Granularity, B/KiB…PiB）",
+    dma_latency_ns: "DMA 延迟（DMA Latency, ns）",
+    dma_energy_pj_per_byte: "DMA 能耗（DMA Energy, pJ/byte）",
+    dma_resource: "DMA 资源 ID（DMA Resource ID）",
+    max_outstanding_requests: "最大并发请求数（Max Outstanding Requests）",
+    physical_unit_kind: "物理单元类型（Physical Unit Kind）",
+    physical_unit_count: "物理单元数量（Physical Unit Count）",
+    physical_unit_count_status: "数量依据状态（Count Status）",
+    simulator_representation: "仿真表示（Simulator Representation）",
+    simulator_node_count: "仿真节点数量（Simulator Node Count）",
+    source_basis: "来源依据（Source Basis）",
+    unit_index: "单元序号（Unit Index）",
+    unit_count_in_product: "产品内单元总数（Units in Product）",
+    unit_count_status: "单元数量状态（Unit Count Status）",
+    unit_count_formula: "单元数量公式（Unit Count Formula）",
+    unit_capacity_bytes: "单元容量（Capacity per Unit, B/KiB…PiB）",
+    product_total_capacity_bytes: "产品总容量（Product Total Capacity, B/KiB…PiB）",
+    unit_bandwidth_gbps: "单元带宽（Bandwidth per Unit, MB/s–TB/s）",
+    product_total_bandwidth_gbps: "产品总带宽（Product Total Bandwidth, MB/s–TB/s）",
+    component_preset_id: "组件预设 ID（Component Preset ID）",
+    component_preset_status: "组件预设匹配状态（Component Preset Status）",
+    value_status: "数值状态（Value Status）",
+  };
+  if (labels[raw]) return labels[raw];
+  if (/_gbps$/i.test(raw)) return `带宽（${raw.replace(/_gbps$/i, "").replaceAll("_", " ")}, MB/s–TB/s）`;
+  return raw.replaceAll("_", " ");
+}
+
+function componentPresetListText(value, fallback = "—", key = "") {
+  if (value == null || value === "") return fallback;
+  if (/_gbps$/i.test(key) && Number.isFinite(Number(value))) return formatBandwidthGbps(Number(value));
+  if (/_bytes$/i.test(key) && Number.isFinite(Number(value))) return formatBytes(Number(value));
+  if (key === "physical_unit_count_status" || key === "unit_count_status") {
+    const status = {
+      explicit_physical_node: "显式物理节点",
+      vendor_documented: "厂商文档明确",
+      vendor_documented_stacks: "厂商文档明确堆栈数",
+      vendor_documented_active_stacks: "厂商文档明确有效堆栈数",
+      not_reliably_disclosed: "未可靠公开",
+      multiple_not_reliably_disclosed: "确认有多个，但精确数量未可靠公开",
+      experimental_reference_scope: "实验参考范围",
+      preset_scope: "预设定义范围",
+    }[String(value).toLowerCase()];
+    if (status) return `${status}（${value}）`;
+  }
+  if (key === "simulator_representation") {
+    const representation = {
+      aggregate_node: "聚合仿真节点",
+      single_physical_unit_node: "单颗物理单元节点",
+      single_reference_unit_node: "单颗参考单元节点",
+      single_device_node: "单设备节点",
+    }[String(value).toLowerCase()];
+    if (representation) return `${representation}（${value}）`;
+  }
+  if (key === "component_preset_status") {
+    const status = {
+      catalog_reference: "已关联目录组件预设",
+      no_exact_per_stack_component_preset: "无精确的单颗堆栈组件预设",
+    }[String(value).toLowerCase()];
+    if (status) return `${status}（${value}）`;
+  }
+  if (key === "value_status" && String(value).toLowerCase() === "derived_per_physical_stack") {
+    return `按物理堆栈推导（${value}）`;
+  }
+  if (Array.isArray(value)) return value.length ? value.map((item) => componentPresetListText(item, "", key)).filter(Boolean).join("；") : fallback;
+  if (typeof value === "object") {
+    const entries = Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== "");
+    return entries.length ? entries.map(([nestedKey, item]) => `${componentPresetFactLabel(nestedKey)}: ${componentPresetListText(item, "", nestedKey)}`).join("；") : fallback;
+  }
+  return normalizePresetBandwidthText(value);
+}
+
+function componentPresetFacts(preset) {
+  if (isTopologyBundlePreset(preset)) {
+    return {
+      "预设类型": "组合拓扑",
+      "组件数": Number(preset?.component_count ?? asArray(preset?.components).length),
+      "内部链路数": Number(preset?.link_count ?? asArray(preset?.links).length),
+      "分组根": String(asObject(preset?.group).root ?? "GPU"),
+      "默认折叠": asObject(preset?.group).collapsed === true ? "是" : "否（默认展开）",
+      "总 HBM 单向带宽（Total HBM One-way Bandwidth, MB/s–TB/s）": formatBandwidthGbps(preset?.read_bandwidth_gbps),
+    };
+  }
+  const spec = componentPresetSpec(preset);
+  const facts = asObject(preset?.facts ?? preset?.specifications ?? preset?.specs);
+  const canonical = {
+    "组件类型": kindLabel(spec.kind ?? preset?.kind),
+    "容量（Capacity, B/KiB…PiB）": formatBytes(spec.capacity_bytes),
+    "峰值运算率（Peak OPS/s）": formatOps(spec.peak_ops_per_s),
+    "读取带宽（Read Bandwidth, MB/s–TB/s）": formatBandwidthGbps(spec.read_bandwidth_gbps),
+    "写入带宽（Write Bandwidth, MB/s–TB/s）": formatBandwidthGbps(spec.write_bandwidth_gbps),
+  };
+  return Object.fromEntries([...Object.entries(canonical), ...Object.entries(facts).map(([key, value]) => [componentPresetFactLabel(key), /_gbps$/i.test(key) ? formatBandwidthGbps(value) : value])].filter(([, value]) => value !== "—" && value !== "" && value != null));
+}
+
+function componentPresetFacetValues(payload, keys, items, fallbackExtractor) {
+  const filterRoot = asObject(payload?.filters);
+  const facetRoot = asObject(payload?.facets);
+  for (const key of keys) {
+    const values = asArray(filterRoot[key] ?? facetRoot[key]);
+    if (values.length) return values.map((item) => String(asObject(item).value ?? asObject(item).name ?? asObject(item).key ?? item)).filter(Boolean);
+  }
+  return items.map(fallbackExtractor).map(String).filter(Boolean);
+}
+
+function replaceFilterOptions(control, label, values, optionLabel = (value) => value) {
+  const previous = control.value;
+  const unique = Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
+  control.replaceChildren(new Option(label, ""), ...unique.map((value) => new Option(optionLabel(value), value)));
+  control.value = unique.includes(previous) ? previous : "";
+}
+
+function syncComponentPresetFilters(payload, items) {
+  replaceFilterOptions(dom.componentPresetKindFilter, "全部类型", componentPresetFacetValues(payload, ["component_kind", "kinds", "kind"], items, componentPresetKind));
+  replaceFilterOptions(dom.componentPresetVendorFilter, "全部厂商", componentPresetFacetValues(payload, ["vendors", "vendor", "manufacturers"], items, componentPresetVendor));
+  replaceFilterOptions(dom.componentPresetEvidenceFilter, "全部状态", componentPresetFacetValues(payload, ["evidence_level", "evidence", "evidence_statuses", "evidence_status"], items, componentPresetEvidence), componentPresetEvidenceLabel);
+}
+
+function componentPresetFactMarkup(facts) {
+  const entries = Object.entries(asObject(facts));
+  if (!entries.length) return `<p class="component-preset-empty-value">—</p>`;
+  return `<dl class="component-preset-facts">${entries.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(componentPresetListText(value))}</dd></div>`).join("")}</dl>`;
+}
+
+function componentPresetDetailsMarkup(preset) {
+  const provenance = asObject(preset?.provenance);
+  const componentMetadata = asObject(componentPresetSpec(preset).metadata);
+  const derived = preset?.derived ?? preset?.derivations ?? preset?.inferences ?? provenance.derived ?? {
+    measurement_basis: componentMetadata.measurement_basis,
+    derived_formula: componentMetadata.derived_formula,
+  };
+  const assumptions = preset?.assumptions ?? provenance.assumptions ?? componentMetadata.conditions ?? preset?.notes;
+  const limitations = preset?.limitations ?? preset?.limits ?? provenance.limitations;
+  return `<div class="component-preset-detail-grid">
+    <section><h4>事实（Facts）</h4>${componentPresetFactMarkup(componentPresetFacts(preset))}</section>
+    <section><h4>厂商（Vendor）</h4><p>${escapeHtml(componentPresetVendor(preset))}</p><h4>来源（Source）</h4>${componentPresetSourceMarkup(preset)}<h4>证据（Evidence）</h4><p>${escapeHtml(componentPresetEvidenceLabel(componentPresetEvidence(preset)))}</p></section>
+    <section><h4>推导（Derived）</h4><p>${escapeHtml(componentPresetListText(derived))}</p><h4>假设（Assumptions）</h4><p>${escapeHtml(componentPresetListText(assumptions))}</p></section>
+    <section class="component-preset-limitations"><h4>限制（Limitations）</h4><p>${escapeHtml(componentPresetListText(limitations, "未声明限制"))}</p></section>
+  </div>`;
+}
+
+function filteredComponentPresets() {
+  const query = dom.componentPresetSearchInput.value.trim().toLocaleLowerCase();
+  const kind = dom.componentPresetKindFilter.value;
+  const vendor = dom.componentPresetVendorFilter.value;
+  const evidence = dom.componentPresetEvidenceFilter.value;
+  return state.componentPresets.filter((preset) => {
+    const detail = state.componentPresetDetails.get(componentPresetId(preset)) || preset;
+    const haystack = [componentPresetId(detail), componentPresetDisplayName(detail), componentPresetVendor(detail), componentPresetKind(detail), componentPresetSource(detail)].join(" ").toLocaleLowerCase();
+    return (!query || haystack.includes(query))
+      && (!kind || componentPresetKind(detail) === kind)
+      && (!vendor || componentPresetVendor(detail) === vendor)
+      && (!evidence || componentPresetEvidence(detail) === evidence);
+  });
+}
+
+function componentPresetCardMarkup(preset) {
+  const id = componentPresetId(preset);
+  const detail = state.componentPresetDetails.get(id);
+  const value = detail || preset;
+  const spec = componentPresetSpec(value);
+  const selected = state.selectedComponentPresetId === id;
+  const readBandwidth = Number(spec.read_bandwidth_gbps);
+  const peakOps = Number(spec.peak_ops_per_s);
+  const bundle = isTopologyBundlePreset(value);
+  const summary = [
+    `<span>${escapeHtml(componentPresetVendor(value))}</span>`,
+    bundle ? `<span>${escapeHtml(String(value.component_count ?? asArray(value.components).length))} 组件 · ${escapeHtml(String(value.link_count ?? asArray(value.links).length))} 内部链路</span>` : `<span>${escapeHtml(formatBytes(spec.capacity_bytes))}</span>`,
+    Number.isFinite(readBandwidth) && readBandwidth > 0 ? `<span>${escapeHtml(formatBandwidthGbps(readBandwidth))}</span>` : "",
+    Number.isFinite(peakOps) && peakOps > 0 ? `<span>${escapeHtml(formatOps(peakOps))}</span>` : "",
+  ].join("");
+  return `<article class="component-preset-card ${selected ? "is-expanded" : ""}" data-component-preset-id="${escapeHtml(id)}">
+    <header><div><span class="component-preset-kind">${bundle ? "组合拓扑（Bundle）" : escapeHtml(kindLabel(componentPresetKind(value)))}</span><h3>${escapeHtml(normalizePresetBandwidthText(componentPresetDisplayName(value)))}</h3><code>${escapeHtml(id || "no-id")}</code></div><span class="evidence-chip">${escapeHtml(componentPresetEvidenceLabel(componentPresetEvidence(value)))}</span></header>
+    <div class="component-preset-summary">${summary}</div>
+    <div class="component-preset-actions"><button type="button" class="button button-quiet" data-component-preset-details="${escapeHtml(id)}" aria-expanded="${String(selected)}">${selected ? "收起详情" : "查看详情"}</button><button type="button" class="button button-primary" data-load-component-preset="${escapeHtml(id)}" ${id ? "" : "disabled"}>${bundle ? "载入组合拓扑" : "载入单组件（Load One）"}</button></div>
+    <section class="component-preset-details" ${selected ? "" : "hidden"}>${selected ? componentPresetDetailsMarkup(value) : ""}</section>
+  </article>`;
+}
+
+function renderComponentPresets() {
+  const items = filteredComponentPresets();
+  dom.componentPresetStatus.textContent = `显示 ${items.length} / ${state.componentPresets.length} 个预设；单组件保持未连接，组合拓扑原子载入并只产生一次撤销。`;
+  if (!items.length) {
+    dom.componentPresetList.innerHTML = `<div class="preset-empty">没有匹配当前筛选条件的组件预设。</div>`;
+    return;
+  }
+  dom.componentPresetList.innerHTML = items.map(componentPresetCardMarkup).join("");
+  $$('[data-component-preset-details]', dom.componentPresetList).forEach((button) => button.addEventListener("click", () => { void toggleComponentPresetDetails(button.dataset.componentPresetDetails, button); }));
+  $$('[data-load-component-preset]', dom.componentPresetList).forEach((button) => button.addEventListener("click", () => { void loadComponentFromPreset(button.dataset.loadComponentPreset, button); }));
+}
+
+async function loadComponentPresets() {
+  state.componentPresetsLoading = true;
+  dom.componentPresetStatus.textContent = "正在载入组件预设目录…";
+  dom.componentPresetList.innerHTML = `<div class="preset-empty">正在载入…</div>`;
+  try {
+    const payload = await apiRequest("/component-presets", { method: "GET", headers: {} });
+    const items = componentPresetEnvelopeItems(payload).filter((item) => Object.keys(asObject(item)).length);
+    state.componentPresets = items;
+    state.componentPresetsLoaded = true;
+    syncComponentPresetFilters(payload, items);
+    renderComponentPresets();
+  } catch (error) {
+    dom.componentPresetStatus.textContent = "组件预设目录载入失败。";
+    dom.componentPresetList.innerHTML = `<div class="preset-empty is-error">${escapeHtml(chineseMessage(error, "组件预设目录载入失败，请确认本地 API 支持 /api/component-presets 后重试。"))}</div>`;
+  } finally {
+    state.componentPresetsLoading = false;
+  }
+}
+
+async function componentPresetDetail(id) {
+  if (state.componentPresetDetails.has(id)) return state.componentPresetDetails.get(id);
+  const payload = await apiRequest(`/component-presets/${encodeURIComponent(id)}`, { method: "GET", headers: {} });
+  const detail = componentPresetDetailItem(payload);
+  state.componentPresetDetails.set(id, detail);
+  return detail;
+}
+
+async function toggleComponentPresetDetails(id, button) {
+  if (state.selectedComponentPresetId === id) {
+    state.selectedComponentPresetId = null;
+    renderComponentPresets();
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "载入详情中…";
+  try {
+    await componentPresetDetail(id);
+    state.selectedComponentPresetId = id;
+    renderComponentPresets();
+    dom.componentPresetList.querySelector(`[data-component-preset-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
+  } catch (error) {
+    showOperationError("组件预设详情载入失败", error);
+    renderComponentPresets();
+  }
+}
+
+function uniqueComponentPresetId(kind) {
+  const base = normalizedComponentKind(kind) === "digital_sram_cim" ? "cim" : slug(kind || "component").replaceAll("-", "_");
+  const ids = new Set(state.scenario.hardware.components.map((component) => String(component.component_id)));
+  let index = 0;
+  while (ids.has(`${base}${index}`)) index += 1;
+  return `${base}${index}`;
+}
+
+function materializeComponentPreset(preset) {
+  const source = componentPresetSpec(preset);
+  requireScenarioSchemaV4(source, "component preset");
+  const kind = normalizedComponentKind(source.kind ?? preset?.kind ?? preset?.component_kind);
+  if (!kind || kind === "unknown") throw new Error("组件预设缺少可识别的组件类型（kind），当前拓扑未修改。");
+  const componentId = uniqueComponentPresetId(kind);
+  const reservedPortIds = new Set(asArray(source.ports).map((port) => String(port?.port_id ?? "").trim()).filter(Boolean));
+  const usedPortIds = new Set();
+  let generatedPortIndex = 0;
+  const ports = asArray(source.ports).map((port) => {
+    const cloned = deepClone(port);
+    requireScenarioSchemaV4(cloned, "component preset port", { inherited: true });
+    const preferred = String(cloned.port_id ?? "").trim();
+    let portId = preferred;
+    if (!portId || usedPortIds.has(portId)) {
+      while (usedPortIds.has(`port${generatedPortIndex}`) || reservedPortIds.has(`port${generatedPortIndex}`)) generatedPortIndex += 1;
+      portId = `port${generatedPortIndex++}`;
+    }
+    usedPortIds.add(portId);
+    cloned.port_id = portId;
+    return cloned;
+  });
+  return {
+    ...source,
+    component_id: componentId,
+    kind,
+    package_id: source.package_id || "package0",
+    die_id: `${componentId}_die`,
+    ports,
+    metadata: {
+      ...asObject(source.metadata),
+      component_preset_id: componentPresetId(preset),
+    },
+  };
+}
+
+function numericIdBase(value, fallback) {
+  const base = String(value || fallback).replace(/\d+$/, "");
+  return base || fallback;
+}
+
+function claimNumericId(base, used) {
+  let index = 0;
+  while (used.has(`${base}${index}`)) index += 1;
+  const id = `${base}${index}`;
+  used.add(id);
+  return id;
+}
+
+const PHYSICAL_COMPONENT_REFERENCE_FIELDS = Object.freeze(["controller_component_id", "memory_subsystem_id"]);
+
+function remapPhysicalCompositionComponentRefs(metadata, componentMap) {
+  const physical = asObject(asObject(metadata).physical_composition);
+  for (const field of PHYSICAL_COMPONENT_REFERENCE_FIELDS) {
+    const current = physical[field];
+    const nextId = typeof current === "string" ? componentMap.get(current) : null;
+    if (nextId) physical[field] = nextId;
+  }
+}
+
+function materializeTopologyBundle(preset) {
+  const sourceComponents = asArray(preset?.components);
+  const sourceLinks = asArray(preset?.links);
+  const sourceGroup = asObject(preset?.group);
+  if (!sourceComponents.length || !sourceLinks.length) throw new Error("组合拓扑缺少组件或内部链路，当前拓扑未修改。");
+  const sourceIds = new Set(sourceComponents.map((component) => String(component?.component_id || "")));
+  if (sourceIds.size !== sourceComponents.length || sourceIds.has("")) throw new Error("组合拓扑中的组件 ID 缺失或重复，当前拓扑未修改。");
+
+  const usedComponentIds = new Set(state.scenario.hardware.components.map((component) => String(component.component_id)));
+  const usedPackageIds = new Set(state.scenario.hardware.components.map((component) => String(component.package_id || "")).filter(Boolean));
+  const packageId = claimNumericId("package", usedPackageIds);
+  const idMap = new Map();
+  sourceComponents.forEach((source) => {
+    const kind = normalizedComponentKind(source.kind);
+    const base = kind === "digital_sram_cim" ? "cim" : slug(kind || "component").replaceAll("-", "_");
+    idMap.set(String(source.component_id), claimNumericId(base, usedComponentIds));
+  });
+  const components = sourceComponents.map((source) => {
+    const component = deepClone(source);
+    requireScenarioSchemaV4(component, "topology bundle component", { inherited: true });
+    const componentId = idMap.get(String(source.component_id));
+    component.component_id = componentId;
+    component.package_id = packageId;
+    component.die_id = `${componentId}_die`;
+    component.ports = asArray(component.ports).map((port) => {
+      const cloned = deepClone(port);
+      requireScenarioSchemaV4(cloned, "topology bundle port", { inherited: true });
+      return cloned;
+    });
+    const portIds = component.ports.map((port) => String(port.port_id || ""));
+    if (portIds.some((id) => !id) || new Set(portIds).size !== portIds.length) throw new Error(`组合拓扑组件 ${source.component_id} 的端口 ID 缺失或重复。`);
+    component.metadata = { ...asObject(component.metadata), component_preset_id: componentPresetId(preset), topology_bundle_instance: packageId };
+    remapPhysicalCompositionComponentRefs(component.metadata, idMap);
+    return component;
+  });
+  const componentById = new Map(components.map((component) => [component.component_id, component]));
+  const usedLinkIds = new Set(state.scenario.hardware.links.map((link) => String(link.link_id)));
+  const links = sourceLinks.map((source) => {
+    const link = deepClone(source);
+    requireScenarioSchemaV4(link, "topology bundle link", { inherited: true });
+    link.link_id = claimNumericId(numericIdBase(source.link_id, "link"), usedLinkIds);
+    link.source_component = idMap.get(String(source.source_component));
+    link.target_component = idMap.get(String(source.target_component));
+    const sourceComponent = componentById.get(link.source_component);
+    const targetComponent = componentById.get(link.target_component);
+    if (!sourceComponent || !targetComponent) throw new Error("组合拓扑内部链路引用了未知组件。");
+    if (!sourceComponent.ports.some((port) => port.port_id === link.source_port) || !targetComponent.ports.some((port) => port.port_id === link.target_port)) {
+      throw new Error(`组合拓扑内部链路 ${source.link_id} 引用了未知端口。`);
+    }
+    link.metadata = { ...asObject(link.metadata), component_preset_id: componentPresetId(preset), topology_bundle_instance: packageId };
+    return link;
+  });
+  const members = asArray(sourceGroup.members).map((id) => idMap.get(String(id))).filter(Boolean);
+  const root = idMap.get(String(sourceGroup.root));
+  if (members.length !== components.length || !root || !members.includes(root)) throw new Error("组合拓扑分组的成员或 GPU 根无效。");
+  const usedGroupIds = new Set(asArray(state.topologyView.groups).map((group) => String(group.group_id)));
+  const group = {
+    group_id: claimNumericId(numericIdBase(sourceGroup.group_id, "group"), usedGroupIds),
+    label: String(sourceGroup.label || componentPresetDisplayName(preset)),
+    members,
+    root,
+    collapsed: sourceGroup.collapsed === true,
+  };
+  return { components, links, group, packageId };
+}
+
+function appendTopologyBundle(bundle, label) {
+  const historyBefore = topologyHistorySnapshot();
+  const metrics = topologyLayoutMetrics();
+  const { nodeW, nodeH } = metrics;
+  const sizes = Object.fromEntries(bundle.components.map((component) => [component.component_id, { width: nodeW, height: nodeH }]));
+  const localLayout = Topology.layoutGraph(bundle.components, bundle.links, [bundle.group], sizes, {
+    nodeGap: metrics.nodeGap,
+    layerGap: Math.round(112 * layoutScaleForFont(state.settings.fontScale)),
+    rowGap: Math.round(64 * layoutScaleForFont(state.settings.fontScale)),
+  });
+  const center = Topology.screenToWorld(topologyCanvasCenterPoint(), state.topologyView.viewport);
+  const desired = Object.fromEntries(Object.entries(localLayout.positions).map(([id, point]) => [id, {
+    x: point.x + center.x - localLayout.bounds.width / 2,
+    y: point.y + center.y - localLayout.bounds.height / 2,
+  }]));
+  const placement = resolveTopologyPlacement({ ...state.nodePositions, ...desired }, desired, sizes);
+  try {
+    state.scenario.hardware.components = [...state.scenario.hardware.components, ...bundle.components];
+    state.scenario.hardware.links = [...state.scenario.hardware.links, ...bundle.links];
+    materializeMissingCostProfiles(bundle.components);
+    state.topologyView.groups = [...state.topologyView.groups, bundle.group];
+    state.nodePositions = { ...state.nodePositions, ...placement.positions };
+    state.topologyView.layout.positions = state.nodePositions;
+    state.selectedComponents = new Set(bundle.group.members);
+    state.selected = { type: "group", id: bundle.group.group_id };
+    savePositions();
+    refreshColocatedRankMapping();
+    commitTopologyHistory(historyBefore, label, { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "组合芯片拓扑已新增，映射需要重新生成。" });
+    requestAnimationFrame(fitTopologyViewport);
+    return placement.adjusted;
+  } catch (error) {
+    restoreTopologyHistorySnapshot(historyBefore, { restorePlacement: true });
+    throw error;
+  }
+}
+
+function appendUnconnectedComponent(component, label) {
+  const components = state.scenario.hardware.components;
+  const canvas = dom.topologyCanvas;
+  const historyBefore = topologyHistorySnapshot();
+  const { nodeW, nodeH } = topologyLayoutMetrics();
+  const center = Topology.screenToWorld(topologyCanvasCenterPoint(canvas), state.topologyView.viewport);
+  const desired = {
+    x: center.x - nodeW / 2 + ((components.length + 1) % 3) * 18,
+    y: center.y - nodeH / 2 + ((components.length + 1) % 4) * 16,
+  };
+  const placement = resolveTopologyPlacement({ ...state.nodePositions, [component.component_id]: desired }, { [component.component_id]: desired }, { [component.component_id]: { width: nodeW, height: nodeH } });
+  components.push(component);
+  materializeMissingCostProfiles([component]);
+  state.nodePositions[component.component_id] = placement.positions[component.component_id];
+  state.selectedComponents = new Set([component.component_id]);
+  state.selected = { type: "component", id: component.component_id };
+  savePositions();
+  commitTopologyHistory(historyBefore, label, { mappingImpact: true });
+  markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件组件已新增，映射需要重新生成。" });
+  return placement.adjusted;
+}
+
+async function loadComponentFromPreset(id, button) {
+  button.disabled = true;
+  button.textContent = "正在载入…";
+  try {
+    const preset = await componentPresetDetail(id);
+    if (isTopologyBundlePreset(preset)) {
+      const bundle = materializeTopologyBundle(preset);
+      const adjusted = appendTopologyBundle(bundle, `载入组合拓扑 ${id}`);
+      dom.hardwarePresetsDialog.close("loaded");
+      toast("组合拓扑已载入", `${bundle.group.label} · ${bundle.components.length} 个组件与 ${bundle.links.length} 条内部链路已原子加入${adjusted ? "；已自动避让重叠" : ""}。`, "success", 7000);
+      return;
+    }
+    const component = materializeComponentPreset(preset);
+    const adjusted = appendUnconnectedComponent(component, `载入组件预设 ${id}`);
+    dom.hardwarePresetsDialog.close("loaded");
+    toast("组件预设已载入", `${component.component_id} 已作为单个未连接组件加入当前拓扑${adjusted ? "；已自动避让重叠" : ""}。`, "success", 6000);
+  } catch (error) {
+    showOperationError("组件预设载入失败", error);
+    renderComponentPresets();
+  }
+}
+
+function hardwarePresetScrollTarget(tab) {
+  return tab === "components" ? dom.componentPresetList : dom.architecturePresetList;
+}
+
+async function setHardwarePresetTab(tab, { focus = false } = {}) {
+  const next = tab === "components" ? "components" : "architectures";
+  const previous = state.hardwarePresetTab;
+  const previousScrollTarget = hardwarePresetScrollTarget(previous);
+  if (previousScrollTarget) state.hardwarePresetScroll[previous] = previousScrollTarget.scrollTop || 0;
+  state.hardwarePresetTab = next;
+  for (const [name, button, panel] of [
+    ["components", dom.hardwarePresetComponentTab, dom.componentPresetsDialog],
+    ["architectures", dom.hardwarePresetArchitectureTab, dom.architecturePresetsDialog],
+  ]) {
+    const selected = name === next;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+    panel.hidden = !selected;
+  }
+  if (next === "components") {
+    if (!state.componentPresetsLoaded && !state.componentPresetsLoading) await loadComponentPresets();
+    else renderComponentPresets();
+  } else if (!state.architecturePresetsLoaded && !state.architecturePresetsLoading) await loadArchitecturePresets();
+  else renderArchitecturePresets();
+  const scrollTarget = hardwarePresetScrollTarget(next);
+  requestAnimationFrame(() => { scrollTarget.scrollTop = state.hardwarePresetScroll[next] || 0; });
+  if (focus) (next === "components" ? dom.componentPresetSearchInput : dom.architecturePresetSearchInput).focus();
+}
+
+async function openHardwarePresetsDialog(initialTab = state.hardwarePresetTab) {
+  showModalDialog(dom.hardwarePresetsDialog, dom.hardwarePresetsButton);
+  await setHardwarePresetTab(initialTab, { focus: true });
+}
+
+function scheduleComponentPresetSearch() {
+  if (componentPresetSearchTimer) window.clearTimeout(componentPresetSearchTimer);
+  componentPresetSearchTimer = window.setTimeout(renderComponentPresets, 140);
+}
+
+function architecturePresetEnvelopeItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  return asArray(payload?.items ?? payload?.presets ?? payload?.architecture_presets ?? payload?.results);
+}
+
+function architecturePresetDetailItem(payload) {
+  const preset = asObject(payload?.preset ?? payload?.item ?? payload);
+  return {
+    ...preset,
+    hardware: deepClone(asObject(payload?.hardware ?? preset.hardware)),
+    topology_view: deepClone(asObject(payload?.topology_view ?? preset.topology_view)),
+    compatibility: deepClone(asObject(payload?.compatibility ?? preset.compatibility)),
+    usage_hint: payload?.usage_hint ?? preset.usage_hint,
+    topology_evidence: payload?.topology_evidence ?? preset.topology_evidence,
+    parameter_basis: payload?.parameter_basis ?? preset.parameter_basis,
+    physical_composition: payload?.physical_composition ?? preset.physical_composition,
+    aggregate_node: payload?.aggregate_node ?? preset.aggregate_node,
+    aggregate_node_explanation: payload?.aggregate_node_explanation ?? preset.aggregate_node_explanation,
+    planner_executable: payload?.planner_executable ?? preset.planner_executable,
+    requires_gpu_attachment: payload?.requires_gpu_attachment ?? preset.requires_gpu_attachment,
+    requires_cpu_attachment: payload?.requires_cpu_attachment ?? preset.requires_cpu_attachment,
+    requires_profile_review: payload?.requires_profile_review ?? preset.requires_profile_review,
+    catalog: deepClone(asObject(payload?.catalog ?? preset.catalog)),
+  };
+}
+
+function architecturePresetNames(preset) {
+  const zh = String(
+    preset?.name_zh
+    ?? preset?.display_name_zh
+    ?? asObject(preset?.localized_names).zh
+    ?? preset?.display_name
+    ?? preset?.name
+    ?? componentPresetId(preset)
+    ?? "未命名架构",
+  ).trim();
+  const en = String(
+    preset?.name_en
+    ?? preset?.display_name_en
+    ?? asObject(preset?.localized_names).en
+    ?? preset?.english_name
+    ?? "",
+  ).trim();
+  return { zh: zh || "未命名架构", en: en && en !== zh ? en : "" };
+}
+
+function architecturePresetField(preset, keys, fallback = "—") {
+  const metadata = asObject(preset?.metadata);
+  for (const key of keys) {
+    const value = preset?.[key] ?? metadata[key];
+    if (value !== undefined && value !== null && value !== "") return String(value);
+  }
+  return fallback;
+}
+
+function architecturePresetCategory(preset) {
+  return architecturePresetField(preset, ["category", "architecture_category", "topology_class", "family", "architecture_family"]);
+}
+
+function architecturePresetLevel(preset) {
+  return architecturePresetField(preset, ["level", "topology_level", "scope", "scale"]);
+}
+
+function architecturePresetVendor(preset) {
+  return architecturePresetField(preset, ["vendor", "manufacturer", "organization", "publisher"], componentPresetVendor(preset));
+}
+
+function architecturePresetSupport(preset) {
+  return architecturePresetField(preset, ["support", "support_level", "support_status", "status"], "未注明");
+}
+
+function architecturePresetFidelity(preset) {
+  const raw = architecturePresetField(
+    preset,
+    ["fidelity", "modeling_fidelity", "accuracy", "support_level", "support"],
+    "experimental",
+  ).toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+  if (["exact", "verified", "calibrated", "vendor_exact"].includes(raw) || raw.includes("exact")) return "exact";
+  if (raw.includes("analytical") || raw.includes("approx")) return "analytical";
+  return "experimental";
+}
+
+function architecturePresetFidelityLabel(value) {
+  return {
+    exact: "精确（Exact）",
+    analytical: "分析近似（Analytical）",
+    experimental: "实验参考（Experimental）",
+  }[value] || value;
+}
+
+function architecturePresetCompatibility(preset) {
+  return asObject(preset?.compatibility);
+}
+
+function architecturePresetIsLoadable(preset) {
+  const compatibility = architecturePresetCompatibility(preset);
+  for (const value of [preset?.loadable, preset?.can_load, compatibility.loadable, compatibility.can_load, compatibility.supported]) {
+    if (typeof value === "boolean") return value;
+  }
+  const status = String(compatibility.status ?? preset?.support_status ?? "").toLowerCase();
+  if (["unsupported", "incompatible", "out_of_domain", "display_only", "unavailable"].includes(status)) return false;
+  return true;
+}
+
+function architecturePresetFacetValues(payload, keys, items, fallbackExtractor) {
+  return componentPresetFacetValues(payload, keys, items, fallbackExtractor);
+}
+
+function syncArchitecturePresetFilters(payload, items) {
+  replaceFilterOptions(dom.architecturePresetCategoryFilter, "全部类别", architecturePresetFacetValues(payload, ["categories", "category", "topology_class"], items, architecturePresetCategory));
+  replaceFilterOptions(dom.architecturePresetLevelFilter, "全部层级", architecturePresetFacetValues(payload, ["levels", "level", "topology_levels", "scale"], items, architecturePresetLevel));
+  replaceFilterOptions(dom.architecturePresetVendorFilter, "全部厂商", architecturePresetFacetValues(payload, ["vendors", "vendor", "manufacturers"], items, architecturePresetVendor));
+  replaceFilterOptions(dom.architecturePresetSupportFilter, "全部支持状态", architecturePresetFacetValues(payload, ["support", "support_level", "support_levels", "support_statuses"], items, architecturePresetSupport));
+}
+
+function architecturePresetLimitations(preset) {
+  return preset?.limitations
+    ?? preset?.limits
+    ?? architecturePresetCompatibility(preset).limitations
+    ?? asObject(preset?.provenance).limitations;
+}
+
+function architecturePhysicalUnitLabel(value) {
+  const key = String(value || "physical_unit").toLowerCase();
+  return {
+    hbm_stack: "HBM 堆栈（HBM Stack）",
+    gpu: "GPU",
+    cpu: "CPU",
+    chiplet: "芯粒（Chiplet）",
+    compute_chiplet: "计算芯粒（Compute Chiplet）",
+    io_die: "I/O 裸片（I/O Die）",
+    switch_asic: "交换芯片（Switch ASIC）",
+    lpddr5x_device: "LPDDR5X 器件（Device）",
+  }[key] || String(value || "物理单元（Physical Unit）");
+}
+
+function architectureMemorySubsystemKey(component) {
+  const metadata = asObject(component?.metadata);
+  const physical = asObject(metadata.physical_composition);
+  const memorySubsystemId = physical.memory_subsystem_id;
+  if (memorySubsystemId !== undefined && memorySubsystemId !== null && String(memorySubsystemId).trim()) {
+    return String(memorySubsystemId).trim();
+  }
+  const controllerComponentId = physical.controller_component_id;
+  return controllerComponentId !== undefined && controllerComponentId !== null && String(controllerComponentId).trim()
+    ? String(controllerComponentId).trim()
+    : "";
+}
+
+function architectureComponentPhysicalText(component, context = {}) {
+  const metadata = asObject(component?.metadata);
+  const physical = asObject(metadata.physical_composition);
+  if (Object.keys(physical).length) {
+    const count = Number(physical.physical_unit_count);
+    const countText = Number.isFinite(count) && count > 0
+      ? `${formatNumber(count)} ×`
+      : physical.known_multiple || String(physical.physical_unit_count_status || "").includes("multiple")
+        ? "多个（精确数量未可靠公开）×"
+        : "数量未声明 ×";
+    const representation = String(physical.simulator_representation || "");
+    const simulatorCount = Number(physical.simulator_node_count);
+    const simulatorText = representation === "aggregate_node"
+      ? `折叠为 ${Number.isFinite(simulatorCount) && simulatorCount > 0 ? formatNumber(simulatorCount) : "1"} 个仿真聚合节点`
+      : representation === "single_physical_unit_node"
+        ? "当前仿真节点对应一颗物理单元"
+      : representation
+        ? `仿真表示：${componentPresetListText(representation, representation, "simulator_representation")}`
+        : "仿真节点与物理单元的对应关系未声明";
+    const statusText = physical.physical_unit_count_status
+      ? `数量依据：${componentPresetListText(physical.physical_unit_count_status, "", "physical_unit_count_status")}`
+      : "";
+    const declaredUnitCapacity = Number(physical.unit_capacity_bytes);
+    const capacity = Number(component?.capacity_bytes);
+    const capacityText = Number.isFinite(declaredUnitCapacity) && declaredUnitCapacity > 0
+      ? `每物理单元容量：${formatBytes(declaredUnitCapacity)}`
+      : Number.isFinite(count) && count > 0 && Number.isFinite(capacity) && capacity > 0
+        ? `每物理单元容量：${formatBytes(capacity / count)}（仿真组件总容量 ÷ ${formatNumber(count)}）`
+      : "";
+    const unitIndex = Number(physical.unit_index);
+    const productCount = Number(physical.unit_count_in_product);
+    const productPositionText = Number.isInteger(unitIndex) && unitIndex >= 0 && Number.isFinite(productCount) && productCount > 0
+      ? `产品内第 ${formatNumber(unitIndex + 1)} / ${formatNumber(productCount)} 颗`
+      : Number.isFinite(productCount) && productCount > 0
+        ? `产品内共 ${formatNumber(productCount)} 颗`
+        : "";
+    const groupHbmCount = Number(context.groupHbmCount);
+    const groupText = Number.isFinite(groupHbmCount) && groupHbmCount > 0
+      ? `当前分组含 ${formatNumber(groupHbmCount)} 个 HBM 物理组件${Number.isFinite(productCount) && productCount > 0 ? (groupHbmCount === productCount ? "，与产品单元总数一致" : `，产品元数据声明 ${formatNumber(productCount)} 颗`) : ""}`
+      : "";
+    return [`${countText} ${architecturePhysicalUnitLabel(physical.physical_unit_kind)}`, simulatorText, productPositionText, capacityText, statusText, groupText].filter(Boolean).join("；");
+  }
+  return String(metadata.modeling_approximation || "1 个仿真逻辑组件；未声明额外物理折叠关系");
+}
+
+function architectureComponentDerivationText(component) {
+  const metadata = asObject(component?.metadata);
+  const physical = asObject(metadata.physical_composition);
+  const values = {
+    unit_count_status: physical.unit_count_status,
+    unit_count_formula: physical.unit_count_formula,
+    product_total_capacity_bytes: physical.product_total_capacity_bytes,
+    product_total_bandwidth_gbps: physical.product_total_bandwidth_gbps,
+    component_preset_id: physical.component_preset_id,
+    component_preset_status: physical.component_preset_status,
+    source_basis: physical.source_basis,
+    measurement_basis: metadata.measurement_basis,
+    derived_formula: metadata.derived_formula,
+    evidence_level: metadata.evidence_level,
+    parameter_basis: metadata.parameter_basis,
+    provenance: metadata.provenance,
+  };
+  const present = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+  return Object.keys(present).length ? componentPresetListText(present) : "";
+}
+
+function architectureComponentPeakBasisText(component) {
+  const basis = asObject(asObject(component?.metadata).peak_ops_basis);
+  if (!Object.keys(basis).length) return "峰值运算率口径未单独声明";
+  const precision = {
+    bf16_matrix: "BF16 矩阵",
+    bf16_tensor: "BF16 Tensor Core",
+    fp16_matrix: "FP16 矩阵",
+    fp8_matrix: "FP8 矩阵",
+    fp8_tensor: "FP8 Tensor Core",
+    int8_matrix: "INT8 矩阵",
+  }[String(basis.precision || "").toLowerCase()] || basis.precision;
+  const sparsity = {
+    dense_no_structured_sparsity_credit: "稠密，不计结构化稀疏增益",
+    dense: "稠密",
+    sparse: "稀疏",
+  }[String(basis.sparsity || "").toLowerCase()] || basis.sparsity;
+  const source = {
+    vendor_product_specification: "厂商产品规格（Vendor Specification）",
+    standards_document: "标准文档（Standards Document）",
+    analytical_assumption: "分析假设（Analytical Assumption）",
+  }[String(basis.source_basis || "").toLowerCase()] || basis.source_basis;
+  return [precision, sparsity, source].filter(Boolean).join(" · ") || componentPresetListText(basis);
+}
+
+function architecturePresetHardwareMarkup(preset) {
+  const hardware = asObject(preset?.hardware);
+  const components = asArray(hardware.components);
+  const links = asArray(hardware.links);
+  if (!components.length) return "";
+  const kindCounts = new Map();
+  components.forEach((component) => {
+    const label = kindLabel(component.kind);
+    kindCounts.set(label, (kindCounts.get(label) || 0) + 1);
+  });
+  const protocols = [...new Set(links.map((link) => String(link.protocol || "").trim()).filter(Boolean))];
+  const componentById = new Map(components.map((component) => [String(component.component_id), component]));
+  const rawView = Object.keys(asObject(preset?.topology_view)).length
+    ? asObject(preset.topology_view)
+    : asObject(asObject(hardware.metadata).topology_view);
+  const groupHbmCount = new Map();
+  asArray(rawView.groups).forEach((group) => {
+    const hbmMembers = asArray(asObject(group).members)
+      .map((id) => componentById.get(String(id)))
+      .filter((member) => member && normalizedComponentKind(member.kind) === "hbm");
+    if (!hbmMembers.length) return;
+    const countsBySubsystem = new Map();
+    hbmMembers.forEach((member) => {
+      const key = architectureMemorySubsystemKey(member);
+      countsBySubsystem.set(key, (countsBySubsystem.get(key) || 0) + 1);
+    });
+    hbmMembers.forEach((member) => {
+      const key = architectureMemorySubsystemKey(member);
+      groupHbmCount.set(String(member.component_id), countsBySubsystem.get(key) || 0);
+    });
+  });
+  const componentCards = components.map((component) => {
+    const capacity = Number(component.capacity_bytes) || 0;
+    const peakOps = Number(component.peak_ops_per_s) || 0;
+    const readBandwidth = Number(component.read_bandwidth_gbps) || 0;
+    const writeBandwidth = Number(component.write_bandwidth_gbps) || 0;
+    const derivation = architectureComponentDerivationText(component);
+    const metrics = [
+      capacity > 0 ? `容量 ${formatBytes(capacity)}` : "",
+      peakOps > 0 ? `峰值 ${formatOps(peakOps)}` : "",
+      readBandwidth > 0 ? `读取 ${formatBandwidthGbps(readBandwidth)}` : "",
+      writeBandwidth > 0 ? `写入 ${formatBandwidthGbps(writeBandwidth)}` : "",
+    ].filter(Boolean);
+    return `<article class="architecture-component-summary">
+      <header><strong>${escapeHtml(String(component.component_id || "未命名组件"))}</strong><span>${escapeHtml(kindLabel(component.kind))}</span></header>
+      ${metrics.length ? `<p>${metrics.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</p>` : ""}
+      <dl><div><dt>物理组成（Physical Composition）</dt><dd>${escapeHtml(architectureComponentPhysicalText(component, { groupHbmCount: groupHbmCount.get(String(component.component_id)) }))}</dd></div>${peakOps > 0 ? `<div><dt>OPS 口径（OPS Basis）</dt><dd>${escapeHtml(architectureComponentPeakBasisText(component))}</dd></div>` : ""}${derivation ? `<div><dt>来源与推导（Basis &amp; Derivation）</dt><dd>${escapeHtml(derivation)}</dd></div>` : ""}</dl>
+    </article>`;
+  }).join("");
+  return `<section class="architecture-preset-hardware-summary"><h4>仿真组件与物理组成（Simulator Components &amp; Physical Composition）</h4>
+    <p class="architecture-hardware-rollup">${escapeHtml(`${components.length} 个仿真组件 · ${links.length} 条链路 · ${[...kindCounts].map(([kind, count]) => `${kind} × ${count}`).join(" · ")}${protocols.length ? ` · 协议 ${protocols.join(" / ")}` : ""}`)}</p>
+    <div class="architecture-component-summary-grid">${componentCards}</div>
+  </section>`;
+}
+
+function architecturePresetDetailsMarkup(preset) {
+  const compatibility = architecturePresetCompatibility(preset);
+  const usageHint = preset?.usage_hint ?? compatibility.usage_hint;
+  const topologyEvidence = preset?.topology_evidence ?? asObject(preset?.provenance).topology_evidence;
+  const parameterBasis = preset?.parameter_basis ?? {
+    bandwidth: preset?.bandwidth_basis ?? asObject(preset?.metadata).bandwidth_basis,
+    peak_ops: preset?.ops_basis ?? preset?.peak_ops_basis ?? asObject(preset?.metadata).ops_basis,
+  };
+  const composition = preset?.physical_composition ?? asObject(preset?.metadata).physical_composition;
+  const aggregateNode = preset?.aggregate_node_explanation ?? preset?.aggregate_node ?? asObject(preset?.metadata).aggregate_node;
+  const plannerExecutable = preset?.planner_executable ?? compatibility.planner_executable;
+  const requiresGpuAttachment = preset?.requires_gpu_attachment ?? compatibility.requires_gpu_attachment;
+  const requiresCpuAttachment = preset?.requires_cpu_attachment ?? compatibility.requires_cpu_attachment;
+  const requiresProfileReview = preset?.requires_profile_review ?? compatibility.requires_profile_review;
+  const booleanLabel = (value) => value === true ? "是（Yes）" : value === false ? "否（No）" : "未声明";
+  return `<div class="component-preset-detail-grid architecture-preset-detail-grid">
+    <section><h4>层级与类别（Level &amp; Category）</h4>${componentPresetFactMarkup({
+      "架构层级（Level）": architecturePresetLevel(preset),
+      "架构类别（Category）": architecturePresetCategory(preset),
+      "支持状态（Support）": architecturePresetSupport(preset),
+      "建模精度（Fidelity）": architecturePresetFidelityLabel(architecturePresetFidelity(preset)),
+    })}</section>
+    <section><h4>厂商（Vendor）</h4><p>${escapeHtml(architecturePresetVendor(preset))}</p><h4>证据（Evidence）</h4><p>${escapeHtml(componentPresetEvidenceLabel(componentPresetEvidence(preset)))}</p><h4>拓扑证据（Topology Evidence）</h4><p>${escapeHtml(componentPresetListText(topologyEvidence, "未单独声明"))}</p><h4>来源（Sources）</h4>${componentPresetSourceMarkup(preset)}</section>
+    <section><h4>参数口径（Parameter Basis）</h4><p>${escapeHtml(componentPresetListText(parameterBasis, "未单独声明带宽 / OPS 口径"))}</p><h4>物理组成（Physical Composition）</h4><p>${escapeHtml(componentPresetListText(composition, "未单独声明"))}</p><h4>聚合节点说明（Aggregate Node）</h4><p>${escapeHtml(componentPresetListText(aggregateNode, "未使用或未声明聚合节点"))}</p></section>
+    <section><h4>兼容性（Compatibility）</h4>${componentPresetFactMarkup({
+      "可载入（Loadable）": architecturePresetIsLoadable(preset) ? "是（Yes）" : "否（No）",
+      "Planner 可执行（Planner Executable）": booleanLabel(plannerExecutable),
+      "需连接 GPU（Requires GPU Attachment）": booleanLabel(requiresGpuAttachment),
+      "需连接 CPU（Requires CPU Attachment）": booleanLabel(requiresCpuAttachment),
+      "需复核硬件 Profile（Profile Review Required）": booleanLabel(requiresProfileReview),
+    })}<p>${escapeHtml(componentPresetListText(compatibility, architecturePresetIsLoadable(preset) ? "可载入" : "不可载入"))}</p><h4>使用提示（Usage Hint）</h4><p>${escapeHtml(componentPresetListText(usageHint, "未提供使用提示"))}</p></section>
+    ${architecturePresetHardwareMarkup(preset)}
+    <section class="component-preset-limitations"><h4>限制（Limitations）</h4><p>${escapeHtml(componentPresetListText(architecturePresetLimitations(preset), "未声明限制"))}</p></section>
+  </div>`;
+}
+
+function filteredArchitecturePresets() {
+  const query = dom.architecturePresetSearchInput.value.trim().toLocaleLowerCase();
+  const category = dom.architecturePresetCategoryFilter.value;
+  const level = dom.architecturePresetLevelFilter.value;
+  const vendor = dom.architecturePresetVendorFilter.value;
+  const support = dom.architecturePresetSupportFilter.value;
+  return state.architecturePresets.filter((preset) => {
+    const detail = state.architecturePresetDetails.get(componentPresetId(preset)) || preset;
+    const names = architecturePresetNames(detail);
+    const haystack = [
+      componentPresetId(detail), names.zh, names.en, architecturePresetCategory(detail),
+      architecturePresetLevel(detail), architecturePresetVendor(detail), architecturePresetSupport(detail),
+      componentPresetSource(detail),
+    ].join(" ").toLocaleLowerCase();
+    return (!query || haystack.includes(query))
+      && (!category || architecturePresetCategory(detail) === category)
+      && (!level || architecturePresetLevel(detail) === level)
+      && (!vendor || architecturePresetVendor(detail) === vendor)
+      && (!support || architecturePresetSupport(detail) === support);
+  });
+}
+
+function architecturePresetCardMarkup(preset) {
+  const id = componentPresetId(preset);
+  const value = state.architecturePresetDetails.get(id) || preset;
+  const names = architecturePresetNames(value);
+  const selected = state.selectedArchitecturePresetId === id;
+  const fidelity = architecturePresetFidelity(value);
+  const loadable = architecturePresetIsLoadable(value);
+  const compatibility = architecturePresetCompatibility(value);
+  const plannerExecutable = value.planner_executable ?? compatibility.planner_executable;
+  const requiresGpuAttachment = value.requires_gpu_attachment ?? compatibility.requires_gpu_attachment;
+  const requiresCpuAttachment = value.requires_cpu_attachment ?? compatibility.requires_cpu_attachment;
+  const topologyEvidence = asObject(value.topology_evidence);
+  const componentCount = Number(value.component_count ?? asArray(asObject(value.hardware).components).length) || 0;
+  const linkCount = Number(value.link_count ?? asArray(asObject(value.hardware).links).length) || 0;
+  const sourceEvidenceRaw = String(componentPresetEvidence(value) || "").toLowerCase();
+  const sourceEvidence = ["exact_public_topology", "analytical_approximation"].includes(sourceEvidenceRaw)
+    ? ""
+    : componentPresetEvidenceLabel(componentPresetEvidence(value));
+  const summary = [
+    `层级 · ${architecturePresetLevel(value)}`,
+    `类别 · ${architecturePresetCategory(value)}`,
+    componentCount ? `${componentCount} 组件` : "",
+    linkCount ? `${linkCount} 链路` : "",
+    `厂商 · ${architecturePresetVendor(value)}`,
+    `拓扑证据 · ${architecturePresetFidelityLabel(architecturePresetFidelity({ support_level: topologyEvidence.level || architecturePresetSupport(value) }))}`,
+    sourceEvidence ? `资料证据 · ${sourceEvidence}` : "",
+    plannerExecutable === false ? "Planner 不可执行" : plannerExecutable === true ? "Planner 可执行" : "",
+    requiresGpuAttachment === true ? "需连接 GPU" : "",
+    requiresCpuAttachment === true ? "需连接 CPU" : "",
+  ].filter((item) => item && item !== "—").map((item) => `<span>${escapeHtml(item)}</span>`).join("");
+  return `<article class="component-preset-card architecture-preset-card ${selected ? "is-expanded" : ""}" data-architecture-preset-id="${escapeHtml(id)}">
+    <header><div><span class="component-preset-kind">完整硬件架构（Architecture）</span><h3>${escapeHtml(names.zh)}</h3>${names.en ? `<p class="architecture-preset-name-en">${escapeHtml(names.en)}</p>` : ""}<code>${escapeHtml(id || "no-id")}</code></div><span class="fidelity-badge is-${escapeHtml(fidelity)}">${escapeHtml(architecturePresetFidelityLabel(fidelity))}</span></header>
+    <div class="component-preset-summary">${summary}</div>
+    <div class="component-preset-actions"><button type="button" class="button button-quiet" data-architecture-preset-details="${escapeHtml(id)}" aria-expanded="${String(selected)}" ${id ? "" : "disabled"}>${selected ? "收起详情" : "查看来源、限制与兼容性"}</button><button type="button" class="button button-primary" data-load-architecture-preset="${escapeHtml(id)}" ${id && loadable ? "" : "disabled"}>${loadable ? "替换当前硬件（Load）" : "仅供查看（不可载入）"}</button></div>
+    <section class="component-preset-details" ${selected ? "" : "hidden"}>${selected ? architecturePresetDetailsMarkup(value) : ""}</section>
+  </article>`;
+}
+
+function renderArchitecturePresets() {
+  const items = filteredArchitecturePresets();
+  const catalog = asObject(state.architecturePresetCatalog);
+  const catalogLabel = catalog.catalog_version || catalog.version || catalog.cutoff_at || "本地目录";
+  dom.architecturePresetStatus.textContent = `显示 ${items.length} / ${state.architecturePresets.length} 个架构预设 · ${catalogLabel}；载入会替换硬件并保留模型与负载。`;
+  dom.architecturePresetList.innerHTML = items.length
+    ? items.map(architecturePresetCardMarkup).join("")
+    : `<div class="preset-empty">没有匹配当前筛选条件的架构预设。</div>`;
+  $$('[data-architecture-preset-details]', dom.architecturePresetList).forEach((button) => button.addEventListener("click", () => { void toggleArchitecturePresetDetails(button.dataset.architecturePresetDetails, button); }));
+  $$('[data-load-architecture-preset]', dom.architecturePresetList).forEach((button) => button.addEventListener("click", () => { void loadArchitectureFromPreset(button.dataset.loadArchitecturePreset, button); }));
+}
+
+async function loadArchitecturePresets() {
+  state.architecturePresetsLoading = true;
+  dom.architecturePresetStatus.textContent = "正在载入架构预设目录…";
+  dom.architecturePresetList.innerHTML = `<div class="preset-empty">正在载入…</div>`;
+  try {
+    const payload = await apiRequest("/architecture-presets", { method: "GET", headers: {} });
+    const items = architecturePresetEnvelopeItems(payload).filter((item) => Object.keys(asObject(item)).length);
+    state.architecturePresets = items;
+    state.architecturePresetCatalog = asObject(payload?.catalog);
+    state.architecturePresetsLoaded = true;
+    syncArchitecturePresetFilters(payload, items);
+    renderArchitecturePresets();
+  } catch (error) {
+    dom.architecturePresetStatus.textContent = "架构预设目录载入失败。";
+    dom.architecturePresetList.innerHTML = `<div class="preset-empty is-error">${escapeHtml(backendChineseMessage(error, "架构预设目录载入失败，请确认本地 API 支持 /api/architecture-presets 后重试。"))}</div>`;
+  } finally {
+    state.architecturePresetsLoading = false;
+  }
+}
+
+async function architecturePresetDetail(id) {
+  if (state.architecturePresetDetails.has(id)) return state.architecturePresetDetails.get(id);
+  const payload = await apiRequest(`/architecture-presets/${encodeURIComponent(id)}`, { method: "GET", headers: {} });
+  const detail = architecturePresetDetailItem(payload);
+  state.architecturePresetDetails.set(id, detail);
+  return detail;
+}
+
+async function toggleArchitecturePresetDetails(id, button) {
+  if (state.selectedArchitecturePresetId === id) {
+    state.selectedArchitecturePresetId = null;
+    renderArchitecturePresets();
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "载入详情中…";
+  try {
+    await architecturePresetDetail(id);
+    state.selectedArchitecturePresetId = id;
+    renderArchitecturePresets();
+    dom.architecturePresetList.querySelector(`[data-architecture-preset-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
+  } catch (error) {
+    showOperationError("架构预设详情载入失败", error);
+    renderArchitecturePresets();
+  }
+}
+
+function normalizeArchitecturePresetHardware(detail) {
+  const hardware = deepClone(asObject(detail?.hardware));
+  if (!Object.keys(hardware).length) throw new Error("架构预设缺少 hardware，当前硬件未修改。");
+  requireScenarioSchemaV4(hardware, "architecture preset hardware");
+  hardware.name ??= componentPresetId(detail) || "preset-hardware";
+  hardware.metadata = asObject(hardware.metadata);
+  hardware.components = objectArray(hardware.components, "架构预设组件（hardware.components）");
+  hardware.links = objectArray(hardware.links, "架构预设链路（hardware.links）");
+  if (!hardware.components.length) throw new Error("架构预设不包含硬件组件，当前硬件未修改。");
+  const componentIds = hardware.components.map((component) => String(component.component_id || "").trim());
+  if (componentIds.some((id) => !id) || new Set(componentIds).size !== componentIds.length) {
+    throw new Error("架构预设的组件 ID 缺失或重复，当前硬件未修改。");
+  }
+  const components = new Map();
+  hardware.components.forEach((component, index) => {
+    requireScenarioSchemaV4(component, `architecture preset hardware.components[${index}]`, { inherited: true });
+    component.component_id = componentIds[index];
+    component.ports = objectArray(component.ports, `架构预设组件 ${component.component_id} 的端口（ports）`);
+    component.ports.forEach((port, portIndex) => requireScenarioSchemaV4(
+      port,
+      `architecture preset hardware.components[${index}].ports[${portIndex}]`,
+      { inherited: true },
+    ));
+    const portIds = component.ports.map((port) => String(port.port_id || "").trim());
+    if (portIds.some((id) => !id) || new Set(portIds).size !== portIds.length) {
+      throw new Error(`架构预设组件 ${component.component_id} 的端口 ID 缺失或重复。`);
+    }
+    components.set(component.component_id, new Set(portIds));
+  });
+  const linkIds = new Set();
+  hardware.links.forEach((link, linkIndex) => {
+    requireScenarioSchemaV4(link, `architecture preset hardware.links[${linkIndex}]`, { inherited: true });
+    const linkId = String(link.link_id || "").trim();
+    if (!linkId || linkIds.has(linkId)) throw new Error("架构预设的链路 ID 缺失或重复，当前硬件未修改。");
+    linkIds.add(linkId);
+    for (const [componentField, portField] of [["source_component", "source_port"], ["target_component", "target_port"]]) {
+      const componentId = String(link[componentField] || "");
+      const portId = String(link[portField] || "");
+      if (!components.has(componentId) || (portId && !components.get(componentId).has(portId))) {
+        throw new Error(`架构预设链路 ${linkId} 引用了未知的 ${componentField === "source_component" ? "源" : "目标"}组件或端口。`);
+      }
+    }
+  });
+  return hardware;
+}
+
+function collisionSafeArchitectureTopologyView(rawTopologyView, hardware) {
+  const componentIds = hardware.components.map((component) => component.component_id);
+  const view = Topology.normalizeTopologyView(rawTopologyView, componentIds);
+  const metrics = topologyLayoutMetrics();
+  const { nodeW, nodeH } = metrics;
+  const sizes = Object.fromEntries(componentIds.map((id) => [id, { width: nodeW, height: nodeH }]));
+  const fallback = Topology.layoutGraph(hardware.components, hardware.links, view.groups, sizes, {
+    nodeGap: metrics.nodeGap,
+    layerGap: Math.round(112 * layoutScaleForFont(state.settings.fontScale)),
+    rowGap: Math.round(64 * layoutScaleForFont(state.settings.fontScale)),
+  });
+  const placed = {};
+  let adjusted = false;
+  componentIds.forEach((id) => {
+    const desired = view.layout.positions[id] || fallback.positions[id] || { x: 42, y: 42 };
+    const resolved = Topology.resolveCollisionPlacement(placed, sizes, { [id]: desired }, {
+      gap: Math.round(14 * layoutScaleForFont(state.settings.fontScale)),
+      step: Math.round(22 * layoutScaleForFont(state.settings.fontScale)),
+      maxRings: 160,
+    });
+    placed[id] = resolved.positions[id];
+    adjusted = adjusted || resolved.adjusted;
+  });
+  view.layout.positions = placed;
+  view.layout.bounds = fallback.bounds;
+  return { view, adjusted };
+}
+
+function resetPlacementForArchitecturePreset(placement, hardwareName) {
+  placement.hardware_name = String(hardwareName || "");
+  placement.op_to_component = {};
+  placement.tensor_to_component = {};
+  placement.tensor_bytes = {};
+  placement.parallel = asObject(placement.parallel);
+  placement.parallel.rank_mapping = [];
+  placement.kv_policy = asObject(placement.kv_policy);
+  placement.kv_policy.cache_component = null;
+  placement.kv_policy.offload_component = null;
+  const metadata = asObject(placement.metadata);
+  placement.metadata = metadata;
+  metadata.ui = asObject(metadata.ui);
+  delete metadata.control_plane;
+  return placement;
+}
+
+function applyArchitecturePresetDetail(detail) {
+  if (!architecturePresetIsLoadable(detail)) throw new Error("该架构预设仅供查看，不能载入当前场景。");
+  const historyBefore = topologyHistorySnapshot();
+  if (!historyBefore) throw new Error("当前场景尚未准备好，无法替换硬件拓扑。");
+  const hardware = normalizeArchitecturePresetHardware(detail);
+  const rawTopologyView = Object.keys(asObject(detail.topology_view)).length
+    ? detail.topology_view
+    : asObject(hardware.metadata).topology_view;
+  const normalized = collisionSafeArchitectureTopologyView(rawTopologyView, hardware);
+  try {
+    state.scenario.hardware = hardware;
+    const rebuiltProfiles = resetArchitectureDependentProfiles(state.scenario);
+    resetPlacementForArchitecturePreset(state.scenario.placement, hardware.name);
+    state.topologyView = normalized.view;
+    state.nodePositions = normalized.view.layout.positions;
+    state.nodeSizes = {};
+    state.groupBounds = {};
+    state.selected = null;
+    state.selectedComponents = new Set();
+    state.selectedDisplayLinkId = null;
+    state.connectSource = null;
+    saveTopologyView();
+    commitTopologyHistory(historyBefore, `载入架构预设 ${componentPresetId(detail)}`, { mappingImpact: true });
+    const reason = `架构预设 ${componentPresetId(detail)} 已替换硬件拓扑；引用旧组件的算子、张量、KV 驻留与 Rank 映射已清空，硬件绑定 Profile 已重建或失效，需要复核 Profile 并重新生成映射。`;
+    markScenarioChanged("", { mappingImpact: true, mappingReason: reason });
+    requestAnimationFrame(() => {
+      renderTopology();
+      fitTopologyViewport();
+    });
+    return { adjusted: normalized.adjusted, hardware, rebuiltProfiles };
+  } catch (error) {
+    restoreTopologyHistorySnapshot(historyBefore, { restorePlacement: true });
+    throw error;
+  }
+}
+
+async function loadArchitectureFromPreset(id, button) {
+  button.disabled = true;
+  button.textContent = "正在载入…";
+  try {
+    const detail = await architecturePresetDetail(id);
+    if (!architecturePresetIsLoadable(detail)) throw new Error("该架构预设仅供查看，不能载入当前场景。");
+    const currentHardware = asObject(state.scenario?.hardware);
+    const hasCurrentHardware = asArray(currentHardware.components).length > 0 || asArray(currentHardware.links).length > 0;
+    if (hasCurrentHardware && typeof globalThis.confirm === "function" && !globalThis.confirm("载入架构预设会替换当前全部硬件组件与链路，清空引用旧组件的映射，并重建或失效硬件绑定 Profile。模型、负载与 Fusion 策略会保留。是否继续？")) {
+      renderArchitecturePresets();
+      return;
+    }
+    const result = applyArchitecturePresetDetail(detail);
+    dom.hardwarePresetsDialog.close("loaded");
+    toast("架构预设已载入", `${architecturePresetNames(detail).zh} · ${result.hardware.components.length} 个组件、${result.hardware.links.length} 条链路${result.adjusted ? "；重叠坐标已自动避让" : ""}。模型、负载与 Fusion 策略保持不变；硬件 Profile 已重建或失效，请复核后重新映射。`, "success", 8500);
+  } catch (error) {
+    showOperationError("架构预设载入失败", error);
+    renderArchitecturePresets();
+  }
+}
+
+function scheduleArchitecturePresetSearch() {
+  if (architecturePresetSearchTimer) window.clearTimeout(architecturePresetSearchTimer);
+  architecturePresetSearchTimer = window.setTimeout(renderArchitecturePresets, 140);
+}
+
+function protocolPresetEnvelopeItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  return asArray(payload?.items ?? payload?.presets ?? payload?.protocol_presets ?? payload?.results);
+}
+
+function protocolPresetDetailItem(payload) {
+  if (Object.keys(asObject(payload?.preset)).length) {
+    return {
+      ...asObject(payload.preset),
+      derivation: payload.derivation,
+      simulation_defaults: asObject(payload.simulation_defaults),
+      catalog: asObject(payload.catalog),
+    };
+  }
+  return asObject(payload?.item ?? payload?.preset ?? payload);
+}
+
+function protocolPresetBandwidthMarkup(preset) {
+  const bandwidth = asObject(preset?.bandwidth);
+  const show = (label, key) => {
+    const value = Number(bandwidth[key]);
+    return `<div><dt data-concept-help="bandwidth_semantics">${label}</dt><dd>${Number.isFinite(value) ? escapeHtml(formatBandwidthGbps(value)) : "未给固定值"}</dd></div>`;
+  };
+  return `<dl class="protocol-bandwidth-grid">${show("原始线路", "raw_gbps")}${show("单向有效", "effective_one_way_gbps")}${show("双向聚合", "aggregate_bidirectional_gbps")}</dl>`;
+}
+
+function protocolPresetCardMarkup(preset) {
+  const id = componentPresetId(preset);
+  const ioSpeed = asObject(preset?.io_speed);
+  return `<article class="component-preset-card protocol-preset-card" data-protocol-preset-id="${escapeHtml(id)}">
+    <header><div><span class="component-preset-kind" data-concept-help="protocol">${escapeHtml(String(preset.protocol || "协议"))} · ${escapeHtml(String(preset.version || "—"))}</span><h3>${escapeHtml(String(preset.name || id))}</h3><code>${escapeHtml(id)}</code></div><span class="evidence-chip">${escapeHtml(String(preset.organization || "—"))}</span></header>
+    <div class="component-preset-summary"><span>${escapeHtml(String(ioSpeed.value ?? "—"))} ${escapeHtml(String(ioSpeed.unit ?? ""))}</span><span>${escapeHtml(String(preset.transfer_unit_count ?? "—"))} ${escapeHtml(String(preset.transfer_unit || "unit"))}</span></div>
+    ${protocolPresetBandwidthMarkup(preset)}
+    <p class="protocol-bandwidth-scope"><strong>显示口径：</strong>${escapeHtml(String(preset.displayed_bandwidth_scope || "未声明"))}</p>
+    <p class="protocol-unit-semantics"><strong>通道语义：</strong>${escapeHtml(String(preset.transfer_unit_semantics || "未声明"))}</p>
+    <section class="component-preset-details"><div class="component-preset-detail-grid">
+      <section><h4>来源（Sources）</h4>${componentPresetSourceMarkup(preset)}</section>
+      <section class="component-preset-limitations"><h4>限制（Limitations）</h4><p>${escapeHtml(componentPresetListText(preset.limitations, "未声明限制"))}</p></section>
+    </div></section>
+    <div class="component-preset-actions"><button type="button" class="button button-primary" data-use-protocol-preset="${escapeHtml(id)}">选用并允许覆盖</button></div>
+  </article>`;
+}
+
+function filteredProtocolPresets() {
+  const query = dom.protocolPresetSearchInput.value.trim().toLocaleLowerCase();
+  const protocol = dom.protocolPresetProtocolFilter.value;
+  const organization = dom.protocolPresetOrganizationFilter.value;
+  return state.protocolPresets.filter((preset) => {
+    const haystack = [preset.id, preset.name, preset.protocol, preset.version, preset.organization, preset.transfer_unit_semantics].join(" ").toLocaleLowerCase();
+    return (!query || haystack.includes(query))
+      && (!protocol || preset.protocol === protocol)
+      && (!organization || preset.organization === organization);
+  });
+}
+
+function renderProtocolPresets() {
+  const items = filteredProtocolPresets();
+  dom.protocolPresetStatus.textContent = `显示 ${items.length} / ${state.protocolPresets.length} 个协议预设；带宽统一按单向 MB/s、GB/s 或 TB/s 展示。`;
+  dom.protocolPresetList.innerHTML = items.length ? items.map(protocolPresetCardMarkup).join("") : `<div class="preset-empty">没有匹配当前筛选条件的协议预设。</div>`;
+  $$('[data-use-protocol-preset]', dom.protocolPresetList).forEach((button) => button.addEventListener("click", () => { void useProtocolPreset(button.dataset.useProtocolPreset, button); }));
+  hydrateConceptHelp(dom.protocolPresetList);
+}
+
+function syncProtocolPresetFilters(payload, items) {
+  const filters = asObject(payload?.filters);
+  replaceFilterOptions(dom.protocolPresetProtocolFilter, "全部协议", asArray(filters.protocol).length ? filters.protocol : items.map((item) => item.protocol));
+  replaceFilterOptions(dom.protocolPresetOrganizationFilter, "全部组织", asArray(filters.organization).length ? filters.organization : items.map((item) => item.organization));
+}
+
+async function loadProtocolPresets() {
+  state.protocolPresetsLoading = true;
+  dom.protocolPresetStatus.textContent = "正在载入离线协议目录…";
+  dom.protocolPresetList.innerHTML = `<div class="preset-empty">正在载入…</div>`;
+  try {
+    const payload = await apiRequest("/protocol-presets", { method: "GET", headers: {} });
+    state.protocolPresets = protocolPresetEnvelopeItems(payload).filter((item) => Object.keys(asObject(item)).length);
+    state.protocolPresetsLoaded = true;
+    syncProtocolPresetFilters(payload, state.protocolPresets);
+    renderProtocolPresets();
+  } catch (error) {
+    dom.protocolPresetStatus.textContent = "通信协议目录载入失败。";
+    dom.protocolPresetList.innerHTML = `<div class="preset-empty is-error">${escapeHtml(chineseMessage(error, "请确认本地 API 支持 /api/protocol-presets。"))}</div>`;
+  } finally {
+    state.protocolPresetsLoading = false;
+  }
+}
+
+async function protocolPresetDetail(id) {
+  if (state.protocolPresetDetails.has(id)) return state.protocolPresetDetails.get(id);
+  const payload = await apiRequest(`/protocol-presets/${encodeURIComponent(id)}`, { method: "GET", headers: {} });
+  const detail = protocolPresetDetailItem(payload);
+  state.protocolPresetDetails.set(id, detail);
+  return detail;
+}
+
+async function useProtocolPreset(id, button) {
+  button.disabled = true;
+  button.textContent = "正在应用…";
+  try {
+    const detail = await protocolPresetDetail(id);
+    if (!Array.from(dom.protocolSelect.options).some((option) => option.value === detail.protocol)) throw new Error(`当前连接工具不支持协议 ${detail.protocol}`);
+    dom.protocolSelect.value = detail.protocol;
+    syncProtocolManualControls(asObject(asObject(detail.simulation_defaults).link), id);
+    state.connectSource = null;
+    dom.connectionHint.textContent = state.connectMode
+      ? uiText("连接模式 · {protocol} · 请选择第一个组件", "Connect mode · {protocol} · select the first component", { protocol: detail.protocol })
+      : uiText("选择节点或链路查看属性", "Select a node or link to inspect its properties");
+    dom.protocolPresetsDialog.close("selected");
+    toast("协议预设已选用", `${detail.name || id} · 已填入单向仿真默认值，可在连接菜单手动覆盖。`, "success", 5200);
+  } catch (error) {
+    showOperationError("协议预设应用失败", error);
+    renderProtocolPresets();
+  }
+}
+
+async function openProtocolPresetsDialog() {
+  closeToolbarMenus();
+  showModalDialog(dom.protocolPresetsDialog, dom.protocolCatalogButton, dom.protocolPresetSearchInput);
+  if (!state.protocolPresetsLoaded && !state.protocolPresetsLoading) await loadProtocolPresets();
+  else renderProtocolPresets();
+}
+
+function scheduleProtocolPresetSearch() {
+  if (protocolPresetSearchTimer) window.clearTimeout(protocolPresetSearchTimer);
+  protocolPresetSearchTimer = window.setTimeout(renderProtocolPresets, 140);
+}
+
+function resetModelPresetsDialogScroll() {
+  const shell = dom.modelPresetsDialog ? $(".preset-dialog-shell", dom.modelPresetsDialog) : null;
+  for (const element of [
+    dom.modelPresetsDialog,
+    shell,
+    dom.localPresetPanel,
+    dom.remotePresetPanel,
+    dom.presetList,
+    dom.remotePresetList,
+  ]) {
+    if (element && "scrollTop" in element) element.scrollTop = 0;
+  }
+}
+
+async function openModelPresetsDialog() {
+  const extremeScale = fontScaleBand(state.settings.fontScale) === "extreme";
+  showModalDialog(
+    dom.modelPresetsDialog,
+    dom.modelPresetsButton,
+    extremeScale ? dom.closeModelPresetsButton : dom.presetSearchInput,
+  );
+  setPresetMode("local");
+  resetModelPresetsDialogScroll();
+  requestAnimationFrame(() => {
+    resetModelPresetsDialogScroll();
+    requestAnimationFrame(resetModelPresetsDialogScroll);
+  });
+  if (!state.modelPresetsLoaded && !state.modelPresetsLoading) await loadModelPresets();
+}
+
+function togglePresetDialogFullscreen(force = null) {
+  const active = typeof force === "boolean"
+    ? force
+    : !dom.modelPresetsDialog.classList.contains("is-viewport-fullscreen");
+  dom.modelPresetsDialog.classList.toggle("is-viewport-fullscreen", active);
+  dom.presetFullscreenButton.setAttribute("aria-pressed", String(active));
+  dom.presetFullscreenButton.textContent = active ? "退出全屏（Restore）" : "全屏（Fullscreen）";
+}
+
+function setPresetMode(mode) {
+  state.presetMode = mode === "remote" ? "remote" : "local";
+  const remote = state.presetMode === "remote";
+  dom.localPresetPanel.hidden = remote;
+  dom.remotePresetPanel.hidden = !remote;
+  dom.localPresetTab.classList.toggle("is-active", !remote);
+  dom.remotePresetTab.classList.toggle("is-active", remote);
+  dom.localPresetTab.setAttribute("aria-selected", String(!remote));
+  dom.remotePresetTab.setAttribute("aria-selected", String(remote));
+  if (remote) dom.remotePresetQueryInput.focus();
+}
+
+function modelPresetPageQuery(offset = 0) {
+  const params = new URLSearchParams({
+    limit: String(state.presetCatalog.limit),
+    offset: String(Math.max(0, offset)),
+  });
+  const filters = {
+    query: dom.presetSearchInput.value.trim(),
+    family: dom.presetFamilyFilter.value,
+    model_kind: dom.presetArchitectureFilter.value,
+    support_level: dom.presetSupportFilter.value,
+  };
+  Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+  return `?${params.toString()}`;
+}
+
+function syncPresetFamilies(payload) {
+  const previous = dom.presetFamilyFilter.value;
+  const facetValues = (name) => {
+    const facets = asObject(payload?.facets);
+    return asArray(facets[name])
+      .map((item) => String(asObject(item).value || ""))
+      .filter(Boolean);
+  };
+  const families = Array.from(new Set(facetValues("family"))).sort((a, b) => a.localeCompare(b));
+  dom.presetFamilyFilter.replaceChildren(new Option("全部系列（All Families）", ""), ...families.map((family) => new Option(String(family), String(family))));
+  if (families.includes(previous)) dom.presetFamilyFilter.value = previous;
+  else dom.presetFamilyFilter.value = "";
+  const previousKind = dom.presetArchitectureFilter.value;
+  const modelKinds = Array.from(new Set(facetValues("model_kind")))
+    .sort((a, b) => a.localeCompare(b));
+  const kindLabels = { dense: "Dense", moe: "MoE", state_space: "State Space", hybrid: "Hybrid", multimodal: "Multimodal" };
+  dom.presetArchitectureFilter.replaceChildren(
+    new Option("全部结构（All Model Kinds）", ""),
+    ...modelKinds.map((kind) => new Option(kindLabels[kind] || kind.replaceAll("_", " "), kind)),
+  );
+  if (modelKinds.includes(previousKind)) dom.presetArchitectureFilter.value = previousKind;
+  else dom.presetArchitectureFilter.value = "";
+}
+
+function syncPresetPagination() {
+  const { offset, nextOffset } = state.presetCatalog;
+  dom.presetPreviousButton.disabled = state.modelPresetsLoading || offset <= 0;
+  dom.presetNextButton.disabled = state.modelPresetsLoading || nextOffset == null;
+  dom.presetPagination.setAttribute("aria-busy", String(state.modelPresetsLoading));
+}
+
+async function loadModelPresets({ offset = 0, selectedId = null } = {}) {
+  if (presetSearchTimer) {
+    window.clearTimeout(presetSearchTimer);
+    presetSearchTimer = null;
+  }
+  const generation = ++presetCatalogGeneration;
+  presetCatalogController?.abort();
+  const controller = new AbortController();
+  presetCatalogController = controller;
+  state.modelPresetsLoading = true;
+  syncPresetPagination();
+  dom.presetStatus.textContent = "正在载入模型预设…";
+  dom.presetList.innerHTML = `<div class="preset-empty">正在从本地分页目录读取轻量元数据。</div>`;
+  try {
+    const payload = await apiRequest("/model-presets" + modelPresetPageQuery(offset), { method: "GET", headers: {}, signal: controller.signal });
+    if (generation !== presetCatalogGeneration) return;
+    if (!Array.isArray(payload?.items)) throw new Error("V4 模型预设 API 必须返回分页 items。");
+    const items = payload.items;
+    state.modelPresets = items.filter((preset) => preset && typeof preset === "object");
+    const limit = Math.max(1, Number(payload?.limit) || state.presetCatalog.limit);
+    const total = Math.max(state.modelPresets.length, Number(payload?.total) || state.modelPresets.length);
+    const resolvedOffset = Math.max(0, Number(payload?.offset) || 0);
+    state.presetCatalog = {
+      total,
+      offset: resolvedOffset,
+      limit,
+      nextOffset: payload?.next_offset == null ? null : Number(payload.next_offset),
+      catalogVersion: String(payload?.catalog_version || ""),
+      cutoffAt: String(payload?.cutoff_at || ""),
+    };
+    state.selectedPresetId = selectedId || state.selectedPresetId;
+    state.modelPresetsLoaded = true;
+    syncPresetFamilies(payload);
+    state.modelPresetsLoading = false;
+    renderModelPresets();
+  } catch (error) {
+    if (error?.name === "AbortError" || generation !== presetCatalogGeneration) return;
+    dom.presetStatus.textContent = "模型预设载入失败。";
+    const message = chineseMessage(error, "无法读取模型预设，请稍后重试。");
+    dom.presetList.innerHTML = `<div class="preset-empty is-error">无法读取模型预设：${escapeHtml(message)}</div>`;
+    toast("模型预设载入失败", message, "error", 6500);
+  } finally {
+    if (generation === presetCatalogGeneration) {
+      state.modelPresetsLoading = false;
+      presetCatalogController = null;
+      syncPresetPagination();
+    }
+  }
+}
+
+function presetFactValue(preset, keys, fallback = "—") {
+  for (const key of keys) {
+    const value = preset[key];
+    if (Array.isArray(value)) return value.length ? joinChineseList(value) : fallback;
+    if (value && typeof value === "object") return JSON.stringify(value);
+    if (value !== undefined && value !== null && value !== "") return String(value);
+  }
+  return fallback;
+}
+
+function joinChineseList(values) {
+  const items = asArray(values).map(String).map((value) => value.trim()).filter(Boolean);
+  return items
+    .map((value, index) => index < items.length - 1 ? value.replace(/[。；;]+$/u, "") : value)
+    .join("；");
+}
+
+function presetCatalogValue(value) {
+  const text = String(value ?? "");
+  return {
+    unspecified: "未公开（Unspecified）",
+    bundled: "内置目录（Bundled）",
+    metadata_only: "仅元数据（Metadata Only）",
+    text_backbone_only: "仅文本主干（Text Backbone Only）",
+    full_language_model: "完整语言模型（Full Language Model）",
+    open_weight: "开放权重（Open Weight）",
+    open_source: "开源（Open Source）",
+  }[text] || text;
+}
+
+function compactPresetNumber(value) {
+  const number = Number(value);
+  return value !== "" && Number.isFinite(number) ? formatNumber(number, 4) : String(value ?? "—");
+}
+
+function modelPresetCardMarkup(preset, selectedId = "") {
+  const id = presetId(preset);
+  const level = presetSupportLevel(preset);
+  const disabled = level === "out_of_domain" || !id;
+  const familyName = presetText(preset, ["family", "model_family"]);
+  const name = presetText(preset, ["display_name", "name"], id || "未命名预设");
+  const scale = presetCatalogValue(presetText(preset, ["scale", "parameter_scale", "parameters", "parameter_count"]));
+  const layerCount = compactPresetNumber(presetFactValue(preset, ["layer_count", "num_layers", "layers"]));
+  const context = compactPresetNumber(presetText(preset, ["context_length", "max_sequence_length", "context_window"]));
+  const license = [presetText(preset, ["license_category", "license"]), presetCatalogValue(presetText(preset, ["openness"], ""))].filter(Boolean).join(" · ");
+  const source = presetCatalogValue(presetText(preset, ["source", "source_name", "source_repo", "source_url"]));
+  const architecture = presetFactValue(preset, ["architecture", "architecture_type"]);
+  const modelKind = presetFactValue(preset, ["model_kind", "model_type", "kind"]);
+  const limitations = presetFactValue(preset, ["limitations", "limitation"]);
+  const unsupported = presetFactValue(preset, ["unsupported_subgraphs", "unsupported", "unsupported_features"]);
+  const coverage = presetCatalogValue(presetFactValue(preset, ["coverage", "coverage_notes", "supported_features"]));
+  const notes = presetFactValue(preset, ["notes", "note"]);
+  const evidence = asObject(preset.architecture_evidence);
+  const evidenceStatus = String(evidence.status || "");
+  const evidenceLabel = architectureEvidenceCopy(evidenceStatus);
+  const evidenceSource = String(evidence.source_url || "");
+  const evidenceHref = /^https:\/\/[^\s]+$/i.test(evidenceSource) ? evidenceSource : "";
+  const evidenceNotes = String(evidence.notes || "—");
+  const evidenceUncertainty = String(evidence.uncertainty || "—");
+  const outOfDomainNotice = level === "out_of_domain"
+    ? `<p class="preset-ood-notice" role="alert"><strong>超出适用域，不能应用。</strong>限制详情已展开，请先确认适用边界。</p>`
+    : "";
+  return `<article class="preset-card support-${escapeHtml(level)} ${selectedId === id ? "is-selected" : ""}" data-preset-id="${escapeHtml(id)}">
+    <div class="preset-card-head"><h3>${escapeHtml(name)}</h3><span class="preset-badge-stack"><span class="support-badge">${escapeHtml(presetSupportCopy(level))}</span><span class="architecture-evidence-badge status-${escapeHtml(evidenceStatus || "unknown")}">${escapeHtml(evidenceLabel)}</span></span></div>
+    <dl class="preset-facts preset-primary-facts">
+      <div><dt>规模（Scale）</dt><dd>${escapeHtml(scale)}</dd></div>
+      <div><dt>架构（Architecture）</dt><dd>${escapeHtml(architecture)}</dd></div>
+      <div><dt>上下文（Context）</dt><dd>${escapeHtml(context)}</dd></div>
+    </dl>
+    ${outOfDomainNotice}
+    <details class="preset-details" ${level === "out_of_domain" ? "open" : ""}>
+      <summary>来源、许可与限制（Details）</summary>
+      <dl class="preset-facts preset-detail-facts">
+        <div><dt>系列（Family）</dt><dd>${escapeHtml(familyName)}</dd></div>
+        <div><dt>层数（Layers）</dt><dd>${escapeHtml(layerCount)}</dd></div>
+        <div><dt>模型类型（Model Kind）</dt><dd>${escapeHtml(modelKind)}</dd></div>
+        <div><dt>许可证类别（License）</dt><dd>${escapeHtml(license)}</dd></div>
+        <div class="span-all"><dt>预设 ID（Preset ID）</dt><dd><code>${escapeHtml(id)}</code></dd></div>
+        <div class="span-all"><dt>来源（Source）</dt><dd>${escapeHtml(source)}</dd></div>
+        <div class="span-all"><dt>架构证据（Architecture Evidence）</dt><dd>${escapeHtml(evidenceLabel)}</dd></div>
+        <div class="span-all"><dt>证据来源（Evidence Source）</dt><dd>${evidenceHref ? `<a class="preset-evidence-link" href="${escapeHtml(evidenceHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(evidenceSource)}</a>` : escapeHtml(evidenceSource || "—")}</dd></div>
+        <div class="span-all"><dt>核验说明（Verification Notes）</dt><dd>${escapeHtml(evidenceNotes)}</dd></div>
+        <div class="span-all"><dt>不确定性（Uncertainty）</dt><dd>${escapeHtml(evidenceUncertainty)}</dd></div>
+        <div class="span-all"><dt>覆盖范围（Coverage）</dt><dd>${escapeHtml(coverage)}</dd></div>
+        <div class="span-all"><dt>配置摘要（Config Summary）</dt><dd>${escapeHtml(notes)}</dd></div>
+        <div class="span-all"><dt>限制（Limitations）</dt><dd>${escapeHtml(limitations)}</dd></div>
+        <div class="span-all"><dt>不支持（Unsupported）</dt><dd>${escapeHtml(unsupported)}</dd></div>
+      </dl>
+    </details>
+    <div class="preset-card-footer"><button type="button" class="button ${disabled ? "button-quiet" : "button-primary"}" data-apply-preset="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>${disabled ? "不可应用（Out of Domain）" : "应用模型预设"}</button></div>
+  </article>`;
+}
+
+function renderModelPresets() {
+  const { total, offset, limit, nextOffset, catalogVersion, cutoffAt } = state.presetCatalog;
+  const page = Math.floor(offset / limit) + 1;
+  const pages = Math.max(1, Math.ceil(total / limit));
+  dom.presetStatus.textContent = `本地目录 ${offset + (state.modelPresets.length ? 1 : 0)}–${offset + state.modelPresets.length} / ${total} · catalog ${catalogVersion}${cutoffAt ? ` · cutoff ${cutoffAt}` : ""}`;
+  dom.presetPageStatus.textContent = `第 ${page} / ${pages} 页（Page ${page}/${pages}）`;
+  syncPresetPagination();
+  if (!state.modelPresets.length) {
+    dom.presetList.innerHTML = `<div class="preset-empty">没有匹配当前筛选条件的模型预设。</div>`;
+    return;
+  }
+  dom.presetList.innerHTML = state.modelPresets
+    .map((preset) => modelPresetCardMarkup(preset, state.selectedPresetId))
+    .join("");
+  $$('[data-apply-preset]', dom.presetList).forEach((button) => button.addEventListener("click", () => applyModelPreset(button.dataset.applyPreset, button)));
+}
+
+function schedulePresetCatalogSearch() {
+  if (presetSearchTimer) window.clearTimeout(presetSearchTimer);
+  presetSearchTimer = window.setTimeout(() => loadModelPresets({ offset: 0 }), 260);
+}
+
+async function searchRemoteModelPresets() {
+  const query = dom.remotePresetQueryInput.value.trim();
+  if (!query) return;
+  dom.remotePresetStatus.textContent = "正在主动搜索在线目录…";
+  dom.remotePresetList.innerHTML = `<div class="preset-empty">在线搜索中。</div>`;
+  try {
+    const payload = await apiRequest(`/model-presets/remote-search?query=${encodeURIComponent(query)}&limit=12`, { method: "GET", headers: {} });
+    state.remotePresets = asArray(payload?.items ?? payload?.candidates ?? payload?.results ?? payload).filter((item) => item && typeof item === "object");
+    renderRemoteModelPresets();
+  } catch (error) {
+    dom.remotePresetStatus.textContent = "在线搜索失败。";
+    dom.remotePresetList.innerHTML = `<div class="preset-empty is-error">${escapeHtml(chineseMessage(error, "在线模型搜索失败，请检查网络后重试。"))}</div>`;
+  }
+}
+
+function remoteModelPresetCardMarkup(preset) {
+  const repoId = presetText(preset, ["repo_id", "id", "source_repo"], "");
+  const revision = presetText(preset, ["revision", "sha"], "");
+  const name = presetText(preset, ["display_name", "name"], repoId || "未命名在线预设");
+  const source = presetText(preset, ["source", "provider", "host"], "remote");
+  const license = presetText(preset, ["license", "license_category"]);
+  const updated = presetText(preset, ["updated_at", "last_modified", "modified_at"]);
+  return `<article class="preset-card remote-preset-card">
+    <div class="preset-card-head"><div><h3>${escapeHtml(name)}</h3><code>${escapeHtml(repoId)}</code></div></div>
+    <details class="preset-details remote-preset-details">
+      <summary>来源、许可与修订（Details）</summary>
+      <dl class="preset-facts preset-detail-facts">
+        <div><dt>来源（Source）</dt><dd>${escapeHtml(source)}</dd></div>
+        <div><dt>许可证（License）</dt><dd>${escapeHtml(license)}</dd></div>
+        <div><dt>更新时间（Updated）</dt><dd>${escapeHtml(updated)}</dd></div>
+        <div class="span-all"><dt>修订（Revision）</dt><dd>${escapeHtml(revision)}</dd></div>
+      </dl>
+    </details>
+    <div class="preset-card-footer"><button type="button" class="button button-primary" data-import-repo="${escapeHtml(repoId)}" data-import-revision="${escapeHtml(revision)}" ${repoId ? "" : "disabled"}>导入到本地（Import）并应用（Apply）</button></div>
+  </article>`;
+}
+
+function renderRemoteModelPresets() {
+  dom.remotePresetStatus.textContent = `在线候选 ${state.remotePresets.length} 个。导入会写入本地目录；能够生成执行结构时也会应用到当前场景。`;
+  if (!state.remotePresets.length) {
+    dom.remotePresetList.innerHTML = `<div class="preset-empty">没有在线候选。</div>`;
+    return;
+  }
+  dom.remotePresetList.innerHTML = state.remotePresets.map(remoteModelPresetCardMarkup).join("");
+  $$('[data-import-repo]', dom.remotePresetList).forEach((button) => button.addEventListener("click", () => importModelPreset(button.dataset.importRepo, button.dataset.importRevision, button)));
+}
+
+function presetLimitationsText(preset) {
+  const limitations = asArray(preset?.limitations).map(String).filter(Boolean);
+  const unsupported = asArray(preset?.unsupported_subgraphs).map(String).filter(Boolean);
+  return joinChineseList([...limitations, ...unsupported]) || "此预设不能生成可执行的模型结构。";
+}
+
+function presetMaterializationReadiness(payload) {
+  const preset = asObject(payload?.preset);
+  const level = presetSupportLevel(preset);
+  if (!new Set(["exact", "analytical_approximation"]).has(level)) {
+    return { ready: false, level, code: "preset_out_of_domain", reason: `此预设超出适用域（Out of Domain）：${presetLimitationsText(preset)}` };
+  }
+  const model = asObject(payload?.model);
+  let graph;
+  try {
+    graph = normalizeModelGraphPayload(model.graph || payload?.graph, model);
+  } catch (error) {
+    return { ready: false, level, code: "preset_not_materializable", reason: `预设无法生成可执行结构：${chineseMessage(error, presetLimitationsText(preset))}` };
+  }
+  const graphReady = graph.executable !== false && graph.operators.length > 0;
+  if (!model.name || !graphReady) {
+    return { ready: false, level, code: "preset_not_materializable", reason: `预设无法生成可执行结构：${presetLimitationsText(preset)}` };
+  }
+  return { ready: true, level, code: "", reason: "" };
+}
+
+function restorePresetActionButton(button, previousText) {
+  if (!button) return;
+  button.disabled = false;
+  button.textContent = previousText;
+}
+
+function resetModelGraphForPreset(graphValue) {
+  const graph = graphValue;
+  graph.attributes = asObject(graph.attributes);
+  const previousUi = asObject(graph.attributes.ui);
+  const collapsedGroups = asArray(asObject(previousUi.detail).collapsed_groups).length
+    ? asArray(previousUi.detail.collapsed_groups).map(String)
+    : asArray(graph.operators).filter((item) => item.op_kind === "layer_group").map((item) => item.operator_id);
+  graph.attributes.ui = {
+    mode: "overview",
+    detail: { positions: {}, viewport: {}, collapsed_groups: collapsedGroups, focus_group_id: "", focus_operator_id: "" },
+    overview: { positions: {}, viewport: {}, collapsed_groups: collapsedGroups, inline_positions: {} },
+  };
+  state.modelGraphEditor = {
+    selectedOperatorId: null,
+    selectedOverviewId: null,
+    connectSource: null,
+    connectMode: false,
+    connectPreview: null,
+    connectPointer: null,
+    connectPreviewWatchdog: null,
+    suppressPortClick: false,
+    diagnostics: [],
+    history: { undo: [], redo: [], restoring: false },
+    drag: null,
+    pan: null,
+    layoutKey: "",
+    overviewLayoutKey: "",
+    overviewCanvasWidth: 0,
+    overviewResizeTarget: 0,
+  };
+  return graph;
+}
+
+function applyPresetDetailToScenario(payload) {
+  const preset = asObject(payload?.preset);
+  const readiness = presetMaterializationReadiness(payload);
+  const level = readiness.level;
+  if (!readiness.ready) {
+    const error = new Error(`${readiness.reason}；当前模型未被修改。`);
+    error.code = readiness.code;
+    throw error;
+  }
+  const nextModel = deepClone(asObject(payload?.model));
+  requireScenarioSchemaV4(nextModel, "model preset");
+  normalizeV4ModelAuthoring(nextModel, nextModel.graph || payload?.graph);
+  if (!nextModel.name || nextModel.graph.executable === false) {
+    const error = new Error(`预设无法生成可执行结构，当前模型未被修改：${presetLimitationsText(preset)}`);
+    error.code = "preset_not_materializable";
+    throw error;
+  }
+  const removedByGroup = { op_to_component: 0, tensor_to_component: 0, tensor_bytes: 0 };
+  delete asObject(state.scenario.placement.metadata).control_plane;
+  const layerToStage = clearParallelLayerToStage(state.scenario.placement);
+  resetModelGraphForPreset(nextModel.graph);
+  state.scenario.model = nextModel;
+  state.scenario.placement.model_name = nextModel.name;
+  markScenarioChanged();
+  return { preset, level, nextModel, removedByGroup, layerToStage };
+}
+
+function presetAppliedToastText(applied, subject = "") {
+  const modelName = String(subject || applied?.nextModel?.name || "模型预设");
+  const removedTotal = Object.values(asObject(applied?.removedByGroup))
+    .reduce((total, count) => total + (Number(count) || 0), 0);
+  const removedStages = Number(applied?.layerToStage?.removed) || 0;
+  return `${modelName} · ${presetSupportCopy(applied?.level)}；已清理 ${removedTotal} 条逐层映射 / ${removedStages} 条 PP 分段；并行策略与通用映射已保留。运行时放置将在内部控制平面需要时重新物化。`;
+}
+
+async function importModelPreset(repoId, revision = "", button = null) {
+  const id = String(repoId || "").trim();
+  if (!id) return;
+  const previous = button?.textContent;
+  if (button) { button.disabled = true; button.textContent = "正在导入（Importing）…"; }
+  dom.remotePresetStatus.textContent = `正在导入 ${id}…`;
+  try {
+    const payload = await apiRequest("/model-presets/import", { method: "POST", body: JSON.stringify({ repo_id: id, ...(revision ? { revision } : {}) }) });
+    const importedId = presetId(payload?.preset || payload) || String(payload?.id || id);
+    state.selectedPresetId = importedId;
+    dom.presetSearchInput.value = importedId;
+    setPresetMode("local");
+    await loadModelPresets({ offset: 0, selectedId: importedId });
+    dom.presetList.querySelector(`[data-preset-id="${CSS.escape(importedId)}"]`)?.scrollIntoView({ block: "nearest" });
+    const readiness = presetMaterializationReadiness(payload);
+    if (!readiness.ready) {
+      dom.remotePresetStatus.textContent = `已导入元数据，但不可应用：${readiness.reason}`;
+      restorePresetActionButton(button, previous);
+      toast("预设仅导入了元数据", readiness.reason, "warning", 9000);
+      return;
+    }
+    const applied = applyPresetDetailToScenario(payload);
+    dom.modelPresetsDialog.close("imported-applied");
+    toast("模型预设已导入并应用", presetAppliedToastText(applied, applied.nextModel.name || importedId), "success", 6500);
+  } catch (error) {
+    if (error?.code === "preset_out_of_domain" || error?.code === "preset_not_materializable") {
+      const message = chineseMessage(error, "该预设当前不能生成执行结构。");
+      dom.remotePresetStatus.textContent = `已导入元数据，但不可应用：${message}`;
+      restorePresetActionButton(button, previous);
+      toast("预设不能应用", message, "warning", 9000);
+      return;
+    }
+    const message = chineseMessage(error, "模型预设导入失败，请检查仓库 ID 和网络连接。");
+    dom.remotePresetStatus.textContent = `导入失败：${message}`;
+    restorePresetActionButton(button, previous);
+    toast("无法导入模型预设", message, "error", 7000);
+  }
+}
+
+async function applyModelPreset(id, button) {
+  if (!state.scenario || !id) return;
+  button.disabled = true;
+  const previousText = button.textContent;
+  button.textContent = "正在应用…";
+  try {
+    const payload = await apiRequest(`/model-presets/${encodeURIComponent(id)}`, { method: "GET", headers: {} });
+    const applied = applyPresetDetailToScenario(payload);
+    dom.modelPresetsDialog.close("applied");
+    toast("模型预设已应用", presetAppliedToastText(applied), "success", 6500);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = previousText;
+    toast("无法应用模型预设", chineseMessage(error, "模型预设无法应用到当前场景。"), "error", 7000);
+  }
+}
+
+const MODEL_OPERATOR_LABELS = Object.freeze({
+  input: "输入（Input）", model_input: "模型输入（Model Input）", embedding: "词嵌入（Embedding）", layer_group: "重复 Block 组（Repeated Block Group）",
+  rms_norm: "RMS 归一化（RMS Norm）", layer_norm: "层归一化（Layer Norm）", attention: "全注意力（Full Attention）", self_attention: "自注意力（Self Attention）", full_attention: "全注意力（Full Attention）",
+  linear_attention: "线性注意力（Linear Attention）", residual_add: "残差相加（Residual Add）", dense_mlp: "稠密 MLP（Dense MLP）",
+  moe_router: "MoE 路由器（MoE Router）", experts: "专家模块（Experts）", moe_experts: "MoE 专家模块（MoE Experts）", shared_expert: "共享专家（Shared Expert）", moe_combine: "MoE 结果合并（MoE Combine）",
+  final_norm: "最终归一化（Final Norm）", lm_head: "语言模型头（LM Head）", mtp_head: "多 Token 预测头（MTP Head）",
+  mtp_prediction_layer: "多 Token 预测层（MTP Prediction Layer）", mtp_aux_head: "多 Token 辅助头（MTP Auxiliary Head）",
+  output: "输出（Output）", model_output: "模型输出（Model Output）",
+  linear: "线性层（Linear）", transform: "显式变换（Transform）",
+});
+
+const MODEL_OVERVIEW_PATTERN_LABELS = Object.freeze({
+  "Linear Attention Block": ["线性注意力 Block", "Linear Attention Block"],
+  "Full Attention Block": ["全注意力 Block", "Full Attention Block"],
+  "Decoder Block": ["解码器 Block", "Decoder Block"],
+  "Linear Attention MoE Block": ["线性注意力 MoE Block", "Linear Attention MoE Block"],
+  "Full Attention MoE Block": ["全注意力 MoE Block", "Full Attention MoE Block"],
+  "Decoder MoE Block": ["解码器 MoE Block", "Decoder MoE Block"],
+});
+
+function modelOverviewPatternLabel(partValue) {
+  const part = asObject(partValue);
+  const moeSuffix = part.ffn_kind === "moe" ? " MoE" : "";
+  if (part.mixer_kind === "linear_attention") return uiText(`线性注意力${moeSuffix} Block`, `Linear Attention${moeSuffix} Block`);
+  if (part.mixer_kind === "full_attention") return uiText(`全注意力${moeSuffix} Block`, `Full Attention${moeSuffix} Block`);
+  const label = String(part.label || (part.ffn_kind === "moe" ? "Decoder MoE Block" : "Decoder Block"));
+  const known = MODEL_OVERVIEW_PATTERN_LABELS[label];
+  if (known) return uiText(known[0], known[1]);
+  return /^[\x00-\x7F]+$/.test(label) ? uiText("模型 Block", label) : label;
+}
+
+function modelOverviewStackSummary(nodeValue) {
+  const node = asObject(nodeValue);
+  const pattern = asArray(node.pattern);
+  const parts = pattern.map((part) => `${modelOverviewPatternLabel(part)} ×${part.repeat}`);
+  const repetitions = Math.max(1, Number(node.pattern_repetitions) || 1);
+  if (repetitions > 1 && parts.length > 1) return `[${parts.join(" + ")}] ×${repetitions}`;
+  if (repetitions > 1 && parts.length === 1) return `${parts[0]} ×${repetitions}`;
+  return parts.join(" + ") || String(node.summary || "");
+}
+
+function normalizedModelShape(value) {
+  return ModelGraph.normalizeShape(value);
+}
+
+function modelShapeText(shape) {
+  const dimensions = normalizedModelShape(shape);
+  return dimensions.length ? dimensions.join(" × ") : uiText("未声明", "Undeclared");
+}
+
+function modelPortDirectionLabel(direction) {
+  const labels = {
+    input: ["输入", "Input"],
+    output: ["输出", "Output"],
+    weight: ["权重", "Weight"],
+  };
+  const pair = labels[String(direction || "").toLowerCase()];
+  return pair ? uiText(pair[0], pair[1]) : String(direction || uiText("端口", "Port"));
+}
+
+function modelPortCompatibility(outputPort, inputPort) {
+  return ModelGraph.modelPortCompatibility(outputPort, inputPort);
+}
+
+function normalizeModelGraphPayload(payloadValue, modelValue = {}) {
+  const root = asObject(payloadValue);
+  const model = asObject(modelValue);
+  const candidate = asObject(root.graph_id ? root : asObject(root.model).graph || root.graph || model.graph);
+  if (!Object.keys(candidate).length) throw new Error("V4 model.graph 是必填的唯一执行定义。");
+  return ModelGraph.normalizeModelGraph(candidate, model);
+}
+
+function modelGraphEdges(graphValue) {
+  return ModelGraph.modelGraphEdges(normalizeModelGraphPayload(graphValue));
+}
+
+function modelGraphLayerSpecs(graphValue) {
+  const projection = ModelGraph.graphToLayerSpecs(graphValue, { schema_version: AUTHORING_SCHEMA_VERSION });
+  if (!projection.ok) {
+    const error = new Error(projection.reason || "模型语义组件图无法生成执行 layer specs。");
+    error.code = projection.code || "model_graph_projection_failed";
+    throw error;
+  }
+  return projection.layer_specs;
+}
+
+function modelExecutionLayerIsAuxiliary(layerValue) {
+  const layer = asObject(layerValue);
+  const kind = String(layer.kind || layer.op_kind || "").toLowerCase();
+  const layerId = String(layer.layer_id || "");
+  const metadata = asObject(layer.metadata);
+  return kind.startsWith("mtp_")
+    || kind.includes("mtp_prediction")
+    || kind.includes("aux_head")
+    || layerId.startsWith("mtp.")
+    || String(metadata.branch || metadata.role || "").toLowerCase() === "mtp";
+}
+
+function modelExecutionLayerSpecs(modelValue) {
+  const model = asObject(modelValue);
+  const graph = Object.keys(asObject(model.graph)).length
+    ? model.graph
+    : (model.graph_id ? model : null);
+  if (!graph) {
+    const error = new Error("V4 model.graph 是必填的唯一执行定义。");
+    error.code = "model_graph_missing";
+    throw error;
+  }
+  return modelGraphLayerSpecs(graph).filter((layer) => !modelExecutionLayerIsAuxiliary(layer));
+}
+
+function modelExecutionLayerSummary(modelValue) {
+  try {
+    const layers = modelExecutionLayerSpecs(modelValue);
+    return { count: layers.length, reason: "" };
+  } catch (error) {
+    return {
+      count: null,
+      reason: chineseMessage(error, "模型语义组件图无法投影为执行层。"),
+    };
+  }
+}
+
+function ensureScenarioModelGraph(model = state.scenario?.model) {
+  if (!model) return null;
+  model.graph = normalizeModelGraphPayload(model.graph, model);
+  return model.graph;
+}
+
+function modelGraphUi(graph = ensureScenarioModelGraph()) {
+  graph.attributes = asObject(graph.attributes);
+  graph.attributes.ui = asObject(graph.attributes.ui);
+  const ui = graph.attributes.ui;
+  // Semantic graph authority and overview view state remain separate. Group
+  // collapse, member coordinates, and viewport are persisted but never dirty
+  // the scenario or invalidate placement.
+  ui.mode = ["overview", "focus"].includes(ui.mode) ? ui.mode : "overview";
+  ui.detail = asObject(ui.detail);
+  ui.detail.positions = asObject(ui.detail.positions);
+  ui.detail.viewport = asObject(ui.detail.viewport);
+  ui.detail.viewport.scale = Math.max(0.25, Math.min(2.5, Number(ui.detail.viewport.scale) || 1));
+  ui.detail.collapsed_groups = asArray(ui.detail.collapsed_groups).map(String);
+  ui.detail.focus_group_id = String(ui.detail.focus_group_id || "");
+  ui.detail.focus_operator_id = String(ui.detail.focus_operator_id || "");
+  ui.overview = asObject(ui.overview);
+  ui.overview.positions = asObject(ui.overview.positions);
+  ui.overview.viewport = asObject(ui.overview.viewport);
+  ui.overview.viewport.scale = Math.max(0.25, Math.min(2.5, Number(ui.overview.viewport.scale) || 1));
+  const overviewCollapsed = Array.isArray(ui.overview.collapsed_groups)
+    ? ui.overview.collapsed_groups.map(String)
+    : graph.operators.filter((item) => item.op_kind === "layer_group").map((item) => item.operator_id);
+  ui.overview.collapsed_groups = overviewCollapsed;
+  ui.overview.inline_positions = asObject(ui.overview.inline_positions);
+  ui.overview.collapsed_compounds = asArray(ui.overview.collapsed_compounds).map(String);
+  delete ui.positions;
+  delete ui.viewport;
+  delete ui.collapsed_groups;
+  return ui;
+}
+
+function modelGraphDetailUi(graph = ensureScenarioModelGraph()) {
+  return modelGraphUi(graph).detail;
+}
+
+function modelGraphActiveUi(graph = ensureScenarioModelGraph()) {
+  return modelGraphUi(graph).overview;
+}
+
+function clearModelGraphConnectionPreviewWatchdog() {
+  const editor = state.modelGraphEditor;
+  if (editor.connectPreviewWatchdog == null) return;
+  globalThis.clearTimeout?.(editor.connectPreviewWatchdog);
+  editor.connectPreviewWatchdog = null;
+}
+
+function modelGraphConnectionPreviewTimeoutDiagnostic() {
+  return {
+    ok: false,
+    compatible: false,
+    code: "preview_timeout",
+    timeout_kind: "frontend_watchdog",
+    message: uiText("端口连接预览超时；graph 未改变。", "Port connection preview timed out; graph was not changed."),
+  };
+}
+
+function scheduleModelGraphConnectionPreviewWatchdog(pointerId) {
+  clearModelGraphConnectionPreviewWatchdog();
+  if (pointerId == null || !state.modelGraphEditor.connectPreview?.active) return;
+  state.modelGraphEditor.connectPreviewWatchdog = globalThis.setTimeout?.(() => {
+    const editor = state.modelGraphEditor;
+    editor.connectPreviewWatchdog = null;
+    if (!editor.connectPreview?.active || editor.connectPointer?.pointerId !== pointerId) return;
+    const diagnostic = modelGraphConnectionPreviewTimeoutDiagnostic();
+    clearModelGraphConnectionPreview("frontend-watchdog");
+    editor.diagnostics = [diagnostic.message];
+    renderModelGraph();
+  }, MODEL_GRAPH_CONNECTION_PREVIEW_WATCHDOG_MS) ?? null;
+}
+
+function clearModelGraphConnectionPreview(reason = "cancelled", { announce = false, keepMode = false } = {}) {
+  const editor = state.modelGraphEditor;
+  clearModelGraphConnectionPreviewWatchdog();
+  const cancelled = editor.connectPreview?.active
+    ? ModelGraph.cancelConnectionPreview(editor.connectPreview, reason)
+    : null;
+  editor.connectPreview = null;
+  editor.connectPointer = null;
+  editor.connectSourceElement = null;
+  editor.connectTargetElement = null;
+  editor.suppressPortClick = false;
+  editor.connectSource = null;
+  if (!keepMode) editor.connectMode = false;
+  editor.diagnostics = announce ? [cancelled?.diagnostic?.message || "已取消端口连接预览。"] : [];
+  refreshModelGraphConnectionPreviewPath();
+}
+
+function setModelGraphMode(mode, { groupId = "", operatorId = "" } = {}) {
+  const graph = ensureScenarioModelGraph();
+  const ui = modelGraphUi(graph);
+  ui.mode = "overview";
+  clearModelGraphConnectionPreview("mode-change");
+  state.modelGraphEditor.drag = null;
+  state.modelGraphEditor.pan = null;
+  if (mode === "focus" && (groupId || operatorId)) selectModelGraphOverviewComponent(groupId || operatorId);
+  if (mode === "overview") {
+    ui.detail.focus_group_id = "";
+    ui.detail.focus_operator_id = "";
+    state.modelGraphEditor.selectedOperatorId = null;
+    state.modelGraphEditor.selectedOverviewId = null;
+  }
+  renderModelGraph();
+}
+
+function selectModelGraphOverviewComponent(componentId) {
+  const graph = ensureScenarioModelGraph();
+  const id = String(componentId || "");
+  const projection = modelGraphOverviewProjection(graph);
+  const node = projection.nodes.find((item) => item.display_id === id || asArray(item.operator_ids).includes(id) || asArray(item.group_ids).includes(id));
+  if (!node) return false;
+  state.modelGraphEditor.selectedOverviewId = node.display_id;
+  state.modelGraphEditor.selectedOperatorId = node.kind === "operator" ? String(node.representative_operator_id || "") : null;
+  return true;
+}
+
+function modelGraphSnapshotGraph(graphValue = ensureScenarioModelGraph()) {
+  const graph = deepClone(graphValue);
+  graph.attributes = asObject(graph.attributes);
+  delete graph.attributes.ui;
+  return graph;
+}
+
+function modelGraphCurrentUiSnapshot(graph = ensureScenarioModelGraph()) {
+  return deepClone(modelGraphUi(graph));
+}
+
+function modelGraphSnapshot() {
+  return { graph: modelGraphSnapshotGraph() };
+}
+
+function restoreModelGraphHistorySnapshot(snapshot) {
+  const currentUi = modelGraphCurrentUiSnapshot();
+  const graph = deepClone(snapshot.graph);
+  graph.attributes = asObject(graph.attributes);
+  graph.attributes.ui = currentUi;
+  state.scenario.model.graph = graph;
+  modelGraphUi(state.scenario.model.graph);
+}
+
+function commitModelGraphHistory(before, label, semantic = true) {
+  const editor = state.modelGraphEditor;
+  if (!semantic) return false;
+  if (!before || editor.history.restoring || JSON.stringify(before) === JSON.stringify(modelGraphSnapshot())) return false;
+  editor.history.undo.push({ snapshot: before, label, semantic });
+  if (editor.history.undo.length > TOPOLOGY_HISTORY_LIMIT) editor.history.undo.shift();
+  editor.history.redo = [];
+  syncModelGraphControls();
+  return true;
+}
+
+function saveModelGraphLayout() {
+  // Model layout is browser-side view state. Persist it with the local scenario
+  // snapshot, but never turn a clean semantic scenario into a modified one.
+  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+}
+
+function scheduleModelGraphViewportSave(delayMs = 140) {
+  if (modelGraphViewportSaveTimer !== null) clearTimeout(modelGraphViewportSaveTimer);
+  modelGraphViewportSaveTimer = setTimeout(() => {
+    modelGraphViewportSaveTimer = null;
+    saveModelGraphLayout();
+  }, Math.max(0, Number(delayMs) || 0));
+}
+
+function syncModelGraphViewport(ui = modelGraphActiveUi()) {
+  const viewport = asObject(ui?.viewport);
+  if (dom.modelGraphWorld) {
+    dom.modelGraphWorld.style.transform = `translate(${Number(viewport.x) || 0}px, ${Number(viewport.y) || 0}px) scale(${Number(viewport.scale) || 1})`;
+  }
+  if (dom.modelGraphZoomValue) dom.modelGraphZoomValue.textContent = `${Math.round((Number(viewport.scale) || 1) * 100)}%`;
+}
+
+function applyModelGraphSemanticChange(before, label) {
+  const validation = ModelGraph.validateModelGraph(state.scenario.model.graph);
+  if (!validation.valid) throw new Error(validation.errors.join("\n"));
+  modelGraphLayerSpecs(state.scenario.model.graph);
+  commitModelGraphHistory(before, label, true);
+  markScenarioChanged("", { mappingImpact: true, mappingReason: "模型语义组件、端口、张量连接或参数已修改，映射需要重新生成。" });
+}
+
+function autoLayoutModelGraph({ commit = false } = {}) {
+  const graph = ensureScenarioModelGraph();
+  if (modelGraphUi(graph).mode === "overview") {
+    autoLayoutModelGraphOverview({ commit });
+    return;
+  }
+  const ui = modelGraphDetailUi(graph);
+  const before = commit ? modelGraphSnapshot() : null;
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const visible = visibleModelGraphOperators(graph);
+  const visibleIds = new Set(visible.map((operator) => operator.operator_id));
+  const collapsed = new Set(ui.collapsed_groups);
+  const endpoint = (operatorId, direction) => {
+    if (visibleIds.has(operatorId)) return operatorId;
+    const operator = graph.operators.find((item) => item.operator_id === operatorId);
+    if (operator?.op_kind !== "layer_group" || collapsed.has(operatorId)) return null;
+    const children = graph.operators
+      .filter((item) => String(item.attributes.parent_group_id || "") === operatorId && visibleIds.has(item.operator_id))
+      .sort((left, right) => left.sequence_index - right.sequence_index || left.operator_id.localeCompare(right.operator_id));
+    return direction === "source" ? children.at(-1)?.operator_id || null : children[0]?.operator_id || null;
+  };
+  const layoutOperators = visible.map((operator) => ({
+    operator_id: operator.operator_id,
+    op_kind: operator.op_kind,
+    sequence_index: operator.sequence_index,
+    input_tensor_ids: [],
+    output_tensor_ids: [],
+    weight_tensor_ids: [],
+    ports: [],
+    parameters: {},
+    attributes: {},
+  }));
+  const byId = new Map(layoutOperators.map((operator) => [operator.operator_id, operator]));
+  const layoutTensors = [];
+  const edgeKeys = new Set();
+  modelGraphEdges(graph).forEach((edge, index) => {
+    const source = endpoint(edge.source_operator_id, "source");
+    const target = endpoint(edge.target_operator_id, "target");
+    const key = `${source || ""}->${target || ""}`;
+    if (!source || !target || source === target || edgeKeys.has(key)) return;
+    edgeKeys.add(key);
+    const tensorId = `layout-edge-${index}`;
+    byId.get(source)?.output_tensor_ids.push(tensorId);
+    byId.get(target)?.input_tensor_ids.push(tensorId);
+    layoutTensors.push({ tensor_id: tensorId, producer_operator_id: source, consumer_operator_ids: [target], dtype: edge.dtype, shape: edge.shape, layout: edge.layout });
+  });
+  visible
+    .slice()
+    .sort((left, right) => left.sequence_index - right.sequence_index || left.operator_id.localeCompare(right.operator_id))
+    .forEach((operator, index, ordered) => {
+      if (!index) return;
+      const source = ordered[index - 1].operator_id;
+      const target = operator.operator_id;
+      const key = `${source}->${target}`;
+      if (edgeKeys.has(key)) return;
+      edgeKeys.add(key);
+      const tensorId = `layout-order-${index}`;
+      byId.get(source)?.output_tensor_ids.push(tensorId);
+      byId.get(target)?.input_tensor_ids.push(tensorId);
+      layoutTensors.push({ tensor_id: tensorId, producer_operator_id: source, consumer_operator_ids: [target], dtype: "unknown", shape: [], layout: "logical" });
+    });
+  const layoutGraph = { graph_id: `${graph.graph_id}:layout`, operators: layoutOperators, tensors: layoutTensors, executable: true, attributes: {}, transforms: [] };
+  const sizes = Object.fromEntries(visible.map((operator) => [operator.operator_id, { width: 220 * scale, height: 132 * scale }]));
+  const layout = ModelGraph.layoutDag(layoutGraph, sizes, { direction: "LR", margin: 48, layerGap: 72 * scale, rowGap: 38 * scale });
+  const reasonableWidth = Math.max(900, visible.length * 430 * scale);
+  if (!layout.hasCycle && layout.bounds.width <= reasonableWidth) {
+    ui.positions = layout.positions;
+    state.modelGraphEditor.layoutKey = graph.operators.map((operator) => operator.operator_id).join("|");
+    if (before) {
+      commitModelGraphHistory(before, "整理模型图布局", false);
+      saveModelGraphLayout();
+    }
+    renderModelGraph();
+    return;
+  }
+  const groups = new Map(graph.operators.filter((operator) => operator.attributes.parent_group_id).map((operator) => [operator.operator_id, String(operator.attributes.parent_group_id)]));
+  const fallbackCollapsed = new Set(ui.collapsed_groups);
+  const top = graph.operators.filter((operator) => !groups.has(operator.operator_id)).sort((a, b) => a.sequence_index - b.sequence_index || a.operator_id.localeCompare(b.operator_id));
+  const positions = {};
+  let cursor = 48;
+  top.forEach((operator) => {
+    positions[operator.operator_id] = { x: cursor, y: 120 };
+    if (operator.op_kind === "layer_group" && !fallbackCollapsed.has(operator.operator_id)) {
+      const children = graph.operators.filter((item) => groups.get(item.operator_id) === operator.operator_id).sort((a, b) => a.sequence_index - b.sequence_index);
+      children.forEach((child, index) => { positions[child.operator_id] = { x: cursor + 36 + (index % 3) * 260, y: 210 + Math.floor(index / 3) * 190 }; });
+      cursor += Math.max(780, Math.ceil(children.length / 2) * 250);
+    } else cursor += 280;
+  });
+  ui.positions = positions;
+  state.modelGraphEditor.layoutKey = graph.operators.map((operator) => operator.operator_id).join("|");
+  if (before) {
+    commitModelGraphHistory(before, "整理模型图布局", false);
+    saveModelGraphLayout();
+  }
+  renderModelGraph();
+}
+
+function visibleModelGraphOperators(graph) {
+  const ui = modelGraphDetailUi(graph);
+  const focusGroupId = ui.focus_group_id;
+  if (focusGroupId && graph.operators.some((item) => item.operator_id === focusGroupId && item.op_kind === "layer_group")) {
+    return graph.operators.filter((operator) => String(operator.attributes.parent_group_id || "") === focusGroupId);
+  }
+  const focusOperatorId = ui.focus_operator_id;
+  if (focusOperatorId) {
+    const operator = graph.operators.find((item) => item.operator_id === focusOperatorId);
+    return operator ? [operator] : [];
+  }
+  const collapsed = new Set(ui.collapsed_groups);
+  return graph.operators.filter((operator) => {
+    const parent = String(operator.attributes.parent_group_id || "");
+    if (parent && collapsed.has(parent)) return false;
+    if (operator.op_kind === "layer_group" && !collapsed.has(operator.operator_id)) return false;
+    return true;
+  });
+}
+
+function modelGraphDisplayEndpoint(graph, operatorId) {
+  const operator = graph.operators.find((item) => item.operator_id === operatorId);
+  const parent = String(operator?.attributes?.parent_group_id || "");
+  const detail = modelGraphDetailUi(graph);
+  if (detail.focus_group_id) return parent === detail.focus_group_id ? operatorId : null;
+  return parent && detail.collapsed_groups.includes(parent) ? parent : operatorId;
+}
+
+function modelGraphBounds(graph, visible) {
+  const positions = modelGraphDetailUi(graph).positions;
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const width = 220 * scale;
+  const height = 132 * scale;
+  return { width: Math.max(900, ...visible.map((operator) => Number(positions[operator.operator_id]?.x || 0) + width + 80)), height: Math.max(520, ...visible.map((operator) => Number(positions[operator.operator_id]?.y || 0) + height + 100)), nodeWidth: width, nodeHeight: height };
+}
+
+function modelGraphOverviewProjection(graph = ensureScenarioModelGraph()) {
+  const overview = modelGraphUi(graph).overview;
+  const projection = ModelGraph.buildOverviewProjection(graph, {
+    collapsed_groups: modelGraphUi(graph).overview.collapsed_groups,
+  });
+  const collapsedCompounds = new Set(asArray(overview.collapsed_compounds));
+  asArray(projection.nodes).forEach((node) => {
+    if (node.kind !== "repeat_group") return;
+    const inline = asObject(node.inline_graph);
+    if (collapsedCompounds.has(`${String(node.group_id || "")}.moe`)) inline.moe_expanded = false;
+  });
+  return projection;
+}
+
+const MODEL_OVERVIEW_HORIZONTAL_EXTRA = 20;
+const modelOverviewTextWidthCache = new Map();
+
+function modelGraphOverviewDisplayText(value) {
+  const text = String(value || "");
+  return globalThis.UiI18n?.localizeText?.(text, state.settings.language) || text;
+}
+
+function modelGraphOverviewTextWidth(value) {
+  const text = String(value || "");
+  const fontRatio = clampFontScale(state.settings.fontScale) / 100;
+  const cacheKey = `${fontRatio}:${text}`;
+  if (modelOverviewTextWidthCache.has(cacheKey)) return modelOverviewTextWidthCache.get(cacheKey);
+  const fontSize = 12 * fontRatio;
+  let width = 0;
+  try {
+    const canvas = globalThis.document?.createElement?.("canvas");
+    const context = canvas?.getContext?.("2d");
+    if (context) {
+      context.font = `700 ${fontSize}px "Cascadia Code", Consolas, monospace`;
+      width = context.measureText(text).width;
+    }
+  } catch (_error) {
+    // Deterministic character-width fallback below also supports DOM-less tests.
+  }
+  // Browser canvas metrics can under-report CJK fallback glyphs when the
+  // declared mono font has no Han coverage. Keep the deterministic estimate
+  // as a lower bound so the visible border still encloses the rendered label.
+  const estimatedWidth = Array.from(text).reduce((total, character) => (
+    total + (/[^\u0000-\u00ff]/u.test(character) ? fontSize * 1.16 : fontSize * 0.59)
+  ), 0);
+  width = Math.max(width, estimatedWidth);
+  const measured = Math.ceil(width);
+  modelOverviewTextWidthCache.set(cacheKey, measured);
+  return measured;
+}
+
+function modelGraphOverviewBoundaryPortAllowance(node) {
+  return Math.max(0, Number(ModelGraph.overviewNodeSize(node, 1).height) - 48);
+}
+
+function modelGraphOverviewNodeSize(node) {
+  const layoutScale = layoutScaleForFont(state.settings.fontScale);
+  const fontRatio = clampFontScale(state.settings.fontScale) / 100;
+  const repeatSuffix = node.kind === "repeat_group" ? ` ×${Math.max(1, Number(node.repeat_count) || 1)}` : "";
+  const labelWidth = modelGraphOverviewTextWidth(`${modelGraphOverviewName(node)}${repeatSuffix}`);
+  const ports = ModelGraph.overviewBoundaryPortCounts(node);
+  const portAllowance = modelGraphOverviewBoundaryPortAllowance(node);
+  const portDiameter = 14 * layoutScale;
+  const portCapacityWidth = Math.max(ports.inputs, ports.outputs) * portDiameter + 8 * layoutScale;
+  if (node.kind === "repeat_group" && node.expanded) {
+    const inline = modelInlineLayout(asObject(node.inline_graph), 0);
+    const hasMoeControl = asArray(asObject(node.inline_graph).moe_operator_ids).length > 0;
+    const width = Math.ceil(Math.max(
+      252 * layoutScale,
+      labelWidth + 52 * layoutScale,
+      portCapacityWidth,
+      inline.graphWidth + 12 * layoutScale,
+    ));
+    const chromeHeight = (50 + (hasMoeControl ? 40 : 0)) * layoutScale;
+    return { width, height: Math.ceil(inline.graphHeight + chromeHeight) };
+  }
+  const compactRepeatHeight = (36 + Math.max(0, portAllowance - 24)) * layoutScale + 2;
+  const baseTitleWidth = labelWidth + MODEL_OVERVIEW_HORIZONTAL_EXTRA;
+  const titleWidth = node.kind === "repeat_group"
+    ? baseTitleWidth + 32 * layoutScale
+    : baseTitleWidth;
+  return {
+    width: Math.ceil(Math.max(titleWidth, portCapacityWidth)),
+    height: Math.ceil(node.kind === "repeat_group" ? compactRepeatHeight : (12 * fontRatio * 1.2 + 8) * layoutScale + 2),
+  };
+}
+
+function modelGraphOverviewRenderLayoutKey(projection) {
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const measuredSizes = projection.nodes.map((node) => {
+    const size = modelGraphOverviewNodeSize(node);
+    return `${node.display_id}:${size.width}x${size.height}`;
+  }).join("|");
+  return `${ModelGraph.overviewLayoutKey(projection, scale)}:${modelGraphOverviewLayoutWidthKey()}:${state.settings.language}:${measuredSizes}`;
+}
+
+function modelGraphOverviewLayoutWidthKey() {
+  const canvasWidth = modelGraphOverviewContainerWidth();
+  return canvasWidth > 0 ? String(Math.round(Math.max(1, canvasWidth - 32))) : "hidden";
+}
+
+function modelGraphOverviewContainerWidth() {
+  const canvas = dom.modelGraphCanvas;
+  if (!canvas) return 0;
+  const borderBoxWidth = Number(canvas.getBoundingClientRect?.().width) || Number(canvas.offsetWidth) || 0;
+  return Math.max(0, Math.round(borderBoxWidth || Number(canvas.clientWidth) || 0));
+}
+
+function modelGraphOverviewNeedsViewportFit(previousWidthValue, currentWidthValue) {
+  const previousWidth = Math.max(0, Number(previousWidthValue) || 0);
+  const currentWidth = Math.max(0, Number(currentWidthValue) || 0);
+  if (!currentWidth) return false;
+  if (!previousWidth) return true;
+  const materialReduction = Math.max(96, previousWidth * 0.12);
+  return currentWidth <= previousWidth - materialReduction;
+}
+
+function fitModelGraphOverviewViewportForWidth(widthValue, { resetVertical = false } = {}) {
+  if (!state.scenario) return false;
+  const width = Math.max(1, Number(widthValue) || 0);
+  const graph = ensureScenarioModelGraph();
+  const rootUi = modelGraphUi(graph);
+  if (rootUi.mode !== "overview") return false;
+  const ui = rootUi.overview;
+  const projection = modelGraphOverviewProjection(graph);
+  const presentation = modelGraphOverviewPresentationLayout(projection, ui.positions);
+  const bounds = modelGraphOverviewBounds(projection, presentation.positions);
+  const viewport = asObject(ui.viewport);
+  ui.viewport = viewport;
+  const currentScale = Math.max(0.25, Math.min(2.5, Number(viewport.scale) || 1));
+  const fitScale = Math.max(0.25, Math.min(1.15, Math.max(1, width - 32) / Math.max(1, bounds.width)));
+  const nextScale = Math.min(currentScale, fitScale);
+  const nextX = Math.max(16, (width - bounds.width * nextScale) / 2);
+  const currentY = Number(viewport.y);
+  const nextY = resetVertical || !Number.isFinite(currentY) ? 16 : currentY;
+  const changed = Math.abs((Number(viewport.scale) || 1) - nextScale) > 0.001
+    || Math.abs((Number(viewport.x) || 0) - nextX) > 0.5
+    || Math.abs((Number(viewport.y) || 0) - nextY) > 0.5;
+  if (!changed) return false;
+  viewport.scale = nextScale;
+  viewport.x = nextX;
+  viewport.y = nextY;
+  return true;
+}
+
+function scheduleModelGraphOverviewResize(widthValue = modelGraphOverviewContainerWidth()) {
+  const editor = state.modelGraphEditor;
+  const width = Math.max(0, Math.round(Number(widthValue) || 0));
+  if (!width || state.view !== "model" || dom.modelGraphCanvas?.dataset.mode !== "overview") return false;
+  if (width === Number(editor.overviewCanvasWidth || 0) && modelGraphResizeFrame == null) {
+    editor.overviewResizeTarget = 0;
+    return false;
+  }
+  editor.overviewResizeTarget = width;
+  if (modelGraphResizeFrame != null) return true;
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+  modelGraphResizeFrame = requestFrame(() => {
+    modelGraphResizeFrame = null;
+    const currentWidth = modelGraphOverviewContainerWidth();
+    if (!currentWidth || state.view !== "model" || dom.modelGraphCanvas?.dataset.mode !== "overview") return;
+    // ResizeObserver may fire while a node is moving (for example when a
+    // scrollbar appears). Preserve the measured target, but never invalidate
+    // or rebuild the user's manual layout during an active gesture. Pointer-up
+    // performs the deferred render after the gesture has committed.
+    if (editor.drag || editor.pan || editor.connectPointer) {
+      editor.overviewResizeTarget = currentWidth;
+      return;
+    }
+    editor.overviewResizeTarget = 0;
+    const previousWidth = Number(editor.overviewCanvasWidth || 0);
+    if (currentWidth === previousWidth) return;
+    const shouldFitViewport = modelGraphOverviewNeedsViewportFit(previousWidth, currentWidth);
+    const viewportChanged = shouldFitViewport
+      ? fitModelGraphOverviewViewportForWidth(currentWidth, { resetVertical: !previousWidth })
+      : false;
+    editor.overviewCanvasWidth = currentWidth;
+    if (viewportChanged) saveModelGraphLayout();
+    renderModelGraph();
+  });
+  return true;
+}
+
+function bindModelGraphResizeObserver() {
+  if (!dom.modelGraphCanvas || modelGraphResizeObserver) return;
+  if (typeof globalThis.ResizeObserver === "function") {
+    modelGraphResizeObserver = new globalThis.ResizeObserver(() => {
+      scheduleModelGraphOverviewResize();
+    });
+    modelGraphResizeObserver.observe(dom.modelGraphCanvas);
+  }
+  // Also check once after the first grid layout. This covers the transition
+  // from a temporarily wide/hidden model view to its final visible column.
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+  requestFrame(() => scheduleModelGraphOverviewResize());
+}
+
+function modelGraphOverviewBounds(projection, positions) {
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const rects = projection.nodes.map((node) => ({ ...positions[node.display_id], ...modelGraphOverviewNodeSize(node) }));
+  return {
+    width: Math.max(Math.round(620 * scale), ...rects.map((rect) => Number(rect.x || 0) + rect.width + 40 * scale)),
+    height: Math.max(Math.round(480 * scale), ...rects.map((rect) => Number(rect.y || 0) + rect.height + 30 * scale)),
+  };
+}
+
+function modelGraphOverviewPosition(value) {
+  const position = asObject(value);
+  const x = Number(position.x);
+  const y = Number(position.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function modelGraphOverviewRectsOverlap(left, right, gap = 0) {
+  return left.x < right.x + right.width + gap
+    && left.x + left.width + gap > right.x
+    && left.y < right.y + right.height + gap
+    && left.y + left.height + gap > right.y;
+}
+
+function modelGraphOverviewOpenPosition(candidateValue, size, occupied, canvasWidth, scale) {
+  const margin = Math.max(8, Math.round(16 * scale));
+  const gap = Math.max(6, Math.round(12 * scale));
+  const candidate = {
+    x: Math.max(margin, Math.round(Number(candidateValue?.x) || margin)),
+    y: Math.max(margin, Math.round(Number(candidateValue?.y) || margin)),
+  };
+  const stepX = Math.max(size.width + gap, Math.round(56 * scale));
+  const stepY = Math.max(size.height + gap, Math.round(42 * scale));
+  const maxX = Math.max(margin, Number(canvasWidth || 0) - size.width - margin);
+  const free = (position) => {
+    const rect = { ...position, ...size };
+    return !occupied.some((item) => modelGraphOverviewRectsOverlap(rect, item, gap));
+  };
+  for (let ring = 0; ring <= 18; ring += 1) {
+    const offsets = ring === 0 ? [[0, 0]] : [
+      [0, ring], [ring, 0], [-ring, 0], [0, -ring],
+      [ring, ring], [-ring, ring], [ring, -ring], [-ring, -ring],
+    ];
+    for (const [column, row] of offsets) {
+      const position = {
+        x: Math.max(margin, Math.min(maxX, candidate.x + column * stepX)),
+        y: Math.max(margin, candidate.y + row * stepY),
+      };
+      if (free(position)) return position;
+    }
+  }
+  const bottom = occupied.length ? Math.max(...occupied.map((rect) => rect.y + rect.height)) + gap : margin;
+  return { x: Math.max(margin, Math.min(maxX, candidate.x)), y: Math.round(bottom) };
+}
+
+function modelGraphOverviewNearestOpenPosition(candidateValue, size, occupied, gap) {
+  const origin = {
+    x: Math.max(0, Number(candidateValue?.x) || 0),
+    y: Math.max(0, Number(candidateValue?.y) || 0),
+  };
+  let current = { ...origin };
+  const visited = new Set();
+  const attemptLimit = Math.max(8, occupied.length * 8 + 8);
+  for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
+    const rect = { ...current, ...size };
+    const collisions = occupied.filter((item) => modelGraphOverviewRectsOverlap(rect, item, gap));
+    if (!collisions.length) return current;
+    visited.add(`${current.x}:${current.y}`);
+    const candidates = collisions.flatMap((item) => [
+      { x: Math.ceil(item.x + item.width + gap), y: current.y },
+      { x: current.x, y: Math.ceil(item.y + item.height + gap) },
+    ]).filter((position) => !visited.has(`${position.x}:${position.y}`));
+    candidates.sort((left, right) => {
+      const leftDistance = (left.x - origin.x) ** 2 + (left.y - origin.y) ** 2;
+      const rightDistance = (right.x - origin.x) ** 2 + (right.y - origin.y) ** 2;
+      return leftDistance - rightDistance || left.y - right.y || left.x - right.x;
+    });
+    if (!candidates.length) break;
+    current = candidates[0];
+  }
+  return {
+    x: origin.x,
+    y: occupied.length ? Math.ceil(Math.max(...occupied.map((item) => item.y + item.height)) + gap) : origin.y,
+  };
+}
+
+function modelGraphOverviewPresentationLayout(projection, positionsValue) {
+  const source = asObject(positionsValue);
+  const positions = Object.fromEntries(Object.entries(source).map(([id, value]) => {
+    const position = modelGraphOverviewPosition(value);
+    return [id, position ? { ...position } : value];
+  }));
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const gap = Math.max(8, Math.round(12 * scale));
+  const nodes = asArray(projection.nodes).map((node, index) => ({
+    node,
+    index,
+    id: String(node.display_id || ""),
+    position: modelGraphOverviewPosition(source[node.display_id]),
+    size: modelGraphOverviewNodeSize(node),
+  })).filter((entry) => entry.id && entry.position).sort((left, right) => (
+    left.position.y - right.position.y
+      || left.position.x - right.position.x
+      || Number(left.node.sequence_index || 0) - Number(right.node.sequence_index || 0)
+      || left.index - right.index
+      || left.id.localeCompare(right.id)
+  ));
+  const occupied = [];
+  let adjusted = false;
+  nodes.forEach((entry) => {
+    const position = modelGraphOverviewNearestOpenPosition(entry.position, entry.size, occupied, gap);
+    positions[entry.id] = position;
+    adjusted ||= Math.abs(position.x - entry.position.x) > 0.01 || Math.abs(position.y - entry.position.y) > 0.01;
+    occupied.push({ id: entry.id, ...position, ...entry.size });
+  });
+  return { positions, adjusted, gap };
+}
+
+function reconcileModelGraphOverviewPositions(projection, overview) {
+  const positions = asObject(overview.positions);
+  overview.positions = positions;
+  const nodes = asArray(projection.nodes);
+  const validIds = new Set(nodes.map((node) => String(node.display_id || "")).filter(Boolean));
+  let changed = false;
+  Object.keys(positions).forEach((id) => {
+    if (!validIds.has(id) || !modelGraphOverviewPosition(positions[id])) {
+      delete positions[id];
+      changed = true;
+    }
+  });
+  // An empty projection is already a valid, fully initialized overview. Treating
+  // it as "needs layout" would bounce synchronously between render and layout.
+  if (!nodes.length) return { changed, initialized: true };
+  const presentIds = new Set(Object.keys(positions));
+  if (!presentIds.size) return { changed, initialized: false };
+  const missing = nodes.filter((node) => !presentIds.has(String(node.display_id || "")));
+  if (!missing.length) return { changed, initialized: true };
+
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const canvasWidth = Number(dom.modelGraphCanvas?.clientWidth) || Math.round(900 * scale);
+  const nodeSizes = Object.fromEntries(nodes.map((node) => [node.display_id, modelGraphOverviewNodeSize(node)]));
+  const suggested = ModelGraph.overviewResponsiveLayout(projection, canvasWidth, scale, { nodeSizes }).positions;
+  const nodeById = new Map(nodes.map((node) => [String(node.display_id || ""), node]));
+  const occupied = Array.from(presentIds).map((id) => {
+    const position = modelGraphOverviewPosition(positions[id]);
+    return position && nodeById.has(id) ? { id, ...position, ...nodeSizes[id] } : null;
+  }).filter(Boolean);
+  const incoming = new Map();
+  const outgoing = new Map();
+  asArray(projection.edges).forEach((edge) => {
+    const sourceId = String(edge.source_id || "");
+    const targetId = String(edge.target_id || "");
+    if (!incoming.has(targetId)) incoming.set(targetId, []);
+    if (!outgoing.has(sourceId)) outgoing.set(sourceId, []);
+    incoming.get(targetId).push(sourceId);
+    outgoing.get(sourceId).push(targetId);
+  });
+  missing.sort((left, right) => Number(left.sequence_index || 0) - Number(right.sequence_index || 0)
+    || String(left.display_id || "").localeCompare(String(right.display_id || ""))).forEach((node) => {
+    const id = String(node.display_id || "");
+    const size = nodeSizes[id];
+    const predecessorId = asArray(incoming.get(id)).find((candidate) => modelGraphOverviewPosition(positions[candidate]));
+    const successorId = asArray(outgoing.get(id)).find((candidate) => modelGraphOverviewPosition(positions[candidate]));
+    let candidate = suggested[id] || { x: 16 * scale, y: 16 * scale };
+    if (predecessorId) {
+      const predecessor = modelGraphOverviewPosition(positions[predecessorId]);
+      const predecessorSize = nodeSizes[predecessorId] || { width: 0, height: 0 };
+      candidate = { x: predecessor.x + (predecessorSize.width - size.width) / 2, y: predecessor.y + predecessorSize.height + 28 * scale };
+    } else if (successorId) {
+      const successor = modelGraphOverviewPosition(positions[successorId]);
+      const successorSize = nodeSizes[successorId] || { width: 0, height: 0 };
+      candidate = { x: successor.x + (successorSize.width - size.width) / 2, y: successor.y - size.height - 28 * scale };
+    }
+    const position = modelGraphOverviewOpenPosition(candidate, size, occupied, canvasWidth, scale);
+    positions[id] = position;
+    occupied.push({ id, ...position, ...size });
+    changed = true;
+  });
+  return { changed, initialized: true };
+}
+
+function autoLayoutModelGraphOverview({ commit = false } = {}) {
+  const graph = ensureScenarioModelGraph();
+  const projection = modelGraphOverviewProjection(graph);
+  const overview = modelGraphUi(graph).overview;
+  const before = commit ? modelGraphSnapshot() : null;
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const canvasWidth = Number(dom.modelGraphCanvas?.clientWidth) || Math.round(900 * scale);
+  const nodeSizes = Object.fromEntries(projection.nodes.map((node) => [node.display_id, modelGraphOverviewNodeSize(node)]));
+  const layout = ModelGraph.overviewResponsiveLayout(projection, canvasWidth, scale, { nodeSizes });
+  overview.positions = layout.positions;
+  overview.viewport = { ...overview.viewport, ...layout.viewport };
+  const measuredWidth = modelGraphOverviewContainerWidth();
+  if (measuredWidth > 0) state.modelGraphEditor.overviewCanvasWidth = measuredWidth;
+  state.modelGraphEditor.overviewResizeTarget = 0;
+  state.modelGraphEditor.overviewLayoutKey = modelGraphOverviewRenderLayoutKey(projection);
+  if (before) {
+    commitModelGraphHistory(before, "整理模型结构总览", false);
+    saveModelGraphLayout();
+  }
+  renderModelGraph();
+}
+
+function modelOverviewContractTitle(edge) {
+  return asArray(edge.contracts).map((contract) => `${contract.tensor_id || "tensor"} · ${contract.dtype || "?"} · ${modelShapeText(contract.shape)} · ${contract.layout || "logical"}`).join("\n");
+}
+
+function modelGraphEndpointIdentity(endpoint) {
+  if (!endpoint) return null;
+  const operatorId = String(endpoint.operatorId ?? endpoint.operator_id ?? "");
+  const portId = String(endpoint.portId ?? endpoint.port_id ?? "");
+  return operatorId && portId ? { operatorId, portId } : null;
+}
+
+function modelGraphPortInteractionClass(graph, endpoint) {
+  const editor = state.modelGraphEditor;
+  const preview = editor.connectPreview;
+  const source = modelGraphEndpointIdentity(preview?.active ? preview.source : editor.connectSource);
+  if (!source) return "";
+  if (source.operatorId === endpoint.operatorId && source.portId === endpoint.portId) return "is-connect-source";
+  if (endpoint.direction !== "input") return "is-connect-unavailable";
+  const compatibility = preview?.active
+    ? ModelGraph.connectionPreviewCompatibility(graph, preview, endpoint)
+    : null;
+  if (!compatibility) return "is-connect-unavailable";
+  return compatibility.ok
+    ? "is-connect-compatible"
+    : "is-connect-incompatible";
+}
+
+function modelGraphRouteEndpointKey(operatorId, portId) {
+  return `${String(operatorId || "")}::${String(portId || "")}`;
+}
+
+function modelGraphRouteClass(route) {
+  return route?.kind === "smooth" ? "is-smooth" : route?.kind === "fallback" ? "is-fallback" : "is-orthogonal";
+}
+
+function modelGraphPortPlacementPlan(rectByNode, edgeEntries) {
+  const samples = new Map();
+  const add = (endpoint, nodeId, dx, dy) => {
+    if (!endpoint?.operatorId || !endpoint?.portId || !rectByNode.has(nodeId)) return;
+    const key = modelGraphRouteEndpointKey(endpoint.operatorId, endpoint.portId);
+    if (!samples.has(key)) samples.set(key, { key, nodeId, endpoint, dx: 0, dy: 0 });
+    const sample = samples.get(key);
+    sample.dx += dx;
+    sample.dy += dy;
+  };
+  edgeEntries.forEach((entry) => {
+    const sourceRect = rectByNode.get(entry.sourceNodeId);
+    const targetRect = rectByNode.get(entry.targetNodeId);
+    if (!sourceRect || !targetRect) return;
+    const sourceCenter = { x: sourceRect.x + sourceRect.width / 2, y: sourceRect.y + sourceRect.height / 2 };
+    const targetCenter = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 };
+    add(entry.source, entry.sourceNodeId, targetCenter.x - sourceCenter.x, targetCenter.y - sourceCenter.y);
+    add(entry.target, entry.targetNodeId, sourceCenter.x - targetCenter.x, sourceCenter.y - targetCenter.y);
+  });
+  const placements = new Map();
+  samples.forEach((sample, key) => {
+    const side = Math.abs(sample.dx) > Math.abs(sample.dy)
+      ? (sample.dx >= 0 ? "right" : "left")
+      : (sample.dy >= 0 ? "bottom" : "top");
+    placements.set(key, { nodeId: sample.nodeId, side, fraction: 0.5 });
+  });
+  const groups = new Map();
+  placements.forEach((placement, key) => {
+    const groupKey = `${placement.nodeId}:${placement.side}`;
+    if (!groups.has(groupKey)) groups.set(groupKey, []);
+    groups.get(groupKey).push(key);
+  });
+  groups.forEach((keys) => keys.sort().forEach((key, index) => {
+    placements.get(key).fraction = (index + 1) / (keys.length + 1);
+  }));
+  return placements;
+}
+
+function modelGraphPlacedPort(rect, placement, fallbackSide = "left", fallbackFraction = 0.5) {
+  return ModelGraph.modelGraphAnchor(rect, placement?.side || fallbackSide, placement?.fraction ?? fallbackFraction);
+}
+
+function modelGraphOverviewRoutePlan(projection, positions, placementOverride = null) {
+  const rectByNode = new Map(projection.nodes.map((node) => {
+    const position = positions[node.display_id] || { x: 0, y: 0 };
+    return [node.display_id, { id: node.display_id, x: Number(position.x) || 0, y: Number(position.y) || 0, ...modelGraphOverviewNodeSize(node) }];
+  }));
+  const entries = projection.edges.filter((edge) => !edge.visual_only).map((edge) => {
+    const endpoints = modelOverviewProjectedEdgeEndpoints(edge, projection);
+    return endpoints ? {
+      edge,
+      sourceNodeId: edge.source_id,
+      targetNodeId: edge.target_id,
+      source: endpoints.source,
+      target: endpoints.target,
+    } : null;
+  }).filter(Boolean);
+  const placements = placementOverride || modelGraphPortPlacementPlan(rectByNode, entries);
+  const obstacles = Array.from(rectByNode.values());
+  const routes = new Map();
+  const occupiedSegments = [];
+  entries.forEach((entry) => {
+    const sourceRect = rectByNode.get(entry.sourceNodeId);
+    const targetRect = rectByNode.get(entry.targetNodeId);
+    const sourcePlacement = placements.get(modelGraphRouteEndpointKey(entry.source.operatorId, entry.source.portId));
+    const targetPlacement = placements.get(modelGraphRouteEndpointKey(entry.target.operatorId, entry.target.portId));
+    const source = modelGraphPlacedPort(sourceRect, sourcePlacement, "right");
+    const target = modelGraphPlacedPort(targetRect, targetPlacement, "left");
+    const route = ModelGraph.modelGraphRouteEdge(sourceRect, targetRect, obstacles, {
+      sourcePoint: source,
+      targetPoint: target,
+      sourceSide: source.side,
+      targetSide: target.side,
+      shortCurveDistance: 220,
+      clearance: 12,
+      cornerRadius: 10,
+      occupiedSegments,
+      overlapPenalty: 180,
+      crossingPenalty: 72,
+    });
+    routes.set(`${entry.edge.source_id}->${entry.edge.target_id}`, route);
+    asArray(route?.points).slice(1).forEach((point, index) => {
+      const start = route.points[index];
+      const end = point;
+      if (Number(start?.x) === Number(end?.x) && Number(start?.y) === Number(end?.y)) return;
+      occupiedSegments.push({
+        x1: Number(start?.x) || 0,
+        y1: Number(start?.y) || 0,
+        x2: Number(end?.x) || 0,
+        y2: Number(end?.y) || 0,
+        source_id: entry.sourceNodeId,
+        target_id: entry.targetNodeId,
+      });
+    });
+  });
+  return { rectByNode, placements, routes, entries, occupiedSegments };
+}
+
+function modelGraphPortPlacementStyle(placement, fallbackSide, fallbackFraction) {
+  const side = placement?.side || fallbackSide;
+  const fraction = placement?.fraction ?? fallbackFraction;
+  return { side, style: `--model-port-position:${Math.max(8, Math.min(92, fraction * 100))}%` };
+}
+
+function modelOverviewPortMarkup(graph, node, placements = new Map()) {
+  const ports = asArray(node.boundary_ports);
+  if (!ports.length) return "";
+  const markup = (port, index, siblings) => {
+    const endpoint = { operatorId: port.operator_id, portId: port.port_id, direction: port.direction };
+    const contract = `${port.dtype || "?"} [${modelShapeText(port.shape)}] / ${port.layout || "logical"}`;
+    const interaction = modelGraphPortInteractionClass(graph, endpoint);
+    const placement = placements.get(modelGraphRouteEndpointKey(port.operator_id, port.port_id));
+    const placed = modelGraphPortPlacementStyle(placement, port.direction === "output" ? "right" : "left", (index + 1) / (siblings.length + 1));
+    const direction = modelPortDirectionLabel(port.direction);
+    const accessibleLabel = uiText(
+      "{direction}端口 {id}，张量契约 {contract}",
+      "{direction} port {id}, tensor contract {contract}",
+      { direction, id: `${port.operator_id}.${port.port_id}`, contract },
+    );
+    return `<button type="button" class="model-graph-port model-overview-port is-overview-dot is-${escapeHtml(port.direction)} ${interaction}" data-model-route-scope="overview" data-model-port-operator="${escapeHtml(port.operator_id)}" data-model-port-id="${escapeHtml(port.port_id)}" data-model-port-direction="${escapeHtml(port.direction)}" data-model-port-mapped="${escapeHtml(JSON.stringify(asArray(port.mapped_ports)))}" data-model-port-side="${placed.side}" data-model-port-index="${index}" data-model-port-count="${siblings.length}" style="${placed.style}" title="${escapeHtml(`${port.operator_id}.${port.port_id}\n${contract}`)}" aria-label="${escapeHtml(accessibleLabel)}"><i aria-hidden="true"></i><span class="sr-only">${escapeHtml(port.port_id)} · ${escapeHtml(port.dtype || "?")} [${escapeHtml(modelShapeText(port.shape))}]</span></button>`;
+  };
+  const inputs = ports.filter((port) => port.direction === "input");
+  const outputs = ports.filter((port) => port.direction === "output");
+  return `<div class="model-overview-ports is-inputs">${inputs.map(markup).join("")}</div><div class="model-overview-ports is-outputs">${outputs.map(markup).join("")}</div>`;
+}
+
+function modelOverviewPortPoint(projection, positions, endpointValue, placements = null) {
+  const endpoint = modelGraphEndpointIdentity(endpointValue);
+  if (!endpoint) return null;
+  const node = projection.nodes.find((item) => asArray(item.boundary_ports).some((port) => (
+    port.operator_id === endpoint.operatorId && port.port_id === endpoint.portId
+  )));
+  const position = node ? positions[node.display_id] : null;
+  if (!node || !position) return null;
+  const port = asArray(node.boundary_ports).find((item) => item.operator_id === endpoint.operatorId && item.port_id === endpoint.portId);
+  const siblings = asArray(node.boundary_ports).filter((item) => item.direction === port?.direction);
+  const index = Math.max(0, siblings.findIndex((item) => item.operator_id === endpoint.operatorId && item.port_id === endpoint.portId));
+  const rect = { id: node.display_id, x: Number(position.x) || 0, y: Number(position.y) || 0, ...modelGraphOverviewNodeSize(node) };
+  const placement = placements?.get(modelGraphRouteEndpointKey(endpoint.operatorId, endpoint.portId));
+  return modelGraphPlacedPort(rect, placement, port?.direction === "output" ? "right" : "left", (index + 1) / (siblings.length + 1));
+}
+
+function modelOverviewProjectedEdgeEndpoints(edge, projection) {
+  const sourceNode = projection.nodes.find((item) => item.display_id === edge.source_id);
+  const targetNode = projection.nodes.find((item) => item.display_id === edge.target_id);
+  if (!sourceNode || !targetNode) return null;
+  const tensorIds = new Set(asArray(edge.tensor_ids).map(String));
+  const sourcePort = asArray(sourceNode.boundary_ports).find((port) => port.direction === "output" && tensorIds.has(String(port.tensor_id)))
+    || asArray(sourceNode.boundary_ports).find((port) => port.direction === "output");
+  const targetPort = asArray(targetNode.boundary_ports).find((port) => port.direction === "input" && tensorIds.has(String(port.tensor_id)))
+    || asArray(targetNode.boundary_ports).find((port) => port.direction === "input");
+  return sourcePort && targetPort ? {
+    source: { operatorId: sourcePort.operator_id, portId: sourcePort.port_id },
+    target: { operatorId: targetPort.operator_id, portId: targetPort.port_id },
+  } : null;
+}
+
+function modelGraphOverviewEdgeDirection(edge, selectedId = state.modelGraphEditor.selectedOverviewId) {
+  const id = String(selectedId || "");
+  if (!id) return "";
+  const fromSelected = String(edge?.source_id || "") === id;
+  const toSelected = String(edge?.target_id || "") === id;
+  if (fromSelected && toSelected) return "loop";
+  if (fromSelected) return "outgoing";
+  if (toSelected) return "incoming";
+  return "";
+}
+
+function modelGraphOverviewEdgeDirectionClass(edge, selectedId = state.modelGraphEditor.selectedOverviewId) {
+  const direction = modelGraphOverviewEdgeDirection(edge, selectedId);
+  return direction ? `is-one-hop is-${direction}` : "";
+}
+
+function refreshModelGraphOverviewSelectionState() {
+  const selectedId = String(state.modelGraphEditor.selectedOverviewId || "");
+  $$('.model-graph-edge.is-overview[data-model-route-source-node][data-model-route-target-node]', dom.modelGraphEdgeLayer).forEach((path) => {
+    const direction = modelGraphOverviewEdgeDirection({
+      source_id: path.dataset.modelRouteSourceNode,
+      target_id: path.dataset.modelRouteTargetNode,
+    }, selectedId);
+    path.classList.toggle("is-one-hop", Boolean(direction));
+    for (const value of ["incoming", "outgoing", "loop"]) path.classList.toggle(`is-${value}`, direction === value);
+    if (direction) path.dataset.modelHopDirection = direction;
+    else delete path.dataset.modelHopDirection;
+  });
+}
+
+function renderModelGraphOverviewEdges(graph, projection, ui, bounds, routePlan = null) {
+  const plan = routePlan || modelGraphOverviewRoutePlan(projection, ui.positions);
+  const paths = projection.edges.map((edge) => {
+    if (edge.visual_only && edge.source_id === edge.target_id) {
+      const rect = plan.rectByNode.get(edge.source_id);
+      if (!rect) return "";
+      // Keep the visual-only repeat loop entirely outside the group card. The
+      // previous bottom-to-top rail crossed behind the title and toggle, which
+      // made the dashed cue look broken even though its semantics were intact.
+      const scale = layoutScaleForFont(state.settings.fontScale);
+      const railX = rect.x + rect.width + Math.max(24, 20 * scale);
+      const startX = rect.x + rect.width;
+      const startY = rect.y + rect.height * 0.68;
+      const endX = startX;
+      const endY = rect.y + rect.height * 0.32;
+      const radius = Math.max(6, 6 * scale);
+      const path = `M ${startX} ${startY} H ${railX - radius} Q ${railX} ${startY} ${railX} ${startY - radius} V ${endY + radius} Q ${railX} ${endY} ${railX - radius} ${endY} H ${endX}`;
+      const labelX = railX - 5 * scale;
+      const labelY = rect.y + rect.height / 2 - 5 * scale;
+      return `<path class="model-graph-edge is-overview is-visual-repeat is-loop ${modelGraphOverviewEdgeDirectionClass(edge)}" data-visual-only="true" data-repeat-count="${escapeHtml(edge.repeat_count)}" d="${escapeHtml(path)}" tabindex="-1"><title>${escapeHtml(uiText("仅用于表示重复次数；不写回权威 DAG", "Visual repeat indicator only; never written to the authoritative DAG"))}</title></path><text class="model-graph-edge-label is-visual-repeat-label" x="${labelX}" y="${labelY}" text-anchor="end">${escapeHtml(edge.label || `×${edge.repeat_count}`)}</text>`;
+    }
+    const endpoints = modelOverviewProjectedEdgeEndpoints(edge, projection);
+    const route = plan.routes.get(`${edge.source_id}->${edge.target_id}`);
+    if (!endpoints || !route) return "";
+    const sourceNode = projection.nodes.find((item) => item.display_id === edge.source_id);
+    const targetNode = projection.nodes.find((item) => item.display_id === edge.target_id);
+    const sideBranch = modelGraphOverviewIsMtp(targetNode) || modelGraphOverviewIsMtp(sourceNode);
+    const direction = modelGraphOverviewEdgeDirection(edge);
+    return `<path class="model-graph-edge is-overview ${modelGraphRouteClass(route)} ${sideBranch ? "is-mtp-branch is-skip-route" : ""} ${modelGraphOverviewEdgeDirectionClass(edge)}" data-model-route-profile="overview" data-model-route-points="${escapeHtml(JSON.stringify(asArray(route.points)))}" data-model-route-source-node="${escapeHtml(edge.source_id)}" data-model-route-target-node="${escapeHtml(edge.target_id)}" data-model-route-source-operator="${escapeHtml(endpoints.source.operatorId)}" data-model-route-source-port="${escapeHtml(endpoints.source.portId)}" data-model-route-target-operator="${escapeHtml(endpoints.target.operatorId)}" data-model-route-target-port="${escapeHtml(endpoints.target.portId)}" ${direction ? `data-model-hop-direction="${direction}"` : ""} data-model-route-outer="false" d="${escapeHtml(route.path)}" tabindex="-1"><title>${escapeHtml(modelOverviewContractTitle(edge))}</title></path>`;
+  });
+  const preview = state.modelGraphEditor.connectPreview;
+  if (preview?.active) {
+    const source = modelOverviewPortPoint(projection, ui.positions, preview.source, plan.placements);
+    const target = preview.target
+      ? modelOverviewPortPoint(projection, ui.positions, preview.target, plan.placements)
+      : preview.pointer;
+    if (source && target) {
+      const targetSide = target.side || (Math.abs(Number(target.x) - Number(source.x)) > Math.abs(Number(target.y) - Number(source.y))
+        ? (Number(target.x) < Number(source.x) ? "right" : "left")
+        : (Number(target.y) < Number(source.y) ? "bottom" : "top"));
+      const previewTarget = { ...target, side: targetSide };
+      const previewRect = { id: "model-connection-pointer", x: Number(target.x), y: Number(target.y), width: 1, height: 1 };
+      const sourceEntry = plan.entries.find((entry) => entry.source.operatorId === preview.source.operator_id || entry.source.operatorId === preview.source.operatorId);
+      const sourceRect = sourceEntry ? plan.rectByNode.get(sourceEntry.sourceNodeId) : { id: "model-connection-source", x: source.x - 1, y: source.y - 1, width: 2, height: 2 };
+      const route = ModelGraph.modelGraphRouteEdge(sourceRect, previewRect, [...plan.rectByNode.values(), previewRect], {
+        sourcePoint: source,
+        targetPoint: previewTarget,
+        sourceSide: source.side,
+        targetSide,
+        shortCurveDistance: 160,
+        clearance: 10,
+      });
+      const status = ["compatible", "incompatible"].includes(preview.status) ? `is-${preview.status}` : "is-pending";
+      paths.push(`<path class="model-graph-edge is-overview is-connection-preview ${modelGraphRouteClass(route)} ${status}" data-model-connection-preview="true" d="${escapeHtml(route.path)}" tabindex="-1"><title>${escapeHtml(preview.diagnostic?.message || "端口连接预览；点击输入端点提交，按 Esc 取消。")}</title></path>`);
+    }
+  }
+  dom.modelGraphEdgeLayer.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+  dom.modelGraphEdgeLayer.innerHTML = paths.join("");
+  dom.modelGraphEdgeLayer.classList.toggle("is-preview-active", Boolean(preview?.active));
+}
+
+function modelInlineVisibleOperators(inline) {
+  const moeIds = new Set(asArray(inline.moe_operator_ids));
+  return asArray(inline.operators).filter((operator) => inline.moe_expanded || !moeIds.has(operator.operator_id));
+}
+
+const MODEL_INLINE_SHORT_LABELS = Object.freeze({
+  input: ["输入", "Input"], model_input: ["模型输入", "Model Input"], embedding: ["词嵌入", "Embedding"],
+  rms_norm: ["RMS 归一化", "RMS Norm"], layer_norm: ["层归一化", "Layer Norm"], final_norm: ["最终归一化", "Final Norm"],
+  attention: ["全注意力", "Attention"], self_attention: ["自注意力", "Attention"], full_attention: ["全注意力", "Attention"],
+  linear_attention: ["线性注意力", "Linear Attention"], residual_add: ["残差相加", "Residual Add"],
+  dense_mlp: ["稠密 MLP", "Dense MLP"], linear: ["线性层", "Linear"], transform: ["显式变换", "Transform"],
+  moe_router: ["MoE 路由器", "MoE Router"], experts: ["专家模块", "Experts"], moe_experts: ["MoE 专家", "MoE Experts"],
+  shared_expert: ["共享专家", "Shared Expert"], moe_combine: ["MoE 合并", "MoE Combine"],
+  lm_head: ["语言模型头", "LM Head"], mtp_head: ["多 Token 预测头", "MTP Head"],
+  mtp_prediction_layer: ["多 Token 预测层", "MTP Layer"], mtp_aux_head: ["多 Token 辅助头", "MTP Aux"],
+  output: ["输出", "Output"], model_output: ["模型输出", "Model Output"],
+});
+
+function modelInlineShortLabel(operatorValue) {
+  const operator = asObject(operatorValue);
+  const known = MODEL_INLINE_SHORT_LABELS[operator.op_kind];
+  if (known) return uiText(known[0], known[1]);
+  return String(operator.op_kind || uiText("算子", "Operator"))
+    .split("_")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function modelInlineOperatorSize(operator, inline) {
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const projection = asObject(asObject(inline.attention_projections)[operator.operator_id]);
+  if (projection.derived_only) {
+    return { width: Math.ceil(332 * scale), height: Math.ceil(236 * scale), derived: true };
+  }
+  const labelWidth = modelGraphOverviewTextWidth(modelInlineShortLabel(operator));
+  const ports = asArray(operator.ports);
+  const inputs = ports.filter((port) => port.direction !== "output").length;
+  const outputs = ports.filter((port) => port.direction === "output").length;
+  const portRows = Math.max(inputs, outputs, 1);
+  return {
+    width: Math.ceil(Math.max(76 * scale, labelWidth + 30 * scale, (portRows * 13 + 18) * scale)),
+    height: Math.ceil(Math.max(38 * scale, (portRows * 13 + 12) * scale)),
+    derived: false,
+  };
+}
+
+function renderAttentionLoweringProjection(projection) {
+  const nodes = asArray(projection.nodes);
+  const width = 320;
+  const height = 222;
+  const nodeHeight = 24;
+  const centers = {
+    "q-projection": { x: 52, y: 8 }, "k-projection": { x: 160, y: 8 }, "v-projection": { x: 268, y: 8 },
+    "q-heads": { x: 52, y: 51 }, "k-heads": { x: 160, y: 51 }, "v-heads": { x: 268, y: 51 },
+    "qk-scores": { x: 106, y: 94 }, softmax: { x: 106, y: 136 }, pv: { x: 214, y: 136 }, output: { x: 160, y: 181 },
+  };
+  const suffix = (id) => String(id || "").split(":derived:").at(-1);
+  const shortLabels = Object.freeze({
+    "q-projection": "Q", "k-projection": "K", "v-projection": "V",
+    "q-heads": "Q Heads", "k-heads": "K Heads", "v-heads": "V Heads",
+    "qk-scores": "QKᵀ", softmax: "Softmax", pv: "P × V", output: "Output",
+  });
+  const rectById = new Map(nodes.map((node, index) => {
+    const key = suffix(node.derived_id);
+    const compactLabel = shortLabels[key] || String(node.label || "");
+    const labelWidth = Math.max(46, Math.min(88, Array.from(compactLabel).length * 6.1 + 16));
+    const center = centers[key] || { x: 160, y: 8 + index * 38 };
+    return [node.derived_id, { id: node.derived_id, x: center.x - labelWidth / 2, y: center.y, width: labelWidth, height: nodeHeight, compactLabel }];
+  }));
+  const obstacles = Array.from(rectById.values());
+  const edgeMarkup = asArray(projection.edges).map((edge) => {
+    const sourceRect = rectById.get(edge.source_id);
+    const targetRect = rectById.get(edge.target_id);
+    if (!sourceRect || !targetRect) return "";
+    const route = ModelGraph.modelGraphRouteEdge(sourceRect, targetRect, obstacles, { shortCurveDistance: 112, clearance: 5, cornerRadius: 5 });
+    return `<path class="model-attention-derived-edge ${modelGraphRouteClass(route)}" data-derived-edge="${escapeHtml(`${edge.source_id}->${edge.target_id}`)}" d="${escapeHtml(route.path)}"><title>${escapeHtml(edge.label || "derived connection")}</title></path><circle class="model-attention-derived-port" cx="${route.source.x}" cy="${route.source.y}" r="3"></circle><circle class="model-attention-derived-port" cx="${route.target.x}" cy="${route.target.y}" r="3"></circle>`;
+  }).join("");
+  const nodeMarkup = nodes.map((node) => {
+    const rect = rectById.get(node.derived_id);
+    const details = `${node.label} · [${modelShapeText(node.shape)}]`;
+    return `<g class="model-attention-derived-node" data-derived-id="${escapeHtml(node.derived_id)}" transform="translate(${rect.x} ${rect.y})" aria-label="${escapeHtml(details)}"><title>${escapeHtml(details)}</title><rect width="${rect.width}" height="${nodeHeight}" rx="5"></rect><text x="${rect.width / 2}" y="16" text-anchor="middle">${escapeHtml(rect.compactLabel)}</text></g>`;
+  }).join("");
+  const knownDisclaimer = "派生视图 / 不新增执行 IR";
+  const disclaimer = !projection.disclaimer || projection.disclaimer === knownDisclaimer
+    ? uiText(knownDisclaimer, "Derived view / no additional execution IR")
+    : String(projection.disclaimer);
+  const accessibleSummary = uiText(
+    "{disclaimer}；{mode}；Q {attentionHeads} heads；KV {kvHeads} heads；head_dim {headDim}",
+    "{disclaimer}; {mode}; Q {attentionHeads} heads; KV {kvHeads} heads; head_dim {headDim}",
+    {
+      disclaimer,
+      mode: projection.attention_mode,
+      attentionHeads: projection.attention_heads,
+      kvHeads: projection.kv_heads,
+      headDim: projection.head_dim,
+    },
+  );
+  const graphLabel = uiText(
+    "{mode} Q/K/V 与 attention heads 派生连接；{summary}",
+    "{mode} Q/K/V derived connections to attention heads; {summary}",
+    { mode: projection.attention_mode, summary: accessibleSummary },
+  );
+  return `<aside class="model-attention-derived" data-derived-only="true" title="${escapeHtml(accessibleSummary)}">
+    <svg class="model-attention-derived-graph" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(graphLabel)}">${edgeMarkup}${nodeMarkup}</svg>
+  </aside>`;
+}
+
+function modelInlineLayout(inline, width, savedPositions = {}) {
+  const operators = modelInlineVisibleOperators(inline).slice().sort((left, right) => left.sequence_index - right.sequence_index || left.operator_id.localeCompare(right.operator_id));
+  const ids = new Set(operators.map((operator) => operator.operator_id));
+  const edges = asArray(inline.edges).filter((edge) => ids.has(edge.source_operator_id) && ids.has(edge.target_operator_id));
+  const predecessors = new Map(operators.map((operator) => [operator.operator_id, new Set()]));
+  const successors = new Map(operators.map((operator) => [operator.operator_id, new Set()]));
+  edges.forEach((edge) => {
+    if (edge.source_operator_id === edge.target_operator_id) return;
+    predecessors.get(edge.target_operator_id)?.add(edge.source_operator_id);
+    successors.get(edge.source_operator_id)?.add(edge.target_operator_id);
+  });
+  const indegree = new Map(operators.map((operator) => [operator.operator_id, predecessors.get(operator.operator_id).size]));
+  const rank = new Map(operators.map((operator) => [operator.operator_id, 0]));
+  const order = new Map(operators.map((operator, index) => [operator.operator_id, index]));
+  const queue = operators.filter((operator) => indegree.get(operator.operator_id) === 0).map((operator) => operator.operator_id);
+  const visited = new Set();
+  while (queue.length) {
+    queue.sort((left, right) => order.get(left) - order.get(right));
+    const id = queue.shift();
+    visited.add(id);
+    successors.get(id)?.forEach((target) => {
+      rank.set(target, Math.max(rank.get(target), rank.get(id) + 1));
+      indegree.set(target, indegree.get(target) - 1);
+      if (indegree.get(target) === 0) queue.push(target);
+    });
+  }
+  operators.filter((operator) => !visited.has(operator.operator_id)).forEach((operator, index) => rank.set(operator.operator_id, visited.size + index));
+  const layers = new Map();
+  operators.forEach((operator) => {
+    const value = rank.get(operator.operator_id);
+    if (!layers.has(value)) layers.set(value, []);
+    layers.get(value).push(operator);
+  });
+  const ranks = Array.from(layers.keys()).sort((left, right) => left - right);
+  const scale = layoutScaleForFont(state.settings.fontScale);
+  const sideMargin = 14;
+  const columnGap = 18 * scale;
+  const layerGap = 24 * scale;
+  const top = 14;
+  const sizes = Object.fromEntries(operators.map((operator) => [operator.operator_id, modelInlineOperatorSize(operator, inline)]));
+  const rowWidths = new Map(ranks.map((value) => {
+    const layer = layers.get(value);
+    return [value, layer.reduce((total, operator) => total + sizes[operator.operator_id].width, 0) + Math.max(0, layer.length - 1) * columnGap];
+  }));
+  const rowHeights = new Map(ranks.map((value) => [value, Math.max(...layers.get(value).map((operator) => sizes[operator.operator_id].height))]));
+  const naturalWidth = Math.max(240 * scale, ...Array.from(rowWidths.values()).map((rowWidth) => rowWidth + sideMargin * 2));
+  const requestedWidth = Math.max(0, Number(width) || 0);
+  const maxNodeWidth = Math.max(0, ...Object.values(sizes).map((size) => size.width));
+  const maxNodeHeight = Math.max(0, ...Object.values(sizes).map((size) => size.height));
+  const graphWidth = requestedWidth
+    ? Math.max(requestedWidth, maxNodeWidth + sideMargin * 2)
+    : naturalWidth;
+  const constrained = requestedWidth > 0;
+  const basePositions = {};
+  let rowTop = top;
+  if (constrained) {
+    // A caller may explicitly request a narrow drill-down surface. Preserve
+    // routing clearance by stacking same-rank siblings in a max-size lane;
+    // the normal overview path passes the measured natural width and remains
+    // compact and horizontally grouped.
+    ranks.forEach((value, layerIndex) => {
+      const layer = layers.get(value).sort((left, right) => order.get(left.operator_id) - order.get(right.operator_id));
+      layer.forEach((operator, index) => {
+        basePositions[operator.operator_id] = { x: Math.max(sideMargin, (graphWidth - maxNodeWidth) / 2), y: rowTop };
+        rowTop += maxNodeHeight + (index < layer.length - 1 ? 10 * scale : 0);
+      });
+      if (layerIndex < ranks.length - 1) rowTop += layerGap;
+    });
+  } else {
+    ranks.forEach((value, layerIndex) => {
+      const layer = layers.get(value).sort((left, right) => order.get(left.operator_id) - order.get(right.operator_id));
+      const rowWidth = rowWidths.get(value);
+      let left = Math.max(sideMargin, (graphWidth - rowWidth) / 2);
+      const rowHeight = rowHeights.get(value);
+      layer.forEach((operator) => {
+        const size = sizes[operator.operator_id];
+        basePositions[operator.operator_id] = { x: left, y: rowTop + (rowHeight - size.height) / 2 };
+        left += size.width + columnGap;
+      });
+      rowTop += rowHeight + (layerIndex < ranks.length - 1 ? layerGap : 0);
+    });
+  }
+  const graphHeight = Math.max(72 * scale, rowTop + top);
+  const positions = Object.fromEntries(operators.map((operator) => {
+    const automatic = basePositions[operator.operator_id];
+    const saved = asObject(asObject(savedPositions)[operator.operator_id]);
+    const size = sizes[operator.operator_id];
+    return [operator.operator_id, {
+      x: Math.max(sideMargin, Math.min(graphWidth - size.width - sideMargin, Number.isFinite(Number(saved.x)) ? Number(saved.x) : automatic.x)),
+      y: Math.max(top, Math.min(graphHeight - size.height - top, Number.isFinite(Number(saved.y)) ? Number(saved.y) : automatic.y)),
+    }];
+  }));
+  return {
+    operators, edges, positions, sizes, graphWidth, graphHeight, constrained,
+    nodeWidth: maxNodeWidth,
+    nodeHeight: maxNodeHeight,
+  };
+}
+
+function modelInlineRoutePlan(layout) {
+  const operatorById = new Map(layout.operators.map((operator) => [operator.operator_id, operator]));
+  const rectByNode = new Map(layout.operators.map((operator) => [operator.operator_id, {
+    id: operator.operator_id,
+    ...layout.positions[operator.operator_id],
+    ...layout.sizes[operator.operator_id],
+  }]));
+  const entries = layout.edges.map((edge) => {
+    const sourceOperator = operatorById.get(edge.source_operator_id);
+    const targetOperator = operatorById.get(edge.target_operator_id);
+    const sourcePort = asArray(sourceOperator?.ports).find((port) => port.direction === "output" && port.tensor_id === edge.tensor_id);
+    const targetPort = asArray(targetOperator?.ports).find((port) => port.direction === "input" && port.tensor_id === edge.tensor_id);
+    if (!sourcePort || !targetPort) return null;
+    return {
+      edge,
+      sourceNodeId: edge.source_operator_id,
+      targetNodeId: edge.target_operator_id,
+      source: { operatorId: edge.source_operator_id, portId: sourcePort.port_id },
+      target: { operatorId: edge.target_operator_id, portId: targetPort.port_id },
+    };
+  }).filter(Boolean);
+  const placements = modelGraphPortPlacementPlan(rectByNode, entries);
+  const obstacles = Array.from(rectByNode.values());
+  const residualIds = new Set(asArray(layout.inline?.residual_edges).map((edge) => edge.edge_id));
+  const routes = new Map();
+  entries.forEach((entry) => {
+    const sourceRect = rectByNode.get(entry.sourceNodeId);
+    const targetRect = rectByNode.get(entry.targetNodeId);
+    const source = modelGraphPlacedPort(sourceRect, placements.get(modelGraphRouteEndpointKey(entry.source.operatorId, entry.source.portId)), "bottom");
+    const target = modelGraphPlacedPort(targetRect, placements.get(modelGraphRouteEndpointKey(entry.target.operatorId, entry.target.portId)), "top");
+    const residual = residualIds.has(entry.edge.edge_id) || operatorById.get(entry.targetNodeId)?.op_kind === "residual_add";
+    routes.set(entry.edge.edge_id, ModelGraph.modelGraphRouteEdge(sourceRect, targetRect, obstacles, {
+      sourcePoint: source,
+      targetPoint: target,
+      sourceSide: source.side,
+      targetSide: target.side,
+      // Residual edges still use orthogonal clearance, but they must not be
+      // forced around the full inline graph. A wide attention replacement
+      // would otherwise turn a local skip into a line spanning the group.
+      // Bounded drill-down layouts retain preferOuter for residual routes.
+      preferOuter: Boolean(layout.constrained && residual),
+      shortCurveDistance: residual ? 0 : 154,
+      clearance: residual ? 14 : 10,
+      cornerRadius: 8,
+    }));
+  });
+  return { rectByNode, entries, placements, routes, residualIds };
+}
+
+function modelGraphInlineEdgeDirection(entry, selectedOperatorId = state.modelGraphEditor.selectedOperatorId) {
+  const id = String(selectedOperatorId || "");
+  if (!id) return "";
+  const fromSelected = String(entry?.sourceNodeId || entry?.source_operator_id || "") === id;
+  const toSelected = String(entry?.targetNodeId || entry?.target_operator_id || "") === id;
+  if (fromSelected && toSelected) return "loop";
+  if (fromSelected) return "outgoing";
+  if (toSelected) return "incoming";
+  return "";
+}
+
+function modelGraphInlineEdgeDirectionClass(entry, selectedOperatorId = state.modelGraphEditor.selectedOperatorId) {
+  const direction = modelGraphInlineEdgeDirection(entry, selectedOperatorId);
+  return direction ? ` is-one-hop is-${direction}` : "";
+}
+
+function refreshModelGraphInlineSelectionState(selectedOperatorId = state.modelGraphEditor.selectedOperatorId) {
+  const selectedId = String(selectedOperatorId || "");
+  $$('.model-inline-operator[data-model-select-operator]', dom.modelGraphNodeLayer).forEach((node) => {
+    const selected = node.dataset.modelSelectOperator === selectedId;
+    node.classList.toggle("is-selected", selected);
+    node.setAttribute("aria-pressed", String(selected));
+  });
+  $$('.model-inline-edge[data-model-route-source-operator][data-model-route-target-operator]', dom.modelGraphNodeLayer).forEach((path) => {
+    const direction = modelGraphInlineEdgeDirection({
+      source_operator_id: path.dataset.modelRouteSourceOperator,
+      target_operator_id: path.dataset.modelRouteTargetOperator,
+    }, selectedOperatorId);
+    path.classList.toggle("is-one-hop", Boolean(direction));
+    for (const value of ["incoming", "outgoing", "loop"]) path.classList.toggle(`is-${value}`, direction === value);
+    if (direction) path.dataset.modelHopDirection = direction;
+    else delete path.dataset.modelHopDirection;
+  });
+}
+
+function renderModelInlineAuthoritativeGraph(graph, inline, width, { groupId = "", mtp = false } = {}) {
+  const scope = mtp ? "overview:mtp-proposer" : String(groupId || "inline");
+  const overview = modelGraphActiveUi(graph);
+  const savedPositions = asObject(overview.inline_positions[scope]);
+  const layout = modelInlineLayout(inline, width, savedPositions);
+  layout.inline = inline;
+  const plan = modelInlineRoutePlan(layout);
+  const operatorById = new Map(layout.operators.map((operator) => [operator.operator_id, operator]));
+  const edgeMarkup = plan.entries.map((entry) => {
+    const route = plan.routes.get(entry.edge.edge_id);
+    if (!route) return "";
+    const residual = plan.residualIds.has(entry.edge.edge_id) || operatorById.get(entry.targetNodeId)?.op_kind === "residual_add";
+    const direction = modelGraphInlineEdgeDirection(entry);
+    // Base authoritative-edge contract remains: class="model-inline-edge ${modelGraphRouteClass(route)}${residual ? " is-residual is-skip-route" : ""}" data-authoritative="true".
+    return `<path class="model-inline-edge ${modelGraphRouteClass(route)}${residual ? " is-residual is-skip-route" : ""}${modelGraphInlineEdgeDirectionClass(entry)}" data-authoritative="true" data-model-inline-edge-id="${escapeHtml(entry.edge.edge_id)}" data-model-route-source-node="${escapeHtml(entry.sourceNodeId)}" data-model-route-target-node="${escapeHtml(entry.targetNodeId)}" data-model-route-source-operator="${escapeHtml(entry.source.operatorId)}" data-model-route-source-port="${escapeHtml(entry.source.portId)}" data-model-route-target-operator="${escapeHtml(entry.target.operatorId)}" data-model-route-target-port="${escapeHtml(entry.target.portId)}" ${direction ? `data-model-hop-direction="${direction}"` : ""} data-model-route-outer="false" d="${escapeHtml(route.path)}"><title>${escapeHtml(`${entry.edge.tensor_id} · ${entry.edge.dtype || "?"} [${modelShapeText(entry.edge.shape)}] / ${entry.edge.layout || "logical"}`)}</title></path>`;
+  }).join("");
+  const portMarkup = (operator, port, index, siblings) => {
+    const interaction = modelGraphPortInteractionClass(graph, { operatorId: operator.operator_id, portId: port.port_id, direction: port.direction });
+    const placement = plan.placements.get(modelGraphRouteEndpointKey(operator.operator_id, port.port_id));
+    const placed = modelGraphPortPlacementStyle(placement, port.direction === "output" ? "right" : "left", (index + 1) / (siblings.length + 1));
+    const endpointId = `${operator.operator_id}.${port.port_id}`;
+    const contract = `${port.tensor_id} · ${port.dtype || "?"} [${modelShapeText(port.shape)}] / ${port.layout || "logical"}`;
+    const direction = modelPortDirectionLabel(port.direction);
+    const accessibleLabel = uiText("{direction}端口 {id}，张量契约 {contract}", "{direction} port {id}, tensor contract {contract}", { direction, id: endpointId, contract });
+    return `<button type="button" class="model-graph-port model-inline-port is-${escapeHtml(port.direction)} ${interaction}" data-model-route-scope="inline" data-model-port-operator="${escapeHtml(operator.operator_id)}" data-model-port-id="${escapeHtml(port.port_id)}" data-model-port-direction="${escapeHtml(port.direction)}" data-model-port-side="${placed.side}" style="${placed.style}" title="${escapeHtml(`${endpointId}\n${contract}`)}" aria-label="${escapeHtml(accessibleLabel)}"><i aria-hidden="true"></i><span class="sr-only">${escapeHtml(port.port_id)}</span></button>`;
+  };
+  const nodeMarkup = layout.operators.map((operator) => {
+    const position = layout.positions[operator.operator_id];
+    const size = layout.sizes[operator.operator_id];
+    const leftPorts = asArray(operator.ports).filter((port) => port.direction !== "output");
+    const outputs = asArray(operator.ports).filter((port) => port.direction === "output");
+    const derived = asObject(inline.attention_projections)[operator.operator_id];
+    const derivedExpanded = Boolean(derived?.derived_only);
+    const shortLabel = modelInlineShortLabel(operator);
+    const operatorTitle = `${shortLabel}\n${uiText("算子 ID", "Operator ID")}: ${operator.operator_id}`;
+    const operatorAccessibleLabel = uiText(
+      "{name}；算子 ID {id}",
+      "{name}; Operator ID: {id}",
+      { name: shortLabel, id: operator.operator_id },
+    );
+    return `<article class="model-inline-operator kind-${escapeHtml(slug(operator.op_kind))} ${derivedExpanded ? "is-attention-derived" : ""} ${state.modelGraphEditor.selectedOperatorId === operator.operator_id ? "is-selected" : ""}" data-authoritative="true" data-model-inline-operator="${escapeHtml(operator.operator_id)}" data-model-route-node="${escapeHtml(operator.operator_id)}" data-model-route-scope="inline" data-model-drag-kind="inline" data-model-drag-id="${escapeHtml(operator.operator_id)}" data-model-inline-scope="${escapeHtml(scope)}" data-model-select-operator="${escapeHtml(operator.operator_id)}" style="left:${position.x}px;top:${position.y}px;width:${size.width}px;height:${size.height}px" title="${escapeHtml(operatorTitle)}" aria-label="${escapeHtml(operatorAccessibleLabel)}" aria-pressed="${String(state.modelGraphEditor.selectedOperatorId === operator.operator_id)}" role="button" tabindex="0">
+      <span class="model-graph-drag-handle" data-model-drag-handle title="${escapeHtml(uiText("拖动权威算子", "Drag authoritative operator"))}" aria-hidden="true">⠿</span>
+      <div class="model-inline-ports is-inputs">${leftPorts.map(portMarkup.bind(null, operator)).join("")}</div>
+      <div class="model-inline-ports is-outputs">${outputs.map(portMarkup.bind(null, operator)).join("")}</div>
+      ${derivedExpanded ? renderAttentionLoweringProjection(derived) : `<header><span>${escapeHtml(shortLabel)}</span></header>`}
+    </article>`;
+  }).join("");
+  const moeControl = asArray(inline.moe_operator_ids).length
+    ? `<button type="button" class="model-inline-compound-toggle" data-model-overview-moe="${escapeHtml(`${groupId}.moe`)}" aria-expanded="${String(inline.moe_expanded)}" aria-label="${escapeHtml(inline.moe_expanded ? uiText("收起 MoE 路由、专家与合并结构", "Collapse MoE Router, Experts, and Combine") : uiText("展开 MoE 路由、专家与合并结构", "Expand MoE Router, Experts, and Combine"))}"><span>MoE</span><strong>${escapeHtml(inline.moe_expanded ? uiText("收起专家结构", "Collapse experts") : uiText("展开专家结构", "Expand experts"))}</strong></button>`
+    : "";
+  return `<div class="model-overview-inline-expansion ${mtp ? "is-mtp" : ""}" data-authoritative-subgraph="true">
+    ${moeControl}
+    <div class="model-inline-graph" data-model-inline-scope="${escapeHtml(scope)}" style="width:${layout.graphWidth}px;height:${layout.graphHeight}px"><svg viewBox="0 0 ${layout.graphWidth} ${layout.graphHeight}" role="img" aria-label="${escapeHtml(uiText("权威张量连接", "Authoritative tensor connections"))}">${edgeMarkup}</svg>${nodeMarkup}</div>
+    ${!inline.moe_expanded && asArray(inline.moe_operator_ids).length ? `<p class="model-inline-collapsed-note">${escapeHtml(uiText("此派生投影不在结构总览中显示；请从右侧组件检查器查看 MoE 语义摘要。", "This derived projection is not shown in the overview; inspect the MoE semantic summary on the right."))}</p>` : ""}
+  </div>`;
+}
+
+function modelGraphOverviewName(node) {
+  const label = MODEL_OPERATOR_LABELS[node.op_kind] || node.label || node.op_kind || uiText("模型组件", "Model component");
+  return modelGraphOverviewDisplayText(label);
+}
+
+function modelGraphOverviewIsMtp(nodeValue) {
+  const node = asObject(nodeValue);
+  return String(node.op_kind || "").startsWith("mtp_");
+}
+
+function modelGraphOverviewConceptKey(node) {
+  if (modelGraphOverviewIsMtp(node)) return "mtp";
+  const kind = String(node.op_kind || "").toLowerCase();
+  if (kind.includes("rms") && kind.includes("norm")) return "rmsnorm";
+  if (kind === "softmax") return "softmax";
+  if (kind === "expert_router" || kind.endsWith("_router")) return "expert_router";
+  if (kind === "linear_attention") return "linear_attention";
+  if (kind.includes("attention")) return "attention";
+  if (kind.includes("moe") || kind.includes("expert")) return "moe";
+  if (kind === "embedding") return "embedding";
+  if (kind === "residual_add") return "residual_add";
+  if (kind === "dense_mlp") return "dense_mlp";
+  if (kind === "lm_head") return "lm_head";
+  return "model_graph";
+}
+
+function modelGraphOverviewInspectorReadout(label, value) {
+  return `<div class="readout"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "—")}</strong></div>`;
+}
+
+function renderModelGraphOverviewInspector(graph, projection) {
+  const node = projection.nodes.find((item) => item.display_id === state.modelGraphEditor.selectedOverviewId);
+  if (!node) {
+    dom.modelGraphInspectorTitle.textContent = uiText("未选择组件", "No component selected");
+    dom.modelGraphInspectorContent.innerHTML = `<div class="inspector-empty"><span>${escapeHtml(uiText("选择 · SELECT", "SELECT"))}</span><p>${escapeHtml(uiText("点击结构总览中的叶子算子，在此查看说明、实例数、参数和具体端口。", "Select a leaf operator in the overview to inspect its description, instance count, parameters, and concrete ports."))}</p></div>`;
+    return;
+  }
+  if (state.modelGraphEditor.selectedOperatorId && asArray(node.operator_ids).includes(state.modelGraphEditor.selectedOperatorId)) {
+    renderModelGraphInspector();
+    return;
+  }
+  const name = modelGraphOverviewName(node);
+  dom.modelGraphInspectorTitle.textContent = name;
+  const boundaryPorts = asArray(node.boundary_ports);
+  const portMarkup = boundaryPorts.map((port) => `<div class="model-port-contract"><strong>${escapeHtml(`${port.port_id} · ${modelPortDirectionLabel(port.direction)}`)}</strong><span>${escapeHtml(`${port.dtype || "?"} [${modelShapeText(port.shape)}] / ${port.layout || "logical"}`)}</span><small>${escapeHtml(port.tensor_id || uiText("未连接张量", "Unconnected tensor"))}</small></div>`).join("");
+  const operator = graph.operators.find((item) => item.operator_id === node.representative_operator_id);
+  const parameters = Object.entries(asObject(node.detail?.parameters || operator?.parameters)).filter(([, value]) => ["string", "number", "boolean"].includes(typeof value));
+  const instanceCount = Math.max(1, Number(node.instance_count) || asArray(node.operator_ids).length || 1);
+  const description = conceptHelpText(modelGraphOverviewConceptKey(node));
+  const groupDetails = node.kind === "repeat_group" ? `<section class="inspector-section"><h3>${escapeHtml(uiText("重复模式", "Repeat pattern"))}</h3>
+      ${modelGraphOverviewInspectorReadout(uiText("总实例数", "Total instances"), node.repeat_count)}
+      ${modelGraphOverviewInspectorReadout(uiText("最小基本周期", "Minimal period"), node.pattern_period)}
+      ${modelGraphOverviewInspectorReadout(uiText("完整周期次数", "Complete repetitions"), node.pattern_repetitions)}
+      ${modelGraphOverviewInspectorReadout(uiText("模式", "Pattern"), modelOverviewStackSummary(node))}
+      ${modelGraphOverviewInspectorReadout(uiText("边界", "Boundary"), `${node.boundary?.input_count || 0} in / ${node.boundary?.output_count || 0} out`)}
+      ${modelGraphOverviewInspectorReadout(uiText("语义 Override", "Semantic overrides"), node.has_semantic_overrides ? JSON.stringify(node.overrides) : uiText("无", "None"))}
+      <p class="inspector-note">${escapeHtml(uiText("虚线 ×N 回线仅表达重复，不属于权威 DAG。边界代理端口映射到模板的真实首/末端口。", "The dashed ×N loop is visual only. Boundary proxies map to real first/last template ports."))}</p></section>` : "";
+  dom.modelGraphInspectorContent.innerHTML = `<section class="inspector-section"><h3>${escapeHtml(uiText("组件说明", "Component description"))}</h3>
+    <p class="inspector-note">${escapeHtml(description)}</p></section>
+    <section class="inspector-section"><h3>${escapeHtml(uiText("组件身份", "Component identity"))}</h3>
+      ${modelGraphOverviewInspectorReadout(uiText("组件名称", "Component name"), name)}
+      ${modelGraphOverviewInspectorReadout(uiText("算子类型", "Operator kind"), node.op_kind)}
+      ${modelGraphOverviewInspectorReadout(uiText("结构角色", "Structural role"), node.structural_role || "—")}
+      ${modelGraphOverviewInspectorReadout(uiText("代表算子 ID", "Representative operator ID"), node.representative_operator_id)}
+      ${modelGraphOverviewInspectorReadout(uiText("实例数量", "Instance count"), instanceCount)}</section>
+    ${groupDetails}
+    ${parameters.length ? `<section class="inspector-section"><h3>${escapeHtml(uiText("组件参数", "Component parameters"))}</h3>${parameters.map(([key, value]) => modelGraphOverviewInspectorReadout(modelGraphParameterLabel(key), value)).join("")}</section>` : ""}
+    <section class="inspector-section"><h3>${fieldTitleMarkup(uiText("具体端口", "Concrete ports"), "typed_port")}</h3>${portMarkup || `<p class="muted">${escapeHtml(uiText("此组件没有边界端口。", "This component has no boundary ports."))}</p>`}</section>`;
+  hydrateConceptHelp(dom.modelGraphInspectorContent);
+}
+
+function renderModelGraphOverview(graph, ui) {
+  const projection = modelGraphOverviewProjection(graph);
+  const overviewKey = modelGraphOverviewRenderLayoutKey(projection);
+  const reconciliation = reconcileModelGraphOverviewPositions(projection, ui);
+  if (!reconciliation.initialized) {
+    autoLayoutModelGraphOverview();
+    return;
+  }
+  // Width, font, and language changes affect measurement and routing only.
+  // Existing coordinates are user-owned until the explicit “整理” action;
+  // a render-only copy adds enough spacing when larger labels would collide.
+  state.modelGraphEditor.overviewLayoutKey = overviewKey;
+  const measuredWidth = modelGraphOverviewContainerWidth();
+  if (measuredWidth > 0) state.modelGraphEditor.overviewCanvasWidth = measuredWidth;
+  state.modelGraphEditor.overviewResizeTarget = 0;
+  if (reconciliation.changed) saveModelGraphLayout();
+  const presentation = modelGraphOverviewPresentationLayout(projection, ui.positions);
+  const renderPositions = presentation.positions;
+  state.modelGraphEditor.overviewPresentationLayout = presentation;
+  const bounds = modelGraphOverviewBounds(projection, renderPositions);
+  const routePlan = modelGraphOverviewRoutePlan(projection, renderPositions);
+  const viewport = ui.viewport;
+  dom.modelGraphWorld.style.width = `${bounds.width}px`;
+  dom.modelGraphWorld.style.height = `${bounds.height}px`;
+  syncModelGraphViewport(ui);
+  dom.modelGraphGroupLayer.innerHTML = "";
+  dom.modelGraphNodeLayer.innerHTML = projection.nodes.map((node) => {
+    const position = renderPositions[node.display_id] || { x: 0, y: 0 };
+    const size = modelGraphOverviewNodeSize(node);
+    const portMarkup = modelOverviewPortMarkup(graph, node, routePlan.placements);
+    const name = modelGraphOverviewName(node);
+    const repeatLabel = node.kind === "repeat_group" ? ` ×${Math.max(1, Number(node.repeat_count) || 1)}` : "";
+    const conceptKey = modelGraphOverviewConceptKey(node);
+    const accessibleTitle = uiText("{name} · {help}", "{name} · {help}", { name, help: conceptHelpText(conceptKey) });
+    const selected = state.modelGraphEditor.selectedOverviewId === node.display_id;
+    const inlineMarkup = node.kind === "repeat_group" && node.expanded
+      ? renderModelInlineAuthoritativeGraph(graph, node.inline_graph, 0, { groupId: node.group_id })
+      : "";
+    return `<article class="model-overview-node kind-${escapeHtml(slug(node.op_kind))} ${node.kind === "repeat_group" ? "is-repeat-group" : ""} ${node.expanded ? "is-expanded" : "is-collapsed"} ${modelGraphOverviewIsMtp(node) ? "is-mtp-leaf" : ""} ${selected ? "is-selected" : ""}" data-model-overview-node="${escapeHtml(node.display_id)}" data-model-route-node="${escapeHtml(node.display_id)}" data-model-route-scope="overview" data-model-drag-kind="overview" data-model-drag-id="${escapeHtml(node.display_id)}" style="left:${position.x}px;top:${position.y}px;width:${size.width}px;height:${size.height}px">
+      <span class="model-graph-drag-handle" data-model-drag-handle title="${escapeHtml(uiText("拖动结构组件", "Drag structural component"))}" aria-hidden="true">⠿</span>
+      ${portMarkup}
+      <header class="model-overview-node-header">
+        <button type="button" class="model-overview-select-button" data-model-select-overview="${escapeHtml(node.display_id)}" title="${escapeHtml(accessibleTitle)}" aria-label="${escapeHtml(uiText("选择组件：{name}", "Select component: {name}", { name }))}"><strong>${escapeHtml(`${name}${repeatLabel}`)}</strong></button>
+        ${node.kind === "repeat_group" ? `<button type="button" class="model-overview-group-toggle" data-model-toggle-overview-group="${escapeHtml(node.display_id)}" aria-expanded="${String(Boolean(node.expanded))}" aria-label="${escapeHtml(node.expanded ? uiText("折叠重复 Block 组", "Collapse repeated Block group") : uiText("展开重复 Block 组", "Expand repeated Block group"))}" title="${escapeHtml(node.expanded ? uiText("折叠", "Collapse") : uiText("展开", "Expand"))}"><span aria-hidden="true">⌄</span></button>` : ""}
+      </header>
+      ${inlineMarkup}
+    </article>`;
+  }).join("");
+  renderModelGraphOverviewEdges(graph, projection, ui, bounds, routePlan);
+  refreshModelGraphDomRoutes({
+    coordinateRoot: dom.modelGraphWorld,
+    pathRoot: dom.modelGraphEdgeLayer,
+    nodeSelector: '.model-overview-node[data-model-route-node]',
+    routingProfile: "overview",
+  });
+  refreshModelGraphConnectionPreviewPath();
+  refreshModelGraphInlineSelectionState();
+  renderModelGraphOverviewInspector(graph, projection);
+  renderModelGraphDiagnostics();
+  bindModelGraphDynamicEvents();
+  syncModelGraphControls();
+}
+
+function renderModelGraph() {
+  if (!dom.modelGraphCanvas) return;
+  const performance = state.modelGraphEditor.performance ||= { fullRenders: 0, interactionFrames: 0, nodeTransforms: 0, edgeUpdates: 0 };
+  performance.fullRenders += 1;
+  const graph = ensureScenarioModelGraph();
+  const rootUi = modelGraphUi(graph);
+  dom.modelGraphCanvas.dataset.mode = rootUi.mode;
+  const shell = dom.modelGraphCanvas.closest?.(".model-graph-shell");
+  if (shell) shell.dataset.modelGraphMode = rootUi.mode;
+  if (rootUi.mode === "overview") {
+    renderModelGraphOverview(graph, rootUi.overview);
+    return;
+  }
+  const ui = rootUi.detail;
+  const layoutKey = graph.operators.map((operator) => operator.operator_id).join("|");
+  if (!Object.keys(ui.positions).length || state.modelGraphEditor.layoutKey !== layoutKey) autoLayoutModelGraph();
+  const visible = visibleModelGraphOperators(graph);
+  const visibleIds = new Set(visible.map((operator) => operator.operator_id));
+  const bounds = modelGraphBounds(graph, visible);
+  const viewport = ui.viewport;
+  dom.modelGraphWorld.style.width = `${bounds.width}px`;
+  dom.modelGraphWorld.style.height = `${bounds.height}px`;
+  syncModelGraphViewport(ui);
+  dom.modelGraphNodeLayer.innerHTML = visible.map((operator) => {
+    const position = ui.positions[operator.operator_id] || { x: 0, y: 0 };
+    const selected = state.modelGraphEditor.selectedOperatorId === operator.operator_id;
+    const operatorName = modelGraphOverviewDisplayText(MODEL_OPERATOR_LABELS[operator.op_kind] || operator.op_kind);
+    const operatorAccessibleLabel = uiText(
+      "{name}；算子 ID {id}",
+      "{name}; Operator ID: {id}",
+      { name: operatorName, id: operator.operator_id },
+    );
+    const inputs = operator.ports.filter((item) => item.direction === "input");
+    const outputs = operator.ports.filter((item) => item.direction === "output");
+    const weights = operator.ports.filter((item) => item.direction === "weight");
+    const portMarkup = (item) => {
+      const interaction = modelGraphPortInteractionClass(graph, { operatorId: operator.operator_id, portId: item.port_id, direction: item.direction });
+      const direction = modelPortDirectionLabel(item.direction);
+      const contract = `${item.tensor_id} · ${item.dtype || "?"} [${modelShapeText(item.shape)}] / ${item.layout || "logical"}`;
+      const accessibleLabel = uiText(
+        "{direction}端口 {id}，张量契约 {contract}",
+        "{direction} port {id}, tensor contract {contract}",
+        { direction, id: `${operator.operator_id}.${item.port_id}`, contract },
+      );
+      return `<button type="button" class="model-graph-port is-${escapeHtml(item.direction)} ${interaction}" data-model-port-operator="${escapeHtml(operator.operator_id)}" data-model-port-id="${escapeHtml(item.port_id)}" data-model-port-direction="${escapeHtml(item.direction)}" title="${escapeHtml(accessibleLabel)}" aria-label="${escapeHtml(accessibleLabel)}"><i aria-hidden="true"></i><span>${escapeHtml(item.port_id)} · ${escapeHtml(item.dtype || "?")} [${escapeHtml(modelShapeText(item.shape))}]</span></button>`;
+    };
+    return `<article class="model-graph-node kind-${escapeHtml(slug(operator.op_kind))} ${selected ? "is-selected" : ""}" data-model-operator="${escapeHtml(operator.operator_id)}" style="left:${position.x}px;top:${position.y}px;width:${bounds.nodeWidth}px;min-height:${bounds.nodeHeight}px" role="button" tabindex="0" aria-pressed="${String(selected)}" aria-label="${escapeHtml(operatorAccessibleLabel)}">
+      <header><span>${escapeHtml(MODEL_OPERATOR_LABELS[operator.op_kind] || operator.op_kind)}</span><strong>${escapeHtml(operator.operator_id)}</strong></header>
+      <div class="model-node-ports"><div>${inputs.map(portMarkup).join("")}${weights.map(portMarkup).join("")}</div><div>${outputs.map(portMarkup).join("")}</div></div>
+      ${operator.op_kind === "layer_group" ? `<button type="button" class="model-group-toggle" data-model-toggle-group="${escapeHtml(operator.operator_id)}">展开 Block × ${escapeHtml(operator.parameters.repeat || 1)}</button>` : ""}
+    </article>`;
+  }).join("");
+  const collapsed = new Set(ui.collapsed_groups);
+  dom.modelGraphGroupLayer.innerHTML = graph.operators.filter((operator) => operator.op_kind === "layer_group" && !collapsed.has(operator.operator_id)).map((group) => {
+    const children = visible.filter((item) => item.attributes.parent_group_id === group.operator_id);
+    if (!children.length) return "";
+    const rects = children.map((item) => ({ ...ui.positions[item.operator_id], width: bounds.nodeWidth, height: bounds.nodeHeight }));
+    const left = Math.min(...rects.map((item) => item.x)) - 24;
+    const top = Math.min(...rects.map((item) => item.y)) - 54;
+    const right = Math.max(...rects.map((item) => item.x + item.width)) + 24;
+    const bottom = Math.max(...rects.map((item) => item.y + item.height)) + 24;
+    const focused = ui.focus_group_id === group.operator_id;
+    return `<section class="model-graph-group-frame ${focused ? "is-template-focus" : ""}" style="left:${left}px;top:${top}px;width:${right-left}px;height:${bottom-top}px"><button type="button" ${focused ? "data-model-return-overview" : `data-model-toggle-group="${escapeHtml(group.operator_id)}"`}>${escapeHtml(group.operator_id)} · Block × ${escapeHtml(group.parameters.repeat || 1)} · ${focused ? "代表模板 / 返回总览" : "折叠"}</button></section>`;
+  }).join("");
+  const edgeMap = new Map();
+  modelGraphEdges(graph)
+    .map((edge) => ({ ...edge, source: modelGraphDisplayEndpoint(graph, edge.source_operator_id), target: modelGraphDisplayEndpoint(graph, edge.target_operator_id) }))
+    .filter((edge) => edge.source !== edge.target && visibleIds.has(edge.source) && visibleIds.has(edge.target))
+    .forEach((edge) => {
+      const key = `${edge.source}->${edge.target}`;
+      const current = edgeMap.get(key);
+      if (current) current.parallel_count += 1;
+      else edgeMap.set(key, { ...edge, parallel_count: 1 });
+    });
+  const edges = Array.from(edgeMap.values());
+  const paths = [];
+  edges.forEach((edge) => {
+    const source = ui.positions[edge.source];
+    const target = ui.positions[edge.target];
+    if (!source || !target) return;
+    const x1 = source.x + bounds.nodeWidth;
+    const y1 = source.y + bounds.nodeHeight / 2;
+    const x2 = target.x;
+    const y2 = target.y + bounds.nodeHeight / 2;
+    const mid = Math.max(48, Math.abs(x2 - x1) / 2);
+    const parallel = edge.parallel_count > 1 ? ` · ${edge.parallel_count} 张量` : "";
+    paths.push(`<path class="model-graph-edge" d="M ${x1} ${y1} C ${x1+mid} ${y1}, ${x2-mid} ${y2}, ${x2} ${y2}"><title>${escapeHtml(`${edge.tensor_id} · ${edge.dtype || "?"} [${modelShapeText(edge.shape)}] / ${edge.layout || "logical"}`)}</title></path><text class="model-graph-edge-label" x="${(x1+x2)/2}" y="${(y1+y2)/2-8}" text-anchor="middle">${escapeHtml(`${modelShapeText(edge.shape)} · ${edge.dtype || "?"} / ${edge.layout || "logical"}${parallel}`)}</text>`);
+  });
+  dom.modelGraphEdgeLayer.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+  dom.modelGraphEdgeLayer.innerHTML = paths.join("");
+  renderModelGraphInspector();
+  renderModelGraphDiagnostics();
+  bindModelGraphDynamicEvents();
+  syncModelGraphControls();
+}
+
+function renderModelGraphDiagnostics() {
+  if (!dom.modelGraphDiagnostics) return;
+  const messages = asArray(state.modelGraphEditor.diagnostics);
+  dom.modelGraphDiagnostics.hidden = !messages.length;
+  dom.modelGraphDiagnostics.innerHTML = messages.map((message) => `<p>${escapeHtml(message)}</p>`).join("");
+  const graph = ensureScenarioModelGraph();
+  const projection = modelGraphOverviewProjection(graph);
+  const selected = projection.nodes.find((node) => node.display_id === state.modelGraphEditor.selectedOverviewId);
+  const selectedOperator = graph.operators.find((operator) => operator.operator_id === state.modelGraphEditor.selectedOperatorId);
+  const selectedOperatorName = selectedOperator
+    ? modelGraphOverviewDisplayText(MODEL_OPERATOR_LABELS[selectedOperator.op_kind] || selectedOperator.op_kind)
+    : "";
+  const fallback = selectedOperator
+    ? uiText(
+      "已选择 {name} · {id} · 详情显示在组件检查器 · 带类型端口保持契约校验",
+      "{name} · {id} selected · details are shown in the component inspector · typed ports preserve contract validation",
+      { name: selectedOperatorName, id: selectedOperator.operator_id },
+    )
+    : uiText(
+      selected
+        ? `已选择 ${modelGraphOverviewName(selected)} · 详情显示在组件检查器 · 带类型端口保持契约校验`
+        : "未选择组件 · 点击组件查看详情 · 带类型端口保持契约校验",
+      selected
+        ? `${modelGraphOverviewName(selected)} selected · details are shown in the component inspector · typed ports preserve contract validation`
+        : "No component selected · select a component to inspect it · typed ports preserve contract validation",
+    );
+  dom.modelGraphStatus.textContent = messages.at(-1) || (state.modelGraphEditor.connectMode
+    ? uiText("连接模式：先选输出端口，再选输入端口", "Connect mode: select an output port, then an input port")
+    : fallback);
+  dom.modelGraphStatus.title = dom.modelGraphStatus.textContent;
+}
+
+const MODEL_GRAPH_PARAMETER_LABELS = Object.freeze({
+  attention_head_dim: "单头维度（Attention Head Dimension）",
+  attention_heads: "注意力头数（Attention Heads）",
+  dtype: "数据类型（DType）",
+  experts_per_token: "每 Token 专家数（Experts per Token）",
+  hidden_size: "隐藏维度（Hidden Size）",
+  intermediate_size: "中间维度（Intermediate Size）",
+  kind: "结构类型（Kind）",
+  kv_heads: "KV 头数（KV Heads）",
+  max_sequence_length: "最大序列长度（Max Sequence Length）",
+  num_experts: "专家数量（Expert Count）",
+  quantization: "权重量化（Quantization）",
+  repeat: "重复层数（Repeat）",
+  sequence_mixer: "序列混合器（Sequence Mixer）",
+  shared_expert_gate: "共享专家门控（Shared Expert Gate）",
+  shared_expert_intermediate_size: "共享专家中间维度（Shared Expert Intermediate Size）",
+  vocabulary_size: "词表大小（Vocabulary Size）",
+  weight_bytes: "权重字节数（Weight Bytes）",
+});
+
+const MODEL_GRAPH_PARAMETER_LABELS_EN = Object.freeze({
+  attention_head_dim: "Attention head dimension",
+  attention_heads: "Attention heads",
+  dtype: "Data type (DType)",
+  experts_per_token: "Experts per Token",
+  hidden_size: "Hidden size",
+  intermediate_size: "Intermediate size",
+  kind: "Structure kind",
+  kv_heads: "KV heads",
+  max_sequence_length: "Maximum sequence length",
+  num_experts: "Expert count",
+  quantization: "Weight quantization",
+  repeat: "Repeated layer count",
+  sequence_mixer: "Sequence mixer",
+  shared_expert_gate: "Shared-expert gate",
+  shared_expert_intermediate_size: "Shared-expert intermediate size",
+  vocabulary_size: "Vocabulary size",
+  weight_bytes: "Weight bytes",
+});
+
+function modelGraphParameterLabel(key) {
+  return uiText(
+    MODEL_GRAPH_PARAMETER_LABELS[key] || `自定义参数（${key}）`,
+    MODEL_GRAPH_PARAMETER_LABELS_EN[key] || `Custom parameter (${key})`,
+  );
+}
+
+function renderModelGraphInspector() {
+  const graph = ensureScenarioModelGraph();
+  const operator = graph.operators.find((item) => item.operator_id === state.modelGraphEditor.selectedOperatorId);
+  if (!operator) {
+    dom.modelGraphInspectorTitle.textContent = uiText("未选择组件", "No component selected");
+    dom.modelGraphInspectorContent.innerHTML = `<div class="inspector-empty"><span>${escapeHtml(uiText("选择 · SELECT", "SELECT"))}</span><p>${escapeHtml(uiText("选择钻取视图中的组件以查看参数和端口契约。", "Select a component in the detail view to inspect its parameters and port contracts."))}</p></div>`;
+    return;
+  }
+  dom.modelGraphInspectorTitle.textContent = operator.operator_id;
+  const params = Object.entries(operator.parameters).filter(([key, value]) => key === "quantization" || ["string", "number", "boolean"].includes(typeof value));
+  const template = operator.op_kind === "layer_group" ? asObject(operator.parameters.layer_template) : {};
+  const templateFields = ["kind", "hidden_size", "intermediate_size", "attention_heads", "kv_heads", "dtype", "quantization", "num_experts", "experts_per_token"].filter((key) => template[key] != null);
+  const activationPorts = operator.ports.filter((item) => ["input", "output"].includes(item.direction));
+  const weightPorts = operator.ports.filter((item) => item.direction === "weight");
+  const readout = (label, value) => `<div class="readout"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "—")}</strong></div>`;
+  const editor = (label, key, value, attribute = "data-model-param") => `<label class="field"><span>${escapeHtml(label)}</span><input type="text" ${attribute}="${escapeHtml(key)}" value="${escapeHtml(value ?? "")}"></label>`;
+  const portEditor = (item) => `<div class="model-port-editor" data-model-port-editor="${escapeHtml(item.port_id)}">
+    <strong>${escapeHtml(item.port_id)} · ${escapeHtml(modelPortDirectionLabel(item.direction))}</strong>
+    <label><span>${escapeHtml(uiText("数据类型", "DType"))}</span><input type="text" data-model-port-id="${escapeHtml(item.port_id)}" data-model-port-field="dtype" value="${escapeHtml(item.dtype || "")}"></label>
+    <label><span>${escapeHtml(uiText("形状", "Shape"))}</span><input type="text" data-model-port-id="${escapeHtml(item.port_id)}" data-model-port-field="shape" value="${escapeHtml(modelShapeText(item.shape).replaceAll(" × ", ", "))}"></label>
+    <small>${escapeHtml(item.tensor_id || uiText("未连接张量", "Unconnected tensor"))}</small>
+  </div>`;
+  dom.modelGraphInspectorContent.innerHTML = `<section class="inspector-section"><h3>${escapeHtml(uiText("组件身份", "Component identity"))}</h3>
+    ${readout(uiText("组件 ID（Operator ID）", "Operator ID"), operator.operator_id)}
+    ${readout(uiText("组件类型（Op Kind）", "Operator kind"), operator.op_kind)}</section>
+    ${params.length ? `<section class="inspector-section"><h3>${escapeHtml(uiText("组件参数（Parameters）", "Component parameters"))}</h3>${params.map(([key, value]) => editor(modelGraphParameterLabel(key), key, value)).join("")}</section>` : ""}
+    ${templateFields.length ? `<section class="inspector-section"><h3>${escapeHtml(uiText("Block 组参数（Group Template）", "Block group parameters"))}</h3>${templateFields.map((key) => editor(modelGraphParameterLabel(key), key, template[key], "data-model-template-param")).join("")}</section>` : ""}
+    <section class="inspector-section"><h3>${fieldTitleMarkup(uiText("带类型端口（Typed Ports）", "Typed ports"), "typed_port")}</h3><p class="inspector-note">${escapeHtml(uiText("编辑具体 input/output 端口的 Shape 与 DType 会同步该 TensorValue 及所有引用端口；量化仍是当前组件参数。", "Editing a concrete input/output port's Shape or DType updates that TensorValue and every referencing port; quantization remains a component parameter."))}</p>${activationPorts.map(portEditor).join("") || `<p class="muted">${escapeHtml(uiText("此组件没有声明 input/output 端口。", "This component declares no input/output ports."))}</p>`}${weightPorts.length ? `<h4>${escapeHtml(uiText("权重端口（只读）", "Weight ports (read-only)"))}</h4>${weightPorts.map((item) => `<div class="model-port-contract"><strong>${escapeHtml(item.port_id)} · ${escapeHtml(modelPortDirectionLabel("weight"))}</strong><span>${escapeHtml(`${item.dtype || "?"} [${modelShapeText(item.shape)}] / ${item.layout || "logical"}`)}</span><small>${escapeHtml(item.tensor_id || uiText("未连接张量", "Unconnected tensor"))}</small></div>`).join("")}` : ""}</section>`;
+  hydrateConceptHelp(dom.modelGraphInspectorContent);
+  $$('[data-model-param], [data-model-template-param], [data-model-port-field]', dom.modelGraphInspectorContent)
+    .forEach((control) => control.addEventListener("change", () => updateModelGraphInspector(operator, control)));
+}
+
+function updateModelGraphInspector(operator, control) {
+  const graph = ensureScenarioModelGraph();
+  const before = modelGraphSnapshot();
+  try {
+    if (control.dataset.modelOperatorId !== undefined) {
+      const nextId = control.value.trim();
+      if (!nextId || graph.operators.some((item) => item !== operator && item.operator_id === nextId)) throw new Error("组件 ID 不能为空且必须唯一。");
+      const previousId = operator.operator_id;
+      operator.operator_id = nextId;
+      graph.tensors.forEach((tensor) => {
+        if (tensor.producer_operator_id === previousId) tensor.producer_operator_id = nextId;
+        tensor.consumer_operator_ids = tensor.consumer_operator_ids.map((id) => id === previousId ? nextId : id);
+      });
+      graph.operators.forEach((item) => { if (item.attributes.parent_group_id === previousId) item.attributes.parent_group_id = nextId; });
+      const ui = modelGraphUi(graph);
+      if (ui.positions[previousId]) { ui.positions[nextId] = ui.positions[previousId]; delete ui.positions[previousId]; }
+      ui.collapsed_groups = ui.collapsed_groups.map((id) => id === previousId ? nextId : id);
+      state.modelGraphEditor.selectedOperatorId = nextId;
+    } else if (control.dataset.modelParam) {
+      const key = control.dataset.modelParam;
+      const previous = operator.parameters[key];
+      operator.parameters[key] = key === "quantization"
+        ? (control.value.trim() || null)
+        : typeof previous === "number" ? Number(control.value) : typeof previous === "boolean" ? control.value === "true" : control.value.trim();
+    } else if (control.dataset.modelTemplateParam) {
+      const key = control.dataset.modelTemplateParam;
+      const template = asObject(operator.parameters.layer_template);
+      const previous = template[key];
+      template[key] = typeof previous === "number" ? Number(control.value) : control.value.trim() || null;
+      operator.parameters.layer_template = template;
+    } else if (control.dataset.modelOverrides !== undefined) {
+      operator.parameters.overrides = asObject(JSON.parse(control.value || "{}"));
+    } else if (control.dataset.modelPortField) {
+      const field = control.dataset.modelPortField;
+      state.scenario.model.graph = ModelGraph.updatePortContract(
+        graph,
+        operator.operator_id,
+        control.dataset.modelPortId,
+        { [field]: field === "shape" ? normalizedModelShape(control.value) : control.value.trim() },
+      );
+    }
+    if (JSON.stringify(before) === JSON.stringify(modelGraphSnapshot())) return;
+    state.modelGraphEditor.diagnostics = [];
+    applyModelGraphSemanticChange(before, "编辑模型组件");
+  } catch (error) {
+    state.scenario.model.graph = before.graph;
+    state.modelGraphEditor.diagnostics = [chineseMessage(error, "模型组件参数无效，请检查输入。")];
+    renderModelGraph();
+  }
+}
+
+function modelGraphPointerWorldPoint(event) {
+  const rect = dom.modelGraphCanvas.getBoundingClientRect();
+  const graphUi = asObject(asObject(asObject(state.scenario?.model?.graph).attributes).ui);
+  const viewport = asObject(asObject(graphUi.overview).viewport);
+  const scale = Number(viewport.scale) || 1;
+  return {
+    x: (Number(event.clientX) - rect.left - (Number(viewport.x) || 0)) / scale,
+    y: (Number(event.clientY) - rect.top - (Number(viewport.y) || 0)) / scale,
+  };
+}
+
+function modelGraphPortEndpoint(button) {
+  if (!button) return null;
+  let mappedPorts = [];
+  try { mappedPorts = JSON.parse(String(button.dataset.modelPortMapped || "[]")); } catch (_error) { /* Non-proxy port. */ }
+  return {
+    operatorId: String(button.dataset.modelPortOperator || ""),
+    portId: String(button.dataset.modelPortId || ""),
+    direction: String(button.dataset.modelPortDirection || ""),
+    mappedPorts: asArray(mappedPorts).map((item) => ({ operator_id: String(item.operator_id || ""), port_id: String(item.port_id || "") })).filter((item) => item.operator_id && item.port_id),
+  };
+}
+
+function modelGraphPortAtPoint(event) {
+  const element = document.elementFromPoint?.(Number(event.clientX), Number(event.clientY));
+  return element?.closest?.('[data-model-port-id]') || event.target?.closest?.('[data-model-port-id]') || null;
+}
+
+function modelGraphLogicalMetrics(coordinateRoot) {
+  if (!coordinateRoot) return null;
+  const rootRect = coordinateRoot.getBoundingClientRect();
+  const logicalWidth = Math.max(1, Number.parseFloat(coordinateRoot.style.width) || coordinateRoot.clientWidth || rootRect.width || 1);
+  const logicalHeight = Math.max(1, Number.parseFloat(coordinateRoot.style.height) || coordinateRoot.clientHeight || rootRect.height || 1);
+  const scaleX = rootRect.width / logicalWidth || 1;
+  const scaleY = rootRect.height / logicalHeight || scaleX || 1;
+  return { rootRect, scaleX, scaleY };
+}
+
+function modelGraphElementLogicalRect(element, coordinateRoot, metricsValue = null) {
+  if (!element || !coordinateRoot) return null;
+  const metrics = metricsValue || modelGraphLogicalMetrics(coordinateRoot);
+  if (!metrics) return null;
+  const elementRect = element.getBoundingClientRect();
+  return {
+    x: (elementRect.left - metrics.rootRect.left) / metrics.scaleX,
+    y: (elementRect.top - metrics.rootRect.top) / metrics.scaleY,
+    width: elementRect.width / metrics.scaleX,
+    height: elementRect.height / metrics.scaleY,
+  };
+}
+
+function modelGraphPortLogicalPoint(button, coordinateRoot, metrics = null) {
+  const rect = modelGraphElementLogicalRect(button, coordinateRoot, metrics);
+  if (!rect) return null;
+  return {
+    x: rect.x + rect.width / 2,
+    y: rect.y + rect.height / 2,
+    side: String(button.dataset.modelPortSide || (button.dataset.modelPortDirection === "output" ? "right" : "left")),
+  };
+}
+
+function modelGraphAppendOccupiedRoute(occupiedSegments, routePoints) {
+  asArray(routePoints).slice(1).forEach((point, index) => {
+    const start = routePoints[index];
+    const x1 = Number(start?.x);
+    const y1 = Number(start?.y);
+    const x2 = Number(point?.x);
+    const y2 = Number(point?.y);
+    if (![x1, y1, x2, y2].every(Number.isFinite) || (x1 === x2 && y1 === y2)) return;
+    occupiedSegments.push({ x1, y1, x2, y2 });
+  });
+}
+
+function modelGraphStoredRoutePoints(path) {
+  try {
+    const points = JSON.parse(String(path?.dataset?.modelRoutePoints || "[]"));
+    return Array.isArray(points) ? points : [];
+  } catch {
+    return [];
+  }
+}
+
+function refreshModelGraphDomRoutes({ coordinateRoot, pathRoot, nodeSelector, changedNodeId = "", routingProfile = "" }) {
+  if (!coordinateRoot || !pathRoot) return 0;
+  const coordinateMetrics = modelGraphLogicalMetrics(coordinateRoot);
+  const paths = $$('[data-model-route-source-node][data-model-route-target-node]', pathRoot);
+  const overviewRouting = routingProfile === "overview" || paths.some((path) => path.dataset.modelRouteProfile === "overview");
+  const routeNodes = $$(nodeSelector, coordinateRoot);
+  const nodeById = new Map(routeNodes.map((node) => [String(node.dataset.modelRouteNode || ""), node]));
+  const rectById = new Map(routeNodes.map((node) => [String(node.dataset.modelRouteNode || ""), {
+    id: String(node.dataset.modelRouteNode || ""),
+    ...modelGraphElementLogicalRect(node, coordinateRoot, coordinateMetrics),
+  }]));
+  const portByIdentity = new Map();
+  routeNodes.forEach((node) => {
+    const nodeId = String(node.dataset.modelRouteNode || "");
+    const routeScope = String(node.dataset.modelRouteScope || (overviewRouting ? "overview" : ""));
+    $$('[data-model-port-id]', node).filter((button) => (
+      button.closest?.('[data-model-route-node]') === node
+      && String(button.dataset.modelRouteScope || routeScope) === routeScope
+    )).forEach((button) => {
+      const key = [nodeId, button.dataset.modelPortOperator || "", button.dataset.modelPortId || ""].join("\u001f");
+      portByIdentity.set(key, button);
+    });
+  });
+  const obstacles = Array.from(rectById.values());
+  const occupiedSegments = [];
+  if (overviewRouting && changedNodeId) {
+    paths.forEach((path) => {
+      const sourceNodeId = String(path.dataset.modelRouteSourceNode || "");
+      const targetNodeId = String(path.dataset.modelRouteTargetNode || "");
+      if (sourceNodeId === changedNodeId || targetNodeId === changedNodeId) return;
+      modelGraphAppendOccupiedRoute(occupiedSegments, modelGraphStoredRoutePoints(path));
+    });
+  }
+  let updated = 0;
+  paths.forEach((path) => {
+    const sourceNodeId = String(path.dataset.modelRouteSourceNode || "");
+    const targetNodeId = String(path.dataset.modelRouteTargetNode || "");
+    if (changedNodeId && sourceNodeId !== changedNodeId && targetNodeId !== changedNodeId) return;
+    const sourceNode = nodeById.get(sourceNodeId);
+    const targetNode = nodeById.get(targetNodeId);
+    const sourceButton = portByIdentity.get([sourceNodeId, path.dataset.modelRouteSourceOperator || "", path.dataset.modelRouteSourcePort || ""].join("\u001f"));
+    const targetButton = portByIdentity.get([targetNodeId, path.dataset.modelRouteTargetOperator || "", path.dataset.modelRouteTargetPort || ""].join("\u001f"));
+    const sourceRect = rectById.get(sourceNodeId);
+    const targetRect = rectById.get(targetNodeId);
+    const source = modelGraphPortLogicalPoint(sourceButton, coordinateRoot, coordinateMetrics);
+    const target = modelGraphPortLogicalPoint(targetButton, coordinateRoot, coordinateMetrics);
+    if (!sourceRect || !targetRect || !source || !target) return;
+    const preferOuter = !overviewRouting && path.dataset.modelRouteOuter === "true";
+    const route = ModelGraph.modelGraphRouteEdge(sourceRect, targetRect, obstacles, {
+      sourcePoint: source,
+      targetPoint: target,
+      sourceSide: source.side,
+      targetSide: target.side,
+      preferOuter,
+      shortCurveDistance: overviewRouting ? 220 : (preferOuter ? 0 : 180),
+      clearance: overviewRouting ? 12 : (preferOuter ? 14 : 10),
+      cornerRadius: overviewRouting ? 10 : 9,
+      occupiedSegments: overviewRouting ? occupiedSegments : undefined,
+      overlapPenalty: overviewRouting ? 180 : undefined,
+      crossingPenalty: overviewRouting ? 72 : undefined,
+    });
+    path.setAttribute("d", route.path);
+    if (overviewRouting) {
+      path.dataset.modelRouteProfile = "overview";
+      path.dataset.modelRoutePoints = JSON.stringify(asArray(route.points));
+      modelGraphAppendOccupiedRoute(occupiedSegments, route.points);
+    }
+    path.classList.remove("is-smooth", "is-orthogonal", "is-fallback");
+    path.classList.add(modelGraphRouteClass(route));
+    updated += 1;
+  });
+  const performance = state.modelGraphEditor.performance ||= { fullRenders: 0, interactionFrames: 0, nodeTransforms: 0, edgeUpdates: 0 };
+  performance.edgeUpdates += updated;
+  return updated;
+}
+
+function refreshModelGraphConnectionPreviewPath() {
+  const preview = state.modelGraphEditor.connectPreview;
+  const layer = dom.modelGraphEdgeLayer;
+  if (!layer) return;
+  let path = layer.querySelector('[data-model-connection-preview]');
+  if (!preview?.active) {
+    path?.remove();
+    layer.classList.remove("is-preview-active");
+    return;
+  }
+  const sourceIdentity = modelGraphEndpointIdentity(preview.source);
+  const sourceButton = state.modelGraphEditor.connectPointer?.sourceElement
+    || state.modelGraphEditor.connectSourceElement
+    || $$('[data-model-port-id]', dom.modelGraphNodeLayer).find((button) => {
+      const endpoint = modelGraphPortEndpoint(button);
+      return endpoint.operatorId === sourceIdentity?.operatorId && endpoint.portId === sourceIdentity?.portId;
+    });
+  const targetButton = preview.target ? (state.modelGraphEditor.connectTargetElement || $$('[data-model-port-id]', dom.modelGraphNodeLayer).find((button) => {
+    const endpoint = modelGraphPortEndpoint(button);
+    const target = modelGraphEndpointIdentity(preview.target);
+    return endpoint.operatorId === target?.operatorId && endpoint.portId === target?.portId;
+  })) : null;
+  const sourceNode = sourceButton?.closest?.('[data-model-route-node]');
+  const targetNode = targetButton?.closest?.('[data-model-route-node]');
+  const sourceRect = sourceNode ? { id: String(sourceNode.dataset.modelRouteNode || "source"), ...modelGraphElementLogicalRect(sourceNode, dom.modelGraphWorld) } : null;
+  const source = modelGraphPortLogicalPoint(sourceButton, dom.modelGraphWorld);
+  const target = targetButton
+    ? modelGraphPortLogicalPoint(targetButton, dom.modelGraphWorld)
+    : (preview.pointer ? { ...preview.pointer, side: Math.abs(preview.pointer.x - (source?.x || 0)) > Math.abs(preview.pointer.y - (source?.y || 0))
+      ? (preview.pointer.x < (source?.x || 0) ? "right" : "left")
+      : (preview.pointer.y < (source?.y || 0) ? "bottom" : "top") } : null);
+  const targetRect = targetNode
+    ? { id: String(targetNode.dataset.modelRouteNode || "target"), ...modelGraphElementLogicalRect(targetNode, dom.modelGraphWorld) }
+    : (target ? { id: "model-connection-pointer", x: target.x - 1, y: target.y - 1, width: 2, height: 2 } : null);
+  if (!sourceRect || !targetRect || !source || !target) return;
+  const obstacles = $$('.model-overview-node[data-model-route-node], .model-inline-operator[data-model-route-node]', dom.modelGraphNodeLayer)
+    .filter((node) => !node.contains(sourceButton) && !(targetButton && node.contains(targetButton)))
+    .map((node) => ({ id: String(node.dataset.modelRouteNode || ""), ...modelGraphElementLogicalRect(node, dom.modelGraphWorld) }));
+  const route = ModelGraph.modelGraphRouteEdge(sourceRect, targetRect, obstacles, {
+    sourcePoint: source,
+    targetPoint: target,
+    sourceSide: source.side,
+    targetSide: target.side,
+    shortCurveDistance: 160,
+    clearance: 10,
+    cornerRadius: 9,
+  });
+  if (!path) {
+    path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.dataset.modelConnectionPreview = "true";
+    layer.append(path);
+  }
+  const status = ["compatible", "incompatible"].includes(preview.status) ? `is-${preview.status}` : "is-pending";
+  path.setAttribute("class", `model-graph-edge is-overview is-connection-preview ${modelGraphRouteClass(route)} ${status}`);
+  path.setAttribute("d", route.path);
+  layer.classList.add("is-preview-active");
+}
+
+function startModelGraphConnectionPreview(endpoint, pointer = null, sourceElement = null) {
+  const graph = ensureScenarioModelGraph();
+  const editor = state.modelGraphEditor;
+  const preview = ModelGraph.createConnectionPreview(graph, endpoint, pointer);
+  editor.connectPreview = preview.active ? preview : null;
+  editor.connectSourceElement = preview.active ? sourceElement : null;
+  editor.connectSource = preview.active ? { ...endpoint } : null;
+  editor.connectMode = preview.active;
+  editor.diagnostics = [preview.active
+    ? `已选择源端口 ${endpoint.operatorId}.${endpoint.portId}；移动指针并点击输入端口，或按住拖至输入端口。`
+    : (preview.diagnostic?.message || "连接必须从输出端口开始。")];
+  return preview.active;
+}
+
+function updateModelGraphConnectionPreview(event) {
+  const editor = state.modelGraphEditor;
+  if (!editor.connectPreview?.active) return;
+  const targetButton = modelGraphPortAtPoint(event);
+  const target = modelGraphPortEndpoint(targetButton);
+  editor.connectTargetElement = targetButton;
+  editor.connectPreview = ModelGraph.updateConnectionPreview(
+    state.scenario.model.graph,
+    editor.connectPreview,
+    { pointer: modelGraphPointerWorldPoint(event), target },
+  );
+  editor.connectSource = modelGraphEndpointIdentity(editor.connectPreview.source);
+  editor.connectMode = true;
+  if (target && editor.connectPreview.diagnostic) editor.diagnostics = [editor.connectPreview.diagnostic.message];
+  if (editor.connectPointer?.pointerId === event.pointerId) scheduleModelGraphConnectionPreviewWatchdog(event.pointerId);
+  refreshModelGraphConnectionPreviewPath();
+  renderModelGraphDiagnostics();
+}
+
+function commitModelGraphConnectionPreview(target, { cancelOnFailure = false } = {}) {
+  const editor = state.modelGraphEditor;
+  const graph = ensureScenarioModelGraph();
+  const before = modelGraphSnapshot();
+  let result = ModelGraph.commitConnectionPreview(graph, editor.connectPreview || {}, target);
+  if (result.connected && asArray(target?.mappedPorts).length > 1) {
+    try {
+      let nextGraph = result.graph;
+      const source = result.diagnostic.source;
+      asArray(target.mappedPorts).filter((item) => !(
+        item.operator_id === result.diagnostic.target.operator_id && item.port_id === result.diagnostic.target.port_id
+      )).forEach((mapped) => {
+        nextGraph = ModelGraph.connect(nextGraph, source, mapped);
+      });
+      result = { ...result, graph: nextGraph, fan_out_count: target.mappedPorts.length };
+    } catch (error) {
+      result = {
+        connected: false, graph, preview: editor.connectPreview,
+        diagnostic: { ok: false, code: "proxy_fan_out_failed", message: chineseMessage(error, "组边界代理端口 fan-out 连接失败；graph 未改变。") },
+      };
+    }
+  }
+  if (!result.connected) {
+    if (cancelOnFailure) {
+      clearModelGraphConnectionPreview("invalid-drop", { keepMode: false });
+      editor.diagnostics = [result.diagnostic?.message || "模型端口连接失败；graph 未改变。"];
+    } else {
+      editor.connectPreview = result.preview;
+      editor.connectSource = modelGraphEndpointIdentity(result.preview?.source);
+      editor.connectMode = Boolean(result.preview?.active);
+      editor.diagnostics = [result.diagnostic?.message || "模型端口连接失败；graph 未改变。"];
+    }
+    return false;
+  }
+  state.scenario.model.graph = result.graph;
+  if (result.connected) {
+    editor.connectSource = null;
+    editor.connectMode = false;
+    clearModelGraphConnectionPreviewWatchdog();
+    editor.connectPreview = null;
+    editor.connectSourceElement = null;
+    editor.connectTargetElement = null;
+  }
+  editor.diagnostics = [`已连接 ${result.diagnostic.source.operator_id}.${result.diagnostic.source.port_id} → ${result.diagnostic.target.operator_id}.${result.diagnostic.target.port_id}${result.fan_out_count > 1 ? `，并同步到组内 ${result.fan_out_count} 个真实输入端口` : ""}。`];
+  applyModelGraphSemanticChange(before, "连接模型端口");
+  return true;
+}
+
+function refreshModelGraphPortInteractionClasses(graph = ensureScenarioModelGraph()) {
+  $$('[data-model-port-id]', dom.modelGraphNodeLayer).forEach((button) => {
+    button.classList.remove("is-connect-source", "is-connect-compatible", "is-connect-incompatible", "is-connect-unavailable");
+    const interaction = modelGraphPortInteractionClass(graph, modelGraphPortEndpoint(button));
+    if (interaction) button.classList.add(interaction);
+  });
+}
+
+function beginModelGraphPortPointer(event, portButton = null) {
+  if (event.button !== 0) return;
+  const button = portButton || event.target?.closest?.('[data-model-port-id]');
+  if (!button) return;
+  const endpoint = modelGraphPortEndpoint(button);
+  if (endpoint?.direction !== "output") return;
+  const editor = state.modelGraphEditor;
+  if (!startModelGraphConnectionPreview(endpoint, modelGraphPointerWorldPoint(event), button)) return;
+  editor.connectPointer = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+    captureElement: button,
+    sourceElement: button,
+  };
+  scheduleModelGraphConnectionPreviewWatchdog(event.pointerId);
+  editor.suppressPortClick = true;
+  try { button.setPointerCapture?.(event.pointerId); } catch (_error) { /* Chrome 108 can reject capture after an interrupted pointer. */ }
+  refreshModelGraphPortInteractionClasses();
+  refreshModelGraphConnectionPreviewPath();
+  renderModelGraphDiagnostics();
+  event.stopPropagation();
+}
+
+function selectModelGraphOperatorElement(selectable) {
+  const operatorId = selectable?.dataset.modelSelectOperator || selectable?.dataset.modelOperator;
+  if (!operatorId) return false;
+  const editor = state.modelGraphEditor;
+  const inlineNode = selectable.closest?.('.model-inline-operator[data-model-select-operator]');
+  const selectedNode = inlineNode || selectable.closest?.('.model-graph-node, .model-overview-node') || selectable;
+  const overviewNode = selectable.closest?.('[data-model-overview-node]');
+  editor.selectedOverviewId = overviewNode?.dataset.modelOverviewNode || null;
+  editor.selectedOperatorId = operatorId;
+  $$('.model-graph-node.is-selected, .model-overview-node.is-selected, .model-inline-operator.is-selected', dom.modelGraphNodeLayer)
+    .forEach((node) => node.classList.remove("is-selected"));
+  $$('.model-inline-operator[aria-pressed]', dom.modelGraphNodeLayer)
+    .forEach((node) => node.setAttribute("aria-pressed", String(node === inlineNode)));
+  selectedNode.classList.add("is-selected");
+  refreshModelGraphOverviewSelectionState();
+  refreshModelGraphInlineSelectionState(operatorId);
+  if (inlineNode) renderModelGraphInspector();
+  else if (editor.selectedOverviewId) renderModelGraphOverviewInspector(ensureScenarioModelGraph(), modelGraphOverviewProjection());
+  else renderModelGraphInspector();
+  renderModelGraphDiagnostics();
+  return true;
+}
+
+function bindModelGraphDynamicEvents() {
+  if (!dom.modelGraphCanvas || dom.modelGraphCanvas.dataset.modelGraphDelegated === "true") return;
+  dom.modelGraphCanvas.dataset.modelGraphDelegated = "true";
+  dom.modelGraphCanvas.addEventListener("click", (event) => {
+    const editor = state.modelGraphEditor;
+    if (editor.suppressNodeClick) {
+      editor.suppressNodeClick = false;
+      event.preventDefault();
+      return;
+    }
+    const overviewButton = event.target.closest?.('[data-model-select-overview]');
+    if (overviewButton) {
+      event.stopPropagation();
+      if (!selectModelGraphOverviewComponent(overviewButton.dataset.modelSelectOverview)) return;
+      $$('.model-overview-node.is-selected', dom.modelGraphNodeLayer).forEach((node) => node.classList.remove("is-selected"));
+      overviewButton.closest?.('.model-overview-node')?.classList.add("is-selected");
+      refreshModelGraphOverviewSelectionState();
+      refreshModelGraphInlineSelectionState();
+      renderModelGraphOverviewInspector(ensureScenarioModelGraph(), modelGraphOverviewProjection());
+      renderModelGraphDiagnostics();
+      return;
+    }
+    if (event.target.closest?.('[data-model-return-overview]')) {
+      setModelGraphMode("overview");
+      return;
+    }
+    const overviewGroupButton = event.target.closest?.('[data-model-toggle-overview-group]');
+    if (overviewGroupButton) {
+      event.stopPropagation();
+      const graph = ensureScenarioModelGraph();
+      const overview = modelGraphActiveUi(graph);
+      const projection = modelGraphOverviewProjection(graph);
+      const node = projection.nodes.find((item) => item.display_id === overviewGroupButton.dataset.modelToggleOverviewGroup);
+      if (!node || node.kind !== "repeat_group") return;
+      const collapsed = new Set(asArray(overview.collapsed_groups));
+      const willCollapse = node.expanded;
+      if (willCollapse && editor.selectedOperatorId && asArray(node.operator_ids).includes(editor.selectedOperatorId)) {
+        editor.selectedOverviewId = node.display_id;
+        editor.selectedOperatorId = null;
+      }
+      asArray(node.group_ids).forEach((groupId) => {
+        if (willCollapse) collapsed.add(groupId);
+        else collapsed.delete(groupId);
+      });
+      overview.collapsed_groups = Array.from(collapsed);
+      // Expansion changes measured node size. Re-run the same complete global
+      // responsive layout used by the toolbar "整理" action so every node,
+      // edge route, and viewport is updated from one deterministic pass.
+      autoLayoutModelGraph({ commit: false });
+      saveModelGraphLayout();
+      return;
+    }
+    const overviewMoeButton = event.target.closest?.('[data-model-overview-moe]');
+    if (overviewMoeButton) {
+      event.stopPropagation();
+      const graph = ensureScenarioModelGraph();
+      const overview = modelGraphActiveUi(graph);
+      const compoundId = String(overviewMoeButton.dataset.modelOverviewMoe || "");
+      if (!compoundId) return;
+      const collapsed = new Set(asArray(overview.collapsed_compounds));
+      if (overviewMoeButton.getAttribute("aria-expanded") === "true") collapsed.add(compoundId);
+      else collapsed.delete(compoundId);
+      overview.collapsed_compounds = Array.from(collapsed);
+      // Internal MoE expansion also changes the containing repeat-group size;
+      // use the global arrange path rather than a local collision adjustment.
+      autoLayoutModelGraph({ commit: false });
+      saveModelGraphLayout();
+      return;
+    }
+    const portButton = event.target.closest?.('[data-model-port-id]');
+    if (portButton) {
+      event.stopPropagation();
+      const endpoint = modelGraphPortEndpoint(portButton);
+      if (editor.suppressPortClick) {
+        editor.suppressPortClick = false;
+        return;
+      }
+      const source = modelGraphEndpointIdentity(editor.connectPreview?.source);
+      let committed = false;
+      if (!source) {
+        if (endpoint.direction !== "output") editor.diagnostics = ["请先选择一个输出端口，再选择目标输入端口。"];
+        else startModelGraphConnectionPreview(endpoint, event.detail ? modelGraphPointerWorldPoint(event) : null, portButton);
+      } else if (source.operatorId === endpoint.operatorId && source.portId === endpoint.portId) {
+        clearModelGraphConnectionPreview("source-click", { announce: true });
+      } else if (endpoint.direction !== "input") {
+        editor.diagnostics = ["目标必须是输入端口；当前源端口仍保持选中。"];
+      } else {
+        committed = commitModelGraphConnectionPreview(endpoint);
+      }
+      if (committed) renderModelGraph();
+      else {
+        refreshModelGraphPortInteractionClasses();
+        refreshModelGraphConnectionPreviewPath();
+        renderModelGraphDiagnostics();
+        syncModelGraphControls();
+      }
+      return;
+    }
+    const toggleGroupButton = event.target.closest?.('[data-model-toggle-group]');
+    if (toggleGroupButton) {
+      const graph = ensureScenarioModelGraph();
+      const ui = modelGraphDetailUi(graph);
+      const id = toggleGroupButton.dataset.modelToggleGroup;
+      const before = modelGraphSnapshot();
+      ui.collapsed_groups = ui.collapsed_groups.includes(id) ? ui.collapsed_groups.filter((item) => item !== id) : [...ui.collapsed_groups, id];
+      editor.layoutKey = "";
+      commitModelGraphHistory(before, ui.collapsed_groups.includes(id) ? "折叠 Block 组" : "展开 Block 组", false);
+      saveModelGraphLayout();
+      renderModelGraph();
+      return;
+    }
+    const selectable = event.target.closest?.('[data-model-select-operator], [data-model-operator]');
+    selectModelGraphOperatorElement(selectable);
+  });
+  dom.modelGraphCanvas.addEventListener("keydown", (event) => {
+    if (!['Enter', ' '].includes(event.key)) return;
+    const selectableNode = event.target.closest?.('.model-inline-operator[data-model-select-operator], .model-graph-node[data-model-operator]');
+    if (!selectableNode || event.target !== selectableNode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectModelGraphOperatorElement(selectableNode);
+  });
+}
+
+function syncModelGraphControls() {
+  if (!dom.modelGraphUndoButton) return;
+  const graphUi = modelGraphUi();
+  const focus = graphUi.mode === "focus";
+  if (dom.modelGraphBackButton) dom.modelGraphBackButton.hidden = !focus;
+  dom.modelGraphConnectButton.disabled = false;
+  dom.modelGraphConnectButton.setAttribute("aria-pressed", String(state.modelGraphEditor.connectMode));
+  dom.modelGraphUndoButton.disabled = !state.modelGraphEditor.history.undo.length;
+  dom.modelGraphRedoButton.disabled = !state.modelGraphEditor.history.redo.length;
+}
+
+function travelModelGraphHistory(direction) {
+  const editor = state.modelGraphEditor;
+  const source = direction === "redo" ? editor.history.redo : editor.history.undo;
+  const target = direction === "redo" ? editor.history.undo : editor.history.redo;
+  const entry = source.pop();
+  if (!entry) return;
+  target.push({ snapshot: modelGraphSnapshot(), label: entry.label, semantic: entry.semantic });
+  editor.history.restoring = true;
+  restoreModelGraphHistorySnapshot(entry.snapshot);
+  editor.layoutKey = "";
+  editor.history.restoring = false;
+  if (entry.semantic) markScenarioChanged("", { mappingImpact: true, mappingReason: "撤销或重做了模型语义编辑，映射需要重新生成。" });
+  else { saveModelGraphLayout(); renderModelGraph(); }
+  syncModelGraphControls();
+}
+
+function zoomModelGraph(factor, anchor = null) {
+  const ui = modelGraphActiveUi();
+  const previous = Number(ui.viewport.scale) || 1;
+  const next = Math.max(0.25, Math.min(2.5, previous * factor));
+  if (anchor) {
+    ui.viewport.x = anchor.x - (anchor.x - (Number(ui.viewport.x) || 0)) * (next / previous);
+    ui.viewport.y = anchor.y - (anchor.y - (Number(ui.viewport.y) || 0)) * (next / previous);
+  }
+  ui.viewport.scale = next;
+  syncModelGraphViewport(ui);
+  scheduleModelGraphViewportSave();
+}
+
+function fitModelGraph() {
+  const graph = ensureScenarioModelGraph();
+  const rootUi = modelGraphUi(graph);
+  const ui = modelGraphActiveUi(graph);
+  const projection = rootUi.mode === "overview" ? modelGraphOverviewProjection(graph) : null;
+  const presentation = projection ? modelGraphOverviewPresentationLayout(projection, ui.positions) : null;
+  const bounds = projection
+    ? modelGraphOverviewBounds(projection, presentation.positions)
+    : modelGraphBounds(graph, visibleModelGraphOperators(graph));
+  const width = Math.max(1, dom.modelGraphCanvas.clientWidth - 32);
+  const height = Math.max(1, dom.modelGraphCanvas.clientHeight - 32);
+  if (rootUi.mode === "overview") {
+    ui.viewport.scale = Math.max(0.25, Math.min(1.15, width / bounds.width));
+    ui.viewport.x = Math.max(16, (dom.modelGraphCanvas.clientWidth - bounds.width * ui.viewport.scale) / 2);
+    ui.viewport.y = 16;
+  } else {
+    ui.viewport.scale = Math.max(0.25, Math.min(1.25, width / bounds.width, height / bounds.height));
+    ui.viewport.x = 16;
+    ui.viewport.y = 16;
+  }
+  saveModelGraphLayout();
+  renderModelGraph();
+}
+
+function modelGraphCancelInteractionFrame() {
+  const editor = state.modelGraphEditor;
+  if (editor.interactionFrame == null) return;
+  const cancel = globalThis.cancelAnimationFrame || clearTimeout;
+  cancel(editor.interactionFrame);
+  editor.interactionFrame = null;
+}
+
+function refreshModelGraphDragRoutes(drag) {
+  if (!drag) return 0;
+  if (drag.kind === "inline") {
+    return refreshModelGraphDomRoutes({
+      coordinateRoot: drag.routeRoot,
+      pathRoot: drag.pathRoot,
+      nodeSelector: '.model-inline-operator[data-model-route-node]',
+      changedNodeId: drag.operatorId,
+    });
+  }
+  if (drag.kind === "overview") {
+    return refreshModelGraphDomRoutes({
+      coordinateRoot: dom.modelGraphWorld,
+      pathRoot: dom.modelGraphEdgeLayer,
+      nodeSelector: '.model-overview-node[data-model-route-node]',
+      changedNodeId: drag.operatorId,
+      routingProfile: "overview",
+    });
+  }
+  return 0;
+}
+
+function modelGraphApplyInteractionFrame(pointValue = null) {
+  const editor = state.modelGraphEditor;
+  const point = pointValue || editor.pendingPointer;
+  editor.pendingPointer = null;
+  if (!point) return;
+  const metrics = editor.performance ||= { fullRenders: 0, interactionFrames: 0, nodeTransforms: 0, edgeUpdates: 0 };
+  metrics.interactionFrames += 1;
+  if (editor.connectPointer?.pointerId === point.pointerId || (editor.connectPreview?.active && !editor.drag && !editor.pan)) {
+    updateModelGraphConnectionPreview(point);
+    return;
+  }
+  if (editor.drag?.pointerId === point.pointerId) {
+    const drag = editor.drag;
+    const scale = Number(drag.viewportScale) || 1;
+    const rawX = drag.originX + (point.clientX - drag.startX) / scale;
+    const rawY = drag.originY + (point.clientY - drag.startY) / scale;
+    const x = Math.max(drag.minX, Math.min(drag.maxX, rawX));
+    const y = Math.max(drag.minY, Math.min(drag.maxY, rawY));
+    drag.previewPosition = { x, y };
+    drag.element.style.transform = `translate(${x - drag.originX}px, ${y - drag.originY}px)`;
+    drag.element.classList.add("is-dragging");
+    metrics.nodeTransforms += 1;
+    refreshModelGraphDragRoutes(drag);
+    return;
+  }
+  if (editor.pan?.pointerId === point.pointerId) {
+    const pan = editor.pan;
+    pan.previewViewport = {
+      x: pan.originX + point.clientX - pan.startX,
+      y: pan.originY + point.clientY - pan.startY,
+    };
+    dom.modelGraphWorld.style.transform = `translate(${pan.previewViewport.x}px, ${pan.previewViewport.y}px) scale(${Number(pan.viewportScale) || 1})`;
+  }
+}
+
+function scheduleModelGraphInteractionFrame(event) {
+  const editor = state.modelGraphEditor;
+  editor.pendingPointer = {
+    pointerId: event.pointerId,
+    clientX: Number(event.clientX),
+    clientY: Number(event.clientY),
+    target: event.target,
+  };
+  if (editor.interactionFrame != null) return;
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+  editor.interactionFrame = requestFrame(() => {
+    editor.interactionFrame = null;
+    modelGraphApplyInteractionFrame();
+  });
+}
+
+function beginModelGraphPointer(event) {
+  if (event.button !== 0 && event.button !== 1) return;
+  const portButton = event.target.closest?.('[data-model-port-id]');
+  if (portButton) {
+    beginModelGraphPortPointer(event, portButton);
+    return;
+  }
+  // Pointer capture and preventDefault on a port/drill-down button can remove
+  // its DOM node before the browser dispatches click.  Interactive controls
+  // own their complete pointer lifecycle; the canvas only handles blank-space
+  // panning and direct node dragging.
+  const dragHandle = event.target.closest?.('[data-model-drag-handle]');
+  if (!dragHandle && event.target.closest?.('button, input, select, textarea, a, [role="button"]')) return;
+  const editor = state.modelGraphEditor;
+  const node = event.target.closest?.('[data-model-drag-kind], [data-model-operator]');
+  const ui = modelGraphActiveUi();
+  const viewportScale = Number(ui.viewport.scale) || 1;
+  if (node) {
+    const kind = String(node.dataset.modelDragKind || "detail");
+    const id = String(node.dataset.modelDragId || node.dataset.modelOperator || "");
+    const scope = String(node.dataset.modelInlineScope || node.closest?.('[data-model-inline-scope]')?.dataset.modelInlineScope || "");
+    const storedPosition = kind === "inline"
+      ? asObject(asObject(ui.inline_positions)[scope])[id]
+      : ui.positions[id];
+    const renderedPosition = kind === "overview"
+      ? modelGraphOverviewPosition({ x: Number.parseFloat(node.style.left), y: Number.parseFloat(node.style.top) })
+      : null;
+    const position = renderedPosition || (storedPosition && Number.isFinite(Number(storedPosition.x)) && Number.isFinite(Number(storedPosition.y))
+      ? storedPosition
+      : { x: Number.parseFloat(node.style.left) || 0, y: Number.parseFloat(node.style.top) || 0 });
+    if (!position) return;
+    const routeRoot = kind === "inline" ? node.closest('.model-inline-graph') : dom.modelGraphWorld;
+    const routeWidth = kind === "inline" ? routeRoot.clientWidth : Number.parseFloat(dom.modelGraphWorld.style.width) || routeRoot.clientWidth;
+    const routeHeight = kind === "inline" ? routeRoot.clientHeight : Number.parseFloat(dom.modelGraphWorld.style.height) || routeRoot.clientHeight;
+    editor.drag = {
+      pointerId: event.pointerId,
+      operatorId: id,
+      kind,
+      scope,
+      element: node,
+      routeRoot,
+      pathRoot: kind === "inline" ? routeRoot.querySelector('svg') : dom.modelGraphEdgeLayer,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: Number(position.x) || 0,
+      originY: Number(position.y) || 0,
+      viewportScale,
+      minX: kind === "inline" ? 14 : 0,
+      minY: kind === "inline" ? 14 : 0,
+      maxX: Math.max(kind === "inline" ? 14 : 0, routeWidth - node.offsetWidth - (kind === "inline" ? 14 : 0)),
+      maxY: Math.max(kind === "inline" ? 14 : 0, routeHeight - node.offsetHeight - (kind === "inline" ? 14 : 0)),
+      before: modelGraphSnapshot(),
+      previewPosition: { x: Number(position.x) || 0, y: Number(position.y) || 0 },
+      moved: false,
+    };
+    const selectedOperatorId = node.dataset.modelSelectOperator || node.dataset.modelOperator || (kind === "inline" ? id : "");
+    if (selectedOperatorId) editor.selectedOperatorId = selectedOperatorId;
+  } else {
+    editor.pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: Number(ui.viewport.x) || 0, originY: Number(ui.viewport.y) || 0, viewportScale, before: modelGraphSnapshot(), moved: false };
+  }
+  dom.modelGraphCanvas.setPointerCapture?.(event.pointerId);
+  dom.modelGraphCanvas.classList.add("is-interacting");
+  event.preventDefault();
+}
+
+function moveModelGraphPointer(event) {
+  const editor = state.modelGraphEditor;
+  if (editor.connectPointer?.pointerId === event.pointerId) {
+    const pointer = editor.connectPointer;
+    pointer.moved ||= Math.abs(event.clientX - pointer.startX) + Math.abs(event.clientY - pointer.startY) > 3;
+    scheduleModelGraphInteractionFrame(event);
+    event.preventDefault();
+  } else if (editor.connectPreview?.active && !editor.drag && !editor.pan) {
+    scheduleModelGraphInteractionFrame(event);
+  } else if (editor.drag?.pointerId === event.pointerId) {
+    const drag = editor.drag;
+    drag.moved ||= Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 3;
+    scheduleModelGraphInteractionFrame(event);
+    event.preventDefault();
+  } else if (editor.pan?.pointerId === event.pointerId) {
+    const pan = editor.pan;
+    pan.moved ||= Math.abs(event.clientX - pan.startX) + Math.abs(event.clientY - pan.startY) > 3;
+    scheduleModelGraphInteractionFrame(event);
+    event.preventDefault();
+  }
+}
+
+function endModelGraphPointer(event) {
+  const editor = state.modelGraphEditor;
+  if (editor.connectPointer?.pointerId === event.pointerId) {
+    modelGraphCancelInteractionFrame();
+    clearModelGraphConnectionPreviewWatchdog();
+    const pointer = editor.connectPointer;
+    const cancelled = event.type === "pointercancel" || event.type === "lostpointercapture";
+    if (!cancelled) updateModelGraphConnectionPreview(event);
+    const target = cancelled ? null : modelGraphPortEndpoint(modelGraphPortAtPoint(event));
+    editor.connectPointer = null;
+    try {
+      if (pointer.captureElement?.hasPointerCapture?.(event.pointerId)) pointer.captureElement.releasePointerCapture(event.pointerId);
+    } catch (_error) { /* Capture may already be gone after a DOM refresh. */ }
+    if (cancelled) {
+      clearModelGraphConnectionPreview("pointer-cancel");
+      editor.diagnostics = ["端口拖拽已取消；graph 未改变。"];
+      editor.suppressPortClick = true;
+      setTimeout(() => { editor.suppressPortClick = false; }, 0);
+      renderModelGraph();
+    } else if (pointer.moved) {
+      if (target?.direction === "input") {
+        commitModelGraphConnectionPreview(target, { cancelOnFailure: true });
+      } else {
+        clearModelGraphConnectionPreview("invalid-drop");
+        editor.diagnostics = ["未释放到有效输入端口；graph 未改变。"];
+      }
+      editor.suppressPortClick = true;
+      setTimeout(() => { editor.suppressPortClick = false; }, 0);
+      renderModelGraph();
+    } else {
+      editor.diagnostics = ["已选择源端口；移动指针并点击输入端口，或按 Esc 取消。"];
+      setTimeout(() => { editor.suppressPortClick = false; }, 0);
+      renderModelGraphDiagnostics();
+    }
+    scheduleModelGraphOverviewResize();
+    return;
+  }
+  const operation = editor.drag?.pointerId === event.pointerId ? editor.drag : editor.pan?.pointerId === event.pointerId ? editor.pan : null;
+  if (!operation) return;
+  const cancelled = event.type === "pointercancel" || event.type === "lostpointercapture";
+  const finalPoint = !cancelled ? {
+    pointerId: event.pointerId,
+    clientX: Number(event.clientX),
+    clientY: Number(event.clientY),
+    target: event.target,
+  } : null;
+  modelGraphCancelInteractionFrame();
+  if (finalPoint) modelGraphApplyInteractionFrame(finalPoint);
+  editor.drag = null;
+  editor.pan = null;
+  dom.modelGraphCanvas.classList.remove("is-interacting");
+  if (cancelled) {
+    if (operation.operatorId) {
+      operation.element.style.transform = "";
+      operation.element.classList.remove("is-dragging");
+    }
+    syncModelGraphViewport();
+    renderModelGraph();
+  } else if (operation.moved) {
+    let requiresFullRender = false;
+    if (operation.operatorId) {
+      const next = operation.previewPosition || { x: operation.originX, y: operation.originY };
+      if (operation.kind === "inline") {
+        const overview = modelGraphActiveUi();
+        overview.inline_positions[operation.scope] = asObject(overview.inline_positions[operation.scope]);
+        overview.inline_positions[operation.scope][operation.operatorId] = next;
+      } else {
+        modelGraphActiveUi().positions[operation.operatorId] = next;
+      }
+      operation.element.style.left = `${next.x}px`;
+      operation.element.style.top = `${next.y}px`;
+      operation.element.style.transform = "";
+      operation.element.classList.remove("is-dragging");
+      if (operation.kind === "detail") requiresFullRender = true;
+      else refreshModelGraphDragRoutes(operation);
+      editor.suppressNodeClick = true;
+      setTimeout(() => { editor.suppressNodeClick = false; }, 0);
+    } else if (operation.previewViewport) {
+      const viewport = modelGraphActiveUi().viewport;
+      viewport.x = operation.previewViewport.x;
+      viewport.y = operation.previewViewport.y;
+    }
+    commitModelGraphHistory(operation.before, operation.operatorId ? "移动模型组件" : "平移模型画布", false);
+    saveModelGraphLayout();
+    if (requiresFullRender) renderModelGraph();
+    else {
+      syncModelGraphViewport();
+      syncModelGraphControls();
+    }
+  } else if (editor.connectPreview?.active) {
+    clearModelGraphConnectionPreview("blank-click", { announce: true });
+    renderModelGraph();
+  } else if (operation.operatorId) {
+    operation.element.style.transform = "";
+    operation.element.classList.remove("is-dragging");
+    refreshModelGraphDragRoutes(operation);
+  } else {
+    syncModelGraphViewport();
+  }
+  try {
+    if (dom.modelGraphCanvas.hasPointerCapture?.(event.pointerId)) dom.modelGraphCanvas.releasePointerCapture(event.pointerId);
+  } catch (_error) { /* Chrome 108 can report capture loss before pointerup. */ }
+  scheduleModelGraphOverviewResize();
+}
+
+function renderModel() {
+  const model = state.scenario.model;
+  ensureScenarioModelGraph(model);
+  const summary = ModelGraph.modelGraphAuthoringSummary(model.graph);
+  dom.modelMetaForm.innerHTML = [
+    modelSummaryFact("模型名称（Model Name）", "name", model.name),
+    modelSummaryFact("模型架构（Architecture）", "architecture", summary.architecture),
+    modelSummaryFact("词表大小（Vocabulary Size）", "vocabulary_size", summary.vocabulary_size, "vocabulary_size"),
+    modelSummaryFact("最大序列长度（Max Sequence Length）", "max_sequence_length", summary.max_sequence_length, "max_sequence_length"),
+  ].join("");
+  renderModelGraph();
+}
+
+function modelSummaryFact(label, field, value, helpKey = "") {
+  const displayValue = String(value ?? "—");
+  const discoverability = ` title="${escapeHtml(displayValue)}" aria-label="${escapeHtml(displayValue)}"`;
+  return `<div class="model-summary-fact" data-model-summary-field="${escapeHtml(field)}"><dt${helpKey ? ` data-concept-help="${escapeHtml(helpKey)}"` : ""}>${escapeHtml(label)}</dt><dd${discoverability}>${escapeHtml(displayValue)}</dd></div>`;
+}
+
+function componentOptions(selected, filter = null) {
+  let components = state.scenario.hardware.components;
+  if (filter) components = components.filter(filter);
+  if (selected && !components.some((item) => item.component_id === selected)) {
+    components = [{ component_id: selected, kind: "unknown" }, ...components];
+  }
+  return components.map((component) => `<option value="${escapeHtml(component.component_id)}" ${component.component_id === selected ? "selected" : ""}>${escapeHtml(component.component_id)} · ${escapeHtml(kindLabel(component.kind))}</option>`).join("");
+}
+
+function renderMapping() {
+  renderControlPlaneStatus();
+  renderEffectiveMapping();
+  renderPlacementControls();
+  hydrateConceptHelp(dom.viewMapping || $("#view-mapping"));
+}
+
+function effectiveParallelRanks() {
+  const placement = asObject(state.scenario?.placement);
+  const parallel = asObject(placement.parallel);
+  const explicit = asArray(parallel.rank_mapping);
+  if (explicit.length) {
+    return explicit.map((rank, index) => ({
+      rank: Number(rank.rank ?? index),
+      tp_rank: Number(rank.tp_rank ?? 0),
+      pp_rank: Number(rank.pp_rank ?? 0),
+      ep_rank: Number(rank.ep_rank ?? 0),
+      component_id: String(rank.component_id || ""),
+      memory_component_id: rank.memory_component_id == null ? null : String(rank.memory_component_id),
+      cim_component_id: rank.cim_component_id == null ? null : String(rank.cim_component_id),
+    })).sort((a, b) => a.rank - b.rank);
+  }
+  const tp = Math.max(1, Number(parallel.tp_degree ?? 1));
+  const pp = Math.max(1, Number(parallel.pp_degree ?? 1));
+  const ep = Math.max(1, Number(parallel.ep_degree ?? 1));
+  const gpus = asArray(state.scenario?.hardware?.components)
+    .filter((component) => normalizedComponentKind(component.kind) === "gpu")
+    .sort((a, b) => String(a.component_id).localeCompare(String(b.component_id)));
+  const ranks = [];
+  let flat = 0;
+  for (let ppRank = 0; ppRank < pp; ppRank += 1) {
+    for (let epRank = 0; epRank < ep; epRank += 1) {
+      for (let tpRank = 0; tpRank < tp; tpRank += 1) {
+        const component = gpus[flat];
+        if (!component) return ranks;
+        ranks.push({ rank: flat, tp_rank: tpRank, pp_rank: ppRank, ep_rank: epRank, component_id: component.component_id });
+        flat += 1;
+      }
+    }
+  }
+  return ranks;
+}
+
+function operatorTargetRows(decision, ranks) {
+  const direct = decision.operator_execution_targets;
+  const rows = [];
+  if (!direct || typeof direct !== "object" || Array.isArray(direct)) return rows;
+  Object.entries(direct).sort(([left], [right]) => left.localeCompare(right)).forEach(([operator, rawEntries]) => {
+    const entries = asArray(rawEntries);
+    const usedRanks = new Set();
+    entries.forEach((raw, entryIndex) => {
+      const entry = typeof raw === "string" ? { component_id: raw } : asObject(raw);
+      const componentId = String(entry.component_id || entry.execution_component_id || entry.node_id || raw || "");
+      let rank = null;
+      const rankId = entry.rank_id ?? entry.rank;
+      if (rankId !== undefined && rankId !== null && rankId !== "") {
+        rank = ranks.find((candidate) => candidate.rank === Number(rankId)) || null;
+      }
+      if (!rank) {
+        const matches = ranks.filter((candidate) => candidate.component_id === componentId && !usedRanks.has(candidate.rank));
+        if (matches.length === 1) rank = matches[0];
+        else if (matches.length > 1 && entries.length === matches.length) rank = matches[Math.min(entryIndex, matches.length - 1)];
+      }
+      if (rank) usedRanks.add(rank.rank);
+      const partition = String(entry.partition || entry.partition_kind || entry.shard_kind || (
+        operator.includes("expert")
+          ? uiText("TP×EP 专家分片", "TP×EP expert shard")
+          : ranks.some((item) => item.ep_rank > 0)
+            ? uiText("TP 分片 / EP 副本", "TP shard / EP replica")
+            : ranks.some((item) => item.tp_rank > 0)
+              ? uiText("TP 张量分片", "TP tensor shard")
+              : uiText("完整算子", "Full operator")
+      ));
+      rows.push({ operator, componentId, rank, partition });
+    });
+  });
+  return rows;
+}
+
+function tensorShardRows(decision, ranks) {
+  const details = asObject(decision.weight_tensor_details);
+  const shardsByTensor = asObject(decision.rank_weight_shards);
+  const rows = [];
+  Object.entries(shardsByTensor).sort(([left], [right]) => left.localeCompare(right)).forEach(([tensorId, rawShards]) => {
+    const detail = asObject(details[tensorId]);
+    asArray(rawShards).forEach((rawShard) => {
+      const shard = asObject(rawShard);
+      const rankId = Number(shard.rank_id ?? shard.rank);
+      const rank = ranks.find((candidate) => candidate.rank === rankId) || {
+        rank: Number.isFinite(rankId) ? rankId : null,
+        tp_rank: Number(shard.tp_rank ?? 0),
+        pp_rank: Number(shard.pp_rank ?? 0),
+        ep_rank: Number(shard.ep_rank ?? 0),
+        component_id: String(shard.compute_component_id || ""),
+      };
+      rows.push({
+        tensorId,
+        rank,
+        compute: String(shard.compute_component_id || rank.component_id || ""),
+        storage: String(shard.storage_component_id || shard.component_id || ""),
+        logicalBytes: Number(shard.logical_bytes ?? shard.length_bytes ?? 0),
+        physicalBytes: Number(shard.physical_bytes ?? shard.logical_bytes ?? shard.length_bytes ?? 0),
+        shardIndex: Number.isInteger(Number(shard.shard_index)) ? Number(shard.shard_index) : null,
+        shardCount: Number.isInteger(Number(shard.shard_count)) ? Number(shard.shard_count) : null,
+        residency: String(shard.residency || detail.residency || ""),
+        shardKind: String(shard.shard_kind || detail.shard_policy || "rank shard"),
+      });
+    });
+  });
+  return rows;
+}
+
+function rankCoordinateLabel(rank) {
+  if (!rank || rank.rank == null) return uiText("未消歧", "Ambiguous");
+  return `TP ${rank.tp_rank} / PP ${rank.pp_rank} / EP ${rank.ep_rank}`;
+}
+
+function groupEffectiveMappingRows(rows, key) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const label = String(row[key] || uiText("未命名", "Unnamed"));
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(row);
+  });
+  return Array.from(groups, ([label, entries]) => ({ label, rows: entries }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function filterEffectiveMappingGroups(groups, kind, view) {
+  const query = String(view.query || "").trim().toLocaleLowerCase();
+  const rank = String(view.rank ?? "");
+  const component = String(view.component || "");
+  return groups.map((group) => {
+    const groupQueryMatch = !query || group.label.toLocaleLowerCase().includes(query);
+    const rows = group.rows.filter((row) => {
+      const rowRank = row.rank?.rank == null ? "" : String(row.rank.rank);
+      const rowComponents = kind === "operator"
+        ? [String(row.componentId || row.rank?.component_id || "")]
+        : [String(row.compute || row.rank?.component_id || ""), String(row.storage || "")];
+      const rowText = [rowRank, ...rowComponents, rankCoordinateLabel(row.rank), row.partition, row.shardKind, row.shardIndex, row.shardCount, row.residency]
+        .filter(Boolean).join(" ").toLocaleLowerCase();
+      return (!rank || rowRank === rank)
+        && (!component || rowComponents.includes(component))
+        && (groupQueryMatch || rowText.includes(query));
+    });
+    return { ...group, rows };
+  }).filter((group) => group.rows.length);
+}
+
+function effectiveMappingPage(groups, rawPage, pageSize = EFFECTIVE_MAPPING_PAGE_SIZE) {
+  const pageCount = Math.max(1, Math.ceil(groups.length / pageSize));
+  const page = Math.min(pageCount - 1, Math.max(0, Math.trunc(Number(rawPage)) || 0));
+  return { page, pageCount, items: groups.slice(page * pageSize, (page + 1) * pageSize) };
+}
+
+function effectiveMappingGroupMarkup(group, kind) {
+  const componentIds = Array.from(new Set(group.rows.map((row) => kind === "operator"
+    ? String(row.componentId || row.rank?.component_id || "—")
+    : `${String(row.compute || row.rank?.component_id || "—")}↔${String(row.storage || "—")}`)));
+  const label = kind === "operator" ? uiText("Rank 目标", "Rank targets") : uiText("Rank 分片", "Rank shards");
+  const headers = kind === "operator"
+    ? `<th data-concept-help="rank">${escapeHtml(uiText("逻辑 Rank", "Logical Rank"))}</th><th>${escapeHtml(uiText("TP / PP / EP 坐标", "TP / PP / EP Coordinates"))}</th><th>${escapeHtml(uiText("执行组件", "Compute Component"))}</th><th>${escapeHtml(uiText("分区语义", "Partition Semantics"))}</th>`
+    : `<th data-concept-help="rank">${escapeHtml(uiText("逻辑 Rank", "Logical Rank"))}</th><th>${escapeHtml(uiText("TP / PP / EP 坐标", "TP / PP / EP Coordinates"))}</th><th>${escapeHtml(uiText("计算组件", "Compute Component"))}</th><th>${escapeHtml(uiText("存储组件", "Storage Component"))}</th><th>${escapeHtml(uiText("逻辑容量", "Logical Bytes"))}</th><th>${escapeHtml(uiText("物理容量", "Physical Bytes"))}</th><th data-concept-help="shard">${escapeHtml(uiText("分片索引 / 数量", "Shard Index / Count"))}</th><th data-concept-help="residency">${escapeHtml(uiText("驻留状态", "Residency"))}</th><th data-concept-help="shard">${escapeHtml(uiText("分片方式", "Shard Type"))}</th>`;
+  const columns = kind === "operator"
+    ? '<colgroup><col class="rank-col"><col class="coordinate-col"><col class="component-col"><col class="semantics-col"></colgroup>'
+    : '<colgroup><col class="rank-col"><col class="coordinate-col"><col class="compute-component-col"><col class="storage-component-col"><col class="bytes-col"><col class="physical-bytes-col"><col class="shard-index-col"><col class="residency-col"><col class="semantics-col"></colgroup>';
+  const rows = group.rows.map((row) => kind === "operator" ? `<tr>
+      <td>${row.rank?.rank == null ? "—" : formatNumber(row.rank.rank)}</td>
+      <td>${escapeHtml(rankCoordinateLabel(row.rank))}</td>
+      <td>${escapeHtml(row.componentId || row.rank?.component_id || "—")}</td>
+      <td>${escapeHtml(row.partition)}</td>
+    </tr>` : `<tr>
+      <td>${row.rank?.rank == null ? "—" : formatNumber(row.rank.rank)}</td>
+      <td>${escapeHtml(rankCoordinateLabel(row.rank))}</td>
+      <td>${escapeHtml(row.compute || row.rank?.component_id || "—")}</td>
+      <td>${escapeHtml(row.storage || "—")}</td>
+      <td>${escapeHtml(formatBytes(row.logicalBytes))}</td>
+      <td>${escapeHtml(formatBytes(row.physicalBytes))}</td>
+      <td>${row.shardIndex == null && row.shardCount == null ? "—" : `${row.shardIndex == null ? "—" : escapeHtml(formatNumber(row.shardIndex))} / ${row.shardCount == null ? "—" : escapeHtml(formatNumber(row.shardCount))}`}</td>
+      <td>${escapeHtml(row.residency || "—")}</td>
+      <td>${escapeHtml(row.shardKind)}</td>
+    </tr>`).join("");
+  return `<details class="rank-mapping-group"><summary><span><strong>${escapeHtml(group.label)}</strong><small>${escapeHtml(uiText("{count} 个{label} · {components}", "{count} {label} · {components}", { count: formatNumber(group.rows.length), label, components: componentIds.join(" / ") }))}</small></span><span aria-hidden="true">${escapeHtml(uiText("展开", "Expand"))}</span></summary><div class="table-shell"><table class="data-table compact-data-table rank-mapping-table rank-mapping-table-${kind}">${columns}<thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div></details>`;
+}
+
+function syncEffectiveMappingFilters(operatorRows, shardRows) {
+  const view = state.effectiveMappingView;
+  const rankValues = Array.from(new Set([...operatorRows, ...shardRows]
+    .map((row) => row.rank?.rank)
+    .filter((rank) => rank != null)
+    .map(String))).sort((left, right) => Number(left) - Number(right));
+  const componentValues = Array.from(new Set([
+    ...operatorRows.map((row) => String(row.componentId || row.rank?.component_id || "")),
+    ...shardRows.map((row) => String(row.compute || row.rank?.component_id || "")),
+    ...shardRows.map((row) => String(row.storage || "")),
+  ].filter(Boolean))).sort((left, right) => left.localeCompare(right));
+  if (!rankValues.includes(view.rank)) view.rank = "";
+  if (!componentValues.includes(view.component)) view.component = "";
+  dom.effectiveMappingSearchInput.value = view.query;
+  dom.effectiveMappingRankFilter.innerHTML = `<option value="">${escapeHtml(uiText("全部 Rank", "All Ranks"))}</option>${rankValues.map((rank) => `<option value="${escapeHtml(rank)}" ${rank === view.rank ? "selected" : ""}>${escapeHtml(uiText("逻辑 Rank {rank}", "Logical Rank {rank}", { rank }))}</option>`).join("")}`;
+  dom.effectiveMappingComponentFilter.innerHTML = `<option value="">${escapeHtml(uiText("全部组件", "All Components"))}</option>${componentValues.map((component) => `<option value="${escapeHtml(component)}" ${component === view.component ? "selected" : ""}>${escapeHtml(component)}</option>`).join("")}`;
+}
+
+function syncEffectiveMappingPagination(kind, pageData, groupCount, rowCount) {
+  const prefix = kind === "operator" ? "effectiveOp" : "effectiveTensor";
+  dom[`${prefix}PreviousButton`].disabled = pageData.page <= 0;
+  dom[`${prefix}NextButton`].disabled = pageData.page >= pageData.pageCount - 1;
+  dom[`${prefix}PageStatus`].textContent = groupCount
+    ? uiText("第 {page} / {pages} 页 · {groups} 组 · {rows} 条逐 Rank 数据", "Page {page} / {pages} · {groups} groups · {rows} per-Rank rows", { page: pageData.page + 1, pages: pageData.pageCount, groups: groupCount, rows: rowCount })
+    : uiText("无匹配数据", "No matching data");
+}
+
+function renderEffectiveMapping() {
+  const decision = controlPlaneDecision(state.scenario.placement);
+  const ranks = effectiveParallelRanks();
+  const operatorRows = operatorTargetRows(decision, ranks);
+  const shardRows = tensorShardRows(decision, ranks);
+  syncEffectiveMappingFilters(operatorRows, shardRows);
+  const operatorGroups = filterEffectiveMappingGroups(groupEffectiveMappingRows(operatorRows, "operator"), "operator", state.effectiveMappingView);
+  const tensorGroups = filterEffectiveMappingGroups(groupEffectiveMappingRows(shardRows, "tensorId"), "tensor", state.effectiveMappingView);
+  const operatorPage = effectiveMappingPage(operatorGroups, state.effectiveMappingView.operatorPage);
+  const tensorPage = effectiveMappingPage(tensorGroups, state.effectiveMappingView.tensorPage);
+  state.effectiveMappingView.operatorPage = operatorPage.page;
+  state.effectiveMappingView.tensorPage = tensorPage.page;
+  const filteredOperatorRows = operatorGroups.reduce((total, group) => total + group.rows.length, 0);
+  const filteredTensorRows = tensorGroups.reduce((total, group) => total + group.rows.length, 0);
+  dom.effectiveOpMappingMeta.textContent = uiText("{groups} 个算子组 · {targets} 个 Rank 目标", "{groups} operator groups · {targets} Rank targets", { groups: formatNumber(operatorGroups.length), targets: formatNumber(filteredOperatorRows) });
+  dom.effectiveTensorShardMeta.textContent = uiText("{groups} 个张量组 · {shards} 个物理分片", "{groups} tensor groups · {shards} physical shards", { groups: formatNumber(tensorGroups.length), shards: formatNumber(filteredTensorRows) });
+  dom.effectiveMappingMeta.textContent = operatorRows.length || shardRows.length
+    ? `World Size ${formatNumber(ranks.length)} · Rank-aware`
+    : uiText("尚无 Rank-aware 控制平面决策", "No Rank-aware control-plane decision yet");
+  dom.effectiveMappingSummary.innerHTML = [
+    [uiText("逻辑 Rank", "Logical Ranks"), ranks.length], [uiText("算子组", "Operator groups"), groupEffectiveMappingRows(operatorRows, "operator").length],
+    [uiText("算子 Rank 目标", "Operator Rank targets"), operatorRows.length], [uiText("张量组", "Tensor groups"), groupEffectiveMappingRows(shardRows, "tensorId").length],
+    [uiText("张量物理分片", "Tensor physical shards"), shardRows.length],
+  ].map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${formatNumber(value)}</dd></div>`).join("");
+  dom.effectiveOpMappingBody.innerHTML = operatorPage.items.length
+    ? operatorPage.items.map((group) => effectiveMappingGroupMarkup(group, "operator")).join("")
+    : `<div class="preset-empty">${escapeHtml(operatorRows.length ? uiText("没有匹配筛选条件的算子 Rank 目标。", "No operator Rank targets match the filters.") : uiText("内部控制平面物化后显示每个算子的实际 TP/PP/EP Rank 覆盖。", "Actual TP/PP/EP Rank coverage appears after the internal control plane materializes placement."))}</div>`;
+  dom.effectiveTensorShardBody.innerHTML = tensorPage.items.length
+    ? tensorPage.items.map((group) => effectiveMappingGroupMarkup(group, "tensor")).join("")
+    : `<div class="preset-empty">${escapeHtml(shardRows.length ? uiText("没有匹配筛选条件的张量 Rank 分片。", "No tensor Rank shards match the filters.") : uiText("当前映射尚未声明逐 Rank 权重分片。", "The current mapping does not declare per-Rank weight shards."))}</div>`;
+  syncEffectiveMappingPagination("operator", operatorPage, operatorGroups.length, filteredOperatorRows);
+  syncEffectiveMappingPagination("tensor", tensorPage, tensorGroups.length, filteredTensorRows);
+}
+
+function eligibleParallelGpus() {
+  return asArray(state.scenario?.hardware?.components)
+    .filter((component) => normalizedComponentKind(component.kind) === "gpu")
+    .slice()
+    .sort((left, right) => String(left.component_id).localeCompare(String(right.component_id)));
+}
+
+function associatedRankTargets(componentId) {
+  const hardware = state.scenario.hardware;
+  const componentMap = new Map(hardware.components.map((component) => [component.component_id, component]));
+  const adjacent = [];
+  hardware.links.forEach((link) => {
+    if (link.source_component === componentId) adjacent.push(link.target_component);
+    else if (link.target_component === componentId) adjacent.push(link.source_component);
+  });
+  const components = Array.from(new Set(adjacent)).map((id) => componentMap.get(id)).filter(Boolean)
+    .sort((left, right) => String(left.component_id).localeCompare(String(right.component_id)));
+  return {
+    memory: components.find(isWritableActiveRankMemory)?.component_id || null,
+    cim: components.find((component) => componentKindClass(component.kind) === "cim")?.component_id || null,
+  };
+}
+
+function buildColocatedRankMapping(parallel = asObject(state.scenario?.placement?.parallel)) {
+  const tp = Number(parallel.tp_degree);
+  const pp = Number(parallel.pp_degree);
+  const ep = Number(parallel.ep_degree);
+  if (![tp, pp, ep].every((value) => Number.isSafeInteger(value) && value >= 1)) return [];
+  const gpus = eligibleParallelGpus();
+  if (!gpus.length) return [];
+  const ranks = [];
+  let rank = 0;
+  for (let ppRank = 0; ppRank < pp; ppRank += 1) {
+    for (let epRank = 0; epRank < ep; epRank += 1) {
+      for (let tpRank = 0; tpRank < tp; tpRank += 1) {
+        const gpu = gpus[rank % gpus.length];
+        const associated = associatedRankTargets(gpu.component_id);
+        ranks.push({
+          rank,
+          component_id: gpu.component_id,
+          tp_rank: tpRank,
+          pp_rank: ppRank,
+          ep_rank: epRank,
+          ...(associated.memory ? { memory_component_id: associated.memory } : {}),
+          ...(associated.cim ? { cim_component_id: associated.cim } : {}),
+        });
+        rank += 1;
+      }
+    }
+  }
+  return ranks;
+}
+
+function refreshColocatedRankMapping() {
+  const parallel = asObject(state.scenario?.placement?.parallel);
+  if (!allowColocatedRanksEnabled()) return false;
+  const next = buildColocatedRankMapping(parallel);
+  const changed = JSON.stringify(asArray(parallel.rank_mapping)) !== JSON.stringify(next);
+  parallel.rank_mapping = next;
+  return changed;
+}
+
+function parallelCapacityDiagnostic(parallel = asObject(state.scenario?.placement?.parallel)) {
+  const worldSize = Number(parallel.tp_degree) * Number(parallel.pp_degree) * Number(parallel.ep_degree);
+  const gpuCount = eligibleParallelGpus().length;
+  if (![worldSize, gpuCount].every(Number.isFinite) || worldSize < 1) return uiText("并行度必须是大于等于 1 的整数。", "Parallel degrees must be integers greater than or equal to 1.");
+  if (allowColocatedRanksEnabled() && !gpuCount) {
+    return uiText("当前并行世界需要 {worldSize} 个逻辑 Rank，但拓扑中没有 eligible GPU。请先添加并连接 GPU，或降低 TP/PP/EP。", "The current parallel world needs {worldSize} logical Ranks, but the topology has no eligible GPU. Add and connect a GPU or reduce TP/PP/EP.", { worldSize });
+  }
+  if (!allowColocatedRanksEnabled() && gpuCount < worldSize) {
+    return uiText("当前 TP×PP×EP = {worldSize}，但只有 {gpuCount} 个 eligible GPU。请降低并行度、添加 GPU，或显式开启“允许同组件多逻辑 Rank”；界面不会自动添加硬件。", "TP×PP×EP is {worldSize}, but only {gpuCount} eligible GPUs are available. Reduce parallelism, add GPUs, or explicitly allow colocated logical Ranks; the interface will not add hardware automatically.", { worldSize, gpuCount });
+  }
+  return "";
+}
+
+function reconcileParallelDegree(field, rawValue) {
+  const placement = state.scenario.placement;
+  const parallel = asObject(placement.parallel);
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    toast("并行度无效", "TP/PP/EP 必须是大于等于 1 的整数。", "error", 5200);
+    renderPlacementControls();
+    return false;
+  }
+  parallel[field] = value;
+  parallel.rank_mapping = [];
+  if (field === "pp_degree") parallel.layer_to_stage = {};
+  refreshColocatedRankMapping();
+  markScenarioChanged("", { mappingImpact: true, mappingReason: "TP/PP/EP 并行度已修改，旧 Rank 映射已原子清理。" });
+  const diagnostic = parallelCapacityDiagnostic(parallel);
+  if (diagnostic) toast("并行资源不足", diagnostic, "warning", 8000);
+  return true;
+}
+
+function renderPlacementControls() {
+  const placement = state.scenario.placement;
+  const parallel = asObject(placement.parallel);
+  const kvPolicy = asObject(placement.kv_policy);
+  const hbmFilter = (component) => isDedicatedHbm(component.kind);
+  const backingPlannerExplanation = uiText(
+    "HBF 走 UCIe；SSD 和高 I/O SSD 走 PCIe / CXL。",
+    "HBF uses UCIe; SSD and high-I/O SSD use PCIe/CXL.",
+  );
+  const rankMappingExplanation = uiText(
+    "更改 TP/PP/EP 会清空旧 Rank 映射；更改 PP 还会清空层到阶段映射。开启同址开关后，界面只使用当前 eligible GPU 及其直接相连的 HBM/CIM 生成完整笛卡尔积映射。",
+    "Changing TP/PP/EP clears the old Rank mapping; changing PP also clears the layer-to-stage mapping. With colocation enabled, the interface builds the complete Cartesian mapping only from eligible GPUs and their directly connected HBM/CIM components.",
+  );
+  dom.placementControls.innerHTML = `
+    <section class="control-section" aria-labelledby="parallelControlsTitle">
+      <strong class="control-section-title" id="parallelControlsTitle" data-concept-help="parallel_strategy">${escapeHtml(uiText("并行策略", "Parallel strategy"))}</strong>
+      <div class="parallel-grid">
+        ${placementNumberField(uiText("张量并行度（TP Degree）", "Tensor Parallel Degree (TP)"), "tp_degree", parallel.tp_degree, "parallel", "tp_degree")}
+        ${placementNumberField(uiText("流水线并行度（PP Degree）", "Pipeline Parallel Degree (PP)"), "pp_degree", parallel.pp_degree, "parallel", "pp_degree")}
+        ${placementNumberField(uiText("专家并行度（EP Degree）", "Expert Parallel Degree (EP)"), "ep_degree", parallel.ep_degree, "parallel", "ep_degree")}
+      </div>
+      <label class="field"><span data-concept-help="collective_algorithm">${escapeHtml(uiText("集合通信算法", "Collective Algorithm"))}</span><select data-placement-group="parallel" data-placement-field="collective_algorithm">
+        ${fixedOptions([["auto", uiText("自动", "Auto")], ["ring", uiText("环形", "Ring")], ["tree", uiText("树形", "Tree")]], parallel.collective_algorithm)}
+      </select></label>
+      <label class="checkbox-field"><span data-concept-help="colocated_ranks"><strong>${escapeHtml(uiText("允许同组件多逻辑 Rank", "Allow colocated logical Ranks"))}</strong><small>${escapeHtml(uiText("默认关闭；不会添加硬件", "Off by default; does not add hardware"))}</small></span><input type="checkbox" id="allowColocatedRanksInput" ${allowColocatedRanksEnabled(placement) ? "checked" : ""}></label>
+      <p class="parallel-diagnostic ${parallelCapacityDiagnostic(parallel) ? "is-warning" : "is-ready"}" id="parallelCapacityDiagnostic">${escapeHtml(parallelCapacityDiagnostic(parallel) || uiText("当前显式 Rank 映射 {count} 项。", "Current explicit Rank mapping: {count} entries.", { count: asArray(parallel.rank_mapping).length }))}</p>
+      <p class="muted">${escapeHtml(rankMappingExplanation)}</p>
+    </section>
+    <section class="control-section" aria-labelledby="kvControlsTitle">
+      <strong class="control-section-title" id="kvControlsTitle" data-concept-help="kv_residency_policy">${escapeHtml(uiText("KV 驻留策略", "KV residency strategy"))}</strong>
+      <div class="kv-grid">
+         <label class="field"><span data-concept-help="kv_cache_component">${escapeHtml(uiText("缓存组件", "Cache Component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("未指定", "Unspecified"))}</option>${componentOptions(kvPolicy.cache_component || "", hbmFilter)}</select></label>
+         <label class="field"><span data-concept-help="kv_offload_component">${escapeHtml(uiText("卸载组件", "Offload Component"))}</span><select data-placement-group="kv_policy" data-placement-field="offload_component"><option value="">${escapeHtml(uiText("不卸载", "No Offload"))}</option>${componentOptions(kvPolicy.offload_component || "")}</select></label>
+         ${placementNumberField(uiText("每页 Token 数（Tokens per Page）", "Tokens per Page"), "tokens_per_page", kvPolicy.tokens_per_page, "kv_policy", "page_size")}
+      </div>
+    </section>
+    <p class="muted" data-concept-help="model_weights_backing">${escapeHtml(backingPlannerExplanation)}</p>
+    <label class="checkbox-field"><span data-concept-help="weights_resident"><strong>${escapeHtml(uiText("权重常驻", "Weights Resident"))}</strong><small>${escapeHtml(uiText("勾选 = preloaded_resident；取消 = cold_stream_per_use。冷流式读取不按 batch、Token 或 MTP 候选重复。", "Checked = preloaded_resident; unchecked = cold_stream_per_use. Cold-stream reads are not multiplied by batch items, Tokens, or MTP candidates."))}</small></span><input type="checkbox" data-scenario-field="weights_resident" ${state.scenario.weights_resident ? "checked" : ""}></label>`;
+  hydrateConceptHelp(dom.placementControls);
+  $$('[data-placement-field]', dom.placementControls).forEach((control) => control.addEventListener("change", () => {
+    const group = control.dataset.placementGroup;
+    const field = control.dataset.placementField;
+    const target = group === "parallel" ? parallel : kvPolicy;
+    const value = control.type === "number" ? Number(control.value) : control.value || null;
+    if (group === "parallel" && ["tp_degree", "pp_degree", "ep_degree"].includes(field)) {
+      reconcileParallelDegree(field, value);
+      return;
+    }
+    target[field] = value;
+    markScenarioChanged("", { mappingImpact: true, mappingReason: group === "kv_policy" ? "KV 策略已修改。" : "并行策略已修改。" });
+  }));
+  $("#allowColocatedRanksInput", dom.placementControls).addEventListener("change", (event) => {
+    setAllowColocatedRanks(event.target.checked, placement);
+    parallel.rank_mapping = event.target.checked ? buildColocatedRankMapping(parallel) : [];
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "逻辑 Rank 同址策略已修改。" });
+    const diagnostic = parallelCapacityDiagnostic(parallel);
+    if (diagnostic) toast("并行资源诊断", diagnostic, "warning", 8000);
+  });
+  $$('[data-scenario-field]', dom.placementControls).forEach((control) => control.addEventListener("change", () => {
+    state.scenario[control.dataset.scenarioField] = control.checked;
+    markScenarioChanged();
+  }));
+}
+
+function fixedOptions(options, selected) {
+  return options.map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function placementNumberField(label, field, value, group, helpKey = "") {
+  return `<label class="field">${helpKey ? fieldTitleMarkup(label, helpKey) : `<span>${escapeHtml(label)}</span>`}<input type="number" min="1" step="1" data-placement-group="${escapeHtml(group)}" data-placement-field="${escapeHtml(field)}" value="${escapeHtml(value)}"></label>`;
+}
+
+function markWorkloadChanged(message = "") {
+  markScenarioChanged(message, {
+    mappingImpact: false,
+  });
+}
+
+function renderWorkload() {
+  const workload = state.scenario.workload;
+  const scheduler = asObject(workload.scheduler);
+  const mtp = workload.mtp === null ? null : asObject(workload.mtp);
+  dom.workloadMetaForm.innerHTML = `
+    <section class="workload-config-section" data-workload-section="request-generation" aria-labelledby="workloadGenerationTitle">
+      <header class="workload-section-heading"><div><h2 id="workloadGenerationTitle" data-concept-help="request_generation">${escapeHtml(uiText("请求生成", "Request Generation"))}</h2></div></header>
+      <div class="workload-field-grid">
+        ${workloadField("负载名称", "Workload Name", "name", workload.name, "text", "", "workload")}
+        ${workloadField("合成请求数", "Synthetic Request Count", "request_count", workload.request_count, "number", 0, "synthetic_request_count")}
+        ${workloadField("合成提示 Token 数", "Synthetic Prompt Tokens", "prompt_tokens", workload.prompt_tokens, "number", 0, "synthetic_prompt_tokens")}
+        ${workloadField("合成输出 Token 数", "Synthetic Output Tokens", "output_tokens", workload.output_tokens, "number", 0, "synthetic_output_tokens")}
+        ${workloadField("随机种子", "Random Seed", "random_seed", workload.random_seed, "number", 0, "random_seed")}
+      </div>
+    </section>
+    <section class="workload-config-section" data-workload-section="continuous-batching" aria-labelledby="workloadSchedulerTitle">
+      <header class="workload-section-heading"><div><h2 id="workloadSchedulerTitle" data-concept-help="scheduler">${escapeHtml(uiText("连续批处理与调度", "Continuous Batching & Scheduling"))}</h2></div></header>
+      <div class="workload-field-grid">
+        <label class="field">${workloadFieldLabel("调度模式", "Scheduler Mode", "scheduler")}<select data-scheduler-field="mode">${fixedOptions([["static", "静态（Static）"], ["continuous", "持续（Continuous）"]], scheduler.mode)}</select></label>
+        ${nestedNumberField("最大序列数", "Max Sequences", "scheduler", "max_num_seqs", scheduler.max_num_seqs, { min: 1, helpKey: "max_sequences" })}
+        ${nestedNumberField("最大批处理 Token 数", "Max Batched Tokens", "scheduler", "max_num_batched_tokens", scheduler.max_num_batched_tokens, { min: 1, helpKey: "batched_tokens" })}
+        ${nestedNumberField("预填充分块 Token 数", "Prefill Chunk Tokens", "scheduler", "prefill_chunk_tokens", scheduler.prefill_chunk_tokens, { min: 1, helpKey: "prefill_chunk_tokens" })}
+        <label class="field workload-toggle-field is-preemption-toggle">${workloadFieldLabel("允许抢占", "Preemption Enabled", "preemption")}<span class="workload-checkbox-control"><input type="checkbox" data-scheduler-field="preemption_enabled" ${scheduler.preemption_enabled ? "checked" : ""}><span>${escapeHtml(uiText("允许调度器抢占进行中的序列", "Allow the scheduler to preempt active sequences"))}</span></span></label>
+      </div>
+    </section>
+    <section class="workload-config-section" data-workload-section="mtp" aria-labelledby="workloadMtpTitle">
+      <header class="workload-section-heading"><div><h2 id="workloadMtpTitle" data-concept-help="mtp">${escapeHtml(uiText("多 Token 预测（MTP）", "Multi-Token Prediction (MTP)"))}</h2></div></header>
+      <div class="workload-field-grid">
+        <label class="field workload-toggle-field">${workloadFieldLabel("启用多 Token 预测", "Enable MTP", "mtp_enabled")}<span class="workload-checkbox-control"><input type="checkbox" id="mtpEnabledInput" ${mtp ? "checked" : ""}><span>${escapeHtml(uiText("启用候选 Token 提议与接受模型", "Enable candidate-Token proposals and the acceptance model"))}</span></span></label>
+        ${nestedNumberField("候选 Token 数", "Candidate Tokens", "mtp", "candidate_tokens", mtp?.candidate_tokens ?? 4, { min: 1, disabled: !mtp, helpKey: "mtp_candidates" })}
+        ${nestedNumberField("接受率", "Acceptance Rate", "mtp", "acceptance_rate", mtp?.acceptance_rate ?? "", { min: 0, max: 1, step: "any", disabled: !mtp, helpKey: "acceptance_rate" })}
+        ${nestedNumberField("提议成本系数", "Proposal Cost Scale", "mtp", "proposal_cost_scale", mtp?.proposal_cost_scale ?? 0.15, { min: 0, step: "any", disabled: !mtp, helpKey: "proposal_cost" })}
+      </div>
+    </section>`;
+  hydrateConceptHelp(dom.workloadMetaForm);
+  $$('[data-workload-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
+    const field = control.dataset.workloadField;
+    workload[field] = control.type === "number" ? Number(control.value) : control.value.trim();
+    markWorkloadChanged();
+  }));
+  $$('[data-scheduler-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
+    const field = control.dataset.schedulerField;
+    scheduler[field] = control.type === "checkbox" ? control.checked : control.type === "number" ? Number(control.value) : control.value;
+    markWorkloadChanged();
+  }));
+  const mtpEnabledInput = $("#mtpEnabledInput", dom.workloadMetaForm);
+  mtpEnabledInput.addEventListener("change", () => {
+    if (mtpEnabledInput.checked) {
+      workload.mtp = {
+        method: "head_based",
+        candidate_tokens: 4,
+        acceptance_model: "expected",
+        acceptance_rate: null,
+        proposal_cost_scale: 0.15,
+        acceptance_trace: [],
+      };
+    } else {
+      workload.mtp = null;
+    }
+    markWorkloadChanged();
+  });
+  if (mtp) {
+    $$('[data-mtp-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
+      const field = control.dataset.mtpField;
+      mtp[field] = field === "acceptance_rate" && control.value === "" ? null : Number(control.value);
+      markWorkloadChanged();
+    }));
+  }
+  renderRequestTable();
+}
+
+function workloadFieldLabel(primary, secondary, helpKey = "") {
+  return `<span class="workload-field-label" ${helpKey ? `data-concept-help="${escapeHtml(helpKey)}"` : ""}><span>${escapeHtml(uiText(primary, secondary))}</span></span>`;
+}
+
+function nestedNumberField(primary, secondary, group, field, value, { min = "", max = "", step = "1", disabled = false, helpKey = "" } = {}) {
+  const dataAttribute = group === "scheduler" ? "data-scheduler-field" : "data-mtp-field";
+  return `<label class="field">${workloadFieldLabel(primary, secondary, helpKey)}<input type="number" ${dataAttribute}="${escapeHtml(field)}" value="${escapeHtml(value ?? "")}" ${min !== "" ? `min="${min}"` : ""} ${max !== "" ? `max="${max}"` : ""} step="${escapeHtml(step)}" ${disabled ? "disabled" : ""}></label>`;
+}
+
+function workloadField(primary, secondary, field, value, type = "text", min = "", helpKey = "") {
+  return `<label class="field">${workloadFieldLabel(primary, secondary, helpKey)}<input type="${type}" data-workload-field="${field}" value="${escapeHtml(value ?? "")}" ${min !== "" ? `min="${min}"` : ""} ${type === "number" ? 'step="1"' : ""}></label>`;
+}
+
+function renderRequestTable() {
+  const requests = state.scenario.workload.requests;
+  dom.requestTableBody.innerHTML = requests.length ? requests.map((request, index) => `
+    <tr data-request-index="${index}">
+      <td><input class="cell-input" data-request-field="request_id" value="${escapeHtml(request.request_id)}"></td>
+      <td><input class="cell-input" type="number" min="0" step="any" data-request-field="arrival_ns" value="${escapeHtml(request.arrival_ns)}"></td>
+      <td><span class="mono-readout">${escapeHtml(formatDurationNs(request.arrival_ns))}</span></td>
+      <td><input class="cell-input" type="number" min="0" step="1" data-request-field="prompt_tokens" value="${escapeHtml(request.prompt_tokens)}"></td>
+      <td><input class="cell-input" type="number" min="0" step="1" data-request-field="output_tokens" value="${escapeHtml(request.output_tokens)}"></td>
+      <td><input class="cell-input" type="number" step="1" data-request-field="priority" value="${escapeHtml(request.priority ?? 0)}" aria-label="${escapeHtml(uiText("请求 {id} 优先级", "Request {id} priority", { id: request.request_id }))}"></td>
+      <td><input class="cell-input" type="number" min="${escapeHtml(request.arrival_ns ?? 0)}" step="any" data-request-field="deadline_ns" value="${escapeHtml(request.deadline_ns ?? "")}" placeholder="—" aria-label="${escapeHtml(uiText("请求 {id} 截止时间（纳秒，可选）", "Request {id} deadline (nanoseconds, optional)", { id: request.request_id }))}"></td>
+      <td><button type="button" class="row-delete-button" data-delete-request aria-label="${escapeHtml(uiText("删除请求 {id}", "Delete request {id}", { id: request.request_id }))}">×</button></td>
+    </tr>`).join("") : `<tr class="empty-row"><td colspan="8">${escapeHtml(uiText("没有显式请求；synthetic_workload 仅作为校验/仿真负载使用。映射性能目标来自显式设计点，不来自请求表。", "No explicit requests. synthetic_workload is used only as validation/simulation workload. Mapping performance objectives come from explicit design points, not this request table."))}</td></tr>`;
+  $$('[data-request-index]', dom.requestTableBody).forEach((row) => {
+    const index = Number(row.dataset.requestIndex);
+    $$('[data-request-field]', row).forEach((control) => control.addEventListener("change", () => updateRequestField(index, control)));
+    $("[data-delete-request]", row).addEventListener("click", () => deleteRequest(index));
+  });
+}
+
+function updateRequestField(index, control) {
+  const requests = state.scenario.workload.requests;
+  const request = requests[index];
+  if (!request) return;
+  const field = control.dataset.requestField;
+  const rawValue = control.value.trim();
+  let value = field === "deadline_ns" && rawValue === ""
+    ? null
+    : control.type === "number"
+      ? Number(rawValue)
+      : rawValue;
+  if (field === "request_id") {
+    if (!value || requests.some((item, otherIndex) => otherIndex !== index && item.request_id === value)) {
+      toast("请求 ID 无效", value ? `${value} 已存在` : "请求 ID 不能为空。", "error");
+      renderRequestTable();
+      return;
+    }
+  }
+  if (field === "priority" && !Number.isInteger(value)) {
+    toast("优先级无效", "优先级必须是整数。", "error");
+    renderRequestTable();
+    return;
+  }
+  if (field === "deadline_ns" && value !== null && (!Number.isFinite(value) || value < Number(request.arrival_ns))) {
+    toast("截止时间无效", "截止时间必须是数字，并且不能早于到达时间。", "error", 5200);
+    renderRequestTable();
+    return;
+  }
+  if (field === "arrival_ns" && request.deadline_ns != null && Number(request.deadline_ns) < value) {
+    toast("到达时间无效", "到达时间不能晚于当前截止时间。", "error", 5200);
+    renderRequestTable();
+    return;
+  }
+  request[field] = value;
+  markWorkloadChanged();
+}
+
+function addRequest() {
+  const requests = state.scenario.workload.requests;
+  const used = new Set(requests.map((request) => request.request_id));
+  let index = requests.length;
+  let id = `request-${String(index).padStart(4, "0")}`;
+  while (used.has(id)) id = `request-${String(++index).padStart(4, "0")}`;
+  const previous = requests.at(-1);
+  requests.push({
+    schema_version: AUTHORING_SCHEMA_VERSION,
+    request_id: id,
+    arrival_ns: previous ? Number(previous.arrival_ns) : 0,
+    prompt_tokens: previous?.prompt_tokens ?? 64,
+    output_tokens: previous?.output_tokens ?? 4,
+    priority: previous?.priority ?? 0,
+    deadline_ns: null,
+  });
+  markWorkloadChanged("已新增显式请求");
+}
+
+function deleteRequest(index) {
+  const requests = state.scenario.workload.requests;
+  const [removed] = requests.splice(index, 1);
+  if (!removed) return;
+  markWorkloadChanged();
+  toast("请求已删除", removed.request_id, "warning");
+}
+
+function emptyTracePlaybackState() {
+  return {
+    data: null,
+    reportRef: null,
+    events: [],
+    filteredEvents: [],
+    timeNs: 0,
+    startNs: 0,
+    endNs: 0,
+    selectedEventId: null,
+    selectedIndex: -1,
+    playing: false,
+    requestFilter: "",
+    batchFilter: "",
+    rankFilter: "",
+    aggregateData: null,
+    batchTraceIndex: [],
+    pageCache: new Map(),
+    pagePending: new Map(),
+    page: null,
+    loading: false,
+    loadError: "",
+    mode: "aggregate",
+    topologyLayout: null,
+    measuredNodeSizes: {},
+    layoutView: { positions: {}, zoom: 1, offsetX: 0, offsetY: 0, autoFitKey: "" },
+    topologyGroups: null,
+    collapsedGroupIds: [],
+    groupCollapseInitialized: false,
+    drawerOpen: true,
+    fullscreen: false,
+    activeSignature: "",
+    autoLoadFirstBatch: true,
+    semanticStreamOpen: false,
+    semanticQuery: "",
+    semanticCategory: "",
+    semanticPhase: "",
+    semanticTemporal: "",
+    semanticPage: 0,
+  };
+}
+
+function stopTracePlayback() {
+  if (traceAnimationFrame !== null) {
+    if (traceAnimationMode === "interval" && typeof globalThis.clearInterval === "function") globalThis.clearInterval(traceAnimationFrame);
+    else if (traceAnimationMode === "raf" && typeof globalThis.cancelAnimationFrame === "function") globalThis.cancelAnimationFrame(traceAnimationFrame);
+  }
+  traceAnimationFrame = null;
+  traceAnimationMode = "static";
+  if (!state.tracePlayback) return;
+  state.tracePlayback.playing = false;
+  if (dom.tracePlayButton) {
+    dom.tracePlayButton.textContent = uiText("播放", "Play");
+    dom.tracePlayButton.setAttribute("aria-pressed", "false");
+  }
+}
+
+function startTraceAnimationDriver() {
+  traceAnimationMode = typeof globalThis.setInterval === "function" ? "interval" : "static";
+  if (traceAnimationMode === "interval") {
+    traceAnimationFrame = globalThis.setInterval(traceAnimationStep, TRACE_PLAYBACK_STEP_MS);
+  } else {
+    traceAnimationFrame = null;
+    traceAnimationStep();
+  }
+  return { mode: traceAnimationMode, stepMs: TRACE_PLAYBACK_STEP_MS };
+}
+
+function traceParticleAnimationCapability() {
+  const prefersReducedMotion = typeof globalThis.matchMedia === "function"
+    && globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return TraceView.animationCapability(globalThis, {
+    frameMs: 16,
+    reduceMotion: state.settings.reduceMotion,
+    prefersReducedMotion,
+  });
+}
+
+function resetTracePlaybackState() {
+  cancelTraceInteractionFrame();
+  tracePendingPointer = null;
+  stopTracePlayback();
+  clearTraceFullscreenState();
+  state.tracePlayback = emptyTracePlaybackState();
+}
+
+function syncTraceFullscreenSemantics(open = state.tracePlayback?.fullscreen === true) {
+  const panel = dom.traceTopologyPanel;
+  if (!panel) return;
+  panel.classList.toggle("is-fullscreen", open);
+  panel.setAttribute("role", open ? "dialog" : "region");
+  if (open) panel.setAttribute("aria-modal", "true");
+  else panel.removeAttribute("aria-modal");
+}
+
+function clearTraceFullscreenState() {
+  if (state.tracePlayback) state.tracePlayback.fullscreen = false;
+  document.documentElement?.classList?.remove?.("trace-fullscreen-open");
+  syncTraceFullscreenSemantics(false);
+  dom.traceFullscreenButton?.setAttribute?.("aria-pressed", "false");
+  traceFullscreenPreviousFocus = null;
+}
+
+function finiteTraceNumber(...values) {
+  for (const value of values) {
+    if (value == null || typeof value === "boolean") continue;
+    if (typeof value === "string" && !value.trim()) continue;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+function normalizeTraceRank(rawEvent, metadata) {
+  const rankSource = asObject(rawEvent.rank);
+  const rankId = finiteTraceNumber(rankSource.rank, rankSource.rank_id, rawEvent.rank_id, metadata.rank, metadata.rank_id);
+  const known = rankId == null ? null : effectiveParallelRanks().find((candidate) => candidate.rank === rankId);
+  const componentId = String(
+    rankSource.component_id
+    || rawEvent.compute_component_id
+    || metadata.compute_component_id
+    || metadata.target_component
+    || known?.component_id
+    || "",
+  );
+  if (rankId == null && !componentId) return null;
+  return {
+    ...rankSource,
+    rank: rankId,
+    tp_rank: finiteTraceNumber(rankSource.tp_rank, rawEvent.tp_rank, metadata.tp_rank, known?.tp_rank),
+    pp_rank: finiteTraceNumber(rankSource.pp_rank, rawEvent.pp_rank, metadata.pp_rank, known?.pp_rank),
+    ep_rank: finiteTraceNumber(rankSource.ep_rank, rawEvent.ep_rank, metadata.ep_rank, known?.ep_rank),
+    component_id: componentId,
+  };
+}
+
+function normalizeTraceHops(rawHops, eventStart, eventEnd) {
+  return asArray(rawHops).map((rawHop, index) => {
+    const hop = asObject(rawHop);
+    const startNs = Object.hasOwn(hop, "start_ns") ? finiteTraceNumber(hop.start_ns) : eventStart;
+    const endNs = Object.hasOwn(hop, "end_ns") ? finiteTraceNumber(hop.end_ns) : eventEnd;
+    return {
+      ...hop,
+      link_id: String(hop.link_id || hop.id || hop.resource_id || ""),
+      protocol: String(hop.protocol || hop.protocol_name || ""),
+      source_component: String(hop.source_component || hop.source || ""),
+      target_component: String(hop.target_component || hop.target || ""),
+      resource_id: String(hop.resource_id || hop.link_id || ""),
+      start_ns: startNs,
+      end_ns: endNs == null || startNs == null ? endNs : Math.max(startNs, endNs),
+      interval_semantics: Object.hasOwn(hop, "interval_semantics")
+        ? hop.interval_semantics == null ? null : String(hop.interval_semantics)
+        : "",
+      index: Math.trunc(finiteTraceNumber(hop.index) ?? index),
+    };
+  });
+}
+
+function normalizeTraceEvent(rawValue, index) {
+  const raw = asObject(rawValue);
+  const metadata = asObject(raw.metadata);
+  const start = finiteTraceNumber(raw.start_ns, raw.timestamp_ns, metadata.start_ns, 0) ?? 0;
+  const end = Math.max(start, finiteTraceNumber(raw.end_ns, metadata.end_ns, start) ?? start);
+  const transferRaw = asObject(raw.transfer);
+  const tensorRaw = asObject(raw.tensor);
+  const sourceComponent = String(
+    transferRaw.source_component
+    || raw.source_component
+    || metadata.source_component
+    || metadata.weight_source_component
+    || "",
+  );
+  const targetComponent = String(
+    transferRaw.target_component
+    || raw.target_component
+    || metadata.target_component
+    || metadata.weight_target_component
+    || "",
+  );
+  const logicalTensor = String(
+    tensorRaw.logical_id
+    || tensorRaw.logical_tensor_id
+    || raw.logical_tensor_id
+    || metadata.logical_weight_tensor
+    || metadata.logical_tensor
+    || metadata.tensor
+    || "",
+  );
+  const physicalTensor = String(
+    tensorRaw.physical_id
+    || tensorRaw.physical_tensor_id
+    || raw.physical_tensor_id
+    || metadata.tensor
+    || logicalTensor
+    || "",
+  );
+  const tensorComponent = String(tensorRaw.component_id || sourceComponent || "");
+  const rank = normalizeTraceRank(raw, metadata);
+  const rawHops = transferRaw.hops || raw.hops || metadata.hops || metadata.route_hops;
+  const resources = asArray(raw.resources || raw.resource_intervals).map((resource) => {
+    const item = asObject(resource);
+    return {
+      ...item,
+      resource_id: String(item.resource_id || item.id || ""),
+      component_id: String(item.component_id || ""),
+      start_ns: finiteTraceNumber(item.start_ns, start) ?? start,
+      end_ns: finiteTraceNumber(item.end_ns, end) ?? end,
+      bytes: finiteTraceNumber(item.bytes, item.bytes_moved),
+    };
+  });
+  const eventKind = String(raw.event_kind || raw.event_type || metadata.event_kind || raw.category || "event");
+  const operatorId = String(raw.operator_id || raw.operator || metadata.operator_id || metadata.operator || "");
+  const layerId = String(raw.layer_id || raw.layer || metadata.layer_id || metadata.layer || "");
+  const phase = String(raw.phase || metadata.phase || metadata.serving_phase || "");
+  const requestId = String(raw.request_id || metadata.request_id || "");
+  const requestIds = asArray(raw.request_ids || metadata.request_ids)
+    .map((value) => String(value ?? ""))
+    .filter(Boolean);
+  if (requestId && !requestIds.includes(requestId)) requestIds.unshift(requestId);
+  const batchId = String(raw.batch_id || raw.cohort_id || metadata.batch_id || metadata.cohort_id || "");
+  return {
+    ...raw,
+    event_id: String(raw.event_id || raw.task_id || `trace-event-${index}`),
+    task_id: String(raw.task_id || ""),
+    request_id: requestId,
+    request_ids: requestIds,
+    request_ids_truncated: raw.request_ids_truncated === true || metadata.request_ids_truncated === true,
+    request_id_limit: finiteTraceNumber(raw.request_id_limit, raw.detail_limit, metadata.request_id_limit),
+    batch_id: batchId,
+    event_kind: eventKind,
+    category: String(raw.category || metadata.category || ""),
+    phase,
+    marker: raw.marker ?? metadata.marker ?? null,
+    token_index: raw.token_index ?? metadata.token_index ?? null,
+    detail_semantics: raw.detail_semantics ?? metadata.detail_semantics ?? "",
+    detail_limit: finiteTraceNumber(raw.detail_limit, metadata.detail_limit),
+    representative_items: asArray(raw.representative_items || metadata.representative_items),
+    representative_items_truncated: raw.representative_items_truncated === true || metadata.representative_items_truncated === true,
+    layer_id: layerId,
+    operator_id: operatorId,
+    name: String(raw.name || metadata.name || operatorId || eventKind),
+    start_ns: start,
+    end_ns: end,
+    rank,
+    tensor: logicalTensor || physicalTensor ? {
+      ...tensorRaw,
+      logical_id: logicalTensor || physicalTensor,
+      physical_id: physicalTensor || logicalTensor,
+      component_id: tensorComponent,
+      offset_bytes: finiteTraceNumber(tensorRaw.offset_bytes, raw.offset_bytes, metadata.offset_bytes),
+      length_bytes: finiteTraceNumber(tensorRaw.length_bytes, tensorRaw.bytes, raw.bytes, metadata.bytes),
+      shard_index: finiteTraceNumber(tensorRaw.shard_index, raw.shard_index, metadata.shard_index),
+      shard_count: finiteTraceNumber(tensorRaw.shard_count, raw.shard_count, metadata.shard_count),
+    } : null,
+    transfer: sourceComponent || targetComponent || rawHops ? {
+      ...transferRaw,
+      source_component: sourceComponent,
+      target_component: targetComponent,
+      bytes: finiteTraceNumber(transferRaw.bytes, raw.bytes, metadata.bytes, 0) ?? 0,
+      hops: normalizeTraceHops(rawHops, start, end),
+    } : null,
+    resources,
+    metadata,
+  };
+}
+
+function normalizedTraceBatchIndex(candidate) {
+  const rawIndex = asObject(candidate.batch_trace_index);
+  if (rawIndex.available === false) return [];
+  const batches = asArray(rawIndex.batches);
+  const seen = new Set();
+  return batches.map((raw, index) => {
+    const item = asObject(raw);
+    const batchId = String(item.batch_id || "");
+    if (!batchId || seen.has(batchId)) return null;
+    seen.add(batchId);
+    return {
+      ...item,
+      batch_id: batchId,
+      kind: String(item.kind || ""),
+      start_ns: finiteTraceNumber(item.start_ns),
+      end_ns: finiteTraceNumber(item.end_ns),
+      event_count: finiteTraceNumber(item.event_count),
+      index,
+    };
+  }).filter(Boolean);
+}
+
+function traceVisualizationFromReport(report) {
+  const candidate = asObject(report.visualization);
+  const rawEvents = asArray(candidate.events);
+  const events = rawEvents.map(normalizeTraceEvent)
+    .filter((event) => Number.isFinite(event.start_ns) && Number.isFinite(event.end_ns))
+    .sort((left, right) => left.start_ns - right.start_ns || left.end_ns - right.end_ns || left.event_id.localeCompare(right.event_id));
+  const range = asArray(candidate.time_range_ns);
+  const startNs = finiteTraceNumber(range[0], candidate.start_ns, events[0]?.start_ns, 0) ?? 0;
+  const endNs = Math.max(startNs, finiteTraceNumber(range[1], candidate.end_ns, events.at(-1)?.end_ns, startNs) ?? startNs);
+  const fidelity = String(candidate.fidelity || "unavailable");
+  const limitations = asArray(candidate.limitations).map(String);
+  if (fidelity === "aggregate") limitations.push("聚合回放仅展示批次包络；不会将批次伪装成逐层、逐算子或逐 Rank 的任务事件。");
+  const memoryLayout = candidate.memory_layout && typeof candidate.memory_layout === "object"
+    ? candidate.memory_layout
+    : { schema_version: "1.0", fidelity: "unavailable", components: {} };
+  return {
+    ...candidate,
+    schema_version: String(candidate.schema_version || "1.0"),
+    fidelity,
+    truncated: candidate.truncated === true,
+    limitations: Array.from(new Set(limitations)),
+    events,
+    memory_layout: memoryLayout,
+    start_ns: startNs,
+    end_ns: endNs,
+    total_events: Number(candidate.total_events ?? asObject(candidate.pagination).total ?? events.length),
+    pagination: asObject(candidate.pagination),
+    granularity: String(candidate.granularity || "task"),
+    trace_source: String(candidate.trace_source || "unified_event_kernel"),
+    batch_trace_index: normalizedTraceBatchIndex(candidate),
+  };
+}
+
+function tracePageEndpoint(jobId, batchId, offset = 0, limit = 5000) {
+  const query = new URLSearchParams({
+    batch_id: String(batchId),
+    offset: String(Math.max(0, Math.trunc(finiteTraceNumber(offset) ?? 0))),
+    limit: String(Math.min(5000, Math.max(1, Math.trunc(finiteTraceNumber(limit) ?? 5000)))),
+  });
+  return `/run-jobs/${encodeURIComponent(String(jobId))}/trace?${query.toString()}`;
+}
+
+function tracePagePagination(payload, returned) {
+  const source = asObject(payload.pagination);
+  const offset = Math.max(0, Math.trunc(finiteTraceNumber(source.offset) ?? 0));
+  const limit = Math.min(5000, Math.max(1, Math.trunc(finiteTraceNumber(source.limit) ?? 5000)));
+  const total = Math.max(returned, Math.trunc(finiteTraceNumber(source.total, payload.total_events) ?? returned));
+  const nextOffset = finiteTraceNumber(source.next_offset);
+  const hasMore = typeof source.has_more === "boolean" ? source.has_more : offset + returned < total;
+  return {
+    ...source,
+    offset,
+    limit,
+    returned,
+    total,
+    has_more: hasMore,
+    next_offset: hasMore ? Math.max(offset + returned, Math.trunc(nextOffset ?? (offset + limit))) : null,
+    previous_offset: offset > 0 ? Math.max(0, Math.trunc(finiteTraceNumber(source.previous_offset) ?? (offset - limit))) : null,
+  };
+}
+
+function tracePageData(payloadValue, batchId, aggregateData) {
+  const payload = asObject(payloadValue);
+  const rawEvents = asArray(payload.events);
+  const pageOffset = Math.max(0, Math.trunc(finiteTraceNumber(asObject(payload.pagination).offset) ?? 0));
+  const events = rawEvents.map((raw, index) => normalizeTraceEvent({ ...asObject(raw), batch_id: asObject(raw).batch_id || batchId }, pageOffset + index))
+    .filter((event) => Number.isFinite(event.start_ns) && Number.isFinite(event.end_ns))
+    .sort((left, right) => left.start_ns - right.start_ns || left.end_ns - right.end_ns || left.event_id.localeCompare(right.event_id));
+  const pagination = tracePagePagination(payload, events.length);
+  const scope = asObject(payload.scope);
+  const indexed = asArray(aggregateData?.batch_trace_index).find((item) => item.batch_id === batchId);
+  const range = asArray(scope.time_range_ns || payload.time_range_ns);
+  const startNs = finiteTraceNumber(range[0], scope.start_ns, indexed?.start_ns, events[0]?.start_ns, aggregateData?.start_ns, 0) ?? 0;
+  const eventEnd = events.reduce((maximum, event) => Math.max(maximum, event.end_ns), startNs);
+  const endNs = Math.max(startNs, finiteTraceNumber(range[1], scope.end_ns, indexed?.end_ns, eventEnd, aggregateData?.end_ns, startNs) ?? startNs);
+  return {
+    ...payload,
+    schema_version: String(payload.schema_version || "1.0"),
+    granularity: String(payload.granularity || "task"),
+    trace_source: String(payload.trace_source || "exact_cohort_replay"),
+    fidelity: String(payload.fidelity || "representative"),
+    scope: { ...scope, batch_id: String(scope.batch_id || batchId) },
+    events,
+    pagination,
+    limitations: Array.from(new Set(asArray(payload.limitations).map(String))),
+    memory_layout: payload.memory_layout || aggregateData?.memory_layout,
+    start_ns: startNs,
+    end_ns: endNs,
+    total_events: pagination.total,
+    truncated: pagination.offset > 0 || pagination.has_more,
+    batch_trace_index: aggregateData?.batch_trace_index || [],
+  };
+}
+
+function tracePageCacheKey(batchId, offset) {
+  return `${String(batchId || "")}\u0000${Math.max(0, Math.trunc(finiteTraceNumber(offset) ?? 0))}`;
+}
+
+function tracePageCacheGet(playback, cacheKey) {
+  if (!playback?.pageCache?.has(cacheKey)) return null;
+  const pageData = playback.pageCache.get(cacheKey);
+  playback.pageCache.delete(cacheKey);
+  playback.pageCache.set(cacheKey, pageData);
+  return pageData;
+}
+
+function tracePageCacheSet(playback, cacheKey, pageData, limit = TRACE_PAGE_CACHE_LIMIT) {
+  if (!playback?.pageCache || !cacheKey || !pageData) return pageData;
+  if (playback.pageCache.has(cacheKey)) playback.pageCache.delete(cacheKey);
+  playback.pageCache.set(cacheKey, pageData);
+  const boundedLimit = Math.max(1, Math.trunc(finiteTraceNumber(limit) ?? TRACE_PAGE_CACHE_LIMIT));
+  while (playback.pageCache.size > boundedLimit) {
+    const oldest = playback.pageCache.keys().next().value;
+    playback.pageCache.delete(oldest);
+  }
+  return pageData;
+}
+
+function tracePagePendingGetOrCreate(playback, cacheKey, serial, createPromise) {
+  playback.pagePending ||= new Map();
+  const existing = playback.pagePending.get(cacheKey);
+  if (existing?.serial === serial) return existing;
+  let promise;
+  promise = Promise.resolve()
+    .then(createPromise)
+    .finally(() => {
+      if (playback.pagePending?.get(cacheKey)?.promise === promise) playback.pagePending.delete(cacheKey);
+    });
+  const pending = { serial, promise };
+  playback.pagePending.set(cacheKey, pending);
+  return pending;
+}
+
+function ensureTracePlaybackData() {
+  const playback = state.tracePlayback;
+  const jobId = String(asObject(state.runJob).job_id || "");
+  if (playback.reportRef === state.report && playback.jobIdRef === jobId) return;
+  stopTracePlayback();
+  tracePageLoadSerial += 1;
+  state.tracePlayback = emptyTracePlaybackState();
+  state.tracePlayback.reportRef = state.report;
+  state.tracePlayback.jobIdRef = jobId;
+  if (!state.report) return;
+  const data = traceVisualizationFromReport(asObject(state.report));
+  state.tracePlayback.data = data;
+  state.tracePlayback.aggregateData = data;
+  state.tracePlayback.batchTraceIndex = data.batch_trace_index;
+  state.tracePlayback.events = data.events;
+  state.tracePlayback.startNs = data.start_ns;
+  state.tracePlayback.endNs = data.end_ns;
+  state.tracePlayback.timeNs = data.start_ns;
+  applyTraceFilters({ resetTime: true, syncControls: true });
+}
+
+function traceTaskReplayAvailable(playback = state.tracePlayback) {
+  return Boolean(playback?.jobIdRef && playback.batchTraceIndex?.length);
+}
+
+function applyAggregateTraceData({ preserveBatch = false } = {}) {
+  const playback = state.tracePlayback;
+  const aggregate = playback.aggregateData;
+  if (!aggregate) return;
+  playback.data = aggregate;
+  playback.events = aggregate.events;
+  playback.mode = "aggregate";
+  playback.page = null;
+  playback.loading = false;
+  playback.loadError = "";
+  playback.autoLoadFirstBatch = false;
+  if (!preserveBatch) playback.batchFilter = "";
+  applyTraceFilters({ resetTime: true, syncControls: true });
+}
+
+function applyTraceTaskPage(pageData, batchId, { selectEdge = "first" } = {}) {
+  const playback = state.tracePlayback;
+  playback.data = pageData;
+  playback.events = pageData.events;
+  playback.page = pageData.pagination;
+  playback.mode = "task";
+  playback.batchFilter = batchId;
+  playback.loading = false;
+  playback.loadError = "";
+  applyTraceFilters({ resetTime: true, syncControls: true });
+  if (selectEdge === "last" && playback.filteredEvents.length) {
+    const index = playback.filteredEvents.length - 1;
+    setTraceSelectedIndex(index);
+    playback.timeNs = playback.filteredEvents[index].start_ns;
+  }
+}
+
+function renderTraceLoadingState() {
+  renderTracePageState();
+  if (state.tracePlayback.loading && dom.traceEventBody) {
+    dom.traceEventBody.innerHTML = `<tr class="empty-row"><td colspan="5">${escapeHtml(uiText("正在加载该批次的任务级 Trace，请稍候……", "Loading task-level Trace for this batch…"))}</td></tr>`;
+  }
+}
+
+async function loadTraceTaskPage(batchId, offset = 0, { force = false, resumePlayback = false, selectEdge = "first" } = {}) {
+  const playback = state.tracePlayback;
+  const normalizedBatchId = String(batchId || "");
+  if (!normalizedBatchId || !traceTaskReplayAvailable(playback)) return false;
+  const shouldResume = resumePlayback && playback.playing;
+  stopTracePlayback();
+  const normalizedOffset = Math.max(0, Math.trunc(finiteTraceNumber(offset) ?? 0));
+  const cacheKey = tracePageCacheKey(normalizedBatchId, normalizedOffset);
+  const batchChanged = playback.batchFilter !== normalizedBatchId;
+  if (batchChanged) {
+    playback.requestFilter = "";
+    playback.rankFilter = "";
+  }
+  const cachedPage = force ? null : tracePageCacheGet(playback, cacheKey);
+  if (cachedPage) {
+    applyTraceTaskPage(cachedPage, normalizedBatchId, { selectEdge });
+    renderTracePlayback();
+    if (shouldResume) startTracePlayback();
+    return true;
+  }
+  playback.pagePending ||= new Map();
+  let pending = force ? null : playback.pagePending.get(cacheKey);
+  let serial = pending?.serial;
+  if (!pending || pending.serial !== tracePageLoadSerial) {
+    serial = ++tracePageLoadSerial;
+    const requestPlayback = playback;
+    pending = tracePagePendingGetOrCreate(requestPlayback, cacheKey, serial, () => (
+      apiRequest(tracePageEndpoint(playback.jobIdRef, normalizedBatchId, normalizedOffset, 5000), { method: "GET", headers: {} })
+        .then((payload) => {
+        const pageData = tracePageData(payload, normalizedBatchId, requestPlayback.aggregateData);
+        if (
+          serial === tracePageLoadSerial
+          && state.tracePlayback === requestPlayback
+          && requestPlayback.batchFilter === normalizedBatchId
+        ) {
+          tracePageCacheSet(requestPlayback, cacheKey, pageData);
+        }
+        return pageData;
+      })
+    ));
+  }
+  playback.loading = true;
+  playback.loadError = "";
+  playback.batchFilter = normalizedBatchId;
+  renderTraceLoadingState();
+  try {
+    const pageData = await pending.promise;
+    if (serial !== tracePageLoadSerial || state.tracePlayback !== playback || playback.batchFilter !== normalizedBatchId) return false;
+    tracePageCacheSet(playback, cacheKey, pageData);
+    applyTraceTaskPage(pageData, normalizedBatchId, { selectEdge });
+    renderTracePlayback();
+    if (shouldResume) startTracePlayback();
+    return true;
+  } catch (error) {
+    if (serial !== tracePageLoadSerial || state.tracePlayback !== playback) return false;
+    playback.loading = false;
+    playback.loadError = uiText(
+      "无法加载批次 {batch} 的任务级 Trace：{message}",
+      "Could not load task-level Trace for batch {batch}: {message}",
+      { batch: normalizedBatchId, message: error?.message || uiText("未知错误", "Unknown error") },
+    );
+    playback.mode = "aggregate";
+    playback.data = playback.aggregateData;
+    playback.events = playback.aggregateData?.events || [];
+    applyTraceFilters({ resetTime: true, syncControls: true });
+    renderTracePlayback();
+    return false;
+  }
+}
+
+function traceFilterValue(event, kind) {
+  if (kind === "request") return event.request_id;
+  if (kind === "batch") return event.batch_id;
+  if (kind === "rank") return event.rank?.rank == null ? "" : String(event.rank.rank);
+  return "";
+}
+
+function traceEventRequestIds(event) {
+  return Array.from(new Set([
+    event?.request_id,
+    ...asArray(event?.request_ids),
+  ].filter(Boolean).map(String)));
+}
+
+function syncTraceSelect(select, values, placeholder, selected) {
+  if (!select) return;
+  const options = [`<option value="">${escapeHtml(placeholder)}</option>`]
+    .concat(values.map((entry) => {
+      const value = typeof entry === "object" ? String(entry.value ?? "") : String(entry);
+      const label = typeof entry === "object" ? String(entry.label ?? value) : value;
+      return `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }));
+  select.innerHTML = options.join("");
+}
+
+function applyTraceFilters({ resetTime = false, syncControls = false } = {}) {
+  const playback = state.tracePlayback;
+  if (resetTime) playback.semanticPage = 0;
+  const selectedEventId = playback.selectedEventId;
+  playback.filteredEvents = playback.events.filter((event) => (
+    (!playback.requestFilter || traceEventRequestIds(event).includes(playback.requestFilter))
+    && (!playback.batchFilter || traceFilterValue(event, "batch") === playback.batchFilter)
+    && (!playback.rankFilter || traceFilterValue(event, "rank") === playback.rankFilter)
+  ));
+  const firstStart = playback.filteredEvents.length ? Math.min(...playback.filteredEvents.map((event) => event.start_ns)) : null;
+  const lastEnd = playback.filteredEvents.length ? Math.max(...playback.filteredEvents.map((event) => event.end_ns)) : null;
+  playback.startNs = firstStart ?? playback.data?.start_ns ?? 0;
+  playback.endNs = Math.max(playback.startNs, lastEnd ?? playback.data?.end_ns ?? playback.startNs);
+  if (resetTime || playback.timeNs < playback.startNs || playback.timeNs > playback.endNs) playback.timeNs = playback.startNs;
+  let selectedIndex = selectedEventId
+    ? playback.filteredEvents.findIndex((event) => event.event_id === selectedEventId)
+    : -1;
+  if (selectedIndex < 0 && playback.filteredEvents.length) selectedIndex = 0;
+  setTraceSelectedIndex(selectedIndex);
+  if (dom.tracePlaybackMeta) {
+    dom.tracePlaybackMeta.textContent = uiText(
+      "全局回放 {count} 个事件 · 自动播放每秒前进一步",
+      "Global replay · {count} events · advances once per second",
+      { count: formatNumber(playback.filteredEvents.length) },
+    );
+  }
+  if (syncControls) {
+    const requests = Array.from(new Set(playback.events.flatMap(traceEventRequestIds))).sort();
+    const indexedBatches = asArray(playback.batchTraceIndex).map((item) => ({
+      value: item.batch_id,
+      label: `${item.batch_id}${item.kind ? ` · ${item.kind}` : ""}${item.event_count != null ? uiText(" · {count} 个任务", " · {count} tasks", { count: formatNumber(item.event_count) }) : ""}`,
+    }));
+    const batches = indexedBatches.length
+      ? indexedBatches
+      : Array.from(new Set(playback.events.map((event) => event.batch_id).filter(Boolean))).sort();
+    const ranks = Array.from(new Set(playback.events.map((event) => event.rank?.rank).filter((value) => value != null).map(String))).sort((a, b) => Number(a) - Number(b));
+    syncTraceSelect(dom.traceRequestFilter, requests, uiText("全部请求", "All requests"), playback.requestFilter);
+    syncTraceSelect(dom.traceBatchFilter, batches, traceTaskReplayAvailable(playback) ? uiText("聚合总览", "Aggregate overview") : uiText("全部批次", "All batches"), playback.batchFilter);
+    syncTraceSelect(
+      dom.traceRankFilter,
+      ranks.map((rank) => ({ value: rank, label: `Rank ${rank}` })),
+      uiText("全部 Rank", "All Ranks"),
+      playback.rankFilter,
+    );
+  }
+}
+
+function setTraceSelectedIndex(index) {
+  const playback = state.tracePlayback;
+  const normalized = Number.isInteger(index) && index >= 0 && index < playback.filteredEvents.length ? index : -1;
+  playback.selectedIndex = normalized;
+  playback.selectedEventId = normalized >= 0 ? playback.filteredEvents[normalized].event_id : null;
+  return normalized;
+}
+
+function traceEventIndexById(eventId) {
+  if (eventId == null || eventId === "") return -1;
+  return state.tracePlayback.filteredEvents.findIndex((event) => event.event_id === String(eventId));
+}
+
+function selectedTraceEvent() {
+  const events = state.tracePlayback.filteredEvents;
+  const byId = traceEventIndexById(state.tracePlayback.selectedEventId);
+  if (byId >= 0) {
+    if (byId !== state.tracePlayback.selectedIndex) setTraceSelectedIndex(byId);
+    return events[byId];
+  }
+  return events[state.tracePlayback.selectedIndex] || null;
+}
+
+function currentTraceEvent() {
+  return selectedTraceEvent();
+}
+
+function activeTraceEvents(timeNs = state.tracePlayback.timeNs) {
+  const time = finiteTraceNumber(timeNs);
+  if (time == null) return [];
+  return state.tracePlayback.filteredEvents.filter((event) => (
+    event.start_ns === event.end_ns
+      ? time === event.start_ns
+      : event.start_ns <= time && time < event.end_ns
+  ));
+}
+
+function traceActiveSignature(timeNs) {
+  const events = activeTraceEvents(timeNs);
+  const intervals = events.flatMap((event) => [
+    ...asArray(event?.transfer?.hops).filter((item) => traceIntervalActive(item, timeNs)).map((item) => `hop:${item.link_id || item.resource_id}`),
+    ...asArray(event?.resources).filter((item) => traceIntervalActive(item, timeNs)).map((item) => `resource:${item.resource_id}`),
+  ]);
+  return events.map((event) => event.event_id).concat(intervals).sort().join("\u0000");
+}
+
+function traceTimelineRatio(timeNs) {
+  const playback = state.tracePlayback;
+  const span = playback.endNs - playback.startNs;
+  return span > 0 ? Math.max(0, Math.min(1, (timeNs - playback.startNs) / span)) : 0;
+}
+
+function setTraceTime(timeNs, { force = false, eventIndex = null, eventId = null, reveal = false } = {}) {
+  const playback = state.tracePlayback;
+  playback.timeNs = Math.max(playback.startNs, Math.min(playback.endNs, Number(timeNs) || 0));
+  const previousEventId = playback.selectedEventId;
+  let nextIndex = eventId == null ? -1 : traceEventIndexById(eventId);
+  if (nextIndex < 0 && eventIndex != null) {
+    const explicitIndex = Math.trunc(finiteTraceNumber(eventIndex) ?? -1);
+    if (explicitIndex >= 0 && explicitIndex < playback.filteredEvents.length) nextIndex = explicitIndex;
+  }
+  const active = activeTraceEvents(playback.timeNs);
+  if (nextIndex < 0 && active.length) {
+    const selected = selectedTraceEvent();
+    const event = selected && active.some((item) => item.event_id === selected.event_id) ? selected : active.at(-1);
+    nextIndex = traceEventIndexById(event?.event_id);
+  }
+  if (nextIndex < 0) nextIndex = traceEventIndexById(previousEventId);
+  if (nextIndex < 0 && playback.filteredEvents.length) nextIndex = 0;
+  setTraceSelectedIndex(nextIndex);
+  const changed = playback.selectedEventId !== previousEventId;
+  const activeSignature = traceActiveSignature(playback.timeNs);
+  const activeChanged = activeSignature !== playback.activeSignature;
+  playback.activeSignature = activeSignature;
+  if (dom.traceTimeline) dom.traceTimeline.value = String(Math.round(traceTimelineRatio(playback.timeNs) * 10000));
+  if (dom.playbackTime) dom.playbackTime.textContent = formatDurationNs(playback.timeNs);
+  if (changed || activeChanged || force) {
+    renderTraceNarrative();
+    renderTraceEventTable();
+    renderTraceEventDetails();
+    renderTraceTopology();
+  }
+  if (reveal && state.view === "playback") {
+    const expectedEventId = playback.selectedEventId;
+    requestAnimationFrame(() => {
+      if (state.tracePlayback === playback && playback.selectedEventId === expectedEventId) revealTraceTopology();
+    });
+  }
+}
+
+function traceAnimationStep() {
+  const playback = state.tracePlayback;
+  if (!playback.playing) return;
+  // Keep the current node elements stable while a pointer gesture owns them.
+  // The interval remains armed and advances on the first tick after release.
+  if (playback.layoutDrag || playback.layoutPan) return;
+  const nextIndex = playback.selectedIndex + 1;
+  if (nextIndex < playback.filteredEvents.length) {
+    const event = playback.filteredEvents[nextIndex];
+    setTraceTime(event.start_ns, { force: true, eventId: event.event_id });
+    return;
+  }
+  if (playback.mode === "task" && playback.page?.has_more && playback.page?.next_offset != null && !playback.loading) {
+    void loadTraceTaskPage(playback.batchFilter, playback.page.next_offset, { resumePlayback: true });
+    return;
+  }
+  stopTracePlayback();
+}
+
+function startTracePlayback() {
+  const playback = state.tracePlayback;
+  if (!playback.filteredEvents.length || playback.playing) return false;
+  const atPageEnd = playback.selectedIndex >= playback.filteredEvents.length - 1;
+  const canContinuePage = playback.mode === "task" && playback.page?.has_more;
+  if (atPageEnd && !canContinuePage) {
+    const first = playback.filteredEvents[0];
+    setTraceTime(first.start_ns, { force: true, eventId: first.event_id });
+  }
+  playback.playing = true;
+  dom.tracePlayButton.textContent = uiText("暂停", "Pause");
+  dom.tracePlayButton.setAttribute("aria-pressed", "true");
+  startTraceAnimationDriver();
+  return true;
+}
+
+function toggleTracePlayback() {
+  if (state.tracePlayback.playing) {
+    stopTracePlayback();
+    return;
+  }
+  startTracePlayback();
+}
+
+function stepTraceEvent(direction) {
+  stopTracePlayback();
+  const playback = state.tracePlayback;
+  if (!playback.filteredEvents.length) return;
+  if (direction > 0 && playback.selectedIndex >= playback.filteredEvents.length - 1 && playback.page?.next_offset != null) {
+    void loadTraceTaskPage(playback.batchFilter, playback.page.next_offset, { selectEdge: "first" });
+    return;
+  }
+  if (direction < 0 && playback.selectedIndex <= 0 && playback.page?.previous_offset != null) {
+    void loadTraceTaskPage(playback.batchFilter, playback.page.previous_offset, { selectEdge: "last" });
+    return;
+  }
+  const anchor = playback.selectedIndex >= 0 ? playback.selectedIndex : direction > 0 ? -1 : 0;
+  const next = Math.max(0, Math.min(playback.filteredEvents.length - 1, anchor + direction));
+  const event = playback.filteredEvents[next];
+  setTraceTime(event.start_ns, { force: true, eventId: event.event_id, reveal: true });
+}
+
+function traceFidelityLabel(fidelity) {
+  return {
+    exact: uiText("精确事件", "Exact events"),
+    representative: uiText("代表性事件", "Representative events"),
+    aggregate: uiText("聚合事件", "Aggregate events"),
+    unavailable: uiText("无 Trace", "Trace unavailable"),
+  }[fidelity] || String(fidelity || uiText("未知精度", "Unknown fidelity"));
+}
+
+function renderTracePageState() {
+  if (!dom.tracePageBar || !dom.tracePageStatus) return;
+  const playback = state.tracePlayback;
+  dom.tracePageBar.classList.toggle("is-loading", playback.loading);
+  dom.tracePageBar.classList.toggle("is-error", Boolean(playback.loadError));
+  if (playback.loading) {
+    dom.tracePageStatus.textContent = uiText(
+      "正在加载批次 {batch} 的任务级 Trace（单页最多 5,000 条）……",
+      "Loading task-level Trace for batch {batch} (up to 5,000 events per page)…",
+      { batch: playback.batchFilter },
+    );
+  } else if (playback.loadError) {
+    dom.tracePageStatus.textContent = playback.loadError;
+  } else if (playback.mode === "task" && playback.page) {
+    const page = playback.page;
+    const first = page.returned ? page.offset + 1 : 0;
+    const last = page.offset + page.returned;
+    dom.tracePageStatus.textContent = uiText(
+      "任务级回放 · 批次 {batch} · {first}–{last} / {total} · 全局仿真时间",
+      "Task replay · Batch {batch} · {first}–{last} / {total} · global simulation time",
+      { batch: playback.batchFilter, first: formatNumber(first), last: formatNumber(last), total: formatNumber(page.total) },
+    );
+  } else if (traceTaskReplayAvailable(playback)) {
+    dom.tracePageStatus.textContent = uiText("聚合总览：请选择一个批次以按需加载真实任务级 Trace。", "Aggregate overview: select a batch to load its real task-level Trace on demand.");
+  } else {
+    dom.tracePageStatus.textContent = uiText("聚合回放：当前报告或运行任务没有可读取的任务级 Trace；不会伪造 Rank、GPU 或逐算子事件。", "Aggregate replay: the current report or run has no readable task-level Trace; Rank, GPU, and per-operator events are not fabricated.");
+  }
+  if (dom.tracePagePreviousButton) dom.tracePagePreviousButton.disabled = playback.loading || playback.mode !== "task" || playback.page?.previous_offset == null;
+  if (dom.tracePageNextButton) dom.tracePageNextButton.disabled = playback.loading || playback.mode !== "task" || !playback.page?.has_more;
+}
+
+function renderTracePlayback() {
+  if (!dom.traceContent || !state.scenario) return;
+  ensureTracePlaybackData();
+  const playback = state.tracePlayback;
+  if (dom.traceEventStreamDisclosure && dom.traceEventStreamDisclosure.open !== playback.semanticStreamOpen) dom.traceEventStreamDisclosure.open = playback.semanticStreamOpen;
+  if (dom.traceEventKeywordFilter && dom.traceEventKeywordFilter.value !== playback.semanticQuery) dom.traceEventKeywordFilter.value = playback.semanticQuery;
+  if (dom.traceEventTemporalFilter && dom.traceEventTemporalFilter.value !== playback.semanticTemporal) dom.traceEventTemporalFilter.value = playback.semanticTemporal;
+  syncTraceFullscreenSemantics(playback.fullscreen === true);
+  if (dom.traceFullscreenButton) {
+    dom.traceFullscreenButton.setAttribute("aria-pressed", String(playback.fullscreen === true));
+    dom.traceFullscreenButton.textContent = playback.fullscreen ? uiText("退出拓扑全屏", "Exit topology fullscreen") : uiText("拓扑全屏", "Topology fullscreen");
+  }
+  const drawerOpen = playback.drawerOpen !== false;
+  if (dom.traceEventDrawer) {
+    dom.traceEventDrawer.hidden = !drawerOpen;
+    dom.traceEventDrawer.setAttribute("aria-hidden", String(!drawerOpen));
+  }
+  if (dom.traceDrawerOpenButton) {
+    dom.traceDrawerOpenButton.hidden = drawerOpen;
+    dom.traceDrawerOpenButton.setAttribute("aria-expanded", String(drawerOpen));
+  }
+  if (dom.traceDrawerCloseButton) dom.traceDrawerCloseButton.setAttribute("aria-expanded", String(drawerOpen));
+  const data = playback.data;
+  renderTraceStepSummary();
+  const hasEvents = Boolean(data && playback.events.length);
+  const hasReplay = hasEvents || playback.loading || traceTaskReplayAvailable(playback);
+  dom.traceEmpty.hidden = hasReplay;
+  dom.traceContent.hidden = !hasReplay;
+  const fidelity = data?.fidelity || "unavailable";
+  dom.playbackFidelity.className = `trace-fidelity-badge is-${["exact", "representative", "aggregate"].includes(fidelity) ? fidelity : "empty"}`;
+  dom.playbackFidelity.textContent = data
+    ? uiText(
+      "{fidelity} · {count} 个事件{truncated}",
+      "{fidelity} · {count} events{truncated}",
+      { fidelity: traceFidelityLabel(fidelity), count: formatNumber(data.total_events), truncated: data.truncated ? uiText(" · 已裁剪", " · truncated") : "" },
+    )
+    : uiText("尚无 Trace", "No Trace yet");
+  if (!hasReplay) return;
+  dom.tracePreviousButton.disabled = playback.selectedIndex <= 0 && playback.page?.previous_offset == null;
+  dom.traceNextButton.disabled = playback.selectedIndex >= playback.filteredEvents.length - 1 && !playback.page?.has_more;
+  dom.traceLimitations.innerHTML = asArray(data?.limitations).length
+    ? data.limitations.map((item) => `<div class="trace-limitation">${escapeHtml(traceLimitationText(item))}</div>`).join("")
+    : "";
+  renderTracePageState();
+  if (state.view === "playback" && traceTaskReplayAvailable(playback) && playback.autoLoadFirstBatch && playback.mode === "aggregate" && !playback.loading && !playback.loadError && !playback.batchFilter) {
+    const firstBatch = playback.batchTraceIndex[0]?.batch_id;
+    if (firstBatch) {
+      playback.autoLoadFirstBatch = false;
+      playback.batchFilter = firstBatch;
+      applyTraceFilters({ resetTime: true, syncControls: true });
+      void loadTraceTaskPage(firstBatch, 0);
+      return;
+    }
+  }
+  if (playback.loading) {
+    renderTraceLoadingState();
+    return;
+  }
+  if (!hasEvents) {
+    renderTraceNarrative();
+    renderTraceEventTable();
+    return;
+  }
+  setTraceTime(playback.timeNs, { force: true });
+  if (state.view === "playback") requestAnimationFrame(renderTraceTopology);
+}
+
+function traceLayoutView() {
+  const playback = state.tracePlayback;
+  playback.layoutView ||= {};
+  const view = playback.layoutView;
+  view.positions = asObject(view.positions);
+  view.zoom = Math.max(0.35, Math.min(2.5, Number(view.zoom) || 1));
+  view.offsetX = Number.isFinite(Number(view.offsetX)) ? Number(view.offsetX) : 0;
+  view.offsetY = Number.isFinite(Number(view.offsetY)) ? Number(view.offsetY) : 0;
+  view.autoFitKey = String(view.autoFitKey || "");
+  return view;
+}
+
+function traceViewportPadding() {
+  return Math.round(28 * layoutScaleForFont(state.settings.fontScale));
+}
+
+function traceTopologyContentBounds(layout) {
+  const explicit = asObject(layout?.contentBounds);
+  if ([explicit.x, explicit.y, explicit.width, explicit.height].every((value) => Number.isFinite(Number(value)))
+      && Number(explicit.width) > 0 && Number(explicit.height) > 0) {
+    return {
+      x: Number(explicit.x),
+      y: Number(explicit.y),
+      width: Number(explicit.width),
+      height: Number(explicit.height),
+    };
+  }
+  const rects = asArray(layout?.rects).filter((rect) => (
+    Number.isFinite(Number(rect?.x))
+    && Number.isFinite(Number(rect?.y))
+    && Number.isFinite(Number(rect?.width))
+    && Number.isFinite(Number(rect?.height))
+  ));
+  if (!rects.length) return { ...asObject(layout?.bounds), x: Number(layout?.bounds?.x) || 0, y: Number(layout?.bounds?.y) || 0, width: Math.max(1, Number(layout?.bounds?.width) || 1), height: Math.max(1, Number(layout?.bounds?.height) || 1) };
+  const left = Math.min(...rects.map((rect) => Number(rect.x)));
+  const top = Math.min(...rects.map((rect) => Number(rect.y)));
+  const right = Math.max(...rects.map((rect) => Number(rect.x) + Number(rect.width)));
+  const bottom = Math.max(...rects.map((rect) => Number(rect.y) + Number(rect.height)));
+  return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+}
+
+function normalizedTraceTopologyGroups(hardware, groups, collapsedGroupIds = null) {
+  const components = asArray(asObject(hardware).components);
+  const normalized = Topology.normalizeTopologyView(
+    { groups: deepClone(asArray(groups)) },
+    components.map((component) => String(component.component_id)),
+  ).groups;
+  if (collapsedGroupIds == null) return normalized;
+  const collapsed = collapsedGroupIds instanceof Set
+    ? collapsedGroupIds
+    : new Set(asArray(collapsedGroupIds).map(String));
+  return normalized.map((group) => ({ ...group, collapsed: collapsed.has(String(group.group_id)) }));
+}
+
+function traceTopologyGroups(hardware = state.scenario?.hardware, initialGroups = null) {
+  const playback = state.tracePlayback;
+  if (!Array.isArray(playback.topologyGroups)) {
+    const sourceGroups = initialGroups == null ? state.topologyView?.groups : initialGroups;
+    playback.topologyGroups = normalizedTraceTopologyGroups(hardware, sourceGroups);
+  } else {
+    playback.topologyGroups = normalizedTraceTopologyGroups(hardware, playback.topologyGroups);
+  }
+  if (!playback.groupCollapseInitialized) {
+    playback.collapsedGroupIds = playback.topologyGroups.filter((group) => group.collapsed).map((group) => String(group.group_id));
+    playback.groupCollapseInitialized = true;
+  }
+  return playback.topologyGroups;
+}
+
+function traceCollapsedGroupIds(hardware = state.scenario?.hardware, groups = null) {
+  const playback = state.tracePlayback;
+  const normalized = groups == null ? traceTopologyGroups(hardware) : normalizedTraceTopologyGroups(hardware, groups);
+  const validIds = new Set(normalized.map((group) => String(group.group_id)));
+  playback.collapsedGroupIds = asArray(playback.collapsedGroupIds).map(String).filter((id, index, values) => validIds.has(id) && values.indexOf(id) === index);
+  return new Set(playback.collapsedGroupIds);
+}
+
+function toggleTraceTopologyGroup(groupId) {
+  const playback = state.tracePlayback;
+  const validGroups = traceTopologyGroups();
+  if (!validGroups.some((group) => String(group.group_id) === String(groupId))) return;
+  const group = validGroups.find((candidate) => String(candidate.group_id) === String(groupId));
+  const nextView = Topology.setGroupCollapsed({ groups: validGroups }, String(groupId), !group.collapsed);
+  playback.topologyGroups = normalizedTraceTopologyGroups(state.scenario?.hardware, nextView.groups);
+  playback.collapsedGroupIds = playback.topologyGroups.filter((candidate) => candidate.collapsed).map((candidate) => String(candidate.group_id));
+  playback.groupCollapseInitialized = true;
+  playback.topologyLayout = null;
+  renderTraceTopology();
+  // Refit the playback-local view after the projection changes. The layout
+  // remains owned by tracePlayback, so opening a GPU/HBM package never edits
+  // the architecture view or its persisted group state.
+  const schedule = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout?.(callback, 0));
+  if (typeof schedule === "function") schedule(() => fitTraceLayout({ render: true }));
+  else fitTraceLayout({ render: true });
+}
+
+function traceTopologyAutoFitKey(hardware = state.scenario?.hardware, fontScale = state.settings.fontScale, groups = null) {
+  const components = asArray(asObject(hardware).components);
+  const links = asArray(asObject(hardware).links);
+  const memoryLayout = state.tracePlayback?.data?.memory_layout;
+  const normalizedGroups = groups == null ? traceTopologyGroups(hardware) : normalizedTraceTopologyGroups(hardware, groups);
+  return JSON.stringify({
+    fontScale: clampFontScale(fontScale),
+    components: components.map((item) => [item.component_id, item.kind, traceNodeMemoryCapacityLabel(item, memoryLayout)]),
+    links: links.map((item) => [item.link_id, item.source_component, item.target_component, item.protocol]),
+    groups: normalizedGroups.map((item) => [item.group_id, item.root, item.members, item.collapsed]),
+  });
+}
+
+function traceMarkLayoutHandled(autoFitKey = null) {
+  traceLayoutView().autoFitKey = autoFitKey || traceTopologyAutoFitKey();
+}
+
+function traceFitMetrics(layout) {
+  const canvas = dom.traceTopologyCanvas;
+  const view = traceLayoutView();
+  const padding = traceViewportPadding();
+  const bounds = traceTopologyContentBounds(layout);
+  const viewportSize = {
+    width: Math.max(1, Number(canvas?.clientWidth) || 1),
+    height: Math.max(1, Number(canvas?.clientHeight) || 1),
+  };
+  const fit = TraceView.fitTraceViewport({
+    components: layout.components,
+    links: layout.links,
+    layout: {
+      positions: layout.positions,
+      node_sizes: layout.sizes,
+      bounds,
+    },
+  }, viewportSize, {
+    components: layout.components,
+    links: layout.links,
+    minScale: 0.8,
+    maxScale: 1,
+    padding,
+  }).viewport;
+  const zoom = Math.max(0.8, Math.min(1, Number(fit.scale) || 1));
+  const contentWidth = bounds.width * zoom;
+  const contentHeight = bounds.height * zoom;
+  const worldWidth = Math.max(viewportSize.width, Math.ceil(contentWidth + padding * 2));
+  const worldHeight = Math.max(viewportSize.height, Math.ceil(contentHeight + padding * 2));
+  view.zoom = zoom;
+  view.offsetX = (worldWidth - contentWidth) / 2 - bounds.x * zoom;
+  view.offsetY = (worldHeight - contentHeight) / 2 - bounds.y * zoom;
+  view.autoFitKey = layout.autoFitKey || traceTopologyAutoFitKey();
+  return { worldWidth, worldHeight, left: Math.max(0, (worldWidth - viewportSize.width) / 2), top: Math.max(0, (worldHeight - viewportSize.height) / 2) };
+}
+
+function traceScrollCanvasTo(target, behavior = "auto") {
+  const canvas = dom.traceTopologyCanvas;
+  if (!canvas || !target) return;
+  const left = Math.max(0, Math.min(Math.max(0, canvas.scrollWidth - canvas.clientWidth), Number(target.left) || 0));
+  const top = Math.max(0, Math.min(Math.max(0, canvas.scrollHeight - canvas.clientHeight), Number(target.top) || 0));
+  if (typeof canvas.scrollTo === "function") canvas.scrollTo({ left, top, behavior });
+  else {
+    canvas.scrollLeft = left;
+    canvas.scrollTop = top;
+  }
+  requestAnimationFrame(updateTraceLocateActiveButton);
+}
+
+function traceCanvasLocalPoint(value, canvas = dom.traceTopologyCanvas) {
+  const source = asObject(value);
+  if (Number.isFinite(Number(source.x)) && Number.isFinite(Number(source.y))) return { x: Number(source.x), y: Number(source.y) };
+  if (canvas && Number.isFinite(Number(source.clientX)) && Number.isFinite(Number(source.clientY)) && typeof canvas.getBoundingClientRect === "function") {
+    const rect = canvas.getBoundingClientRect();
+    return { x: Number(source.clientX) - rect.left, y: Number(source.clientY) - rect.top };
+  }
+  return { x: Math.max(1, Number(canvas?.clientWidth) || 1) / 2, y: Math.max(1, Number(canvas?.clientHeight) || 1) / 2 };
+}
+
+function traceNodeRect(layout, componentId) {
+  return asArray(layout?.rects).find((rect) => String(rect.id || rect.component_id) === String(componentId)) || null;
+}
+
+function traceNodeNavigationTarget(layout, currentId, direction) {
+  const directionVector = {
+    left: { x: -1, y: 0 },
+    right: { x: 1, y: 0 },
+    up: { x: 0, y: -1 },
+    down: { x: 0, y: 1 },
+  }[direction];
+  const current = traceNodeRect(layout, currentId);
+  if (!directionVector || !current) return null;
+  const currentCenter = { x: current.x + current.width / 2, y: current.y + current.height / 2 };
+  const candidates = asArray(layout?.rects)
+    .filter((rect) => String(rect.id || rect.component_id) !== String(currentId))
+    .map((rect) => {
+      const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      const delta = { x: center.x - currentCenter.x, y: center.y - currentCenter.y };
+      const primary = delta.x * directionVector.x + delta.y * directionVector.y;
+      const cross = Math.abs(delta.x * directionVector.y - delta.y * directionVector.x);
+      return { rect, primary, cross, score: primary + cross * 1.5 };
+    })
+    .filter((candidate) => candidate.primary > 0.5);
+  const aligned = candidates.filter((candidate) => candidate.cross <= Math.max(candidate.primary * 1.25, 24));
+  const ranked = (aligned.length ? aligned : candidates).sort((left, right) => left.score - right.score
+      || left.cross - right.cross
+      || String(left.rect.id || left.rect.component_id).localeCompare(String(right.rect.id || right.rect.component_id)));
+  const target = ranked[0]?.rect;
+  return target ? String(target.id || target.component_id) : null;
+}
+
+function traceNodeScrollTarget(componentId, layout = traceTopologyLayout()) {
+  const canvas = dom.traceTopologyCanvas;
+  const rect = traceNodeRect(layout, componentId);
+  if (!canvas || !rect) return null;
+  const view = traceLayoutView();
+  const scale = Number(view.zoom) || 1;
+  const padding = Math.round(24 * layoutScaleForFont(state.settings.fontScale));
+  return traceRevealScrollTarget({
+    clientWidth: canvas.clientWidth,
+    clientHeight: canvas.clientHeight,
+    scrollWidth: canvas.scrollWidth,
+    scrollHeight: canvas.scrollHeight,
+    scrollLeft: canvas.scrollLeft,
+    scrollTop: canvas.scrollTop,
+  }, {
+    x: view.offsetX + rect.x * scale,
+    y: view.offsetY + rect.y * scale,
+    width: rect.width * scale,
+    height: rect.height * scale,
+  }, padding);
+}
+
+function traceNodeElement(componentId) {
+  return $$("[data-trace-component]", dom.traceNodeLayer)
+    .find((element) => String(element.dataset?.traceComponent || "") === String(componentId)) || null;
+}
+
+function focusTraceNode(componentId, layout = null) {
+  const element = traceNodeElement(componentId);
+  if (!element || !focusTraceElement(element)) return false;
+  const target = traceNodeScrollTarget(componentId, layout || traceTopologyLayout());
+  if (target) traceScrollCanvasTo(target, "auto");
+  return true;
+}
+
+function traceTopologyScrollBy(deltaX, deltaY) {
+  const canvas = dom.traceTopologyCanvas;
+  if (!canvas) return false;
+  traceScrollCanvasTo({
+    left: (Number(canvas.scrollLeft) || 0) + (Number(deltaX) || 0),
+    top: (Number(canvas.scrollTop) || 0) + (Number(deltaY) || 0),
+  }, "auto");
+  return true;
+}
+
+function traceNodeKeyboardDirection(key) {
+  return {
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    ArrowUp: "up",
+    ArrowDown: "down",
+  }[key] || null;
+}
+
+function handleTraceNodeKeydown(event) {
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return false;
+  const direction = traceNodeKeyboardDirection(event.key);
+  const node = event.currentTarget?.closest?.("[data-trace-component]") || event.currentTarget;
+  const currentId = node?.dataset?.traceComponent;
+  if (!currentId || (!direction && !["Home", "End"].includes(event.key))) return false;
+  const layout = traceTopologyLayout();
+  let handled = false;
+  if (direction) {
+    const targetId = traceNodeNavigationTarget(layout, currentId, direction);
+    if (targetId) handled = focusTraceNode(targetId, layout);
+    else {
+      const amount = Math.max(40, Math.round(72 * layoutScaleForFont(state.settings.fontScale))) * (event.shiftKey ? 3 : 1);
+      handled = traceTopologyScrollBy(
+        direction === "left" ? -amount : direction === "right" ? amount : 0,
+        direction === "up" ? -amount : direction === "down" ? amount : 0,
+      );
+    }
+  } else {
+    const nodes = $$("[data-trace-component]", dom.traceNodeLayer);
+    const target = event.key === "Home" ? nodes[0] : nodes.at(-1);
+    handled = focusTraceElement(target);
+  }
+  if (!handled) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  return true;
+}
+
+function handleTraceTopologyKeydown(event) {
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return false;
+  if (event.target?.closest?.("[data-trace-component]")) return false;
+  const direction = traceNodeKeyboardDirection(event.key);
+  if (!direction && !["PageUp", "PageDown"].includes(event.key)) return false;
+  const amount = Math.max(40, Math.round((event.key.startsWith("Page") ? 0.8 * (Number(dom.traceTopologyCanvas?.clientHeight) || 240) : 72) * layoutScaleForFont(state.settings.fontScale))) * (event.shiftKey ? 2 : 1);
+  const deltaX = direction === "left" ? -amount : direction === "right" ? amount : 0;
+  const deltaY = direction === "up" ? -amount : direction === "down" ? amount : event.key === "PageUp" ? -amount : amount;
+  if (!traceTopologyScrollBy(deltaX, deltaY)) return false;
+  event.preventDefault();
+  return true;
+}
+
+function resetTraceLayout() {
+  state.tracePlayback.layoutView = { positions: {}, zoom: 1, offsetX: 0, offsetY: 0, autoFitKey: traceTopologyAutoFitKey() };
+  state.tracePlayback.topologyLayout = null;
+  renderTraceTopology();
+  toast("回放布局已整理", "使用与架构页一致的确定性分层布局；不会修改硬件拓扑。", "info", 3200);
+}
+
+function fitTraceLayout({ render = true, auto = false } = {}) {
+  const layout = traceTopologyLayout();
+  if (!dom.traceTopologyCanvas) return;
+  const target = traceFitMetrics(layout);
+  if (render) renderTraceTopology();
+  requestAnimationFrame(() => traceScrollCanvasTo(target, "auto"));
+  if (!auto) traceMarkLayoutHandled(layout.autoFitKey);
+}
+
+function arrangeAndFitTraceLayout() {
+  const playback = state.tracePlayback;
+  playback.layoutView = { positions: {}, zoom: 1, offsetX: 0, offsetY: 0, autoFitKey: traceTopologyAutoFitKey() };
+  playback.topologyLayout = null;
+  renderTraceTopology();
+  requestAnimationFrame(() => fitTraceLayout({ render: true }));
+  toast("回放拓扑已整理并适配", "已清除手动位置、重建确定性数据流布局，并居中显示全部组件。", "info", 3200);
+}
+
+function zoomTraceLayout(factor, anchor = null) {
+  const layout = traceTopologyLayout();
+  const canvas = dom.traceTopologyCanvas;
+  if (!canvas) return;
+  const view = traceLayoutView();
+  const previousZoom = view.zoom;
+  const local = traceCanvasLocalPoint(anchor, canvas);
+  const logical = {
+    x: (canvas.scrollLeft + local.x - view.offsetX) / previousZoom,
+    y: (canvas.scrollTop + local.y - view.offsetY) / previousZoom,
+  };
+  view.zoom = Math.max(0.35, Math.min(2.5, previousZoom * (Number(factor) || 1)));
+  traceMarkLayoutHandled(layout.autoFitKey);
+  renderTraceTopology();
+  requestAnimationFrame(() => traceScrollCanvasTo({
+    left: view.offsetX + logical.x * view.zoom - local.x,
+    top: view.offsetY + logical.y * view.zoom - local.y,
+  }, "auto"));
+}
+
+function focusTraceElement(element) {
+  if (!element || typeof element.focus !== "function" || element.hidden || element.isConnected === false) return false;
+  try { element.focus({ preventScroll: true }); }
+  catch (_error) { element.focus(); }
+  return true;
+}
+
+function traceFullscreenFocusableElements() {
+  const panel = dom.traceTopologyPanel;
+  if (!panel) return [];
+  const selector = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "[tabindex]",
+  ].join(",");
+  return $$(selector, panel).filter((element) => {
+    if (!element || element.disabled || element.hidden || element.isConnected === false) return false;
+    if (element.closest?.('[hidden], [inert], [aria-hidden="true"]')) return false;
+    const tabIndex = element.getAttribute?.("tabindex");
+    if (tabIndex != null && Number(tabIndex) < 0) return false;
+    if (typeof globalThis.getComputedStyle === "function") {
+      const style = globalThis.getComputedStyle(element);
+      if (style?.display === "none" || style?.visibility === "hidden") return false;
+    }
+    return true;
+  });
+}
+
+function traceFullscreenFallbackFocusTarget(focusable = traceFullscreenFocusableElements()) {
+  return focusable.find((element) => element === dom.traceTopologyCanvas)
+    || focusable[0]
+    || dom.traceTopologyCanvas;
+}
+
+function handleTraceFullscreenKeydown(event) {
+  if (!state.tracePlayback?.fullscreen || hasOpenModalDialog()) return false;
+  const panel = dom.traceTopologyPanel;
+  if (!panel) return false;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleTraceFullscreen(false);
+    return true;
+  }
+  if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return false;
+  const focusable = traceFullscreenFocusableElements();
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  const active = document.activeElement;
+  const activeIndex = focusable.indexOf(active);
+  let target = null;
+  if (!panel.contains?.(active)) target = traceFullscreenFallbackFocusTarget(focusable);
+  else if (event.shiftKey && (active === first || activeIndex < 0)) target = last || first;
+  else if (!event.shiftKey && (active === last || activeIndex < 0)) target = first || last;
+  if (!target) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  return focusTraceElement(target);
+}
+
+function handleTraceFullscreenFocusIn(event) {
+  if (!state.tracePlayback?.fullscreen || hasOpenModalDialog()) return false;
+  const panel = dom.traceTopologyPanel;
+  if (!panel || panel.contains?.(event.target)) return false;
+  scheduleTraceFocus(() => {
+    if (!state.tracePlayback?.fullscreen || hasOpenModalDialog()) return;
+    if (!panel.contains?.(document.activeElement)) focusTraceElement(traceFullscreenFallbackFocusTarget());
+  });
+  return true;
+}
+
+function scheduleTraceFocus(callback) {
+  const schedule = globalThis.requestAnimationFrame || ((next) => globalThis.setTimeout?.(next, 0));
+  if (typeof schedule === "function") schedule(callback);
+  else callback();
+}
+
+function traceFullscreenFocusTarget() {
+  const active = document.activeElement;
+  if (active && active !== document.body && active !== document.documentElement && active.isConnected !== false) return active;
+  return dom.traceFullscreenButton;
+}
+
+function toggleTraceFullscreen(force = null) {
+  const playback = state.tracePlayback;
+  const wasOpen = playback.fullscreen === true;
+  const opening = typeof force === "boolean" ? force : !wasOpen;
+  if (opening && !wasOpen) traceFullscreenPreviousFocus = traceFullscreenFocusTarget();
+  const next = TraceView.toggleFullscreen({
+    open: playback.fullscreen,
+    mode: "overlay",
+    escapeCloses: true,
+    previousFocusId: traceFullscreenPreviousFocus?.id || dom.traceFullscreenButton?.id || null,
+  }, force);
+  playback.fullscreen = next.open;
+  document.documentElement.classList.toggle("trace-fullscreen-open", playback.fullscreen);
+  renderTracePlayback();
+  if (playback.fullscreen) {
+    scheduleTraceFocus(() => {
+      fitTraceLayout();
+      renderTraceTopology();
+      focusTraceElement(dom.traceTopologyCanvas);
+    });
+  } else if (wasOpen) {
+    const returnFocus = traceFullscreenPreviousFocus || dom.traceFullscreenButton;
+    traceFullscreenPreviousFocus = null;
+    scheduleTraceFocus(() => {
+      if (!focusTraceElement(returnFocus)) focusTraceElement(dom.traceFullscreenButton);
+    });
+  }
+}
+
+function setTraceDrawerOpen(open) {
+  const drawer = dom.traceEventDrawer;
+  const wasOpen = state.tracePlayback.drawerOpen !== false;
+  const nextOpen = open !== false;
+  const activeInside = Boolean(drawer && document.activeElement && drawer.contains?.(document.activeElement));
+  state.tracePlayback.drawerOpen = nextOpen;
+  renderTracePlayback();
+  if (nextOpen && !wasOpen) {
+    scheduleTraceFocus(() => focusTraceElement(dom.traceDrawerCloseButton));
+  } else if (!nextOpen && wasOpen && activeInside) {
+    scheduleTraceFocus(() => focusTraceElement(dom.traceDrawerOpenButton));
+  }
+}
+
+function cancelTraceInteractionFrame() {
+  if (traceInteractionFrame == null) return;
+  const cancelFrame = globalThis.cancelAnimationFrame || clearTimeout;
+  cancelFrame(traceInteractionFrame);
+  traceInteractionFrame = null;
+}
+
+function previewTraceNodeRoutes(drag, target) {
+  const layout = drag?.layout;
+  if (!layout || !Topology?.routeOrthogonal) return;
+  const metrics = topologyLayoutMetrics();
+  const positions = { ...layout.positions, [drag.componentId]: target };
+  const rects = layout.components.map((component) => Topology.rectForNode(component.component_id, positions, layout.sizes));
+  const rectById = new Map(rects.map((rect) => [String(rect.id), rect]));
+  const parallel = new Map();
+  layout.links.forEach((link) => {
+    const key = [String(link.source_component), String(link.target_component)].sort().join("\u0000");
+    (parallel.get(key) || parallel.set(key, []).get(key)).push(link);
+  });
+  layout.links.forEach((link) => {
+    if (String(link.source_component) !== drag.componentId && String(link.target_component) !== drag.componentId) return;
+    const source = rectById.get(String(link.source_component));
+    const destination = rectById.get(String(link.target_component));
+    const shell = dom.traceLinkLayer?.querySelector?.(`[data-trace-link="${CSS.escape(topologyDisplayLinkId(link))}"]`);
+    const path = shell?.matches?.(".trace-link-path") ? shell : shell?.querySelector?.(".trace-link-path");
+    if (!source || !destination || !path) return;
+    const key = [String(link.source_component), String(link.target_component)].sort().join("\u0000");
+    const siblings = parallel.get(key) || [link];
+    const channelOffset = (siblings.indexOf(link) - (siblings.length - 1) / 2) * metrics.parallelSpacing;
+    try {
+      const points = Topology.routeOrthogonal(source, destination, rects, { clearance: metrics.routeClearance, channelOffset });
+      path.setAttribute("d", Topology.pathToSvg(points));
+    } catch (_error) { /* Keep the last valid preview route until the final full render. */ }
+  });
+}
+
+function applyTraceInteractionFrame(point = tracePendingPointer) {
+  tracePendingPointer = null;
+  if (!point) return;
+  const playback = state.tracePlayback;
+  if (playback.layoutDrag?.pointerId === point.pointerId) {
+    const drag = playback.layoutDrag;
+    const zoom = Number(playback.layoutView.zoom) || 1;
+    const target = TraceView.tracePointerDragPosition(drag, point, zoom);
+    if (!target) return;
+    drag.moved ||= Math.abs(point.clientX - drag.startX) + Math.abs(point.clientY - drag.startY) > 3;
+    drag.previewPosition = target;
+    drag.element.style.transform = `translate(${target.x - drag.originX}px, ${target.y - drag.originY}px)`;
+    previewTraceNodeRoutes(drag, target);
+    return;
+  }
+  if (playback.layoutPan?.pointerId === point.pointerId) {
+    const pan = playback.layoutPan;
+    pan.moved ||= Math.abs(point.clientX - pan.startX) + Math.abs(point.clientY - pan.startY) > 2;
+    dom.traceTopologyCanvas.scrollLeft = pan.scrollLeft - (point.clientX - pan.startX);
+    dom.traceTopologyCanvas.scrollTop = pan.scrollTop - (point.clientY - pan.startY);
+  }
+}
+
+function scheduleTraceInteractionFrame(event) {
+  tracePendingPointer = { pointerId: event.pointerId, clientX: Number(event.clientX), clientY: Number(event.clientY) };
+  if (traceInteractionFrame != null) return;
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 16));
+  traceInteractionFrame = requestFrame(() => {
+    traceInteractionFrame = null;
+    applyTraceInteractionFrame();
+  });
+}
+
+function beginTraceCanvasPointer(event) {
+  if (event.button !== 0 && event.button !== 1) return;
+  cancelTraceInteractionFrame();
+  tracePendingPointer = null;
+  const playback = state.tracePlayback;
+  const node = event.target.closest?.('[data-trace-component]');
+  if (node && event.button === 0) {
+    focusTraceElement(node);
+    const layout = traceTopologyLayout();
+    const componentId = node.dataset.traceComponent;
+    const origin = layout.positions[componentId];
+    if (!origin) return;
+    traceMarkLayoutHandled(layout.autoFitKey);
+    if (!Object.keys(asObject(playback.layoutView.positions)).length) playback.layoutView.positions = deepClone(layout.positions);
+    playback.layoutDrag = TraceView.beginTracePointerDrag(event, componentId, origin);
+    if (playback.layoutDrag) Object.assign(playback.layoutDrag, {
+      element: node,
+      layout,
+      previewPosition: { ...origin },
+      moved: false,
+    });
+    stopTraceParticles();
+    dom.traceTopologyCanvas.classList.toggle("is-dragging", Boolean(playback.layoutDrag));
+  } else {
+    stopTraceParticles();
+    traceMarkLayoutHandled();
+    playback.layoutPan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, scrollLeft: dom.traceTopologyCanvas.scrollLeft, scrollTop: dom.traceTopologyCanvas.scrollTop };
+  }
+  try { dom.traceTopologyCanvas.setPointerCapture?.(event.pointerId); } catch (_error) { /* Pointer may already be inactive. */ }
+  event.preventDefault();
+}
+
+function moveTraceCanvasPointer(event) {
+  const playback = state.tracePlayback;
+  if (playback.layoutDrag?.pointerId !== event.pointerId && playback.layoutPan?.pointerId !== event.pointerId) return;
+  scheduleTraceInteractionFrame(event);
+  event.preventDefault();
+}
+
+function endTraceCanvasPointer(event) {
+  const playback = state.tracePlayback;
+  const drag = playback.layoutDrag?.pointerId === event.pointerId ? playback.layoutDrag : null;
+  const pan = playback.layoutPan?.pointerId === event.pointerId ? playback.layoutPan : null;
+  if (!drag && !pan) return;
+  const cancelled = event.type === "pointercancel" || event.type === "lostpointercapture";
+  cancelTraceInteractionFrame();
+  tracePendingPointer = null;
+  if (!cancelled) applyTraceInteractionFrame({ pointerId: event.pointerId, clientX: Number(event.clientX), clientY: Number(event.clientY) });
+  if (drag) {
+    if (!cancelled && drag.moved && drag.previewPosition) {
+      const committed = TraceView.dragTraceNode({
+        components: drag.layout.components,
+        links: drag.layout.links,
+        positions: playback.layoutView.positions,
+        node_sizes: drag.layout.sizes,
+        bounds: drag.layout.bounds,
+      }, drag.componentId, drag.previewPosition);
+      playback.layoutView.positions = committed.positions;
+      playback.topologyLayout = null;
+    }
+    drag.element.style.transform = "";
+    playback.layoutDrag = null;
+    dom.traceTopologyCanvas.classList.remove("is-dragging");
+    renderTraceTopology();
+  }
+  if (pan) {
+    if (cancelled) {
+      dom.traceTopologyCanvas.scrollLeft = pan.scrollLeft;
+      dom.traceTopologyCanvas.scrollTop = pan.scrollTop;
+    }
+    playback.layoutPan = null;
+    if (!drag) renderTraceTopology();
+  }
+  if (dom.traceTopologyCanvas.hasPointerCapture?.(event.pointerId)) {
+    try { dom.traceTopologyCanvas.releasePointerCapture(event.pointerId); } catch (_error) { /* Capture already released. */ }
+  }
+}
+
+function traceNodeMemoryCapacityLabel(component, memoryLayout = state.tracePlayback?.data?.memory_layout) {
+  const id = String(component?.component_id || "");
+  const segments = asArray(normalizedMemoryComponents(memoryLayout)[id]);
+  if (!segments.length) return "";
+  const maximumEnd = Math.max(...segments.map((segment) => Number(segment.offset_bytes || 0) + Number(segment.length_bytes || 0)), 1);
+  const capacity = Math.max(maximumEnd, Number(component?.capacity_bytes) || 0, 1);
+  return formatBytes(capacity);
+}
+
+function traceMemorySegmentId(segment) {
+  return String(segment?.logical_id || "");
+}
+
+function traceNodeMemorySummary(componentId) {
+  const segments = asArray(normalizedMemoryComponents(state.tracePlayback.data?.memory_layout)[componentId]);
+  if (!segments.length) return "";
+  const component = asArray(state.scenario?.hardware?.components).find((item) => item.component_id === componentId);
+  const maximumEnd = Math.max(...segments.map((segment) => Number(segment.offset_bytes || 0) + Number(segment.length_bytes || 0)), 1);
+  const capacity = Math.max(maximumEnd, Number(component?.capacity_bytes) || 0, 1);
+  const activeTensorIds = new Set(activeTraceEvents().flatMap((event) => [event.tensor?.logical_id, event.tensor?.physical_id]).filter(Boolean).map(String));
+  const activeCount = segments.filter((segment) => activeTensorIds.has(traceMemorySegmentId(segment))).length;
+  return uiText(
+    "逻辑地址（不是 JEDEC 物理地址）：容量 {capacity}，共 {segments} 个区间{active}",
+    "Logical address (not a JEDEC physical address): capacity {capacity}, {segments} intervals{active}",
+    {
+      capacity: formatBytes(capacity),
+      segments: formatNumber(segments.length),
+      active: activeCount
+        ? uiText("，当前 {count} 个分片活动", ", {count} shards active now", { count: formatNumber(activeCount) })
+        : uiText("，当前没有活动分片", ", no active shards now"),
+    },
+  );
+}
+
+function traceNodeSizes(components, fontScale = state.settings.fontScale, memoryLayout = state.tracePlayback?.data?.memory_layout) {
+  const fontRatio = clampFontScale(fontScale) / 100;
+  const layoutScale = layoutScaleForFont(fontScale);
+  return Object.fromEntries(asArray(components).map((component) => {
+    const id = String(component.component_id || "");
+    const memoryLabel = traceNodeMemoryCapacityLabel(component, memoryLayout);
+    const longest = Math.max(id.length, memoryLabel.length);
+    const hasMemory = Boolean(memoryLabel);
+    return [id, {
+      width: Math.ceil(Math.max(58 * layoutScale, longest * 6.6 * fontRatio + 24 * layoutScale)),
+      height: Math.ceil(Math.max(34 * layoutScale, 16 * fontRatio + (hasMemory ? 21 * fontRatio : 0) + 14 * layoutScale)),
+    }];
+  }));
+}
+
+function traceProjectionProxyMap(groups) {
+  const proxyFor = new Map();
+  asArray(groups).forEach((group) => {
+    if (!group.collapsed) return;
+    asArray(group.members).forEach((member) => proxyFor.set(String(member), String(group.root)));
+  });
+  return proxyFor;
+}
+
+function traceLayoutGroupBounds(groups, positions, sizes, fontScale = state.settings.fontScale) {
+  const scale = layoutScaleForFont(fontScale);
+  const bounds = {};
+  asArray(groups).forEach((group) => {
+    const members = group.collapsed ? [group.root] : group.members;
+    const rects = asArray(members)
+      .filter((id) => positions[String(id)])
+      .map((id) => Topology.rectForNode(String(id), positions, sizes));
+    if (!rects.length) return;
+    const padding = Math.round(18 * scale);
+    const header = Math.round(28 * scale);
+    const left = Math.min(...rects.map((rect) => rect.x)) - padding;
+    const top = Math.min(...rects.map((rect) => rect.y)) - padding - header;
+    const right = Math.max(...rects.map((rect) => rect.x + rect.width)) + padding;
+    const bottom = Math.max(...rects.map((rect) => rect.y + rect.height)) + padding;
+    bounds[String(group.group_id)] = { x: left, y: top, width: right - left, height: bottom - top };
+  });
+  return bounds;
+}
+
+function buildTraceTopologyLayout(hardware, fontScale = state.settings.fontScale, groups = [], positionOverrides = {}, collapsedGroupIds = null, viewportSize = {}) {
+  const allComponents = asArray(asObject(hardware).components);
+  const sourceLinks = asArray(asObject(hardware).links);
+  const normalizedGroups = normalizedTraceTopologyGroups(hardware, groups, collapsedGroupIds);
+  const projection = Topology.collapseProjection(allComponents, sourceLinks, normalizedGroups);
+  const visibleIds = new Set(projection.visibleComponentIds.map(String));
+  const components = allComponents.filter((component) => visibleIds.has(String(component.component_id)));
+  const links = projection.links;
+  const sizes = {
+    ...traceNodeSizes(components, fontScale, state.tracePlayback?.data?.memory_layout),
+    ...asObject(state.tracePlayback?.measuredNodeSizes),
+  };
+  if (!Topology?.layoutGraph) return { key: "unavailable", components, allComponents, links, groups: normalizedGroups, sizes, positions: {}, rects: [], groupBounds: {}, routes: new Map(), proxyFor: traceProjectionProxyMap(normalizedGroups), bounds: { width: 640, height: 480 } };
+  const scale = layoutScaleForFont(fontScale);
+  const metrics = topologyLayoutMetrics(fontScale);
+  const layoutGroups = normalizedGroups.map((group) => group.collapsed ? { ...group, members: [group.root] } : group);
+  const layoutOptions = {
+    nodeGap: metrics.nodeGap,
+    layerGap: metrics.layerGap,
+    rowGap: metrics.rowGap,
+    viewportWidth: Math.max(0, Number(viewportSize.width) || 0),
+    viewportHeight: Math.max(0, Number(viewportSize.height) || 0),
+    fillViewport: true,
+  };
+  const layout = Topology.layoutGraph(components, links, layoutGroups, sizes, layoutOptions);
+  const visibleOverrides = Object.fromEntries(Object.entries(asObject(positionOverrides)).filter(([id]) => visibleIds.has(String(id))));
+  const positions = Object.keys(visibleOverrides).length ? { ...layout.positions, ...deepClone(visibleOverrides) } : layout.positions;
+  const rects = components.map((component) => Topology.rectForNode(component.component_id, positions, sizes));
+  const groupBounds = traceLayoutGroupBounds(normalizedGroups, positions, sizes, fontScale);
+  const routes = new Map();
+  const routeClearance = metrics.routeClearance;
+  let routePlan;
+  try {
+    routePlan = Topology.planOrthogonalRoutes(links, rects, {
+      clearance: routeClearance,
+      parallelSpacing: metrics.parallelSpacing,
+      routeSpacing: metrics.routeSpacing,
+      cornerRadius: metrics.cornerRadius,
+      shortCurveDistance: metrics.shortCurveDistance,
+      renderGeometry: false,
+      allowCurves: false,
+    });
+  } catch (error) {
+    routePlan = {
+      routes: [],
+      errors: links.map((link) => ({ link, linkId: topologyDisplayLinkId(link), error })),
+    };
+  }
+  routePlan.routes.forEach((route) => {
+    routes.set(route.linkId, {
+      points: route.points,
+      segments: route.segments,
+      path: route.path || Topology.pathToSvg(route.points),
+      kind: route.kind || "orthogonal",
+    });
+  });
+  asArray(routePlan.errors).forEach((record) => {
+    routes.set(String(record.linkId), {
+      points: [],
+      segments: [],
+      path: "",
+      error: record.error?.message || "正交路由失败",
+    });
+  });
+  const geometryRects = [
+    ...rects,
+    ...Object.values(groupBounds),
+    ...routePlan.routes.map((route) => Topology.pointsBounds(route.points)).filter(Boolean),
+  ];
+  const contentBounds = geometryRects.length ? {
+    x: Math.min(...geometryRects.map((rect) => rect.x)),
+    y: Math.min(...geometryRects.map((rect) => rect.y)),
+    width: Math.max(...geometryRects.map((rect) => rect.x + rect.width)) - Math.min(...geometryRects.map((rect) => rect.x)),
+    height: Math.max(...geometryRects.map((rect) => rect.y + rect.height)) - Math.min(...geometryRects.map((rect) => rect.y)),
+  } : { x: 0, y: 0, width: layout.bounds.width, height: layout.bounds.height };
+  const worldPadding = Math.round(28 * scale);
+  const maxX = Math.max(Math.round(640 * scale), layout.bounds.width, contentBounds.x + contentBounds.width + worldPadding);
+  const maxY = Math.max(Math.round(480 * scale), layout.bounds.height, contentBounds.y + contentBounds.height + worldPadding);
+  return {
+    components,
+    allComponents,
+    links,
+    groups: normalizedGroups,
+    sizes,
+    positions,
+    rects,
+    groupBounds,
+    routes,
+    proxyFor: traceProjectionProxyMap(normalizedGroups),
+    contentBounds,
+    bounds: { width: Math.ceil(maxX), height: Math.ceil(maxY) },
+    algorithm: layout.algorithm || "group-layered-v1",
+    layers: layout.layers || [],
+  };
+}
+
+function traceTopologyLayout() {
+  const playback = state.tracePlayback;
+  const hardware = asObject(state.scenario?.hardware);
+  const groups = traceTopologyGroups(hardware);
+  const collapsedGroupIds = traceCollapsedGroupIds(hardware, groups);
+  const autoFitKey = traceTopologyAutoFitKey(hardware, state.settings.fontScale, groups);
+  if (playback.measuredNodeKey !== autoFitKey) {
+    playback.measuredNodeSizes = {};
+    playback.measuredNodeKey = autoFitKey;
+  }
+  const viewportSize = {
+    width: Math.max(0, Number(dom.traceTopologyCanvas?.clientWidth) || 0),
+    height: Math.max(0, Number(dom.traceTopologyCanvas?.clientHeight) || 0),
+  };
+  const key = JSON.stringify({
+    autoFitKey,
+    components: asArray(hardware.components).map((item) => [item.component_id, item.kind]),
+    links: asArray(hardware.links).map((item) => [item.link_id, item.source_component, item.target_component, item.protocol]),
+    groups: groups.map((item) => [item.group_id, item.root, item.members, item.collapsed]),
+    positions: asObject(playback.layoutView?.positions),
+    measuredNodeSizes: asObject(playback.measuredNodeSizes),
+    viewportSize,
+  });
+  if (playback.topologyLayout?.key === key) return playback.topologyLayout;
+  const layout = buildTraceTopologyLayout(hardware, state.settings.fontScale, groups, playback.layoutView?.positions, collapsedGroupIds, viewportSize);
+  layout.key = key;
+  layout.autoFitKey = autoFitKey;
+  playback.topologyLayout = layout;
+  return layout;
+}
+
+function traceIntervalActive(item, timeNs) {
+  return TraceView.intervalActive(item, timeNs);
+}
+
+function activeTraceLinkIds(events, timeNs = state.tracePlayback.timeNs) {
+  const ids = new Set();
+  const eventList = Array.isArray(events) ? events : events ? [events] : [];
+  const activeEvents = eventList.filter((event) => traceIntervalActive(event, timeNs));
+  activeEvents.forEach((event) => {
+    const transfer = event?.transfer;
+    if (transfer?.link_id) ids.add(String(transfer.link_id));
+    if (transfer?.resource_id) ids.add(String(transfer.resource_id));
+  });
+  activeEvents.forEach((event) => asArray(event?.transfer?.hops).forEach((hop) => {
+    if (!traceIntervalActive(hop, timeNs)) return;
+    if (hop.link_id) ids.add(String(hop.link_id));
+    if (hop.resource_id) ids.add(String(hop.resource_id));
+  }));
+  return ids;
+}
+
+function traceEventHasExactLinkIdentity(event, timeNs = state.tracePlayback.timeNs) {
+  const transfer = event?.transfer;
+  if (!transfer) return false;
+  if (!traceIntervalActive(event, timeNs)) return false;
+  if (transfer.link_id || transfer.resource_id) return true;
+  return asArray(transfer.hops).some((hop) => (
+    traceIntervalActive(hop, timeNs) && (hop.link_id || hop.resource_id)
+  ));
+}
+
+function traceLinkIdentityMatches(link, candidate) {
+  const candidateId = String(candidate || "");
+  if (!candidateId) return false;
+  const originalIds = asArray(link?.original_link_ids).length
+    ? asArray(link.original_link_ids).map(String)
+    : [String(link?.link_id || "")].filter(Boolean);
+  return [...originalIds, topologyDisplayLinkId(link)].some((linkId) => (
+    candidateId === linkId
+    || candidateId === `link.${linkId}`
+    || candidateId.startsWith(`link.${linkId}.`)
+  ));
+}
+
+function traceLinkDirection(link, sourceComponent, targetComponent, proxyFor = new Map()) {
+  const source = String(sourceComponent ?? "");
+  const target = String(targetComponent ?? "");
+  if (!source || !target) return 0;
+  const projected = (componentId) => proxyFor.get(String(componentId || "")) || String(componentId || "");
+  const linkSource = String(link?.source_component ?? "");
+  const linkTarget = String(link?.target_component ?? "");
+  if (projected(source) === linkSource && projected(target) === linkTarget) return 1;
+  if (link?.bidirectional !== false && projected(source) === linkTarget && projected(target) === linkSource) return -1;
+  return 0;
+}
+
+function traceTransferEndpoints(pair) {
+  return {
+    source: String(pair?.source_component || pair?.source || ""),
+    target: String(pair?.target_component || pair?.target || ""),
+  };
+}
+
+function traceTransferIdentityValues(pair) {
+  return [pair?.link_id, pair?.resource_id]
+    .map((value) => String(value || ""))
+    .filter(Boolean);
+}
+
+function traceTransferKind(pair, fallback = "data") {
+  const source = pair?.transfer && typeof pair.transfer === "object" ? pair.transfer : pair;
+  const candidate = source?.transfer_kind ?? source?.transferKind ?? source?.kind;
+  const normalized = String(candidate ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "instruction" || normalized === "instructions" || normalized.includes("instruction")) return "instruction";
+  if (normalized === "data" || normalized === "payload" || normalized.includes("data")) return "data";
+  return String(fallback).toLowerCase() === "instruction" ? "instruction" : "data";
+}
+
+function traceLinkFlowDirections(link, events, activeIds = new Set(), timeNs = state.tracePlayback.timeNs, proxyFor = new Map()) {
+  const eventList = Array.isArray(events) ? events : events ? [events] : [];
+  const flows = [];
+  let exactDirectionRejected = false;
+  eventList.forEach((event) => {
+    if (!traceIntervalActive(event, timeNs)) return;
+    const transfer = event?.transfer;
+    if (!transfer) return;
+    const transferEndpoints = traceTransferEndpoints(transfer);
+    const eventHasExactIdentity = traceEventHasExactLinkIdentity(event, timeNs);
+    const pairs = [
+      { pair: transfer, kind: "transfer", index: -1 },
+      ...asArray(transfer.hops)
+        .filter((hop) => traceIntervalActive(hop, timeNs))
+        .map((hop, index) => ({ pair: hop, kind: "hop", index })),
+    ];
+    pairs.forEach(({ pair, kind, index }) => {
+      const exact = traceTransferIdentityValues(pair).some((value) => traceLinkIdentityMatches(link, value));
+      if (eventHasExactIdentity && !exact) return;
+      const pairEndpoints = traceTransferEndpoints(pair);
+      const endpoints = {
+        source: pairEndpoints.source || transferEndpoints.source,
+        target: pairEndpoints.target || transferEndpoints.target,
+      };
+      let direction = endpoints.source && endpoints.target
+        ? traceLinkDirection(link, endpoints.source, endpoints.target, proxyFor)
+        : exact ? 1 : 0;
+      // A projected route can outlive the original hidden component ids when
+      // this helper is used without the layout's proxy map. Exact identity is
+      // still sufficient to select that aggregate route; the renderer passes
+      // the proxy map whenever it can resolve the actual direction.
+      if (!direction && exact && link?.projected === true && !proxyFor?.size) direction = 1;
+      if (!direction) {
+        if (exact) exactDirectionRejected = true;
+        return;
+      }
+      const transferKind = traceTransferKind(pair, traceTransferKind(transfer));
+      flows.push({
+        direction,
+        event_id: String(event?.event_id || event?.task_id || ""),
+        kind,
+        index,
+        exact,
+        transferKind,
+        transfer_kind: transferKind,
+      });
+    });
+  });
+  if (!flows.length && !exactDirectionRejected && Array.from(activeIds || []).some((value) => traceLinkIdentityMatches(link, value))) {
+    flows.push({ direction: 1, event_id: "", kind: "identity", index: -1, exact: true, transferKind: "data", transfer_kind: "data" });
+  }
+  return flows;
+}
+
+function traceLinkIsActive(link, events, activeIds, timeNs = state.tracePlayback.timeNs, proxyFor = new Map()) {
+  return traceLinkFlowDirections(link, events, activeIds, timeNs, proxyFor).length > 0;
+}
+
+function activeTraceNodeRoles(events, timeNs, componentIds, projection = {}) {
+  const roles = new Map(Array.from(componentIds, (id) => [id, new Set()]));
+  const proxyFor = projection?.proxyFor instanceof Map ? projection.proxyFor : new Map();
+  const allComponentIds = asArray(projection?.allComponentIds).length
+    ? asArray(projection.allComponentIds).map(String)
+    : Array.from(componentIds, String);
+  const projected = (id) => proxyFor.get(String(id || "")) || String(id || "");
+  const add = (id, role) => {
+    const visibleId = projected(id);
+    if (visibleId && roles.has(visibleId)) roles.get(visibleId).add(role);
+  };
+  asArray(events).forEach((event) => {
+    add(event?.transfer?.source_component || event?.tensor?.component_id, "is-source");
+    add(event?.transfer?.target_component, "is-target");
+    add(event?.rank?.component_id, "is-compute");
+    asArray(event?.transfer?.hops).filter((hop) => traceIntervalActive(hop, timeNs)).forEach((hop) => {
+      add(hop.source_component, "is-source");
+      add(hop.target_component, "is-target");
+    });
+    asArray(event?.resources).filter((resource) => traceIntervalActive(resource, timeNs)).forEach((resource) => {
+      add(resource.component_id, "is-active");
+      const resourceId = String(resource.resource_id || "");
+      allComponentIds.forEach((id) => {
+        if (resourceId === id || resourceId.startsWith(`${id}.`) || resourceId.startsWith(`component.${id}.`)) add(id, "is-active");
+      });
+    });
+  });
+  roles.forEach((value) => { if (value.size) value.add("is-active"); });
+  return roles;
+}
+
+function projectTraceNodeRoles(roles, visibleComponentIds, proxyFor) {
+  const projected = new Map(Array.from(visibleComponentIds, (id) => [String(id), new Set()]));
+  roles.forEach((roleSet, originalId) => {
+    const visibleId = proxyFor?.get?.(String(originalId)) || String(originalId);
+    const target = projected.get(visibleId);
+    if (!target) return;
+    roleSet.forEach((role) => target.add(role));
+  });
+  return projected;
+}
+
+function traceRectUnion(rects) {
+  const values = asArray(rects).filter((rect) => rect && Number.isFinite(rect.x) && Number.isFinite(rect.y));
+  if (!values.length) return null;
+  const left = Math.min(...values.map((rect) => rect.x));
+  const top = Math.min(...values.map((rect) => rect.y));
+  const right = Math.max(...values.map((rect) => rect.x + rect.width));
+  const bottom = Math.max(...values.map((rect) => rect.y + rect.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function tracePrimaryComponentIds(event) {
+  return Array.from(new Set([
+    event?.rank?.component_id,
+    event?.transfer?.target_component,
+    event?.transfer?.source_component,
+    event?.tensor?.component_id,
+  ].filter(Boolean).map(String)));
+}
+
+function traceRevealTargetRect(layout, events, timeNs, primaryEvent, viewportWidth, viewportHeight, padding = 24) {
+  const componentIds = new Set(asArray(layout?.components).map((component) => String(component.component_id)));
+  const roles = activeTraceNodeRoles(events, timeNs, componentIds, {
+    proxyFor: layout?.proxyFor,
+    allComponentIds: asArray(layout?.allComponents).map((component) => String(component.component_id)),
+  });
+  const activeRects = asArray(layout?.rects).filter((rect) => roles.get(String(rect.id))?.size);
+  const union = traceRectUnion(activeRects);
+  const availableWidth = Math.max(1, Number(viewportWidth) - padding * 2);
+  const availableHeight = Math.max(1, Number(viewportHeight) - padding * 2);
+  if (union && union.width <= availableWidth && union.height <= availableHeight) return union;
+  const byId = new Map(asArray(layout?.rects).map((rect) => [String(rect.id), rect]));
+  for (const originalId of tracePrimaryComponentIds(primaryEvent)) {
+    const componentId = layout?.proxyFor?.get?.(originalId) || originalId;
+    const rect = byId.get(componentId);
+    if (rect) return rect;
+  }
+  return activeRects[0] || null;
+}
+
+function traceRevealScrollTarget(viewport, rect, padding = 24) {
+  if (!rect) return null;
+  const clientWidth = Math.max(1, Number(viewport?.clientWidth) || 0);
+  const clientHeight = Math.max(1, Number(viewport?.clientHeight) || 0);
+  const scrollWidth = Math.max(clientWidth, Number(viewport?.scrollWidth) || clientWidth);
+  const scrollHeight = Math.max(clientHeight, Number(viewport?.scrollHeight) || clientHeight);
+  const currentLeft = Math.max(0, Number(viewport?.scrollLeft) || 0);
+  const currentTop = Math.max(0, Number(viewport?.scrollTop) || 0);
+  const fitsWidth = rect.width + padding * 2 <= clientWidth;
+  const fitsHeight = rect.height + padding * 2 <= clientHeight;
+  const visibleLeft = currentLeft + (fitsWidth ? padding : 0);
+  const visibleRight = currentLeft + clientWidth - (fitsWidth ? padding : 0);
+  const visibleTop = currentTop + (fitsHeight ? padding : 0);
+  const visibleBottom = currentTop + clientHeight - (fitsHeight ? padding : 0);
+  if (
+    rect.x >= visibleLeft
+    && rect.x + rect.width <= visibleRight
+    && rect.y >= visibleTop
+    && rect.y + rect.height <= visibleBottom
+  ) return null;
+  let left = currentLeft;
+  let top = currentTop;
+  if (!fitsWidth) left = rect.x + rect.width / 2 - clientWidth / 2;
+  else if (rect.x < visibleLeft) left = rect.x - padding;
+  else if (rect.x + rect.width > visibleRight) left = rect.x + rect.width + padding - clientWidth;
+  if (!fitsHeight) top = rect.y + rect.height / 2 - clientHeight / 2;
+  else if (rect.y < visibleTop) top = rect.y - padding;
+  else if (rect.y + rect.height > visibleBottom) top = rect.y + rect.height + padding - clientHeight;
+  const target = {
+    left: Math.max(0, Math.min(scrollWidth - clientWidth, left)),
+    top: Math.max(0, Math.min(scrollHeight - clientHeight, top)),
+  };
+  if (Math.abs(target.left - currentLeft) < 0.5 && Math.abs(target.top - currentTop) < 0.5) return null;
+  return target;
+}
+
+function traceRevealScrollBehavior(reduceMotion, prefersReducedMotion) {
+  return reduceMotion || prefersReducedMotion ? "auto" : "smooth";
+}
+
+function tracePrefersReducedMotion() {
+  if (typeof globalThis.matchMedia !== "function") return false;
+  return Boolean(globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+function tracePlaybackControlTarget() {
+  const timeline = dom.traceTimeline;
+  if (!timeline) return null;
+  return typeof timeline.closest === "function"
+    ? timeline.closest(".trace-control-bar") || timeline
+    : timeline;
+}
+
+function revealTracePlaybackControls() {
+  const playback = state.tracePlayback;
+  if (state.view !== "playback" || dom.traceContent?.hidden || playback.playing) return false;
+  const target = tracePlaybackControlTarget();
+  if (!target || typeof target.scrollIntoView !== "function") return false;
+  const behavior = traceRevealScrollBehavior(state.settings.reduceMotion, tracePrefersReducedMotion());
+  target.scrollIntoView({ behavior, block: "start", inline: "nearest" });
+  return true;
+}
+
+function traceTopologyRevealTarget() {
+  const canvas = dom.traceTopologyCanvas;
+  if (!canvas || state.view !== "playback" || dom.traceContent?.hidden) return null;
+  const playback = state.tracePlayback;
+  const layout = traceTopologyLayout();
+  const padding = Math.round(24 * layoutScaleForFont(state.settings.fontScale));
+  const rect = traceRevealTargetRect(
+    layout,
+    activeTraceEvents(playback.timeNs),
+    playback.timeNs,
+    currentTraceEvent(),
+    canvas.clientWidth,
+    canvas.clientHeight,
+    padding,
+  );
+  const view = traceLayoutView();
+  const scaledRect = rect ? {
+    x: view.offsetX + rect.x * view.zoom,
+    y: view.offsetY + rect.y * view.zoom,
+    width: rect.width * view.zoom,
+    height: rect.height * view.zoom,
+  } : null;
+  return traceRevealScrollTarget({
+    clientWidth: canvas.clientWidth,
+    clientHeight: canvas.clientHeight,
+    scrollWidth: canvas.scrollWidth,
+    scrollHeight: canvas.scrollHeight,
+    scrollLeft: canvas.scrollLeft,
+    scrollTop: canvas.scrollTop,
+  }, scaledRect, padding);
+}
+
+function updateTraceLocateActiveButton() {
+  const button = dom.traceLocateActiveButton;
+  if (!button) return false;
+  const visible = Boolean(traceTopologyRevealTarget());
+  button.hidden = !visible;
+  dom.traceTopologyPanel?.classList.toggle("has-offscreen-active", visible);
+  return visible;
+}
+
+function revealTraceTopology() {
+  const target = traceTopologyRevealTarget();
+  if (!target) return false;
+  const prefersReducedMotion = tracePrefersReducedMotion();
+  const behavior = traceRevealScrollBehavior(state.settings.reduceMotion, prefersReducedMotion);
+  traceScrollCanvasTo(target, behavior);
+  return true;
+}
+
+function traceNodeMemoryMarkup(componentId) {
+  const components = normalizedMemoryComponents(state.tracePlayback.data?.memory_layout);
+  const segments = asArray(components[componentId]);
+  if (!segments.length) return "";
+  const component = asArray(state.scenario?.hardware?.components).find((item) => item.component_id === componentId);
+  const maximumEnd = Math.max(...segments.map((segment) => Number(segment.offset_bytes || 0) + Number(segment.length_bytes || 0)), 1);
+  const capacity = Math.max(maximumEnd, Number(component?.capacity_bytes) || 0, 1);
+  const activeTensorIds = new Set(activeTraceEvents().flatMap((event) => [event.tensor?.logical_id, event.tensor?.physical_id]).filter(Boolean).map(String));
+  const blocks = segments.slice(0, 24).map((segment) => {
+    const offset = Math.max(0, Number(segment.offset_bytes || 0));
+    const length = Math.max(0, Number(segment.length_bytes || 0));
+    const active = activeTensorIds.has(traceMemorySegmentId(segment));
+    return `<i class="${active ? "is-active" : ""}" style="left:${Math.min(100, offset / capacity * 100)}%;width:${Math.max(1, Math.min(100, length / capacity * 100))}%"></i>`;
+  }).join("");
+  return `<span class="trace-node-memory"><span>${blocks}</span><small>${escapeHtml(formatBytes(capacity))}</small></span>`;
+}
+
+function tracePointAlongRoute(points, ratio) {
+  return TraceView.pointAtProgress(points, ratio);
+}
+
+function traceParticleRouteForDirection(route, direction) {
+  const normalizedDirection = Number(direction) < 0 ? -1 : 1;
+  const transferKind = traceTransferKind(route);
+  return {
+    ...route,
+    direction: normalizedDirection,
+    transferKind,
+    transfer_kind: transferKind,
+    points: normalizedDirection < 0 ? asArray(route?.points).slice().reverse() : route?.points,
+  };
+}
+
+function stopTraceParticles() {
+  if (traceParticleFrame !== null) {
+    if (traceParticleMode === "interval" && typeof globalThis.clearInterval === "function") globalThis.clearInterval(traceParticleFrame);
+    else if (traceParticleMode === "raf" && typeof globalThis.cancelAnimationFrame === "function") globalThis.cancelAnimationFrame(traceParticleFrame);
+  }
+  traceParticleFrame = null;
+  traceParticleMode = "static";
+  traceParticleRoutes = [];
+  if (dom.traceParticleLayer) dom.traceParticleLayer.innerHTML = "";
+}
+
+function animateTraceParticles(timestamp = 0) {
+  if (traceParticleMode === "raf") traceParticleFrame = null;
+  if (!traceParticleRoutes.length || traceParticleAnimationCapability().mode === "static" || state.view !== "playback") {
+    if (traceParticleFrame !== null) {
+      if (traceParticleMode === "interval" && typeof globalThis.clearInterval === "function") globalThis.clearInterval(traceParticleFrame);
+      else if (traceParticleMode === "raf" && typeof globalThis.cancelAnimationFrame === "function") globalThis.cancelAnimationFrame(traceParticleFrame);
+    }
+    traceParticleFrame = null;
+    traceParticleMode = "static";
+    return;
+  }
+  const view = traceLayoutView();
+  const zoom = view.zoom;
+  $$('[data-trace-particle]', dom.traceParticleLayer).forEach((particle) => {
+    const route = traceParticleRoutes[Number(particle.dataset.traceRouteIndex) || 0];
+    const progress = TraceView.particleLoopProgress(timestamp, {
+      periodMs: 1200,
+      phase: Number(particle.dataset.tracePhase) || 0,
+    });
+    const point = tracePointAlongRoute(route.points, progress);
+    particle.style.transform = `translate(${view.offsetX + point.x * zoom}px, ${view.offsetY + point.y * zoom}px)`;
+  });
+  if (traceParticleMode === "raf") traceParticleFrame = globalThis.requestAnimationFrame(animateTraceParticles);
+}
+
+function renderTraceParticles(routes) {
+  if (!dom.traceParticleLayer) return;
+  const view = traceLayoutView();
+  const zoom = view.zoom;
+  traceParticleRoutes = asArray(routes).filter((route) => asArray(route.points).length > 1);
+  if (traceParticleFrame !== null) {
+    if (traceParticleMode === "interval" && typeof globalThis.clearInterval === "function") globalThis.clearInterval(traceParticleFrame);
+    else if (traceParticleMode === "raf" && typeof globalThis.cancelAnimationFrame === "function") globalThis.cancelAnimationFrame(traceParticleFrame);
+  }
+  traceParticleFrame = null;
+  traceParticleMode = "static";
+  if (!traceParticleRoutes.length) {
+    dom.traceParticleLayer.innerHTML = "";
+    return;
+  }
+  const capability = traceParticleAnimationCapability();
+  const staticMode = capability.mode === "static";
+  dom.traceParticleLayer.innerHTML = traceParticleRoutes.flatMap((route, routeIndex) => (
+    Array.from({ length: TRACE_PARTICLES_PER_ROUTE }, (_, particleIndex) => {
+      const phase = particleIndex / TRACE_PARTICLES_PER_ROUTE;
+      const point = tracePointAlongRoute(route.points, staticMode ? 0.5 : phase);
+      const reverse = Number(route.direction) < 0;
+      const transferKind = traceTransferKind(route);
+      const kindClass = transferKind === "instruction" ? "is-instruction" : "is-data";
+      return `<i class="trace-flow-particle ${kindClass} ${staticMode ? "is-static" : ""} ${reverse ? "is-reverse" : ""}" data-trace-particle data-trace-route-index="${routeIndex}" data-trace-phase="${phase}" data-trace-direction="${reverse ? "reverse" : "forward"}" data-trace-transfer-kind="${transferKind}" style="transform:translate(${view.offsetX + point.x * zoom}px,${view.offsetY + point.y * zoom}px)"></i>`;
+    })
+  )).join("");
+  if (!staticMode) {
+    traceParticleMode = capability.mode;
+    if (capability.mode === "raf") traceParticleFrame = globalThis.requestAnimationFrame(animateTraceParticles);
+    else if (capability.mode === "interval") traceParticleFrame = globalThis.setInterval(() => animateTraceParticles(Date.now()), capability.frameMs);
+  }
+}
+
+function renderTraceProtocolLegend(links) {
+  if (!dom.traceProtocolLegend) return;
+  const entries = new Map();
+  asArray(links).forEach((link) => {
+    const protocolClass = topologyProtocolClass(link?.protocol);
+    if (!entries.has(protocolClass)) entries.set(protocolClass, String(link?.protocol || uiText("未知协议", "Unknown protocol")));
+  });
+  const protocolMarkup = Array.from(entries, ([protocolClass, label]) => (
+    `<span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-${protocolClass}"></i>${escapeHtml(label)}</span>`
+  )).join("");
+  const particleMarkup = entries.size ? [
+    `<span class="protocol-legend-item trace-particle-legend-item" role="listitem"><i class="trace-particle-legend-dot is-instruction" aria-hidden="true"></i>${escapeHtml(uiText("指令", "Instruction"))}</span>`,
+    `<span class="protocol-legend-item trace-particle-legend-item" role="listitem"><i class="trace-particle-legend-dot is-data" aria-hidden="true"></i>${escapeHtml(uiText("数据", "Data"))}</span>`,
+  ].join("") : "";
+  dom.traceProtocolLegend.hidden = !entries.size;
+  dom.traceProtocolLegend.innerHTML = protocolMarkup + particleMarkup;
+}
+
+function renderTraceGroups(layout, nodeRoles, selectedOriginalIds) {
+  if (!dom.traceGroupLayer) return;
+  dom.traceGroupLayer.innerHTML = asArray(layout.groups).map((group) => {
+    const rect = asObject(layout.groupBounds)[String(group.group_id)];
+    if (!rect) return "";
+    const active = asArray(group.members).some((member) => {
+      const visibleId = layout.proxyFor.get(String(member)) || String(member);
+      return nodeRoles.get(visibleId)?.has("is-active");
+    });
+    const selected = asArray(group.members).some((member) => selectedOriginalIds.has(String(member)));
+    const action = group.collapsed ? uiText("展开", "Open") : uiText("折叠", "Close");
+    const label = `${group.collapsed ? "▸" : "▾"} ${group.label} · ${formatNumber(group.members.length)} · ${action}`;
+    const description = uiText(
+      `${group.label}，${formatNumber(group.members.length)} 个成员，${group.collapsed ? "已折叠" : "已展开"}；按 Enter 或空格${group.collapsed ? "展开" : "折叠"}`,
+      `${group.label}, ${formatNumber(group.members.length)} members, ${group.collapsed ? "collapsed" : "expanded"}; press Enter or Space to ${group.collapsed ? "open" : "close"}`,
+    );
+    const frameId = `trace-group-frame-${slug(group.group_id)}`;
+    return `<section id="${escapeHtml(frameId)}" class="trace-group ${group.collapsed ? "is-collapsed" : ""} ${active ? "is-active" : ""} ${selected ? "is-selected" : ""}" data-trace-group="${escapeHtml(group.group_id)}" aria-label="${escapeHtml(description)}" style="left:${rect.x}px;top:${rect.y}px;width:${rect.width}px;height:${rect.height}px">
+      <button type="button" class="trace-group-toggle" data-trace-group-toggle="${escapeHtml(group.group_id)}" aria-controls="${escapeHtml(frameId)}" aria-expanded="${String(!group.collapsed)}" aria-label="${escapeHtml(description)}" title="${escapeHtml(description)}">${escapeHtml(label)}</button>
+    </section>`;
+  }).join("");
+  $$('[data-trace-group-toggle]', dom.traceGroupLayer).forEach((button) => {
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleTraceTopologyGroup(button.dataset.traceGroupToggle);
+    });
+    button.addEventListener("keydown", (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toggleTraceTopologyGroup(button.dataset.traceGroupToggle);
+    });
+  });
+}
+
+function bindTraceLinkTooltip(element, link) {
+  element._topologyLinkData = link;
+  element.addEventListener("pointerdown", (event) => event.stopPropagation());
+  element.addEventListener("pointerenter", (event) => showLinkTooltip(dom.traceLinkTooltip, element, event));
+  element.addEventListener("pointermove", (event) => showLinkTooltip(dom.traceLinkTooltip, element, event));
+  element.addEventListener("pointerleave", () => hideLinkTooltip(dom.traceLinkTooltip));
+  element.addEventListener("focus", (event) => showLinkTooltip(dom.traceLinkTooltip, element, event));
+  element.addEventListener("blur", () => hideLinkTooltip(dom.traceLinkTooltip));
+}
+
+function measureTraceTopologyNodes(layout) {
+  const playback = state.tracePlayback;
+  let changed = false;
+  $$(".trace-node[data-trace-component]", dom.traceNodeLayer).forEach((node) => {
+    const id = String(node.dataset.traceComponent || "");
+    const current = layout.sizes[id];
+    if (!id || !current || !node.offsetWidth || !node.offsetHeight) return;
+    const content = node.querySelector?.(".trace-node-copy");
+    const contentWidth = Math.max(Number(content?.offsetWidth) || 0, Number(content?.scrollWidth) || 0);
+    const contentHeight = Math.max(Number(content?.offsetHeight) || 0, Number(content?.scrollHeight) || 0);
+    const horizontalChrome = Math.max(0, node.offsetWidth - (Number(content?.offsetWidth) || node.offsetWidth));
+    const measured = {
+      width: Math.ceil(Math.max(node.offsetWidth, contentWidth + horizontalChrome)),
+      // Measure only the real copy/memory content. The node's ::after hover
+      // summary is absolutely positioned and must never grow the layout box.
+      height: Math.ceil(Math.max(node.offsetHeight, contentHeight)),
+    };
+    const previous = asObject(playback.measuredNodeSizes)[id];
+    if (measured.width > current.width + 0.5 || measured.height > current.height + 0.5) {
+      playback.measuredNodeSizes[id] = measured;
+      changed ||= !previous || previous.width !== measured.width || previous.height !== measured.height;
+    }
+  });
+  return changed;
+}
+
+function renderTraceTopology() {
+  if (!dom.traceTopologyCanvas || state.view !== "playback" || dom.traceContent.hidden) return;
+  const focusedGroupId = document.activeElement?.dataset?.traceGroupToggle || "";
+  const focusedLinkId = document.activeElement?.dataset?.traceLink || "";
+  const focusedNodeId = document.activeElement?.dataset?.traceComponent || "";
+  const layout = traceTopologyLayout();
+  const view = traceLayoutView();
+  if (view.autoFitKey !== layout.autoFitKey && !Object.keys(view.positions).length) {
+    const target = traceFitMetrics(layout);
+    requestAnimationFrame(() => traceScrollCanvasTo(target, "auto"));
+  }
+  const events = activeTraceEvents();
+  dom.traceTopologyPanel?.classList.toggle("has-active-trace", events.length > 0);
+  const selectedOriginalIds = new Set(tracePrimaryComponentIds(selectedTraceEvent()));
+  const selectedComponentIds = new Set(Array.from(selectedOriginalIds, (id) => layout.proxyFor.get(id) || id));
+  const componentIds = new Set(layout.allComponents.map((component) => String(component.component_id)));
+  const sourceNodeRoles = activeTraceNodeRoles(events, state.tracePlayback.timeNs, componentIds);
+  const nodeRoles = projectTraceNodeRoles(
+    sourceNodeRoles,
+    layout.components.map((component) => String(component.component_id)),
+    layout.proxyFor,
+  );
+  const zoom = view.zoom;
+  const padding = traceViewportPadding();
+  const canvasWidth = Math.max(
+    dom.traceTopologyCanvas.clientWidth || 0,
+    Math.ceil(view.offsetX + layout.bounds.width * zoom + padding),
+  );
+  const canvasHeight = Math.max(
+    Math.round(480 * layoutScaleForFont(state.settings.fontScale)),
+    dom.traceTopologyCanvas.clientHeight || 0,
+    Math.ceil(view.offsetY + layout.bounds.height * zoom + padding),
+  );
+  if (dom.traceTopologyWorld) {
+    dom.traceTopologyWorld.style.width = `${canvasWidth}px`;
+    dom.traceTopologyWorld.style.height = `${canvasHeight}px`;
+  }
+  for (const layer of [dom.traceGroupLayer, dom.traceNodeLayer, dom.traceLinkLayer]) {
+    if (!layer) continue;
+    layer.style.transformOrigin = "0 0";
+    layer.style.transform = `translate(${view.offsetX}px, ${view.offsetY}px) scale(${zoom})`;
+    layer.style.width = `${layout.bounds.width}px`;
+    layer.style.height = `${layout.bounds.height}px`;
+  }
+  dom.traceParticleLayer.style.width = `${canvasWidth}px`;
+  dom.traceParticleLayer.style.height = `${canvasHeight}px`;
+  if (dom.traceZoomValue) dom.traceZoomValue.textContent = `${Math.round(zoom * 100)}%`;
+  renderTraceGroups(layout, nodeRoles, selectedOriginalIds);
+  if (focusedGroupId) {
+    dom.traceGroupLayer?.querySelector?.(`[data-trace-group-toggle="${CSS.escape(focusedGroupId)}"][aria-expanded]`)?.focus?.();
+  }
+  dom.traceNodeLayer.innerHTML = layout.components.map((component) => {
+    const componentId = String(component.component_id);
+    const position = layout.positions[componentId];
+    const size = layout.sizes[componentId];
+    if (!position || !size) return "";
+    const roles = Array.from(nodeRoles.get(componentId) || []);
+    if (selectedComponentIds.has(componentId)) roles.push("is-selected");
+    const activeLabel = roles.includes("is-active")
+      ? uiText("，此刻活动", ", active now")
+      : selectedComponentIds.has(componentId)
+        ? uiText("，属于选中事件但此刻未活动", ", belongs to the selected event but is not active now")
+        : "";
+    const memorySummary = traceNodeMemorySummary(componentId);
+    const kindText = kindLabel(component.kind);
+    const ariaLabel = `${componentId}${uiText("，", ", ")}${kindText}${activeLabel}${memorySummary ? `${uiText("。", ". ")}${memorySummary}` : ""}`;
+    const title = memorySummary ? `${kindText}${uiText("。", ". ")}${memorySummary}` : "";
+    const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
+    const memoryAttribute = memorySummary ? ` data-trace-memory-summary="${escapeHtml(memorySummary)}"` : "";
+    return `<div class="trace-node ${componentKindClass(component.kind)} ${roles.join(" ")}" role="listitem" tabindex="0" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home End" aria-describedby="traceTopologyKeyboardHelp" aria-label="${escapeHtml(ariaLabel)}"${titleAttribute}${memoryAttribute} data-trace-component="${escapeHtml(componentId)}" style="left:${position.x}px;top:${position.y}px;width:${size.width}px;height:${size.height}px">
+      <span class="trace-node-accent"></span>
+      <span class="trace-node-copy"><strong>${escapeHtml(componentId)}</strong>${traceNodeMemoryMarkup(componentId)}</span>
+    </div>`;
+  }).join("");
+  $$("[data-trace-component]", dom.traceNodeLayer).forEach((node) => {
+    node.addEventListener("keydown", handleTraceNodeKeydown);
+  });
+  if (focusedNodeId) focusTraceElement(traceNodeElement(focusedNodeId));
+  const activeIds = activeTraceLinkIds(events);
+  const linkMarkup = [];
+  const activeRoutes = [];
+  layout.links.forEach((link) => {
+    const linkId = topologyDisplayLinkId(link);
+    const route = layout.routes.get(linkId);
+    if (!route?.path) return;
+    const flows = traceLinkFlowDirections(link, events, activeIds, state.tracePlayback.timeNs, layout.proxyFor);
+    const active = flows.length > 0;
+    const protocolClass = topologyProtocolClass(link.protocol);
+    const accessibleText = topologyLinkTooltipText(link);
+    const dashDirections = active
+      ? Array.from(new Set(flows.map((flow) => Number(flow.direction) < 0 ? -1 : 1)))
+      : [1];
+    const pathMarkup = dashDirections.map((direction) => (
+      `<path class="trace-link-path protocol-${protocolClass} ${active ? "is-active" : ""} ${direction < 0 ? "is-reverse" : ""}" data-trace-direction="${direction < 0 ? "reverse" : "forward"}" d="${escapeHtml(route.path)}"></path>`
+    )).join("");
+    linkMarkup.push(`<g class="trace-link protocol-${protocolClass} ${link.projected ? "is-projected" : ""} ${active ? "is-active" : ""}" data-trace-link="${escapeHtml(linkId)}" tabindex="0" role="img" aria-label="${escapeHtml(accessibleText)}">
+      <path class="trace-link-hit" d="${escapeHtml(route.path)}"></path>
+      ${pathMarkup}
+      <title>${escapeHtml(accessibleText)}</title>
+    </g>`);
+    if (active) {
+      const particleGroups = new Map();
+      flows.forEach((flow) => {
+        const direction = Number(flow.direction) < 0 ? -1 : 1;
+        const transferKind = traceTransferKind(flow);
+        const key = `${direction}:${transferKind}`;
+        if (!particleGroups.has(key)) particleGroups.set(key, { direction, transferKind });
+      });
+      dashDirections.forEach((direction) => activeRoutes.push(
+        ...Array.from(particleGroups.values())
+          .filter((group) => group.direction === direction)
+          .map((group) => traceParticleRouteForDirection({ ...route, transferKind: group.transferKind }, direction)),
+      ));
+    }
+  });
+  dom.traceLinkLayer.setAttribute("viewBox", `0 0 ${layout.bounds.width} ${layout.bounds.height}`);
+  dom.traceLinkLayer.innerHTML = linkMarkup.join("");
+  const linksById = new Map(layout.links.map((link) => [topologyDisplayLinkId(link), link]));
+  $$('.trace-link[data-trace-link]', dom.traceLinkLayer).forEach((element) => {
+    const link = linksById.get(element.dataset.traceLink);
+    if (link) bindTraceLinkTooltip(element, link);
+  });
+  if (focusedLinkId) {
+    dom.traceLinkLayer?.querySelector?.(`[data-trace-link="${CSS.escape(focusedLinkId)}"][tabindex]`)?.focus?.();
+  }
+  renderTraceProtocolLegend(layout.links);
+  renderTraceParticles(activeRoutes);
+  requestAnimationFrame(updateTraceLocateActiveButton);
+  if (measureTraceTopologyNodes(layout)) {
+    state.tracePlayback.topologyLayout = null;
+    requestAnimationFrame(() => fitTraceLayout({ render: true, auto: true }));
+  }
+}
+
+function traceDetailFact(label, value, helpKey = "") {
+  return `<dt${helpKey ? ` data-concept-help="${escapeHtml(helpKey)}"` : ""}>${escapeHtml(label)}</dt><dd>${escapeHtml(value == null || value === "" ? "—" : value)}</dd>`;
+}
+
+function traceEventDuration(event) {
+  return Math.max(0, Number(event?.end_ns || 0) - Number(event?.start_ns || 0));
+}
+
+function traceRequestScopeLabel(event) {
+  const requestIds = traceEventRequestIds(event);
+  const requestText = requestIds.length
+    ? requestIds.join(uiText("、", ", ")) + (event?.request_ids_truncated ? uiText("（列表已裁剪）", " (list truncated)") : "")
+    : uiText("未绑定单一请求", "Not bound to one request");
+  return [requestText, event?.batch_id ? uiText("批次 {id}", "Batch {id}", { id: event.batch_id }) : ""].filter(Boolean).join(" · ");
+}
+
+function traceEventSubject(event) {
+  const operatorId = [event?.layer_id, event?.operator_id || event?.name].filter(Boolean).join(" / ");
+  const operation = operatorId || traceFriendlyTerm(event?.phase || event?.event_kind);
+  const actor = event?.rank?.component_id || event?.transfer?.target_component || event?.transfer?.source_component || uiText("运行时", "Runtime");
+  if (event?.marker) {
+    const token = event.token_index == null ? "" : uiText("，第 {index} 个 Token", ", Token {index}", { index: event.token_index });
+    return uiText("{actor} 到达{marker}标记{token}", "{actor} reached the {marker} marker{token}", {
+      actor, marker: traceFriendlyTerm(event.marker), token,
+    });
+  }
+  if (event?.transfer && (event.category === "communication" || event.transfer.source_component || event.transfer.target_component)) {
+    const tensor = event.tensor?.logical_id
+      ? uiText("张量 {id}", "tensor {id}", { id: event.tensor.logical_id })
+      : uiText("数据", "data");
+    return uiText("{source} 向 {target} 传送{tensor}", "{source} transfers {tensor} to {target}", {
+      source: event.transfer.source_component || uiText("源组件", "the source component"),
+      target: event.transfer.target_component || uiText("目标组件", "the target component"),
+      tensor,
+    });
+  }
+  if (event?.event_kind === "batch" || event?.category === "batch") {
+    const batch = event.batch_id ? uiText("批次 {id}", "Batch {id}", { id: event.batch_id }) : uiText("批次", "The batch");
+    return uiText("{batch} 执行 {operation}", "{batch} performs {operation}", { batch, operation });
+  }
+  return uiText("{actor} 执行 {operation}", "{actor} performs {operation}", { actor, operation });
+}
+
+function traceFriendlyTerm(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return uiText("未说明", "Not specified");
+  const key = raw.toLowerCase().replace(/[^a-z0-9]+/gu, "_").replace(/^_+|_+$/gu, "");
+  const entry = TRACE_FRIENDLY_TERMS[key];
+  if (entry) return uiText(entry[0], entry[1]);
+  // Unknown backend enum values stay available in copied diagnostics. The UI
+  // uses a natural semantic description instead of leaking code-like English.
+  if (globalThis.UiI18n?.language?.() === "en") {
+    const words = raw.replace(/[_-]+/gu, " ").replace(/\s+/gu, " ").trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Not specified";
+  }
+  return uiText("运行事件", "Runtime event");
+}
+
+function traceEventSemantics(event) {
+  return [event?.phase, event?.event_kind, event?.category]
+    .filter(Boolean)
+    .map(traceFriendlyTerm)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(" · ") || uiText("未说明事件类型", "Event type not specified");
+}
+
+function traceDetailGroup(title, facts) {
+  return `<section class="trace-detail-group"><h3>${escapeHtml(title)}</h3><dl class="trace-detail-list">${facts.join("")}</dl></section>`;
+}
+
+function renderTraceNarrative() {
+  if (!dom.traceNarrativePrimary || !dom.traceNarrativeSecondary || !dom.traceNarrativeState) return;
+  const playback = state.tracePlayback;
+  const active = activeTraceEvents(playback.timeNs);
+  const selected = selectedTraceEvent();
+  const selectedActive = Boolean(selected && active.some((event) => event.event_id === selected.event_id));
+  dom.traceNarrativeState.className = `trace-narrative-state ${active.length ? "is-active" : "is-idle"}`;
+  dom.traceNarrativeState.textContent = active.length
+    ? uiText("{count} 项活动", "{count} active", { count: formatNumber(active.length) })
+    : uiText("时间空档", "Idle interval");
+  if (active.length) {
+    const lead = selectedActive ? selected : active[0];
+    const concurrentSuffix = active.length > 1
+      ? uiText("，并有另外 {count} 项并发工作。", ", with {count} other concurrent events.", { count: formatNumber(active.length - 1) })
+      : uiText("。", ".");
+    dom.traceNarrativePrimary.textContent = uiText("{time}：{subject}{suffix}", "{time}: {subject}{suffix}", {
+      time: formatDurationNs(playback.timeNs), subject: traceEventSubject(lead), suffix: concurrentSuffix,
+    });
+    dom.traceNarrativeSecondary.textContent = selectedActive
+      ? uiText("选中的事件此刻正在执行；拓扑高亮只表示这个时刻真实处于区间内的工作。", "The selected event is running now; topology highlights show only work active at this instant.")
+      : uiText("选中的事件与当前活动不同；此刻正在进行：{events}。", "The selected event is not currently active. Running now: {events}.", { events: active.map(traceEventSubject).join(uiText("；", "; ")) });
+  } else {
+    dom.traceNarrativePrimary.textContent = uiText("{time}：没有事件处于执行区间内，这是两项工作之间的时间空档。", "{time}: no event is executing; this is an idle interval between events.", { time: formatDurationNs(playback.timeNs) });
+    dom.traceNarrativeSecondary.textContent = selected
+      ? uiText("事件仍保持选中以便查看，但它此刻未在运行，拓扑不会把它伪装成活动。", "The event remains selected for inspection, but it is not running and the topology does not present it as active.")
+      : uiText("当前筛选条件下也没有可选事件。", "No event is available under the current filters.");
+  }
+}
+
+function tracePathLabel(event) {
+  const transfer = event?.transfer;
+  if (!transfer) return asArray(event?.resources).map((item) => item.resource_id).filter(Boolean).join(" → ") || uiText("本地资源", "Local resource");
+  const hops = asArray(transfer.hops);
+  if (hops.length) {
+    return hops.map((hop) => `${hop.source_component || "?"} —${hop.protocol || hop.link_id || hop.resource_id || "IO"}→ ${hop.target_component || "?"}`).join("；");
+  }
+  return [transfer.source_component, transfer.target_component].filter(Boolean).join(" → ") || uiText("本地传输", "Local transfer");
+}
+
+function traceRankLabel(rank) {
+  if (!rank) return "—";
+  if (rank.rank == null) return rank.component_id ? uiText("未声明 Rank · {id}", "Rank not specified · {id}", { id: rank.component_id }) : "—";
+  const coordinates = [
+    rank.tp_rank == null ? null : `TP${rank.tp_rank}`,
+    rank.pp_rank == null ? null : `PP${rank.pp_rank}`,
+    rank.ep_rank == null ? null : `EP${rank.ep_rank}`,
+  ].filter(Boolean).join("/");
+  return `Rank ${rank.rank}${coordinates ? ` · ${coordinates}` : ""}${rank.component_id ? ` · ${rank.component_id}` : ""}`;
+}
+
+function renderTraceEventDetails() {
+  const event = selectedTraceEvent();
+  if (!event) {
+    if (dom.traceDiagnosticCopyButton) dom.traceDiagnosticCopyButton.disabled = true;
+    dom.traceEventDetails.innerHTML = `<p class="muted">${escapeHtml(uiText("当前筛选条件下没有可选事件。", "No event is available under the current filters."))}</p>`;
+    return;
+  }
+  if (dom.traceDiagnosticCopyButton) dom.traceDiagnosticCopyButton.disabled = false;
+  const tensor = event.tensor;
+  const tensorRange = tensor && tensor.offset_bytes != null && tensor.length_bytes != null
+    ? `${formatBytes(tensor.offset_bytes)} – ${formatBytes(tensor.offset_bytes + tensor.length_bytes)}`
+    : uiText("未声明逻辑地址区间", "Logical address range not specified");
+  const concurrent = activeTraceEvents();
+  const selectedActive = concurrent.some((item) => item.event_id === event.event_id);
+  const concurrentSummary = concurrent.length
+    ? concurrent.map(traceEventSubject).join(uiText("；", "; "))
+    : uiText("此刻没有事件处于执行区间内", "No event is executing now");
+  const unspecified = uiText("未说明", "Not specified");
+  const intervalSemantics = [...new Set([
+    ...asArray(event.transfer?.hops).map((item) => traceFriendlyTerm(item.interval_semantics)),
+    ...asArray(event.resources).map((item) => traceFriendlyTerm(item.interval_semantics)),
+  ].filter((item) => item && item !== unspecified))];
+  const completeness = event.request_ids_truncated || event.representative_items_truncated || event.items_truncated || event.truncated
+    ? uiText("后端只保留了部分代表信息；复制诊断信息可取得精确字段。", "The backend retained representative information only; use Copy diagnostic information for the exact fields.")
+    : uiText("后端返回了这条事件当前可用的完整信息。", "The backend returned all currently available information for this event.");
+  dom.traceEventDetails.innerHTML = `<div class="trace-selection-state ${selectedActive ? "is-active" : "is-idle"}">
+      <span>${escapeHtml(uiText("选中事件", "Selected event"))}</span><strong>${escapeHtml(selectedActive ? uiText("此刻正在发生", "Active now") : uiText("此刻没有发生", "Not active now"))}</strong>
+    </div>
+    ${traceDetailGroup(uiText("计算主体", "Compute subject"), [
+      traceDetailFact(uiText("正在做什么", "Activity"), traceEventSubject(event), "runtime_event"),
+      traceDetailFact(uiText("事件类型", "Event type"), traceEventSemantics(event), "runtime_event"),
+      traceDetailFact(uiText("模型位置", "Model location"), [event.layer_id ? uiText("层 {id}", "Layer {id}", { id: event.layer_id }) : "", event.phase ? traceFriendlyTerm(event.phase) : "", event.operator_id || event.name ? uiText("算子 {id}", "Operator {id}", { id: event.operator_id || event.name }) : ""].filter(Boolean).join(uiText("；", "; ")), "operator"),
+      traceDetailFact(uiText("执行位置", "Execution location"), traceRankLabel(event.rank), "rank"),
+      traceDetailFact(uiText("运行标记", "Runtime marker"), [event.marker ? traceFriendlyTerm(event.marker) : "", event.token_index == null ? "" : uiText("第 {index} 个词元", "Token {index}", { index: event.token_index })].filter(Boolean).join(uiText("；", "; ")), "event_marker"),
+    ])}
+    ${traceDetailGroup(uiText("数据流", "Data flow"), [
+      traceDetailFact(uiText("数据对象", "Data object"), tensor?.logical_id ? uiText("逻辑张量 {id}", "Logical tensor {id}", { id: tensor.logical_id }) : uiText("没有单独声明张量", "No tensor declared separately"), "tensor"),
+      traceDetailFact(uiText("逻辑地址范围", "Logical address range"), tensorRange, "logical_memory"),
+      traceDetailFact(uiText("流向", "Direction"), event.transfer ? uiText("从 {source} 到 {target}", "From {source} to {target}", { source: event.transfer.source_component || uiText("未说明的源组件", "unspecified source component"), target: event.transfer.target_component || uiText("未说明的目标组件", "unspecified target component") }) : uiText("没有跨组件传输", "No cross-component transfer"), "protocol_path"),
+      traceDetailFact(uiText("数据量", "Data volume"), event.transfer ? formatBytes(event.transfer.bytes) : tensor?.length_bytes != null ? formatBytes(tensor.length_bytes) : unspecified),
+      traceDetailFact(uiText("经过的路径", "Path"), tracePathLabel(event), "protocol_path"),
+      traceDetailFact(uiText("时间精度说明", "Timing fidelity"), intervalSemantics.join(uiText("；", "; ")), "fidelity"),
+    ])}
+    ${traceDetailGroup(uiText("时间与并发", "Time and concurrency"), [
+      traceDetailFact(uiText("发生时间", "Event time"), uiText("从 {start} 到 {end}，共 {duration}", "From {start} to {end}, lasting {duration}", { start: formatDurationNs(event.start_ns), end: formatDurationNs(event.end_ns), duration: formatDurationNs(traceEventDuration(event)) }), "simulation_time"),
+      traceDetailFact(uiText("当前回放时间", "Current playback time"), formatDurationNs(state.tracePlayback.timeNs), "time_cursor"),
+      traceDetailFact(uiText("同时进行的工作（{count} 项）", "Concurrent work ({count})", { count: concurrent.length }), concurrentSummary, "resource_contention"),
+    ])}
+    ${traceDetailGroup(uiText("范围与完整性", "Scope and completeness"), [
+      traceDetailFact(uiText("关联请求", "Related requests"), traceRequestScopeLabel(event), "request"),
+      traceDetailFact(uiText("记录完整性", "Record completeness"), completeness, "run_manifest"),
+      traceDetailFact(uiText("记录方式", "Recording method"), traceFriendlyTerm(event.detail_semantics || state.tracePlayback.data?.fidelity), "fidelity"),
+    ])}`;
+  hydrateConceptHelp(dom.traceEventDrawer);
+}
+
+async function copyTraceDiagnosticInfo() {
+  const event = selectedTraceEvent();
+  if (!event) return;
+  const text = `${JSON.stringify({
+    playback_time_ns: state.tracePlayback.timeNs,
+    playback_mode: state.tracePlayback.mode,
+    page: state.tracePlayback.page,
+    event,
+  }, null, 2)}\n`;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("诊断信息已复制", "精确原始字段只写入剪贴板，不会显示在页面中。", "success", 2600);
+  } catch (_error) {
+    toast("无法复制诊断信息", "浏览器没有授予剪贴板写入权限。", "error", 4200);
+  }
+}
+
+function normalizedMemoryComponents(memoryLayout) {
+  const raw = asObject(memoryLayout);
+  const direct = raw.components;
+  const result = {};
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+    Object.entries(direct).forEach(([componentId, value]) => {
+      result[componentId] = asArray(value).map(asObject);
+    });
+  }
+  return result;
+}
+
+function traceSemanticEvents() {
+  const playback = state.tracePlayback;
+  const enriched = playback.filteredEvents.map((event) => ({
+    ...event,
+    semantic_search_text: [traceEventSubject(event), traceEventSemantics(event), traceRequestScopeLabel(event), tracePathLabel(event)].join(" "),
+  }));
+  const filtered = TraceView.filterSemanticTraceEvents(enriched, {
+    query: playback.semanticQuery,
+    category: playback.semanticCategory,
+    phase: playback.semanticPhase,
+    temporal: playback.semanticTemporal,
+  }, playback.timeNs);
+  const originals = new Map(playback.filteredEvents.map((event) => [event.event_id, event]));
+  return filtered.map((event) => originals.get(event.event_id) || event);
+}
+
+function syncTraceSemanticFilters() {
+  const playback = state.tracePlayback;
+  const events = playback.filteredEvents;
+  const categories = Array.from(new Set(events.map((event) => event.category || event.event_kind).filter(Boolean))).sort();
+  const phases = Array.from(new Set(events.map((event) => event.phase).filter(Boolean))).sort();
+  if (playback.semanticCategory && !categories.includes(playback.semanticCategory)) categories.push(playback.semanticCategory);
+  if (playback.semanticPhase && !phases.includes(playback.semanticPhase)) phases.push(playback.semanticPhase);
+  syncTraceSelect(dom.traceEventCategoryFilter, categories.map((value) => ({ value, label: traceFriendlyTerm(value) })), "全部类别", playback.semanticCategory);
+  syncTraceSelect(dom.traceEventPhaseFilter, phases.map((value) => ({ value, label: traceFriendlyTerm(value) })), "全部阶段", playback.semanticPhase);
+}
+
+function renderTraceEventTable() {
+  const playback = state.tracePlayback;
+  if (!dom.traceEventBody) return;
+  if (!playback.semanticStreamOpen) {
+    dom.traceEventBody.innerHTML = "";
+    if (dom.traceEventMeta) dom.traceEventMeta.textContent = uiText("展开后按本地条件筛选；不会改变全局回放。", "Expand to apply local filters; global playback is unchanged.");
+    return;
+  }
+  syncTraceSemanticFilters();
+  const events = traceSemanticEvents();
+  const page = TraceView.paginateSemanticTraceEvents(events, playback.semanticPage, TRACE_EVENT_STREAM_PAGE_SIZE);
+  playback.semanticPage = page.page;
+  if (dom.traceEventPreviousPageButton) dom.traceEventPreviousPageButton.disabled = page.page <= 0;
+  if (dom.traceEventNextPageButton) dom.traceEventNextPageButton.disabled = page.page >= page.pageCount - 1;
+  if (dom.traceEventPageStatus) dom.traceEventPageStatus.textContent = uiText("第 {page} / {total} 页", "Page {page} / {total}", { page: formatNumber(page.page + 1), total: formatNumber(page.pageCount) });
+  const backendPrefix = playback.mode === "task" && playback.page ? uiText("后端当前页 {start}–{end} · ", "Backend page {start}–{end} · ", { start: formatNumber(playback.page.offset + 1), end: formatNumber(playback.page.offset + playback.page.returned) }) : "";
+  if (dom.traceEventMeta) dom.traceEventMeta.textContent = uiText("{prefix}{count} 条符合本地条件 · 显示 {range} · 不改变全局回放", "{prefix}{count} match local filters · showing {range} · global playback unchanged", { prefix: backendPrefix, count: formatNumber(page.total), range: page.total ? `${formatNumber(page.start + 1)}–${formatNumber(page.end)}` : "0" });
+  if (!page.events.length) {
+    const message = playback.loading ? uiText("正在加载任务级 Trace……", "Loading task-level trace…") : playback.loadError || uiText("本地筛选条件下没有事件。", "No events match the local filters.");
+    dom.traceEventBody.innerHTML = `<tr class="empty-row"><td colspan="5">${escapeHtml(message)}</td></tr>`;
+    return;
+  }
+  const span = Math.max(0, playback.endNs - playback.startNs);
+  dom.traceEventBody.innerHTML = page.events.map((event) => {
+    const selected = event.event_id === playback.selectedEventId;
+    const temporal = TraceView.traceEventTemporalState(event, playback.timeNs);
+    const left = span > 0 ? Math.max(0, Math.min(100, (event.start_ns - playback.startNs) / span * 100)) : 0;
+    const width = span > 0 ? Math.max(0.8, Math.min(100 - left, traceEventDuration(event) / span * 100)) : 100;
+    const dataFlow = event.transfer || event.tensor
+      ? [event.tensor?.logical_id ? uiText("逻辑张量 {id}", "Logical tensor {id}", { id: event.tensor.logical_id }) : "", tracePathLabel(event)].filter(Boolean).join(uiText("；", "; "))
+      : asArray(event.resources).map((item) => item.resource_id).filter(Boolean).join(" → ") || uiText("本地执行，没有单独声明数据流", "Local execution with no separately declared data flow");
+    const timeline = uiText("{start} 开始，持续 {duration}", "Starts at {start}, lasts {duration}", { start: formatDurationNs(event.start_ns), duration: formatDurationNs(traceEventDuration(event)) });
+    const subject = traceEventSubject(event);
+    const semantics = traceEventSemantics(event);
+    const rank = traceRankLabel(event.rank);
+    const requestScope = traceRequestScopeLabel(event);
+    const stateLabel = `${traceFriendlyTerm(temporal)}${selected ? uiText(" · 已选中", " · Selected") : ""}`;
+    const precision = traceFriendlyTerm(event.detail_semantics || playback.data?.fidelity);
+    const completeness = event.request_ids_truncated || event.representative_items_truncated || event.items_truncated || event.truncated
+      ? uiText("部分代表信息", "Representative information only")
+      : uiText("当前可用信息完整", "All currently available information");
+    return `<tr class="trace-event-row is-${temporal} ${selected ? "is-selected" : ""}" data-trace-event-id="${escapeHtml(event.event_id)}">
+      <td data-label="${escapeHtml(uiText("时序", "Timeline"))}" aria-label="${escapeHtml(uiText("时序：{value}", "Timeline: {value}", { value: timeline }))}"><div class="trace-time-cell"><span>${escapeHtml(timeline)}</span><span class="trace-duration-track" role="img" aria-label="${escapeHtml(uiText("事件从 {start} 开始，持续 {duration}，{state}", "Event starts at {start}, lasts {duration}, {state}", { start: formatDurationNs(event.start_ns), duration: formatDurationNs(traceEventDuration(event)), state: traceFriendlyTerm(temporal) }))}"><span class="trace-duration-bar is-${temporal}" style="--trace-start:${left}%;--trace-duration:${width}%"></span></span></div></td>
+      <td data-label="${escapeHtml(uiText("语义事件", "Semantic event"))}" aria-label="${escapeHtml(uiText("语义事件：{subject}；{semantics}", "Semantic event: {subject}; {semantics}", { subject, semantics }))}"><button type="button" class="trace-event-select" aria-pressed="${selected ? "true" : "false"}" aria-label="${escapeHtml(uiText("选择：{subject}", "Select: {subject}", { subject }))}"><strong>${escapeHtml(subject)}</strong><span>${escapeHtml(semantics)}</span></button></td>
+      <td data-label="${escapeHtml(uiText("计算主体 / 数据流", "Compute subject / data flow"))}" aria-label="${escapeHtml(uiText("计算主体 / 数据流：{rank}；{flow}", "Compute subject / data flow: {rank}; {flow}", { rank, flow: dataFlow }))}"><strong class="trace-cell-lead">${escapeHtml(rank)}</strong><span class="trace-cell-copy">${escapeHtml(dataFlow)}</span></td>
+      <td data-label="${escapeHtml(uiText("请求范围", "Request scope"))}" aria-label="${escapeHtml(uiText("请求范围：{value}", "Request scope: {value}", { value: requestScope }))}"><span class="trace-cell-copy">${escapeHtml(requestScope)}</span></td>
+      <td data-label="${escapeHtml(uiText("状态 / 详情", "Status / details"))}" aria-label="${escapeHtml(uiText("状态 / 详情：{value}", "Status / details: {value}", { value: stateLabel }))}"><span class="trace-event-state is-${temporal}">${escapeHtml(stateLabel)}</span><details class="trace-row-details"><summary>${escapeHtml(uiText("简要说明", "Summary"))}</summary><p>${escapeHtml(uiText("{precision}；{completeness}。精确原始字段可用“复制诊断信息”取得。", "{precision}; {completeness}. Use Copy diagnostic information for the exact raw fields.", { precision, completeness }))}</p></details></td>
+    </tr>`;
+  }).join("");
+  $$('[data-trace-event-id]', dom.traceEventBody).forEach((row) => {
+    row.addEventListener("click", (clickEvent) => {
+      // The whole semantic stream is itself a <details> disclosure.  Only
+      // clicks inside a row's optional details panel should stay local; the
+      // event-select button must bubble here for mouse and keyboard users.
+      if (clickEvent.target.closest(".trace-row-details")) return;
+      stopTracePlayback();
+      const event = playback.filteredEvents.find((candidate) => candidate.event_id === row.dataset.traceEventId);
+      if (event) {
+        setTraceTime(event.start_ns, { force: true, eventId: event.event_id, reveal: true });
+        revealTracePlaybackControls();
+      }
+    });
+  });
+  dom.tracePreviousButton.disabled = playback.selectedIndex <= 0 && playback.page?.previous_offset == null;
+  dom.traceNextButton.disabled = playback.selectedIndex >= playback.filteredEvents.length - 1 && !playback.page?.has_more;
+}
+
+function percentile(values, fraction) {
+  const numbers = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!numbers.length) return null;
+  if (numbers.length === 1) return numbers[0];
+  const position = (numbers.length - 1) * fraction;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  if (lower === upper) return numbers[lower];
+  const amount = position - lower;
+  return numbers[lower] * (1 - amount) + numbers[upper] * amount;
+}
+
+function formatDurationNs(value, { raw = false } = {}) {
+  if (value == null || !Number.isFinite(Number(value))) return "NA";
+  const ns = Number(value);
+  let friendly;
+  if (Math.abs(ns) < 1_000) friendly = `${formatNumber(ns, 4)} ns`;
+  else if (Math.abs(ns) < 1_000_000) friendly = `${formatNumber(ns / 1_000, 4)} µs`;
+  else if (Math.abs(ns) < 1_000_000_000) friendly = `${formatNumber(ns / 1_000_000, 4)} ms`;
+  else friendly = `${formatNumber(ns / 1_000_000_000, 4)} s`;
+  return raw ? `${friendly} · ${formatNumber(ns, 4)} ns` : friendly;
+}
+
+function formatResultNumber(value) {
+  // Numeric-only trusted markup. User/machine strings stay on the escapeHtml path.
+  if (value == null || value === "") return { html: "NA", text: "NA" };
+  const number = Number(value);
+  if (!Number.isFinite(number)) return { html: "NA", text: "NA" };
+  const absolute = Math.abs(number);
+  const formatter = new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: 4 });
+  if (absolute >= 1_000_000 || (absolute > 0 && absolute < 0.001)) {
+    let exponent = Math.floor(Math.log10(absolute));
+    let coefficient = Number((number / (10 ** exponent)).toPrecision(4));
+    if (Math.abs(coefficient) >= 10) {
+      coefficient /= 10;
+      exponent += 1;
+    }
+    const coefficientText = formatter.format(coefficient);
+    return {
+      html: `${escapeHtml(coefficientText)} × 10<sup>${exponent}</sup>`,
+      text: `${coefficientText}e${exponent}`,
+    };
+  }
+  const text = formatter.format(number);
+  return { html: escapeHtml(text), text };
+}
+
+function resultWithUnit(value, unit) {
+  const number = formatResultNumber(value);
+  if (number.text === "NA") return number;
+  const safeUnit = escapeHtml(unit);
+  return { html: `${number.html} ${safeUnit}`, text: `${number.text} ${unit}` };
+}
+
+function formatResultDurationNs(value) {
+  if (value == null || !Number.isFinite(Number(value))) return { html: "NA", text: "NA" };
+  const ns = Number(value);
+  if (Math.abs(ns) < 1_000) return resultWithUnit(ns, "ns");
+  if (Math.abs(ns) < 1_000_000) return resultWithUnit(ns / 1_000, "µs");
+  if (Math.abs(ns) < 1_000_000_000) return resultWithUnit(ns / 1_000_000, "ms");
+  return resultWithUnit(ns / 1_000_000_000, "s");
+}
+
+function formatResultEnergyPj(value) {
+  if (value == null || !Number.isFinite(Number(value))) return { html: "NA", text: "NA" };
+  const pj = Number(value);
+  if (Math.abs(pj) < 1_000) return resultWithUnit(pj, "pJ");
+  if (Math.abs(pj) < 1_000_000) return resultWithUnit(pj / 1_000, "nJ");
+  if (Math.abs(pj) < 1_000_000_000) return resultWithUnit(pj / 1_000_000, "µJ");
+  if (Math.abs(pj) < 1_000_000_000_000) return resultWithUnit(pj / 1_000_000_000, "mJ");
+  return resultWithUnit(pj / 1_000_000_000_000, "J");
+}
+
+function formatResultRate(value, unit) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return { html: "NA", text: "NA" };
+  if (Math.abs(number) >= 1_000_000) return resultWithUnit(number / 1_000_000, `M${unit}`);
+  if (Math.abs(number) >= 1_000) return resultWithUnit(number / 1_000, `k${unit}`);
+  return resultWithUnit(number, unit);
+}
+
+function metricLabel({ text, percentile = null }) {
+  const percentileHtml = percentile == null ? "" : ` p<sub>${Number(percentile)}</sub>`;
+  return `${escapeHtml(text)}${percentileHtml}`;
+}
+
+function metricCell(label, value, raw, className = "") {
+  const valueMarkup = value?.html == null ? { html: escapeHtml(value ?? ""), text: String(value ?? "") } : value;
+  const rawMarkup = raw?.html == null ? { html: escapeHtml(raw ?? ""), text: String(raw ?? "") } : raw;
+  return `<div class="metric-cell ${escapeHtml(className)}"><span class="label">${metricLabel(label)}</span><strong class="value" title="${escapeHtml(valueMarkup.text)}">${valueMarkup.html}</strong><small class="raw">${rawMarkup.html}</small></div>`;
+}
+
+function unavailableResult() {
+  return { html: "—", text: uiText("不可用", "Unavailable") };
+}
+
+function resultText(value) {
+  const text = String(value ?? "—");
+  return { html: escapeHtml(text), text };
+}
+
+function appendResult(value, suffix) {
+  if (!value || value.html === "—") return unavailableResult();
+  if (value.text === "NA") return value;
+  return {
+    html: `${value.html} ${escapeHtml(suffix)}`,
+    text: `${value.text} ${suffix}`,
+  };
+}
+
+function combineResults(values, separator = " · ") {
+  if (!values.length || values.every((value) => value?.html === "—")) return unavailableResult();
+  return {
+    html: values.map((value) => value?.html ?? "—").join(escapeHtml(separator)),
+    text: values.map((value) => value?.text ?? uiText("不可用", "Unavailable")).join(separator),
+  };
+}
+
+function formatResultBytes(value) {
+  if (value == null || !Number.isFinite(Number(value))) return { html: "NA", text: "NA" };
+  const bytes = Number(value);
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  let scaled = Math.abs(bytes);
+  let unit = 0;
+  while (scaled >= 1024 && unit < units.length - 1) {
+    scaled /= 1024;
+    unit += 1;
+  }
+  if (bytes < 0) scaled *= -1;
+  return resultWithUnit(scaled, units[unit]);
+}
+
+function formatResultPercent(value) {
+  if (value == null || !Number.isFinite(Number(value))) return { html: "NA", text: "NA" };
+  const formatted = formatResultNumber(Number(value) * 100);
+  return { html: `${formatted.html}%`, text: `${formatted.text}%` };
+}
+
+function runtimeValue(source, key, formatter = formatResultNumber) {
+  return Object.hasOwn(source, key) ? formatter(source[key]) : unavailableResult();
+}
+
+function runtimeTrackHeight(element) {
+  if (!element) return 0;
+  const rectangle = element.getBoundingClientRect?.();
+  return Math.ceil(Math.max(0, Number(rectangle?.height) || 0, Number(element.scrollHeight) || 0));
+}
+
+function runtimeSharedTrackMeasurements(root = dom.runtimeSummary) {
+  const groups = root?.querySelectorAll ? $$(".runtime-group", root) : [];
+  let titleHeight = 0;
+  const labelHeights = [];
+  const valueHeights = [];
+  groups.forEach((group) => {
+    titleHeight = Math.max(titleHeight, runtimeTrackHeight($(".runtime-group-title-copy", group)));
+    $$('[data-runtime-stat-row]', group).forEach((stat) => {
+      const row = Math.max(0, Number(stat.dataset.runtimeStatRow) || 0);
+      labelHeights[row] = Math.max(labelHeights[row] || 0, runtimeTrackHeight($(".runtime-stat-label-copy", stat)));
+      valueHeights[row] = Math.max(valueHeights[row] || 0, runtimeTrackHeight($(".runtime-stat-value-copy", stat)));
+    });
+  });
+  return { titleHeight, labelHeights, valueHeights };
+}
+
+function applyRuntimeSharedTracks(root = dom.runtimeSummary) {
+  if (!root?.querySelectorAll || !root.style?.setProperty) return { titleHeight: 0, labelHeights: [], valueHeights: [] };
+  const measurements = runtimeSharedTrackMeasurements(root);
+  if (measurements.titleHeight > 0) root.style.setProperty("--runtime-title-track", `${measurements.titleHeight}px`);
+  else root.style.removeProperty?.("--runtime-title-track");
+  $$('.runtime-stat[data-runtime-stat-row]', root).forEach((stat) => {
+    const row = Math.max(0, Number(stat.dataset.runtimeStatRow) || 0);
+    const labelHeight = measurements.labelHeights[row] || 0;
+    const valueHeight = measurements.valueHeights[row] || 0;
+    if (labelHeight > 0) stat.style.setProperty("--runtime-label-track", `${labelHeight}px`);
+    else stat.style.removeProperty?.("--runtime-label-track");
+    if (valueHeight > 0) stat.style.setProperty("--runtime-value-track", `${valueHeight}px`);
+    else stat.style.removeProperty?.("--runtime-value-track");
+  });
+  return measurements;
+}
+
+function scheduleRuntimeSharedTracks() {
+  if (runtimeTrackAlignmentFrame != null) return;
+  const schedule = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 0));
+  runtimeTrackAlignmentFrame = schedule(() => {
+    runtimeTrackAlignmentFrame = null;
+    applyRuntimeSharedTracks();
+  });
+}
+
+function bindRuntimeTrackResizeObserver() {
+  if (!dom.runtimeSummary || runtimeTrackResizeObserver || typeof globalThis.ResizeObserver !== "function") return;
+  runtimeTrackResizeObserver = new globalThis.ResizeObserver((entries) => {
+    const entry = asArray(entries).find((candidate) => candidate.target === dom.runtimeSummary) || asArray(entries)[0];
+    const width = Number(entry?.contentRect?.width ?? dom.runtimeSummary.clientWidth);
+    if (Number.isFinite(width) && runtimeTrackObservedWidth != null && Math.abs(width - runtimeTrackObservedWidth) < 0.5) return;
+    runtimeTrackObservedWidth = Number.isFinite(width) ? width : null;
+    scheduleRuntimeSharedTracks();
+  });
+  runtimeTrackResizeObserver.observe(dom.runtimeSummary);
+}
+
+function timeseriesRenderedCardWidth() {
+  const card = dom.componentTimeseriesCharts?.querySelector?.(".timeseries-chart-card");
+  if (!card) return 0;
+  const rectangle = card.getBoundingClientRect?.();
+  return Math.max(Number(card.clientWidth) || 0, Number(rectangle?.width) || 0);
+}
+
+function scheduleComponentTimeseriesResizeRender() {
+  if (componentTimeseriesResizeFrame != null) return;
+  const schedule = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 0));
+  componentTimeseriesResizeFrame = schedule(() => {
+    componentTimeseriesResizeFrame = null;
+    if (state.view !== "results" || !state.report || !dom.componentTimeseriesCharts || dom.componentTimeseriesPanel?.hidden) return;
+    renderComponentTimeseries(state.report);
+  });
+}
+
+function bindComponentTimeseriesResizeObserver() {
+  if (!dom.componentTimeseriesCharts || componentTimeseriesResizeObserver || typeof globalThis.ResizeObserver !== "function") return;
+  componentTimeseriesResizeObserver = new globalThis.ResizeObserver((entries) => {
+    const entry = asArray(entries).find((candidate) => candidate.target === dom.componentTimeseriesCharts) || asArray(entries)[0];
+    const width = Number(entry?.contentRect?.width ?? dom.componentTimeseriesCharts.clientWidth);
+    if (Number.isFinite(width) && componentTimeseriesObservedWidth != null && Math.abs(width - componentTimeseriesObservedWidth) < 0.5) return;
+    componentTimeseriesObservedWidth = Number.isFinite(width) ? width : null;
+    scheduleComponentTimeseriesResizeRender();
+  });
+  componentTimeseriesResizeObserver.observe(dom.componentTimeseriesCharts);
+}
+
+function runtimeStat(label, value, index = 0, helpKey = "") {
+  const markup = value?.html == null ? resultText(value) : value;
+  return `<div class="runtime-stat" data-runtime-stat-row="${Math.floor(index / 2)}"><dt title="${escapeHtml(label)}"${helpKey ? ` data-concept-help="${escapeHtml(helpKey)}"` : ""}><span class="runtime-stat-label-copy">${escapeHtml(label)}</span></dt><dd title="${escapeHtml(markup.text)}"><span class="runtime-stat-value-copy">${markup.html}</span></dd></div>`;
+}
+
+function runtimeGroup(title, stats, className = "", helpKey = "") {
+  return `<section class="runtime-group ${escapeHtml(className)}"><h3${helpKey ? ` data-concept-help="${escapeHtml(helpKey)}"` : ""}><span class="runtime-group-title-copy">${escapeHtml(title)}</span></h3><dl class="runtime-stats">${stats.map(([label, value, statHelpKey], index) => runtimeStat(label, value, index, statHelpKey)).join("")}</dl></section>`;
+}
+
+function renderRuntime(report) {
+  const summary = asObject(report.summary);
+  const parallel = asObject(summary.parallel);
+  const scenarioParallel = asObject(state.scenario?.placement?.parallel);
+  const scheduler = asObject(report.scheduler);
+  const kv = asObject(report.kv_cache);
+  const mtp = asObject(summary.mtp);
+  const goodput = asObject(summary.goodput);
+  const machineMode = String(report.execution_mode || (state.scenario?.workload?.scheduler?.mode === "continuous" ? "continuous_batching" : "static"));
+  const modeLabel = {
+    static: uiText("静态", "Static"),
+    continuous: uiText("连续批处理", "Continuous Batching"),
+    continuous_batching: uiText("连续批处理", "Continuous Batching"),
+  }[machineMode] || machineMode;
+  dom.runtimeModeMeta.textContent = modeLabel;
+
+  const degree = (key) => {
+    const value = parallel[key] ?? scenarioParallel[key];
+    return value == null ? unavailableResult() : formatResultNumber(value);
+  };
+  const batchPeak = Object.hasOwn(scheduler, "max_batch_sequences") || Object.hasOwn(scheduler, "max_batch_tokens")
+    ? combineResults([
+      Object.hasOwn(scheduler, "max_batch_sequences") ? appendResult(formatResultNumber(scheduler.max_batch_sequences), uiText("个序列", "seq")) : unavailableResult(),
+      Object.hasOwn(scheduler, "max_batch_tokens") ? appendResult(formatResultNumber(scheduler.max_batch_tokens), uiText("Token", "tok")) : unavailableResult(),
+    ], " / ")
+    : unavailableResult();
+  const preemptionKinds = Object.hasOwn(scheduler, "priority_preemptions") || Object.hasOwn(scheduler, "memory_preemptions")
+    ? combineResults([
+      Object.hasOwn(scheduler, "priority_preemptions") ? appendResult(formatResultNumber(scheduler.priority_preemptions), uiText("次优先级抢占", "priority")) : unavailableResult(),
+      Object.hasOwn(scheduler, "memory_preemptions") ? appendResult(formatResultNumber(scheduler.memory_preemptions), uiText("次内存抢占", "memory")) : unavailableResult(),
+    ], " / ")
+    : unavailableResult();
+  const swap = Object.hasOwn(kv, "swap_events") || Object.hasOwn(kv, "swap_bytes")
+    ? combineResults([
+      Object.hasOwn(kv, "swap_events") ? appendResult(formatResultNumber(kv.swap_events), uiText("次", "events")) : unavailableResult(),
+      Object.hasOwn(kv, "swap_bytes") ? formatResultBytes(kv.swap_bytes) : unavailableResult(),
+    ])
+    : unavailableResult();
+  const recompute = Object.hasOwn(kv, "recompute_events") || Object.hasOwn(kv, "recompute_tokens")
+    ? combineResults([
+      Object.hasOwn(kv, "recompute_events") ? appendResult(formatResultNumber(kv.recompute_events), uiText("次", "events")) : unavailableResult(),
+      Object.hasOwn(kv, "recompute_tokens") ? appendResult(formatResultNumber(kv.recompute_tokens), uiText("Token", "tok")) : unavailableResult(),
+    ])
+    : unavailableResult();
+  const labeledValue = (label, value) => ({
+    html: `<span class="runtime-value-label">${escapeHtml(label)}</span> ${value.html}`,
+    text: `${label} ${value.text}`,
+  });
+  const kvBytePair = (logicalKey, physicalKey) => {
+    const values = [];
+    if (Object.hasOwn(kv, logicalKey)) values.push(labeledValue(uiText("逻辑", "Logical"), formatResultBytes(kv[logicalKey])));
+    if (Object.hasOwn(kv, physicalKey)) values.push(labeledValue(uiText("物理", "Physical"), formatResultBytes(kv[physicalKey])));
+    return values.length ? combineResults(values, " / ") : unavailableResult();
+  };
+  const kvMovement = (eventsKey, bytesKey) => {
+    const values = [];
+    if (Object.hasOwn(kv, eventsKey)) values.push(appendResult(formatResultNumber(kv[eventsKey]), uiText("次", "events")));
+    if (Object.hasOwn(kv, bytesKey)) values.push(formatResultBytes(kv[bytesKey]));
+    return values.length ? combineResults(values) : unavailableResult();
+  };
+  const prefetchModeling = Object.hasOwn(kv, "prefetch_distance_modeled")
+    ? resultText(kv.prefetch_distance_modeled ? uiText("已显式建模", "Explicitly modeled") : uiText("未显式建模（仅策略元数据）", "Not explicitly modeled (policy metadata only)"))
+    : unavailableResult();
+
+  dom.runtimeSummary.innerHTML = [
+    runtimeGroup(uiText("执行", "Execution"), [
+      [uiText("模式", "Mode"), resultText(modeLabel), "runtime_execution_mode"],
+      [uiText("张量并行度", "TP Degree"), degree("tp_degree"), "tp_degree"],
+      [uiText("流水线并行度", "PP Degree"), degree("pp_degree"), "pp_degree"],
+      [uiText("专家并行度", "EP Degree"), degree("ep_degree"), "ep_degree"],
+    ], "is-runtime", "runtime_summary"),
+    runtimeGroup(uiText("连续批处理", "Continuous Batching"), [
+      [uiText("批次数", "Batches"), runtimeValue(scheduler, "total_batches"), "total_batches"],
+      [uiText("峰值批次", "Peak Batch"), batchPeak, "peak_batch"],
+      [uiText("抢占次数", "Preemptions"), runtimeValue(scheduler, "preemptions"), "preemption_count"],
+      [uiText("优先级 / 内存", "Priority / Memory"), preemptionKinds, "preemption_breakdown"],
+    ], "", "continuous_batching"),
+    runtimeGroup(uiText("KV 缓存", "KV Cache"), [
+      [uiText("峰值占用", "Peak"), runtimeValue(kv, "peak_used_bytes", formatResultBytes), "kv_peak_occupancy"],
+      [uiText("单请求最大存活 Token", "Max Live Tokens"), runtimeValue(kv, "max_live_tokens_per_request"), "kv_max_live_tokens"],
+      [uiText("交换", "Swap"), swap, "kv_swap_summary"],
+      [uiText("页容量", "Capacity Pages"), runtimeValue(kv, "capacity_pages"), "kv_capacity_pages"],
+    ], "is-kv", "kv_cache"),
+    runtimeGroup(uiText("KV 读写流量", "KV Traffic"), [
+      [uiText("预填读取", "Prefill Read"), kvBytePair("logical_prefill_read_bytes", "physical_prefill_read_bytes"), "kv_prefill_read_traffic"],
+      [uiText("预填写入", "Prefill Write"), kvBytePair("logical_prefill_write_bytes", "physical_prefill_write_bytes"), "kv_prefill_write_traffic"],
+      [uiText("解码读取", "Decode Read"), kvBytePair("logical_decode_read_bytes", "physical_decode_read_bytes"), "kv_decode_read_traffic"],
+      [uiText("解码追加", "Decode Append"), kvBytePair("logical_decode_append_bytes", "physical_decode_append_bytes"), "kv_decode_append_traffic"],
+    ], "is-kv-traffic", "kv_traffic_summary"),
+    runtimeGroup(uiText("KV 迁移与限制", "KV Movement"), [
+      [uiText("卸载", "Offload"), kvMovement("offload_events", "offload_bytes"), "kv_offload_total"],
+      [uiText("调入 / 预取", "Prefetch"), kvMovement("prefetch_events", "prefetch_bytes"), "kv_prefetch_total"],
+      [uiText("迁移合计", "Migration"), kvMovement("migration_events", "migration_bytes"), "kv_migration_total"],
+      [uiText("重计算", "Recompute"), recompute, "kv_recompute"],
+      [uiText("交换传输时间", "Swap Transfer"), runtimeValue(kv, "swap_transfer_time_ns", formatResultDurationNs), "kv_swap_transfer_time"],
+      [uiText("预取距离", "Prefetch Distance"), prefetchModeling, "kv_prefetch_distance"],
+    ], "is-kv-movement", "kv_movement_summary"),
+    runtimeGroup(uiText("多 Token 预测（MTP）", "Multi-Token Prediction (MTP)"), [
+      [uiText("提议数", "Proposed"), runtimeValue(mtp, "proposed_tokens"), "mtp_proposed_tokens"],
+      [uiText("接受数", "Accepted"), runtimeValue(mtp, "accepted_tokens"), "mtp_accepted_tokens"],
+      [uiText("提交数", "Committed"), runtimeValue(mtp, "committed_tokens"), "mtp_committed_tokens"],
+      [uiText("拒绝数", "Rejected"), runtimeValue(mtp, "rejected_tokens"), "mtp_rejected_tokens"],
+      [uiText("有效接受率", "Effective Rate"), runtimeValue(mtp, "effective_acceptance_rate", formatResultPercent), "mtp_effective_rate"],
+    ], "", "mtp"),
+    runtimeGroup(uiText("有效吞吐", "Goodput"), [
+      [uiText("请求率", "Requests / s"), runtimeValue(goodput, "requests_per_s", (value) => formatResultRate(value, "req/s")), "goodput_request_rate"],
+      [uiText("Token 率", "Tokens / s"), runtimeValue(goodput, "visible_output_tokens_per_s", (value) => formatResultRate(value, "tok/s")), "goodput_token_rate"],
+      [uiText("达标请求", "Qualified"), runtimeValue(goodput, "qualified_requests"), "goodput_qualified_requests"],
+    ], "is-goodput", "goodput"),
+  ].join("");
+  bindRuntimeTrackResizeObserver();
+  scheduleRuntimeSharedTracks();
+}
+
+function runManifestMarkup(report) {
+  const manifest = asObject(report?.manifest);
+  const summary = asObject(report?.summary);
+  const metadata = asObject(manifest.metadata);
+  const evidence = String(manifest.evidence || "analytical").toUpperCase();
+  const language = (globalThis.UiI18n?.language?.() || state?.settings?.language) === "en" ? "en" : "zh-CN";
+  const localText = (zh, en) => language === "en" ? en : zh;
+  const source = manifest.source || metadata.source || report?.source || localText("本地分析仿真", "Local analytical simulation");
+  const assumptions = asArray(manifest[language === "en" ? "assumptions_en" : "assumptions_zh"])
+    .map(String)
+    .filter(Boolean);
+  const taskCount = formatResultNumber(summary.task_count);
+  const fact = (label, value, className = "") => `<div class="${className}"><dt>${escapeHtml(label)}</dt><dd data-i18n-skip>${escapeHtml(value ?? "—")}</dd></div>`;
+  return `
+    <div class="run-manifest-summary run-manifest-bar-help" data-concept-help="analytical_report">
+      <strong data-i18n-skip>${escapeHtml(evidence)}</strong>
+      <span data-i18n-skip>${taskCount.html} ${escapeHtml(localText("个任务", "Tasks"))}</span>
+    </div>
+    <details class="run-technical-details">
+      <summary data-concept-help="run_manifest">${escapeHtml(localText("运行技术详情", "Technical Details"))}</summary>
+      <dl class="technical-facts">
+        ${fact(localText("运行 ID", "Run ID"), manifest.run_id, "span-all")}
+        ${fact(localText("场景 Schema", "Schema"), manifest.schema_version)}
+        ${fact(localText("模拟器版本", "Simulator"), manifest.simulator_version)}
+        ${fact(localText("解析模型版本（兼容字段）", "Analytical Model (compatibility field)"), manifest.calibration_version || "task-transaction-analytical-v4")}
+        ${fact(localText("随机种子", "Random Seed"), manifest.random_seed)}
+        ${fact(localText("模型", "Model"), manifest.model_name)}
+        ${fact(localText("硬件", "Hardware"), manifest.hardware_name)}
+        ${fact(localText("负载", "Workload"), manifest.workload_name)}
+        ${fact(localText("来源", "Source"), source, "span-all")}
+      </dl>
+      ${assumptions.length ? `<section class="run-assumptions"><h3>${escapeHtml(localText("假设与警告", "Assumptions and warnings"))}</h3><ul data-i18n-skip>${assumptions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : ""}
+    </details>`;
+}
+
+const TIMESERIES_FIDELITY_DESCRIPTIONS = Object.freeze({
+  "当前静态保留策略未保存完整资源变点；精确总体指标不依赖这些样本。": "The current static retention policy did not preserve complete resource change points; exact aggregate metrics do not depend on these samples.",
+  "静态活动曲线使用离散事件仿真的精确资源变点；驻留估算会在各曲线上单独标注。": "Static activity curves use exact resource change points from discrete-event simulation; residency estimates are marked separately on each curve.",
+  "连续批处理曲线是批次包络聚合或代表性峰值，不能还原为逐算子时间线。": "Continuous-batching curves are aggregate batch envelopes or representative peaks; they cannot reconstruct a per-operator timeline.",
+  "批次包络聚合，不是硬件采样。": "Aggregate batch envelopes are not hardware samples.",
+});
+
+function timeseriesMetricLabelPair(metric, fallbackCn = "", fallbackEn = "") {
+  const key = String(metric || "");
+  const known = TIMESERIES_METRIC_LABELS[key];
+  const backendEnglish = String(fallbackEn || "").trim();
+  return {
+    zh: String(fallbackCn || known?.[0] || key || "未命名曲线"),
+    en: backendEnglish && !/[\u3400-\u9fff]/u.test(backendEnglish)
+      ? backendEnglish
+      : String(known?.[1] || key || "Unnamed curve"),
+  };
+}
+
+function timeseriesSeriesLabel(series) {
+  const metric = String(series?.metric || "unknown");
+  const labels = timeseriesMetricLabelPair(metric, series?.label_cn || series?.label_zh, series?.label_en);
+  return uiText(labels.zh, labels.en);
+}
+
+function timeseriesRankLabel(series) {
+  return series?.rank == null
+    ? uiText("组件聚合", "Component aggregate")
+    : uiText("Rank {rank}", "Rank {rank}", { rank: String(series.rank) });
+}
+
+function timeseriesPointCopy(series) {
+  const count = formatNumber(asArray(series?.points).length);
+  const limit = formatNumber(series?.point_limit || 500);
+  return uiText("{count} / 上限 {limit} 点", "{count} / up to {limit} points", { count, limit });
+}
+
+function timeseriesFidelityDescription(normalized) {
+  const executionMode = String(normalized?.execution_mode || "");
+  const fidelity = String(normalized?.fidelity || "unknown");
+  const descriptionCn = String(normalized?.fidelity_description_cn || "").trim()
+    || `${executionMode || "仿真"} · ${fidelity}；曲线 fidelity/quality 按后端原样展示。`;
+  const descriptionEn = String(normalized?.fidelity_description_en || "").trim()
+    || TIMESERIES_FIDELITY_DESCRIPTIONS[descriptionCn]
+    || `Execution mode ${executionMode || "simulation"} · fidelity ${fidelity}; curve fidelity/quality are shown exactly as returned by the backend.`;
+  return uiText(descriptionCn, descriptionEn);
+}
+
+function normalizeComponentTimeseries(reportValue) {
+  const report = asObject(reportValue);
+  const payload = asObject(report.component_timeseries || asObject(report.report).component_timeseries);
+  const normalizeSeries = (seriesValue, owner) => asArray(seriesValue).map((value, index) => {
+    const series = asObject(value);
+    const metric = String(series.metric || "unknown");
+    const seriesId = series.series_id == null || series.series_id === ""
+      ? `${owner.owner_id}:${metric || index}`
+      : String(series.series_id);
+    const rank = series.rank == null ? null : Number(series.rank);
+    const channelId = series.channel_id == null ? null : String(series.channel_id);
+    const ownerKey = `${owner.owner_type}:${owner.owner_id}`;
+    const labels = timeseriesMetricLabelPair(metric, series.label_cn || series.label_zh, series.label_en);
+    const fidelityValue = series.fidelity == null || series.fidelity === "" ? payload.fidelity : series.fidelity;
+    return {
+      ...deepClone(series),
+      series_id: seriesId,
+      series_key: `${ownerKey}:${seriesId}:${rank == null ? "aggregate" : rank}:${channelId || ""}:${index}`,
+      label_cn: labels.zh,
+      label_en: labels.en,
+      metric,
+      unit: String(series.unit || "unknown"),
+      scope: String(series.scope || owner.owner_type),
+      rank,
+      channel_id: channelId,
+      fidelity: String(fidelityValue == null || fidelityValue === "" ? "unknown" : fidelityValue),
+      quality: String(series.quality || "unknown"),
+      capacity: asObject(series.capacity),
+      points: asArray(series.points).map((point) => ({ start_ns: Number(point?.start_ns) || 0, end_ns: Number(point?.end_ns) || Number(point?.start_ns) || 0, value: Number(point?.value) })).filter((point) => Number.isFinite(point.value)),
+      owner_id: owner.owner_id,
+      owner_type: owner.owner_type,
+      owner_key: ownerKey,
+      component_kind: owner.component_kind || "",
+      point_limit: Number(series.point_limit || payload.point_limit) || 500,
+    };
+  });
+  const components = asArray(payload.components).map((value) => {
+    const component = asObject(value);
+    return { ...deepClone(component), component_id: String(component.component_id || ""), component_kind: String(component.component_kind || component.kind || "unknown"), capacities: asObject(component.capacities), drilldown: asObject(component.drilldown) };
+  });
+  const links = asArray(payload.links).map((value) => ({ ...deepClone(asObject(value)), link_id: String(value?.link_id || ""), source_component: String(value?.source_component || ""), target_component: String(value?.target_component || "") }));
+  const series = [
+    ...components.flatMap((component) => normalizeSeries(component.series, { owner_id: component.component_id, owner_type: "component", component_kind: component.component_kind })),
+    ...links.flatMap((link) => normalizeSeries(link.series, { owner_id: link.link_id, owner_type: "link" })),
+  ];
+  return {
+    schema_version: String(payload.schema_version || ""),
+    time_unit: String(payload.time_unit || "ns"),
+    execution_mode: String(payload.execution_mode || ""),
+    fidelity: String(payload.fidelity || "unknown"),
+    fidelity_description_cn: String(payload.fidelity_description_cn || ""),
+    fidelity_description_en: String(payload.fidelity_description_en || ""),
+    point_limit: Number(payload.point_limit) || 500,
+    components,
+    links,
+    series,
+  };
+}
+
+function timeseriesMetricGroup(metric) {
+  const key = String(metric || "");
+  if (["busy_fraction", "modeled_compute_utilization"].includes(key)) return uiText("GPU 忙碌与模型计算（GPU Busy & Compute）", "GPU busy and modeled compute");
+  if (key.includes("residency") || key === "memory_occupancy_bytes") return uiText("HBM 容量驻留（HBM Capacity Residency）", "HBM capacity residency");
+  if (key.includes("memory_read_bandwidth") || key.includes("memory_write_bandwidth")) return uiText("HBM 读写带宽（HBM Bandwidth）", "HBM read/write bandwidth");
+  if (key.startsWith("storage_") || key === "dma_engine_utilization") return uiText("存储与 DMA（Storage / DMA）", "Storage and DMA");
+  if (key.includes("fabric") || key.includes("link_bandwidth")) return uiText("互连与链路（Fabric / Link）", "Fabric and link");
+  return uiText("其他组件指标（Other Metrics）", "Other component metrics");
+}
+
+function formatTimeseriesValue(value, unit) {
+  if (!Number.isFinite(Number(value))) return "—";
+  if (unit === "ratio" || unit === "fraction") return `${formatNumber(Number(value) * 100, 4)}%`;
+  if (unit === "bytes") return formatBytes(value);
+  if (["bytes_per_s", "B/s"].includes(unit)) return `${formatBytes(value)}/s`;
+  return `${formatNumber(value, 4)} ${unit === "unknown" ? "" : unit}`.trim();
+}
+
+function normalizeTimeseriesColor(value, fallbackIndex = 0) {
+  const color = String(value || "").trim();
+  if (/^#[0-9a-f]{6}$/iu.test(color)) return color.toLowerCase();
+  return TIMESERIES_DEFAULT_COLORS[Math.abs(Number(fallbackIndex) || 0) % TIMESERIES_DEFAULT_COLORS.length];
+}
+
+function timeseriesTimeDomain(seriesValues) {
+  const points = asArray(seriesValues).flatMap((series) => asArray(series?.points));
+  if (!points.length) return [0, 1];
+  const minNs = Math.min(...points.map((point) => Number(point.start_ns)).filter(Number.isFinite));
+  const maxNs = Math.max(...points.map((point) => Math.max(Number(point.start_ns), Number(point.end_ns))).filter(Number.isFinite));
+  if (!Number.isFinite(minNs) || !Number.isFinite(maxNs)) return [0, 1];
+  return maxNs > minNs ? [minNs, maxNs] : [minNs, minNs + 1];
+}
+
+function timeseriesLinearTicks(minimum, maximum, count = 5) {
+  const total = Math.max(2, Math.trunc(count) || 5);
+  return Array.from({ length: total }, (_, index) => minimum + (maximum - minimum) * index / (total - 1));
+}
+
+function timeseriesLogTicks(minExponent, maxExponent) {
+  const span = Math.max(1, maxExponent - minExponent);
+  const count = Math.min(5, span + 1);
+  return Array.from(new Set(Array.from({ length: count }, (_, index) => {
+    const exponent = Math.round(minExponent + span * index / Math.max(1, count - 1));
+    return 10 ** exponent;
+  })));
+}
+
+function timeseriesYAxisTitle(series, yScale) {
+  const unit = String(series?.unit || "unknown");
+  let labelCn = "数值";
+  let labelEn = "Value";
+  if (["ratio", "fraction"].includes(unit)) {
+    labelCn = "利用率（%）";
+    labelEn = "Utilization (%)";
+  } else if (unit === "bytes") {
+    labelCn = "容量（Bytes）";
+    labelEn = "Capacity (Bytes)";
+  } else if (["bytes_per_s", "B/s"].includes(unit)) {
+    labelCn = "带宽（Bytes/s）";
+    labelEn = "Bandwidth (Bytes/s)";
+  } else if (unit !== "unknown") {
+    labelCn = `数值（${unit}）`;
+    labelEn = `Value (${unit})`;
+  }
+  const scaleCn = yScale === "log" ? "Log10" : "线性";
+  const scaleEn = yScale === "log" ? "Log10" : "Linear";
+  return uiText(`${labelCn} · ${scaleCn}`, `${labelEn} · ${scaleEn}`);
+}
+
+function timeseriesChartModel(series, options = {}) {
+  const width = Number(options.width) || 760;
+  const height = Number(options.height) || 320;
+  const margins = { left: 84, right: 24, top: 40, bottom: 62, ...asObject(options.margins) };
+  const plotLeft = margins.left;
+  const plotRight = Math.max(plotLeft + 1, width - margins.right);
+  const plotTop = margins.top;
+  const plotBottom = Math.max(plotTop + 1, height - margins.bottom);
+  const yScale = options.yScale === "log" ? "log" : "linear";
+  const points = asArray(series.points).slice().sort((left, right) => Number(left.start_ns) - Number(right.start_ns) || Number(left.end_ns) - Number(right.end_ns));
+  const ownDomain = timeseriesTimeDomain([{ points }]);
+  const requestedDomain = asArray(options.xDomain).map(Number);
+  const minNs = Number.isFinite(requestedDomain[0]) ? requestedDomain[0] : ownDomain[0];
+  const requestedMax = Number.isFinite(requestedDomain[1]) ? requestedDomain[1] : ownDomain[1];
+  const maxNs = requestedMax > minNs ? requestedMax : minNs + 1;
+  const values = points.map((point) => Number(point.value)).filter(Number.isFinite);
+  const ratio = ["ratio", "fraction"].includes(series.unit);
+  const capacity = Number(series.capacity?.value);
+  let yMinimum;
+  let yMaximum;
+  let yTicks;
+  let yPosition;
+
+  if (yScale === "log") {
+    const positiveValues = values.filter((value) => value > 0);
+    const positiveMinimum = positiveValues.length ? Math.min(...positiveValues) : NaN;
+    const observedMaximum = positiveValues.length ? Math.max(...positiveValues) : NaN;
+    const maximumCandidate = ratio
+      ? Math.max(1, Number.isFinite(observedMaximum) ? observedMaximum : 0)
+      : Math.max(Number.isFinite(observedMaximum) ? observedMaximum : 0, Number.isFinite(capacity) && capacity > 0 ? capacity : 0);
+    let minimumExponent = Number.isFinite(positiveMinimum) ? Math.floor(Math.log10(positiveMinimum)) : -1;
+    let maximumExponent = maximumCandidate > 0 ? Math.ceil(Math.log10(maximumCandidate)) : 0;
+    if (maximumExponent <= minimumExponent) minimumExponent = maximumExponent - 1;
+    yMinimum = 10 ** minimumExponent;
+    yMaximum = 10 ** maximumExponent;
+    yTicks = timeseriesLogTicks(minimumExponent, maximumExponent);
+    const logMinimum = Math.log10(yMinimum);
+    const logSpan = Math.max(1e-12, Math.log10(yMaximum) - logMinimum);
+    yPosition = (value) => plotBottom - Math.max(0, Math.min(1, (Math.log10(value) - logMinimum) / logSpan)) * (plotBottom - plotTop);
+  } else {
+    const observedMinimum = values.length ? Math.min(...values) : 0;
+    const observedMaximum = values.length ? Math.max(...values) : 0;
+    yMinimum = ratio ? 0 : Math.min(0, observedMinimum);
+    yMaximum = ratio ? 1 : Math.max(observedMaximum, Number.isFinite(capacity) ? capacity : 0, 1e-12);
+    if (!(yMaximum > yMinimum)) yMaximum = yMinimum + Math.max(1, Math.abs(yMinimum) * 0.1);
+    yTicks = timeseriesLinearTicks(yMinimum, yMaximum);
+    const ySpan = yMaximum - yMinimum;
+    yPosition = (value) => plotBottom - Math.max(0, Math.min(1, (value - yMinimum) / ySpan)) * (plotBottom - plotTop);
+  }
+
+  const xPosition = (time) => plotLeft + (time - minNs) / (maxNs - minNs) * (plotRight - plotLeft);
+  const commands = [];
+  let active = false;
+  let previousEnd = null;
+  let previousY = null;
+  const adjacencyTolerance = Math.max(1e-9, Math.abs(maxNs - minNs) * 1e-9);
+  points.forEach((point) => {
+    const value = Number(point.value);
+    const start = Number(point.start_ns);
+    const end = Math.max(start, Number(point.end_ns));
+    if (!Number.isFinite(value) || !Number.isFinite(start) || !Number.isFinite(end) || (yScale === "log" && value <= 0)) {
+      active = false;
+      previousEnd = null;
+      previousY = null;
+      return;
+    }
+    const startX = xPosition(Math.max(minNs, Math.min(maxNs, start)));
+    const endX = xPosition(Math.max(minNs, Math.min(maxNs, end)));
+    const pointY = yPosition(value);
+    if (active && Math.abs(start - previousEnd) <= adjacencyTolerance) {
+      commands.push(`L ${startX.toFixed(2)} ${previousY.toFixed(2)}`);
+      if (Math.abs(pointY - previousY) > 0.005) commands.push(`L ${startX.toFixed(2)} ${pointY.toFixed(2)}`);
+      commands.push(`L ${endX.toFixed(2)} ${pointY.toFixed(2)}`);
+    } else {
+      commands.push(`M ${startX.toFixed(2)} ${pointY.toFixed(2)}`, `L ${endX.toFixed(2)} ${pointY.toFixed(2)}`);
+    }
+    active = true;
+    previousEnd = end;
+    previousY = pointY;
+  });
+
+  return {
+    width,
+    height,
+    plotLeft,
+    plotRight,
+    plotTop,
+    plotBottom,
+    path: commands.join(" "),
+    minNs,
+    maxNs,
+    maxValue: yMaximum,
+    yMinimum,
+    yMaximum,
+    yScale,
+    nonPositiveCount: yScale === "log" ? values.filter((value) => value <= 0).length : 0,
+    positiveCount: values.filter((value) => value > 0).length,
+    xTicks: timeseriesLinearTicks(minNs, maxNs).map((value) => ({ value, position: xPosition(value) })),
+    yTicks: yTicks.map((value) => ({ value, position: yPosition(value) })),
+  };
+}
+
+function timeseriesSvgMarkup(series, chart, pointCopy) {
+  const horizontalGrid = chart.yTicks.map((tick) => `<line class="timeseries-gridline" x1="${chart.plotLeft}" y1="${tick.position.toFixed(2)}" x2="${chart.plotRight}" y2="${tick.position.toFixed(2)}"></line>`).join("");
+  const verticalGrid = chart.xTicks.map((tick) => `<line class="timeseries-gridline" x1="${tick.position.toFixed(2)}" y1="${chart.plotTop}" x2="${tick.position.toFixed(2)}" y2="${chart.plotBottom}"></line>`).join("");
+  const yTickLabels = chart.yTicks.map((tick) => `<text class="timeseries-tick-label timeseries-y-tick" x="${chart.plotLeft - 10}" y="${(tick.position + 4).toFixed(2)}" text-anchor="end">${escapeHtml(formatTimeseriesValue(tick.value, series.unit))}</text>`).join("");
+  const xTickLabels = chart.xTicks.map((tick) => `<text class="timeseries-tick-label timeseries-x-tick" x="${tick.position.toFixed(2)}" y="${chart.plotBottom + 22}" text-anchor="middle">${escapeHtml(formatDurationNs(tick.value))}</text>`).join("");
+  const yTitle = timeseriesYAxisTitle(series, chart.yScale);
+  const label = timeseriesSeriesLabel(series);
+  const metric = String(series?.metric || "unknown");
+  const chartPointCopy = String(pointCopy || timeseriesPointCopy(series));
+  const ariaLabel = uiText(
+    "{label}；横轴仿真时间，纵轴 {yTitle}；{pointCopy}",
+    "{label}; X-axis: simulation time; Y-axis: {yTitle}; {pointCopy}",
+    { label, yTitle, pointCopy: chartPointCopy },
+  );
+  const title = uiText("{label} · {metric}", "{label} · {metric}", { label, metric });
+  return `<svg class="timeseries-chart-svg" viewBox="0 0 ${chart.width} ${chart.height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeHtml(ariaLabel)}">
+      <title>${escapeHtml(title)}</title>
+      <g class="timeseries-grid">${horizontalGrid}${verticalGrid}</g>
+      <line class="timeseries-axis-line" x1="${chart.plotLeft}" y1="${chart.plotBottom}" x2="${chart.plotRight}" y2="${chart.plotBottom}"></line>
+      <line class="timeseries-axis-line" x1="${chart.plotLeft}" y1="${chart.plotTop}" x2="${chart.plotLeft}" y2="${chart.plotBottom}"></line>
+      <g class="timeseries-axis-labels">${yTickLabels}${xTickLabels}</g>
+      <text class="timeseries-axis-title timeseries-x-axis-title" x="${(chart.plotLeft + chart.plotRight) / 2}" y="${chart.height - 8}" text-anchor="middle">${escapeHtml(uiText("仿真时间（线性）", "Simulation time (linear)"))}</text>
+      <text class="timeseries-axis-title timeseries-y-axis-title" x="${chart.plotLeft}" y="22" text-anchor="start">${escapeHtml(yTitle)}</text>
+      ${chart.path ? `<path class="timeseries-series-path" d="${escapeHtml(chart.path)}"></path>` : ""}
+    </svg>`;
+}
+
+function timeseriesChartMarkup(series, options = {}) {
+  const yScale = options.yScale === "log" ? "log" : "linear";
+  const color = normalizeTimeseriesColor(options.color);
+  const chart = timeseriesChartModel(series, {
+    xDomain: options.xDomain,
+    yScale,
+    width: options.width,
+    height: options.height,
+  });
+  const label = timeseriesSeriesLabel(series);
+  const ownerId = String(series?.owner_id || uiText("未指定所有者", "Unspecified owner"));
+  const rank = timeseriesRankLabel(series);
+  const pointCopy = timeseriesPointCopy(series);
+  const controlsMarkup = String(options.controlsMarkup || "");
+  const slotAttribute = options.slotId == null ? "" : ` data-timeseries-slot-id="${escapeHtml(options.slotId)}"`;
+  const logNote = chart.nonPositiveCount
+    ? `<p class="timeseries-scale-note">${escapeHtml(uiText(
+      "Log10 仅接受正值：已将 {count} 个非正值区间显示为断点。{suffix}",
+      "Log10 accepts positive values only: {count} non-positive intervals are shown as breaks.{suffix}",
+      {
+        count: formatNumber(chart.nonPositiveCount),
+        suffix: chart.positiveCount ? "" : uiText(" 本图没有可绘制的正值。", " This chart has no positive values to draw."),
+      },
+    ))}</p>`
+    : "";
+  const noPointsCopy = uiText(
+    "后端明确没有可用点；不会为未知 Activation / Temporary 生命周期伪造曲线。",
+    "The backend reported no usable points; no curve is fabricated for unknown Activation / Temporary lifetimes.",
+  );
+  const mergedCopy = series?.merged ? uiText(" · 已合并", " · merged") : "";
+  const fidelity = String(series?.fidelity || "unknown");
+  const quality = String(series?.quality || "unknown");
+  const metric = String(series?.metric || "unknown");
+  const unit = String(series?.unit || "unknown");
+  const channel = series?.channel_id == null ? "" : ` · ${escapeHtml(String(series.channel_id))}`;
+  const points = asArray(series?.points);
+  return `<article class="timeseries-chart-card"${slotAttribute} style="--timeseries-line-color: ${escapeHtml(color)}">${controlsMarkup}<header><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(ownerId)} · ${escapeHtml(rank)}${channel}</span></div><span class="timeseries-fidelity is-${escapeHtml(fidelity)}">${escapeHtml(fidelity)} · ${escapeHtml(quality)}</span></header>
+    ${points.length ? `<div class="timeseries-chart-viewport">${timeseriesSvgMarkup(series, chart, pointCopy)}</div>${logNote}` : `<div class="timeseries-no-points">${escapeHtml(noPointsCopy)}</div>`}
+    <footer><span>${escapeHtml(timeseriesMetricGroup(metric))} · ${escapeHtml(metric)} · ${escapeHtml(unit)}</span><span>${escapeHtml(pointCopy)}${mergedCopy}</span></footer></article>`;
+}
+
+function timeseriesOwnerEntries(normalized) {
+  const componentById = new Map(normalized.components.map((component) => [component.component_id, component]));
+  const linkById = new Map(normalized.links.map((link) => [link.link_id, link]));
+  const entries = new Map();
+  normalized.series.forEach((series) => {
+    if (entries.has(series.owner_key)) return;
+    if (series.owner_type === "link") {
+      const link = linkById.get(series.owner_id);
+      const route = link ? `${link.source_component} → ${link.target_component}` : uiText("链路", "Link");
+      entries.set(series.owner_key, { value: series.owner_key, label: `${series.owner_id} · ${route}` });
+      return;
+    }
+    const component = componentById.get(series.owner_id);
+    entries.set(series.owner_key, { value: series.owner_key, label: `${series.owner_id} · ${component?.component_kind || series.component_kind || uiText("组件", "Component")}` });
+  });
+  return Array.from(entries.values());
+}
+
+function timeseriesCurveLabel(series) {
+  const parts = [
+    timeseriesSeriesLabel(series),
+    String(series?.metric || "unknown"),
+    timeseriesRankLabel(series),
+  ];
+  if (series?.channel_id != null) parts.push(String(series.channel_id));
+  return parts.join(" · ");
+}
+
+function timeseriesDefaultScore(series) {
+  const kind = String(series.component_kind || "").toLowerCase();
+  const metric = String(series.metric || "");
+  let score = 100;
+  if (kind.includes("gpu") && metric === "modeled_compute_utilization") score = 0;
+  else if (kind.includes("gpu") && metric === "busy_fraction") score = 1;
+  else if (metric === "modeled_compute_utilization") score = 2;
+  else if (metric === "busy_fraction") score = 3;
+  else if (metric.includes("utilization")) score = 10;
+  else if (metric.includes("residency") || metric.includes("occupancy")) score = 20;
+  if (series.rank == null) score -= 0.2;
+  if (asArray(series.points).length) score -= 0.1;
+  return score;
+}
+
+function timeseriesPreferredSeries(seriesValues, excludedKeys = new Set()) {
+  const ranked = asArray(seriesValues).slice().sort((left, right) => timeseriesDefaultScore(left) - timeseriesDefaultScore(right));
+  return ranked.find((series) => !excludedKeys.has(series.series_key)) || ranked[0] || null;
+}
+
+function createTimeseriesSlot(series, colorIndex = 0) {
+  const view = state.componentTimeseriesView;
+  return {
+    id: view.nextSlotId++,
+    ownerKey: series.owner_key,
+    seriesKey: series.series_key,
+    yScale: "linear",
+    color: normalizeTimeseriesColor("", colorIndex),
+  };
+}
+
+function reconcileTimeseriesSlots(normalized) {
+  const view = state.componentTimeseriesView;
+  view.slots = asArray(view.slots).slice(0, MAX_TIMESERIES_CHARTS).map((slot, index) => {
+    let series = normalized.series.find((candidate) => candidate.series_key === slot.seriesKey);
+    if (!series) {
+      const ownerSeries = normalized.series.filter((candidate) => candidate.owner_key === slot.ownerKey);
+      series = timeseriesPreferredSeries(ownerSeries.length ? ownerSeries : normalized.series);
+    }
+    if (!series) return null;
+    return {
+      id: Number(slot.id) || view.nextSlotId++,
+      ownerKey: series.owner_key,
+      seriesKey: series.series_key,
+      yScale: slot.yScale === "log" ? "log" : "linear",
+      color: normalizeTimeseriesColor(slot.color, index),
+    };
+  }).filter(Boolean);
+  if (!view.slots.length && normalized.series.length) {
+    view.slots.push(createTimeseriesSlot(timeseriesPreferredSeries(normalized.series), 0));
+  }
+}
+
+function timeseriesOptionMarkup(value, label, selected) {
+  return `<option value="${escapeHtml(value)}"${selected ? " selected" : ""}>${escapeHtml(label)}</option>`;
+}
+
+function timeseriesControlsMarkup(slot, normalized) {
+  const ownerEntries = timeseriesOwnerEntries(normalized);
+  const ownerSeries = normalized.series.filter((series) => series.owner_key === slot.ownerKey);
+  const selectedSeries = ownerSeries.find((series) => series.series_key === slot.seriesKey) || ownerSeries[0] || null;
+  const selectedSeriesLabel = selectedSeries ? timeseriesCurveLabel(selectedSeries) : uiText("未选择曲线", "No curve selected");
+  const removeDisabled = state.componentTimeseriesView.slots.length <= 1;
+  return `<div class="timeseries-chart-controls">
+      <label class="timeseries-control"><span>${escapeHtml(uiText("组件 / 链路", "Component / link"))}</span><select data-timeseries-field="owner" aria-label="${escapeHtml(uiText("组件 / 链路", "Component / link"))}">${ownerEntries.map((entry) => timeseriesOptionMarkup(entry.value, entry.label, entry.value === slot.ownerKey)).join("")}</select></label>
+      <label class="timeseries-control timeseries-curve-control"><span>${escapeHtml(uiText("指标 / Rank 曲线", "Metric / Rank curve"))}</span><select data-timeseries-field="series" title="${escapeHtml(selectedSeriesLabel)}" aria-label="${escapeHtml(uiText("指标 / Rank 曲线：{label}", "Metric / Rank curve: {label}", { label: selectedSeriesLabel }))}">${ownerSeries.map((series) => timeseriesOptionMarkup(series.series_key, timeseriesCurveLabel(series), series.series_key === slot.seriesKey)).join("")}</select></label>
+      <label class="timeseries-control"><span>${escapeHtml(uiText("Y 轴尺度", "Y-axis scale"))}</span><select data-timeseries-field="yScale" aria-label="${escapeHtml(uiText("Y 轴尺度", "Y-axis scale"))}"><option value="linear"${slot.yScale === "linear" ? " selected" : ""}>${escapeHtml(uiText("线性（Linear）", "Linear"))}</option><option value="log"${slot.yScale === "log" ? " selected" : ""}>Log10</option></select></label>
+      <label class="timeseries-control timeseries-color-control"><span>${escapeHtml(uiText("线条颜色", "Line color"))}</span><input type="color" value="${escapeHtml(slot.color)}" data-timeseries-field="color" aria-label="${escapeHtml(uiText("选择线条颜色", "Choose line color"))}"></label>
+      <button type="button" class="icon-button timeseries-remove-button" data-remove-timeseries-chart aria-label="${escapeHtml(uiText("移除此图表", "Remove this chart"))}" title="${escapeHtml(removeDisabled ? uiText("至少保留一张图表", "Keep at least one chart") : uiText("移除此图表", "Remove this chart"))}"${removeDisabled ? " disabled" : ""}>×</button>
+    </div>`;
+}
+
+function renderComponentTimeseries(report) {
+  if (!dom.componentTimeseriesPanel) return;
+  const normalized = normalizeComponentTimeseries(report);
+  const available = Boolean(normalized.schema_version || normalized.series.length || normalized.components.length || normalized.links.length);
+  const view = state.componentTimeseriesView;
+  dom.componentTimeseriesPanel.hidden = !available;
+  if (!available) return;
+  if (view.reportRef !== report) {
+    view.reportRef = report;
+    view.slots = [];
+    view.nextSlotId = 1;
+  }
+  reconcileTimeseriesSlots(normalized);
+  dom.componentTimeseriesFidelity.textContent = timeseriesFidelityDescription(normalized);
+  dom.componentTimeseriesCharts.dataset.chartCount = String(view.slots.length);
+  dom.addTimeseriesChartButton.disabled = !normalized.series.length || view.slots.length >= MAX_TIMESERIES_CHARTS;
+  dom.addTimeseriesChartButton.textContent = uiText("添加图表（{count}/{max}）", "Add chart ({count}/{max})", { count: view.slots.length, max: MAX_TIMESERIES_CHARTS });
+  dom.timeseriesPointMeta.textContent = normalized.series.length
+    ? uiText("{count} 条后端曲线 · 每条最多 {limit} 点 · X 轴统一为线性时间", "{count} backend series · up to {limit} points each · X-axis uses a shared linear time scale", { count: formatNumber(normalized.series.length), limit: formatNumber(normalized.point_limit) })
+    : uiText("后端未返回可选择的组件时序曲线", "The backend returned no selectable component time-series curves.");
+  if (!normalized.series.length) {
+    dom.componentTimeseriesCharts.innerHTML = `<div class="timeseries-empty">${escapeHtml(uiText("当前报告没有组件利用率时序；界面不会补造后端不存在的指标。", "This report has no component utilization series; the UI does not invent metrics absent from the backend."))}</div>`;
+    return;
+  }
+  const xDomain = timeseriesTimeDomain(normalized.series);
+  const containerWidth = Number(dom.componentTimeseriesCharts.clientWidth);
+  let chartWidth = containerWidth > 0 ? containerWidth : 760;
+  const renderCharts = (width) => {
+    dom.componentTimeseriesCharts.innerHTML = view.slots.map((slot) => {
+      const series = normalized.series.find((candidate) => candidate.series_key === slot.seriesKey);
+      return timeseriesChartMarkup(series, {
+        slotId: slot.id,
+        xDomain,
+        yScale: slot.yScale,
+        color: slot.color,
+        width,
+        controlsMarkup: timeseriesControlsMarkup(slot, normalized),
+      });
+    }).join("");
+  };
+  renderCharts(chartWidth);
+  const renderedCardWidth = timeseriesRenderedCardWidth();
+  if (renderedCardWidth > 0 && Math.abs(renderedCardWidth - chartWidth) >= 1) {
+    chartWidth = renderedCardWidth;
+    renderCharts(chartWidth);
+  }
+  hydrateConceptHelp(dom.componentTimeseriesPanel);
+}
+
+function addTimeseriesChart() {
+  const normalized = normalizeComponentTimeseries(state.report);
+  const view = state.componentTimeseriesView;
+  if (!normalized.series.length || view.slots.length >= MAX_TIMESERIES_CHARTS) return;
+  const used = new Set(view.slots.map((slot) => slot.seriesKey));
+  const series = timeseriesPreferredSeries(normalized.series, used);
+  if (!series) return;
+  view.slots.push(createTimeseriesSlot(series, view.slots.length));
+  renderComponentTimeseries(state.report);
+}
+
+function updateTimeseriesSlot(event) {
+  const control = event.target.closest?.("[data-timeseries-field]");
+  const card = control?.closest?.("[data-timeseries-slot-id]");
+  if (!control || !card) return;
+  const slot = state.componentTimeseriesView.slots.find((candidate) => String(candidate.id) === String(card.dataset.timeseriesSlotId));
+  if (!slot) return;
+  const normalized = normalizeComponentTimeseries(state.report);
+  const field = control.dataset.timeseriesField;
+  if (field === "owner") {
+    const ownerSeries = normalized.series.filter((series) => series.owner_key === control.value);
+    const series = timeseriesPreferredSeries(ownerSeries);
+    if (!series) return;
+    slot.ownerKey = series.owner_key;
+    slot.seriesKey = series.series_key;
+  } else if (field === "series") {
+    const series = normalized.series.find((candidate) => candidate.series_key === control.value && candidate.owner_key === slot.ownerKey);
+    if (!series) return;
+    slot.seriesKey = series.series_key;
+  } else if (field === "yScale") {
+    slot.yScale = control.value === "log" ? "log" : "linear";
+  } else if (field === "color") {
+    slot.color = normalizeTimeseriesColor(control.value);
+  }
+  renderComponentTimeseries(state.report);
+}
+
+function previewTimeseriesColor(event) {
+  const control = event.target.closest?.('[data-timeseries-field="color"]');
+  const card = control?.closest?.("[data-timeseries-slot-id]");
+  if (!control || !card) return;
+  const slot = state.componentTimeseriesView.slots.find((candidate) => String(candidate.id) === String(card.dataset.timeseriesSlotId));
+  if (!slot) return;
+  slot.color = normalizeTimeseriesColor(control.value);
+  card.style.setProperty("--timeseries-line-color", slot.color);
+}
+
+function removeTimeseriesChart(event) {
+  const button = event.target.closest?.("[data-remove-timeseries-chart]");
+  const card = button?.closest?.("[data-timeseries-slot-id]");
+  const view = state.componentTimeseriesView;
+  if (!button || !card || view.slots.length <= 1) return;
+  view.slots = view.slots.filter((slot) => String(slot.id) !== String(card.dataset.timeseriesSlotId));
+  renderComponentTimeseries(state.report);
+}
+
+function renderResults() {
+  const report = state.report;
+  dom.resultsEmpty.hidden = Boolean(report);
+  dom.resultsContent.hidden = !report;
+  if (!report) {
+    const heading = $("h2", dom.resultsEmpty);
+    const copy = $("p", dom.resultsEmpty);
+    if (state.reportStale) {
+      heading.textContent = uiText("场景已修改，旧报告已失效", "The scenario changed; the previous report is stale");
+      copy.textContent = uiText("重新运行以生成与当前 JSON 一致的 ANALYTICAL 报告。", "Run again to generate an ANALYTICAL report that matches the current JSON.");
+    } else {
+      heading.textContent = uiText("尚无仿真报告", "No simulation report yet");
+      copy.textContent = uiText("校验当前场景后运行，以查看延迟、吞吐、能耗、瓶颈与关键路径。", "Validate and run the current scenario to inspect latency, throughput, energy, bottlenecks, and the critical path.");
+    }
+    return;
+  }
+  const summary = asObject(report.summary);
+  const throughput = asObject(summary.throughput);
+  const requests = asObject(report.requests);
+  const requestRows = Object.entries(requests);
+  const requestTpot = requestRows.map(([, request]) => request.tpot_ns).filter((value) => value != null);
+  const tpotP50 = percentile(requestTpot, 0.5);
+  dom.runManifestBar.innerHTML = runManifestMarkup(report);
+  dom.metricGrid.innerHTML = [
+    metricCell({ text: uiText("总历时（Makespan）", "Makespan") }, formatResultDurationNs(summary.makespan_ns), resultWithUnit(summary.makespan_ns, "ns"), "is-accent"),
+    metricCell({ text: uiText("首 Token 延迟（TTFT）", "Time to First Token (TTFT)"), percentile: 50 }, formatResultDurationNs(summary.ttft_ns?.p50), resultWithUnit(summary.ttft_ns?.p50, "ns")),
+    metricCell({ text: uiText("Token 间延迟（TBT）", "Time Between Tokens (TBT)"), percentile: 50 }, formatResultDurationNs(summary.tbt_ns?.p50), resultWithUnit(summary.tbt_ns?.p50, "ns")),
+    metricCell({ text: uiText("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)"), percentile: 50 }, formatResultDurationNs(tpotP50), tpotP50 == null ? uiText("无可用 Token 间隔", "No Token interval available") : resultWithUnit(tpotP50, "ns")),
+    metricCell({ text: uiText("端到端延迟（E2E）", "End-to-End Latency (E2E)"), percentile: 50 }, formatResultDurationNs(summary.e2e_ns?.p50), resultWithUnit(summary.e2e_ns?.p50, "ns")),
+    metricCell({ text: uiText("Token 吞吐（Token Throughput）", "Token Throughput") }, formatResultRate(throughput.visible_output_tokens_per_s, "tok/s"), resultWithUnit(throughput.visible_output_tokens_per_s, "tokens/s"), "is-io"),
+    metricCell({ text: uiText("请求吞吐（Request Throughput）", "Request Throughput") }, formatResultRate(throughput.requests_per_s, "req/s"), resultWithUnit(throughput.requests_per_s, "requests/s"), "is-io"),
+    metricCell({ text: uiText("总能耗（Total Energy）", "Total Energy") }, formatResultEnergyPj(summary.total_energy_pj), resultWithUnit(summary.total_energy_pj, "pJ"), "is-accent"),
+  ].join("");
+  renderRuntime(report);
+  renderComponentTimeseries(report);
+  renderComparison();
+  renderUtilization(report);
+  renderCategories(report);
+  renderRequestResults(requests);
+  hydrateConceptHelp(dom.resultsContent);
+}
+
+function renderComparison() {
+  const payload = state.comparison;
+  dom.comparisonStrip.hidden = !payload;
+  if (!payload) return;
+  const comparison = asObject(payload.comparison);
+  const latency = comparison.latency_speedup;
+  const throughput = comparison.throughput_speedup;
+  const energy = comparison.energy_ratio;
+  const item = (label, value, favorable) => {
+    const formatted = formatResultNumber(value);
+    return `<span class="comparison-item ${favorable === true ? "is-favorable" : favorable === false ? "is-unfavorable" : ""}">${escapeHtml(label)}<strong>${formatted.html}${formatted.text === "NA" ? "" : "×"}</strong></span>`;
+  };
+  const candidate = formatResultDurationNs(comparison.candidate_makespan_ns);
+  const baseline = formatResultDurationNs(comparison.baseline_makespan_ns);
+  dom.comparisonStrip.innerHTML = `
+    <span class="comparison-label">${escapeHtml(uiText("GPU 基线比较", "GPU Baseline Comparison"))}</span>
+    ${item(uiText("延迟加速", "Latency Speedup"), latency, latency == null ? null : latency > 1)}
+    ${item(uiText("吞吐加速", "Throughput Speedup"), throughput, throughput == null ? null : throughput > 1)}
+    ${item(uiText("能耗比（候选 / 基线）", "Energy Ratio (Candidate / Baseline)"), energy, energy == null ? null : energy < 1)}
+    <span class="comparison-item">${escapeHtml(uiText("候选", "Candidate"))}<strong>${candidate.html}</strong></span>
+    <span class="comparison-item">${escapeHtml(uiText("基线", "Baseline"))}<strong>${baseline.html}</strong></span>`;
+}
+
+function renderUtilization(report) {
+  const utilization = Object.entries(asObject(report.resource_utilization))
+    .map(([resourceId, raw]) => {
+      const numeric = Number(raw);
+      return [resourceId, Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : 0];
+    })
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const bottleneck = report.summary?.bottleneck_resource;
+  const bottleneckValue = Number(bottleneck?.utilization);
+  dom.bottleneckMeta.innerHTML = bottleneck
+    ? `${escapeHtml(bottleneck.resource_id)} · ${formatResultNumber((Number.isFinite(bottleneckValue) ? Math.min(1, Math.max(0, bottleneckValue)) : 0) * 100).html}%`
+    : escapeHtml(uiText("无资源占用", "No utilization data"));
+  if (!utilization.length) {
+    dom.utilizationList.innerHTML = `<p class="muted">${escapeHtml(uiText("报告未返回资源利用率。", "The report did not return resource utilization."))}</p>`;
+    return;
+  }
+  dom.utilizationList.innerHTML = utilization.map(([resourceId, value]) => {
+    const percent = value * 100;
+    const visualPercent = percent > 0 ? Math.max(0.5, percent) : 0;
+    const level = percent >= 90 ? "is-critical" : percent >= 75 ? "is-high" : percent >= 40 ? "is-medium" : "is-low";
+    const cls = `${level}${resourceId === bottleneck?.resource_id ? " is-bottleneck" : ""}${percent === 0 ? " is-zero" : ""}`;
+    const percentText = `${formatResultNumber(percent).text}%`;
+    const accessibleLabel = uiText("{id} 利用率", "{id} utilization", { id: resourceId });
+    return `<div class="util-row"><span class="util-name" title="${escapeHtml(resourceId)}">${escapeHtml(resourceId)}</span><span class="bar-track ${percent === 0 ? "is-zero" : ""}" role="progressbar" aria-label="${escapeHtml(accessibleLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(formatNumber(percent, 6))}" aria-valuetext="${escapeHtml(percentText)}"><span class="bar-fill ${cls}" style="width:${visualPercent}%"></span></span><span class="util-value">${formatResultNumber(percent).html}%</span></div>`;
+  }).join("");
+}
+
+function renderCategories(report) {
+  const total = asObject(report.category_time_ns);
+  const critical = asObject(report.critical_path_category_ns);
+  const names = Array.from(new Set([...Object.keys(total), ...Object.keys(critical)])).sort((a, b) => (total[b] || 0) - (total[a] || 0));
+  const max = Math.max(1, ...names.map((name) => Number(total[name]) || 0));
+  if (!names.length) {
+    dom.categoryList.innerHTML = `<p class="muted">${escapeHtml(uiText("报告未返回类别时间。", "The report did not return category timing."))}</p>`;
+    return;
+  }
+  dom.categoryList.innerHTML = names.map((name) => {
+    const totalValue = Number(total[name]) || 0;
+    const criticalValue = Number(critical[name]) || 0;
+    const totalFormatted = formatResultDurationNs(totalValue);
+    const criticalFormatted = formatResultDurationNs(criticalValue);
+    return `<div class="category-row">
+      <span class="category-name">${escapeHtml(name)}</span>
+      <span class="category-bars" title="${escapeHtml(uiText("总计 {total}；关键路径 {critical}", "Total {total}; critical path {critical}", { total: totalFormatted.text, critical: criticalFormatted.text }))}">
+        <span class="category-bar-total" style="width:${(totalValue / max) * 100}%"></span>
+        <span class="category-bar-critical" style="width:${(criticalValue / max) * 100}%"></span>
+      </span>
+      <span class="category-value">${criticalFormatted.html}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderRequestResults(requests) {
+  const entries = Object.entries(requests);
+  dom.requestResultMeta.innerHTML = uiText("{count} 个请求", "{count} requests", { count: formatResultNumber(entries.length).html });
+  const dataLabel = (zh, en) => ` data-label="${escapeHtml(uiText(zh, en))}"`;
+  dom.requestResultBody.innerHTML = entries.length ? entries.map(([requestId, request]) => {
+    const tbt = asArray(request.tbt_ns).map(Number).filter(Number.isFinite);
+    const tbtP50 = percentile(tbt, 0.5);
+    const tbtP95 = percentile(tbt, 0.95);
+    const arrival = formatResultDurationNs(request.arrival_ns);
+    const ttft = formatResultDurationNs(request.ttft_ns);
+    const tbt50 = formatResultDurationNs(tbtP50);
+    const tbt95 = formatResultDurationNs(tbtP95);
+    const tpot = formatResultDurationNs(request.tpot_ns);
+    const e2e = formatResultDurationNs(request.e2e_ns);
+    const status = String(request.status ?? request.request_status ?? (request.rejected === true ? "rejected" : "—"));
+    const rejectionReason = request.rejection_reason ?? request.reason ?? request.reject_reason ?? request.rejection?.reason ?? "—";
+    const statusClass = slug(status);
+    return `<tr>
+      <td${dataLabel("请求（Request）", "Request")}><span class="mono-readout">${escapeHtml(requestId)}</span></td>
+      <td${dataLabel("状态（Status）", "Status")}><span class="request-status is-${escapeHtml(statusClass)}">${escapeHtml(status)}</span></td>
+      <td${dataLabel("拒绝原因（Rejection Reason）", "Rejection Reason")} class="request-rejection-reason" title="${escapeHtml(rejectionReason)}">${escapeHtml(rejectionReason)}</td>
+      <td${dataLabel("到达时间（Arrival）", "Arrival")} title="${escapeHtml(resultWithUnit(request.arrival_ns, "ns").text)}">${arrival.html}</td>
+      <td${dataLabel("首 Token 延迟（TTFT）", "Time to First Token (TTFT)")} title="${escapeHtml(resultWithUnit(request.ttft_ns, "ns").text)}">${ttft.html}</td>
+      <td${dataLabel("Token 间延迟（TBT）p50 / p95", "Time Between Tokens (TBT) p50 / p95")} title="${escapeHtml(uiText("原始 tbt_ns 数组含 {count} 项", "Raw tbt_ns array contains {count} items", { count: formatResultNumber(tbt.length).text }))}">${tbt50.html} / ${tbt95.html}</td>
+      <td${dataLabel("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)")} title="${escapeHtml(resultWithUnit(request.tpot_ns, "ns").text)}">${tpot.html}</td>
+      <td${dataLabel("端到端延迟（E2E）", "End-to-End Latency (E2E)")} title="${escapeHtml(resultWithUnit(request.e2e_ns, "ns").text)}">${e2e.html}</td>
+      <td${dataLabel("可见 Token 数（Visible Tokens）", "Visible Tokens")}>${formatResultNumber(request.visible_output_tokens).html}</td>
+    </tr>`;
+  }).join("") : `<tr class="empty-row"><td data-label="${escapeHtml(uiText("请求指标", "Request metrics"))}" colspan="9">${escapeHtml(uiText("报告没有请求级指标。", "The report contains no request-level metrics."))}</td></tr>`;
+}
+
+function openJsonDialog() {
+  if (!state.scenario) return;
+  dom.jsonEditor.value = JSON.stringify(scenarioPayloadForTransport(), null, 2);
+  dom.jsonEditor.classList.remove("has-error");
+  dom.jsonStatus.textContent = "JSON 可编辑 · Schema 与 runtime metadata 保留 · 不适用能力默认值省略";
+  showModalDialog(dom.jsonDialog, dom.jsonButton, dom.jsonEditor);
+}
+
+function applyJsonEditor() {
+  try {
+    const value = JSON.parse(dom.jsonEditor.value);
+    ensureScenarioShape(value);
+    const mappingChanged = mappingInputsChanged(state.scenario, value);
+    dom.jsonEditor.classList.remove("has-error");
+    setScenario(value, { dirty: true, message: "JSON 已应用" });
+    if (mappingChanged) {
+      markMappingStale("高级 JSON 修改了影响映射的模型执行结构、硬件 / Profiles、并行、驻留 / KV 或控制平面选项。");
+      renderAll();
+    }
+    dom.jsonDialog.close();
+  } catch (error) {
+    dom.jsonEditor.classList.add("has-error");
+    dom.jsonStatus.textContent = "无法应用：JSON 语法或场景结构不正确。";
+    toast("JSON 解析失败", "请输入语法正确且结构完整的 JSON 文档。", "error", 6000);
+  }
+}
+
+async function copyJson() {
+  const text = dom.jsonEditor.value;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_error) {
+    dom.jsonEditor.select();
+    document.execCommand("copy");
+  }
+  toast("已复制 JSON", `${text.length} 字符`, "success", 2400);
+}
+
+function exportScenario() {
+  if (!state.scenario) return;
+  const text = `${JSON.stringify(scenarioPayloadForTransport(), null, 2)}\n`;
+  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${slug(state.scenario.name)}.json`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  toast("JSON 已导出", anchor.download, "success");
+}
+
+async function exportCanonicalIr() {
+  if (!state.scenario || state.busy) return;
+  setBusy(true, "正在编译标准 IR", "正在把当前架构、模型、映射与推理负载编译为 Canonical Schema 1.1…");
+  try {
+    const payload = await apiRequest("/canonical-ir", {
+      method: "POST",
+      body: JSON.stringify(scenarioPayloadForTransport()),
+    });
+    const text = `${JSON.stringify(payload, null, 2)}\n`;
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${slug(state.scenario.name)}-canonical-v1.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    toast("标准 IR 已导出", anchor.download, "success");
+  } catch (error) {
+    showOperationError("标准 IR 导出失败", error);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function importScenarioFile(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const value = JSON.parse(text);
+    ensureScenarioShape(value);
+    setScenario(value, { dirty: true, message: "JSON 已导入" });
+  } catch (error) {
+    const message = "导入文件不是有效的场景 JSON，或者场景结构不完整。";
+    state.validation = { errors: [normalizeIssue({ code: "import_error", message_zh: message }, "json", "error")], warnings: [], information: [] };
+    renderDiagnostics();
+    openDiagnostics();
+    toast("导入失败", message, "error", 6500);
+  } finally {
+    dom.fileInput.value = "";
+  }
+}
+
+function cacheDom() {
+  const ids = [
+    "connectionState", "dirtyMark", "loadReferenceButton", "importButton", "fileInput", "exportButton", "canonicalExportButton", "jsonButton", "settingsButton",
+    "validateButton", "runButton", "architectureStatus", "architectureCount", "modelStatus", "modelCount", "mappingStatus", "mappingCount",
+    "workloadStatus", "workloadCount", "playbackStatus", "playbackCount", "resultsStatus", "resultsCount", "errorCount", "warningCount", "diagnosticToggle", "diagnosticPanel",
+    "diagnosticContent", "closeDiagnosticsButton", "hardwareName", "topologySummary", "hardwarePresetsButton", "topologyEditMenuButton", "topologyGroupMenuButton", "topologyConnectMenuButton", "selectModeButton", "connectModeButton", "protocolSelect", "protocolCatalogButton", "protocolVersionInput", "protocolUnitsInput", "protocolBandwidthInput", "protocolLatencyInput", "protocolPayloadInput", "protocolPresetSelection",
+    "connectionHint", "topologySelectionStatus", "topologyRouteStatus", "undoTopologyButton", "redoTopologyButton", "createGroupButton", "setGroupRootButton", "toggleGroupButton", "releaseGroupButton", "copyTopologyButton", "pasteTopologyButton",
+    "topologyZoomValue", "fitCanvasButton", "topologyCanvas", "topologyWorld", "linkLayer", "groupLayer", "nodeLayer", "topologyLinkTooltip", "topologyMarquee", "canvasEmpty", "inspectorTitle", "deleteSelectionButton",
+    "inspectorContent", "modelMetaForm", "modelPresetsButton", "modelGraphBackButton", "modelGraphConnectButton", "modelGraphAutoLayoutButton", "modelGraphFitButton", "modelGraphZoomOutButton", "modelGraphZoomValue", "modelGraphZoomInButton", "modelGraphUndoButton", "modelGraphRedoButton", "modelGraphStatus", "modelGraphCanvas", "modelGraphWorld", "modelGraphEdgeLayer", "modelGraphGroupLayer", "modelGraphNodeLayer", "modelGraphInspectorTitle", "modelGraphInspectorContent", "modelGraphDiagnostics",
+    "placementControls", "controlPlaneStatus", "controlPlaneStatusBadge", "controlPlaneStatusSummary", "controlPlaneStatusMetrics", "effectiveMappingMeta", "effectiveMappingSummary", "effectiveMappingFilterForm", "effectiveMappingSearchInput", "effectiveMappingRankFilter", "effectiveMappingComponentFilter", "resetEffectiveMappingFiltersButton", "effectiveOpMappingMeta", "effectiveOpMappingBody", "effectiveOpPreviousButton", "effectiveOpNextButton", "effectiveOpPageStatus", "effectiveTensorShardMeta", "effectiveTensorShardBody", "effectiveTensorPreviousButton", "effectiveTensorNextButton", "effectiveTensorPageStatus", "workloadMetaForm", "addRequestButton", "requestTableBody", "compareButton", "rerunButton",
+    "playbackFidelity", "traceEmpty", "traceRunButton", "traceContent", "traceResetButton", "tracePreviousButton", "tracePlayButton", "traceNextButton", "traceTimeline", "playbackTime", "traceRequestFilter", "traceBatchFilter", "traceRankFilter", "tracePlaybackMeta", "traceEventMeta", "tracePageBar", "tracePageStatus", "tracePagePreviousButton", "tracePageNextButton", "traceNarrativeState", "traceNarrativePrimary", "traceNarrativeSecondary", "traceTopologyPanel", "traceTopologyCanvas", "traceTopologyWorld", "traceGroupLayer", "traceLinkLayer", "traceParticleLayer", "traceNodeLayer", "traceLinkTooltip", "traceProtocolLegend", "traceLocateActiveButton", "traceEventDrawer", "traceDrawerCloseButton", "traceDrawerOpenButton", "traceArrangeFitButton", "traceAutoLayoutButton", "traceFitButton", "traceZoomOutButton", "traceZoomValue", "traceZoomInButton", "traceFullscreenButton", "traceEventDetails", "traceDiagnosticCopyButton", "traceEventStreamDisclosure", "traceEventKeywordFilter", "traceEventCategoryFilter", "traceEventPhaseFilter", "traceEventTemporalFilter", "traceEventPreviousPageButton", "traceEventNextPageButton", "traceEventPageStatus", "traceEventBody", "traceLimitations",
+    "resultsEmpty", "emptyRunButton", "resultsContent", "runManifestBar", "comparisonStrip", "metricGrid", "componentTimeseriesPanel", "componentTimeseriesFidelity", "componentTimeseriesFilterForm", "addTimeseriesChartButton", "timeseriesPointMeta", "componentTimeseriesCharts", "runtimeModeMeta", "runtimeSummary", "bottleneckMeta", "utilizationList",
+    "categoryList", "requestResultMeta", "requestResultBody", "jsonDialog", "jsonEditor", "jsonStatus", "canonicalExportDialogButton", "copyJsonButton", "applyJsonButton",
+    "modelPresetsDialog", "closeModelPresetsButton", "presetFullscreenButton", "localPresetTab", "remotePresetTab", "localPresetPanel", "remotePresetPanel", "presetFilterForm", "presetSearchInput", "presetFamilyFilter", "presetArchitectureFilter", "presetSupportFilter", "presetStatus", "presetList", "presetPagination", "presetPreviousButton", "presetNextButton", "presetPageStatus",
+    "remotePresetSearchForm", "remotePresetQueryInput", "remotePresetStatus", "remotePresetList", "presetImportForm", "presetRepoIdInput", "presetRevisionInput",
+    "hardwarePresetsDialog", "closeHardwarePresetsButton", "hardwarePresetComponentTab", "hardwarePresetArchitectureTab", "architecturePresetsDialog", "architecturePresetFilterForm", "architecturePresetSearchInput", "architecturePresetCategoryFilter", "architecturePresetLevelFilter", "architecturePresetVendorFilter", "architecturePresetSupportFilter", "architecturePresetStatus", "architecturePresetList",
+    "componentPresetsDialog", "componentPresetFilterForm", "componentPresetSearchInput", "componentPresetKindFilter", "componentPresetVendorFilter", "componentPresetEvidenceFilter", "componentPresetStatus", "componentPresetList",
+    "protocolPresetsDialog", "closeProtocolPresetsButton", "protocolPresetFilterForm", "protocolPresetSearchInput", "protocolPresetProtocolFilter", "protocolPresetOrganizationFilter", "protocolPresetStatus", "protocolPresetList",
+    "settingsDialog", "settingsDialogForm", "uiLanguageInput", "fontScaleInput", "fontScaleNumberInput", "fontScaleValue", "resetFontScaleButton", "runtimeHealthPanel", "runtimeHealthRefreshButton",
+    "customWorkspaceEnabled", "workspaceBackgroundInput", "compactLayoutInput", "topologyGridInput", "reduceMotionInput", "resetSettingsButton",
+    "architectureScanButton", "architectureScanDialog", "closeArchitectureScanButton", "architectureScanBackend", "architectureScanTopN", "runArchitectureScanButton", "architectureScanStatus", "architectureScanSummary", "architectureScanBody", "architectureScanDiagnostics",
+    "runJobDialog", "closeRunJobDialogButton", "runEstimateRisk", "runEstimateSummary", "runEstimateWarnings", "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount", "runProgressBar", "runProgressMessage", "dismissRunJobButton", "cancelRunJobButton", "startRunJobButton",
+    "toastRegion", "busyOverlay", "busyTitle", "busyDetail",
+  ];
+  ids.forEach((id) => { dom[id] = document.getElementById(id); });
+}
+
+function bindConnectionEvents() {
+  if (!connectionEventsBound) {
+    document.addEventListener("ui-languagechange", renderConnectionState);
+    connectionEventsBound = true;
+  }
+}
+
+function bindStaticEvents() {
+  bindConnectionEvents();
+  bindToolbarMenus();
+  $$(".step-button").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+  dom.loadReferenceButton.addEventListener("click", () => loadReference());
+  dom.importButton.addEventListener("click", () => dom.fileInput.click());
+  dom.fileInput.addEventListener("change", () => importScenarioFile(dom.fileInput.files?.[0]));
+  dom.exportButton.addEventListener("click", exportScenario);
+  dom.canonicalExportButton.addEventListener("click", () => { void exportCanonicalIr(); });
+  dom.jsonButton.addEventListener("click", openJsonDialog);
+  dom.modelPresetsButton.addEventListener("click", openModelPresetsDialog);
+  dom.hardwarePresetsButton.addEventListener("click", () => { void openHardwarePresetsDialog("architectures"); });
+  dom.settingsButton.addEventListener("click", openSettingsDialog);
+  dom.architectureScanButton.addEventListener("click", openArchitectureScanDialog);
+  dom.validateButton.addEventListener("click", () => validateScenario());
+  dom.runButton.addEventListener("click", runScenario);
+  dom.rerunButton.addEventListener("click", runScenario);
+  dom.emptyRunButton.addEventListener("click", runScenario);
+  dom.traceRunButton.addEventListener("click", runScenario);
+  dom.compareButton.addEventListener("click", compareScenario);
+  dom.runArchitectureScanButton.addEventListener("click", () => { void runArchitectureScan(); });
+  dom.closeArchitectureScanButton.addEventListener("click", () => dom.architectureScanDialog.close("close"));
+  dom.startRunJobButton.addEventListener("click", () => { void startRunJob(); });
+  dom.cancelRunJobButton.addEventListener("click", () => { void cancelRunJob(); });
+  dom.closeRunJobDialogButton.addEventListener("click", () => dom.runJobDialog.close("close"));
+  dom.dismissRunJobButton.addEventListener("click", () => dom.runJobDialog.close(runJobIsActive() ? "background" : "close"));
+  dom.traceResetButton.addEventListener("click", () => {
+    stopTracePlayback();
+    setTraceTime(state.tracePlayback.startNs, { force: true });
+  });
+  dom.traceArrangeFitButton.addEventListener("click", arrangeAndFitTraceLayout);
+  dom.traceAutoLayoutButton.addEventListener("click", resetTraceLayout);
+  dom.traceFitButton.addEventListener("click", fitTraceLayout);
+  dom.traceZoomOutButton.addEventListener("click", () => zoomTraceLayout(1 / 1.15));
+  dom.traceZoomInButton.addEventListener("click", () => zoomTraceLayout(1.15));
+  dom.traceFullscreenButton.addEventListener("click", () => toggleTraceFullscreen());
+  dom.traceLocateActiveButton.addEventListener("click", revealTraceTopology);
+  dom.traceDiagnosticCopyButton.addEventListener("click", () => { void copyTraceDiagnosticInfo(); });
+  dom.traceDrawerCloseButton.addEventListener("click", () => setTraceDrawerOpen(false));
+  dom.traceDrawerOpenButton.addEventListener("click", () => setTraceDrawerOpen(true));
+  dom.traceTopologyCanvas.addEventListener("pointerdown", beginTraceCanvasPointer);
+  dom.traceTopologyCanvas.addEventListener("pointermove", moveTraceCanvasPointer);
+  dom.traceTopologyCanvas.addEventListener("pointerup", endTraceCanvasPointer);
+  dom.traceTopologyCanvas.addEventListener("pointercancel", endTraceCanvasPointer);
+  dom.traceTopologyCanvas.addEventListener("lostpointercapture", endTraceCanvasPointer);
+  dom.traceTopologyCanvas.addEventListener("scroll", updateTraceLocateActiveButton, { passive: true });
+  dom.traceTopologyCanvas.addEventListener("keydown", handleTraceTopologyKeydown);
+  dom.traceTopologyCanvas.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    zoomTraceLayout(event.deltaY < 0 ? 1.1 : 1 / 1.1, event);
+  }, { passive: false });
+  dom.tracePreviousButton.addEventListener("click", () => stepTraceEvent(-1));
+  dom.tracePlayButton.addEventListener("click", toggleTracePlayback);
+  dom.traceNextButton.addEventListener("click", () => stepTraceEvent(1));
+  dom.traceTimeline.addEventListener("input", () => {
+    stopTracePlayback();
+    const ratio = Math.max(0, Math.min(1, Number(dom.traceTimeline.value) / 10000));
+    const playback = state.tracePlayback;
+    setTraceTime(playback.startNs + (playback.endNs - playback.startNs) * ratio, { force: true });
+  });
+  const updateTraceFilter = (field, control) => {
+    stopTracePlayback();
+    state.tracePlayback[field] = control.value;
+    applyTraceFilters({ resetTime: true });
+    setTraceTime(state.tracePlayback.timeNs, { force: true });
+  };
+  dom.traceRequestFilter.addEventListener("change", () => updateTraceFilter("requestFilter", dom.traceRequestFilter));
+  dom.traceBatchFilter.addEventListener("change", () => {
+    stopTracePlayback();
+    const batchId = dom.traceBatchFilter.value;
+    tracePageLoadSerial += 1;
+    if (batchId && traceTaskReplayAvailable()) {
+      state.tracePlayback.loadError = "";
+      void loadTraceTaskPage(batchId, 0);
+    } else {
+      applyAggregateTraceData();
+      renderTracePlayback();
+    }
+  });
+  dom.traceRankFilter.addEventListener("change", () => updateTraceFilter("rankFilter", dom.traceRankFilter));
+  dom.tracePagePreviousButton.addEventListener("click", () => {
+    const playback = state.tracePlayback;
+    if (playback.page?.previous_offset != null) void loadTraceTaskPage(playback.batchFilter, playback.page.previous_offset);
+  });
+  dom.tracePageNextButton.addEventListener("click", () => {
+    const playback = state.tracePlayback;
+    if (playback.page?.next_offset != null) void loadTraceTaskPage(playback.batchFilter, playback.page.next_offset);
+  });
+  dom.traceEventStreamDisclosure.addEventListener("toggle", () => {
+    state.tracePlayback.semanticStreamOpen = dom.traceEventStreamDisclosure.open;
+    state.tracePlayback.semanticPage = 0;
+    renderTraceEventTable();
+  });
+  const updateTraceSemanticFilter = (field, control) => {
+    state.tracePlayback[field] = control.value;
+    state.tracePlayback.semanticPage = 0;
+    renderTraceEventTable();
+  };
+  dom.traceEventKeywordFilter.addEventListener("input", () => updateTraceSemanticFilter("semanticQuery", dom.traceEventKeywordFilter));
+  dom.traceEventCategoryFilter.addEventListener("change", () => updateTraceSemanticFilter("semanticCategory", dom.traceEventCategoryFilter));
+  dom.traceEventPhaseFilter.addEventListener("change", () => updateTraceSemanticFilter("semanticPhase", dom.traceEventPhaseFilter));
+  dom.traceEventTemporalFilter.addEventListener("change", () => updateTraceSemanticFilter("semanticTemporal", dom.traceEventTemporalFilter));
+  dom.traceEventPreviousPageButton.addEventListener("click", () => {
+    state.tracePlayback.semanticPage = Math.max(0, state.tracePlayback.semanticPage - 1);
+    renderTraceEventTable();
+  });
+  dom.traceEventNextPageButton.addEventListener("click", () => {
+    state.tracePlayback.semanticPage += 1;
+    renderTraceEventTable();
+  });
+  dom.diagnosticToggle.addEventListener("click", () => dom.diagnosticPanel.hidden ? openDiagnostics() : closeDiagnostics());
+  dom.closeDiagnosticsButton.addEventListener("click", closeDiagnostics);
+  dom.selectModeButton.addEventListener("click", () => setTopologyTool("select"));
+  dom.connectModeButton.addEventListener("click", () => setTopologyTool("connect"));
+  dom.protocolSelect.addEventListener("change", () => {
+    state.connectSource = null;
+    syncProtocolManualControls(PROTOCOL_DEFAULTS[dom.protocolSelect.value] || {}, null);
+    if (state.connectMode) {
+      dom.connectionHint.textContent = uiText(
+        "连接模式 · {protocol} · 请选择第一个组件",
+        "Connect mode · {protocol} · select the first component",
+        { protocol: dom.protocolSelect.value },
+      );
+    }
+    applyTopologySelection();
+  });
+  dom.protocolCatalogButton.addEventListener("click", () => { void openProtocolPresetsDialog(); });
+  dom.fitCanvasButton.addEventListener("click", () => {
+    const historyBefore = topologyHistorySnapshot();
+    ensureNodePositions(true);
+    renderTopology();
+    commitTopologyHistory(historyBefore, "自动整理布局");
+    requestAnimationFrame(fitTopologyViewport);
+    toast("布局已整理", "确定性分层布局已写入 topology_view；硬件与链路语义不变", "info", 3200);
+  });
+  dom.undoTopologyButton.addEventListener("click", () => travelTopologyHistory("undo"));
+  dom.redoTopologyButton.addEventListener("click", () => travelTopologyHistory("redo"));
+  dom.createGroupButton.addEventListener("click", createSelectedGroup);
+  dom.setGroupRootButton.addEventListener("click", setSelectedGroupRoot);
+  dom.toggleGroupButton.addEventListener("click", () => { void toggleSelectedGroup(); });
+  dom.releaseGroupButton.addEventListener("click", releaseSelectedGroup);
+  dom.copyTopologyButton.addEventListener("click", () => { void copyTopologySelection(); });
+  dom.pasteTopologyButton.addEventListener("click", () => { void pasteTopologySelection(); });
+  dom.topologyCanvas.addEventListener("pointerdown", beginCanvasPointer);
+  dom.topologyCanvas.addEventListener("pointermove", moveCanvasPointer);
+  dom.topologyCanvas.addEventListener("pointerup", endCanvasPointer);
+  dom.topologyCanvas.addEventListener("pointercancel", endCanvasPointer);
+  dom.topologyCanvas.addEventListener("lostpointercapture", endCanvasPointer);
+  dom.topologyCanvas.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    zoomTopology(event.deltaY < 0 ? 1.12 : 1 / 1.12, canvasScreenPoint(event));
+  }, { passive: false });
+  dom.topologyCanvas.addEventListener("keydown", (event) => {
+    if (!state.selectedComponents.size || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const distance = event.shiftKey ? 32 : 8;
+    const historyBefore = topologyHistorySnapshot();
+    const delta = { ArrowLeft: [-distance, 0], ArrowRight: [distance, 0], ArrowUp: [0, -distance], ArrowDown: [0, distance] }[event.key];
+    const desired = {};
+    state.selectedComponents.forEach((id) => {
+      const position = state.nodePositions[id];
+      if (!position) return;
+      desired[id] = { x: position.x + delta[0], y: position.y + delta[1] };
+    });
+    let placement;
+    try {
+      placement = resolveTopologyPlacement(state.nodePositions, desired);
+    } catch (error) {
+      toast("移动受阻", chineseMessage(error, "当前位置与其他组件冲突，无法完成移动。"), "warning", 4200);
+      return;
+    }
+    Object.assign(state.nodePositions, placement.positions);
+    event.preventDefault();
+    saveTopologyView();
+    commitTopologyHistory(historyBefore, "键盘移动组件");
+    renderTopology();
+    if (placement.adjusted) toast("已避让重叠", "键盘移动已吸附到最近空位。", "info", 2600);
+  });
+  $$("[data-add-kind]").forEach((button) => button.addEventListener("click", () => addComponent(button.dataset.addKind)));
+  dom.deleteSelectionButton.addEventListener("click", deleteSelection);
+  dom.modelGraphBackButton.addEventListener("click", () => setModelGraphMode("overview"));
+  dom.modelGraphConnectButton.addEventListener("click", () => {
+    if (state.modelGraphEditor.connectMode || state.modelGraphEditor.connectPreview?.active) {
+      clearModelGraphConnectionPreview("tool-toggle", { announce: true });
+    } else {
+      clearModelGraphConnectionPreview("tool-toggle", { keepMode: true });
+      state.modelGraphEditor.connectMode = true;
+      state.modelGraphEditor.diagnostics = ["连接模式：请选择一个输出端口，再选择目标输入端口。"];
+    }
+    renderModelGraph();
+  });
+  dom.modelGraphAutoLayoutButton.addEventListener("click", () => { clearModelGraphConnectionPreview("tool-action"); autoLayoutModelGraph({ commit: true }); });
+  dom.modelGraphFitButton.addEventListener("click", () => { clearModelGraphConnectionPreview("tool-action"); fitModelGraph(); });
+  dom.modelGraphZoomOutButton.addEventListener("click", () => { clearModelGraphConnectionPreview("tool-action"); zoomModelGraph(1 / 1.15); });
+  dom.modelGraphZoomInButton.addEventListener("click", () => { clearModelGraphConnectionPreview("tool-action"); zoomModelGraph(1.15); });
+  dom.modelGraphUndoButton.addEventListener("click", () => { clearModelGraphConnectionPreview("tool-action"); travelModelGraphHistory("undo"); });
+  dom.modelGraphRedoButton.addEventListener("click", () => { clearModelGraphConnectionPreview("tool-action"); travelModelGraphHistory("redo"); });
+  dom.modelGraphCanvas.addEventListener("pointerdown", beginModelGraphPointer);
+  dom.modelGraphCanvas.addEventListener("pointermove", moveModelGraphPointer);
+  dom.modelGraphCanvas.addEventListener("pointerup", endModelGraphPointer);
+  dom.modelGraphCanvas.addEventListener("pointercancel", endModelGraphPointer);
+  dom.modelGraphCanvas.addEventListener("lostpointercapture", endModelGraphPointer);
+  dom.modelGraphCanvas.addEventListener("wheel", (event) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    clearModelGraphConnectionPreview("zoom");
+    const rect = dom.modelGraphCanvas.getBoundingClientRect();
+    zoomModelGraph(event.deltaY < 0 ? 1.1 : 1 / 1.1, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+  }, { passive: false });
+  bindModelGraphResizeObserver();
+  bindTopologyResizeObservers();
+  const updateEffectiveMappingFilters = () => {
+    state.effectiveMappingView.query = dom.effectiveMappingSearchInput.value;
+    state.effectiveMappingView.rank = dom.effectiveMappingRankFilter.value;
+    state.effectiveMappingView.component = dom.effectiveMappingComponentFilter.value;
+    state.effectiveMappingView.operatorPage = 0;
+    state.effectiveMappingView.tensorPage = 0;
+    renderEffectiveMapping();
+  };
+  dom.effectiveMappingSearchInput.addEventListener("input", updateEffectiveMappingFilters);
+  dom.effectiveMappingRankFilter.addEventListener("change", updateEffectiveMappingFilters);
+  dom.effectiveMappingComponentFilter.addEventListener("change", updateEffectiveMappingFilters);
+  dom.effectiveMappingFilterForm.addEventListener("reset", () => requestAnimationFrame(() => {
+    state.effectiveMappingView = { query: "", rank: "", component: "", operatorPage: 0, tensorPage: 0 };
+    renderEffectiveMapping();
+  }));
+  dom.effectiveOpPreviousButton.addEventListener("click", () => { state.effectiveMappingView.operatorPage -= 1; renderEffectiveMapping(); });
+  dom.effectiveOpNextButton.addEventListener("click", () => { state.effectiveMappingView.operatorPage += 1; renderEffectiveMapping(); });
+  dom.effectiveTensorPreviousButton.addEventListener("click", () => { state.effectiveMappingView.tensorPage -= 1; renderEffectiveMapping(); });
+  dom.effectiveTensorNextButton.addEventListener("click", () => { state.effectiveMappingView.tensorPage += 1; renderEffectiveMapping(); });
+  dom.addRequestButton.addEventListener("click", addRequest);
+  dom.addTimeseriesChartButton.addEventListener("click", addTimeseriesChart);
+  dom.componentTimeseriesCharts.addEventListener("change", updateTimeseriesSlot);
+  dom.componentTimeseriesCharts.addEventListener("input", previewTimeseriesColor);
+  dom.componentTimeseriesCharts.addEventListener("click", removeTimeseriesChart);
+  bindComponentTimeseriesResizeObserver();
+  dom.copyJsonButton.addEventListener("click", copyJson);
+  dom.canonicalExportDialogButton.addEventListener("click", () => { void exportCanonicalIr(); });
+  dom.applyJsonButton.addEventListener("click", applyJsonEditor);
+  dom.closeModelPresetsButton.addEventListener("click", () => dom.modelPresetsDialog.close("close"));
+  dom.closeHardwarePresetsButton.addEventListener("click", () => dom.hardwarePresetsDialog.close("close"));
+  dom.hardwarePresetComponentTab.addEventListener("click", () => { void setHardwarePresetTab("components", { focus: true }); });
+  dom.hardwarePresetArchitectureTab.addEventListener("click", () => { void setHardwarePresetTab("architectures", { focus: true }); });
+  dom.closeProtocolPresetsButton.addEventListener("click", () => dom.protocolPresetsDialog.close("close"));
+  dom.presetFullscreenButton.addEventListener("click", togglePresetDialogFullscreen);
+  dom.localPresetTab.addEventListener("click", () => setPresetMode("local"));
+  dom.remotePresetTab.addEventListener("click", () => setPresetMode("remote"));
+  dom.presetFilterForm.addEventListener("submit", (event) => { event.preventDefault(); void loadModelPresets({ offset: 0 }); });
+  dom.presetSearchInput.addEventListener("input", schedulePresetCatalogSearch);
+  for (const control of [dom.presetFamilyFilter, dom.presetArchitectureFilter, dom.presetSupportFilter]) {
+    control.addEventListener("change", () => { void loadModelPresets({ offset: 0 }); });
+  }
+  dom.presetPreviousButton.addEventListener("click", () => { void loadModelPresets({ offset: Math.max(0, state.presetCatalog.offset - state.presetCatalog.limit) }); });
+  dom.presetNextButton.addEventListener("click", () => { if (state.presetCatalog.nextOffset != null) void loadModelPresets({ offset: state.presetCatalog.nextOffset }); });
+  dom.remotePresetSearchForm.addEventListener("submit", (event) => { event.preventDefault(); void searchRemoteModelPresets(); });
+  dom.presetImportForm.addEventListener("submit", (event) => { event.preventDefault(); void importModelPreset(dom.presetRepoIdInput.value, dom.presetRevisionInput.value, $("button[type='submit']", dom.presetImportForm)); });
+  dom.architecturePresetFilterForm.addEventListener("submit", (event) => { event.preventDefault(); renderArchitecturePresets(); });
+  dom.architecturePresetSearchInput.addEventListener("input", scheduleArchitecturePresetSearch);
+  for (const control of [dom.architecturePresetCategoryFilter, dom.architecturePresetLevelFilter, dom.architecturePresetVendorFilter, dom.architecturePresetSupportFilter]) {
+    control.addEventListener("change", renderArchitecturePresets);
+  }
+  dom.componentPresetFilterForm.addEventListener("submit", (event) => { event.preventDefault(); renderComponentPresets(); });
+  dom.componentPresetSearchInput.addEventListener("input", scheduleComponentPresetSearch);
+  for (const control of [dom.componentPresetKindFilter, dom.componentPresetVendorFilter, dom.componentPresetEvidenceFilter]) {
+    control.addEventListener("change", renderComponentPresets);
+  }
+  dom.protocolPresetFilterForm.addEventListener("submit", (event) => { event.preventDefault(); renderProtocolPresets(); });
+  dom.protocolPresetSearchInput.addEventListener("input", scheduleProtocolPresetSearch);
+  for (const control of [dom.protocolPresetProtocolFilter, dom.protocolPresetOrganizationFilter]) control.addEventListener("change", renderProtocolPresets);
+  dom.fontScaleInput.addEventListener("input", () => updateUiSettings({ fontScale: dom.fontScaleInput.value }, { deferStore: true }));
+  dom.fontScaleInput.addEventListener("change", () => updateUiSettings({ fontScale: dom.fontScaleInput.value }));
+  dom.fontScaleNumberInput.addEventListener("input", () => {
+    const value = Number(dom.fontScaleNumberInput.value);
+    if (Number.isFinite(value) && value >= MIN_FONT_SCALE && value <= MAX_FONT_SCALE) {
+      updateUiSettings({ fontScale: value }, { deferStore: true });
+    }
+  });
+  dom.fontScaleNumberInput.addEventListener("change", () => updateUiSettings({ fontScale: dom.fontScaleNumberInput.value }));
+  dom.resetFontScaleButton.addEventListener("click", resetFontScale);
+  dom.uiLanguageInput.addEventListener("change", () => updateUiSettings({ language: dom.uiLanguageInput.value }));
+  dom.runtimeHealthRefreshButton.addEventListener("click", () => { void probeConnection({ notify: true }); });
+  $$("input[name=\"settingsTheme\"]", dom.settingsDialog).forEach((control) => control.addEventListener("change", () => updateUiSettings({ theme: control.value })));
+  dom.customWorkspaceEnabled.addEventListener("change", () => updateUiSettings({
+    workspaceBackground: dom.customWorkspaceEnabled.checked ? dom.workspaceBackgroundInput.value : null,
+  }));
+  dom.workspaceBackgroundInput.addEventListener("input", () => {
+    if (dom.customWorkspaceEnabled.checked) updateUiSettings({ workspaceBackground: dom.workspaceBackgroundInput.value });
+  });
+  dom.compactLayoutInput.addEventListener("change", () => updateUiSettings({ compact: dom.compactLayoutInput.checked }));
+  dom.topologyGridInput.addEventListener("change", () => updateUiSettings({ topologyGrid: dom.topologyGridInput.checked }));
+  dom.reduceMotionInput.addEventListener("change", () => updateUiSettings({ reduceMotion: dom.reduceMotionInput.checked }));
+  dom.resetSettingsButton.addEventListener("click", resetUiSettings);
+  bindModalDialogLifecycle();
+  document.addEventListener("keydown", handleTraceFullscreenKeydown, true);
+  document.addEventListener("focusin", handleTraceFullscreenFocusIn, true);
+
+  window.addEventListener("keydown", (event) => {
+    const editing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement;
+    if (event.key === "Escape" && state.tracePlayback?.fullscreen) {
+      event.preventDefault();
+      toggleTraceFullscreen(false);
+      return;
+    }
+    if (event.key === "Escape" && closeFieldHelp({ returnFocus: true })) {
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "Escape" && closeToolbarMenus({ returnFocus: true })) {
+      event.preventDefault();
+      return;
+    }
+    if (hasOpenModalDialog()) return;
+    if (event.key === "Escape" && state.view === "model") {
+      const graphUi = modelGraphUi();
+      if (state.modelGraphEditor.connectMode || state.modelGraphEditor.connectSource || state.modelGraphEditor.connectPreview?.active) {
+        clearModelGraphConnectionPreview("escape", { announce: true });
+        renderModelGraph();
+        event.preventDefault();
+        return;
+      }
+      if (graphUi.mode === "focus") {
+        event.preventDefault();
+        setModelGraphMode("overview");
+        return;
+      }
+    }
+    if ((event.ctrlKey || event.metaKey) && !editing && state.view === "architecture" && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      travelTopologyHistory(event.shiftKey ? "redo" : "undo");
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && !editing && state.view === "architecture" && event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      travelTopologyHistory("redo");
+      return;
+    }
+    if (event.code === "Space" && state.view === "architecture" && !editing && event.target === dom.topologyCanvas) {
+      state.spacePressed = true;
+      dom.topologyCanvas.classList.add("is-space-pan");
+      event.preventDefault();
+    }
+    if ((event.ctrlKey || event.metaKey) && !editing && state.view === "architecture" && event.key.toLowerCase() === "c") {
+      event.preventDefault();
+      void copyTopologySelection();
+    }
+    if ((event.ctrlKey || event.metaKey) && !editing && state.view === "architecture" && event.key.toLowerCase() === "v") {
+      event.preventDefault();
+      void pasteTopologySelection();
+    }
+    if (event.key === "Escape") {
+      if (state.connectMode) setTopologyTool("select");
+      else if (!dom.diagnosticPanel.hidden) closeDiagnostics();
+      else setComponentSelection([]);
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && state.view === "architecture" && state.selected && !editing) {
+      event.preventDefault();
+      deleteSelection();
+    }
+  });
+  window.addEventListener("keyup", (event) => {
+    if (event.code === "Space") {
+      state.spacePressed = false;
+      dom.topologyCanvas.classList.remove("is-space-pan");
+    }
+  });
+  window.addEventListener("resize", () => {
+    if (activeFieldHelp && fieldHelpPortal && !fieldHelpPortal.hidden) {
+      const trigger = activeFieldHelp.matches?.(".field-help-trigger") ? activeFieldHelp : $(".field-help-trigger", activeFieldHelp);
+      positionFieldHelp(trigger, fieldHelpPortal);
+    }
+    if (state.view === "architecture") scheduleTopologyResponsiveLayout();
+    if (state.view === "model") requestAnimationFrame(renderModelGraph);
+    if (state.view === "playback") requestAnimationFrame(() => {
+      state.tracePlayback.topologyLayout = null;
+      renderTraceTopology();
+      requestAnimationFrame(() => fitTraceLayout({ render: true, auto: true }));
+    });
+    if (dom.runtimeSummary) scheduleRuntimeSharedTracks();
+  });
+}
+
+async function probeConnection({ notify = false } = {}) {
+  try {
+    const health = await apiRequest("/health", { method: "GET", headers: {} });
+    applyRuntimeHealth(health, { notify });
+    if (notify) {
+      const message = state.runtimeHealth.ortoolsAvailable
+        ? `OR-Tools ${state.runtimeHealth.ortoolsVersion} 与 CP-SAT 均可用。`
+        : state.runtimeHealth.ortoolsError;
+      toast("运行环境检查完成", message, state.runtimeHealth.ortoolsAvailable ? "success" : "warning", 7500);
+    }
+    return health;
+  } catch (error) {
+    state.runtimeHealth = null;
+    renderRuntimeHealth();
+    setConnection("offline", error.code === "network_error" ? CONNECTION_LABELS.unreachable : CONNECTION_LABELS.responseError);
+    if (notify) showOperationError("运行环境检查失败", error);
+    return null;
+  }
+}
+
+async function bootstrap() {
+  Topology = await topologyCoreReady;
+  if (!Topology) throw new Error("拓扑核心模块载入失败。");
+  [ModelGraph, TraceView] = await Promise.all([modelGraphCoreReady, traceViewCoreReady]);
+  if (!ModelGraph) throw new Error("模型图核心模块载入失败。");
+  if (!TraceView) throw new Error("回放视图核心模块载入失败。");
+  cacheDom();
+  state.settings = normalizeUiSettings(readStoredJson(STORAGE_UI_SETTINGS, DEFAULT_UI_SETTINGS));
+  applyUiSettings(state.settings);
+  globalThis.UiI18n?.setLanguage?.(state.settings.language, document);
+  storeUiSettings();
+  syncSettingsForm();
+  hydrateConceptHelp();
+  bindStaticEvents();
+  renderConnectionState();
+  await probeConnection();
+  const stored = readStoredJson(STORAGE_SCENARIO, null);
+  if (stored) {
+    try {
+      setScenario(stored, { dirty: false });
+    } catch (error) {
+      localStorage.removeItem(STORAGE_SCENARIO);
+      toast("本地场景不可读", chineseMessage(error, "本地保存的场景已损坏，已改为载入参考场景。"), "warning");
+      await loadReference({ quiet: true });
+    }
+  } else {
+    await loadReference({ quiet: true });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", bootstrap);

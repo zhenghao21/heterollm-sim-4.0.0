@@ -1,0 +1,297 @@
+{
+  "schema": "engine-holdout-candidate-audit/v1",
+  "created_utc": "2026-09-13T18:09:48.983023+00:00",
+  "purpose": "Identify immutable native payloads eligible for L1 Engine simulator-only replay before E-01.",
+  "policy": {
+    "native_execution_count": 0,
+    "l1_requires": [
+      "all three explicit engine fields",
+      "counter_proven or marker_proven evidence",
+      "current v3 timing contract",
+      "identity and token boundary evidence"
+    ],
+    "partial_payload_use": "diagnostic_only"
+  },
+  "payload_scan_count": 11,
+  "identity_reuse_count": 11,
+  "aggregate": {
+    "qwen25": {
+      "payload_count": 8,
+      "replayable_engine_v3": 2,
+      "full_engine_contract_migration_required": 0,
+      "partial_engine_tpot_only": 1,
+      "full_engine_evidence_invalid_or_stale": 5,
+      "gpu_layers": [
+        -1,
+        0
+      ]
+    },
+    "qwen35": {
+      "payload_count": 2,
+      "replayable_engine_v3": 1,
+      "full_engine_contract_migration_required": 0,
+      "partial_engine_tpot_only": 1,
+      "full_engine_evidence_invalid_or_stale": 0,
+      "gpu_layers": [
+        -1
+      ]
+    },
+    "tinyllama": {
+      "payload_count": 1,
+      "replayable_engine_v3": 1,
+      "full_engine_contract_migration_required": 0,
+      "partial_engine_tpot_only": 0,
+      "full_engine_evidence_invalid_or_stale": 0,
+      "gpu_layers": [
+        -1
+      ]
+    }
+  },
+  "skipped_non_payload_count": 69,
+  "skipped_unknown_model_count": 0,
+  "rows": [
+    {
+      "source": "artifacts/development/b08_gate_probe_qwen25.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 8,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_tpot_ms"
+      ],
+      "engine_timing_status": null,
+      "timing_contract_id": "client-real-token/v1",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "partial_engine_tpot_only",
+      "validation_errors": []
+    },
+    {
+      "source": "artifacts/development/b08_gate_probe_qwen35.json",
+      "family": "qwen35",
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 8,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_tpot_ms"
+      ],
+      "engine_timing_status": null,
+      "timing_contract_id": "client-real-token/v1",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "partial_engine_tpot_only",
+      "validation_errors": []
+    },
+    {
+      "source": "artifacts/development/e_engine_probe_qwen25.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 4,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v2",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "full_engine_evidence_invalid_or_stale",
+      "validation_errors": [
+        "native measurements sha256 missing or malformed",
+        "extractor implementation sha256 mismatch",
+        "extractor function list mismatch",
+        "timing contract mismatch",
+        "timing contract sha256 mismatch",
+        "extractor file sha256 mismatch"
+      ]
+    },
+    {
+      "source": "artifacts/development/e_engine_probe_qwen25_gpu_v3.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 4,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v3",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "full_engine_evidence_invalid_or_stale",
+      "validation_errors": [
+        "native measurements sha256 missing or malformed",
+        "extractor file sha256 mismatch"
+      ]
+    },
+    {
+      "source": "artifacts/development/e_engine_probe_qwen25_gpu_v4.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 4,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v3",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "replayable_engine_v3",
+      "validation_errors": []
+    },
+    {
+      "source": "artifacts/development/e_engine_probe_qwen25_v2.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 4,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v2",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "full_engine_evidence_invalid_or_stale",
+      "validation_errors": [
+        "native measurements sha256 missing or malformed",
+        "extractor implementation sha256 mismatch",
+        "extractor function list mismatch",
+        "timing contract mismatch",
+        "timing contract sha256 mismatch",
+        "extractor file sha256 mismatch"
+      ]
+    },
+    {
+      "source": "artifacts/development/e_engine_qwen25_gpu_out8.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 8,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v2",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "full_engine_evidence_invalid_or_stale",
+      "validation_errors": [
+        "native measurements sha256 missing or malformed",
+        "timing contract mismatch",
+        "timing contract sha256 mismatch",
+        "extractor file sha256 mismatch"
+      ]
+    },
+    {
+      "source": "artifacts/development/eengine_qwen35_p2_o4_compare_v1.json",
+      "family": "qwen35",
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 4,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v3",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "replayable_engine_v3",
+      "validation_errors": []
+    },
+    {
+      "source": "artifacts/development/eengine_tiny_p2_o4_compare_v1.json",
+      "family": "tinyllama",
+      "model": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+      "prompt_tokens": 3,
+      "output_tokens": 4,
+      "parallel": 1,
+      "gpu_layers": -1,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v3",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "replayable_engine_v3",
+      "validation_errors": []
+    },
+    {
+      "source": "artifacts/development/engine_contract_probe.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 2,
+      "parallel": 1,
+      "gpu_layers": 0,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v2",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "full_engine_evidence_invalid_or_stale",
+      "validation_errors": [
+        "native measurements sha256 missing or malformed",
+        "timing contract mismatch",
+        "timing contract sha256 mismatch",
+        "extractor file sha256 mismatch"
+      ]
+    },
+    {
+      "source": "artifacts/development/engine_contract_probe_engine_v3.json",
+      "family": "qwen25",
+      "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "prompt_tokens": 2,
+      "output_tokens": 2,
+      "parallel": 1,
+      "gpu_layers": 0,
+      "engine_fields": [
+        "engine_e2e_ms",
+        "engine_tpot_ms",
+        "engine_ttft_ms"
+      ],
+      "engine_timing_status": "counter_proven",
+      "timing_contract_id": "engine-stage+client-real-token/v3",
+      "validity_status": "request_boundary_aligned",
+      "identity_complete": true,
+      "status": "replayable_engine_v3",
+      "validation_errors": []
+    }
+  ]
+}

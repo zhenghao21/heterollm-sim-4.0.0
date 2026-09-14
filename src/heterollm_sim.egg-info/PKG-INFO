@@ -1,0 +1,27 @@
+Metadata-Version: 2.4
+Name: heterollm-sim
+Version: 4.0.0
+Summary: System-level LLM inference simulator for heterogeneous integrated chips
+Author: HeteroLLM Simulator Contributors
+Requires-Python: ==3.12.*
+Description-Content-Type: text/markdown
+Requires-Dist: numpy<2.4,>=2.0.2
+Requires-Dist: ortools==9.15.6755
+
+# HeteroLLM Simulator clean package
+
+这是当前 V4 仿真器的最小可运行包：输入硬件、模型、负载和运行策略，统一进入 `ScenarioConfig`、
+`TopologyAwareBatchCostProvider` 和 `UnifiedEventKernel`。前端是 `src/heterollm_sim/webui` 下的原生
+HTML/CSS/JavaScript，不需要 npm。
+
+## 安装与启动
+
+```powershell
+py -3.12 -m pip install .
+py -3.12 -m heterollm_sim.cli demo
+py -3.12 -m heterollm_sim.cli ui
+```
+
+运行测试：`py -3.12 -m pytest -q`。Node.js 运行 `node --test tests/webui_*.test.cjs` 可检查静态前端。
+
+历史测量、Bionic 适配器、原生批测和实验脚本不在此包中；它们仍保留在开发仓库。

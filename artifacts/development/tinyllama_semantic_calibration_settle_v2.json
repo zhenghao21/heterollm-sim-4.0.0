@@ -1,0 +1,358 @@
+{
+  "schema": "native-calibration/v1",
+  "prompt_ns_per_token": 1648333.3333333333,
+  "decode_ns_per_token": 4289666.666666667,
+  "launch_ns_per_call": 2379.1632653061224,
+  "prefill_launch_ns_per_call": null,
+  "decode_launch_ns_per_call": null,
+  "synchronize_ns_per_call": 107213.95,
+  "decode_first_invocation_extra_ns": null,
+  "decode_first_invocation_policy": null,
+  "decode_first_invocation_evidence": null,
+  "phase_boundary_ns_per_invocation": {
+    "prefill": 1564953.0,
+    "decode": 1271679.6666666667
+  },
+  "phase_boundary_policy": "one_task_per_phase_invocation",
+  "request_marker_ns": null,
+  "request_marker_policy": null,
+  "request_marker_evidence": null,
+  "request_shape": null,
+  "d2h_ns_per_byte": null,
+  "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.json",
+  "source_sha256": "0f6005becf7084162c4941c7f94618f60d9b46123b31553c2534d63f790f037f",
+  "kernel_stage_mapping": {
+    "schema": "native-kernel-mapping/v1",
+    "records": [
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 1850757.0,
+        "instances": 167,
+        "avg_ns": 11082.4,
+        "median_ns": 10113.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)12, (int)3, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 1057249.0,
+        "instances": 131,
+        "avg_ns": 8070.6,
+        "median_ns": 6145.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_f<__half, float, (int)1, (int)32, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 554264.0,
+        "instances": 66,
+        "avg_ns": 8397.9,
+        "median_ns": 8385.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "quantize_q8_1(const float *, void *, long long, long long, long long, long long, long long, unsigned int, uint3)",
+        "stage": "quantize",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 518578.0,
+        "instances": 553,
+        "avg_ns": 937.8,
+        "median_ns": 928.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rms_norm_f32<(int)1024, (bool)1, (bool)0>(const float *, float *, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3)",
+        "stage": "normalization",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 431728.0,
+        "instances": 180,
+        "avg_ns": 2398.5,
+        "median_ns": 2400.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 424556.0,
+        "instances": 171,
+        "avg_ns": 2482.8,
+        "median_ns": 1568.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 390927.0,
+        "instances": 30,
+        "avg_ns": 13030.9,
+        "median_ns": 13024.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 294540.0,
+        "instances": 34,
+        "avg_ns": 8662.9,
+        "median_ns": 1792.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_f<__half, __half, (int)1, (int)128, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 202598.0,
+        "instances": 66,
+        "avg_ns": 3069.7,
+        "median_ns": 3072.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)14, (int)3, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 145698.0,
+        "instances": 20,
+        "avg_ns": 7284.9,
+        "median_ns": 7232.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void soft_max_f32<(bool)1, (int)256, (int)256, float>(const float *, const T4 *, const float *, float *, soft_max_params)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 117986.0,
+        "instances": 88,
+        "avg_ns": 1340.8,
+        "median_ns": 1312.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rope_norm<(bool)1, (bool)0, float, __half>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+        "stage": "attention_qkv",
+        "confidence": 0.91,
+        "reason": "kernel name marker",
+        "total_ns": 97538.0,
+        "instances": 88,
+        "avg_ns": 1108.4,
+        "median_ns": 1120.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_set_rows<float, long long, __half>(const T1 *, const T2 *, T3 *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, uint3, uint3, uint3, uint3, uint3)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 92520.0,
+        "instances": 88,
+        "avg_ns": 1051.4,
+        "median_ns": 1024.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rope_norm<(bool)1, (bool)0, float, float>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+        "stage": "attention_qkv",
+        "confidence": 0.91,
+        "reason": "kernel name marker",
+        "total_ns": 87361.0,
+        "instances": 88,
+        "avg_ns": 992.7,
+        "median_ns": 1024.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_f<__half2, (int)32, (int)3, (int)2, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 61057.0,
+        "instances": 22,
+        "avg_ns": 2775.3,
+        "median_ns": 2752.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_bin_bcast<&op_add, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 46434.0,
+        "instances": 46,
+        "avg_ns": 1009.4,
+        "median_ns": 1024.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_f<__half2, (int)32, (int)3, (int)1, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 42787.0,
+        "instances": 22,
+        "avg_ns": 1944.9,
+        "median_ns": 1920.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void cpy_scalar<&cpy_1_scalar<float, float>>(const char *, char *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 26785.0,
+        "instances": 22,
+        "avg_ns": 1217.5,
+        "median_ns": 1216.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void unary_gated_op_kernel<&op_silu, float>(const T2 *, const T2 *, T2 *, long long, long long, long long, long long)",
+        "stage": "ffn",
+        "confidence": 0.92,
+        "reason": "kernel name marker",
+        "total_ns": 18626.0,
+        "instances": 21,
+        "avg_ns": 887.0,
+        "median_ns": 896.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long long, long long, uint3, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)",
+        "stage": "lm_head",
+        "confidence": 0.92,
+        "reason": "kernel name marker",
+        "total_ns": 8864.0,
+        "instances": 8,
+        "avg_ns": 1108.0,
+        "median_ns": 1104.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\eengine_tiny_p2_o4_profile_v2.kernel.csv"
+      }
+    ],
+    "aggregate": {
+      "attention_qkv": {
+        "stage": "attention_qkv",
+        "kernel_count": 2,
+        "instances": 176,
+        "total_ns": 184899.0,
+        "weighted_avg_ns": 1050.5500000000002,
+        "confidence_min": 0.91,
+        "confidence_mean": 0.91,
+        "share": 0.02857413079852069
+      },
+      "attention_output": {
+        "stage": "attention_output",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "ffn": {
+        "stage": "ffn",
+        "kernel_count": 1,
+        "instances": 21,
+        "total_ns": 18626.0,
+        "weighted_avg_ns": 887.0,
+        "confidence_min": 0.92,
+        "confidence_mean": 0.92,
+        "share": 0.0028784458555927636
+      },
+      "kv": {
+        "stage": "kv",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "lm_head": {
+        "stage": "lm_head",
+        "kernel_count": 1,
+        "instances": 8,
+        "total_ns": 8864.0,
+        "weighted_avg_ns": 1108.0,
+        "confidence_min": 0.92,
+        "confidence_mean": 0.92,
+        "share": 0.001369834857939131
+      },
+      "output": {
+        "stage": "output",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "normalization": {
+        "stage": "normalization",
+        "kernel_count": 1,
+        "instances": 180,
+        "total_ns": 431728.0,
+        "weighted_avg_ns": 2398.5,
+        "confidence_min": 0.98,
+        "confidence_mean": 0.98,
+        "share": 0.06671886998514724
+      },
+      "quantize": {
+        "stage": "quantize",
+        "kernel_count": 1,
+        "instances": 553,
+        "total_ns": 518578.0,
+        "weighted_avg_ns": 937.8,
+        "confidence_min": 0.98,
+        "confidence_mean": 0.98,
+        "share": 0.08014059351989607
+      },
+      "linear_attention_aux": {
+        "stage": "linear_attention_aux",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "unknown": {
+        "stage": "unknown",
+        "kernel_count": 14,
+        "instances": 973,
+        "total_ns": 5308158.0,
+        "weighted_avg_ns": 5455.466392600207,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.8203181249829041
+      }
+    }
+  },
+  "model_sha256": "9fecc3b3cd76bba89d504f29b616eedf7da85b96540e490ca5824d3f7d2776a0",
+  "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+  "runtime_fingerprint": "90617f319d66c9f002eaedb765665224c97af898c630d19ff1e5abdc2da153d6",
+  "backend_version": null,
+  "coverage_status": null,
+  "identity_mismatch": false,
+  "calibration_basis": null
+}
