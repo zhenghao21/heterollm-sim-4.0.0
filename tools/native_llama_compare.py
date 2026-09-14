@@ -376,8 +376,14 @@ def _native_request_record(response: Mapping[str, object],
     if not isinstance(timings, Mapping):
         timings = {}
     boundary = boundary if isinstance(boundary, Mapping) else {}
-    prompt_ms = _finite_timing(timings.get("prompt_ms"))
-    eval_ms = _finite_timing(timings.get("predicted_ms"))
+    def _safe_duration(value: object) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        number = float(value)
+        return number if math.isfinite(number) and number >= 0 else None
+
+    prompt_ms = _safe_duration(timings.get("prompt_ms"))
+    eval_ms = _safe_duration(timings.get("predicted_ms"))
     prompt_value = timings.get("prompt_n", response.get("tokens_evaluated"))
     output_value = timings.get("predicted_n", response.get("tokens_predicted"))
     prompt_tokens = int(prompt_value) if isinstance(prompt_value, int) and not isinstance(prompt_value, bool) and prompt_value >= 0 else None
