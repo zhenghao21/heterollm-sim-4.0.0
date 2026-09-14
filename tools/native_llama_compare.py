@@ -251,7 +251,13 @@ def _percentile_summary(values: list[float]) -> dict[str, object]:
     with the inclusive method gives deterministic interpolation for N>1 and
     naturally handles a singleton batch.
     """
-    finite = [float(value) for value in values if value is not None]
+    finite = []
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        number = float(value)
+        if math.isfinite(number) and number >= 0:
+            finite.append(number)
     if not finite:
         return {
             "count": 0,
@@ -294,7 +300,9 @@ def _engine_boundary_timing(boundary: Mapping[str, object] | None,
     """
     unavailable = {"engine_ttft_ms": None, "engine_tpot_ms": None,
                    "engine_e2e_ms": None, "engine_timing_status": "unavailable"}
-    if not isinstance(boundary, Mapping) or boundary.get("status") != "measured":
+    if (not isinstance(boundary, Mapping) or boundary.get("status") != "measured"
+            or isinstance(output_tokens, bool) or not isinstance(output_tokens, int)
+            or output_tokens < 1):
         return unavailable
     values = [boundary.get(name) for name in ("request_begin_ns", "first_token_ns", "last_token_ns")]
     if any(not isinstance(value, (int, float)) or isinstance(value, bool) for value in values):
@@ -344,7 +352,9 @@ def _engine_counter_timing(timings: Mapping[str, object], output_tokens: int) ->
             or float(prompt_ms) < 0 or float(eval_ms) < 0
             or isinstance(output_tokens, bool) or not isinstance(output_tokens, int)
             or output_tokens < 1
-            or predicted_n is not None and predicted_n != output_tokens):
+            or (predicted_n is not None and (
+                isinstance(predicted_n, bool) or not isinstance(predicted_n, int)
+                or predicted_n != output_tokens))):
         return unavailable
     return {
         "engine_ttft_ms": float(prompt_ms),
@@ -365,14 +375,17 @@ def _native_request_record(response: Mapping[str, object],
     timings = response.get("timings", {})
     if not isinstance(timings, Mapping):
         timings = {}
+    boundary = boundary if isinstance(boundary, Mapping) else {}
     prompt_ms = _finite_timing(timings.get("prompt_ms"))
     eval_ms = _finite_timing(timings.get("predicted_ms"))
     prompt_value = timings.get("prompt_n", response.get("tokens_evaluated"))
     output_value = timings.get("predicted_n", response.get("tokens_predicted"))
     prompt_tokens = int(prompt_value) if isinstance(prompt_value, int) and not isinstance(prompt_value, bool) and prompt_value >= 0 else None
     output_tokens = int(output_value) if isinstance(output_value, int) and not isinstance(output_value, bool) and output_value >= 0 else None
-    first = boundary.get("request_to_first_token_ms")
-    end = boundary.get("request_to_end_ms")
+    first = _finite_timing(boundary.get("request_to_first_token_ms"))
+    end = _finite_timing(boundary.get("request_to_end_ms"))
+    if first is not None and end is not None and end < first:
+        first = end = None
     client_tpot = ((float(end) - float(first)) / (output_tokens - 1)
                    if isinstance(output_tokens, int) and output_tokens > 1 and first is not None and end is not None else None)
     eval_tpot = (eval_ms / (output_tokens - 1)
@@ -421,10 +434,12 @@ def _aggregate_request_records(records: list[Mapping[str, object]],
         "request_to_first_token_ms", "request_to_end_ms",
     )
     aggregate: dict[str, object] = {name: _percentile_summary(
-        [float(item[name]) for item in records if item.get(name) is not None]
+        [item.get(name) for item in records]
     ) for name in metric_names}
-    end_values = [float(item["request_to_end_ms"]) for item in records
-                  if item.get("request_to_end_ms") is not None]
+    end_values = [item.get("request_to_end_ms") for item in records]
+    end_values = [value for value in end_values
+                  if isinstance(value, (int, float)) and not isinstance(value, bool)
+                  and math.isfinite(float(value)) and float(value) >= 0]
     aggregate["request_count"] = len(records)
     aggregate["makespan_ms"] = max(end_values) if end_values else None
     aggregate["batch_client_wall_ms"] = batch_client_wall_ms
@@ -1716,9 +1731,9 @@ def main() -> int:
     result["timing_comparison"] = {
         "headline": {
             "boundary": "engine",
-            "ttft_ms": {"native_field": "native.engine_ttft_ms", "simulator_field": "simulator.engine_ttft_ms", "status": "measured" if native_prompt_ms is not None else "unavailable"},
-            "tpot_ms": {"native_field": "native.engine_tpot_ms", "simulator_field": "simulator.engine_tpot_ms", "status": "measured" if native_engine_tpot_ms is not None else "unavailable"},
-            "e2e_ms": {"native_field": "native.engine_e2e_ms", "simulator_field": "simulator.engine_e2e_ms", "status": "measured" if native_total_ms is not None else "unavailable"},
+            "ttft_ms": {"native_field": "native.engine_ttft_ms", "simulator_field": "simulator.engine_ttft_ms", "status": "measured" if native_payload.get("engine_ttft_ms") is not None else "unavailable"},
+            "tpot_ms": {"native_field": "native.engine_tpot_ms", "simulator_field": "simulator.engine_tpot_ms", "status": "measured" if native_payload.get("engine_tpot_ms") is not None else "unavailable"},
+            "e2e_ms": {"native_field": "native.engine_e2e_ms", "simulator_field": "simulator.engine_e2e_ms", "status": "measured" if native_payload.get("engine_e2e_ms") is not None else "unavailable"},
         },
         "secondary_client": {
             "boundary": "client_stream",
@@ -1747,11 +1762,4 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True); args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"); print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
 
 if __name__ == "__main__": raise SystemExit(main())
-
-
-
-
-
-
-
 
