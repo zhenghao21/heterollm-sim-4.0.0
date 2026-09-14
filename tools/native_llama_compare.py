@@ -382,8 +382,8 @@ def _native_request_record(response: Mapping[str, object],
     output_value = timings.get("predicted_n", response.get("tokens_predicted"))
     prompt_tokens = int(prompt_value) if isinstance(prompt_value, int) and not isinstance(prompt_value, bool) and prompt_value >= 0 else None
     output_tokens = int(output_value) if isinstance(output_value, int) and not isinstance(output_value, bool) and output_value >= 0 else None
-    first = _finite_timing(boundary.get("request_to_first_token_ms"))
-    end = _finite_timing(boundary.get("request_to_end_ms"))
+    first = _safe_duration(boundary.get("request_to_first_token_ms"))
+    end = _safe_duration(boundary.get("request_to_end_ms"))
     if first is not None and end is not None and end < first:
         first = end = None
     client_tpot = ((float(end) - float(first)) / (output_tokens - 1)
@@ -1762,4 +1762,5 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True); args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"); print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
 
 if __name__ == "__main__": raise SystemExit(main())
+
 
