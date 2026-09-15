@@ -1,0 +1,58 @@
+{
+  "schema": "cpu-iq-panel-main-integration/v1",
+  "status": "implemented_and_structurally_validated",
+  "scope": "CPU packed-weight transform repetition only; no native/full-grid execution",
+  "files": {
+    "src/heterollm_sim/cost_models.py": {
+      "sha256": "142479dd07f440809fff165381668464c55eb7977eba9cd4190e956502d7fad8"
+    },
+    "src/heterollm_sim/planner.py": {
+      "sha256": "ae1361fc92d7b419620fc18b7886a92a43e5902eabb71b6d015eefc8e5d8f1d1"
+    },
+    "tests/test_cpu_iq_panel_reuse.py": {
+      "sha256": "0096c68c0bae99618ea3f2227719204ab966dcbb72b7e37b87d6993b366e2d30"
+    },
+    "tests/test_cpu_iq_panel_planner.py": {
+      "sha256": "cbc57308f0ec42019e40d3b68dddf71852c5d044ec7e1c4ac342b9a66dd39f13"
+    }
+  },
+  "tests": {
+    "main_focused_tests": 111,
+    "candidate_frozen_baseline_tests": 16,
+    "passed": true
+  },
+  "metadata_contract": "scenario.workload.metadata.llama_cpp_cpu_iq_panel_reuse",
+  "task_audit": "cpu_gemm task.metadata.cpu_iq_panel_reuse",
+  "cost_audit": "cpu_gemm phase.metadata.instruction_schedule.iq_panel_weight_reuse",
+  "coverage_api": "planner.summarize_cpu_iq_panel_reuse(tasks)",
+  "static_coverage": "ScheduleIR.manifest.metadata.cpu_iq_panel_reuse",
+  "serving_coverage": "_ServingCohortLowering.extra_metadata.cpu_iq_panel_reuse and schedule.manifest.metadata.cpu_iq_panel_reuse",
+  "history": {
+    "no_iq_panel_environment_state": "unknown",
+    "assume_default_unset": "explicit opt-in only",
+    "native_dispatch_proven": false
+  },
+  "synthetic_small_fixture_coverage": {
+    "schema": "heterollm.cpu-iq-panel-reuse-coverage/v1",
+    "counting_unit": "physical_cpu_gemm_task",
+    "cpu_gemm_tasks": 7,
+    "audited_tasks": 7,
+    "applied_tasks": 5,
+    "conditional_tasks": 5,
+    "native_dispatch_proven_tasks": 0,
+    "uncovered_tasks": 2,
+    "uncovered_reason_counts": {
+      "ordinary_f32_input_output_not_proven": 2
+    }
+  },
+  "qualification_limits": [
+    "Imported GGUF SHA and exact named tensor binding required",
+    "One unsharded contiguous 2D physical IQ3_S/IQ4_XS projection",
+    "Existing explicit F32 storage contract AND actual activation/output bytes must match 4*M*K and 4*M*N",
+    "Dynamic RHS, experts/scatter, active or unknown fusion, unsupported geometry preserve original cost",
+    "Disabled fusion annotation does not imply fused epilogue",
+    "Historical unknown environment is never promoted to observed unset"
+  ],
+  "fixture_note": "Synthetic K/V output storage is not 4*M*N: two K/V projections remain uncovered; no storage behavior was changed to force coverage.",
+  "protected_artifacts_modified": false
+}

@@ -5375,6 +5375,7 @@ def _online_report_dict(
     component_timeseries = _component_timeseries(result)
     return {
         "scenario": result.scenario.name,
+        "runtime_placement": _runtime_placement_payload(result.scenario),
         "manifest": to_primitive(result.manifest),
         "execution_mode": "continuous_batching",
         "retention_policy": result.retention_policy,
@@ -5537,6 +5538,19 @@ def online_summary_dict(result: OnlineScenarioResult) -> Dict[str, Any]:
     return {"summary": core.summary, "requests": core.requests}
 
 
+def _runtime_placement_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
+    """Read-only runtime outputs, separate from V4 editable authoring fields."""
+
+    return {
+        "schema_version": "runtime-placement/v1",
+        "read_only": True,
+        "parallel": to_primitive(scenario.placement.parallel),
+        "control_plane": to_primitive(
+            scenario.placement.metadata.get("control_plane", {})
+        ),
+    }
+
+
 def report_dict(
     result: RunResult,
     *,
@@ -5630,6 +5644,7 @@ def _report_dict_in_context(
 
     return {
         "scenario": result.scenario.name,
+        "runtime_placement": _runtime_placement_payload(result.scenario),
         "manifest": to_primitive(result.trace.manifest),
         "execution_mode": "static",
         "retention_policy": result.retention_policy,

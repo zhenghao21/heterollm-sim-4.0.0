@@ -738,8 +738,23 @@ class UnifiedEventKernel:
     def __init__(
         self,
         resource_capacities: Optional[Mapping[str, int]] = None,
+        resource_owners: Optional[Mapping[str, str]] = None,
     ) -> None:
         capacities = dict(resource_capacities or {})
+        owners = dict(resource_owners or {})
+        for resource_id, owner_id in owners.items():
+            if (not isinstance(resource_id, str) or not resource_id
+                    or not isinstance(owner_id, str) or not owner_id):
+                raise ValueError("resource owner ids must be non-empty strings")
+            if owner_id in owners and owners[owner_id] != owner_id:
+                raise ValueError("resource owners must be direct physical ids, not alias chains")
+        owner_capacities: Dict[str, int] = {}
+        for resource_id, capacity in capacities.items():
+            owner_id = owners.get(resource_id, resource_id)
+            previous = owner_capacities.get(owner_id)
+            if previous is not None and previous != capacity:
+                raise ValueError("conflicting capacity for physical resource owner " + owner_id)
+            owner_capacities[owner_id] = capacity
         for resource_id, capacity in capacities.items():
             if not isinstance(resource_id, str) or not resource_id:
                 raise ValueError("resource capacity ids must not be empty")
@@ -749,6 +764,10 @@ class UnifiedEventKernel:
                 or capacity <= 0
             ):
                 raise ValueError("resource capacities must be positive integers")
+        # Reports must expose the effective lane count for logical aliases,
+        # otherwise a two-engine owner looks overutilized on a one-lane alias.
+        for logical_id, owner_id in owners.items():
+            capacities.setdefault(logical_id, owner_capacities.get(owner_id, 1))
         self._tasks: Dict[str, TaskSpec] = {}
         self._indegree: Dict[str, int] = {}
         self._dependents: Dict[str, List[str]] = {}
@@ -764,6 +783,10 @@ class UnifiedEventKernel:
         self._compact_seen_prefix_lengths: Set[int] = set()
         self._compact_seen_sorted_prefixes: List[str] = []
 
+        # Logical names remain visible in emitted events. Only the service
+        # clocks are shared through this explicit, immutable owner mapping.
+        self.resource_owners: Mapping[str, str] = MappingProxyType(owners)
+        self._owner_capacities: Dict[str, int] = owner_capacities
         self.resource_capacities: Dict[str, int] = capacities
         self.resource_available: Dict[str, float] = {}
         self.resource_last_interval: Dict[str, Dict[str, object]] = {}
@@ -777,7 +800,7 @@ class UnifiedEventKernel:
 
         self._resource_lane_available: Dict[str, List[float]] = {
             resource_id: [0.0] * capacity
-            for resource_id, capacity in capacities.items()
+            for resource_id, capacity in owner_capacities.items()
         }
         self._resource_lane_last_interval: Dict[
             Tuple[str, int], Dict[str, object]
@@ -796,6 +819,7 @@ class UnifiedEventKernel:
         tasks: Sequence[TaskSpec],
         *,
         resource_capacities: Optional[Mapping[str, int]] = None,
+        resource_owners: Optional[Mapping[str, str]] = None,
     ) -> "UnifiedEventKernel":
         chunk = tuple(tasks)
         layout = CompiledGraphLayout.compile(chunk)
@@ -803,6 +827,7 @@ class UnifiedEventKernel:
             chunk,
             layout,
             resource_capacities=resource_capacities,
+            resource_owners=resource_owners,
         )
 
     @classmethod
@@ -812,6 +837,7 @@ class UnifiedEventKernel:
         layout: CompiledGraphLayout,
         *,
         resource_capacities: Optional[Mapping[str, int]] = None,
+        resource_owners: Optional[Mapping[str, str]] = None,
     ) -> "UnifiedEventKernel":
         """Load a graph only when it exactly matches a validated layout."""
 
@@ -822,6 +848,7 @@ class UnifiedEventKernel:
             chunk,
             layout,
             resource_capacities=resource_capacities,
+            resource_owners=resource_owners,
         )
 
     @classmethod
@@ -831,10 +858,12 @@ class UnifiedEventKernel:
         layout: CompiledGraphLayout,
         *,
         resource_capacities: Optional[Mapping[str, int]] = None,
+        resource_owners: Optional[Mapping[str, str]] = None,
     ) -> "UnifiedEventKernel":
-        kernel = cls(resource_capacities=resource_capacities)
+        kernel = cls(resource_capacities=resource_capacities, resource_owners=resource_owners)
         phase_sequence: Dict[str, Tuple[int, int]] = {}
         for task in tasks:
+            kernel._validate_owner_demands(task)
             _validate_aggregate_metadata(task)
             phase_sequence[task.task_id] = _validated_phase_sequence(task)
         task_ids = tuple(task.task_id for task in tasks)
@@ -898,10 +927,31 @@ class UnifiedEventKernel:
             "queue_wait_ns": self.total_queue_wait_ns,
             "service_ns": self.total_service_ns,
             "resource_capacities": dict(sorted(self.resource_capacities.items())),
+            "resource_owners": dict(sorted(self.resource_owners.items())),
+            "physical_owner_service_ns": self._owner_service_totals(),
             "resource_service_ns": dict(self.resource_busy_ns),
             "resource_queue_wait_ns": dict(self.resource_queue_wait_ns),
             "resource_task_count": dict(self.resource_task_count),
         }
+
+    def _owner_service_totals(self) -> Mapping[str, float]:
+        totals: Dict[str, float] = {}
+        for logical_id, service_ns in self.resource_busy_ns.items():
+            owner_id = self._physical_owner(logical_id)
+            totals[owner_id] = totals.get(owner_id, 0.0) + service_ns
+        return totals
+
+    def _physical_owner(self, resource_id: str) -> str:
+        return self.resource_owners.get(resource_id, resource_id)
+
+    def _validate_owner_demands(self, task: TaskSpec) -> None:
+        if not self.resource_owners:
+            return
+        owners = [self._physical_owner(d.resource_id) for d in task.demands]
+        if len(owners) != len(set(owners)):
+            raise ValueError(
+                "task {} must coalesce logical demands for the same physical owner".format(task.task_id)
+            )
 
     def ensure_resource_capacities(
         self,
@@ -915,7 +965,8 @@ class UnifiedEventKernel:
         would rewrite that history and therefore fails closed.
         """
 
-        for resource_id, capacity in dict(capacities).items():
+        for logical_id, capacity in dict(capacities).items():
+            resource_id = self._physical_owner(logical_id)
             if not isinstance(resource_id, str) or not resource_id:
                 raise ValueError("resource capacity ids must not be empty")
             if (
@@ -924,7 +975,7 @@ class UnifiedEventKernel:
                 or capacity <= 0
             ):
                 raise ValueError("resource capacities must be positive integers")
-            existing = self.resource_capacities.get(resource_id)
+            existing = self._owner_capacities.get(resource_id)
             lanes = self._resource_lane_available.get(resource_id)
             if existing is not None:
                 if existing != capacity:
@@ -935,6 +986,7 @@ class UnifiedEventKernel:
                             capacity,
                         )
                     )
+                self.resource_capacities[logical_id] = capacity
                 continue
             if lanes is not None:
                 if len(lanes) != capacity:
@@ -945,13 +997,14 @@ class UnifiedEventKernel:
                     )
             else:
                 self._resource_lane_available[resource_id] = [0.0] * capacity
-            self.resource_capacities[resource_id] = capacity
+            self.resource_capacities[logical_id] = capacity
+            self._owner_capacities[resource_id] = capacity
 
     def _resource_ready_ns(self, resource_id: str) -> float:
         # ``resource_available`` is maintained as the earliest free lane for
         # every touched resource.  Untouched declared lanes are all zero, so a
         # missing entry has the same value without scanning the lane list.
-        return self.resource_available.get(resource_id, 0.0)
+        return self.resource_available.get(self._physical_owner(resource_id), 0.0)
 
     def _ready_key(self, task_id: str) -> InternalReadyKey:
         task = self._tasks[task_id]
@@ -1227,6 +1280,7 @@ class UnifiedEventKernel:
                     raise ValueError(
                         "demand resource_id must be a non-empty string"
                     )
+            self._validate_owner_demands(task)
             _validate_task_time(task)
             phase_sequence[task.task_id] = _validated_phase_sequence(task)
             _validate_aggregate_metadata(task)
@@ -1452,6 +1506,7 @@ class UnifiedEventKernel:
                     raise ValueError(
                         "demand resource_id must be a non-empty string"
                     )
+            self._validate_owner_demands(task)
             _validate_task_time(task)
             phase_sequence[task.task_id] = _validated_phase_sequence(task)
             _validate_aggregate_metadata(task)
@@ -1536,6 +1591,18 @@ class UnifiedEventKernel:
         if self.has_active_tasks:
             raise ValueError("prevalidated compiled drain requires an idle kernel")
         chunk = tuple(tasks)
+        if self.resource_owners:
+            if not layout.matches_structure(chunk):
+                raise ValueError("task graph does not match compiled structure")
+            self.submit_compiled(chunk, layout)
+            events: List[KernelEvent] = []
+            while self.has_active_tasks:
+                event = self.step()
+                if event is None:
+                    self.assert_drained()
+                else:
+                    events.append(event)
+            return tuple(events)
         if len(chunk) != layout.task_count:
             raise ValueError("task graph does not match compiled structure")
         task_ids = tuple(task.task_id for task in chunk)
@@ -1979,9 +2046,10 @@ class UnifiedEventKernel:
         return None
 
     def _lanes_for(self, resource_id: str) -> List[float]:
+        resource_id = self._physical_owner(resource_id)
         lanes = self._resource_lane_available.get(resource_id)
         if lanes is None:
-            capacity = self.resource_capacities.get(resource_id, 1)
+            capacity = self._owner_capacities.get(resource_id, 1)
             lanes = [0.0] * capacity
             self._resource_lane_available[resource_id] = lanes
         return lanes
@@ -2053,8 +2121,9 @@ class UnifiedEventKernel:
             lanes, lane_index, available_ns = self._select_lane(
                 demand.resource_id
             )
+            owner_id = self._physical_owner(demand.resource_id)
             previous_interval = self._resource_lane_last_interval.get(
-                (demand.resource_id, lane_index)
+                (owner_id, lane_index)
             )
             resource_lanes[demand.resource_id] = lane_index
             if previous_interval is not None and available_ns == start_ns:
@@ -2072,13 +2141,14 @@ class UnifiedEventKernel:
             if len(lanes) > 1:
                 interval["lane"] = lane_index
             lanes[lane_index] = demand_end_ns
-            resource_available[demand.resource_id] = (
-                demand_end_ns if len(lanes) == 1 else min(lanes)
-            )
+            available_ns = demand_end_ns if len(lanes) == 1 else min(lanes)
+            resource_available[demand.resource_id] = available_ns
+            resource_available[owner_id] = available_ns
+            for logical_id, physical_id in self.resource_owners.items():
+                if physical_id == owner_id:
+                    resource_available[logical_id] = available_ns
             resource_last_interval[demand.resource_id] = interval
-            self._resource_lane_last_interval[
-                (demand.resource_id, lane_index)
-            ] = interval
+            self._resource_lane_last_interval[(owner_id, lane_index)] = interval
             resource_busy_ns[demand.resource_id] = (
                 resource_busy_ns_get(demand.resource_id, 0.0)
                 + demand.service_ns

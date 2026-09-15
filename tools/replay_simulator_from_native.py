@@ -1,15 +1,16 @@
 """Replay simulator timing from immutable native evidence, without native runs."""
 from __future__ import annotations
 import argparse, json, math, statistics, hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from native_llama_compare import build_matching_scenario
+from native_llama_compare import build_matching_scenario, _simulator_engine_start, _simulator_last_engine_token, _aggregate_request_records
 from heterollm_sim.gguf_parity import read_gguf_metadata, build_model_from_gguf
 from heterollm_sim.calibration import load_native_calibration, apply_native_calibration
 from heterollm_sim.reporting import run_scenario
 from heterollm_sim.serde import stable_hash
-from evaluation_contract import evaluate_metrics
+from evaluation_contract import ENGINE_CONTRACT_ID, ENGINE_PROVEN_STATUSES, evaluate_metrics
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATHS = {
@@ -422,7 +423,136 @@ def error(native, simulated):
     if native in (None, 0) or simulated is None: return None
     return 100.0 * (float(simulated) - float(native)) / float(native)
 
-def replay(payload, model_key, source_path=None):
+def score_saved_prediction(payload, prediction):
+    """Recompute request-set scores from captured native and saved prediction.
+
+    This function performs no I/O and does not trust cached aggregates or
+    scores. The caller must separately verify frozen file/source identities.
+    """
+    errors = []
+    positive_int = lambda value: isinstance(value, int) and not isinstance(value, bool) and value > 0
+    def finite_nonnegative(value):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        try:
+            return math.isfinite(float(value)) and value >= 0
+        except OverflowError:
+            return False
+    payload = payload if isinstance(payload, dict) else {}
+    prediction = prediction if isinstance(prediction, dict) else {}
+    config = payload.get("configuration")
+    config = config if isinstance(config, dict) else {}
+    request = payload.get("request")
+    request = request if isinstance(request, dict) else {}
+    counts = payload.get("token_counts")
+    counts = counts if isinstance(counts, dict) else {}
+    parallel, output_tokens, prompt_tokens = config.get("parallel"), request.get("requested_output_tokens"), counts.get("prompt")
+    if not positive_int(parallel):
+        errors.append("configuration.parallel missing or invalid")
+    if not positive_int(output_tokens) or request.get("output_mode") != "fixed":
+        errors.append("fixed requested output shape missing or invalid")
+    if not positive_int(prompt_tokens):
+        errors.append("token_counts.prompt missing or invalid")
+    if counts.get("output") is not None and (not positive_int(counts["output"]) or counts["output"] != output_tokens):
+        errors.append("token_counts.output differs from requested output")
+    native = payload.get("native")
+    native = native if isinstance(native, dict) else {}
+    native_records, saved_records = native.get("requests"), prediction.get("simulator_requests")
+    normalized = []
+    ids = {}
+    fields = ("engine_ttft_ms", "engine_tpot_ms", "engine_e2e_ms")
+    for side, records in (("native", native_records), ("simulator", saved_records)):
+        if not isinstance(records, list) or len(records) != parallel or not records:
+            errors.append(f"{side} request count differs from parallel")
+            ids[side] = []
+            continue
+        ids[side] = [record.get("request_id") if isinstance(record, dict) else None for record in records]
+        valid_ids = all(isinstance(value, str) and value for value in ids[side])
+        if not valid_ids or len(set(ids[side])) != len(ids[side]):
+            errors.append(f"{side} request IDs missing or duplicated")
+        for index, record in enumerate(records):
+            label = f"{side}.requests[{index}]"
+            if not isinstance(record, dict):
+                errors.append(label + " is not a request record")
+                continue
+            actual_output = record.get("output_tokens", record.get("visible_output_tokens") if side == "simulator" else None)
+            if not positive_int(actual_output) or actual_output != output_tokens:
+                errors.append(label + " output token count mismatch")
+            if "visible_output_tokens" in record and (not positive_int(record["visible_output_tokens"]) or record["visible_output_tokens"] != actual_output):
+                errors.append(label + " visible output token count mismatch")
+            if not positive_int(record.get("prompt_tokens")) or record["prompt_tokens"] != prompt_tokens:
+                errors.append(label + " prompt token count mismatch")
+            ttft, tpot, e2e = (record.get(field) for field in fields)
+            if not finite_nonnegative(ttft) or not finite_nonnegative(e2e):
+                errors.append(label + " engine timing missing, non-finite or negative")
+            elif e2e < ttft:
+                errors.append(label + " engine end precedes first token")
+            elif actual_output == 1:
+                if tpot is not None or not math.isclose(e2e, ttft, rel_tol=1e-6, abs_tol=1e-6):
+                    errors.append(label + " single-token timing is inconsistent")
+            elif not finite_nonnegative(tpot):
+                errors.append(label + " engine TPOT missing, non-finite or negative")
+            elif positive_int(actual_output) and not math.isclose(e2e, ttft + (actual_output - 1) * tpot, rel_tol=1e-6, abs_tol=1e-6):
+                errors.append(label + " engine timing disagrees with output token count")
+            contract = record.get("timing_contract_id")
+            status = record.get("engine_timing_status")
+            if (side == "native" or contract is not None) and contract != ENGINE_CONTRACT_ID:
+                errors.append(label + " engine contract mismatch")
+            if (side == "native" or status is not None) and (not isinstance(status, str) or status not in ENGINE_PROVEN_STATUSES):
+                errors.append(label + " engine timing evidence is not proven")
+            if side == "simulator":
+                normalized.append({**record, "output_tokens": actual_output,
+                                   "timing_contract_id": ENGINE_CONTRACT_ID, "engine_timing_status": "measured"})
+    if all(all(isinstance(value, str) and value for value in values) for values in ids.values()) and set(ids.get("native", [])) != set(ids.get("simulator", [])):
+        errors.append("native and simulator request ID sets differ")
+    aggregate = native.get("aggregate")
+    if isinstance(aggregate, dict):
+        if "request_count" in aggregate and (not positive_int(aggregate["request_count"]) or aggregate["request_count"] != parallel):
+            errors.append("native aggregate request_count mismatch")
+        if "request_ids" in aggregate and aggregate["request_ids"] != ids.get("native"):
+            errors.append("native aggregate request_ids mismatch")
+    if "simulator_request_count" in prediction and (not positive_int(prediction["simulator_request_count"]) or prediction["simulator_request_count"] != parallel):
+        errors.append("saved simulator_request_count mismatch")
+    support = payload.get("parallel_support")
+    if isinstance(support, dict):
+        for key in ("requested", "native_requests"):
+            if key in support and (not positive_int(support[key]) or support[key] != parallel):
+                errors.append("parallel_support." + key + " mismatch")
+
+    native_aggregate, simulator_aggregate = {}, {}
+    if errors:
+        evaluation = evaluate_metrics({}, {}, boundary="engine", aggregation="p50")
+        evaluation["evidence_reasons"] = list(errors)
+        for metric in evaluation["metrics"].values():
+            metric["evidence_reasons"] = list(errors)
+    else:
+        native_aggregate = _aggregate_request_records(native_records)
+        simulator_aggregate = _aggregate_request_records(normalized)
+        evaluation = evaluate_metrics(
+            {"requests": native_records, "aggregate": native_aggregate},
+            {"requests": normalized, "aggregate": simulator_aggregate},
+            boundary="engine", aggregation="p50")
+        if evaluation["status"] != "measured":
+            errors.extend(evaluation["evidence_reasons"] or ["request metrics are not eligible"])
+    values = lambda aggregate: {field: (aggregate.get(field) or {}).get("p50_ms") for field in fields}
+    return {"status": "invalid" if errors else "valid", "reason": "; ".join(errors) if errors else None,
+            "request_errors": errors, "engine_evaluation": evaluation, "metrics": evaluation["metrics"],
+            "native": values(native_aggregate), "simulator": values(simulator_aggregate),
+            "relative_error_pct": {metric: record.get("signed_error_pct") for metric, record in evaluation["metrics"].items()},
+            "native_aggregate": native_aggregate, "simulator_aggregate": simulator_aggregate,
+            "simulator_requests": normalized, "simulator_request_count": len(normalized),
+            "simulator_output_tokens": [record["output_tokens"] for record in normalized]}
+
+
+def replay(payload, model_key, source_path=None, *, calibration_mode="legacy", prediction_output=None,
+           prediction_identity=None):
+    if calibration_mode not in {"analytical", "legacy"}:
+        raise ValueError("unsupported calibration mode")
+    if prediction_identity is not None:
+        if (not isinstance(prediction_identity, dict) or set(prediction_identity) != {"freeze_sha256", "cell_id"}
+                or not _is_sha256(prediction_identity.get("freeze_sha256"))
+                or not isinstance(prediction_identity.get("cell_id"), str) or not prediction_identity["cell_id"].strip()):
+            raise ValueError("prediction_identity must contain only a valid freeze_sha256 and cell_id")
     evidence_errors, evidence_summary = _validate_native_evidence(payload, source_path=source_path)
     if evidence_errors:
         return {"status": "invalid", "reason": "native evidence contract: " + "; ".join(evidence_errors), "evidence": evidence_summary}
@@ -446,8 +576,11 @@ def replay(payload, model_key, source_path=None):
                                        parallel=int(config.get("parallel", 1)), batch=int(config.get("batch", 64)),
                                        ubatch=int(config.get("ubatch", 64)), threads=int(config.get("threads", 16)),
                                        gpu_layers=int(config.get("gpu_layers", -1)), model=model,
-                                       hardware_snapshot=payload.get("hardware"))
-    profile, stage, memory, phase = PROFILES[model_key]
+                                       hardware_snapshot=payload.get("hardware"),
+                                       seed=int(config.get("seed", 42)), op_offload=config.get("op_offload", True),
+                                       runtime_binary=(payload.get("command") or [None])[0],
+                                       runtime_environment=payload.get("evidence", {}).get("runtime_environment"))
+    profile, stage, memory, phase = ((None, False, False, False) if calibration_mode == "analytical" else PROFILES[model_key])
     profile_gate = {"status": "not_requested", "profile": str(profile) if profile is not None else None,
                     "reasons": []}
     if profile is not None and profile.exists() and (stage or memory or phase):
@@ -473,23 +606,11 @@ def replay(payload, model_key, source_path=None):
     for metric in sim.metrics.request_metrics.values():
         arrival = float(getattr(metric, "arrival_ns", 0.0) or 0.0)
         request_id = str(getattr(metric, "request_id", ""))
-        # ServingRequestMetrics carries the post-admission engine start; the
-        # aggregate metrics object used by replay does not.
-        serving_metrics = getattr(getattr(sim, "serving", None), "request_metrics", {}) or {}
-        serving_metric = serving_metrics.get(request_id) if isinstance(serving_metrics, dict) else None
-        start = getattr(serving_metric, "start_ns", None)
-        if start is None:
-            start = getattr(metric, "start_ns", None)
+        start, engine_start_source = _simulator_engine_start(sim, metric, scenario)
         first = getattr(metric, "first_token_ns", None)
         finish = getattr(metric, "finish_ns", None)
         token_count = int(getattr(metric, "visible_output_tokens", 0) or 0)
-        token_events = [event for event in getattr(sim.serving, "events", ()) or ()
-                        if str(getattr(event, "request_id", "")) == request_id
-                        and str(getattr(event, "event_type", "")) == "tokens_committed"
-                        and getattr(event, "timestamp_ns", None) is not None]
-        last_token = max((float(getattr(event, "timestamp_ns")) for event in token_events), default=None)
-        if last_token is None and getattr(metric, "last_token_ns", None) is not None:
-            last_token = float(getattr(metric, "last_token_ns"))
+        last_token, last_token_source, token_times = _simulator_last_engine_token(sim, metric)
         client_ttft_ms = ((float(first) - arrival) / 1e6 if first is not None else None)
         tpot_ms = float(metric.tpot_ns) / 1e6 if getattr(metric, "tpot_ns", None) is not None else None
         engine_ttft_ms = ((float(first) - float(start)) / 1e6
@@ -499,13 +620,21 @@ def replay(payload, model_key, source_path=None):
         client_e2e_ms = (client_ttft_ms + tpot_ms * (token_count - 1)
                          if client_ttft_ms is not None and tpot_ms is not None and token_count > 1 else
                          ((float(finish) - arrival) / 1e6 if finish is not None else None))
+        engine_tpot_ms = ((last_token - float(first)) / 1e6 / (token_count - 1)
+                          if token_count > 1 and first is not None and last_token is not None else None)
         sim_requests.append({
+            "request_id": request_id, "prompt_tokens": prompt_tokens, "output_tokens": token_count,
+            "timing_contract_id": ENGINE_CONTRACT_ID, "engine_timing_status": "measured",
             "ttft_ms": client_ttft_ms, "tpot_ms": tpot_ms,
             "client_ttft_ms": client_ttft_ms, "client_tpot_ms": tpot_ms,
-            "engine_ttft_ms": engine_ttft_ms, "engine_tpot_ms": tpot_ms,
+            "engine_ttft_ms": engine_ttft_ms, "engine_tpot_ms": engine_tpot_ms,
             "e2e_ms": client_e2e_ms, "client_e2e_ms": client_e2e_ms,
             "engine_e2e_ms": engine_e2e_ms,
-            "engine_ttft_source": "simulator.first_engine_token-start" if engine_ttft_ms is not None else "unavailable",
+            "engine_ttft_source": "simulator.first_engine_token-" + engine_start_source if engine_ttft_ms is not None else "unavailable",
+            "engine_request_begin_ns": start, "engine_start_source": engine_start_source,
+            "host_preparation_start_ns": getattr((getattr(sim.serving, "request_metrics", {}) or {}).get(request_id), "start_ns", None),
+            "engine_token_times_ns": token_times, "engine_last_token_source": last_token_source,
+            "engine_timepoints_complete": len(token_times) == token_count and last_token is not None,
             "visible_output_tokens": token_count,
         })
     sim_values = {m: [r[m] for r in sim_requests if r[m] is not None]
@@ -513,6 +642,24 @@ def replay(payload, model_key, source_path=None):
     # Only explicit engine fields are eligible for the一级 engine comparison.
     # Legacy prompt_eval/total counters have different boundaries and must not
     # be relabelled or backfilled into TTFT_engine/E2E_engine.
+    prediction_ref = None
+    if prediction_output is not None:
+        prediction_path = Path(prediction_output)
+        prediction_path.parent.mkdir(parents=True, exist_ok=True)
+        prediction = {"schema": "simulator-replay-prediction/v1",
+                      "created_utc": datetime.now(timezone.utc).isoformat(),
+                      "source_payload_sha256": _sha256_file(source_path) if source_path else None,
+                      "calibration_mode": calibration_mode,
+                      "prediction_source": "mechanism_analysis" if calibration_mode == "analytical" else "identity_gated_calibration",
+                      "independent_blind_prediction": False,
+                      "simulator_requests": sim_requests,
+                      "profile_gate": profile_gate,
+                      "runtime_semantics": {key: (getattr(scenario.workload, "metadata", {}) or {}).get(key)
+                                            for key in ("llama_cpp_cuda_op_offload", "llama_cpp_mixed_phase_batching")},
+                      **(prediction_identity or {})}
+        with prediction_path.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(prediction, ensure_ascii=False, indent=2) + "\n")
+        prediction_ref = {"path": str(prediction_path.resolve()), "sha256": _sha256_file(prediction_path)}
     explicit_native_engine = _explicit_native_engine_values(native_agg)
     native_engine_ttft = explicit_native_engine["engine_ttft_ms"]
     native_engine_tpot = explicit_native_engine["engine_tpot_ms"]
@@ -534,22 +681,14 @@ def replay(payload, model_key, source_path=None):
         "tpot_ms": p50([r.get("client_tpot_ms") for r in sim_requests]),
         "e2e_ms": p50([r.get("client_e2e_ms") for r in sim_requests]),
     }
-    native_engine = {"aggregate": native_agg,
-                     "engine_timing_status": (native.get("engine_timing_status")
-                                               or native_agg.get("engine_timing_status")),
-                     "timing_contract_id": (native.get("timing_contract_id")
-                                             or native_agg.get("timing_contract_id"))}
-    evaluation = evaluate_metrics(native_engine, {"aggregate": {
-        "engine_ttft_ms": {"p50_ms": sim_values.get("engine_ttft_ms"), "count": len(sim_requests)},
-        "engine_tpot_ms": {"p50_ms": sim_values.get("engine_tpot_ms"), "count": len(sim_requests)},
-        "engine_e2e_ms": {"p50_ms": sim_values.get("engine_e2e_ms"), "count": len(sim_requests)},
-        "request_count": len(sim_requests),
-        "engine_timing_status": "counter_proven",
-        "timing_contract_id": "engine-boundary/v1",
-    }}, boundary="engine", aggregation="p50")
-    explicit_engine = evaluation["status"] == "measured"
-    row_status = "valid" if evidence_summary.get("evidence_level") == "complete" and explicit_engine else "legacy_development"
-    return {"status": row_status, "evidence_level": evidence_summary.get("evidence_level"), "acceptance_eligible": explicit_engine and row_status == "valid",
+    scored = score_saved_prediction(payload, {"simulator_requests": sim_requests})
+    evaluation = scored["engine_evaluation"]
+    native_values, sim_values = scored["native"], scored["simulator"]
+    explicit_engine = scored["status"] == "valid"
+    row_status = ("invalid" if not explicit_engine else
+                  "valid" if evidence_summary.get("evidence_level") == "complete" else "legacy_development")
+    return {"status": row_status, "reason": scored["reason"], "request_errors": scored["request_errors"],
+            "evidence_level": evidence_summary.get("evidence_level"), "acceptance_eligible": explicit_engine and row_status == "valid",
             "model_key": model_key, "prompt_tokens": prompt_tokens, "output_tokens": output_tokens,
             "parallel": int(config.get("parallel", 1)), "native": native_values, "simulator": sim_values,
             "relative_error_pct": {metric: evaluation["metrics"][metric].get("signed_error_pct") for metric in ("ttft_ms", "tpot_ms", "e2e_ms")},
@@ -563,7 +702,8 @@ def replay(payload, model_key, source_path=None):
             "simulator_request_count": len(sim_requests), "simulator_output_tokens": [r["visible_output_tokens"] for r in sim_requests],
             "prefill_chunk_tokens": getattr(scenario.workload.scheduler, "prefill_chunk_tokens", None),
             "native_identity": (payload.get("identity") or payload.get("native", {}).get("identity")),
-            "profile_gate": profile_gate,
+            "profile_gate": profile_gate, "prediction_artifact": prediction_ref,
+            "simulator_requests": sim_requests, "calibration_mode": calibration_mode,
             "engine_timing_status": "measured" if explicit_engine else "unavailable",
             "native_request_boundary": native.get("request_boundary"),
             "native_evidence": evidence_summary,

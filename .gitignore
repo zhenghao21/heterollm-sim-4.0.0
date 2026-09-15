@@ -53,6 +53,10 @@ source/llama.cpp-semantic/
 
 tmp_*.log
 
+# Independent native diagnostic overlays: keep source and build recipes, not generated binaries/objects.
+source/llama.cpp-annotation-control/build*/
+source/llama.cpp-native-thread-control/build*/
+
 # Local model/runtime/build artifacts
 *.gguf
 *.dll

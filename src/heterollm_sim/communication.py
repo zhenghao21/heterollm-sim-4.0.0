@@ -14,7 +14,7 @@ import math
 from dataclasses import dataclass
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .contracts import ResourceDemand
+from .contracts import ResourceDemand, TaskCategory, TaskSpec
 from .ir import (
     OFFLOAD_STORAGE_COMPONENT_KINDS,
     ComponentSpec,
@@ -33,6 +33,42 @@ def _positive_integer(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError("{} must be a positive integer".format(name))
     return value
+
+
+def declared_resource_owners(hardware: HardwareSpec) -> Mapping[str, str]:
+    """Read explicit service ownership without inferring shared peak rates.
+
+    Hardware metadata may declare ``physical_resource_owners`` as a logical
+    resource-id -> physical owner-id mapping. A memory component can also
+    bind both endpoint directions with ``memory_service_owner`` or declare
+    separate ``read_service_owner`` / ``write_service_owner`` values. A GPU
+    compute memory demand shares a controller only when its existing profile
+    resource ID is bound to that same owner. DMA lanes remain separate.
+    """
+
+    raw = hardware.metadata.get("physical_resource_owners", {})
+    if not isinstance(raw, Mapping):
+        raise ValueError("physical_resource_owners must be a mapping")
+    owners: Dict[str, str] = {}
+
+    def bind(logical: object, owner: object) -> None:
+        if not isinstance(logical, str) or not logical or not isinstance(owner, str) or not owner:
+            raise ValueError("resource owner ids must be non-empty strings")
+        if logical in owners and owners[logical] != owner:
+            raise ValueError("conflicting physical owner for " + logical)
+        owners[logical] = owner
+
+    for logical, owner in raw.items():
+        bind(logical, owner)
+    for component in hardware.components:
+        common = component.metadata.get("memory_service_owner")
+        for direction in ("read", "write"):
+            owner = component.metadata.get(direction + "_service_owner", common)
+            if owner is not None:
+                bind("component.{}.{}".format(component.component_id, direction), owner)
+    if any(owner in owners and owners[owner] != owner for owner in owners.values()):
+        raise ValueError("resource owners must be direct physical ids, not alias chains")
+    return owners
 
 
 @dataclass(frozen=True)
@@ -58,6 +94,162 @@ class TransferPhase:
     name: str
     demands: Tuple[ResourceDemand, ...]
     metadata: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class TransferPipelinePlan:
+    """Opt-in, bounded block pipeline lowered to the ordinary event DAG.
+
+    A credit reserves one whole chunk from its first producer stage until its
+    consumer completes.  This conservative ownership includes in-flight bytes;
+    it never promises a packet/flit model or unbounded zero-buffer overlap.
+    Bounds describe an isolated replay of these exact priced chunks.
+    """
+
+    tasks: Tuple[TaskSpec, ...]
+    chunk_ready_task_ids: Tuple[str, ...]
+    consumer_done_task_ids: Tuple[str, ...]
+    chunk_byte_counts: Tuple[int, ...]
+    buffer_capacity_bytes: int
+    max_inflight_chunks: int
+    ideal_lower_bound_ns: float
+    serialized_upper_bound_ns: float
+
+
+def plan_transfer_pipeline(
+    chunks: Sequence[Sequence[TransferPhase]],
+    *,
+    chunk_byte_counts: Sequence[int],
+    buffer_capacity_bytes: int,
+    max_inflight_chunks: int,
+    consumers: Optional[Sequence[TransferPhase]] = None,
+    request_id: str = "transfer",
+    name: str = "transfer_pipeline",
+    buffer_id: str = "transfer_buffer",
+    resource_owners: Optional[Mapping[str, str]] = None,
+    resource_capacities: Optional[Mapping[str, int]] = None,
+) -> TransferPipelinePlan:
+    """Add FIFO block-arrival, finite buffer and credit dependencies.
+
+    ``chunks`` are separately costed transactions, not fractions of a whole
+    transfer latency.  Every consumer waits for the last transfer stage of its
+    own chunk.  Producers reserve capacity before starting and release it only
+    at consumer completion; one chunk never overwrites an unconsumed chunk.
+    All chunks in this plan share one buffer and credit budget. Separate
+    calls do not share credits: a multi-request pipeline must lower its ordered
+    chunks in one call until an online buffer-admission owner is provided.
+    """
+
+    _positive_integer(buffer_capacity_bytes, "buffer_capacity_bytes")
+    _positive_integer(max_inflight_chunks, "max_inflight_chunks")
+    for value, label in ((request_id, "request_id"), (name, "name"), (buffer_id, "buffer_id")):
+        if not isinstance(value, str) or not value:
+            raise ValueError(label + " must be non-empty text")
+    priced = tuple(tuple(phases) for phases in chunks)
+    sizes = tuple(chunk_byte_counts)
+    if len(priced) != len(sizes):
+        raise ValueError("one chunk byte count is required per chunk")
+    if len(priced) > 4096:
+        raise ValueError("explicit transfer pipeline exceeds 4096 chunks")
+    if consumers is None:
+        consumers = tuple(
+            TransferPhase("consume", (), {"event_kind": "chunk_consume"})
+            for _ in priced
+        )
+    else:
+        consumers = tuple(consumers)
+    if len(consumers) != len(priced):
+        raise ValueError("one consumer phase is required per chunk")
+    for phases, size, consumer in zip(priced, sizes, consumers):
+        _positive_integer(size, "chunk bytes")
+        if size > buffer_capacity_bytes:
+            raise ValueError("chunk exceeds finite buffer capacity")
+        if not phases or any(not isinstance(phase, TransferPhase) for phase in phases):
+            raise ValueError("each chunk requires at least one TransferPhase")
+        if not isinstance(consumer, TransferPhase):
+            raise TypeError("consumers must be TransferPhase values")
+    if priced:
+        stage_resources = tuple(tuple(d.resource_id for d in phase.demands) for phase in priced[0])
+        for phases in priced[1:]:
+            if tuple(tuple(d.resource_id for d in phase.demands) for phase in phases) != stage_resources:
+                raise ValueError("chunk pipeline stage resource paths must match")
+    owners = dict(resource_owners or {})
+    capacities = dict(resource_capacities or {})
+    owner_capacities: Dict[str, int] = {}
+    for logical, capacity in capacities.items():
+        _positive_integer(capacity, "resource capacity")
+        owner = owners.get(logical, logical)
+        if owner in owner_capacities and owner_capacities[owner] != capacity:
+            raise ValueError("conflicting physical owner capacities")
+        owner_capacities[owner] = capacity
+    tasks: List[TaskSpec] = []
+    ready_ids: List[str] = []
+    done_ids: List[str] = []
+    previous_stage_ids: Tuple[str, ...] = ()
+    cumulative = [0]
+    serial_ns = 0.0
+    longest_chunk_ns = 0.0
+    owner_service: Dict[str, float] = {}
+    byte_release_index = -1
+    for index, (phases, size, consumer) in enumerate(zip(priced, sizes, consumers)):
+        cumulative.append(cumulative[-1] + size)
+        while cumulative[index + 1] - cumulative[byte_release_index + 1] > buffer_capacity_bytes:
+            byte_release_index += 1
+        release_index = max(byte_release_index, index - max_inflight_chunks)
+        credit_dependencies = (done_ids[release_index],) if release_index >= 0 else ()
+        stage_ids: List[str] = []
+        chunk_ns = 0.0
+        for stage_index, phase in enumerate((*phases, consumer)):
+            task_id = "{}.chunk{:04d}.stage{:02d}".format(name, index, stage_index)
+            dependencies = []
+            if stage_ids:
+                dependencies.append(stage_ids[-1])
+            else:
+                dependencies.extend(credit_dependencies)
+            # FIFO is a declared pipeline property, even where a stage has
+            # multiple physical lanes. It also makes byte-prefix release exact.
+            if previous_stage_ids:
+                dependencies.append(previous_stage_ids[stage_index])
+            stage_ns = max((d.service_ns for d in phase.demands), default=0.0)
+            chunk_ns += stage_ns
+            serial_ns += stage_ns
+            local_owners = [owners.get(d.resource_id, d.resource_id) for d in phase.demands]
+            if len(local_owners) != len(set(local_owners)):
+                raise ValueError("coalesce same-owner phase demands before pipeline lowering")
+            for demand, owner in zip(phase.demands, local_owners):
+                owner_service[owner] = owner_service.get(owner, 0.0) + demand.service_ns
+            metadata = dict(phase.metadata)
+            metadata.update({
+                "transfer_execution": "finite_buffer_pipeline",
+                "buffer_id": buffer_id,
+                "chunk_index": index,
+                "chunk_bytes": size,
+                "buffer_capacity_bytes": buffer_capacity_bytes,
+                "max_inflight_chunks": max_inflight_chunks,
+                "buffer_reservation": "producer_start_to_consumer_end",
+                "credit_dependency_ids": credit_dependencies if stage_index == 0 else (),
+                "is_chunk_consumer": stage_index == len(phases),
+            })
+            tasks.append(TaskSpec(
+                task_id=task_id, request_id=request_id,
+                name="{}.{}".format(name, phase.name),
+                category=(TaskCategory.COMPUTE if stage_index == len(phases) and phase.demands else TaskCategory.COMMUNICATION),
+                dependencies=tuple(dict.fromkeys(dependencies)), demands=phase.demands,
+                metadata=metadata,
+            ))
+            stage_ids.append(task_id)
+        ready_ids.append(stage_ids[-2])
+        done_ids.append(stage_ids[-1])
+        previous_stage_ids = tuple(stage_ids)
+        longest_chunk_ns = max(longest_chunk_ns, chunk_ns)
+    lower_ns = max(
+        longest_chunk_ns,
+        max((service / owner_capacities.get(owner, 1) for owner, service in owner_service.items()), default=0.0),
+    )
+    return TransferPipelinePlan(
+        tuple(tasks), tuple(ready_ids), tuple(done_ids), sizes,
+        buffer_capacity_bytes, max_inflight_chunks, lower_ns, serial_ns,
+    )
 
 
 @dataclass(frozen=True)
@@ -160,6 +352,7 @@ class TopologyRouter:
                 "coherent_dma_mode must be 'pipelined' or 'strict_serialized'"
             )
         self.hardware = hardware
+        self.resource_owners = declared_resource_owners(hardware)
         self.coherent_dma_mode = mode
         self.components = hardware.component_map()
         self._links = {link.link_id: link for link in hardware.links}
@@ -370,6 +563,48 @@ class TopologyRouter:
             return (coherent,)
         return tuple(phases)
 
+    def transfer_pipeline(
+        self,
+        source_component: str,
+        target_component: str,
+        byte_count: int,
+        *,
+        chunk_size_bytes: int,
+        buffer_capacity_bytes: int,
+        max_inflight_chunks: int,
+        consumers: Optional[Sequence[TransferPhase]] = None,
+        request_id: str = "transfer",
+        name: str = "transfer_pipeline",
+        buffer_id: str = "transfer_buffer",
+        resource_owners: Optional[Mapping[str, str]] = None,
+        resource_capacities: Optional[Mapping[str, int]] = None,
+    ) -> TransferPipelinePlan:
+        """Price blocks separately, then lower their bounded streaming DAG."""
+
+        _non_negative_integer(byte_count, "byte_count")
+        _positive_integer(chunk_size_bytes, "chunk_size_bytes")
+        if (byte_count + chunk_size_bytes - 1) // chunk_size_bytes > 4096:
+            raise ValueError("explicit transfer pipeline exceeds 4096 chunks")
+        sizes = tuple(
+            min(chunk_size_bytes, byte_count - offset)
+            for offset in range(0, byte_count, chunk_size_bytes)
+        )
+        chunks = tuple(
+            self.transfer_phases(
+                source_component, target_component, size, name=name,
+                coherent_dma_mode="strict_serialized",
+            )
+            for size in sizes
+        )
+        return plan_transfer_pipeline(
+            chunks, chunk_byte_counts=sizes,
+            buffer_capacity_bytes=buffer_capacity_bytes,
+            max_inflight_chunks=max_inflight_chunks, consumers=consumers,
+            request_id=request_id, name=name, buffer_id=buffer_id,
+            resource_owners=self.resource_owners if resource_owners is None else resource_owners,
+            resource_capacities=resource_capacities,
+        )
+
     def _coherent_dma_phase(
         self,
         source: ComponentSpec,
@@ -473,7 +708,10 @@ class TopologyRouter:
 
         demands = tuple(demand for phase in phases for demand in phase.demands)
         resource_ids = tuple(demand.resource_id for demand in demands)
-        if len(resource_ids) != len(set(resource_ids)):
+        physical_owners = tuple(self.resource_owners.get(resource_id, resource_id) for resource_id in resource_ids)
+        if len(physical_owners) != len(set(physical_owners)):
+            # Folding same-controller read/write service with max() would
+            # discard work. Retain serial phases until explicit chunking.
             return None
 
         resource_directions: Dict[str, str] = {}
@@ -920,6 +1158,9 @@ __all__ = [
     "RouteHop",
     "TopologyRouter",
     "TransferPhase",
+    "TransferPipelinePlan",
+    "plan_transfer_pipeline",
     "choose_collective_algorithm",
+    "declared_resource_owners",
     "plan_collective",
 ]

@@ -28,7 +28,7 @@ def test_matching_scenario_binds_snapshot_physical_facts_and_resolves_auto_threa
     pcie = next(link for link in scenario.hardware.links if link.link_id == "cpu-gpu-pcie")
     assert (pcie.lanes, pcie.bandwidth_gbps) == (8, pytest.approx(252.032))
     assert scenario.hardware.metadata["gpu_uuid"] == "GPU-test"
-    assert "gpu_offload_disabled_cpu_only" in scenario.placement.metadata["placement_risks"]
+    assert "zero_gpu_weight_layers_op_offload_possible" in scenario.placement.metadata["placement_risks"]
 
 
 def test_matching_scenario_keeps_legacy_call_and_rejects_unknown_identity():

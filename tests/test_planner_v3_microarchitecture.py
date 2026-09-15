@@ -139,7 +139,8 @@ class PlannerV3MicroarchitectureTests(unittest.TestCase):
             pack_model["instruction_schedule"]["model"],
             "cpu_ooo_instruction_schedule_v3",
         )
-        self.assertEqual(pack_model["cache"]["cache_model"], "v3_working_set_reuse")
+        self.assertEqual(pack_model["cache"]["cache_model"], "v4_directional_closed_interval")
+        self.assertEqual(pack_model["cache"]["validation_status"], "payload_flow_only_unvalidated_timing")
 
     def test_enabled_fusion_reduces_hbm_traffic_and_explicit_kernels(self):
         disabled = replace(

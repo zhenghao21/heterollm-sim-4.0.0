@@ -8,6 +8,9 @@ the single event-simulation path for every runtime.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+import hashlib
+from pathlib import Path
+import re
 from typing import Any, Mapping, Sequence
 
 from .contracts import RunManifest, TaskSpec
@@ -145,12 +148,388 @@ class LlamaCppRuntimeConfig:
         return self.kv_type_v
 
 
+LLAMA_CUDA_OP_OFFLOAD_SCHEMA = "llama.cpp.cuda.host-weight-op-offload/v1"
+
+
+def _source_function(text: str, signature: str) -> str:
+    """Read one known source function; unknown layouts are not extrapolated."""
+    begin = text.index(signature)
+    brace = text.index("{", begin)
+    depth = 1
+    end = brace + 1
+    while depth and end < len(text):
+        depth += (text[end] == "{") - (text[end] == "}")
+        end += 1
+    if depth:
+        raise ValueError("unterminated llama.cpp source function: " + signature)
+    return text[begin:end]
+
+
+
+LLAMA_HYBRID_BATCH_SCHEMA = "llama.cpp.hybrid.equal-length-batching/v1"
+
+
+
+
+def _cpp_source_function(text: str, signature: str) -> str:
+    """Bound a C++ body without counting braces in comments or literals.
+
+    The slot loop contains explanatory pseudo-code in comments. A raw brace
+    counter can stop before its real pending-prompt branch, so the slot proof
+    uses this lexical reader rather than guessing a later function boundary.
+    """
+    start = text.index(signature)
+    i = text.index("{", start)
+    depth = 0
+    while i < len(text):
+        if text.startswith("//", i):
+            end = text.find("\n", i + 2)
+            i = len(text) if end < 0 else end + 1
+            continue
+        if text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            if end < 0:
+                raise ValueError("unterminated C++ block comment")
+            i = end + 2
+            continue
+        if text.startswith('R"', i):
+            opening = text.find("(", i + 2, i + 19)
+            if opening >= 0:
+                delimiter = text[i + 2:opening]
+                closing = ")" + delimiter + '\"'
+                end = text.find(closing, opening + 1)
+                if end < 0:
+                    raise ValueError("unterminated C++ raw string")
+                i = end + len(closing)
+                continue
+        if text[i] in ('\"', "'"):
+            quote = text[i]
+            i += 1
+            while i < len(text):
+                if text[i] == "\\":
+                    i += 2
+                elif text[i] == quote:
+                    i += 1
+                    break
+                else:
+                    i += 1
+            continue
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+        i += 1
+    raise ValueError("unterminated C++ function: " + signature)
+
+
+LLAMA_SLOT_ORDER_SCHEMA = "llama.cpp.fresh-cohort.slot-order/v1"
+
+
+def derive_llama_slot_order_contract(
+    server_source: str | Path,
+    *,
+    source_chain: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Derive stable slot traversal from saved source, without timing inputs.
+
+    Stable admission can represent stable native slot order only for an
+    isolated fresh cohort: explicit same-arrival requests, at most one request
+    per slot, equal priority/deadline and no preemption or slot reuse. Runtime
+    qualification is performed again by apply_llama_runtime_config. This is
+    not a general FIFO claim for a server that recycles slots.
+    """
+    path = Path(server_source).resolve()
+    raw = path.read_bytes()
+    text = raw.decode("utf-8")
+    iterate = _cpp_source_function(text, "void iterate(std::vector<server_slot> & slots,")
+    update = _cpp_source_function(text, "void update_slots()")
+    compatible = _cpp_source_function(text, "bool can_batch_with(server_slot & other_slot) const")
+    if ("for (auto & slot : slots)" not in iterate or "callback(slot)" not in iterate
+            or any(fragment in iterate for fragment in ("std::sort", "std::rotate", "std::shuffle", "rbegin()"))):
+        raise ValueError("unrecognized native fixed slot iteration")
+    if not all(fragment in compatible for fragment in (
+            "task->type == other_slot.task->type", "inp_embd.size() == other_slot.inp_embd.size()",
+            "are_lora_equal(lora, other_slot.lora)")):
+        raise ValueError("unrecognized native slot task compatibility")
+    fill = update
+    fill_symbol = "server_context::update_slots"
+    if "if (params_base.cont_batching || batch.size() == 0)" not in fill:
+        if "pre_decode();" not in update:
+            raise ValueError("unrecognized update_slots to pre_decode call chain")
+        fill = _cpp_source_function(text, "void pre_decode()")
+        fill_symbol = "server_context::pre_decode"
+    pending = fill[fill.index("if (params_base.cont_batching || batch.size() == 0)"):]
+    ordered = (
+        "iterate(slots,", "if (!add_ok || batch.size() >= n_batch)",
+        "if (slot.state == SLOT_STATE_STARTED)", "slot.stats.update_prompt_start()",
+        "slot.state = SLOT_STATE_PROCESSING_PROMPT",
+        "while (slot.prompt.n_tokens() < slot.task->n_tokens() && batch.size() < n_batch)",
+        "batch.add(slot.id",
+    )
+    previous = -1
+    for fragment in ordered:
+        position = pending.find(fragment, previous + 1)
+        if position < 0:
+            raise ValueError("unrecognized native pending prompt fill/start order: " + fragment)
+        previous = position
+    guard = pending[pending.index("if (!add_ok || batch.size() >= n_batch)"):pending.index("if (slot.state == SLOT_STATE_STARTED)")]
+    if "return;" not in guard:
+        raise ValueError("native full-batch guard must skip remaining slots")
+    digest = hashlib.sha256(raw).hexdigest()
+    chain_binding = None
+    if source_chain is not None:
+        hashes = source_chain.get("source_sha256", {})
+        if not isinstance(hashes, Mapping) or hashes.get(str(path)) != digest:
+            raise ValueError("slot-order source differs from supplied source chain")
+        chain_binding = {"schema": source_chain.get("schema"), "server_sha256": digest,
+                         "runtime_log_ref": source_chain.get("runtime_log_ref"),
+                         "binding": "same_server_source_as_existing_recurrent_contract"}
+    return {"schema": LLAMA_SLOT_ORDER_SCHEMA, "status": "source_derived",
+        "phase_candidate_order": "stable_admission", "native_slot_iteration": "vector_order",
+        "prompt_fill_rule": "current_compatible_slot_until_batch_budget_or_existing_prompt_stop",
+        "engine_start_boundary": "STARTED_to_PROCESSING_PROMPT_before_prompt_preparation",
+        "preserves_engine_start_definition": True,
+        "requirements": {"explicit_fresh_cohort": True, "same_arrival": True,
+                         "request_count_at_most_slots": True, "no_slot_reuse": True,
+                         "equal_priority_deadline": True, "no_preemption": True,
+                         "no_priority_aging": True, "compatible_causal_text": True},
+        "source_sha256": {str(path): digest}, "source_symbols": ["server_context::iterate(vector<server_slot>)",
+            "server_context::update_slots", fill_symbol, "server_slot::can_batch_with", "slot.stats.update_prompt_start"],
+        "source_chain_binding": chain_binding,
+        "scope": "fresh isolated explicit same-arrival causal-text cohort; no dynamic arrivals, recycled slots, resume, priority aging or preemption",
+        "accuracy_validated": False, "native_latency_used": False}
+
+
+def derive_llama_hybrid_batch_contract(
+    source_root: str | Path,
+    *,
+    server_source: str | Path,
+    runtime_log: str | Path,
+) -> dict[str, Any]:
+    """Bind hybrid batching geometry to locked source and saved runtime facts.
+
+    Only source control flow and static log fields are consumed: this never
+    reads native token timing or fits latency. The caller is responsible for
+    retaining the build/source relationship to the native runtime. The proof
+    is restricted to unified KV, causal text, independent sequence owners and
+    no recurrent rollback/MTP. It does not claim calibrated kernel costs.
+    """
+    root = Path(source_root)
+    paths = {"server": Path(server_source), "hybrid_memory": root / "src/llama-memory-hybrid.cpp",
+             "batch_allocator": root / "src/llama-batch.cpp", "qwen35_graph": root / "src/models/qwen35.cpp"}
+    raw = {name: path.read_bytes() for name, path in paths.items()}
+    texts = {name: value.decode("utf-8") for name, value in raw.items()}
+    compatibility = _source_function(texts["server"], "bool can_batch_with(server_slot & other_slot) const")
+    splitting = _source_function(texts["server"], "bool can_split() const")
+    required = {
+        "server": ("if (params_base.cont_batching || batch.size() == 0)",
+                   "while (slot.prompt.n_tokens() < slot.task->n_tokens() && batch.size() < n_batch)"),
+        "hybrid_memory": ("const bool unified = (mem_attn->get_n_stream() == 1)",
+                          "balloc.split_equal(n_ubatch, !unified, n_rs_seq > 0 ? n_rs_seq + 1 : 0)",
+                          "mem_recr->prepare(ubatches)", "mem_attn->prepare(ubatches)"),
+        "batch_allocator": ("llama_ubatch llama_batch_allocr::split_equal(",
+                            "cur_idx[s] >= (int32_t) seq_set_map[cur_seq_set[s]].size()",
+                            "(idxs_per_seq[0].size() + 1)*n_seqs > n_ubatch",
+                            "idxs.insert(idxs.end(), idxs_per_seq[s].begin(), idxs_per_seq[s].end())"),
+        "qwen35_graph": ("GGML_ASSERT(ubatch.equal_seqs())",
+                         "GGML_ASSERT(ubatch.n_tokens == n_seq_tokens * n_seqs)",
+                         "head_v_dim, head_v_dim, num_v_heads, n_seqs"),
+    }
+    if ("task->type == other_slot.task->type" not in compatibility
+            or "are_lora_equal(lora, other_slot.lora)" not in compatibility
+            or "!task->need_embd()" not in splitting):
+        raise ValueError("unrecognized native slot batching compatibility")
+    for name, fragments in required.items():
+        if not all(fragment in texts[name] for fragment in fragments):
+            raise ValueError("unrecognized hybrid equal-length source: " + name)
+    log_path = Path(runtime_log)
+    log_bytes = log_path.read_bytes()
+    log = log_bytes.decode("utf-8", errors="replace")
+    facts = {}
+    for field in ("n_seq_max", "n_ubatch", "n_rs_seq"):
+        values = {int(value) for value in re.findall(r"\b" + field + r"\s*=\s*(\d+)", log)}
+        if len(values) != 1:
+            raise ValueError("one unambiguous captured hybrid runtime value required: " + field)
+        facts[field] = values.pop()
+    unified = set(re.findall(r"\bkv_unified\s*=\s*['\"]?(true|false)", log))
+    if unified != {"true"} or facts["n_rs_seq"] != 0 or min(facts["n_seq_max"], facts["n_ubatch"]) <= 0:
+        raise ValueError("hybrid proof requires unified KV and zero recurrent rollback snapshots")
+    return {"schema": LLAMA_HYBRID_BATCH_SCHEMA, "status": "source_derived",
+        "architectures": ["qwen3_5_hybrid_transformer"],
+        "physical_lowering": "equal_length_stateful_ubatches", "kv_unified": True,
+        "recurrent_rollback_snapshots": 0, "captured_sequence_capacity": facts["n_seq_max"],
+        "captured_ubatch_capacity": facts["n_ubatch"],
+        "source_sha256": {str(paths[name].resolve()): hashlib.sha256(value).hexdigest() for name, value in raw.items()},
+        "runtime_log_ref": {"path": str(log_path.resolve()), "sha256": hashlib.sha256(log_bytes).hexdigest()},
+        "source_symbols": ["server_slot::can_batch_with", "server_slot::can_split", "server_context::update_slots",
+                           "llama_memory_hybrid::init_batch", "llama_batch_allocr::split_equal", "Qwen35 equal_seqs graph"],
+        "source_rule": "server emits decode rows then compatible prompt rows; unified hybrid memory splits each microbatch into equal tokens per independent sequence",
+        "capabilities": {"supports_batched_stateful_execution": True, "supports_equal_length_stateful_ubatches": True},
+        "scope": "source/runtime-supported causal Qwen hybrid text with unified KV, no MTP/rollback/experts/adapters",
+        "accuracy_validated": False, "native_latency_used": False}
+
+
+def derive_llama_cuda_op_offload_contract(
+    source_root: str | Path,
+    *,
+    runtime_environment: Mapping[str, str | None] | None = None,
+) -> dict[str, Any]:
+    """Extract the supported host MUL_MAT rule from local llama.cpp source.
+
+    This describes execution semantics, not measured latency.  The caller
+    must establish that this source belongs to its CUDA backend.  A missing
+    environment entry means a *conditional default assumption*, never proof
+    that a historical run used the default.  Explicit ``None`` records an
+    observed absence of GGML_OP_OFFLOAD_MIN_BATCH.
+    """
+    root = Path(source_root)
+    paths = {
+        "scheduler": root / "ggml/src/ggml-backend.cpp",
+        "cuda": root / "ggml/src/ggml-cuda/ggml-cuda.cu",
+        "operators": root / "ggml/src/ggml.c",
+    }
+    raw = {name: path.read_bytes() for name, path in paths.items()}
+    source = {name: value.decode("utf-8") for name, value in raw.items()}
+    scheduler = source["scheduler"]
+    required_scheduler = (
+        "sched->op_offload && src_backend_id == sched->n_backends - 1 && ggml_backend_buffer_is_host(src->buffer)",
+        "ggml_backend_supports_op(sched->backends[b], tensor) && ggml_backend_offload_op(sched->backends[b], tensor)",
+    )
+    if not all(fragment in scheduler for fragment in required_scheduler):
+        raise ValueError("unrecognized llama.cpp host-weight offload selection")
+    copies = _source_function(scheduler, "static enum ggml_status ggml_backend_sched_compute_splits(")
+    if ("ggml_backend_tensor_copy(input, input_cpy)" not in copies
+            or "cpy_tensor_async(input_backend, split_backend, input, input_cpy)" not in copies):
+        raise ValueError("unrecognized per-invocation host-weight staging")
+    cuda = source["cuda"]
+    batches = _source_function(cuda, "static int64_t get_op_batch_size(")
+    if not re.search(r"case GGML_OP_MUL_MAT:\s*return op->ne\[1\];", batches):
+        raise ValueError("unrecognized CUDA MUL_MAT physical batch dimension")
+    offload = _source_function(cuda, "static bool ggml_backend_cuda_device_offload_op(")
+    if "get_op_batch_size(op) >= dev_ctx->op_offload_min_batch_size" not in offload:
+        raise ValueError("unrecognized CUDA offload threshold comparison")
+    default = re.search(
+        r'const int min_batch_size = getenv\("GGML_OP_OFFLOAD_MIN_BATCH"\) \? '
+        r'atoi\(getenv\("GGML_OP_OFFLOAD_MIN_BATCH"\)\) : (\d+);', cuda)
+    if default is None:
+        raise ValueError("unrecognized CUDA offload default/environment rule")
+    supports = _source_function(cuda, "static bool ggml_backend_cuda_device_supports_op(")
+    matmul = supports.split("case GGML_OP_MUL_MAT:", 1)[1].split("case GGML_OP_OUT_PROD:", 1)[0]
+    formats_block = matmul.split("switch (a->type)", 1)[1].split("return true;", 1)[0]
+    formats = tuple(dict.fromkeys(re.findall(r"case GGML_TYPE_([A-Z0-9_]+):", formats_block)))
+    if not formats or "a->nb[0] != ggml_element_size(a)" not in matmul:
+        raise ValueError("unrecognized CUDA matmul format/layout support")
+    operators = source["operators"]
+    mul_mat = _source_function(operators, "struct ggml_tensor * ggml_mul_mat(")
+    get_rows = _source_function(operators, "struct ggml_tensor * ggml_get_rows(")
+    if "ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne)" not in mul_mat or "enum ggml_type type = GGML_TYPE_F32;" not in get_rows:
+        raise ValueError("unrecognized ordinary GGUF hidden storage semantics")
+    env_name = "GGML_OP_OFFLOAD_MIN_BATCH"
+    captured = runtime_environment is not None and env_name in runtime_environment
+    env_value = runtime_environment.get(env_name) if captured else None
+    minimum = int(default.group(1))
+    env_status = "captured_absent" if captured else "uncaptured_default_assumption"
+    if captured and env_value is not None:
+        if not isinstance(env_value, str) or not re.fullmatch(r"[+-]?\d+", env_value.strip()):
+            raise ValueError("unsupported GGML_OP_OFFLOAD_MIN_BATCH value; do not guess atoi semantics")
+        minimum = max(1, int(env_value.strip()))
+        env_status = "captured_override"
+    return {
+        "schema": LLAMA_CUDA_OP_OFFLOAD_SCHEMA,
+        "backend": "CUDA",
+        "source_sha256": {str(paths[name].resolve()): hashlib.sha256(value).hexdigest() for name, value in raw.items()},
+        "source_symbols": ["ggml_backend_sched_backend_id_from_cur", "get_op_batch_size",
+                           "ggml_backend_cuda_device_offload_op", "ggml_backend_cuda_device_supports_op",
+                           "ggml_backend_sched_compute_splits", "ggml_mul_mat", "ggml_get_rows"],
+        "minimum_m": minimum,
+        "default_minimum_m": int(default.group(1)),
+        "physical_batch_dimension": "MUL_MAT.output.ne[1]",
+        "supported_weight_formats": formats,
+        "environment": {"name": env_name, "value": env_value, "status": env_status},
+        "prediction_provenance": "source_mechanism" if captured else "conditional_development_assumption",
+        "accuracy_validated": False,
+        "scope": "ordinary contiguous 2D dense text GGUF host-weight MUL_MAT with F32 hidden storage; CUDA backend",
+        "staging": "per_invocation_copy_then_temporary_read_clean_discard",
+        "unsupported": ["MUL_MAT_ID/expert dispatch", "arbitrary tensor views/layouts", "GPU performance calibration"],
+    }
+
+
+def apply_llama_cuda_op_offload(
+    scenario: Any,
+    config: LlamaCppRuntimeConfig,
+    *,
+    source_contract: Mapping[str, Any] | None,
+    cuda_backend_available: bool,
+) -> Any:
+    """Bind source-qualified GEMM execution to existing temporary staging.
+
+    Static weight/KV placement is deliberately preserved.  No empirical
+    timing or model name participates in this capability decision.
+    """
+    from .cost_models import HostGemmOffloadCapability
+    from .ir import model_graph_execution_view
+
+    if not isinstance(cuda_backend_available, bool):
+        raise ValueError("CUDA backend availability must be explicit boolean")
+    profiles = {kind: dict(values) for kind, values in scenario.component_profiles.items()}
+    gpu_profiles = profiles.get("gpu", {})
+    contract = dict(source_contract or {})
+    status = "disabled"
+    reason = "runtime_op_offload_disabled"
+    capability = None
+    if config.op_offload:
+        if not cuda_backend_available or not any(c.normalized_kind in {"gpu", "cuda"} for c in scenario.hardware.components):
+            reason = "cuda_backend_unavailable"
+        elif contract.get("schema") != LLAMA_CUDA_OP_OFFLOAD_SCHEMA or contract.get("backend") != "CUDA":
+            reason = "source_contract_missing_or_unsupported"
+        elif not isinstance(contract.get("source_sha256"), Mapping) or not contract["source_sha256"] or any(
+            not isinstance(value, str) or re.fullmatch(r"[0-9a-fA-F]{64}", value) is None
+            for value in contract["source_sha256"].values()
+        ):
+            reason = "source_identity_missing"
+        elif not isinstance(contract.get("supported_weight_formats"), (list, tuple)) or not contract["supported_weight_formats"]:
+            reason = "source_format_support_missing"
+        else:
+            view = model_graph_execution_view(scenario.model.graph, schema_version=scenario.model.schema_version)
+            if scenario.workload.mtp is not None or any(
+                x.layer.kind != "dense" or x.layer.shared_expert_intermediate_size for x in view.layer_instances
+            ):
+                reason = "model_graph_outside_source_scope"
+            else:
+                capability = HostGemmOffloadCapability(
+                    minimum_m=contract["minimum_m"],
+                    evidence="llama.cpp CUDA source-derived host-weight MUL_MAT offload; " + str(contract["prediction_provenance"]),
+                    supported_weight_formats=tuple(contract["supported_weight_formats"]),
+                    provenance=contract,
+                )
+                status, reason = "enabled", "source_qualified_physical_m_dispatch"
+    for name, profile in gpu_profiles.items():
+        gpu_profiles[name] = replace(profile, host_gemm_offload=capability)
+    audit = {**contract, "status": status, "reason": reason, "op_offload": config.op_offload,
+             "cuda_backend_available": cuda_backend_available, "accuracy_validated": False}
+    workload_metadata = {**scenario.workload.metadata, "llama_cpp_cuda_op_offload": audit}
+    # Host-offloaded GGUF tensors are copied as F32, while compute precision
+    # remains selected by the existing quantized GEMM path.  Reuse the typed
+    # storage-byte lowering; do not charge a second activation conversion.
+    if capability is not None and any(
+        key.rsplit(".", 1)[-1] in {"attention", "linear_attention", "mlp", "lm_head"}
+        and scenario.hardware.get_component(target).normalized_kind == "cpu"
+        for key, target in scenario.placement.op_to_component.items()
+    ):
+        workload_metadata["llama_cpp_f32_hidden_storage"] = True
+    return replace(scenario, component_profiles=profiles, llama_cpp_config=config,
+                   workload=replace(scenario.workload, metadata=workload_metadata))
+
+
 @dataclass(frozen=True)
 class RuntimeExecutionPlan:
     runtime: str
     tasks: tuple[TaskSpec, ...]
     semantics: Mapping[str, Any]
     resource_capacities: Mapping[str, int] = field(default_factory=dict)
+    resource_owners: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def fingerprint(self) -> str:
@@ -158,7 +537,7 @@ class RuntimeExecutionPlan:
 
         return stable_hash({"runtime": self.runtime, "semantics": dict(self.semantics)})
 
-    def to_schedule(self, manifest: RunManifest, *, resource_capacities: Mapping[str, int] | None = None) -> ScheduleIR:
+    def to_schedule(self, manifest: RunManifest, *, resource_capacities: Mapping[str, int] | None = None, resource_owners: Mapping[str, str] | None = None) -> ScheduleIR:
         """Use the existing engine contract without a runtime-specific kernel."""
 
         metadata = dict(manifest.metadata)
@@ -166,7 +545,8 @@ class RuntimeExecutionPlan:
                          "runtime_semantics": dict(self.semantics),
                          "runtime_fingerprint": self.fingerprint})
         capacities = self.resource_capacities if resource_capacities is None else resource_capacities
-        return ScheduleIR(replace(manifest, metadata=metadata), self.tasks, capacities or {})
+        owners = self.resource_owners if resource_owners is None else resource_owners
+        return ScheduleIR(replace(manifest, metadata=metadata), self.tasks, capacities or {}, owners or {})
 
 
 def _plan(runtime: str, tasks: Sequence[TaskSpec], semantics: Mapping[str, Any]) -> RuntimeExecutionPlan:
@@ -282,4 +662,5 @@ class VLLMAdapter:
         return _plan(self.runtime, tasks, semantics)
 
 
-__all__ = ["LlamaCppAdapter", "LlamaCppRuntimeConfig", "RuntimeExecutionPlan", "VLLMAdapter"]
+__all__ = ["LlamaCppAdapter", "LlamaCppRuntimeConfig", "RuntimeExecutionPlan", "VLLMAdapter",
+           "derive_llama_cuda_op_offload_contract", "apply_llama_cuda_op_offload"]

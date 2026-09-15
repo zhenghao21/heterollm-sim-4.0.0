@@ -377,7 +377,8 @@ class _CriticalPathAccumulator:
 
         for resource_id, info in resource_predecessors.items():
             lane = int(info.get("lane", 0)) if isinstance(info, Mapping) else 0
-            state = self._resource_states.get((str(resource_id), lane))
+            predecessor_resource = info.get("resource_id", resource_id) if isinstance(info, Mapping) else resource_id
+            state = self._resource_states.get((str(predecessor_resource), lane))
             if state is not None:
                 candidates.append(state)
 
@@ -1085,7 +1086,10 @@ def execute_incremental_schedule(
     )
 
     accumulator = _ResultAccumulator(retention_policy, retained_task_limit)
-    kernel = execution_kernel or UnifiedEventKernel()
+    resource_owners = dict(getattr(schedule, "resource_owners", {}))
+    kernel = execution_kernel or UnifiedEventKernel(resource_owners=resource_owners)
+    if resource_owners != dict(kernel.resource_owners):
+        raise ValueError("live kernel physical resource owners differ from schedule")
     resource_capacities = getattr(schedule, "resource_capacities", {})
     # Static streaming and online serving must use the same declared
     # execution lanes. ``ensure_resource_capacities`` is idempotent for an

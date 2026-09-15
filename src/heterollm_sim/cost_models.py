@@ -121,6 +121,38 @@ def _dma_setup_service(
 
 
 @dataclass(frozen=True)
+class CPUIQPanelDispatch:
+    """Explicit native-source facts for an isolated IQ panel reuse ablation.
+
+    Missing historical environment evidence is not an observed unset variable.
+    The optional default-unset assumption remains visible in every cost record.
+    Native dtypes are explicit because bit widths alone do not identify F32.
+    """
+
+    compiled_avx2: bool = False
+    source_activation_dtype: str = "unknown"
+    source_output_dtype: str = "unknown"
+    source_weight_layout: str = "unknown"
+    source_activation_ne3: int = 1
+    use_reference_kernel: bool = False
+    no_iq_panel_environment_state: str = "unknown"
+    assume_default_unset: bool = False
+    source_sha256: str = ""
+    cpu_backend_sha256: str = ""
+    source_refs: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name in ("compiled_avx2", "use_reference_kernel", "assume_default_unset"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(name + " must be boolean")
+        if self.no_iq_panel_environment_state not in {"unset", "set", "unknown"}:
+            raise ValueError("IQ panel environment state must be unset, set or unknown")
+        _require_positive_int("source_activation_ne3", self.source_activation_ne3)
+        if not isinstance(self.source_refs, tuple) or any(not isinstance(v, str) or not v for v in self.source_refs):
+            raise ValueError("source_refs must be a tuple of nonempty strings")
+
+
+@dataclass(frozen=True)
 class GemmWorkload:
     """A quantized GEMM ``[M, K] x [K, N] -> [M, N]``.
 
@@ -1456,11 +1488,33 @@ class HostGemmOffloadCapability:
 
     minimum_m: int
     evidence: str
+    # Empty retains the historical explicitly-authored capability.  Runtime
+    # source contracts populate this set and fail closed on unknown formats.
+    supported_weight_formats: Tuple[str, ...] | None = field(default=None, metadata={"omit_none": True})
+    provenance: Mapping[str, object] | None = field(default=None, metadata={"omit_none": True})
 
     def __post_init__(self) -> None:
         _require_positive_int("minimum_m", self.minimum_m)
         if not isinstance(self.evidence, str) or not self.evidence.strip():
             raise ValueError("host GEMM offload capability evidence must be non-empty text")
+        if self.supported_weight_formats is not None:
+            if not isinstance(self.supported_weight_formats, (tuple, list)) or any(
+                not isinstance(value, str) or not value.strip()
+                for value in self.supported_weight_formats
+            ):
+                raise ValueError("host GEMM offload formats must be a sequence of non-empty strings")
+            formats = tuple(value.strip().upper() for value in self.supported_weight_formats)
+            if len(set(formats)) != len(formats):
+                raise ValueError("host GEMM offload formats must be unique")
+            object.__setattr__(self, "supported_weight_formats", formats)
+        if self.provenance is not None and not isinstance(self.provenance, Mapping):
+            raise ValueError("host GEMM offload provenance must be a mapping")
+
+    def supports_workload_format(self, workload: GemmWorkload) -> bool:
+        if not self.supported_weight_formats:
+            return True
+        formats = tuple(value.strip().upper() for value in workload.packed_weight_formats)
+        return bool(formats) and all(value in self.supported_weight_formats for value in formats)
 
 
 @dataclass(frozen=True)
@@ -2149,93 +2203,201 @@ def _cache_memory_demands(
     backing_energy_pj_per_byte: float,
     backing_resource_id: str,
 ) -> Tuple[Tuple[ResourceDemand, ...], Mapping[str, object]]:
-    """Derive deterministic cache-level traffic from an aggregate working set.
+    """Account directional payload traffic over one closed cache interval.
 
-    No physical address trace exists in the system simulator.  The v3 cache
-    contract therefore exposes the exact analytical assumption: reusable
-    traffic is captured in proportion to capacity/working-set, while declared
-    streaming traffic bypasses temporal reuse.  Each level reports accessed,
-    hit, and miss bytes instead of fabricating cache lines that were never
-    observed.
+    The reuse curve estimates read/write *hits*.  This aggregate API closes
+    the interval by flushing dirty write-back payload to the next level, so
+    declared writes can never disappear from backing traffic.  Write-through
+    payload is propagated immediately; write-back payload is propagated at the
+    interval boundary.  Full-payload stores do not incur a read-for-ownership
+    request because byte addresses and partial-line masks are unavailable.
+    Physical allocation residency is owned by the existing residency manager,
+    not this local cache estimate.
     """
 
     _require_non_negative_int("read_bytes", read_bytes)
     _require_non_negative_int("write_bytes", write_bytes)
-    _require_positive_int("working_set_bytes", max(1, working_set_bytes))
+    _require_non_negative_int("working_set_bytes", working_set_bytes)
     _require_positive("reuse_factor", reuse_factor)
     if not 0.0 <= streaming_fraction <= 1.0:
         raise ValueError("streaming_fraction must be in [0, 1]")
     _require_positive("backing_bandwidth_gb_s", backing_bandwidth_gb_s)
+    _require_non_negative("backing_energy_pj_per_byte", backing_energy_pj_per_byte)
+    if not isinstance(backing_resource_id, str) or not backing_resource_id:
+        raise ValueError("backing_resource_id must not be empty")
+    if backing_resource_id in {level.resource_id for level in hierarchy.levels}:
+        raise ValueError("cache and backing memory must own distinct service resources")
 
-    incoming = read_bytes + write_bytes
+    incoming_reads, incoming_writes = read_bytes, write_bytes
     reusable_fraction = (
         (1.0 - streaming_fraction)
         * max(0.0, 1.0 - 1.0 / float(reuse_factor))
     )
-    demands = []
-    rows = []
+    demands, rows = [], []
     for level in hierarchy.levels:
-        accessed = incoming
-        capacity_fraction = min(
-            1.0,
-            level.capacity_bytes / float(max(1, working_set_bytes)),
-        )
+        accessed = incoming_reads + incoming_writes
+        capacity_fraction = min(1.0, level.capacity_bytes / float(max(1, working_set_bytes)))
         local_hit_ratio = min(1.0, reusable_fraction * capacity_fraction)
-        hit_bytes = min(
-            accessed, int(math.floor(accessed * local_hit_ratio + 0.5))
-        )
-        miss_bytes = accessed - hit_bytes
-        line_count = _ceil_div(max(0, accessed), level.line_bytes)
-        latency_waves = _ceil_div(
-            line_count, max(1, level.transaction_parallelism)
-        )
-        service_ns = max(
-            accessed / level.bandwidth_gb_s,
-            latency_waves * level.hit_latency_ns,
-        )
-        demands.append(
-            ResourceDemand(
-                resource_id=level.resource_id,
-                service_ns=service_ns,
-                bytes_moved=accessed,
-                energy_pj=accessed * level.energy_pj_per_byte,
-            )
-        )
-        rows.append(
-            {
-                "level": level.name,
-                "resource_id": level.resource_id,
-                "accessed_bytes": accessed,
-                "hit_bytes": hit_bytes,
-                "miss_bytes": miss_bytes,
-                "hit_ratio": (
-                    hit_bytes / float(accessed) if accessed else 0.0
-                ),
-                "service_ns": service_ns,
-            }
-        )
-        incoming = miss_bytes
+        read_hits = min(incoming_reads, int(math.floor(incoming_reads * local_hit_ratio + 0.5)))
+        write_hits = min(incoming_writes, int(math.floor(incoming_writes * local_hit_ratio + 0.5)))
+        read_misses = incoming_reads - read_hits
+        write_misses = incoming_writes - write_hits
+        allocated_writes = write_misses if hierarchy.write_allocate else 0
+        bypass_writes = write_misses if not hierarchy.write_allocate else 0
+        # Count declared payload bytes only.  RFO and whole-line amplification
+        # are unpriced until an address/partial-store contract is supplied.
+        write_allocate_read_bytes = 0
+        cached_writes = write_hits + allocated_writes
+        dirty_writeback = cached_writes if hierarchy.write_back else 0
+        write_through = cached_writes if not hierarchy.write_back else 0
+        downstream_writes = bypass_writes + write_through + dirty_writeback
+        # This aggregate demand represents the upper-level access stream.
+        # A write-back flush is a downstream write at the interval boundary;
+        # it is reported below without charging a second local read of the
+        # same payload.  No-write-allocate misses bypass this cache level.
+        cache_reads = incoming_reads
+        cache_writes = cached_writes
+        cache_service_bytes = cache_reads + cache_writes
+        read_transactions = _ceil_div(cache_reads, level.line_bytes)
+        write_transactions = _ceil_div(cache_writes, level.line_bytes)
+        read_waves = _ceil_div(read_transactions, level.banks * level.read_ports * level.max_outstanding)
+        write_waves = _ceil_div(write_transactions, level.banks * level.write_ports * level.max_outstanding)
+        latency_waves = max(read_waves, write_waves)
+        service_ns = max(cache_service_bytes / level.bandwidth_gb_s, latency_waves * level.hit_latency_ns)
+        demands.append(ResourceDemand(
+            resource_id=level.resource_id,
+            service_ns=service_ns,
+            bytes_moved=cache_service_bytes,
+            energy_pj=cache_service_bytes * level.energy_pj_per_byte,
+        ))
+        rows.append({
+            "level": level.name,
+            "resource_id": level.resource_id,
+            "accessed_bytes": accessed,
+            "hit_bytes": read_hits + write_hits,
+            "miss_bytes": read_misses + write_misses,
+            "hit_ratio": (read_hits + write_hits) / float(accessed) if accessed else 0.0,
+            "read_bytes": incoming_reads,
+            "write_bytes": incoming_writes,
+            "read_hit_bytes": read_hits,
+            "read_miss_bytes": read_misses,
+            "write_hit_bytes": write_hits,
+            "write_miss_bytes": write_misses,
+            "write_allocate_bytes": allocated_writes,
+            "write_bypass_bytes": bypass_writes,
+            "write_through_bytes": write_through,
+            "dirty_writeback_bytes": dirty_writeback,
+            "dirty_bytes_retained": 0,
+            "write_allocate_read_bytes": write_allocate_read_bytes,
+            "downstream_read_bytes": read_misses + write_allocate_read_bytes,
+            "downstream_write_bytes": downstream_writes,
+            "cache_read_service_bytes": cache_reads,
+            "cache_write_service_bytes": cache_writes,
+            "cache_service_bytes": cache_service_bytes,
+            "read_latency_waves": read_waves,
+            "write_latency_waves": write_waves,
+            "service_ns": service_ns,
+        })
+        incoming_reads, incoming_writes = read_misses, downstream_writes
 
-    backing_bytes = incoming
+    backing_bytes = incoming_reads + incoming_writes
     backing_service_ns = backing_bytes / backing_bandwidth_gb_s
-    demands.append(
-        ResourceDemand(
-            resource_id=backing_resource_id,
-            service_ns=backing_service_ns,
-            bytes_moved=backing_bytes,
-            energy_pj=backing_bytes * backing_energy_pj_per_byte,
-        )
-    )
+    demands.append(ResourceDemand(
+        resource_id=backing_resource_id,
+        service_ns=backing_service_ns,
+        bytes_moved=backing_bytes,
+        energy_pj=backing_bytes * backing_energy_pj_per_byte,
+    ))
     return tuple(demands), {
-        "cache_model": "v3_working_set_reuse",
+        "cache_model": "v4_directional_closed_interval",
+        "evidence": EvidenceStatus.ANALYTICAL.value,
+        "validation_status": "payload_flow_only_unvalidated_timing",
         "working_set_bytes": working_set_bytes,
         "reuse_factor": reuse_factor,
         "streaming_fraction": streaming_fraction,
         "levels": tuple(rows),
+        "backing_read_bytes": incoming_reads,
+        "backing_write_bytes": incoming_writes,
         "backing_bytes": backing_bytes,
         "backing_service_ns": backing_service_ns,
         "write_back": hierarchy.write_back,
         "write_allocate": hierarchy.write_allocate,
+        "writeback_scope": "closed_interval_boundary_flush",
+        "write_payload_semantics": "complete_payload_overwrite",
+        "cross_invocation_cache_state": False,
+        "writeback_flush_included": hierarchy.write_back,
+        "writeback_flush_bytes": sum(
+            int(row["dirty_writeback_bytes"])
+            for row in rows
+        ),
+        "unmodeled_terms": (
+            "dirty_cache_line_amplification_on_eviction",
+            "physical_cache_fill_schedule",
+            "address_conflicts_and_associativity",
+            "read_for_ownership_of_untouched_line_bytes",
+        ),
+        "service_ownership": "one_demand_per_cache_level_and_backing_memory",
+    }
+
+
+def mma_output_tile_wave_proxy(
+    m: Any, k: Any, n: Any, *,
+    sm_count: Any, tensor_cores_per_sm: Any,
+    mma_m: Any, mma_n: Any, mma_k: Any, occupancy: Any,
+    array_module: Any = None,
+) -> Mapping[str, Any]:
+    """One formula for scalar and array MMA output-tile wave estimates.
+
+    Array callers validate their columns and replace unsupported rows with
+    safe positive geometry before calling.  Scalar callers are validated here.
+    The arithmetic is a structural proxy, not measured CUDA CTA occupancy.
+    """
+    if array_module is None:
+        for name, value in (
+            ("m", m), ("k", k), ("n", n), ("sm_count", sm_count),
+            ("tensor_cores_per_sm", tensor_cores_per_sm),
+            ("mma_m", mma_m), ("mma_n", mma_n), ("mma_k", mma_k),
+        ):
+            _require_positive_int(name, value)
+        _require_efficiency("occupancy", occupancy)
+        ceil_div, floor, maximum = _ceil_div, math.floor, max
+    else:
+        ceil_div = lambda numerator, denominator: array_module.ceil(numerator / denominator)
+        floor, maximum = array_module.floor, array_module.maximum
+    m_tiles, n_tiles, k_tiles = ceil_div(m, mma_m), ceil_div(n, mma_n), ceil_div(k, mma_k)
+    independent_tiles = m_tiles * n_tiles
+    warp_equivalents = sm_count * tensor_cores_per_sm
+    resident_capacity = warp_equivalents * occupancy
+    slots = maximum(1, floor(resident_capacity))
+    waves = ceil_div(independent_tiles, slots)
+    return {
+        "m_tile_count": m_tiles,
+        "n_tile_count": n_tiles,
+        "serial_k_tile_count": k_tiles,
+        "independent_output_tile_count": independent_tiles,
+        "warp_equivalent_count": warp_equivalents,
+        "resident_warp_equivalent_capacity": resident_capacity,
+        "parallel_tile_slots": slots,
+        "output_tile_wave_count": waves,
+        "output_tile_wave_utilization": independent_tiles / (waves * slots),
+    }
+
+
+def mma_output_tile_wave_contract() -> Mapping[str, object]:
+    """Evidence attached to both implementations; no measured domain is claimed."""
+    return {
+        "model": "mma_output_tile_wave_proxy_v1",
+        "evidence": EvidenceStatus.ANALYTICAL.value,
+        "validation_status": "unvalidated_physical_proxy",
+        "validated_kernel_families": (),
+        "validated_hardware": (),
+        "physical_applicability": "requires_kernel_family_and_shape_microbenchmark",
+        "assumptions": (
+            "independent MxN MMA output tiles; K tiles are serial reduction",
+            "SM times tensor cores times occupancy is a parallel-slot proxy, not a CTA count",
+            "fixed profile occupancy across shapes; wave boundaries may be discontinuous",
+            "cache state, layout and runtime dispatch are not inferred from geometry",
+        ),
     }
 
 
@@ -2307,9 +2469,16 @@ def estimate_gpu_gemm(
         raise ValueError(
             "GPU tensor core does not support GEMM dtype {}".format(dtype_name)
         )
-    m_tile_count = _ceil_div(workload.m, tensor_core.mma_m)
-    n_tile_count = _ceil_div(workload.n, tensor_core.mma_n)
-    serial_k_tile_count = _ceil_div(workload.k, tensor_core.mma_k)
+    tile_wave = mma_output_tile_wave_proxy(
+        workload.m, workload.k, workload.n,
+        sm_count=tensor_core.sm_count,
+        tensor_cores_per_sm=tensor_core.tensor_cores_per_sm,
+        mma_m=tensor_core.mma_m, mma_n=tensor_core.mma_n,
+        mma_k=tensor_core.mma_k, occupancy=gpu.occupancy,
+    )
+    m_tile_count = tile_wave["m_tile_count"]
+    n_tile_count = tile_wave["n_tile_count"]
+    serial_k_tile_count = tile_wave["serial_k_tile_count"]
     tile_count = m_tile_count * n_tile_count * serial_k_tile_count
     issued_operations = tile_count * tensor_core.operations_per_mma
     structural_peak_tops = tensor_core.peak_tops(dtype_name)
@@ -2403,50 +2572,21 @@ def estimate_gpu_gemm(
     # reflected by counting the RHS once rather than M times.
     reuse_factor = 1.0
     streaming_fraction = 1.0
-    independent_output_tile_count = m_tile_count * n_tile_count
-    warp_equivalent_count = (
-        tensor_core.sm_count * tensor_core.tensor_cores_per_sm
-    )
-    resident_warp_equivalent_capacity = (
-        warp_equivalent_count * gpu.occupancy
-    )
-    parallel_tile_slots = max(
-        1,
-        int(math.floor(resident_warp_equivalent_capacity)),
-    )
-    output_tile_wave_count = _ceil_div(
-        independent_output_tile_count, parallel_tile_slots
-    )
-    output_tile_wave_utilization = independent_output_tile_count / float(
-        output_tile_wave_count * parallel_tile_slots
-    )
     peak_effective_hbm_bandwidth_gb_s = hbm.effective_bandwidth_gb_s
     shape_effective_hbm_bandwidth_gb_s = (
         peak_effective_hbm_bandwidth_gb_s
-        * output_tile_wave_utilization
+        * tile_wave["output_tile_wave_utilization"]
     )
     hbm_bandwidth_metadata = {
-        "model": "mma_output_tile_wave_proxy_v1",
+        **mma_output_tile_wave_contract(),
+        **tile_wave,
         "fallback_to_fixed_bandwidth": False,
-        "m_tile_count": m_tile_count,
-        "n_tile_count": n_tile_count,
-        "serial_k_tile_count": serial_k_tile_count,
-        "independent_output_tile_count": independent_output_tile_count,
-        "warp_equivalent_count": warp_equivalent_count,
-        "parallel_tile_slots": parallel_tile_slots,
-        "resident_warp_equivalent_capacity": (
-            resident_warp_equivalent_capacity
-        ),
-        "output_tile_wave_count": output_tile_wave_count,
-        "output_tile_wave_utilization": output_tile_wave_utilization,
         "profile_occupancy": gpu.occupancy,
-        "peak_effective_hbm_bandwidth_gb_s": (
-            peak_effective_hbm_bandwidth_gb_s
-        ),
-        "shape_effective_hbm_bandwidth_gb_s": (
-            shape_effective_hbm_bandwidth_gb_s
-        ),
+        "peak_effective_hbm_bandwidth_gb_s": peak_effective_hbm_bandwidth_gb_s,
+        "shape_effective_hbm_bandwidth_gb_s": shape_effective_hbm_bandwidth_gb_s,
+        # Payload padding utilization is distinct from the output wave proxy.
         "tile_utilization_applied_to_hbm": False,
+        "output_wave_utilization_applied_to_hbm": True,
         "parallelism_basis": (
             "independent MxN output tiles; K tiles are serial reduction"
         ),
@@ -3914,10 +4054,97 @@ def _cpu_instruction_schedule(
     return service_ns, metadata
 
 
+def _cpu_iq_panel_transform_reuse(
+    cpu: CPUProfile,
+    workload: GemmWorkload,
+    dispatch: Optional[CPUIQPanelDispatch],
+    quantized_capability: Optional[CPUQuantizedDotCapability],
+    original_transform_operations: int,
+) -> Tuple[int, Optional[Dict[str, object]]]:
+    """Change only packed-weight decode reuse, not dot work or throughput."""
+    if dispatch is None:
+        return original_transform_operations, None
+    if not isinstance(dispatch, CPUIQPanelDispatch):
+        raise TypeError("iq_panel_dispatch must be CPUIQPanelDispatch or None")
+    reasons = []
+    def valid_sha(value: str) -> bool:
+        return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdefABCDEF" for c in value)
+    if not dispatch.source_refs or not valid_sha(dispatch.source_sha256) or not valid_sha(dispatch.cpu_backend_sha256):
+        reasons.append("source_or_backend_identity_missing")
+    if not dispatch.compiled_avx2:
+        reasons.append("avx2_not_source_confirmed")
+    if dispatch.source_activation_dtype != "F32" or dispatch.source_output_dtype != "F32":
+        reasons.append("native_activation_and_output_must_be_f32")
+    if dispatch.source_weight_layout != "ordinary_contiguous_2d":
+        reasons.append("native_weight_layout_must_be_contiguous_2d")
+    if dispatch.source_activation_ne3 != 1:
+        reasons.append("native_activation_ne3_must_be_one")
+    if dispatch.use_reference_kernel:
+        reasons.append("reference_kernel_requested")
+    environment = dispatch.no_iq_panel_environment_state
+    if environment == "set":
+        reasons.append("ggml_no_iq_panel_present_even_if_value_is_zero")
+    elif environment == "unknown" and not dispatch.assume_default_unset:
+        reasons.append("historical_ggml_no_iq_panel_unknown")
+    if workload.m < 8:
+        reasons.append("native_iq_panel_minimum_m_is_eight")
+    if workload.k % 256:
+        reasons.append("native_iq_panel_requires_k_multiple_of_256")
+    if workload.n % 8:
+        reasons.append("native_iq_panel_requires_n_multiple_of_eight")
+    formats = {str(v).upper() for v in workload.packed_weight_formats}
+    if len(formats) != 1 or not formats <= {"IQ3_S", "IQ4_XS"}:
+        reasons.append("only_single_iq3_s_or_iq4_xs_matrix_is_source_bound")
+    if workload.packed_weight_format_segments and any(str(fmt).upper() not in formats or n % 8 for fmt, n, _ in workload.packed_weight_format_segments):
+        reasons.append("physical_weight_segment_not_panel_aligned")
+    if quantized_capability is not None:
+        reasons.append("existing_quantized_dot_capability_outside_this_ablation")
+    applied = not reasons
+    transformed = workload.packed_weight_transform_operations if applied else original_transform_operations
+    panel_groups = workload.n // 8 if applied else 0
+    blocks_per_panel = workload.k // 256 if applied else 0
+    # block_iqp_x8: 8 f32 scales + 8 i32 biases + 16*8 i8 scales + 256*8 i8 values.
+    panel_block_bytes = 8 * 4 + 8 * 4 + 16 * 8 + 256 * 8
+    scratch_per_thread = _ceil_div(blocks_per_panel * panel_block_bytes, 64) * 64 if applied else 0
+    audit = {
+        "schema": "cpu-iq-panel-weight-reuse-candidate/v1",
+        "applied": applied,
+        "native_dispatch_proven": applied and environment == "unset",
+        "environment_state": environment,
+        "default_unset_assumption_used": applied and environment == "unknown" and dispatch.assume_default_unset,
+        "evaluation_scope": "conditional_default_unset_ablation" if environment == "unknown" and dispatch.assume_default_unset else "source_bound_structural_model",
+        "rejection_reasons": reasons,
+        "source_refs": dispatch.source_refs,
+        "source_sha256": dispatch.source_sha256,
+        "cpu_backend_sha256": dispatch.cpu_backend_sha256,
+        "native_source_activation_dtype": dispatch.source_activation_dtype,
+        "native_source_output_dtype": dispatch.source_output_dtype,
+        "native_source_weight_layout": dispatch.source_weight_layout,
+        "generic_transform_operations": original_transform_operations,
+        "effective_transform_operations": transformed,
+        "panel_groups": panel_groups,
+        "blocks_per_panel": blocks_per_panel,
+        "panel_decode_calls": panel_groups,
+        "panel_superblock_decodes": panel_groups * blocks_per_panel,
+        "dot_operations_unchanged": workload.operations,
+        "native_activation_conversion_elements_unchanged": workload.m * workload.k,
+        "activation_conversion_cost_model_changed": False,
+        "scratch_scope": "one_ephemeral_panel_per_cpu_worker_not_full_model",
+        "scratch_bytes_per_thread": scratch_per_thread,
+        "scratch_total_bytes": scratch_per_thread * cpu.pipeline.core_count,
+        "scratch_new_backing_memory_demand_applied": False,
+        "throughput_constants_changed": False,
+        "weight_or_activation_storage_bytes_changed": False,
+    }
+    return transformed, audit
+
+
 def estimate_cpu_gemm(
     cpu: CPUProfile,
     memory: HostMemoryProfile,
     workload: GemmWorkload,
+    *,
+    iq_panel_dispatch: Optional[CPUIQPanelDispatch] = None,
 ) -> CostEstimate:
     """Estimate CPU GEMM; CPU GOP/s is not converted through GPU TOPS."""
 
@@ -3989,6 +4216,17 @@ def estimate_cpu_gemm(
         else cpu.attainable_gemm_gops
     )
     dependency_depth = max(1, int(math.ceil(math.log2(workload.k))))
+    transform_operations = (
+        residual_packed_weight_transform_operations
+        if quantized_dot_capability is not None
+        else residual_packed_weight_transform_operations * workload.m
+        if workload.packed_weight_format_segments
+        else residual_packed_weight_transform_operations
+    )
+    transform_operations, iq_panel_audit = _cpu_iq_panel_transform_reuse(
+        cpu, workload, iq_panel_dispatch, quantized_dot_capability,
+        transform_operations,
+    )
     instruction_ns, instruction_metadata = _cpu_instruction_schedule(
         cpu,
         operator_class=OperatorClass.GEMM,
@@ -4009,15 +4247,7 @@ def estimate_cpu_gemm(
         # Projection metadata stores dequant primitives per output row.  A
         # GEMM with M rows performs that unpack for each row on CPU; retain
         # this shape dependence in the generic fallback.
-        packed_weight_transform_operations=(
-            residual_packed_weight_transform_operations
-            if quantized_dot_capability is not None
-            else (
-                residual_packed_weight_transform_operations * workload.m
-                if workload.packed_weight_format_segments
-                else residual_packed_weight_transform_operations
-            )
-        ),
+        packed_weight_transform_operations=transform_operations,
         activation_elements=(
             workload.m * workload.k
             if quantized_dot_capability is not None
@@ -4029,6 +4259,8 @@ def estimate_cpu_gemm(
         source_dot_row_totals=source_dot_row_totals,
     )
     instruction_metadata = dict(instruction_metadata)
+    if iq_panel_audit is not None:
+        instruction_metadata["iq_panel_weight_reuse"] = iq_panel_audit
     known_quantized_formats = any(
         str(value).strip().upper().startswith(("Q", "IQ"))
         for value in workload.packed_weight_formats
@@ -4675,6 +4907,7 @@ def break_even_reuse(
 
 
 __all__ = [
+    "CPUIQPanelDispatch",
     "CPUPipelineProfile",
     "CPUProfile",
     "CacheHierarchyProfile",
@@ -4697,6 +4930,8 @@ __all__ = [
     "TensorKernelWorkload",
     "TensorCoreProfile",
     "break_even_reuse",
+    "mma_output_tile_wave_contract",
+    "mma_output_tile_wave_proxy",
     "estimate_cim_gemm",
     "estimate_cpu_elementwise",
     "estimate_cpu_gemm",

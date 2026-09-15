@@ -30,6 +30,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from heterollm_sim.reference import build_reference_scenario
@@ -37,16 +38,30 @@ from heterollm_sim.model_presets import materialize_model_payload
 from heterollm_sim.config import model_from_dict
 from heterollm_sim.ir import model_graph_execution_view
 from heterollm_sim.reporting import run_scenario
-from heterollm_sim.runtime_adapters import LlamaCppRuntimeConfig
+from heterollm_sim.runtime_adapters import (LlamaCppRuntimeConfig, derive_llama_cuda_op_offload_contract, apply_llama_cuda_op_offload)
 from heterollm_sim.llama_scenario import apply_llama_runtime_config
 from heterollm_sim.gguf_parity import read_gguf_metadata, compare_gguf_to_model, assert_gguf_parity, build_model_from_gguf
 from heterollm_sim.calibration import load_native_calibration, apply_native_calibration
 from heterollm_sim.serde import stable_hash
-from tools.evaluation_contract import evaluate_metrics
+from tools.native_runtime_evidence import capture_loaded_runtime
+from tools.evaluation_contract import (
+    FORMAL_AGGREGATE_SCOPE,
+    ENGINE_COUNTER_UNPROVEN_STATUS,
+    evaluate_metrics,
+    metric_status_for_records,
+    validate_engine_semantic_proof,
+)
 
 
 DEFAULT_EXE = r"C:\Users\A\.lmstudio\extensions\backends\llama.cpp-win-x86_64-nvidia-cuda12-avx2-2.33.0\llama-server.exe"
 DEFAULT_MODEL = r"F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\artifacts\native_benchmark_20260912\models\qwen2.5-0.5b-instruct-q4_k_m.gguf"
+
+
+def _read_engine_semantic_proof(path: Path) -> tuple[object, dict[str, str]]:
+    """Keep the proof document and its capture identity bound to one read."""
+    raw = path.read_bytes()
+    document = json.loads(raw.decode("utf-8"))
+    return document, {"path": str(path.resolve()), "sha256": hashlib.sha256(raw).hexdigest()}
 
 
 def _native_measurements_digest(native: Mapping[str, object]) -> str:
@@ -103,16 +118,18 @@ def post_stream_json(url: str, payload: dict) -> tuple[dict, dict[str, object]]:
     with urlopen(req, timeout=180) as response:
         for raw_line in response:
             line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line:
+            # SSE comments are keepalive frames, including before the first token.
+            # They must not select the plain-JSON fallback and end parsing early.
+            if not line or line.startswith(":"):
                 continue
-            if line.startswith("data:"):
+            is_sse_data = line.startswith("data:")
+            if is_sse_data:
                 encoded = line[5:].strip()
                 if encoded == "[DONE]":
                     break
             else:
-                # A non-SSE body is accepted for compatibility, but cannot
-                # carry a first-token boundary once the whole body arrived.
-                response_mode = "json"
+                # Accept a plain JSON object for older servers, but establish
+                # that mode only after decoding it; SSE metadata/noise is not JSON.
                 encoded = line
             try:
                 item = json.loads(encoded)
@@ -123,6 +140,7 @@ def post_stream_json(url: str, payload: dict) -> tuple[dict, dict[str, object]]:
                 continue
             if not isinstance(item, dict):
                 continue
+            response_mode = "sse" if is_sse_data else "json"
             chunks.append(item)
             elapsed_ms = (time.perf_counter() - started) * 1000.0
             if first_event_ms is None:
@@ -169,6 +187,9 @@ def post_stream_json(url: str, payload: dict) -> tuple[dict, dict[str, object]]:
     boundary = {
         "mode": response_mode,
         "request_start": "client_before_http_post",
+        "request_start_monotonic_s": started,
+        "last_token_monotonic_s": started + last_real_token_ms / 1000.0 if last_real_token_ms is not None else None,
+        "stream_end_monotonic_s": started + ended_ms / 1000.0,
         "first_event_ms": first_event_ms,
         "first_content_ms": first_content_ms,
         "request_to_first_token_ms": first_token_ms if response_mode == "sse" else None,
@@ -182,6 +203,8 @@ def post_stream_json(url: str, payload: dict) -> tuple[dict, dict[str, object]]:
         "token_chunk_times_ms": token_chunk_times_ms,
         "chunk_count": len(chunks),
     }
+    # Keep the exact decoded SSE events as well as each arrival timestamp.
+    merged["raw_stream_events"] = chunks
     return merged, boundary
 
 
@@ -213,11 +236,70 @@ def post_parallel_stream_json(url: str, payload: dict, parallel: int) -> list[tu
     for _response, boundary in results:
         boundary["batch_end_monotonic_s"] = batch_end
         boundary["batch_client_wall_ms"] = batch_wall_ms
-        boundary["batch_client_makespan_ms"] = max(
-            (float(item.get("request_to_end_ms")) for _r, item in results
-             if item.get("request_to_end_ms") is not None), default=None
-        )
+        boundary["batch_client_makespan_ms"] = _client_batch_makespan(results)
     return results
+
+
+def _client_batch_makespan(results):
+    """Elapsed time from earliest POST to last real token, in one client clock."""
+    boundaries = [boundary for _, boundary in results]
+    if not boundaries or any(b.get("request_start_monotonic_s") is None or b.get("last_token_monotonic_s") is None for b in boundaries):
+        return None
+    return 1000.0 * (max(b["last_token_monotonic_s"] for b in boundaries)
+                     - min(b["request_start_monotonic_s"] for b in boundaries))
+
+
+def _completion_payload(args, prompt, *, warmup=False):
+    payload = {"prompt": prompt, "n_predict": max(1, args.warmup_predict) if warmup else args.predict,
+               "temperature": args.temperature, "top_k": args.top_k, "seed": args.seed,
+               "cache_prompt": False, "stream": False if warmup else args.request_timing == "stream",
+               "ignore_eos": args.output_mode == "fixed"}
+    if args.stop:
+        payload["stop"] = list(args.stop)
+    return payload
+
+
+def _native_measurement_policy(args):
+    return {
+        "submission": args.native_client,
+        "connection_policy": "preconnect_each_batch" if args.native_client == "preconnect_http" else "urllib_independent",
+        "log_verbosity": args.native_log_verbosity,
+        "priority": args.native_priority,
+        "warmup_batches": args.warmup_batches,
+        "warmup_output_tokens": args.warmup_predict,
+        "warmup_stream": args.native_client == "preconnect_http",
+        "diagnostic_counter_snapshots": not args.skip_counter_snapshots,
+        "post_retry_count": 0,
+    }
+
+
+def _native_measurement_flags(args):
+    flags = []
+    if args.native_log_verbosity is not None:
+        flags += ["--log-verbosity", str(args.native_log_verbosity)]
+    if args.native_priority != 0:
+        flags += ["--prio", str(args.native_priority), "--prio-batch", str(args.native_priority)]
+    return flags
+
+
+def _collect_warmup_batches(url, payload, parallel, count, client=None):
+    if count < 1:
+        raise ValueError("warmup batch count must be positive")
+    actual = dict(payload)
+    actual["stream"] = client is not None
+    batches = []
+    for _ in range(count):
+        responses = ([response for response, _ in client.batch(url, actual)] if client is not None
+                     else post_parallel_json(url, actual, parallel))
+        batches.append(responses)
+    return batches
+
+
+def _native_execution_environment():
+    # Deliberately omit credentials and unrelated environment variables.
+    keys = ("GGML_OP_OFFLOAD_MIN_BATCH", "LLAMA_ENGINE_TOKEN_TIMES", "CUDA_VISIBLE_DEVICES",
+            "CUDA_MODULE_LOADING", "OMP_NUM_THREADS", "GGML_CUDA_DISABLE_GRAPHS")
+    return {key: {"is_set": key in os.environ, "value": os.environ.get(key)} for key in keys}
 
 
 def post_parallel_json(url: str, payload: dict, parallel: int) -> list[dict]:
@@ -328,13 +410,19 @@ def _engine_boundary_timing(boundary: Mapping[str, object] | None,
             "engine_timing_source": "explicit_engine_boundary"}
 
 
-def _engine_counter_timing(timings: Mapping[str, object], output_tokens: int) -> dict[str, object]:
-    """Map proven llama.cpp slot counters to the engine timing contract.
+def _engine_counter_timing(
+    timings: Mapping[str, object], output_tokens: int, *,
+    semantic_proof: Mapping[str, object] | None = None,
+    binary_artifacts: object = None,
+) -> dict[str, object]:
+    """Map llama.cpp slot counters only after independent semantic proof.
 
-    A counter is not proof by itself: the caller must provide a valid output
-    counter and the returned record carries explicit status/proof fields.  For
-    zero output tokens no generated-token boundary exists, so all engine
-    metrics are unavailable and the capture remains diagnosable.
+    Numeric counters are useful diagnostic observations, but a producer-side
+    ``status=verified`` label cannot prove their boundary semantics.  Formal
+    ``counter_proven`` status therefore requires a proof artifact whose source
+    bytes and capture-time executable/DLL SHA set match this run.  Without it,
+    the same numeric values are retained as ``counter_observed_unproven`` and
+    are rejected by the L1 evaluator.
     """
     unavailable = {
         "engine_ttft_ms": None, "engine_tpot_ms": None, "engine_e2e_ms": None,
@@ -356,21 +444,49 @@ def _engine_counter_timing(timings: Mapping[str, object], output_tokens: int) ->
                 isinstance(predicted_n, bool) or not isinstance(predicted_n, int)
                 or predicted_n != output_tokens))):
         return unavailable
+    proof_ok, proof_errors = validate_engine_semantic_proof(
+        semantic_proof, binary_artifacts=binary_artifacts,
+    )
+    timepoints = timings.get("engine_token_times_us")
+    timepoints_valid = (timings.get("engine_timepoints_complete") is True
+                        and isinstance(timepoints, list) and len(timepoints) == output_tokens
+                        and all(isinstance(t, int) and not isinstance(t, bool) and t > 0 for t in timepoints)
+                        and all(a <= b for a, b in zip(timepoints, timepoints[1:]))
+                        and isinstance(timings.get("engine_request_begin_us"), int)
+                        and timings["engine_request_begin_us"] <= timepoints[0])
+    if timepoints_valid:
+        first_us = timings.get("engine_prompt_last_us")
+        last_us = timepoints[-1]
+        timepoints_valid = (isinstance(first_us, int) and timepoints[0] == first_us
+                            and last_us == timings.get("engine_last_token_us")
+                            and abs(float(prompt_ms) - (first_us - timings["engine_request_begin_us"]) / 1000.0) < 0.002
+                            and (output_tokens == 1 or abs(float(eval_ms) - (last_us - first_us) / 1000.0) < 0.002))
+    # v1 legacy counters remain diagnostic; strict proof v2 requires complete
+    # original token timepoints, not reconstructed evenly-spaced timestamps.
+    if isinstance(semantic_proof, Mapping) and semantic_proof.get("schema") == "engine-semantic-proof/v2" and not timepoints_valid:
+        proof_ok = False
+        proof_errors.append("complete raw engine token timepoints missing or inconsistent")
     return {
+        "engine_timepoints_status": "complete" if timepoints_valid else "unavailable",
         "engine_ttft_ms": float(prompt_ms),
         "engine_tpot_ms": float(eval_ms) / (output_tokens - 1) if output_tokens > 1 else None,
-        "engine_e2e_ms": float(prompt_ms) + float(eval_ms),
-        "engine_timing_status": "counter_proven",
+        "engine_e2e_ms": float(prompt_ms) + (float(eval_ms) if output_tokens > 1 else 0.0),
+        "engine_timing_status": "counter_proven" if proof_ok else ENGINE_COUNTER_UNPROVEN_STATUS,
         "measurement_status": "complete",
-        "measurement_kind": "verified_slot_counters",
-        "semantic_validation_status": "verified",
+        "measurement_kind": "verified_slot_counters" if proof_ok else "observed_slot_counters",
+        "semantic_validation_status": "verified" if proof_ok else "unverified",
+        "semantic_proof_status": "verified" if proof_ok else "unverified",
+        "semantic_proof_errors": proof_errors,
         "timing_contract_id": "engine-boundary/v1",
         "engine_timing_source": "llama.cpp.server_slot_stats.t_start_prompt_last_gen_last",
     }
 
-def _native_request_record(response: Mapping[str, object],
-                           boundary: Mapping[str, object],
-                           request_index: int, requested_output: int) -> dict[str, object]:
+def _native_request_record(
+    response: Mapping[str, object], boundary: Mapping[str, object],
+    request_index: int, requested_output: int, *,
+    semantic_proof: Mapping[str, object] | None = None,
+    binary_artifacts: object = None,
+) -> dict[str, object]:
     """Normalize one native response without discarding its raw timing data."""
     timings = response.get("timings", {})
     if not isinstance(timings, Mapping):
@@ -399,7 +515,10 @@ def _native_request_record(response: Mapping[str, object],
     engine_boundary = response.get("engine_boundary", boundary.get("engine_boundary"))
     engine = _engine_boundary_timing(engine_boundary, output_tokens)
     if engine["engine_timing_status"] == "unavailable":
-        engine = _engine_counter_timing(timings, output_tokens)
+        engine = _engine_counter_timing(
+            timings, output_tokens, semantic_proof=semantic_proof,
+            binary_artifacts=binary_artifacts,
+        )
     return {
         "request_id": f"request-{request_index:04d}",
         "request_index": request_index,
@@ -419,7 +538,15 @@ def _native_request_record(response: Mapping[str, object],
         "semantic_validation_status": engine.get("semantic_validation_status", "unverified"),
         "timing_contract_id": engine.get("timing_contract_id", "engine-boundary/v1"),
         "engine_timing_source": engine.get("engine_timing_source", "explicit_engine_boundary"),
+        "semantic_proof_status": engine.get("semantic_proof_status"),
+        "semantic_proof_errors": list(engine.get("semantic_proof_errors") or []),
         "engine_boundary": dict(engine_boundary) if isinstance(engine_boundary, Mapping) else None,
+        "engine_timepoints_status": engine.get("engine_timepoints_status", "unavailable"),
+        "raw_timings": dict(timings),
+        "slot_id": response.get("id_slot", response.get("slot_id")),
+        "stop_type": response.get("stop_type"),
+        "truncated": response.get("truncated"),
+        "finish_reason": response.get("finish_reason", response.get("stop_type")),
         "total_ms": prompt_ms + eval_ms if prompt_ms is not None and eval_ms is not None else None,
         "ttft_ms": float(first) if first is not None else None,
         "e2e_ms": float(end) if end is not None else None,
@@ -447,14 +574,17 @@ def _aggregate_request_records(records: list[Mapping[str, object]],
                   if isinstance(value, (int, float)) and not isinstance(value, bool)
                   and math.isfinite(float(value)) and float(value) >= 0]
     aggregate["request_count"] = len(records)
+    aggregate["request_ids"] = [str(item.get("request_id")) for item in records
+                                 if isinstance(item.get("request_id"), str) and item.get("request_id")]
+    aggregate["record_scope"] = FORMAL_AGGREGATE_SCOPE
     aggregate["makespan_ms"] = max(end_values) if end_values else None
     aggregate["batch_client_wall_ms"] = batch_client_wall_ms
     statuses = [str(item.get("engine_timing_status")) for item in records]
-    proof_statuses = {"counter_proven", "marker_proven"}
+    proof_statuses = {"counter_proven", "marker_proven", "measured"}
     aggregate["engine_timing_status"] = (
-        "marker_proven" if statuses and all(status == "measured" for status in statuses)
-        else statuses[0] if statuses and all(status == statuses[0] for status in statuses)
-        and statuses[0] in proof_statuses else "unavailable"
+        statuses[0] if statuses and len(set(statuses)) == 1
+        else "measured" if statuses and all(status in proof_statuses for status in statuses)
+        else "unavailable"
     )
     aggregate["measurement_status"] = (
         "complete" if records and all(item.get("measurement_status") == "complete" for item in records)
@@ -469,19 +599,10 @@ def _aggregate_request_records(records: list[Mapping[str, object]],
         else "unverified"
     )
     aggregate["engine_contract_id"] = aggregate["timing_contract_id"]
-    for metric_name in ("tpot_ms", "client_tpot_ms", "engine_tpot_ms"):
-        eligible = [
-            item for item in records
-            if isinstance(item.get("output_tokens"), int)
-            and item.get("output_tokens") > 1
-            and item.get(metric_name) is not None
-        ]
-        if not eligible:
-            aggregate[metric_name]["status"] = "not_applicable"
-        elif len(eligible) < len(records):
-            aggregate[metric_name]["status"] = "incomplete"
-        else:
-            aggregate[metric_name]["status"] = "measured"
+    for metric_name in metric_names:
+        aggregate[metric_name]["status"] = metric_status_for_records(records, metric_name)
+    aggregate["semantic_proof_status"] = "verified" if records and all(
+        item.get("semantic_proof_status") == "verified" for item in records) else "unverified"
     # Friendly aliases match the simulator payload and matrix terminology;
     # the request_* names remain canonical for boundary provenance.
     aggregate["ttft_ms"] = aggregate["request_to_first_token_ms"]
@@ -497,11 +618,54 @@ def _aggregate_request_records(records: list[Mapping[str, object]],
     return aggregate
 
 
+def _simulator_engine_start(simulation, metric, scenario=None):
+    """Use llama's first prompt-processing event, retaining host preparation separately."""
+    scenario = scenario if scenario is not None else getattr(simulation, "scenario", None)
+    workload = getattr(scenario, "workload", None)
+    metadata = getattr(workload, "metadata", {}) or {}
+    is_llama = bool(metadata.get("llama_cpp_runtime")) or getattr(scenario, "llama_cpp_config", None) is not None
+    request_id = str(getattr(metric, "request_id", ""))
+    serving_metrics = getattr(getattr(simulation, "serving", None), "request_metrics", {}) or {}
+    serving_metric = serving_metrics.get(request_id) if isinstance(serving_metrics, Mapping) else None
+    if is_llama:
+        start = getattr(serving_metric, "engine_start_ns", None)
+        if start is None:
+            start = getattr(metric, "engine_start_ns", None)
+        return start, "first_prompt_batch_processing" if start is not None else "unavailable"
+    start = getattr(serving_metric, "start_ns", None)
+    if start is None:
+        start = getattr(metric, "start_ns", None)
+    return start, "generic_runtime_start" if start is not None else "unavailable"
+
+
+def _simulator_last_engine_token(simulation, metric):
+    """Use the complete accumulator, never a partial retained event suffix."""
+    request_id = str(getattr(metric, "request_id", ""))
+    events = [event for event in getattr(getattr(simulation, "serving", None), "events", ()) or ()
+              if str(getattr(event, "request_id", "")) == request_id
+              and str(getattr(event, "event_type", "")) == "tokens_committed"
+              and getattr(event, "timestamp_ns", None) is not None]
+    times = sorted(float(event.timestamp_ns) for event in events)
+    count = int(getattr(metric, "visible_output_tokens", 0) or 0)
+    accumulated = getattr(metric, "last_token_ns", None)
+    complete = count > 0 and len(times) == count
+    if accumulated is not None:
+        last = float(accumulated)
+        if not math.isfinite(last) or (times and times[-1] > last + 1e-6):
+            return None, "conflicting_token_evidence", times
+        if complete and not math.isclose(times[-1], last, rel_tol=1e-12, abs_tol=1e-6):
+            return None, "conflicting_token_evidence", times
+        return last, "accumulator_complete" if complete else "accumulator_with_partial_event_retention", times
+    if complete:
+        return times[-1], "complete_token_events", times
+    return None, "incomplete_token_evidence", times
+
+
 def _simulator_request_timing(simulation, metric: object) -> dict[str, object]:
     """Project realized tasks onto the engine and client timing contracts.
 
-    Engine timing starts at the first physical prefill invocation after host
-    preparation, ends TTFT at the first generated token, and ends E2E at the
+    Llama engine timing starts when a slot first enters prompt batch
+    processing, before ensuing resource waits, ends TTFT at the first generated token, and ends E2E at the
     last generated token.  The request-done marker is excluded because it may
     include response queue or transport work.  Prefill batch ends are retained
     only as a diagnostic field.
@@ -509,14 +673,9 @@ def _simulator_request_timing(simulation, metric: object) -> dict[str, object]:
     request_id = str(getattr(metric, "request_id", ""))
     arrival = getattr(metric, "arrival_ns", None)
     # OnlineScenarioResult retains the serving timeline.  Its serving metrics
-    # carry the post-admission engine start; the aggregate RequestMetrics
-    # object does not, so recover it by request id and keep a labelled legacy
-    # fallback for synthetic/old fixtures.
-    serving_metrics = getattr(getattr(simulation, "serving", None), "request_metrics", {}) or {}
-    serving_metric = serving_metrics.get(request_id) if isinstance(serving_metrics, Mapping) else None
-    start = getattr(serving_metric, "start_ns", None)
-    if start is None:
-        start = getattr(metric, "start_ns", None)
+    # carry the distinct engine start; recover it by request id. Llama must
+    # not substitute the earlier host preparation or arrival timestamp.
+    start, engine_start_source = _simulator_engine_start(simulation, metric)
     first = getattr(metric, "first_token_ns", None)
     finish = getattr(metric, "finish_ns", None)
     tokens = int(getattr(metric, "visible_output_tokens", 0) or 0)
@@ -526,16 +685,12 @@ def _simulator_request_timing(simulation, metric: object) -> dict[str, object]:
                     and request_id in tuple(getattr(batch, "request_ids", ()) or ())
                     and getattr(batch, "end_ns", None) is not None]
     prefill_end = max(prefill_ends) if prefill_ends else None
-    token_events = [event for event in getattr(simulation.serving, "events", ()) or ()
-                    if str(getattr(event, "request_id", "")) == request_id
-                    and str(getattr(event, "event_type", "")) == "tokens_committed"]
-    last_engine_token = max((float(getattr(event, "timestamp_ns")) for event in token_events
-                             if getattr(event, "timestamp_ns", None) is not None), default=None)
-    if last_engine_token is None and first is not None and tpot_ns is not None and tokens > 1:
+    last_engine_token, last_token_source, token_times = _simulator_last_engine_token(simulation, metric)
+    if last_engine_token is None and engine_start_source == "generic_runtime_start" and last_token_source != "conflicting_token_evidence" and first is not None and tpot_ns is not None and tokens > 1:
         last_engine_token = float(first) + float(tpot_ns) * (tokens - 1)
     if first is not None and start is not None:
         engine_ttft_ns = float(first) - float(start)
-        engine_ttft_source = "simulator.first_engine_token-start"
+        engine_ttft_source = "simulator.first_engine_token-" + engine_start_source
     else:
         engine_ttft_ns = None
         engine_ttft_source = "unavailable"
@@ -547,16 +702,22 @@ def _simulator_request_timing(simulation, metric: object) -> dict[str, object]:
                      if client_ttft_ns is not None and tpot_ns is not None and tokens > 1 else
                      (float(finish) - float(arrival)
                       if finish is not None and arrival is not None else None))
+    engine_tpot_ns = ((last_engine_token - float(first)) / (tokens - 1)
+                       if tokens > 1 and first is not None and last_engine_token is not None else None)
     return {
         "engine_ttft_ms": engine_ttft_ns / 1e6 if engine_ttft_ns is not None else None,
-        "engine_tpot_ms": float(tpot_ns) / 1e6 if tpot_ns is not None else None,
+        "engine_tpot_ms": engine_tpot_ns / 1e6 if engine_tpot_ns is not None else None,
         "engine_e2e_ms": engine_e2e_ns / 1e6 if engine_e2e_ns is not None else None,
         "client_ttft_ms": client_ttft_ns / 1e6 if client_ttft_ns is not None else None,
         "client_tpot_ms": float(tpot_ns) / 1e6 if tpot_ns is not None else None,
         "client_e2e_ms": client_e2e_ns / 1e6 if client_e2e_ns is not None else None,
         "engine_ttft_source": engine_ttft_source,
         "engine_request_begin_ns": start,
+        "engine_start_source": engine_start_source,
         "engine_last_token_ns": last_engine_token,
+        "engine_last_token_source": last_token_source,
+        "engine_token_times_ns": token_times,
+        "engine_timepoints_complete": len(token_times) == tokens and last_engine_token is not None,
         "prefill_end_ns": prefill_end,
     }
 
@@ -876,7 +1037,7 @@ def _runtime_artifact_refs(exe: Path) -> list[dict[str, object]]:
 
 
 _EXTRACTOR_FUNCTIONS = (
-    "post_stream_json", "post_parallel_stream_json", "_percentile_summary",
+    "post_stream_json", "post_parallel_stream_json", "_client_batch_makespan", "_percentile_summary",
     "_engine_boundary_timing", "_engine_counter_timing", "_native_request_record",
     "_aggregate_request_records", "parse_perf_log",
     "metric_snapshot",
@@ -892,7 +1053,9 @@ def native_extractor_identity() -> dict[str, object]:
             continue
         source = inspect.getsource(fn)
         trees[name] = ast.dump(ast.parse(source), include_attributes=False)
-    basis = {"schema": "selected_function_ast_v1", "functions": trees}
+    helper_paths = (Path(__file__).with_name("evaluation_contract.py"), Path(__file__).with_name("native_runtime_evidence.py"), Path(__file__).with_name("native_http_client.py"))
+    basis = {"schema": "selected_function_ast_v2", "functions": trees,
+             "helpers": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in helper_paths}}
     return {
         "path": str(Path(__file__).resolve()),
         "status": "captured",
@@ -934,7 +1097,11 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
                             gpu_layers: int, seed: int = 42,
                             coherent_dma_mode: str = "pipelined",
                             model=None,
-                            hardware_snapshot: Mapping[str, object] | None = None):
+                            hardware_snapshot: Mapping[str, object] | None = None,
+                            op_offload: bool = True,
+                            runtime_binary: str | Path | None = None,
+                            runtime_environment: Mapping[str, str | None] | None = None,
+                            cuda_backend_available: bool | None = None):
     """Build a parity scenario using measured physical host inputs.
 
     The optional snapshot keeps legacy callers working while allowing the
@@ -1123,7 +1290,7 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
         context=ctx, parallel=parallel, gpu_layers=gpu_layers,
         flash_attn=False, kv_type_k="f16", kv_type_v="f16",
         kv_unified=True, cont_batching=True, warmup=True, seed=seed,
-        mmap=True, mlock=False, offload_kqv=True, op_offload=True,
+        mmap=True, mlock=False, offload_kqv=True, op_offload=op_offload,
         split_mode="layer", main_gpu=0,
     )
     placement_risks = []
@@ -1134,7 +1301,7 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     if isinstance(physical_cores, int) and threads > physical_cores:
         placement_risks.append("requested_threads_use_hyperthreads")
     if gpu_layers == 0:
-        placement_risks.append("gpu_offload_disabled_cpu_only")
+        placement_risks.append("zero_gpu_weight_layers_op_offload_possible" if op_offload else "gpu_offload_disabled_cpu_only")
     elif gpu_layers > 0 and gpu_layers < model.num_layers:
         placement_risks.append("partial_gpu_layer_offload")
     placement = replace(placement, metadata={
@@ -1145,6 +1312,37 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     })
     authored = replace(base, name="native-llama-parity-rtx5080", model=model, hardware=hardware, placement=placement, workload=workload, component_profiles=profiles, fusion_policy=replace(base.fusion_policy, flash_attention=False), llama_cpp_config=runtime_config, assumptions=base.assumptions + (f"llama.cpp ctx={ctx} batch={batch} ubatch={ubatch} threads={threads} parallel={parallel} gpu_layers={gpu_layers} ctk=ctv:f16",))
     lowered = apply_llama_runtime_config(authored, runtime_config, materialize_placement=True)
+    # This parity builder targets the project's locked source deployment.  An
+    # unrelated executable cannot inherit its CUDA dispatch rules.  Legacy
+    # native records did not capture the offload environment: do not inspect
+    # today's os.environ and pretend it is historical evidence.
+    locked_source = ROOT / "source/llama.cpp-semantic"
+    locked_binary = locked_source / "build-semantic-direct/bin/llama-server.exe"
+    selected_binary = Path(runtime_binary).resolve() if runtime_binary is not None else locked_binary.resolve()
+    cuda_module = locked_binary.parent / "ggml-cuda.dll"
+    matching_deployment = selected_binary == locked_binary.resolve() and cuda_module.is_file()
+    if cuda_backend_available is None:
+        cuda_backend_available = bool(matching_deployment and hardware_snapshot is not None
+                                      and str(measured["gpu_name"]).startswith("NVIDIA"))
+    contract = None
+    if matching_deployment:
+        try:
+            contract = derive_llama_cuda_op_offload_contract(
+                locked_source, runtime_environment=runtime_environment)
+            contract["backend_artifact"] = {"path": str(cuda_module.resolve()),
+                "sha256": hashlib.sha256(cuda_module.read_bytes()).hexdigest()}
+            contract["source_runtime_binding"] = "local_locked_deployment_conditional_on_capture_identity"
+        except (OSError, UnicodeDecodeError, ValueError, IndexError) as exc:
+            contract = {"source_error": str(exc)}
+    lowered = apply_llama_cuda_op_offload(
+        lowered, runtime_config, source_contract=contract,
+        cuda_backend_available=bool(cuda_backend_available and matching_deployment))
+    # The first pass establishes static layer/weight ownership, needed by
+    # invocation-local lowering. Offload changes component profiles, which
+    # are control-plane inputs: recompute the decision from these final inputs
+    # rather than relabeling a stale fingerprint. The final KV map below is
+    # derived from this freshly materialized placement.
+    lowered = apply_llama_runtime_config(lowered, runtime_config, materialize_placement=True)
     # Keep the llama.cpp per-layer KV arena decision explicit.  ``-ngl`` uses
     # a tail placement: CPU-prefix layers persist K/V in host DRAM and the
     # CUDA suffix persists K/V in HBM.  The planner still has a deterministic
@@ -1216,6 +1414,12 @@ def main() -> int:
     ap.add_argument("--top-k", type=int, default=1)
     ap.add_argument("--stop", action="append", default=[])
     ap.add_argument("--warmup-predict", type=int, default=2)
+    ap.add_argument("--warmup-batches", type=int, default=1)
+    ap.add_argument("--native-client", choices=("independent_http", "preconnect_http"), default="independent_http")
+    ap.add_argument("--native-log-verbosity", type=int, default=None)
+    ap.add_argument("--native-priority", type=int, choices=(0, 1), default=0)
+    ap.add_argument("--skip-counter-snapshots", action="store_true",
+                    help="omit diagnostic /metrics and /slots queries; engine token markers remain the timing source")
     ap.add_argument("--request-timing", choices=("stream", "prompt_eval", "none"), default="stream",
                     help="请求边界计时来源；stream 测量 request-to-first-token，prompt_eval 仅保留旧阶段诊断")
     ap.add_argument("--coherent-dma-mode", choices=("pipelined", "strict_serialized"), default="pipelined")
@@ -1225,6 +1429,8 @@ def main() -> int:
                     help="可选 trace extractor 输出文件；只记录路径与 SHA")
     ap.add_argument("--extractor-script-artifact", action="append", type=Path, default=[],
                     help="可选 trace extractor 脚本或版本文件；只记录路径与 SHA")
+    ap.add_argument("--engine-semantic-proof", type=Path, default=None,
+                    help="optional engine-semantic-proof/v1 bound to current EXE/DLL and source artifacts")
     ap.add_argument("--output", type=Path, default=Path("artifacts/native_compare.json"))
     ap.add_argument("--calibration-profile", type=Path, default=None,
                     help="可选 native-calibration/v1；仅将已测 CUDA launch 系数下沉到 gpu.frontend")
@@ -1239,8 +1445,22 @@ def main() -> int:
     ap.add_argument("--apply-request-boundary-calibration", action="store_true",
                     help="显式启用同 prompt/output 场景下 request_begin/first_token/request_end marker 的一次性边界证据")
     args = ap.parse_args()
+    if args.warmup_batches < 1 or args.warmup_predict < 1:
+        raise SystemExit("warmup batch/token counts must be positive")
+    if args.native_client == "preconnect_http" and args.request_timing != "stream":
+        raise SystemExit("preconnect_http requires --request-timing stream")
+    measurement_policy = _native_measurement_policy(args)
     if not Path(args.exe).exists() or not Path(args.model).exists():
         raise SystemExit("llama.cpp executable or GGUF model not found")
+    semantic_proof = None
+    semantic_proof_capture = {"path": None, "sha256": None}
+    if args.engine_semantic_proof is not None:
+        try:
+            semantic_proof, semantic_proof_capture = _read_engine_semantic_proof(args.engine_semantic_proof)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"engine semantic proof unreadable: {exc}")
+    deployment_artifacts = _runtime_artifact_refs(Path(args.exe))
+    runtime_artifacts = []
     gguf = read_gguf_metadata(args.model)
     gguf_model = build_model_from_gguf(gguf)
     parity = compare_gguf_to_model(gguf, gguf_model, context_length=args.ctx)
@@ -1253,6 +1473,7 @@ def main() -> int:
     hardware = probe_hardware()
     sim_scenario = build_matching_scenario(prompt_tokens, predicted_output_tokens, ctx=args.ctx, parallel=args.parallel,
                                            batch=args.batch, ubatch=args.ubatch, threads=args.threads, gpu_layers=args.gpu_layers,
+                                           runtime_binary=args.exe,
                                            seed=args.seed, coherent_dma_mode=args.coherent_dma_mode, model=gguf_model,
                                            hardware_snapshot=hardware)
     sim_scenario = replace(sim_scenario, placement=replace(
@@ -1273,9 +1494,12 @@ def main() -> int:
     prediction_sim = run_scenario(sim_scenario, retention_policy="aggregate")
     prediction_artifact = args.output.with_suffix(".prediction.json")
     prediction_artifact.parent.mkdir(parents=True, exist_ok=True)
-    prediction_artifact.write_text(json.dumps({
+    if prediction_artifact.exists() or args.output.exists() or args.output.with_suffix(".native_raw.json").exists():
+        raise SystemExit("refusing to overwrite prediction/native artifacts; use a new run id or resume through the frozen runner")
+    with prediction_artifact.open("x", encoding="utf-8") as prediction_handle:
+        prediction_handle.write(json.dumps({
         "schema": "native-simulator-prediction/v1", "created_utc": datetime.now(timezone.utc).isoformat(),
-        "status": "saved_before_native_reveal", "output_mode": args.output_mode,
+        "status": "saved_before_native_reveal", "output_mode": args.output_mode, "measurement_policy": measurement_policy,
         "prompt_tokenization": prompt_tokenization, "requested_output_tokens": predicted_output_tokens,
         "model": str(Path(args.model).resolve()), "gguf_sha256": parity["gguf"]["sha256"],
         "hardware_fingerprint": _hardware_fingerprint(hardware), "configuration": {
@@ -1291,7 +1515,7 @@ def main() -> int:
                                    "engine_timing": _simulator_request_timing(prediction_sim, m),
                                    "visible_output_tokens": getattr(m, "visible_output_tokens", None)}
                             for rid, m in prediction_sim.metrics.request_metrics.items()},
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        }, ensure_ascii=False, indent=2) + "\n")
     prediction_sha256 = hashlib.sha256(prediction_artifact.read_bytes()).hexdigest()
     if not 0 <= args.port <= 65535:
         raise SystemExit("--port must be between 0 and 65535")
@@ -1303,6 +1527,12 @@ def main() -> int:
     else:
         port = args.port
     cmd = [args.exe, "-m", args.model, "--host", "127.0.0.1", "--port", str(port), "-c", str(args.ctx), "-ngl", str(args.gpu_layers), "-np", str(args.parallel), "-b", str(args.batch), "-ub", str(args.ubatch), "-t", str(args.threads), "-tb", str(args.threads), "-fa", "off", "--load-mode", "mmap", "-kvo", "--op-offload", "-sm", "layer", "-mg", "0", "-ctk", "f16", "-ctv", "f16", "-kvu", "-cb", "--perf", "--metrics", "--warmup", "--spec-type", "none"]
+    cmd += _native_measurement_flags(args)
+    execution_environment = _native_execution_environment()
+    measurement_client = None
+    if args.native_client == "preconnect_http":
+        from tools.native_http_client import PersistentClient
+        measurement_client = PersistentClient(parallel=args.parallel, connection_policy="preconnect_each_batch")
     log_path = args.output.with_suffix(".llama.log")
     with log_path.open("w", encoding="utf-8") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=log)
@@ -1310,25 +1540,30 @@ def main() -> int:
         base = f"http://127.0.0.1:{port}"
         wait_health(base, proc)
         try:
-            slots_before = get_json(base + "/slots")
+            slots_before = None if args.skip_counter_snapshots else get_json(base + "/slots")
         except Exception:
             slots_before = None
+        # Hash loaded modules before warmup, not between warmup and timed
+        # execution. Full DLL hashing can leave GPU idle and invalidate the
+        # intended warm-cache/warm-clock measurement state.
+        loaded_runtime_before = capture_loaded_runtime(proc.pid, args.exe)
+        runtime_artifacts = loaded_runtime_before.get("artifacts", [])
         prompt = args.prompt
-        warmup_payload = {"prompt": prompt, "n_predict": max(1, args.warmup_predict), "temperature": args.temperature, "top_k": args.top_k, "seed": args.seed, "cache_prompt": False, "stream": False}
+        warmup_payload = _completion_payload(args, prompt, warmup=True)
         warmup_started = time.perf_counter()
-        warmup = post_json(base + "/completion", warmup_payload)
+        warmup_batches = _collect_warmup_batches(base + "/completion", warmup_payload, args.parallel, args.warmup_batches, measurement_client)
+        warmup_requests = warmup_batches[-1]
+        warmup = warmup_requests[0]
         warmup_wall_ms = (time.perf_counter() - warmup_started) * 1000.0
         # The formal baseline must be captured after warmup.  Otherwise the
         # delta mixes warmup work into the measured request counters.
-        metrics_before = get_text(base + "/metrics")
+        metrics_before = "" if args.skip_counter_snapshots else get_text(base + "/metrics")
         try:
-            slots_before = get_json(base + "/slots")
+            slots_before = None if args.skip_counter_snapshots else get_json(base + "/slots")
         except Exception:
             slots_before = None
         started = time.perf_counter()
-        formal_payload = {"prompt": prompt, "n_predict": args.predict, "temperature": args.temperature, "top_k": args.top_k, "seed": args.seed, "cache_prompt": False, "stream": args.request_timing == "stream", "ignore_eos": args.output_mode == "fixed"}
-        if args.stop:
-            formal_payload["stop"] = list(args.stop)
+        formal_payload = _completion_payload(args, prompt)
         request_boundary: dict[str, object] = {
             "mode": "disabled", "request_start": None,
             "first_event_ms": None, "first_content_ms": None,
@@ -1338,7 +1573,8 @@ def main() -> int:
         native_requests: list[dict] = []
         request_boundaries: list[dict[str, object]] = []
         if args.request_timing == "stream":
-            pairs = post_parallel_stream_json(base + "/completion", formal_payload, args.parallel)
+            pairs = (measurement_client.batch(base + "/completion", formal_payload) if measurement_client is not None
+                     else post_parallel_stream_json(base + "/completion", formal_payload, args.parallel))
             native_requests = [item[0] for item in pairs]
             request_boundaries = [item[1] for item in pairs]
             native = native_requests[0]
@@ -1353,12 +1589,28 @@ def main() -> int:
             native = native_requests[0]
             request_boundaries = [dict(request_boundary) for _ in native_requests]
         wall_ms = (time.perf_counter() - started) * 1000.0
-        metrics_after = get_text(base + "/metrics")
+        # Persist before normalization; a later extractor failure must never
+        # discard a costly native capture or force a new 27B execution.
+        raw_native_path = args.output.with_suffix(".native_raw.json")
+        with raw_native_path.open("x", encoding="utf-8") as raw_handle:
+            json.dump({"schema": "native-raw-capture/v1", "captured_utc": datetime.now(timezone.utc).isoformat(),
+                       "prediction_artifact": str(prediction_artifact.resolve()), "prediction_sha256": prediction_sha256,
+                       "command": cmd, "execution_environment": execution_environment, "measurement_policy": measurement_policy, "warmup_batches": warmup_batches, "responses": native_requests, "request_boundaries": request_boundaries,
+                       "batch_client_wall_ms": wall_ms, "runtime_artifacts": runtime_artifacts},
+                      raw_handle, ensure_ascii=False, indent=2)
+        loaded_runtime_after = capture_loaded_runtime(proc.pid, args.exe)
+        runtime_stable = (loaded_runtime_before.get("status") == loaded_runtime_after.get("status") == "captured"
+                          and loaded_runtime_before.get("module_identity_sha256") == loaded_runtime_after.get("module_identity_sha256"))
+        if not runtime_stable:
+            runtime_artifacts = []
+        metrics_after = "" if args.skip_counter_snapshots else get_text(base + "/metrics")
         try:
-            slots_after = get_json(base + "/slots")
+            slots_after = None if args.skip_counter_snapshots else get_json(base + "/slots")
         except Exception:
             slots_after = None
     finally:
+        if measurement_client is not None:
+            measurement_client.close()
         proc.terminate()
         try: proc.wait(timeout=10)
         except subprocess.TimeoutExpired: proc.kill()
@@ -1422,64 +1674,15 @@ def main() -> int:
             "engine_ttft_source": timing["engine_ttft_source"],
             "engine_request_begin_ns": timing["engine_request_begin_ns"],
             "prefill_end_ns": timing["prefill_end_ns"],
+            "engine_timing_status": "measured",
+            "measurement_status": "complete",
+            "semantic_validation_status": "verified",
+            "timing_contract_id": "engine-boundary/v1",
         })
-    simulator_aggregate = {
-        "ttft_ms": _percentile_summary([
-            float(item["client_ttft_ms"]) for item in simulator_request_records
-            if item.get("client_ttft_ms") is not None
-        ]),
-        "engine_ttft_ms": _percentile_summary([
-            float(item["engine_ttft_ms"]) for item in simulator_request_records
-            if item.get("engine_ttft_ms") is not None
-        ]),
-        "tpot_ms": _percentile_summary([
-            float(item["client_tpot_ms"]) for item in simulator_request_records
-            if item.get("client_tpot_ms") is not None
-        ]),
-        "engine_tpot_ms": _percentile_summary([
-            float(item["engine_tpot_ms"]) for item in simulator_request_records
-            if item.get("engine_tpot_ms") is not None
-        ]),
-        "e2e_ms": _percentile_summary([
-            float(item["client_e2e_ms"]) for item in simulator_request_records
-            if item.get("client_e2e_ms") is not None
-        ]),
-        "client_e2e_ms": _percentile_summary([
-            float(item["client_e2e_ms"]) for item in simulator_request_records
-            if item.get("client_e2e_ms") is not None
-        ]),
-        "engine_e2e_ms": _percentile_summary([
-            float(item["engine_e2e_ms"]) for item in simulator_request_records
-            if item.get("engine_e2e_ms") is not None
-        ]),
-        "client_ttft_ms": _percentile_summary([
-            float(item["client_ttft_ms"]) for item in simulator_request_records
-            if item.get("client_ttft_ms") is not None
-        ]),
-        "request_count": len(simulator_request_records),
-        "engine_timing_status": "counter_proven" if simulator_request_records and all(
-            item.get("engine_ttft_ms") is not None and item.get("engine_e2e_ms") is not None
-            for item in simulator_request_records
-        ) else "unavailable",
-        "measurement_status": "complete" if simulator_request_records else "incomplete",
-        "timing_contract_id": "engine-boundary/v1",
-        "engine_contract_id": "engine-boundary/v1",
-        "makespan_ms": float(getattr(sim.serving, "makespan_ns", 0.0)) / 1e6,
-        "client_makespan_ms": max((float(item["client_e2e_ms"]) for item in simulator_request_records
-                                    if item.get("client_e2e_ms") is not None), default=None),
-        "batch_client_wall_ms": None,
-    }
-    for metric_name in ("tpot_ms", "client_tpot_ms", "engine_tpot_ms"):
-        eligible = [
-            item for item in simulator_request_records
-            if item.get("output_tokens", 0) > 1 and item.get(metric_name) is not None
-        ]
-        if not eligible:
-            simulator_aggregate[metric_name]["status"] = "not_applicable"
-        elif len(eligible) < len(simulator_request_records):
-            simulator_aggregate[metric_name]["status"] = "incomplete"
-        else:
-            simulator_aggregate[metric_name]["status"] = "measured"
+    simulator_aggregate = _aggregate_request_records(simulator_request_records)
+    simulator_aggregate["makespan_ms"] = float(getattr(sim.serving, "makespan_ns", 0.0)) / 1e6
+    simulator_aggregate["client_makespan_ms"] = max((item["client_e2e_ms"] for item in simulator_request_records
+                                                    if item.get("client_e2e_ms") is not None), default=None)
     token_parity = {
         "native_prompt": int(native_prompt_value) if prompt_counter_available else None,
         "simulator_prompt": prompt_tokens,
@@ -1498,9 +1701,23 @@ def main() -> int:
     token_parity_error = None if token_parity["ok"] else "native/simulator token parity gate failed: output token count differs"
     native_prompt_ms = _finite_timing(timings.get("prompt_ms")); native_eval_ms = _finite_timing(timings.get("predicted_ms"))
     native_request_records = [
-        _native_request_record(response, boundary, index, args.predict)
+        _native_request_record(
+            response, boundary, index, args.predict,
+            semantic_proof=semantic_proof, binary_artifacts=runtime_artifacts,
+        )
         for index, (response, boundary) in enumerate(zip(native_requests, request_boundaries))
     ]
+    per_request_parity = [{"request_id": item["request_id"],
+                           "prompt_ok": item.get("prompt_tokens") == prompt_tokens,
+                           "output_ok": item.get("output_tokens") == predicted_output_tokens,
+                           "actual_output_tokens": item.get("output_tokens"),
+                           "truncated": item.get("truncated")}
+                          for item in native_request_records]
+    token_parity["requests"] = per_request_parity
+    token_parity["ok"] = (len(per_request_parity) == args.parallel and token_parity["ok"]
+                           and all(item["prompt_ok"] and item["output_ok"] and item["truncated"] is not True
+                                   for item in per_request_parity))
+    token_parity_error = None if token_parity["ok"] else "per-request token parity incomplete or mismatched"
     # Preserve both boundary families.  Engine counters are primary; stream
     # timestamps remain secondary client diagnostics.
     native_tpot_ms = native_request_records[0].get("client_tpot_ms") if native_request_records else None
@@ -1547,7 +1764,11 @@ def main() -> int:
                        if native_prompt_ms is not None and native_eval_ms is not None else None)
     native_engine_tpot_ms = (native_eval_ms / (output_tokens - 1)
                              if native_eval_ms is not None and isinstance(output_tokens, int) and output_tokens > 1 else None)
-    native_payload = {"prompt_eval_ms": native_prompt_ms, "eval_ms": native_eval_ms,
+    native_payload = {
+                      # Scalar fields are request-0 compatibility aliases.
+                      # Formal consumers must use aggregate/request_set.
+                      "record_scope": "request_0_legacy_with_request_set_aggregate",
+                      "prompt_eval_ms": native_prompt_ms, "eval_ms": native_eval_ms,
                       # Engine-level metrics are the primary comparison
                       # contract; prompt/eval counters are llama.cpp's model
                       # execution boundary.  Client stream fields remain
@@ -1555,8 +1776,10 @@ def main() -> int:
                       "engine_ttft_ms": native_request_records[0].get("engine_ttft_ms") if native_request_records else None,
                       "engine_tpot_ms": native_request_records[0].get("engine_tpot_ms") if native_request_records else None,
                       "engine_e2e_ms": native_request_records[0].get("engine_e2e_ms") if native_request_records else None,
-                      "engine_timing_status": native_request_records[0].get("engine_timing_status") if native_request_records else "unavailable",
+                      "engine_timing_status": native_aggregate.get("engine_timing_status", "unavailable"),
                       "engine_timing_source": native_request_records[0].get("engine_timing_source") if native_request_records else None,
+                      "semantic_proof_status": native_aggregate.get("semantic_proof_status", "unverified"),
+                      "semantic_proof_errors": list(native_request_records[0].get("semantic_proof_errors") or []) if native_request_records else [],
                       "tpot_ms": native_tpot_ms, "client_tpot_ms": native_tpot_ms,
                       "client_ttft_ms": native_request_ttft,
                       "client_e2e_ms": native_request_e2e,
@@ -1568,6 +1791,7 @@ def main() -> int:
                       "client_wall_ms": wall_ms, "request_boundary": request_boundary,
                       "timings": timings, "perf_log": parse_perf_log(log_path),
                       "metrics_delta": metric_delta, "metrics_before": before_metrics,
+                      "diagnostic_counters_status": "not_collected" if args.skip_counter_snapshots else "captured",
                       "metrics_after": after_metrics,
                       "slots_before": slots_before if 'slots_before' in locals() else None,
                       "slots_after": slots_after if 'slots_after' in locals() else None,
@@ -1597,7 +1821,7 @@ def main() -> int:
         "unit": "ms", "clock": "time.perf_counter",
     }
     native_contract_inputs = {
-        "command": cmd,
+        "command": cmd, "measurement_policy": measurement_policy, "execution_environment": execution_environment,
         "configuration": {
             "ctx": args.ctx, "parallel": args.parallel, "batch": args.batch, "ubatch": args.ubatch,
             "threads": args.threads, "threads_batch": args.threads, "gpu_layers": args.gpu_layers,
@@ -1619,14 +1843,27 @@ def main() -> int:
     native_payload["evidence"] = {
         "schema": "native-evidence/v1",
         "native_binary": _trace_artifact_ref(Path(args.exe)),
-        "runtime_artifacts": _runtime_artifact_refs(Path(args.exe)),
+        "runtime_artifacts": runtime_artifacts,
+        "deployment_artifacts": deployment_artifacts,
+        "loaded_runtime_before": loaded_runtime_before,
+        "loaded_runtime_after": loaded_runtime_after,
+        "runtime_stable": runtime_stable,
+        "measurement_policy": measurement_policy,
+        "raw_native_capture": _trace_artifact_ref(raw_native_path),
         "extractor": native_extractor_identity(),
         "timing_contract": {**timing_contract, "sha256": hashlib.sha256(json.dumps(timing_contract, sort_keys=True, separators=(",", ":")).encode()).hexdigest()},
         "engine_timing": {
             "status": native_payload.get("engine_timing_status", "unavailable"),
             "source": native_payload.get("engine_timing_source"),
             "fields": ["engine_ttft_ms", "engine_tpot_ms", "engine_e2e_ms"],
-            "boundary": "server_slot_stats.t_start→t_prompt_last→t_gen_last" if native_payload.get("engine_timing_status") == "counter_proven" else "explicit_engine_boundary",
+            "boundary": "server_slot_stats.t_start→t_prompt_last→t_gen_last" if native_payload.get("engine_timing_status") in ("counter_proven", ENGINE_COUNTER_UNPROVEN_STATUS) else "explicit_engine_boundary",
+            "semantic_proof_status": native_payload.get("semantic_proof_status", "unverified"),
+            "semantic_proof_errors": list(native_payload.get("semantic_proof_errors") or []),
+        },
+        "engine_semantic_proof": {
+            **semantic_proof_capture,
+            "status": native_payload.get("semantic_proof_status", "unverified"),
+            "schema": semantic_proof.get("schema") if isinstance(semantic_proof, Mapping) else None,
         },
         # Bind the measured native object itself.  Configuration identity and
         # extractor output hashes alone do not protect aggregate engine
@@ -1671,31 +1908,24 @@ def main() -> int:
               "native_reveal_timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "validity_status": "request_boundary_aligned" if boundary_measured else "timing_comparison_only",
               "validity_note": "Engine TTFT/TPOT/E2E require proven server_slot_stats or explicit engine-marker evidence; client stream TTFT/TPOT/E2E remain secondary diagnostics.",
-              "command": cmd, "server": {"port": port, "pid": proc.pid}, "log": str(log_path), "model": str(Path(args.model).resolve()), "gguf": parity,
+              "command": cmd, "measurement_policy": measurement_policy, "server": {"port": port, "pid": proc.pid}, "log": str(log_path), "model": str(Path(args.model).resolve()), "gguf": parity,
               "parity": {"geometry": parity, "ctx": {"native": args.ctx, "simulator": args.ctx, "ok": True}, "tokens": token_parity},
               "eligibility": {"status": "eligible" if token_parity["ok"] else "ineligible", "reasons": [] if token_parity["ok"] else [token_parity_error]},
               "configuration": {"ctx": args.ctx, "parallel": args.parallel, "batch": args.batch, "ubatch": args.ubatch, "threads": args.threads, "threads_batch": args.threads, "gpu_layers": args.gpu_layers, "flash_attn": False, "mmap": True, "mlock": False, "offload_kqv": True, "op_offload": True, "split_mode": "layer", "main_gpu": 0, "cpu_range": None, "cpu_range_batch": None, "numa": None, "kv_type_k": "f16", "kv_type_v": "f16", "kv_unified": True, "continuous_batching": True, "coherent_dma_mode": args.coherent_dma_mode, "mtp": False, "temperature": args.temperature, "top_k": args.top_k, "seed": args.seed, "stop": list(args.stop), "warmup_predict": args.warmup_predict, "request_timing": args.request_timing},
-              "token_counts": {"prompt": prompt_tokens, "output": output_tokens, "requested_output": args.predict}, "output_policy": {"mode": args.output_mode, "ignore_eos": args.output_mode == "fixed"}, "warmup": {"wall_ms": warmup_wall_ms, "timings": warmup.get("timings", {})},
-              "native": native_payload, "evidence": native_payload["evidence"], "simulator": {"ttft_ms": simulator_request_records[0].get("client_ttft_ms") if simulator_request_records else None, "client_ttft_ms": simulator_request_records[0].get("client_ttft_ms") if simulator_request_records else None, "engine_ttft_ms": simulator_request_records[0].get("engine_ttft_ms") if simulator_request_records else None, "tpot_ms": simulator_request_records[0].get("client_tpot_ms") if simulator_request_records else None, "client_tpot_ms": simulator_request_records[0].get("client_tpot_ms") if simulator_request_records else None, "engine_tpot_ms": simulator_request_records[0].get("engine_tpot_ms") if simulator_request_records else None, "e2e_ms": simulator_request_records[0].get("client_e2e_ms") if simulator_request_records else None, "client_e2e_ms": simulator_request_records[0].get("client_e2e_ms") if simulator_request_records else None, "engine_e2e_ms": simulator_request_records[0].get("engine_e2e_ms") if simulator_request_records else None, "makespan_ms": float(getattr(sim.serving, "makespan_ns", 0.0)) / 1e6, "client_makespan_ms": simulator_aggregate.get("client_makespan_ms"), "requests": simulator_request_records, "aggregate": simulator_aggregate}, "hardware": {**hardware, "llama_cpp": "0.3.0-dev build1 commit 0f3a71b"},
+              "token_counts": {"prompt": prompt_tokens, "output": output_tokens, "requested_output": args.predict}, "output_policy": {"mode": args.output_mode, "ignore_eos": args.output_mode == "fixed"}, "warmup": {"wall_ms": warmup_wall_ms, "timings": warmup.get("timings", {}), "request_count": len(warmup_requests), "responses": warmup_requests, "batch_count": args.warmup_batches, "response_batches": warmup_batches},
+              "native": native_payload, "evidence": native_payload["evidence"], "simulator": {"record_scope": "request_0_legacy_with_request_set_aggregate", "ttft_ms": simulator_request_records[0].get("client_ttft_ms") if simulator_request_records else None, "client_ttft_ms": simulator_request_records[0].get("client_ttft_ms") if simulator_request_records else None, "engine_ttft_ms": simulator_request_records[0].get("engine_ttft_ms") if simulator_request_records else None, "tpot_ms": simulator_request_records[0].get("client_tpot_ms") if simulator_request_records else None, "client_tpot_ms": simulator_request_records[0].get("client_tpot_ms") if simulator_request_records else None, "engine_tpot_ms": simulator_request_records[0].get("engine_tpot_ms") if simulator_request_records else None, "e2e_ms": simulator_request_records[0].get("client_e2e_ms") if simulator_request_records else None, "client_e2e_ms": simulator_request_records[0].get("client_e2e_ms") if simulator_request_records else None, "engine_e2e_ms": simulator_request_records[0].get("engine_e2e_ms") if simulator_request_records else None, "makespan_ms": float(getattr(sim.serving, "makespan_ns", 0.0)) / 1e6, "client_makespan_ms": simulator_aggregate.get("client_makespan_ms"), "requests": simulator_request_records, "aggregate": simulator_aggregate}, "hardware": {**hardware, "llama_cpp": "0.3.0-dev build1 commit 0f3a71b"},
               "identity": request_identity,
               "parallel_support": {"requested": args.parallel, "native_requests": len(native_request_records), "simulator_requests": len(simulator_request_records), "status": "modeled" if len(simulator_request_records) == args.parallel else "mismatch"}}
     # Engine is the primary acceptance boundary.  Client values are retained
     # as a secondary service diagnostic and never mixed into this headline.
     engine_evaluation = evaluate_metrics(
-        {"aggregate": native_aggregate, "engine_timing_status": native_payload.get("engine_timing_status"),
-         "timing_contract_id": native_payload.get("timing_contract_id")},
-        {"aggregate": simulator_aggregate},
+        {"aggregate": native_aggregate, "requests": native_request_records},
+        {"aggregate": simulator_aggregate, "requests": simulator_request_records},
         boundary="engine", aggregation="p50",
     )
-    result["relative_error_pct"] = {
-        "ttft_ms": (100.0 * (result["simulator"]["engine_ttft_ms"] - result["native"]["engine_ttft_ms"]) / result["native"]["engine_ttft_ms"]
-                    if result["native"].get("engine_ttft_ms") not in (None, 0) and result["simulator"].get("engine_ttft_ms") is not None else None),
-        "tpot_ms": (100.0 * (result["simulator"]["engine_tpot_ms"] - result["native"]["engine_tpot_ms"]) / result["native"]["engine_tpot_ms"]
-                    if result["native"].get("engine_tpot_ms") not in (None, 0) and result["simulator"].get("engine_tpot_ms") is not None else None),
-        "e2e_ms": (100.0 * (result["simulator"]["engine_e2e_ms"] - result["native"]["engine_e2e_ms"]) / result["native"]["engine_e2e_ms"]
-                   if result["native"].get("engine_e2e_ms") not in (None, 0) and result["simulator"].get("engine_e2e_ms") is not None else None),
-    }
     result["engine_evaluation"] = engine_evaluation
+    result["relative_error_pct"] = {metric: item["signed_error_pct"]
+                                    for metric, item in engine_evaluation["metrics"].items()}
     result["relative_error_client_pct"] = {
         "ttft_ms": (100.0 * (result["simulator"]["client_ttft_ms"] - native_request_ttft) / native_request_ttft
                     if native_request_ttft not in (None, 0) and result["simulator"].get("client_ttft_ms") is not None else None),
@@ -1715,9 +1945,7 @@ def main() -> int:
             return None
         return 100.0 * (float(sim_p50) - float(native_p50)) / float(native_p50)
     result["relative_error_aggregate_pct"] = {
-        "ttft_ms": _p50_error(native_agg["engine_ttft_ms"], sim_agg["engine_ttft_ms"]),
-        "tpot_ms": _p50_error(native_agg["engine_tpot_ms"], sim_agg["engine_tpot_ms"]),
-        "e2e_ms": _p50_error(native_agg["engine_e2e_ms"], sim_agg["engine_e2e_ms"]),
+        **result["relative_error_pct"],
         "makespan_ms": (100.0 * (float(sim_agg["makespan_ms"]) - float(native_agg["makespan_ms"])) / float(native_agg["makespan_ms"])
                         if native_agg.get("makespan_ms") not in (None, 0) and sim_agg.get("makespan_ms") is not None else None),
     }

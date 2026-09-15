@@ -492,7 +492,7 @@ class _CriticalPathIndex:
                     if predecessor_id not in task_by_id:
                         continue
                     predecessor_node = interval_nodes.get(
-                        (predecessor_id, str(resource_id)),
+                        (predecessor_id, str(raw_info.get("resource_id", resource_id))),
                         _critical_path_end_node(predecessor_id),
                     )
                     add_edge(predecessor_node, start)

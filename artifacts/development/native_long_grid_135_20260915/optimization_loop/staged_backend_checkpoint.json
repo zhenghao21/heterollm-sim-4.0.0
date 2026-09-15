@@ -1,0 +1,36 @@
+{
+  "schema": "staged-backend-checkpoint/v1",
+  "source_snapshot": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\baseline\\source",
+  "git_tree": "fd91140f9e13e8900c1d1ed716a1cec45cc413a2",
+  "scope": "completed backend checkpoint through round3; R4/R5 and frontend WIP excluded",
+  "format_normalization": "repository clean filters; removed extra reporter blank EOF; no frozen experiment files changed",
+  "test_tree": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\checkpoint_test_tree",
+  "validation": {
+    "returncode": 0,
+    "tests": [
+      "tests/test_llama_mixed_batching.py",
+      "tests/test_llama_slot_order.py",
+      "tests/test_cpu_iq_panel_reuse.py",
+      "tests/test_cpu_iq_panel_planner.py",
+      "tests/test_predict_stable_native_dataset.py",
+      "tests/test_fixed_native_lock.py"
+    ],
+    "log": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\checkpoint_tests.log",
+    "integration_scope": "local-evidence cases explicitly skipped when the dataset is absent; same tests passed in the real data workspace"
+  },
+  "git_tree_scope": "staged source/test/evidence tree before attaching this validation receipt",
+  "prior_validation_attempts": [
+    {
+      "status": "missing_local_fixture",
+      "passed": 143,
+      "failed": 16,
+      "skipped": 1,
+      "resolution": "mark data-dependent integration cases as requiring the excluded local native archive; portable unit tests remain enabled"
+    },
+    {
+      "status": "test_decorator_collection_error",
+      "reason": "ROOT not defined in this test module",
+      "resolution": "refer to adapter.ROOT"
+    }
+  ]
+}

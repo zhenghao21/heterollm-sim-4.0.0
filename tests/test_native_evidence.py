@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import pytest
 
+from tools.evaluation_contract import metric_status_for_records, validate_engine_semantic_proof
 from tools.native_llama_compare import (
     metric_snapshot,
     parse_perf_log,
@@ -178,10 +179,53 @@ def test_counter_engine_timing_is_explicit_and_separate_from_client():
         {"request_to_first_token_ms": 10.0, "request_to_end_ms": 30.0, "status": "measured"},
         0, 8,
     )
-    assert result["engine_timing_status"] == "counter_proven"
+    assert result["engine_timing_status"] == "counter_observed_unproven"
+    assert result["semantic_proof_status"] == "unverified"
     assert result["engine_ttft_ms"] == pytest.approx(4.0)
     assert result["engine_e2e_ms"] == pytest.approx(34.0)
     assert result["client_ttft_ms"] == pytest.approx(10.0)
+
+
+def test_metric_status_distinguishes_single_token_na_from_missing_evidence():
+    assert metric_status_for_records([{"output_tokens": 1}], "engine_tpot_ms") == "not_applicable"
+    assert metric_status_for_records([{"output_tokens": 2}], "engine_tpot_ms") == "evidence_insufficient"
+    assert metric_status_for_records([{"output_tokens": 2, "engine_tpot_ms": 1.0}, {"output_tokens": 2}], "engine_tpot_ms") == "incomplete"
+    assert metric_status_for_records([{"output_tokens": 2, "engine_tpot_ms": 1.0}], "engine_tpot_ms") == "measured"
+
+
+def test_counter_requires_runtime_and_source_semantic_proof(tmp_path: Path):
+    binary = tmp_path / "llama-server.exe"
+    runtime = tmp_path / "ggml-cuda.dll"
+    source = tmp_path / "server-context.cpp"
+    for path, content in ((binary, b"exe"), (runtime, b"dll"), (source, b"engine markers")):
+        path.write_bytes(content)
+    from tools.native_llama_compare import _trace_artifact_ref
+    artifacts = [_trace_artifact_ref(binary), _trace_artifact_ref(runtime)]
+    proof = {
+        "schema": "engine-semantic-proof/v1", "status": "verified",
+        "contract_id": "engine-stage+client-real-token/v3",
+        "binary_sha256": artifacts[0]["sha256"],
+        "runtime_artifacts": artifacts,
+        "source_artifacts": [{"path": str(source), "sha256": _sha256(source)}],
+        "boundary": {
+            "source": "server_slot_stats.t_start→t_prompt_last→t_gen_last",
+            "fields": ["t_start", "t_prompt_last", "t_gen_last"],
+        },
+    }
+    ok, errors = validate_engine_semantic_proof(proof, binary_artifacts=artifacts)
+    assert ok and errors == []
+    proof["status"] = "verified"
+    runtime.write_bytes(b"changed")
+    # The validator must inspect live bytes, even when the caller supplies
+    # capture-time references that still contain the old SHA.
+    ok, errors = validate_engine_semantic_proof(proof, binary_artifacts=artifacts)
+    assert not ok and any("runtime artifact SHA drift" in item for item in errors)
+    assert any("runtime artifact SHA set mismatch" in item for item in errors)
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_simulator_engine_timing_uses_prefill_batch_boundary():
@@ -198,7 +242,7 @@ def test_simulator_engine_timing_uses_prefill_batch_boundary():
     assert result["engine_ttft_ms"] == pytest.approx(5.0)
     assert result["engine_e2e_ms"] == pytest.approx(15.0)
     assert result["client_ttft_ms"] == pytest.approx(6.0)
-    assert result["engine_ttft_source"] == "simulator.first_engine_token-start"
+    assert result["engine_ttft_source"] == "simulator.first_engine_token-generic_runtime_start"
 
 
 def test_native_request_record_tpot_is_undefined_for_single_output_token():
@@ -273,7 +317,7 @@ def test_parallel_stream_json_keeps_one_boundary_per_slot(monkeypatch):
     result = post_parallel_stream_json("http://localhost/completion", {"stream": True}, 2)
     assert len(result) == 2
     assert len(calls) == 2
-    assert all(item[1]["batch_client_makespan_ms"] == 2.0 for item in result)
+    assert all(item[1]["batch_client_makespan_ms"] is None for item in result)  # absolute request starts missing
     assert all(item[1]["batch_end_monotonic_s"] >= item[1]["batch_start_monotonic_s"] for item in result)
 
 
@@ -291,6 +335,9 @@ def test_request_aggregate_reports_p50_p90_and_makespan():
     ]
     aggregate = _aggregate_request_records(records, batch_client_wall_ms=20.0)
     assert aggregate["request_count"] == 3
+    assert aggregate["record_scope"] == "request_set"
+    assert aggregate["request_ids"] == []
+    assert aggregate["engine_tpot_ms"]["status"] == "incomplete"
     assert aggregate["request_to_first_token_ms"]["p50_ms"] == 5.0
     assert aggregate["request_to_first_token_ms"]["p90_ms"] == 6.6
     assert aggregate["request_to_end_ms"]["max_ms"] == 16.0
@@ -1049,5 +1096,45 @@ def test_simulator_replay_artifacts_never_report_native_execution():
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if payload.get("schema") == "simulator-replay-from-native/v1":
+        if isinstance(payload, dict) and payload.get("schema") == "simulator-replay-from-native/v1":
             assert payload.get("native_execution_count") == 0, path
+
+
+def test_llama_simulator_engine_consumer_uses_processing_start_not_host_start():
+    metric = SimpleNamespace(request_id="request-0000", arrival_ns=0, start_ns=1e6,
+                             first_token_ns=25e6, last_token_ns=50e6, finish_ns=80e6,
+                             tpot_ns=11e6, visible_output_tokens=6)
+    scene = SimpleNamespace(workload=SimpleNamespace(metadata={"llama_cpp_runtime": {"cont_batching": True}}))
+    simulation = SimpleNamespace(scenario=scene, serving=SimpleNamespace(
+        request_metrics={metric.request_id: SimpleNamespace(start_ns=1e6, engine_start_ns=20e6)},
+        batches=[], events=[]))
+    result = _simulator_request_timing(simulation, metric)
+    assert result["engine_request_begin_ns"] == 20e6
+    assert result["engine_ttft_ms"] == pytest.approx(5)
+    assert result["engine_tpot_ms"] == pytest.approx(5)
+    assert result["engine_e2e_ms"] == pytest.approx(30)
+    assert result["client_ttft_ms"] == pytest.approx(25)
+    assert result["engine_start_source"] == "first_prompt_batch_processing"
+    simulation.serving.request_metrics[metric.request_id].engine_start_ns = None
+    insufficient = _simulator_request_timing(simulation, metric)
+    assert insufficient["engine_ttft_ms"] is None
+    assert insufficient["engine_e2e_ms"] is None
+    assert insufficient["engine_start_source"] == "unavailable"
+
+def test_llama_engine_last_token_does_not_use_partial_retained_events():
+    metric = SimpleNamespace(request_id="request-0000", arrival_ns=0, start_ns=1e6,
+                             first_token_ns=25e6, last_token_ns=45e6, finish_ns=80e6,
+                             tpot_ns=11e6, visible_output_tokens=5)
+    scene = SimpleNamespace(workload=SimpleNamespace(metadata={"llama_cpp_runtime": {"cont_batching": True}}))
+    simulation = SimpleNamespace(scenario=scene, serving=SimpleNamespace(
+        request_metrics={metric.request_id: SimpleNamespace(start_ns=1e6, engine_start_ns=20e6)},
+        batches=[], events=[SimpleNamespace(event_type="tokens_committed", request_id=metric.request_id, timestamp_ns=t)
+                            for t in (25e6, 30e6)]))
+    result = _simulator_request_timing(simulation, metric)
+    assert result["engine_e2e_ms"] == pytest.approx(25)
+    assert result["engine_tpot_ms"] == pytest.approx(5)
+    assert result["engine_timepoints_complete"] is False
+    simulation.serving.events.append(SimpleNamespace(event_type="tokens_committed", request_id=metric.request_id, timestamp_ns=50e6))
+    assert _simulator_request_timing(simulation, metric)["engine_e2e_ms"] is None
+    metric.last_token_ns = None
+    assert _simulator_request_timing(simulation, metric)["engine_e2e_ms"] is None

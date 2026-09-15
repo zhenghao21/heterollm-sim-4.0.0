@@ -34,6 +34,9 @@ class ScheduleIR:
     # historical single-lane behavior; callers with multi-lane resources can
     # now use the same capacities as the online runtime.
     resource_capacities: Mapping[str, int] = field(default_factory=dict)
+    # Explicit logical demand -> shared physical service owner. Unknown
+    # relationships remain independent instead of inventing a device lock.
+    resource_owners: Mapping[str, str] = field(default_factory=dict)
 
 
 def simulate_schedule(
@@ -65,7 +68,8 @@ def simulate_schedule(
         control.raise_if_cancelled()
     results: List[TaskResult] = []
     kernel = UnifiedEventKernel.from_closed_graph(
-        schedule.tasks, resource_capacities=schedule.resource_capacities
+        schedule.tasks, resource_capacities=schedule.resource_capacities,
+        resource_owners=schedule.resource_owners,
     )
     while kernel.has_active_tasks:
         event = kernel.step()

@@ -1,0 +1,38 @@
+{
+  "schema": "llama.cpp.hybrid.equal-length-batching/v1",
+  "status": "source_derived",
+  "architectures": [
+    "qwen3_5_hybrid_transformer"
+  ],
+  "physical_lowering": "equal_length_stateful_ubatches",
+  "kv_unified": true,
+  "recurrent_rollback_snapshots": 0,
+  "captured_sequence_capacity": 4,
+  "captured_ubatch_capacity": 64,
+  "source_sha256": {
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\tools\\server\\server-context.cpp": "99f7aead4dd6b190292db2a14b2586d4076871a3710a49a94c71424b6f05501e",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\src\\llama-memory-hybrid.cpp": "393dfde776354ed1892268781a04ff90f8ebb7676a6da371eed9a7288ef6ce4a",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\src\\llama-batch.cpp": "efc718ae905dcebcbe15b9b46a093ce034312831394509c943b15430e2747134",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\src\\models\\qwen35.cpp": "c277c0fbef003f268f4ebd539e08afbf3bbd539aa713f29c33319960d98abf4c"
+  },
+  "runtime_log_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\probe_all_fixed\\qwen38_p1536_o256_c4__fixed_runtime__b00.log",
+    "sha256": "0da5f1a01f7690a0f3a525000e0bda707f5e99814d00b4c6c4b85ac7c76abbdc"
+  },
+  "source_symbols": [
+    "server_slot::can_batch_with",
+    "server_slot::can_split",
+    "server_context::update_slots",
+    "llama_memory_hybrid::init_batch",
+    "llama_batch_allocr::split_equal",
+    "Qwen35 equal_seqs graph"
+  ],
+  "source_rule": "server emits decode rows then compatible prompt rows; unified hybrid memory splits each microbatch into equal tokens per independent sequence",
+  "capabilities": {
+    "supports_batched_stateful_execution": true,
+    "supports_equal_length_stateful_ubatches": true
+  },
+  "scope": "source/runtime-supported causal Qwen hybrid text with unified KV, no MTP/rollback/experts/adapters",
+  "accuracy_validated": false,
+  "native_latency_used": false
+}

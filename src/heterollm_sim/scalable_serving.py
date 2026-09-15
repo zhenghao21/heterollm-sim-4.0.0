@@ -136,7 +136,8 @@ def execute_cost_schedule(
             schedule.tasks
         )
         kernel = UnifiedEventKernel(
-            resource_capacities=getattr(schedule, "resource_capacities", {})
+            resource_capacities=getattr(schedule, "resource_capacities", {}),
+            resource_owners=getattr(schedule, "resource_owners", {}),
         )
         bulk_events = kernel._drain_prevalidated_compiled(
             compiled_tasks,
@@ -147,6 +148,7 @@ def execute_cost_schedule(
         kernel = UnifiedEventKernel.from_closed_graph(
             schedule.tasks,
             resource_capacities=getattr(schedule, "resource_capacities", {}),
+            resource_owners=getattr(schedule, "resource_owners", {}),
         )
     task_by_id = {task.task_id: task for task in schedule.tasks}
     total_tasks = len(schedule.tasks)
@@ -196,7 +198,9 @@ def execute_cost_schedule(
         sorted_demands = event.demands
         for demand in sorted_demands:
             lane = int(event.resource_lanes.get(demand.resource_id, 0))
-            predecessor = resource_last_path.get((demand.resource_id, lane))
+            info = event.resource_predecessors.get(demand.resource_id, {})
+            predecessor_resource = str(info.get("resource_id", demand.resource_id))
+            predecessor = resource_last_path.get((predecessor_resource, lane))
             if predecessor is not None and demand.resource_id in event.resource_predecessors:
                 start_path = _better_path(predecessor[1], start_path)
 
@@ -215,6 +219,7 @@ def execute_cost_schedule(
         end_path_by_task[task_id] = end_path
 
         for demand in sorted_demands:
+            lane = int(event.resource_lanes.get(demand.resource_id, 0))
             interval_end_ns = start_ns + demand.service_ns
             interval_duration = interval_end_ns - start_ns
             interval_path = _extend_path(

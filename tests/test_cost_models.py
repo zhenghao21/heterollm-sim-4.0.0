@@ -23,9 +23,11 @@ from heterollm_sim.cost_models import (
     ReductionWorkload,
     TensorCoreProfile,
     TensorKernelWorkload,
+    _cache_memory_demands,
     _cpu_instruction_schedule,
     _dma_setup_service,
     break_even_reuse,
+    mma_output_tile_wave_proxy,
     estimate_cim_gemm,
     estimate_cpu_elementwise,
     estimate_cpu_gemm,
@@ -229,6 +231,95 @@ def gpu_quantized_matmul_capability(
         evidence="unit-test CUDA MMQ source contract",
         provenance="llama.cpp test revision",
     )
+
+
+class CacheDirectionalTrafficTests(unittest.TestCase):
+    def estimate(self, *, write_back=True, write_allocate=True, read_bytes=128, write_bytes=128, reuse=4.0):
+        level = CacheLevelProfile(
+            name="l1", capacity_bytes=1024, line_bytes=16,
+            hit_latency_ns=2.0, bandwidth_gb_s=8.0,
+            read_ports=1, write_ports=1, max_outstanding=1,
+            resource_id="cache.l1",
+        )
+        return _cache_memory_demands(
+            hierarchy=CacheHierarchyProfile((level,), write_back=write_back, write_allocate=write_allocate),
+            read_bytes=read_bytes, write_bytes=write_bytes,
+            working_set_bytes=256, reuse_factor=reuse,
+            streaming_fraction=0.0,
+            backing_bandwidth_gb_s=4.0,
+            backing_energy_pj_per_byte=0.25,
+            backing_resource_id="memory",
+        )
+
+    def test_write_back_and_write_through_have_distinct_local_service(self):
+        wb, wb_meta = self.estimate(write_back=True)
+        wt, wt_meta = self.estimate(write_back=False)
+        wb_row, wt_row = wb_meta["levels"][0], wt_meta["levels"][0]
+        self.assertEqual(wb_row["dirty_writeback_bytes"], 128)
+        self.assertEqual(wb_row["write_through_bytes"], 0)
+        self.assertEqual(wt_row["dirty_writeback_bytes"], 0)
+        self.assertEqual(wt_row["write_through_bytes"], 128)
+        self.assertEqual(wb_meta["backing_write_bytes"], 128)
+        self.assertEqual(wt_meta["backing_write_bytes"], 128)
+        self.assertEqual(wb[0].service_ns, wt[0].service_ns)
+        self.assertEqual(wb_row["dirty_bytes_retained"], 0)
+
+    def test_no_write_allocate_bypasses_only_misses(self):
+        allocated, allocated_meta = self.estimate(write_allocate=True)
+        bypass, bypass_meta = self.estimate(write_allocate=False)
+        row = bypass_meta["levels"][0]
+        self.assertEqual(row["write_hit_bytes"], 96)
+        self.assertEqual(row["write_bypass_bytes"], 32)
+        self.assertEqual(row["write_allocate_bytes"], 0)
+        self.assertEqual(allocated_meta["levels"][0]["write_allocate_bytes"], 32)
+        self.assertLess(bypass[0].bytes_moved, allocated[0].bytes_moved)
+        self.assertEqual(bypass_meta["backing_write_bytes"], 128)
+
+    def test_directional_flow_conserves_every_declared_write(self):
+        for write_back in (False, True):
+            for write_allocate in (False, True):
+                for read_bytes, write_bytes in ((0, 127), (127, 0), (127, 65), (0, 0)):
+                    with self.subTest(wb=write_back, wa=write_allocate, reads=read_bytes, writes=write_bytes):
+                        demands, metadata = self.estimate(
+                            write_back=write_back, write_allocate=write_allocate,
+                            read_bytes=read_bytes, write_bytes=write_bytes,
+                        )
+                        row = metadata["levels"][0]
+                        self.assertEqual(row["read_hit_bytes"] + row["read_miss_bytes"], read_bytes)
+                        self.assertEqual(row["write_hit_bytes"] + row["write_miss_bytes"], write_bytes)
+                        self.assertEqual(row["write_bypass_bytes"] + row["write_through_bytes"] + row["dirty_writeback_bytes"], write_bytes)
+                        self.assertEqual(metadata["backing_write_bytes"], write_bytes)
+                        self.assertEqual(metadata["backing_bytes"], metadata["backing_read_bytes"] + metadata["backing_write_bytes"])
+                        self.assertEqual(demands[-1].bytes_moved, metadata["backing_bytes"])
+
+    def test_streaming_io_is_not_removed_by_any_write_policy(self):
+        for wb in (False, True):
+            for wa in (False, True):
+                _, metadata = self.estimate(write_back=wb, write_allocate=wa, reuse=1.0)
+                self.assertEqual(metadata["backing_bytes"], 256)
+                self.assertFalse(metadata["cross_invocation_cache_state"])
+
+
+class TileWaveProxyTests(unittest.TestCase):
+    def test_wave_boundary_is_explicit_not_silently_smoothed(self):
+        rows = [mma_output_tile_wave_proxy(
+            16, 32, 16 * tiles,
+            sm_count=32, tensor_cores_per_sm=4,
+            mma_m=16, mma_n=16, mma_k=16, occupancy=1.0,
+        ) for tiles in (127, 128, 129)]
+        self.assertEqual([row["output_tile_wave_count"] for row in rows], [1, 1, 2])
+        self.assertEqual([row["output_tile_wave_utilization"] for row in rows], [127 / 128, 1, 129 / 256])
+        for row in rows:
+            self.assertGreater(row["output_tile_wave_utilization"], 0)
+            self.assertLessEqual(row["output_tile_wave_utilization"], 1)
+
+    def test_serial_k_tiles_do_not_increase_output_parallelism(self):
+        kwargs = dict(sm_count=4, tensor_cores_per_sm=4, mma_m=16, mma_n=16, mma_k=16, occupancy=0.75)
+        one = mma_output_tile_wave_proxy(16, 16, 64, **kwargs)
+        many = mma_output_tile_wave_proxy(16, 1024, 64, **kwargs)
+        self.assertEqual(one["output_tile_wave_utilization"], many["output_tile_wave_utilization"])
+        self.assertEqual(one["serial_k_tile_count"], 1)
+        self.assertEqual(many["serial_k_tile_count"], 64)
 
 
 class GPUCostModelTests(unittest.TestCase):

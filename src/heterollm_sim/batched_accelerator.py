@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import importlib
-from typing import Any, Optional, Sequence, Tuple
+from typing import Any, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
+
+from .cost_models import mma_output_tile_wave_contract, mma_output_tile_wave_proxy
 
 
 _BACKENDS = frozenset(("auto", "numpy", "cupy"))
@@ -76,6 +78,7 @@ class BatchedGemmResult:
     backend_used: str
     diagnostics: Tuple[str, ...]
     hbm_bandwidth_model: str
+    hbm_bandwidth_contract: Mapping[str, object]
     operations: np.ndarray
     activation_bytes: np.ndarray
     weight_bytes: np.ndarray
@@ -179,52 +182,21 @@ def evaluate_batched_gemm(
         & (columns["occupancy"] > 0.0)
         & (columns["occupancy"] <= 1.0)
     )
-    safe_mma_m = xp.where(hbm_bandwidth_proxy_enabled, columns["mma_m"], 1.0)
-    safe_mma_n = xp.where(hbm_bandwidth_proxy_enabled, columns["mma_n"], 1.0)
-    safe_mma_k = xp.where(hbm_bandwidth_proxy_enabled, columns["mma_k"], 1.0)
-    m_tile_count = xp.where(
-        hbm_bandwidth_proxy_enabled, xp.ceil(m / safe_mma_m), 0.0
+    tile_wave = mma_output_tile_wave_proxy(
+        m, k, n,
+        sm_count=xp.where(hbm_bandwidth_proxy_enabled, columns["sm_count"], 1.0),
+        tensor_cores_per_sm=xp.where(hbm_bandwidth_proxy_enabled, columns["tensor_cores_per_sm"], 1.0),
+        mma_m=xp.where(hbm_bandwidth_proxy_enabled, columns["mma_m"], 1.0),
+        mma_n=xp.where(hbm_bandwidth_proxy_enabled, columns["mma_n"], 1.0),
+        mma_k=xp.where(hbm_bandwidth_proxy_enabled, columns["mma_k"], 1.0),
+        occupancy=xp.where(hbm_bandwidth_proxy_enabled, columns["occupancy"], 1.0),
+        array_module=xp,
     )
-    n_tile_count = xp.where(
-        hbm_bandwidth_proxy_enabled, xp.ceil(n / safe_mma_n), 0.0
-    )
-    serial_k_tile_count = xp.where(
-        hbm_bandwidth_proxy_enabled, xp.ceil(k / safe_mma_k), 0.0
-    )
-    independent_output_tile_count = m_tile_count * n_tile_count
-    warp_equivalent_count = xp.where(
-        hbm_bandwidth_proxy_enabled,
-        columns["sm_count"] * columns["tensor_cores_per_sm"],
-        0.0,
-    )
-    resident_warp_equivalent_capacity = (
-        warp_equivalent_count * columns["occupancy"]
-    )
-    enabled_parallel_tile_slots = xp.maximum(
-        1.0,
-        xp.floor(resident_warp_equivalent_capacity),
-    )
-    parallel_tile_slots = xp.where(
-        hbm_bandwidth_proxy_enabled, enabled_parallel_tile_slots, 0.0
-    )
-    safe_parallel_tile_slots = xp.where(
-        hbm_bandwidth_proxy_enabled, enabled_parallel_tile_slots, 1.0
-    )
-    output_tile_wave_count = xp.where(
-        hbm_bandwidth_proxy_enabled,
-        xp.ceil(independent_output_tile_count / safe_parallel_tile_slots),
-        0.0,
-    )
-    safe_wave_capacity = xp.where(
-        hbm_bandwidth_proxy_enabled,
-        output_tile_wave_count * safe_parallel_tile_slots,
-        1.0,
-    )
-    output_tile_wave_utilization = xp.where(
-        hbm_bandwidth_proxy_enabled,
-        independent_output_tile_count / safe_wave_capacity,
-        1.0,
-    )
+    tile_wave = {
+        key: xp.where(hbm_bandwidth_proxy_enabled, value, 1.0 if key == "output_tile_wave_utilization" else 0.0)
+        for key, value in tile_wave.items()
+    }
+    output_tile_wave_utilization = tile_wave["output_tile_wave_utilization"]
     effective_memory_bandwidth = (
         peak_effective_memory_bandwidth * output_tile_wave_utilization
     )
@@ -274,27 +246,7 @@ def evaluate_batched_gemm(
         "weight_bytes": _to_numpy(weight_bytes, used, xp),
         "output_bytes": _to_numpy(output_bytes, used, xp),
         "gemm_io_bytes": _to_numpy(gemm_io_bytes, used, xp),
-        "m_tile_count": _to_numpy(m_tile_count, used, xp),
-        "n_tile_count": _to_numpy(n_tile_count, used, xp),
-        "serial_k_tile_count": _to_numpy(
-            serial_k_tile_count, used, xp
-        ),
-        "independent_output_tile_count": _to_numpy(
-            independent_output_tile_count, used, xp
-        ),
-        "warp_equivalent_count": _to_numpy(
-            warp_equivalent_count, used, xp
-        ),
-        "parallel_tile_slots": _to_numpy(parallel_tile_slots, used, xp),
-        "resident_warp_equivalent_capacity": _to_numpy(
-            resident_warp_equivalent_capacity, used, xp
-        ),
-        "output_tile_wave_count": _to_numpy(
-            output_tile_wave_count, used, xp
-        ),
-        "output_tile_wave_utilization": _to_numpy(
-            output_tile_wave_utilization, used, xp
-        ),
+        **{key: _to_numpy(value, used, xp) for key, value in tile_wave.items()},
         "peak_effective_hbm_bandwidth_gb_s": _to_numpy(
             peak_effective_memory_bandwidth, used, xp
         ),
@@ -334,7 +286,8 @@ def evaluate_batched_gemm(
         backend_requested=requested,
         backend_used=used,
         diagnostics=diagnostics,
-        hbm_bandwidth_model="mma_output_tile_wave_proxy_v1",
+        hbm_bandwidth_model=str(mma_output_tile_wave_contract()["model"]),
+        hbm_bandwidth_contract=mma_output_tile_wave_contract(),
         bound=bound,
         sort_order=sort_order,
         rank=rank,

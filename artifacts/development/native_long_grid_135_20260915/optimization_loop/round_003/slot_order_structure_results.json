@@ -1,0 +1,23 @@
+{
+  "schema": "llama-slot-order-structural-validation/v1",
+  "created_utc": "2026-09-15T14:38:29.959247+00:00",
+  "status": "passed",
+  "tests_passed": 51,
+  "tests_failed": 0,
+  "test_files": [
+    "tests/test_llama_slot_order.py",
+    "tests/test_llama_mixed_batching.py"
+  ],
+  "scope": "synthetic structural production-runtime tests; no native or grid execution",
+  "source_contract_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_003\\slot_order_source_contract.json",
+  "source_contract_sha256": "984e54fad10d1c5fd5b70f108422dbbcc321fe6b996ba04ad55da81550f1f8e3",
+  "engine_start_definition_changed": false,
+  "cost_fit_applied": false,
+  "backup": "optimization_loop/round_003/backup_slot_order",
+  "limits": [
+    "closed explicit same-arrival fresh cohort only",
+    "no dynamic arrival/slot reuse/priority aging/preemption",
+    "source-backed prompt stop offsets preserved",
+    "root must run paired anchors and all selected regression cells"
+  ]
+}

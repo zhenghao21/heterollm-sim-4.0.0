@@ -58,6 +58,10 @@ class ControlPlaneRuntime:
         capacities = dict(profile_capacities)
         capacities.update(dict(resource_capacities or {}))
         self.resource_capacities = capacities
+        profile_owners = self.profile.get("resource_owners", {})
+        if not isinstance(profile_owners, Mapping):
+            raise TypeError("profile.resource_owners must be a mapping")
+        self.resource_owners = dict(profile_owners)
 
         profile_bytes = self.profile.get("capacity_bytes", {})
         if not isinstance(profile_bytes, Mapping):
@@ -156,7 +160,8 @@ class ControlPlaneRuntime:
         lowered_roots = self._lower_tasks(roots)
 
         kernel = UnifiedEventKernel(
-            resource_capacities=self.resource_capacities
+            resource_capacities=self.resource_capacities,
+            resource_owners=self.resource_owners,
         )
         self.kernel = kernel
         submissions = [kernel.submit(lowered_roots)]

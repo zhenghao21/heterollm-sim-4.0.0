@@ -852,12 +852,15 @@ def _runtime_profile(
     # Aggregate service costs already include controller-internal parallelism.
     # Only DMA engines remain independent event-kernel lanes.
     capacities = _execution_resource_capacities(scenario)
+    from .communication import declared_resource_owners
+    resource_owners = declared_resource_owners(scenario.hardware)
     declared_capacity = _declared_capacity_bytes(scenario)
     profile: Dict[str, object] = {
         "service_ns": service_ns,
         "resources": resources,
         "transaction_count": transaction_count,
         "resource_capacities": capacities,
+        "resource_owners": resource_owners,
         "default_required_bytes": weight_bytes,
         "control_byte_count": control_bytes,
         "gpu_weight_transfer_bytes": transfer_bytes,

@@ -171,6 +171,25 @@ class BatchedAcceleratorTests(unittest.TestCase):
             / result.shape_effective_hbm_bandwidth_gb_s,
         )
 
+    def test_wave_boundary_contract_matches_shared_scalar_formula(self):
+        from heterollm_sim.cost_models import mma_output_tile_wave_proxy
+        result = evaluate_batched_gemm(BatchedGemmInput(
+            m=16, k=[16, 16, 1024], n=[16 * 127, 16 * 128, 16 * 129],
+            peak_tops=100.0, memory_bandwidth_gb_s=100.0,
+            sm_count=32, tensor_cores_per_sm=4, mma_m=16, mma_n=16,
+            mma_k=16, occupancy=1.0,
+        ), backend="numpy")
+        self.assertEqual(result.hbm_bandwidth_contract["evidence"], "analytical")
+        self.assertEqual(result.hbm_bandwidth_contract["validation_status"], "unvalidated_physical_proxy")
+        self.assertEqual(result.hbm_bandwidth_contract["validated_kernel_families"], ())
+        for index, (k, tiles) in enumerate(((16, 127), (16, 128), (1024, 129))):
+            scalar = mma_output_tile_wave_proxy(
+                16, k, 16 * tiles, sm_count=32, tensor_cores_per_sm=4,
+                mma_m=16, mma_n=16, mma_k=16, occupancy=1.0,
+            )
+            for key, expected in scalar.items():
+                self.assertEqual(getattr(result, key)[index], expected)
+
     def test_vectorized_components_and_stable_ranking(self):
         result = evaluate_batched_gemm(
             BatchedGemmInput(

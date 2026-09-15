@@ -1481,6 +1481,7 @@ class ServingRequestState:
     swaps: int
     recomputes: int
     rejection_reason: Optional[str] = None
+    engine_start_ns: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -1504,6 +1505,7 @@ class ServingRequestMetrics:
     recomputes: int
     deadline_met: Optional[bool]
     rejection_reason: Optional[str] = None
+    engine_start_ns: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -2317,6 +2319,7 @@ class _MutableRequest:
     temporary_kv_pages: int = 0
     queued_since_ns: float = 0.0
     started_ns: Optional[float] = None
+    engine_start_ns: Optional[float] = None
     first_token_ns: Optional[float] = None
     finished_ns: Optional[float] = None
     preemptions: int = 0
@@ -4585,6 +4588,10 @@ class _OnlineRuntime:
         if execution_kernel is not None and execution_kernel.has_active_tasks:
             raise ValueError("execution_kernel must be drained before serving append")
         self.plan = plan
+        self._llama_engine_boundary_enabled = (
+            bool(plan.scenario.workload.metadata.get("llama_cpp_runtime"))
+            or getattr(plan.scenario, "llama_cpp_config", None) is not None
+        )
         self.lowerer = lowerer
         self._execution_stage_metadata_cache = (
             _execution_stage_cache_for_lowerer(lowerer)
@@ -4786,11 +4793,16 @@ class _OnlineRuntime:
         resource_capacities = _execution_resource_capacities(
             self.plan.scenario
         )
+        from .communication import declared_resource_owners
+        resource_owners = declared_resource_owners(self.plan.scenario.hardware)
         if execution_kernel is None:
             self._execution_resource_kernel = UnifiedEventKernel(
-                resource_capacities=resource_capacities
+                resource_capacities=resource_capacities,
+                resource_owners=resource_owners,
             )
         else:
+            if dict(execution_kernel.resource_owners) != dict(resource_owners):
+                raise ValueError("live kernel physical resource owners differ from scenario")
             execution_kernel.ensure_resource_capacities(resource_capacities)
             self._execution_resource_kernel = execution_kernel
         self._execution_task_sequence = 0
@@ -10452,6 +10464,27 @@ class _OnlineRuntime:
             else {},
         )
 
+    def _record_llama_engine_start(self, state: _MutableRequest) -> None:
+        if not self._llama_engine_boundary_enabled or state.engine_start_ns is not None:
+            return
+        # llama.cpp STARTED -> PROCESSING_PROMPT starts its engine clock after
+        # batch/slot eligibility, but before prompt preparation or allocation
+        # pressure can delay processing. This is distinct from speculative
+        # host preparation, and remains set through swap/recompute/resume.
+        state.engine_start_ns = self.now
+        self.events.append(
+            ServingEvent(
+                self.now,
+                "engine_request_begin",
+                state.spec.request_id,
+                details={
+                    "runtime": "llama.cpp",
+                    "boundary": "first_prompt_batch_processing",
+                    "scheduler_round": self.rounds,
+                },
+            )
+        )
+
     def _prefill_cohort(
         self,
         candidates: Sequence[_MutableRequest],
@@ -10503,6 +10536,8 @@ class _OnlineRuntime:
                         chunk = min(chunk, remaining - offset)
             if chunk <= 0:
                 continue
+            if not recompute:
+                self._record_llama_engine_start(state)
             current_cached = state.recompute_cursor if recompute else state.prefill_cursor
             target_pages = self.ledger.pages_for_tokens(current_cached + chunk)
             if not self._reserve_with_pressure(
@@ -11684,7 +11719,10 @@ class _OnlineRuntime:
         second traversal.
         """
 
-        if kernel.has_active_tasks:
+        # The array shortcut is keyed by logical resource IDs. Explicit
+        # shared owners use the unified kernel until this optimization has an
+        # owner-aware structural key and parity proof.
+        if kernel.has_active_tasks or kernel.resource_owners:
             return None
         layout = replay_layout.compiled
         task_count = layout.task_count
@@ -12797,6 +12835,7 @@ class _OnlineRuntime:
                 specs,
                 replay_layout.compiled,
                 resource_capacities=kernel.resource_capacities,
+                resource_owners=kernel.resource_owners,
             )
         remaining = len(specs)
         max_end_ns = 0.0
@@ -12816,7 +12855,7 @@ class _OnlineRuntime:
     ) -> Optional[float]:
         """Return a safe common origin for live/isolated shadow replay."""
 
-        if kernel.has_active_tasks or not stages:
+        if kernel.has_active_tasks or kernel.resource_owners or not stages:
             return None
         origin_ns = ready_by_stage.get(stages[0].stage_id)
         if origin_ns is None:
@@ -13365,7 +13404,8 @@ class _OnlineRuntime:
                 isolated_device_duration_ns = (
                     self._replay_execution_stage_duration(
                         UnifiedEventKernel(
-                            resource_capacities=resource_capacities
+                            resource_capacities=resource_capacities,
+                            resource_owners=self._execution_resource_kernel.resource_owners,
                         ),
                         scheduled_stages,
                         {
@@ -14115,6 +14155,7 @@ class _OnlineRuntime:
                 state.started_ns, state.first_token_ns, state.finished_ns,
                 state.preemptions, state.swaps, state.recomputes,
                 state.rejection_reason,
+                engine_start_ns=state.engine_start_ns,
             )
             queue_delay = state.started_ns - spec.arrival_ns if state.started_ns is not None else None
             ttft = state.first_token_ns - spec.arrival_ns if state.first_token_ns is not None else None
@@ -14133,6 +14174,7 @@ class _OnlineRuntime:
                 spec.output_tokens, state.committed, state.proposed, state.accepted,
                 state.preemptions, state.swaps, state.recomputes, deadline_met,
                 state.rejection_reason,
+                engine_start_ns=state.engine_start_ns,
             )
         self.events.sort(key=_event_sort_key)
         events = tuple(self.events)
@@ -15519,15 +15561,16 @@ _EVENT_TYPE_ORDER = {
     "linear_state_swap_in": 6,
     "request_admitted": 6,
     "request_resumed": 6,
-    "batch_start": 7,
-    "request_rejected": 8,
+    "engine_request_begin": 7,
+    "batch_start": 8,
+    "request_rejected": 9,
 }
 
 
 def _event_sort_key(event: ServingEvent) -> Tuple[float, int, str, str, str]:
     return (
         event.timestamp_ns,
-        _EVENT_TYPE_ORDER.get(event.event_type, 9),
+        _EVENT_TYPE_ORDER.get(event.event_type, 10),
         event.request_id or "",
         event.cohort_id or "",
         event.event_type,

@@ -1,0 +1,31 @@
+{
+  "schema": "posthoc-frozen-iq-eligibility-diagnostic/v1",
+  "freeze_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate\\freeze.json",
+  "native_timings_used": false,
+  "posthoc_static_compile_only": true,
+  "cell_id": "qwen38_p1536_o128_c1__fixed_runtime",
+  "f32_storage_contract_present": false,
+  "cpu_iq_summary": {
+    "schema": "heterollm.cpu-iq-panel-reuse-coverage/v1",
+    "counting_unit": "physical_cpu_gemm_task",
+    "cpu_gemm_tasks": 496,
+    "audited_tasks": 496,
+    "applied_tasks": 0,
+    "conditional_tasks": 0,
+    "native_dispatch_proven_tasks": 0,
+    "uncovered_tasks": 496,
+    "uncovered_reason_counts": {
+      "ordinary_f32_input_output_not_proven": 400,
+      "runtime_rhs_is_not_a_physical_model_weight": 32,
+      "unsupported_or_mixed_physical_weight_format": 64
+    }
+  },
+  "native_cuda_op_offload": {
+    "status": "disabled",
+    "reason": "cuda_backend_unavailable",
+    "op_offload": true,
+    "cuda_backend_available": false,
+    "accuracy_validated": false
+  },
+  "timings_changed": false
+}

@@ -44,6 +44,7 @@ from .contracts import (
     _PreparedExecutionTask,
 )
 from .cost_models import (
+    CPUIQPanelDispatch,
     CPUProfile,
     CostEstimate,
     DigitalSramCimProfile,
@@ -5095,6 +5096,7 @@ class StreamingScheduleIR:
     # runtime.  Keeping this on the IR prevents streaming execution from
     # silently falling back to single-lane resources.
     resource_capacities: Mapping[str, int] = field(default_factory=dict)
+    resource_owners: Mapping[str, str] = field(default_factory=dict)
 
 
 def _scenario_resource_capacities(scenario: ScenarioConfig) -> Mapping[str, int]:
@@ -5105,6 +5107,12 @@ def _scenario_resource_capacities(scenario: ScenarioConfig) -> Mapping[str, int]
     from .control_plane import _execution_resource_capacities
 
     return _execution_resource_capacities(scenario)
+
+
+def _scenario_resource_owners(scenario: ScenarioConfig) -> Mapping[str, str]:
+    from .communication import declared_resource_owners
+
+    return declared_resource_owners(scenario.hardware)
 
 
 def compile_scenario(scenario: ScenarioConfig) -> ScheduleIR:
@@ -5155,6 +5163,7 @@ def compile_streaming_scenario(scenario: ScenarioConfig) -> StreamingScheduleIR:
             scenario=scenario,
             requests=materialize_requests(scenario),
             resource_capacities=_scenario_resource_capacities(scenario),
+            resource_owners=_scenario_resource_owners(scenario),
         )
 
 
@@ -5190,10 +5199,16 @@ def _compile_scenario_in_context(scenario: ScenarioConfig) -> ScheduleIR:
     tasks: List[TaskSpec] = []
     for request in materialize_requests(scenario):
         tasks.extend(_compile_parallel_request(scenario, request))
+    iq_panel_contract = scenario.workload.metadata.get("llama_cpp_cpu_iq_panel_reuse")
+    if isinstance(iq_panel_contract, Mapping) and iq_panel_contract.get("enabled") is True:
+        manifest = replace(manifest, metadata={
+            **manifest.metadata, "cpu_iq_panel_reuse": summarize_cpu_iq_panel_reuse(tasks),
+        })
     return ScheduleIR(
         manifest=manifest,
         tasks=tuple(tasks),
         resource_capacities=_scenario_resource_capacities(scenario),
+        resource_owners=_scenario_resource_owners(scenario),
     )
 
 
@@ -5510,6 +5525,7 @@ class _HostGemmOffloadDecision:
     minimum_m: int
     weight_owner_component_id: Optional[str]
     execution_backend: str
+    provenance: Mapping[str, object] = field(default_factory=dict)
 
     @property
     def audit_metadata(self) -> Dict[str, object]:
@@ -5526,6 +5542,7 @@ class _HostGemmOffloadDecision:
             "host_gemm_offload_applied": self.applied,
             "host_gemm_offload_reason": self.reason,
             "host_gemm_offload_evidence": self.evidence,
+            "host_gemm_offload_provenance": dict(self.provenance or {}),
             "host_gemm_offload_physical_m": self.physical_m,
             "host_gemm_offload_minimum_m": self.minimum_m,
             "physical_m": self.physical_m,
@@ -5666,10 +5683,14 @@ def _host_gemm_offload_decision(
 
     if _kind(placement) != "cpu":
         reason = "placement_not_cpu"
+    elif scenario.llama_cpp_config is not None and not scenario.llama_cpp_config.op_offload:
+        reason = "runtime_op_offload_disabled"
     elif not model_weight_read or dynamic_rhs:
         reason = "dynamic_rhs_not_model_weight"
     elif workload.m < minimum_m:
         reason = "physical_m_below_minimum"
+    elif not capability.supports_workload_format(workload):
+        reason = "weight_format_not_source_supported"
     elif not weight_owner:
         reason = "weight_owner_missing"
     else:
@@ -5729,6 +5750,7 @@ def _host_gemm_offload_decision(
         minimum_m=minimum_m,
         weight_owner_component_id=weight_owner,
         execution_backend=("gpu" if applied else _kind(placement)),
+        provenance=capability.provenance,
     )
 
 
@@ -8626,6 +8648,220 @@ def _mmvq_activation_conversion_workload(
     )
 
 
+
+def _cpu_gemm_cost_key(
+    target_component_id: str,
+    workload: GemmWorkload,
+    dispatch: Optional[CPUIQPanelDispatch] = None,
+) -> Tuple[object, ...]:
+    # Keep the historical key unchanged unless native dispatch facts are used.
+    key = ("cpu_gemm", target_component_id, workload)
+    return key if dispatch is None else key + (dispatch,)
+
+
+def _cpu_iq_panel_weight_bindings(
+    scenario: ScenarioConfig,
+) -> Mapping[str, Optional[Mapping[str, object]]]:
+    """Index imported physical tensor evidence once, without reading live files."""
+    def resolve():
+        bindings: Dict[str, Optional[Mapping[str, object]]] = {}
+        sources = []
+        for layer in _execution_layers(scenario):
+            values = layer.metadata.get("gguf_tensor_bindings", ())
+            if isinstance(values, (tuple, list)):
+                sources.extend(values)
+        model_metadata = scenario.model.metadata
+        metadata_sources = [model_metadata]
+        if isinstance(model_metadata.get("metadata"), Mapping):
+            metadata_sources.append(model_metadata["metadata"])
+        for metadata in metadata_sources:
+            sources.extend(metadata.get(key) for key in (
+                "gguf_embedding_binding", "gguf_output_binding",
+            ))
+        for binding in sources:
+            if not isinstance(binding, Mapping):
+                continue
+            name = binding.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if name in bindings and bindings[name] != binding:
+                bindings[name] = None  # Conflicting source records cannot prove a layout.
+            elif name not in bindings:
+                bindings[name] = binding
+        return bindings
+
+    context = _active_compilation_context(scenario)
+    return resolve() if context is None else context.invariant(
+        ("cpu_iq_panel_weight_bindings",), resolve
+    )
+
+
+def _llama_source_cpu_iq_panel_dispatch(
+    scenario: ScenarioConfig,
+    workload: GemmWorkload,
+    target: ComponentSpec,
+    operation_metadata: Mapping[str, object],
+    *,
+    model_weight_read: bool,
+    rhs_is_activation: bool,
+) -> Tuple[Optional[CPUIQPanelDispatch], Optional[Mapping[str, object]]]:
+    """Prove ordinary F32 x physical GGUF weight geometry before the cost gate.
+
+    The adapter declares source provenance and the experimental switch only.
+    Tensor dtype/layout facts must come from this actual planner invocation.
+    """
+    raw = scenario.workload.metadata.get("llama_cpp_cpu_iq_panel_reuse")
+    if raw is None or (isinstance(raw, Mapping) and raw.get("enabled", False) is False):
+        return None, None
+    audit = {
+        "schema": "heterollm.cpu-iq-panel-reuse/v1",
+        "status": "uncovered", "applied": False, "native_dispatch_proven": False,
+        "default_unset_assumption_used": False,
+        "m": workload.m, "k": workload.k, "n": workload.n,
+        "execution_component": target.component_id,
+    }
+
+    def uncovered(reason: str):
+        return None, {**audit, "reason": reason, "rejection_reasons": (reason,)}
+
+    def valid_sha(value):
+        return isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{64}", value) is not None
+
+    if not isinstance(raw, Mapping) or raw.get("enabled") is not True:
+        return uncovered("invalid_iq_panel_experiment_contract")
+    audit.update(
+        environment_state=raw.get("no_iq_panel_environment_state", "unknown"),
+        assume_default_unset=raw.get("assume_default_unset", False),
+        source_sha256=raw.get("source_sha256", ""),
+        cpu_backend_sha256=raw.get("cpu_backend_sha256", ""),
+    )
+    if (not model_weight_read or rhs_is_activation
+            or operation_metadata.get("dynamic_rhs") is True
+            or operation_metadata.get("rhs_operand_kind") == "activation"):
+        return uncovered("runtime_rhs_is_not_a_physical_model_weight")
+    if (
+        "expert_index" in operation_metadata
+        or operation_metadata.get("coverage_component") in {"routed_expert", "shared_expert"}
+        or operation_metadata.get("ffn_path") in {"routed", "shared"}
+    ):
+        return uncovered("expert_or_scatter_layout")
+    if (
+        workload.epilogue_operations or workload.epilogue_transcendental_operations
+        or workload.epilogue_output_elements or workload.epilogue_name
+        or operation_metadata.get("fused") is True
+        or (operation_metadata.get("fusion_group") not in (None, "")
+            and operation_metadata.get("fusion_enabled") is not False)
+    ):
+        return uncovered("fused_epilogue_has_no_native_iq_panel_contract")
+    formats = tuple(value.upper() for value in workload.packed_weight_formats)
+    if len(formats) != 1 or formats[0] not in {"IQ3_S", "IQ4_XS"}:
+        return uncovered("unsupported_or_mixed_physical_weight_format")
+    segments = operation_metadata.get("projection_segments", ())
+    if (
+        operation_metadata.get("weight_projection_descriptor_applied") is not True
+        or operation_metadata.get("projection_segment_count") != 1
+        or not isinstance(segments, (tuple, list)) or len(segments) != 1
+        or not isinstance(segments[0], Mapping)
+    ):
+        return uncovered("one_physical_projection_not_proven")
+    segment = segments[0]
+    if (
+        segment.get("local_k") != workload.k or segment.get("global_k") != workload.k
+        or segment.get("local_n") != workload.n or segment.get("global_n") != workload.n
+        or str(segment.get("format", "")).upper() != formats[0]
+        or not isinstance(segment.get("physical_tensor_name"), str)
+        or not segment.get("physical_tensor_name")
+    ):
+        return uncovered("physical_projection_shape_or_format_mismatch")
+    tensor_name = segment["physical_tensor_name"]
+    audit.update(weight_format=formats[0], physical_tensor_name=tensor_name)
+    model_sha = _model_gguf_sha256(scenario.model)
+    if not valid_sha(model_sha):
+        return uncovered("source_model_identity_missing")
+    audit["model_sha256"] = model_sha
+    binding = _cpu_iq_panel_weight_bindings(scenario).get(tensor_name)
+    if binding is None:
+        return uncovered("source_tensor_binding_missing_or_ambiguous")
+    shape = binding.get("shape")
+    if (
+        not isinstance(shape, (tuple, list)) or len(shape) != 2
+        or any(type(value) is not int for value in shape)
+        or tuple(shape) != (workload.k, workload.n)
+        or str(binding.get("type", "")).upper() != formats[0]
+    ):
+        return uncovered("source_tensor_shape_or_format_mismatch")
+    spec = _ARTIFACT_QUANTIZATION_REGISTRY[formats[0]]
+    physical_bytes = workload.n * ((workload.k + spec.block_size - 1) // spec.block_size) * (
+        spec.payload_bytes + spec.metadata_bytes
+    )
+    if (
+        type(binding.get("offset")) is not int or binding["offset"] < 0
+        or binding.get("block_size", spec.block_size) != spec.block_size
+        or binding.get("n_bytes") != physical_bytes
+        or segment.get("physical_bytes") != physical_bytes
+        or segment.get("local_physical_bytes") != physical_bytes
+        or workload.weight_bytes != physical_bytes
+    ):
+        return uncovered("source_tensor_physical_storage_mismatch")
+    if (
+        not _f32_hidden_storage_enabled(scenario)
+        or workload.activation_bytes != 4 * workload.m * workload.k
+        or workload.output_bytes != 4 * workload.m * workload.n
+        or workload.accumulator_bits != 32
+    ):
+        return uncovered("ordinary_f32_input_output_not_proven")
+    refs = raw.get("source_refs", ())
+    if (
+        not valid_sha(raw.get("source_sha256"))
+        or not valid_sha(raw.get("cpu_backend_sha256"))
+        or not isinstance(refs, (tuple, list)) or not refs
+        or any(not isinstance(value, str) or not value for value in refs)
+    ):
+        return uncovered("source_or_backend_identity_missing")
+    try:
+        dispatch = CPUIQPanelDispatch(
+            compiled_avx2=raw.get("compiled_avx2", False),
+            source_activation_dtype="F32", source_output_dtype="F32",
+            source_weight_layout="ordinary_contiguous_2d", source_activation_ne3=1,
+            no_iq_panel_environment_state=raw.get("no_iq_panel_environment_state", "unknown"),
+            assume_default_unset=raw.get("assume_default_unset", False),
+            source_sha256=raw["source_sha256"], cpu_backend_sha256=raw["cpu_backend_sha256"],
+            source_refs=tuple(refs),
+        )
+    except (TypeError, ValueError):
+        return uncovered("invalid_iq_panel_dispatch_facts")
+    return dispatch, {**audit, "tensor_evidence": "imported_gguf_ordinary_2d_matrix",
+                      "source_tensor_offset": binding["offset"], "physical_bytes": physical_bytes}
+
+
+def summarize_cpu_iq_panel_reuse(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
+    """Count physical CPU GEMMs, excluding dispatch phases and cache lookups."""
+    total = audited = applied = conditional = proven = 0
+    reasons: Dict[str, int] = {}
+    for task in tasks:
+        if task.metadata.get("phase") != "cpu_gemm":
+            continue
+        total += 1
+        audit = task.metadata.get("cpu_iq_panel_reuse")
+        if not isinstance(audit, Mapping):
+            continue
+        audited += 1
+        if audit.get("applied") is True:
+            applied += 1
+            conditional += int(audit.get("default_unset_assumption_used") is True)
+            proven += int(audit.get("native_dispatch_proven") is True)
+        else:
+            for reason in set(audit.get("rejection_reasons", ())):
+                reasons[reason] = reasons.get(reason, 0) + 1
+    return {
+        "schema": "heterollm.cpu-iq-panel-reuse-coverage/v1",
+        "counting_unit": "physical_cpu_gemm_task",
+        "cpu_gemm_tasks": total, "audited_tasks": audited, "applied_tasks": applied,
+        "conditional_tasks": conditional, "native_dispatch_proven_tasks": proven,
+        "uncovered_tasks": audited - applied, "uncovered_reason_counts": dict(sorted(reasons.items())),
+    }
+
+
 def _declared_mmq_work(
     scenario: ScenarioConfig,
     workload: GemmWorkload,
@@ -8873,6 +9109,7 @@ def _add_rank_gemm(
         or activation_source_component_id
         or rank.component_id
     )
+    iq_panel_audit = None
     operation_metadata = dict(metadata or {})
     operation_metadata.setdefault("operator_class", OperatorClass.GEMM.value)
     if _f32_hidden_storage_enabled(scenario):
@@ -9343,13 +9580,27 @@ def _add_rank_gemm(
         # planner-side merge here would charge the same transform twice.
         dispatch_resource_id = cpu_profile.pipeline.resource_id
         dispatch_energy_pj = cpu_profile.dispatch_energy_pj
+        iq_panel_dispatch, iq_panel_audit = _llama_source_cpu_iq_panel_dispatch(
+            scenario, workload, target, operation_metadata,
+            model_weight_read=model_weight_read, rhs_is_activation=rhs_is_activation,
+        )
         estimate = _memoized_cost_estimate(
             scenario,
-            ("cpu_gemm", target_component_id, workload),
+            _cpu_gemm_cost_key(target_component_id, workload, iq_panel_dispatch),
             lambda: estimate_cpu_gemm(
-                cpu_profile, host_memory_profile, workload
+                cpu_profile, host_memory_profile, workload,
+                iq_panel_dispatch=iq_panel_dispatch,
             ),
         )
+        if iq_panel_audit is not None and iq_panel_dispatch is not None:
+            compute_phase = next(phase for phase in estimate.phases if phase.name == "cpu_gemm")
+            reuse = compute_phase.metadata["instruction_schedule"]["iq_panel_weight_reuse"]
+            iq_panel_audit = {
+                **iq_panel_audit, **reuse,
+                "schema": "heterollm.cpu-iq-panel-reuse/v1",
+                "status": "applied" if reuse["applied"] else "uncovered",
+                "reason": None if reuse["applied"] else reuse["rejection_reasons"][0],
+            }
     else:
         raise ValueError("并行 GEMM 目标 {} 不具备计算能力".format(target.kind))
 
@@ -9530,6 +9781,8 @@ def _add_rank_gemm(
             advance=False,
             metadata={
                 **phase_metadata,
+                **({"cpu_iq_panel_reuse": iq_panel_audit}
+                   if phase.name == "cpu_gemm" and iq_panel_audit is not None else {}),
                 "op_name": name,
                 "phase": phase.name,
                 "cost_model": {
@@ -11505,11 +11758,7 @@ def _task_segment_dynamic_task_overrides(
                         )
                         estimate = _memoized_cost_estimate(
                             scenario,
-                            (
-                                "cpu_gemm",
-                                payload.target_component_id,
-                                workload,
-                            ),
+                            _cpu_gemm_cost_key(payload.target_component_id, workload),
                             lambda: estimate_cpu_gemm(
                                 cpu_profile,
                                 host_memory_profile,
@@ -11600,6 +11849,15 @@ def _task_segment_dynamic_task_overrides(
                     default=0.0,
                 ),
             }
+            if payload.operator_class == OperatorClass.GEMM and phase.name == "cpu_gemm":
+                # Attention replay always has an activation RHS; refresh shape audit
+                # while retaining the historical generic cost key and estimator.
+                _, replay_iq_audit = _llama_source_cpu_iq_panel_dispatch(
+                    scenario, workload, _component(scenario, payload.target_component_id), {},
+                    model_weight_read=False, rhs_is_activation=True,
+                )
+                if replay_iq_audit is not None:
+                    dynamic_metadata["cpu_iq_panel_reuse"] = replay_iq_audit
             if payload.role == "qk_scale":
                 dynamic_metadata["score_elements"] = score_elements
             if (
@@ -23429,6 +23687,13 @@ def _serving_lowering_from_builder(
         assumptions_en=manifest_assumptions_en,
         metadata={"cohort_id": cohort_id, "cohort_kind": kind},
     )
+    iq_panel_contract = scenario.workload.metadata.get("llama_cpp_cpu_iq_panel_reuse")
+    if isinstance(iq_panel_contract, Mapping) and iq_panel_contract.get("enabled") is True:
+        iq_panel_coverage = summarize_cpu_iq_panel_reuse(tasks)
+        enriched_extra_metadata["cpu_iq_panel_reuse"] = iq_panel_coverage
+        manifest = replace(manifest, metadata={
+            **manifest.metadata, "cpu_iq_panel_reuse": iq_panel_coverage,
+        })
     return _ServingCohortLowering(
         schedule=ScheduleIR(manifest=manifest, tasks=tasks),
         cohort_id=cohort_id,
@@ -24837,6 +25102,7 @@ def _is_cim(component: ComponentSpec) -> bool:
 
 
 __all__ = [
+    "summarize_cpu_iq_panel_reuse",
     "CompilationContext",
     "ScenarioValidationReport",
     "TopologyAwareBatchCostProvider",
