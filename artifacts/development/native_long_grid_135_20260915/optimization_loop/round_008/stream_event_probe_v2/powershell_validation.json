@@ -1,0 +1,17 @@
+[
+  {
+    "file": "invoke.ps1",
+    "parsed": true,
+    "errors": []
+  },
+  {
+    "file": "run_frozen_matrix.ps1",
+    "parsed": true,
+    "errors": []
+  },
+  {
+    "file": "check_environment.ps1",
+    "parsed": true,
+    "errors": []
+  }
+]

@@ -1,0 +1,198 @@
+{
+  "schema": "stream-event-matrix-summary/v2",
+  "run_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_008\\stream_event_probe_v2\\runs\\20260915T225012796Z",
+  "expected_configs": 12,
+  "expected_mode_runs": 24,
+  "completed_mode_runs": 24,
+  "accepted_configs": 2,
+  "rejected_configs": 10,
+  "matrix_evidence_complete": false,
+  "issues": [
+    "execution failure:dev_Q5_0_m1_k896:event",
+    "execution failure:dev_Q5_0_m1_k896:control",
+    "execution failure:dev_Q5_0_m2_k896:control",
+    "execution failure:dev_Q5_0_m2_k896:event",
+    "execution failure:dev_Q5_0_m4_k896:event",
+    "execution failure:dev_Q5_0_m4_k896:control",
+    "execution failure:validation_Q5_0_m2_k1024:control",
+    "execution failure:validation_Q5_0_m2_k1024:event",
+    "execution failure:validation_Q5_0_m4_k1024:event",
+    "execution failure:validation_Q5_0_m4_k1024:control",
+    "execution gate:full_raw_audit_exit",
+    "complete raw audit rejected"
+  ],
+  "all_diagnostic_gates_passed": false,
+  "calibration_eligible": false,
+  "llm_actual_fit": false,
+  "interpretation": "Diagnostic hot-buffer 64-graph batches only. Every failed, missing or rejected configuration remains in the fixed denominator. No timing parameter is generated.",
+  "assessments": [
+    {
+      "config": "dev_Q5_0_m1_k896",
+      "group": "dev",
+      "accepted": false,
+      "problems": [
+        "control:complete batch sequence mismatch",
+        "control:final check:numerical failure",
+        "control:first check:numerical failure",
+        "control:required field mismatch:graph_compute_calls",
+        "control:required field mismatch:status",
+        "control:row 0:numerical failure",
+        "event:complete batch sequence mismatch",
+        "event:final check:numerical failure",
+        "event:first check:numerical failure",
+        "event:required field mismatch:graph_compute_calls",
+        "event:required field mismatch:status",
+        "event:row 0:numerical failure"
+      ],
+      "sha256": "8392ad4fd01c3ba1053922eb45867588e8ed1ed5ce2a0fb32eaaf45cfb8e43c4"
+    },
+    {
+      "config": "dev_Q5_0_m2_k896",
+      "group": "dev",
+      "accepted": false,
+      "problems": [
+        "control:complete batch sequence mismatch",
+        "control:final check:numerical failure",
+        "control:first check:numerical failure",
+        "control:module records absent/changed",
+        "control:required field mismatch:graph_compute_calls",
+        "control:required field mismatch:modules_stable",
+        "control:required field mismatch:status",
+        "control:row 0:numerical failure",
+        "event:complete batch sequence mismatch",
+        "event:final check:numerical failure",
+        "event:first check:numerical failure",
+        "event:required field mismatch:graph_compute_calls",
+        "event:required field mismatch:status",
+        "event:row 0:numerical failure"
+      ],
+      "sha256": "fab48890d6983721531851cb52785ab4c86ad9810b1600f999307c4d2125bc20"
+    },
+    {
+      "config": "dev_Q5_0_m4_k896",
+      "group": "dev",
+      "accepted": false,
+      "problems": [
+        "control:complete batch sequence mismatch",
+        "control:final check:numerical failure",
+        "control:first check:numerical failure",
+        "control:required field mismatch:graph_compute_calls",
+        "control:required field mismatch:status",
+        "control:row 0:numerical failure",
+        "event:complete batch sequence mismatch",
+        "event:final check:numerical failure",
+        "event:first check:numerical failure",
+        "event:required field mismatch:graph_compute_calls",
+        "event:required field mismatch:status",
+        "event:row 0:numerical failure"
+      ],
+      "sha256": "22ad1399414af3819217708bfe6b3dfe3a0583f59bfd1308906fab85d5733cf0"
+    },
+    {
+      "config": "dev_Q8_0_m1_k896",
+      "group": "dev",
+      "accepted": false,
+      "problems": [
+        "control:wall dispersion >1.50",
+        "event:envelope dispersion >1.50",
+        "event:wall dispersion >1.50"
+      ],
+      "sha256": "534319f9fd0954ccb72897e33fd1e6e43605fc0bf24af2da7cd31732395d36b1"
+    },
+    {
+      "config": "dev_Q8_0_m2_k896",
+      "group": "dev",
+      "accepted": false,
+      "problems": [
+        "event:envelope dispersion >1.50",
+        "event:wall dispersion >1.50"
+      ],
+      "sha256": "7368b2b333a299e85d0537c3f4cca9d85a5696ee4f472eba6348aafdf56ba390"
+    },
+    {
+      "config": "dev_Q8_0_m4_k896",
+      "group": "dev",
+      "accepted": false,
+      "problems": [
+        "event:envelope dispersion >1.50",
+        "event:wall dispersion >1.50"
+      ],
+      "sha256": "15bb438cfc96fec1a61434d6b348173a8136917de0f9de9cfdae5c9f0f392f3b"
+    },
+    {
+      "config": "validation_Q5_0_m1_k1024",
+      "group": "validation",
+      "accepted": false,
+      "problems": [
+        "event:wall dispersion >1.50"
+      ],
+      "sha256": "745887967a5aa8f0d752de78706fc9df6e1b734c4dee82f0f871cad34c1eed24"
+    },
+    {
+      "config": "validation_Q5_0_m2_k1024",
+      "group": "validation",
+      "accepted": false,
+      "problems": [
+        "control:complete batch sequence mismatch",
+        "control:final check:numerical failure",
+        "control:first check:numerical failure",
+        "control:required field mismatch:graph_compute_calls",
+        "control:required field mismatch:status",
+        "control:row 0:numerical failure",
+        "event:complete batch sequence mismatch",
+        "event:final check:numerical failure",
+        "event:first check:numerical failure",
+        "event:required field mismatch:graph_compute_calls",
+        "event:required field mismatch:status",
+        "event:row 0:numerical failure"
+      ],
+      "sha256": "db68f21172e99e68fe67e2480e302ed33c3152515c80660ea614779f5386b726"
+    },
+    {
+      "config": "validation_Q5_0_m4_k1024",
+      "group": "validation",
+      "accepted": false,
+      "problems": [
+        "control:complete batch sequence mismatch",
+        "control:final check:numerical failure",
+        "control:first check:numerical failure",
+        "control:required field mismatch:graph_compute_calls",
+        "control:required field mismatch:status",
+        "control:row 0:numerical failure",
+        "event:complete batch sequence mismatch",
+        "event:final check:numerical failure",
+        "event:first check:numerical failure",
+        "event:required field mismatch:graph_compute_calls",
+        "event:required field mismatch:status",
+        "event:row 0:numerical failure"
+      ],
+      "sha256": "3da63ed10e75e015328787036908525a045a9b64e91d5d83ae20f83c99183811"
+    },
+    {
+      "config": "validation_Q8_0_m1_k1024",
+      "group": "validation",
+      "accepted": false,
+      "problems": [
+        "event:envelope dispersion >1.50",
+        "event:wall dispersion >1.50"
+      ],
+      "sha256": "b538ffc380ff42fbd1b45b7ca60c836c8921ce5304a53dbe1a3bf19d225d4696"
+    },
+    {
+      "config": "validation_Q8_0_m2_k1024",
+      "group": "validation",
+      "accepted": true,
+      "problems": [],
+      "sha256": "b85d0a1368d80d9566b0536f8ea9c06a176df5ca5bc4b892f5283fd6d79bcefa"
+    },
+    {
+      "config": "validation_Q8_0_m4_k1024",
+      "group": "validation",
+      "accepted": true,
+      "problems": [],
+      "sha256": "70de0457baa8b47e30c8693c594fd2fadec0482a619baeda13e1a62db7a41bb4"
+    }
+  ],
+  "status": "diagnostic_only_no_cost_update",
+  "next": "source-faithful activation quantization reference and scheduler/measurement separation"
+}

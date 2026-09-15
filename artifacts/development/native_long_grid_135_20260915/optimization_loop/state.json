@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_independent_operator_evidence",
+  "status": "active_quantized_reference_diagnosis",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1011,11 +1011,27 @@
       "all3_strict_below10_cells": 9,
       "native_prediction_completed_local": "2026-09-16T02:13:33.920+08:00",
       "completed_before_deadline": true
+    },
+    {
+      "round": 7,
+      "status": "completed_integrity_retained_accuracy_failed",
+      "decision": "round_007/decision.json",
+      "full_evaluation": false,
+      "predicted_cells": 2
+    },
+    {
+      "round": 8,
+      "status": "completed_diagnostic_rejected_no_cost_fit",
+      "decision": "round_008/decision.json",
+      "accepted_microbenchmark_configs": 2,
+      "total_microbenchmark_configs": 12,
+      "supplemental_integrity_passed": true,
+      "full_evaluation": false
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Read identity diagnostics followed by independent real-stream operator envelopes; no target LLM latency fitting.",
+  "next_round_hypothesis": "Uniform wait and batched real-stream synthetic probe; MMVQ M1/2/4 Q5_0/Q8_0 K896 plus aligned controls; no costs fitted before independent acceptance.",
   "full_131_evaluations_started": 3,
   "full_131_evaluations_completed": 3,
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
@@ -1077,6 +1093,13 @@
       "status": "pushed",
       "pushed_to": "origin/main",
       "verified_utc": "2026-09-15T22:09:19.867555+00:00"
+    },
+    {
+      "kind": "round_007",
+      "commit": "1f0c7650d92a91c234f5fe1df6d2a17e6e5150fa",
+      "status": "pushed",
+      "pushed_to": "origin/main",
+      "verified_utc": "2026-09-15T22:42:00.225547+00:00"
     }
   ],
   "operator_microbenchmark": {

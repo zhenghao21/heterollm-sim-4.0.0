@@ -1,0 +1,55 @@
+{
+  "source_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\stream_event_probe",
+  "copied_before_edits": [
+    {
+      "name": "stream_event_probe.cpp",
+      "sha256": "5fe7781229d9de4f40e0504dd3b8b76b747ed6f9cb2ed2b2b0c0401b49b96e0e",
+      "source_sha256": "5fe7781229d9de4f40e0504dd3b8b76b747ed6f9cb2ed2b2b0c0401b49b96e0e"
+    },
+    {
+      "name": "identity_lock.h",
+      "sha256": "2da523485092c75c178aa27b6a066c23559e70043328b9ba09ec96438760fcf7",
+      "source_sha256": "2da523485092c75c178aa27b6a066c23559e70043328b9ba09ec96438760fcf7"
+    },
+    {
+      "name": "identity_lock.json",
+      "sha256": "89f05da6a5d27cd238ef24b8cc1ffd709c67a3a238a3e5923884c4eeacd1f33d",
+      "source_sha256": "89f05da6a5d27cd238ef24b8cc1ffd709c67a3a238a3e5923884c4eeacd1f33d"
+    },
+    {
+      "name": "protocol.json",
+      "sha256": "c966e8d5a31f20bf1b677fdcd549a38c71af105f332d0693fdeed9604ea1612d",
+      "source_sha256": "c966e8d5a31f20bf1b677fdcd549a38c71af105f332d0693fdeed9604ea1612d"
+    },
+    {
+      "name": "invoke.ps1",
+      "sha256": "cdebe37df71e8bb39b70fcf7345e5c5a1897034337d22dfd1dde45a80edd9f9f",
+      "source_sha256": "cdebe37df71e8bb39b70fcf7345e5c5a1897034337d22dfd1dde45a80edd9f9f"
+    },
+    {
+      "name": "assess.py",
+      "sha256": "1f83c8224606769f2a7c83e36b2271b46329b430399a4e14cd8d5c5b1ecf0d7f",
+      "source_sha256": "1f83c8224606769f2a7c83e36b2271b46329b430399a4e14cd8d5c5b1ecf0d7f"
+    },
+    {
+      "name": "full_raw_audit.py",
+      "sha256": "c5dd97c9594dd302838984fbf639ccc05ec50f4774d5e09b31206009ab6d8215",
+      "source_sha256": "c5dd97c9594dd302838984fbf639ccc05ec50f4774d5e09b31206009ab6d8215"
+    },
+    {
+      "name": "run_frozen_matrix.ps1",
+      "sha256": "5c6fc46b0ce0ba80cf148135443e270a31308649ad1beb3166c4580daca16e5a",
+      "source_sha256": "5c6fc46b0ce0ba80cf148135443e270a31308649ad1beb3166c4580daca16e5a"
+    },
+    {
+      "name": "compile.cmd",
+      "sha256": "d9ec56fb315adfd6e9759f8989ea9db9966983273070926223d9d582358ad89c",
+      "source_sha256": "d9ec56fb315adfd6e9759f8989ea9db9966983273070926223d9d582358ad89c"
+    },
+    {
+      "name": "README.md",
+      "sha256": "abfa7068e4f2ef3c3cfd1f8f3fb7c58a1a71742c4b9889f10740886e03108198",
+      "source_sha256": "abfa7068e4f2ef3c3cfd1f8f3fb7c58a1a71742c4b9889f10740886e03108198"
+    }
+  ]
+}

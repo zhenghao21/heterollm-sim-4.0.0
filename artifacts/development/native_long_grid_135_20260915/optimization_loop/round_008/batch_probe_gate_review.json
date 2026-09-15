@@ -1,0 +1,41 @@
+{
+  "schema": "independent-batch-probe-gate-review/v1",
+  "created_utc": "2026-09-15T22:46:20.349466+00:00",
+  "scope": "stream_event_probe_v2 static gates; no GPU activity; no files changed in frozen probe",
+  "tests": {
+    "existing_quality_tests": 11,
+    "passed": 11,
+    "impossible_first_event_span_accepted": true
+  },
+  "decision": "safe to collect diagnostics after freeze; not eligible for cost calibration",
+  "findings": [
+    {
+      "severity": "medium",
+      "location": "full_raw_audit.py event duration check",
+      "issue": "Positive event envelope alone is accepted even when vastly longer than enclosing host wall. Mutation of first row event_envelope_ms to 1e9 passed assess on valid fixture. Both timers cover begin-record to backend wait; gross disagreement signals invalid evidence.",
+      "action": "Before treating data as calibration, add preregistered coarse containment sanity bound with timing resolution tolerance; retain original outputs."
+    },
+    {
+      "severity": "medium",
+      "location": "summarize_matrix.py",
+      "issue": "Loads full_raw_audit and assessments by status but does not verify present raw hashes against audit rows or rederive assessment from raw. A post-audit edit can leave summary falsely complete.",
+      "action": "Bind summary to raw digest records and protocol/manifest digest; preferably re-audit current raw before acceptance."
+    },
+    {
+      "severity": "limitation",
+      "location": "run_frozen_matrix.ps1 background_load",
+      "issue": "Any nonempty compute-apps list is labeled background graphics, not classified. Exclusive access correctly remains false, so this is diagnostic only.",
+      "action": "Do not infer idle/exclusive timing from endpoint snapshots or low dispersion; inspect process identities when interpreting timings."
+    }
+  ],
+  "strengths": [
+    "Same backend wait API in event/control",
+    "Full first/warmup/formal sequence and 64 graph submissions checked",
+    "Numerical samples independently verified rather than trust passed flag",
+    "Nonempty runtime/hardware identities and frozen loaded executable checked",
+    "Missing/failed groups retained in fixed denominator",
+    "calibration_eligible remains false"
+  ],
+  "no_llm_actual_read": true,
+  "no_gpu_access": true
+}
