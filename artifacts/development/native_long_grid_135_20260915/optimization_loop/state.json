@@ -1,0 +1,930 @@
+{
+  "schema": "fixed-native-optimization-loop/v1",
+  "created_utc": "2026-09-15T13:27:44.987878+00:00",
+  "status": "round_004_paired_anchors_running",
+  "user_goal": "固定这组native，按任务书自动优化机制并持续推进",
+  "native_selection_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
+    "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "bytes": 9290976
+  },
+  "native_raw_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o256_c4__fixed_runtime__b00.json",
+      "sha256": "75d9c613cc66de06e746027b80b2a7f77f72c5321b6dbcbacd5638275ca6eb21",
+      "bytes": 5086875
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o256_c1__fixed_runtime__b00.json",
+      "sha256": "14894257d585b4cb5360d41eed1cb07c83af275363d192e6c236418150371c42",
+      "bytes": 1347553
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o128_c1__fixed_runtime__b00.json",
+      "sha256": "989ad39143ea618f48299a8c3996b9598da531b076024714ceb9b562cac9d721",
+      "bytes": 970952
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o256_c2__fixed_runtime__b00.json",
+      "sha256": "ef6d58bc27d700e6d1e910c423db6196f2abd5af4c2d8b6d4f5fff322813a31f",
+      "bytes": 2675993
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p128_o128_c4__fixed_runtime__b00.json",
+      "sha256": "e66164259656b35dbda5990f6309727eef3d6be6089e436640f49774932dd26c",
+      "bytes": 2533561
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o256_c2__fixed_runtime__b00.json",
+      "sha256": "549bbc9fa0ead6ac119696676dd65a2d96bc7b65e06a284e1c167cf55dabf832",
+      "bytes": 2460804
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o256_c4__fixed_runtime__b00.json",
+      "sha256": "1bc987930b78b509039f4431dc1a62c390cbbce44042f6a04b60fae7f3c8a363",
+      "bytes": 4695604
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o32_c2__fixed_runtime__b00.json",
+      "sha256": "0b79cc8f04907c3a5cd385421aa58f7755009de0da2ad344521cc944997ab509",
+      "bytes": 913628
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o256_c1__fixed_runtime__b00.json",
+      "sha256": "527667c592ef448d18c2136f044adc50e8430cb047d8fc1fc3f94ba5d78411cd",
+      "bytes": 1474122
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p128_o32_c4__fixed_runtime__b00.json",
+      "sha256": "42f75bc43ccf3ef0e452b08d4d1f6c74b9bbe84462378871a9aa4e3bc81097a5",
+      "bytes": 1028717
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c4__fixed_runtime__b00.json",
+      "sha256": "ec9cbfd4c0b43a44cc7293bde6476dab7781b533dbda72b5bab434c2c487f0fb",
+      "bytes": 1170900
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p128_o256_c2__fixed_runtime__b00.json",
+      "sha256": "6bfeb367667e608ecbe02e233baeb48818176f85fb4e8568605429990b1ed11f",
+      "bytes": 2380032
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c1__fixed_runtime__b00.json",
+      "sha256": "70d688c759470674f916ac557afec2ea663eaf04826d7ac8fcd37e0201c021c2",
+      "bytes": 468239
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o128_c1__fixed_runtime__b00.json",
+      "sha256": "ddb069f52df76e793f45ac7e79d99f92f6e2bfde980e7e6b0d8ed2ae552ee2f9",
+      "bytes": 845148
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c2__fixed_runtime__b00.json",
+      "sha256": "89e63ca640692dd313637584a06d4b5c73b6bb9a9e53d38bab10a9c4e36cb9e8",
+      "bytes": 702641
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o128_c4__fixed_runtime__b00.json",
+      "sha256": "a37de95e38e01c8c0d3ceb6e86a1377d4386cdfb5db61d79e04a6bb4995e0066",
+      "bytes": 3065430
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o32_c1__fixed_runtime__b00.json",
+      "sha256": "3900ab2d3203e82b1fde0363d02d2201e47107ba727a984ac709dd9da34ae5f0",
+      "bytes": 593485
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o256_c4__fixed_runtime__b00.json",
+      "sha256": "5dec8bcbd5dba00a10681fd6ca6877039a171a452c57b96be3b7fe06d7d95a1a",
+      "bytes": 5068313
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o32_c1__fixed_runtime__b00.json",
+      "sha256": "469d17db283f271a4d35507dae72f052e30c2eefadf15957102746bfc1931fee",
+      "bytes": 417497
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o128_c4__fixed_runtime__b00.json",
+      "sha256": "47fca0d4dbbf7345e86d60a2b0437d987721165dd210dc9c9fa0788a0aeea8dc",
+      "bytes": 3045458
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p128_o128_c2__fixed_runtime__b00.json",
+      "sha256": "b428e136e672c1288412f64ff8ea0604271894f441b8e3c4221e6581c47d9359",
+      "bytes": 1370452
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o256_c4__fixed_runtime__b00.json",
+      "sha256": "751929bd292834f8ab6ab2250bb6ab12cc4ffb6db0685e5d5a2b57fe40987dfb",
+      "bytes": 4670447
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o256_c1__fixed_runtime__b00.json",
+      "sha256": "249bdc1245c32e78b89e1d03a17f1bfb46683ad5b3614a3884ddf653afd0a28e",
+      "bytes": 1296056
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o256_c1__fixed_runtime__b00.json",
+      "sha256": "a8ce63a9d15d4f9f654498f947fbfdad8587c77503ec48b30a4fa84f3fd690d4",
+      "bytes": 1468728
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o32_c2__fixed_runtime__b00.json",
+      "sha256": "8fecd34999d43ceb156e7148e1c262510a2772fa381e62e7508433c558f27949",
+      "bytes": 900401
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o256_c1__fixed_runtime__b00.json",
+      "sha256": "a62d5c92c86f13cc0ac6c5003bc1958178cb2eb36fc9b849f333fde037a34088",
+      "bytes": 1341836
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p1536_o128_c2__fixed_runtime__b00.json",
+      "sha256": "06b755e73390132fa5280e85466b0524ad764add6ed30a0e1ba2caa454ceaa90",
+      "bytes": 1659006
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o32_c1__fixed_runtime__b00.json",
+      "sha256": "eeccf513825ce47385c746221f9fbf3d83e0780693a9c2a520ee5b09095212c4",
+      "bytes": 586451
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o256_c4__fixed_runtime__b00.json",
+      "sha256": "3c5ba686113c9310c45f7090a1e36755a6b2216a7e8515c291b6a632c55462e0",
+      "bytes": 4528091
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p512_o128_c2__fixed_runtime__b00.json",
+      "sha256": "b8489c297327d5c901dbba4b567c1e686a01197b264da6651678d00c6a38176a",
+      "bytes": 1447020
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o32_c1__fixed_runtime__b00.json",
+      "sha256": "16ce48a197865b1650c552b7774ed3c3803568414dcda52cc1d56ba832b37b09",
+      "bytes": 462691
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p512_o32_c2__fixed_runtime__b00.json",
+      "sha256": "74a937adecf573fc3829818c7f054b64524f97fc2dff90efad9a4aa218be23cb",
+      "bytes": 692539
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o128_c4__fixed_runtime__b00.json",
+      "sha256": "f8970f6cbf08f1bc2f49fd06ac57a03042d9b25b8f9384a50afb62b035d0f336",
+      "bytes": 2653965
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o256_c2__fixed_runtime__b00.json",
+      "sha256": "dc9a995ebce1ff265abba3af5e127310fad2fc50d76437e9dea19f8a920d50a3",
+      "bytes": 2372505
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o256_c2__fixed_runtime__b00.json",
+      "sha256": "2ea679e35f8564f0e15b501e5a46b1d53344fb3b841becc684ed722cb877a0b6",
+      "bytes": 2451341
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o32_c4__fixed_runtime__b00.json",
+      "sha256": "b31cf67b258207260286150eefb4bed3ce77cd4754ef23003e907c7ad2cc2c4a",
+      "bytes": 1149582
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o32_c4__fixed_runtime__b00.json",
+      "sha256": "2572c9d746aabe802481683335b4b8c3b2e6bfa146765254ed717a3c3bb8640f",
+      "bytes": 1528793
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o128_c1__fixed_runtime__b00.json",
+      "sha256": "3602c4fdf9c082d7930fce2c2e7748f64adb113bb5dd724993e605a3710c9c6a",
+      "bytes": 839370
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o256_c2__fixed_runtime__b00.json",
+      "sha256": "37cfeb7fa126b2ad660bd37ad42c38df16c09d989b948187b99c43e4b8c2f951",
+      "bytes": 2669438
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o128_c1__fixed_runtime__b00.json",
+      "sha256": "fb0050142c1dbdb2f2b2ddb04661078f900cf67bbd3ff55f99303e6dce72b904",
+      "bytes": 963971
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o128_c2__fixed_runtime__b00.json",
+      "sha256": "83c535cd967c3115a43724314b32ba2b051b274814fb128038b7692a59cf1f90",
+      "bytes": 1629750
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o128_c4__fixed_runtime__b00.json",
+      "sha256": "050e2c03d48c1b2062679ac2a44392c0bab5ffed49ed22e3a08d3767cd3f99f9",
+      "bytes": 2502859
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o256_c2__fixed_runtime__b00.json",
+      "sha256": "845730945750b444137de5d38069058a2aca2e3fbd33b21ceb807a75b814db22",
+      "bytes": 2439496
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o256_c1__fixed_runtime__b00.json",
+      "sha256": "c6216d9942adf5ac38f72d896ab766eb75ed41aba77c29cf7d0bddbc8fc7df76",
+      "bytes": 1292359
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o256_c2__fixed_runtime__b00.json",
+      "sha256": "b27e336ec8c103e8cead47b99df1d1bf9a4709afd3e30f27311a6f200df2bf17",
+      "bytes": 2642568
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o256_c1__fixed_runtime__b00.json",
+      "sha256": "a5202b590bab7d91eec49f49048558cf673c9c3d0383bea5a18ddaedc42b253e",
+      "bytes": 1336025
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o128_c1__fixed_runtime__b00.json",
+      "sha256": "5c93d6a1bbbc05e1497bc9cf88571ae461ccd6c574b0010f75872474a17ad2af",
+      "bytes": 790593
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o128_c4__fixed_runtime__b00.json",
+      "sha256": "25d35224cc081ced73c0a3d1584103616eb829c0ae2c2aa16874be359c007446",
+      "bytes": 2631301
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o128_c1__fixed_runtime__b00.json",
+      "sha256": "49bad9a4dede2663774bae4f02a053f0e5f9ee655ced5278c7428dc0bc5e731b",
+      "bytes": 951348
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\tinyllama_p512_o128_c2__fixed_runtime__b00.json",
+      "sha256": "8b2b4aae3dcde6e7057bc3db6db1ccdc7864e86d0b36cf591160f9cafdde8050",
+      "bytes": 1434161
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o128_c1__fixed_runtime__b00.json",
+      "sha256": "644f8754abe28082b66c49521541ae01089c002f2aa152cfab3f9dd5fd5e43b7",
+      "bytes": 833756
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o32_c2__fixed_runtime__b00.json",
+      "sha256": "7315355ef513ffca3023c8a51777fc214827d9ed0b279a6474aee8f772bdf670",
+      "bytes": 680570
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\tinyllama_p512_o32_c4__fixed_runtime__b00.json",
+      "sha256": "4052cf902fa0883d906b87bcda5c33b55f833a8e721ec3aab63eb97cf6fbd6a1",
+      "bytes": 1126718
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o256_c1__fixed_runtime__b00.json",
+      "sha256": "05525925e301593b678ce8a14386580835f1c979e5d1d12ff88feeaece75b7e5",
+      "bytes": 1455015
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o32_c1__fixed_runtime__b00.json",
+      "sha256": "cbb359b1cdc16ef9629ba54fd20618cae83db4895b90baa2a55349dd90c2cd09",
+      "bytes": 414566
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o256_c2__fixed_runtime__b00.json",
+      "sha256": "af3ab44c577a273143675e9d1b8881d03d4ebf320428cc1d3cd488c7e565b5b1",
+      "bytes": 2364955
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o256_c4__fixed_runtime__b00.json",
+      "sha256": "a7681deb83097cfb660edde32fb048d0fcaf2f766145b48e28af35c653b74027",
+      "bytes": 4646636
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o256_c4__fixed_runtime__b00.json",
+      "sha256": "4ed224a99556368c5b847dfcf828a7d214bfa5b3479460e1abe248f4ab29a064",
+      "bytes": 4512048
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o32_c1__fixed_runtime__b00.json",
+      "sha256": "1bca472f4bd84b9b5c39a33bd62586124f55ffb76f6a7d61b64192e5c193482d",
+      "bytes": 457487
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o32_c4__fixed_runtime__b00.json",
+      "sha256": "b8e7bfe0bbbb73d7569a108f45aa2537e9382140c992ab485814ec58f0ffaa45",
+      "bytes": 1476167
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\tinyllama_p128_o128_c2__fixed_runtime__b00.json",
+      "sha256": "0a615e8863b09ed64d2bfa0a6f27abb1f53f5c32d39f94c62822df80dd02158d",
+      "bytes": 1362180
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o32_c2__fixed_runtime__b00.json",
+      "sha256": "ce4a62e5e38d9786f957e0f06a6d7cac0b46fe8146fb5229647434c36e6b5555",
+      "bytes": 874840
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o256_c4__fixed_runtime__b00.json",
+      "sha256": "85d405a1af704de86f91153b74623b0bda57ecb234c85ddcef4703277bbc6e23",
+      "bytes": 5082008
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o128_c1__fixed_runtime__b00.json",
+      "sha256": "1b86d810ab1e8b9d1b825d39d6ade35c238dacabb387ea58859293b51d5a92d9",
+      "bytes": 843051
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o256_c1__fixed_runtime__b00.json",
+      "sha256": "a9f02041704427f7531510a3bf06893cc5d545a9888467b8486c27cc3c055810",
+      "bytes": 1302709
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o32_c4__fixed_runtime__b00.json",
+      "sha256": "3f674b9dcc81e4bac022d4b6f978ff9a810c78e750d1a2569866d0d399246941",
+      "bytes": 1024946
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o32_c1__fixed_runtime__b00.json",
+      "sha256": "9abf54126dae1a3c43f4f78b010903036ec4e07e76ac53dc2b46732d3e6bfa9d",
+      "bytes": 420772
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o32_c4__fixed_runtime__b00.json",
+      "sha256": "c36ec042dda604fff6cf33b40a684562b912677b2ace8852e56ef51bc5939567",
+      "bytes": 1543018
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o256_c1__fixed_runtime__b00.json",
+      "sha256": "dc689003010f4a16495a9c9919498b83fd0b7d0524f26613fa00c58413de338a",
+      "bytes": 1346078
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o256_c2__fixed_runtime__b00.json",
+      "sha256": "dcecf7c34b12fcdf7e3b14d870f2f14a521c5d9b835686ca664c23bf954ea03c",
+      "bytes": 2459921
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o128_c2__fixed_runtime__b00.json",
+      "sha256": "a68ca9c5a212972066122a3a52e9ef9476567d74f2646c3af5704873d698da77",
+      "bytes": 1663081
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o256_c4__fixed_runtime__b00.json",
+      "sha256": "8ade4a6ff18028185359aaa63b36fabf96da0c6eeca81dc165b7680baa6e9cc0",
+      "bytes": 4693380
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o256_c2__fixed_runtime__b00.json",
+      "sha256": "8887ae137621acee66e59325a91324108ebfce974f65b3a88fe7f2d5cba4a552",
+      "bytes": 2674889
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o256_c4__fixed_runtime__b00.json",
+      "sha256": "8faca35b2b0837df3c338cc9e795fdd9dbfae0430ca4300533e8af8ac49f8282",
+      "bytes": 4557603
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o128_c1__fixed_runtime__b00.json",
+      "sha256": "54acdd7abd62e7ec57551ca89ddc6d3e0d1df5d2354f60fccf78848505f6d268",
+      "bytes": 798352
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o128_c1__fixed_runtime__b00.json",
+      "sha256": "037b462d3b8ce6fb040af781fa344a41520bae6c61c80bbde1bdb26b845c06da",
+      "bytes": 967926
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o128_c4__fixed_runtime__b00.json",
+      "sha256": "8056b4db982c4f7d72831ec9a9ed6777d61c1c5053b67d2d9914ebf9e6e9503a",
+      "bytes": 2533606
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o32_c2__fixed_runtime__b00.json",
+      "sha256": "60f948be8a9208995efa13fb0f163b894e7a5146efcbe70685fa585d0757730f",
+      "bytes": 698961
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o32_c4__fixed_runtime__b00.json",
+      "sha256": "df20584fd71300f4b4b86d2263eccb2d7161ae4fe88660d6ac7acd3af4f3fd9d",
+      "bytes": 1163021
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o128_c2__fixed_runtime__b00.json",
+      "sha256": "58597ebd85a6f2b18dc4fec9b3fa5f14cf2aaf9eddf700a15927f0b768eed624",
+      "bytes": 1451647
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o128_c4__fixed_runtime__b00.json",
+      "sha256": "9ad58eed420e16b034bf6aabee11602a4e0025bc92b00c6e1ba8da46f38956fa",
+      "bytes": 3057172
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o32_c2__fixed_runtime__b00.json",
+      "sha256": "99b489bf8fe26bd324a5999fef4cca0ca5134b061fe44053cf5f059daedb3746",
+      "bytes": 622180
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o128_c2__fixed_runtime__b00.json",
+      "sha256": "850deb6ef0ecc3b254909442cec5b4766105d561fe4476c3c92fd29cb301a536",
+      "bytes": 1377145
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o32_c1__fixed_runtime__b00.json",
+      "sha256": "282c7c1ee8c1b4d5befa7dcb1e5cdeba57c4c4497eed58798dba13d9f270b7be",
+      "bytes": 466432
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o128_c1__fixed_runtime__b00.json",
+      "sha256": "400d4fcc4054700369c637e76e2aa99d837c6b259742f679c3ef2dc74a81586f",
+      "bytes": 973567
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o256_c1__fixed_runtime__b00.json",
+      "sha256": "e9b899df116e7c39ac03be835abb3b500bd072e3dd6475f354e728c53bc8d33a",
+      "bytes": 1355012
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o128_c2__fixed_runtime__b00.json",
+      "sha256": "f0e004816828a8789f2f9f5971967f95f13038adc833f09e425566cb842299e6",
+      "bytes": 1460942
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o256_c2__fixed_runtime__b00.json",
+      "sha256": "2c422c72456429d6d6aedc10772c1263c9982417e12d007bf760a339f16043a7",
+      "bytes": 2399057
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o32_c2__fixed_runtime__b00.json",
+      "sha256": "24fec09f87f0190c418bb485fd586f972cbb865ab8316aa6d40071bb160b6904",
+      "bytes": 911973
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o128_c4__fixed_runtime__b00.json",
+      "sha256": "c75d71b2037bba74b28bf39f2d6ef811592ed52570369288eac35aa971db2c37",
+      "bytes": 2688657
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o32_c1__fixed_runtime__b00.json",
+      "sha256": "2d189d98aed4ae7004b8671ae19ba7c41d180973981c0a24d28a5e2b1fa0aa2c",
+      "bytes": 467925
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o32_c1__fixed_runtime__b00.json",
+      "sha256": "6dc81fdf9313d3273dec1b84f90df34b3f5e0965b50177c45a1fb0fdcb7b7cc5",
+      "bytes": 421822
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o32_c1__fixed_runtime__b00.json",
+      "sha256": "e0df43db3493db8034f8226f8d32db8525ad17504aa7b6fc6e34713953988211",
+      "bytes": 591887
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o256_c1__fixed_runtime__b00.json",
+      "sha256": "ac4b1cf51f738c2384e8d67bfbc62fd5c573d43e2a5c83c120a9ec9d0cb55077",
+      "bytes": 1308787
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o32_c4__fixed_runtime__b00.json",
+      "sha256": "c74aada8e2a9f037f7782f1aa6409992a709152f7612712f965bc175d48767d0",
+      "bytes": 1029544
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o32_c2__fixed_runtime__b00.json",
+      "sha256": "4622ed7efb78ec22d5e0d18d20322fea58829121c7d2436d901e95ddd9081346",
+      "bytes": 624502
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o256_c4__fixed_runtime__b00.json",
+      "sha256": "3e4fbc46ee70f3faeb9bcd6a709504fc84595f70a737e15d16a7d4d1c05a8ad4",
+      "bytes": 4580362
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o256_c4__fixed_runtime__b00.json",
+      "sha256": "71b1dcdafadb1299f5f390d51c523db32fbd256bb90fe1761e8700a88b15a90b",
+      "bytes": 4722835
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o128_c1__fixed_runtime__b00.json",
+      "sha256": "4b02fbd11ccf6d36a70d65c9083d27ea7989d9c94c507e7183a3e7a461d51ab8",
+      "bytes": 846864
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o32_c2__fixed_runtime__b00.json",
+      "sha256": "7eb8af0038966dfd98cd9235c89cc91fc7f767622faf68d8ffcde44eca82e641",
+      "bytes": 701037
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o256_c2__fixed_runtime__b00.json",
+      "sha256": "ea41caceea9105c804a2278087080535f05b16bce99565ecc7da832b8f6244ee",
+      "bytes": 2694802
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o128_c2__fixed_runtime__b00.json",
+      "sha256": "aae27049a9fcb209b414f68aa24499b839c23d30dababf1e7741149d5dbfd938",
+      "bytes": 1384515
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o128_c1__fixed_runtime__b00.json",
+      "sha256": "84c5d27987f1ee5a568ffe07faa432a4581a8f5d6ec1f365eca3a68eb42f03cf",
+      "bytes": 801525
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o32_c4__fixed_runtime__b00.json",
+      "sha256": "ddefc97a7ed36635d3b70e8ab1544eef7e4f4941a0c5035513bd25c9b5052dff",
+      "bytes": 1552962
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o256_c4__fixed_runtime__b00.json",
+      "sha256": "d01d0c4602844b8b02dc2a915a8234208abc97507d7b57c7f1195ae25bbc0ea7",
+      "bytes": 5106329
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o128_c2__fixed_runtime__b00.json",
+      "sha256": "e94ef0dc227b0b84e225cc7c724a00aed2d5bca5f19cda19c4f000201e985bc7",
+      "bytes": 1672755
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o128_c1__fixed_runtime__b00.json",
+      "sha256": "d1188a65f54a090493dc3f668d61e1ec31ae7a236f8ef7cfb244138fd7fcea01",
+      "bytes": 973029
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o256_c1__fixed_runtime__b00.json",
+      "sha256": "cc3bdd169494a6614c514ea18ad18bfaf332f96f0aeff49fdf7ea87d29a486de",
+      "bytes": 1351860
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o128_c2__fixed_runtime__b00.json",
+      "sha256": "cd99663aaa282f1f76e02674d9be11310960eeb564243ed9ff331280b84c3ed2",
+      "bytes": 1460606
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o256_c1__fixed_runtime__b00.json",
+      "sha256": "a0df70908fd7d10defc644b8eb7b3f3bc6aeefa2fb9ba5aa0826e3ddbfbc0164",
+      "bytes": 1480982
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o256_c2__fixed_runtime__b00.json",
+      "sha256": "c86e7787f09f3ee1010db08a3ec6f98e1c3c8d16de0b84ac7ecb22e6f6bb0dc6",
+      "bytes": 2391853
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o32_c2__fixed_runtime__b00.json",
+      "sha256": "ad493486cd7516793736892b8dfe5d8d4a6cad055dc32d2f569aa9aed6b5c202",
+      "bytes": 911837
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o128_c4__fixed_runtime__b00.json",
+      "sha256": "2272912b516dc8ecdda1cfae207ca3e99dfaed95ab74a2bc818b3d87dba5f7ea",
+      "bytes": 2685582
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o128_c4__fixed_runtime__b00.json",
+      "sha256": "6afb50b3390ce6dbbf1ef514e1977fc39bb009b121e65e7794b8f46ead30aae1",
+      "bytes": 3073276
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o32_c1__fixed_runtime__b00.json",
+      "sha256": "eb71898c9f403f5cc8aaf2e505aed7645cc828668150cd1bd2d40f5d206bf5c2",
+      "bytes": 466917
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o128_c4__fixed_runtime__b00.json",
+      "sha256": "514d36ab2663d2d780a1611bc2908e5f88f6980deb28394c5166c72f663b8ba1",
+      "bytes": 2543221
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o32_c1__fixed_runtime__b00.json",
+      "sha256": "917ea55fddb408df366b016db13c899e6b2f803d36a9e89eedde58ea3415b221",
+      "bytes": 421036
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o32_c1__fixed_runtime__b00.json",
+      "sha256": "88648eca2136ec1c9692a0fd83da15ee31c9e7505c8b1dda81d249ca5a243b9d",
+      "bytes": 591991
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o256_c2__fixed_runtime__b00.json",
+      "sha256": "82e9b432ba6d0d164dbc01b14843a32dcbfd99304f41563a5831fe8482a9c6b5",
+      "bytes": 2472538
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o256_c1__fixed_runtime__b00.json",
+      "sha256": "dd0342125799263fc15a3a8af07e395dd9c12ddc524d7294dfd10e62d45a84a3",
+      "bytes": 1305494
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o32_c4__fixed_runtime__b00.json",
+      "sha256": "f5513746cd3671f16f9c31c2fca73f7c41dfd78baa3a2a8fff129002ed311aa5",
+      "bytes": 1028341
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o32_c2__fixed_runtime__b00.json",
+      "sha256": "7a9bef64fba33e1cdcd193f6c137a21ef579a9dd3898bdefb3a63affd5fd1f56",
+      "bytes": 623438
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o256_c4__fixed_runtime__b00.json",
+      "sha256": "0fe256607a4e7c6e06ec2db0251e34e294da2bdb21b1d0a1fa64340a6fc00fa3",
+      "bytes": 4565048
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o256_c4__fixed_runtime__b00.json",
+      "sha256": "295df303a71f10d0f115135351ea05f781542339ddfa640b732b5c5f6e9eb521",
+      "bytes": 4710030
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o128_c1__fixed_runtime__b00.json",
+      "sha256": "ee3bc4737ed0115b61398844f9a8b378e641fe5051dbd60cb48ff75b81fe97ad",
+      "bytes": 846201
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o32_c2__fixed_runtime__b00.json",
+      "sha256": "533da9d94772a28bbc3df1bd2b48ef1234c5475871cc0fd49c1a2550363f3686",
+      "bytes": 701653
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o256_c2__fixed_runtime__b00.json",
+      "sha256": "9b5ea68625af5ca8a45b6028ee00b22211efd70b26355e4489ebb12f9091d515",
+      "bytes": 2688612
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o128_c2__fixed_runtime__b00.json",
+      "sha256": "bca37cb20fd221d6bc18c671db690fdb695e52b4cc6e1ffb49a13bd1bcbf9af4",
+      "bytes": 1381054
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o32_c4__fixed_runtime__b00.json",
+      "sha256": "2a2bafad3486962b42a3bc06ed364cb5526a287f63472af60e9a800cf78c3804",
+      "bytes": 1169005
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o128_c1__fixed_runtime__b00.json",
+      "sha256": "477f4e62dee1f6ab1abd19bf97c310f5a21c20c7ec07c318f2a7934f7b993fad",
+      "bytes": 800052
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o32_c4__fixed_runtime__b00.json",
+      "sha256": "730d97be7b8ef51499894bf0a6717a8b6a8fcf10d0f6bff26db560a61f43a3ef",
+      "bytes": 1550290
+    }
+  ],
+  "native_selected_cells": 131,
+  "original_grid_denominator": 162,
+  "native_remeasurement_allowed_in_this_loop": false,
+  "native_policy": "Never modify selection, native values, original freeze, binary, prompts or extraction contract; verify selection/raw hashes before and after each evaluated round.",
+  "baseline_evaluation": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
+  "budget": {
+    "max_mechanism_rounds": 6,
+    "max_full_131_evaluations": 4,
+    "max_wall_seconds": 28800,
+    "deadline_utc": "2026-09-15T21:27:44.987878+00:00",
+    "prediction_workers": 4,
+    "per_cell_timeout_seconds": 600
+  },
+  "targets": {
+    "per_group_per_metric_median_ape_pct_strict": 10,
+    "per_group_per_metric_p90_ape_pct_max": 20,
+    "per_group_per_metric_worst_ape_pct_max": 30,
+    "fixed_set_prediction_coverage_min_pct": 95,
+    "also_report_strict_all3_below10_cells": true
+  },
+  "dataset_role": "Previously disclosed development/regression data; never independent blind validation.",
+  "rounds": [
+    {
+      "round": 1,
+      "status": "complete_targets_failed_semantic_candidate_retained",
+      "hypothesis": "The recurrent mixed-batch gate disables native-supported equal-length hybrid ubatches and serializes later prefill behind prior decode. Enable only source-qualified equal-length stateful batches; do not change metric anchors or costs.",
+      "anchors": [
+        "qwen38_gpu_p128_o128_c4__fixed_runtime",
+        "qwen38_gpu_p128_o256_c4__fixed_runtime",
+        "qwen38_gpu_p512_o32_c2__fixed_runtime",
+        "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+        "qwen35_p128_o128_c4__fixed_runtime",
+        "qwen35_p128_o256_c4__fixed_runtime",
+        "qwen35_p512_o256_c2__fixed_runtime",
+        "qwen38_p1536_o128_c1__fixed_runtime",
+        "qwen38_p128_o32_c4__fixed_runtime",
+        "qwen25_p1536_o128_c4__fixed_runtime",
+        "tinyllama_p128_o128_c4__fixed_runtime",
+        "smollm2_p512_o32_c2__fixed_runtime"
+      ],
+      "regression_cell_ids": [
+        "qwen25_p1536_o256_c4__fixed_runtime",
+        "qwen25_p512_o256_c1__fixed_runtime",
+        "qwen25_p1536_o128_c1__fixed_runtime",
+        "qwen25_p1536_o256_c2__fixed_runtime",
+        "qwen25_p128_o128_c4__fixed_runtime",
+        "qwen25_p512_o256_c2__fixed_runtime",
+        "qwen25_p512_o256_c4__fixed_runtime",
+        "qwen25_p1536_o32_c2__fixed_runtime",
+        "qwen25_p1536_o256_c1__fixed_runtime",
+        "qwen25_p128_o32_c4__fixed_runtime",
+        "qwen25_p512_o32_c4__fixed_runtime",
+        "qwen25_p128_o256_c2__fixed_runtime",
+        "qwen25_p512_o32_c1__fixed_runtime",
+        "qwen25_p512_o128_c1__fixed_runtime",
+        "qwen25_p512_o32_c2__fixed_runtime",
+        "qwen25_p1536_o32_c1__fixed_runtime",
+        "smollm2_p1536_o256_c4__fixed_runtime",
+        "smollm2_p128_o32_c1__fixed_runtime",
+        "smollm2_p1536_o128_c4__fixed_runtime",
+        "smollm2_p128_o128_c2__fixed_runtime",
+        "smollm2_p512_o256_c4__fixed_runtime",
+        "smollm2_p128_o256_c1__fixed_runtime",
+        "smollm2_p1536_o256_c1__fixed_runtime",
+        "smollm2_p1536_o32_c2__fixed_runtime",
+        "smollm2_p512_o256_c1__fixed_runtime",
+        "smollm2_p1536_o128_c2__fixed_runtime",
+        "smollm2_p1536_o32_c1__fixed_runtime",
+        "smollm2_p128_o256_c4__fixed_runtime",
+        "smollm2_p512_o128_c2__fixed_runtime",
+        "smollm2_p512_o32_c1__fixed_runtime",
+        "smollm2_p512_o128_c4__fixed_runtime",
+        "smollm2_p128_o256_c2__fixed_runtime",
+        "smollm2_p512_o256_c2__fixed_runtime",
+        "smollm2_p512_o32_c4__fixed_runtime",
+        "smollm2_p1536_o32_c4__fixed_runtime",
+        "smollm2_p512_o128_c1__fixed_runtime",
+        "smollm2_p1536_o256_c2__fixed_runtime",
+        "smollm2_p1536_o128_c1__fixed_runtime",
+        "tinyllama_p1536_o128_c2__fixed_runtime",
+        "tinyllama_p512_o256_c2__fixed_runtime",
+        "tinyllama_p128_o256_c1__fixed_runtime",
+        "tinyllama_p1536_o256_c2__fixed_runtime",
+        "tinyllama_p512_o256_c1__fixed_runtime",
+        "tinyllama_p128_o128_c1__fixed_runtime",
+        "tinyllama_p512_o128_c4__fixed_runtime",
+        "tinyllama_p1536_o128_c1__fixed_runtime",
+        "tinyllama_p512_o128_c2__fixed_runtime",
+        "tinyllama_p512_o128_c1__fixed_runtime",
+        "tinyllama_p512_o32_c2__fixed_runtime",
+        "tinyllama_p512_o32_c4__fixed_runtime",
+        "tinyllama_p1536_o256_c1__fixed_runtime",
+        "tinyllama_p128_o32_c1__fixed_runtime",
+        "tinyllama_p128_o256_c2__fixed_runtime",
+        "tinyllama_p512_o256_c4__fixed_runtime",
+        "tinyllama_p128_o256_c4__fixed_runtime",
+        "tinyllama_p512_o32_c1__fixed_runtime",
+        "tinyllama_p1536_o32_c4__fixed_runtime",
+        "tinyllama_p128_o128_c2__fixed_runtime",
+        "tinyllama_p1536_o32_c2__fixed_runtime",
+        "qwen35_p1536_o256_c4__fixed_runtime",
+        "qwen35_p512_o128_c1__fixed_runtime",
+        "qwen35_p128_o256_c1__fixed_runtime",
+        "qwen35_p128_o32_c4__fixed_runtime",
+        "qwen35_p128_o32_c1__fixed_runtime",
+        "qwen35_p1536_o32_c4__fixed_runtime",
+        "qwen35_p512_o256_c1__fixed_runtime",
+        "qwen35_p1536_o128_c2__fixed_runtime",
+        "qwen35_p512_o256_c4__fixed_runtime",
+        "qwen35_p1536_o256_c2__fixed_runtime",
+        "qwen35_p128_o128_c1__fixed_runtime",
+        "qwen35_p1536_o128_c1__fixed_runtime",
+        "qwen35_p512_o32_c2__fixed_runtime",
+        "qwen35_p512_o32_c4__fixed_runtime",
+        "qwen35_p512_o128_c2__fixed_runtime",
+        "qwen35_p1536_o128_c4__fixed_runtime",
+        "qwen35_p128_o32_c2__fixed_runtime",
+        "qwen35_p128_o128_c2__fixed_runtime",
+        "qwen35_p512_o32_c1__fixed_runtime",
+        "qwen38_p512_o256_c1__fixed_runtime",
+        "qwen38_p512_o128_c2__fixed_runtime",
+        "qwen38_p128_o256_c2__fixed_runtime",
+        "qwen38_p1536_o32_c2__fixed_runtime",
+        "qwen38_p512_o128_c4__fixed_runtime",
+        "qwen38_p512_o32_c1__fixed_runtime",
+        "qwen38_p128_o32_c1__fixed_runtime",
+        "qwen38_p1536_o32_c1__fixed_runtime",
+        "qwen38_p128_o256_c1__fixed_runtime",
+        "qwen38_p128_o32_c2__fixed_runtime",
+        "qwen38_p128_o256_c4__fixed_runtime",
+        "qwen38_p512_o256_c4__fixed_runtime",
+        "qwen38_p512_o128_c1__fixed_runtime",
+        "qwen38_p512_o32_c2__fixed_runtime",
+        "qwen38_p1536_o256_c2__fixed_runtime",
+        "qwen38_p128_o128_c2__fixed_runtime",
+        "qwen38_p128_o128_c1__fixed_runtime",
+        "qwen38_p1536_o32_c4__fixed_runtime",
+        "qwen38_gpu_p1536_o256_c4__fixed_runtime",
+        "qwen38_gpu_p1536_o128_c2__fixed_runtime",
+        "qwen38_gpu_p1536_o128_c1__fixed_runtime",
+        "qwen38_gpu_p512_o256_c1__fixed_runtime",
+        "qwen38_gpu_p512_o128_c2__fixed_runtime",
+        "qwen38_gpu_p1536_o256_c1__fixed_runtime",
+        "qwen38_gpu_p128_o256_c2__fixed_runtime",
+        "qwen38_gpu_p1536_o32_c2__fixed_runtime",
+        "qwen38_gpu_p512_o128_c4__fixed_runtime",
+        "qwen38_gpu_p1536_o128_c4__fixed_runtime",
+        "qwen38_gpu_p512_o32_c1__fixed_runtime",
+        "qwen38_gpu_p128_o32_c1__fixed_runtime",
+        "qwen38_gpu_p1536_o32_c1__fixed_runtime",
+        "qwen38_gpu_p512_o256_c2__fixed_runtime",
+        "qwen38_gpu_p128_o256_c1__fixed_runtime",
+        "qwen38_gpu_p128_o32_c4__fixed_runtime",
+        "qwen38_gpu_p128_o32_c2__fixed_runtime",
+        "qwen38_gpu_p512_o256_c4__fixed_runtime",
+        "qwen38_gpu_p512_o128_c1__fixed_runtime",
+        "qwen38_gpu_p1536_o256_c2__fixed_runtime",
+        "qwen38_gpu_p128_o128_c2__fixed_runtime",
+        "qwen38_gpu_p512_o32_c4__fixed_runtime",
+        "qwen38_gpu_p128_o128_c1__fixed_runtime"
+      ],
+      "dataset_partition_note": "Diagnostic anchors vs within-development regression; all 131 were previously disclosed, not independent validation.",
+      "evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\recurrent_source_contract.json",
+      "structural_tests_passed": 27,
+      "calibrated_control": "unavailable: no identity-qualified old profile; never force it onto current native.",
+      "same_source_content": true,
+      "baseline_freeze_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\baseline\\freeze.json",
+        "sha256": "bec4006b04ecdd7a37c1c641037ba55b321f77d366309bddab76153c550ffc97"
+      },
+      "candidate_freeze_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate\\freeze.json",
+        "sha256": "f9f4205712ea144276a33ea120e1050967c995087d6a66faaf3295bd8314c924"
+      },
+      "anchor_evaluation_completed_utc": "2026-09-15T14:09:42.853060+00:00",
+      "paired_anchors_scored": 12,
+      "baseline_equals_v2_all_primary_metrics": true,
+      "anchor_result": "Mixed scheduling fixes output-dependent prompt starvation. All unaffected controls equal. CPU27B C4 E2E regresses; full regression required; not an acceptance pass.",
+      "full_evaluation_started": true,
+      "completed_cells": 131,
+      "failed_cells": 0,
+      "completed_utc": "2026-09-15T14:37:57.781458+00:00",
+      "decision_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\decision.json",
+      "errors_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate\\errors.0002.json"
+    },
+    {
+      "round": 2,
+      "status": "no_effect_deferred_until_source_storage_parity",
+      "hypothesis": "Source IQ panel unpack reused across physical M; apply only qualified CPU F32 projections. Historical disable switch unknown, so conditional default-unset ablation only.",
+      "anchors": [
+        "qwen38_p1536_o128_c1__fixed_runtime",
+        "qwen38_p128_o32_c4__fixed_runtime",
+        "qwen38_gpu_p128_o128_c4__fixed_runtime"
+      ],
+      "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\baseline",
+      "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate",
+      "full_evaluation_started": false,
+      "completed_anchor_cells": 3,
+      "decision_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\decision.json",
+      "actual_timing_effect": false
+    },
+    {
+      "round": 3,
+      "status": "paired_anchors_complete_semantics_retained_accuracy_failed",
+      "hypothesis": "Fixed fresh-cohort slot traversal rather than least-recently-served prompt chunks. Existing engine start event follows first actual eligible prompt processing.",
+      "anchors": [
+        "qwen38_gpu_p128_o128_c4__fixed_runtime",
+        "qwen38_gpu_p128_o256_c4__fixed_runtime",
+        "qwen38_gpu_p512_o32_c2__fixed_runtime",
+        "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+        "qwen35_p128_o128_c4__fixed_runtime",
+        "qwen35_p128_o256_c4__fixed_runtime",
+        "qwen35_p512_o256_c2__fixed_runtime",
+        "qwen38_p1536_o128_c1__fixed_runtime",
+        "qwen38_p128_o32_c4__fixed_runtime",
+        "qwen25_p1536_o128_c4__fixed_runtime",
+        "tinyllama_p128_o128_c4__fixed_runtime",
+        "smollm2_p512_o32_c2__fixed_runtime"
+      ],
+      "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\baseline",
+      "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_003\\candidate",
+      "full_evaluation_started": false,
+      "completed_anchor_cells": 12,
+      "baseline_equals_round1": true,
+      "completed_utc": "2026-09-15T15:00:26.486990+00:00",
+      "comparison_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_003\\paired_anchor_comparison.json",
+      "decision": "Keep source-qualified fresh-slot semantics in development; no accuracy promotion. Slot order changes physical mixed-batch frequency and exposes unresolved costs. Correct current runtime offload and storage before spending the next full131 evaluation."
+    },
+    {
+      "round": 4,
+      "status": "paired_anchors_frozen",
+      "hypothesis": "Bind inherited current CUDA backend to captured host-weight offload policy and its required F32 storage; preserve static ownership and per-call transfers.",
+      "anchors": [
+        "qwen38_p1536_o128_c1__fixed_runtime",
+        "qwen38_p128_o32_c4__fixed_runtime",
+        "qwen38_p512_o128_c2__fixed_runtime",
+        "qwen38_p128_o256_c1__fixed_runtime",
+        "qwen38_gpu_p128_o128_c4__fixed_runtime",
+        "qwen25_p1536_o128_c4__fixed_runtime"
+      ],
+      "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\baseline",
+      "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\candidate",
+      "full_evaluation_started": false,
+      "native_dispatch_proven": false
+    }
+  ],
+  "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
+  "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
+  "next_round_hypothesis": "Bind current native runtime host-weight CUDA offload; then source-qualified F32 storage and GET_ROWS packed-row gather rather than whole-vocabulary reads.",
+  "full_131_evaluations_started": 1,
+  "full_131_evaluations_completed": 1,
+  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate",
+  "best_candidate_status": "No dominant accuracy winner: round1 improves TTFT and overall E2E but worsens CPU27B E2E. Baseline remains retained.",
+  "version_control_policy": {
+    "enabled": true,
+    "effective_utc": "2026-09-15T15:14:39.539409+00:00",
+    "per_completed_optimization": "local_commit_then_push_current_github_upstream",
+    "scope": "completed round code, relevant tests, task brief, compact evidence only",
+    "exclude": "unrelated/WIP edits; GGUF; runtime binaries; large native raw and traces",
+    "force_push_allowed": false,
+    "user_authorized": true
+  }
+}

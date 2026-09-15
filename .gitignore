@@ -52,3 +52,11 @@ artifacts/**/*.prediction.json
 source/llama.cpp-semantic/
 
 tmp_*.log
+
+# Local model/runtime/build artifacts
+*.gguf
+*.dll
+*.exe
+*.obj
+*.pdb
+*.lib
