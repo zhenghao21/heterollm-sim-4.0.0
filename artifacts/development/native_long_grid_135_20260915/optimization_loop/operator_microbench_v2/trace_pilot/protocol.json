@@ -1,0 +1,258 @@
+{
+  "schema": "synthetic-gemm-trace-pilot-protocol/v1",
+  "fixed_before_execution_utc": "2026-09-15T16:04:05.593886+00:00",
+  "scope": "one independent synthetic GGML MUL_MAT; no GGUF, LLM request, or target LLM latency",
+  "attempt_limits": {
+    "profile": 1,
+    "direct_control": 1,
+    "each_subprocess_timeout_seconds": 180,
+    "automatic_retries": 0
+  },
+  "execution_order": [
+    "profile",
+    "direct_control"
+  ],
+  "argv_common": [
+    "--device",
+    "cuda",
+    "--quant",
+    "Q4_K",
+    "--m",
+    "64",
+    "--n",
+    "4096",
+    "--k",
+    "1024",
+    "--threads",
+    "16",
+    "--cuda-index",
+    "0",
+    "--warmup",
+    "3",
+    "--repeats",
+    "20",
+    "--samples",
+    "256",
+    "--seed",
+    "20260914",
+    "--atol",
+    "0.05",
+    "--rtol",
+    "0.03",
+    "--evict-mib",
+    "128",
+    "--run",
+    "--nvtx"
+  ],
+  "shape": {
+    "M": 64,
+    "N": 4096,
+    "K": 1024,
+    "weight_type": "Q4_K",
+    "input_type": "F32",
+    "output_type": "F32"
+  },
+  "correctness": {
+    "absolute_tolerance": 0.05,
+    "relative_tolerance": 0.03,
+    "samples": 256,
+    "criterion": "abs(actual-reference)<=atol+rtol*abs(reference); all outputs finite",
+    "reference": "dequantized synthetic packed weights, double accumulation and F32 input",
+    "check_times": [
+      "after first call",
+      "after final call"
+    ],
+    "tolerance_may_change_after_run": false
+  },
+  "cache": {
+    "requested_eviction_mib": 128,
+    "effective_rule": "max(requested bytes,4*device L2)",
+    "operation": "untimed F32 scale read/write sweep before every invocation",
+    "outside_nvtx_and_qpc_interval": true,
+    "guaranteed_dram_transactions": false
+  },
+  "nsys": {
+    "executable": {
+      "path": "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2024.6.2\\target-windows-x64\\nsys.exe",
+      "bytes": 46246464,
+      "sha256": "9e4d325628a774f358be8ff068b8d1ff284416479b5f72a44fcfe632d046ff6b"
+    },
+    "information": {
+      "version": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\trace_pilot\\nsys_version.txt",
+        "bytes": 59,
+        "sha256": "92a924813e31edfbb953c06d998e2eb5f1581c0c35b1e7da028e62ee2b1e855c"
+      },
+      "profile_help": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\trace_pilot\\nsys_profile_help.txt",
+        "bytes": 20770,
+        "sha256": "d45b16128598106854666afb12b691d1a5d8f2edfd2a6efa6a8a1ae9ad2a5273"
+      },
+      "export_help": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\trace_pilot\\nsys_export_help.txt",
+        "bytes": 11948,
+        "sha256": "2cac5a9b31d35be4d6b15a21c6186e8fb5e8e49d8e4ee8f9593aaca9ea679dc2"
+      }
+    },
+    "profile_options": [
+      "--trace=cuda,nvtx",
+      "--sample=none",
+      "--cpuctxsw=none",
+      "--backtrace=none",
+      "--cuda-graph-trace=node",
+      "--duration=60",
+      "--wait=primary",
+      "--stop-on-exit=true",
+      "--stats=false",
+      "--export=none",
+      "--force-overwrite=false"
+    ]
+  },
+  "environment_explicit": {
+    "GGML_OP_OFFLOAD_MIN_BATCH": null,
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_CUDA_FORCE_MMQ": null,
+    "GGML_CUDA_FORCE_CUBLAS": null,
+    "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "GGML_SCHED_DEBUG": null,
+    "OMP_NUM_THREADS": "16",
+    "GGML_NO_IQ_PANEL": null,
+    "LLAMA_TRACE_ANNOTATIONS": "0",
+    "GGML_CPU_DISABLE_FUSION": null,
+    "GGML_CUDA_DISABLE_FUSION": null,
+    "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+    "CUDA_LAUNCH_BLOCKING": null,
+    "CUDA_MODULE_LOADING": null,
+    "CUDA_CACHE_DISABLE": null,
+    "CUDA_INJECTION64_PATH": null,
+    "NVTX_INJECTION64_PATH": null
+  },
+  "gpu_identity": {
+    "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "name": "NVIDIA GeForce RTX 5080",
+    "driver_version": "616.64",
+    "nvml_library": {
+      "path": "C:\\Windows\\System32\\nvml.dll",
+      "bytes": 1499368,
+      "sha256": "5ee24ec769a7a7404a48fb0cc1e534dd2913477fb4abfcd830c8fc9093e6d26b"
+    }
+  },
+  "gpu_state_before_protocol": {
+    "utc": "2026-09-15T16:04:05.460610+00:00",
+    "qpc_ticks": 393323721291,
+    "graphics_mhz": {
+      "status": 0,
+      "value": 2662
+    },
+    "sm_mhz": {
+      "status": 0,
+      "value": 2662
+    },
+    "memory_mhz": {
+      "status": 0,
+      "value": 15201
+    },
+    "pstate": {
+      "status": 0,
+      "value": 0
+    },
+    "temperature_c": {
+      "status": 0,
+      "value": 41
+    },
+    "power_mw": {
+      "status": 0,
+      "value": 43256
+    },
+    "clocks_throttle_reasons": {
+      "status": 0,
+      "value": 1024
+    }
+  },
+  "timing": {
+    "host_wall": "existing per-call steady_clock nanoseconds since process_start; graph_compute includes synchronization",
+    "nvtx": "GENERIC_GEMM|phase=...|index=...|format=...|M=...|N=...|K=...; push before start_ns, pop after end_ns",
+    "cuda": "union of observed CUDA kernel intervals attributable to each external NVTX range",
+    "host_and_cuda_are_not_additive": true,
+    "graph_synchronize_source": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-backend.cpp",
+      "bytes": 101709,
+      "sha256": "803298af097545b4b611df53a2e9ac39f43c18c095c0d3b4c879d2ae911a2d79"
+    },
+    "qpc_frequency_hz": 10000000,
+    "per_call_ns_preserved_verbatim": true,
+    "absolute_application_qpc_ticks_available": false,
+    "qpc_limitation": "Existing executable exports QPC-derived relative ns only; process_start QPC epoch is absent. Do not invent absolute ticks or align clocks by guessed offsets.",
+    "runner_telemetry_qpc_ticks": "raw QPC ticks around launch, exit, and NVML samples; not substitutes for in-process call timestamps"
+  },
+  "clocks": {
+    "locked_by_pilot": false,
+    "control_status": "unlocked_diagnostic_only",
+    "sampling_period_seconds": 0.05,
+    "temperature_controlled": false,
+    "clock_samples_may_not_bracket_every_short_kernel": true
+  },
+  "build_manifest": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\build_manifest.json",
+    "bytes": 11553,
+    "sha256": "a0c96cd7b9e20e61a184a8fd3f5043209d58a3610a3d14c77fc77277dffae34d"
+  },
+  "frozen_executable": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\generic-gemm-microbench.exe",
+    "sha256": "69ee24125f4d7bc7347c159f1ced0a39ad66df4c7900a03ba15d20fb525061db",
+    "bytes": 106496
+  },
+  "all_existing_manifest_refs_verified": true,
+  "build_closure": {
+    "original_manifest_modified": false,
+    "supplementary_current_header_refs": [
+      {
+        "path": "E:\\cuda\\include\\cuda_runtime_api.h",
+        "bytes": 670876,
+        "sha256": "6c60f63697575ff18156d397ec506ab286b147f33a5ce9e72f95bfec162fd3ea"
+      },
+      {
+        "path": "E:\\cuda\\include\\nvtx3\\nvToolsExt.h",
+        "bytes": 53746,
+        "sha256": "da7c9f69fbec22d00b43e735c55045cd71d38b158542ebaac7182112f4775915"
+      },
+      {
+        "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\include\\__msvc_chrono.hpp",
+        "bytes": 33686,
+        "sha256": "0fefff2b74e2fe60ef89d42042d8f9ecc7bda3f60472d353c84bb1a3fce7cb9c"
+      },
+      {
+        "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\include\\intrin.h",
+        "bytes": 66891,
+        "sha256": "b1cfcc48e6e64200641d677886f63473e3d4135209bcc3438d5a73a298293e0d"
+      }
+    ],
+    "complete_compiler_header_dependency_closure": false,
+    "limitation": "Original build did not capture transitive CUDA/NVTX/MSVC/Windows SDK headers. Current supplemental hashes do not retrospectively prove the complete original include closure."
+  },
+  "runner": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\trace_pilot\\pilot.py",
+    "bytes": 16508,
+    "sha256": "c0fe2fa69ddfa7d957a2d26fdb5fe3dee20a03289137c61018fe27ebab6ee48a"
+  },
+  "calibration_eligible": false,
+  "llm_latency_fitting": false,
+  "less_than_5_percent_claim_allowed": false,
+  "publication": {
+    "keep_local_only": [
+      "nsys-rep",
+      "qdstrm",
+      "sqlite",
+      "exe",
+      "obj",
+      "dll",
+      "raw event exports"
+    ],
+    "small_reviewable_evidence": [
+      "protocol.json",
+      "result_summary.json",
+      "command receipts",
+      "runner/parser code"
+    ]
+  }
+}
