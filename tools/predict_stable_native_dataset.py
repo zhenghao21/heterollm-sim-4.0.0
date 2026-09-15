@@ -500,6 +500,174 @@ def apply_host_offload_static_contract(scenario, inputs):
         source_contract=contract, cuda_backend_available=proof["cuda_backend_available"])
 
 
+def verified_tensor_storage_contract(path, rows, data_root, *, f32_hidden_storage=False,
+                                     runtime_binding=None, runtime_source_contract_path=None):
+    """Bind four tensor rules to the actually inherited/rebuilt native modules."""
+    from heterollm_sim.llama_tensor_storage import SCHEMA, derive_llama_tensor_storage_contract, apply_llama_tensor_storage_contract
+    from tools import llama_runtime_source_binding as source_api
+    if type(f32_hidden_storage) is not bool or "f32_hidden_storage" not in inspect.signature(apply_llama_tensor_storage_contract).parameters:
+        raise ValueError("tensor-storage treatment requires an explicit boolean and its typed storage adapter")
+    saved, contract_ref = grid.read_document(path)
+    payload = dict(saved)
+    digest = payload.pop("content_sha256", None)
+    if digest is not None and digest != grid.stable_hash(payload):
+        raise ValueError("tensor-storage contract content SHA256 mismatch")
+    if payload.get("schema") != SCHEMA:
+        raise ValueError("tensor-storage source contract schema mismatch")
+    sources = payload.get("source_sha256", {})
+    if not isinstance(sources, Mapping) or len(sources) != 4:
+        raise ValueError("tensor-storage contract requires four source identities")
+    source_files = {Path(name).name: grid.resolve_data(name, data_root) for name in sources}
+    if set(source_files) != {"ggml.c", "ops.cpp", "getrows.cu", "llama-graph.cpp"}:
+        raise ValueError("tensor-storage source roles are missing or ambiguous")
+    source_root = source_files["ggml.c"].parents[2]
+    source_refs = [{"path": str(grid.resolve_data(name, data_root)), "sha256": sha} for name, sha in sources.items()]
+    verify_refs(source_refs)
+    derived = derive_llama_tensor_storage_contract(source_root)
+    if json.loads(json.dumps(derived)) != payload:
+        raise ValueError("tensor-storage contract differs from re-derived source rules")
+    if runtime_binding is None:
+        runtime_source_contract_path = runtime_source_contract_path or Path(path).resolve().parent.parent / "round_004/runtime_source_binding_structural_audit.json"
+        runtime_binding = verified_host_offload_source_contract(runtime_source_contract_path, rows, data_root)
+    binding = runtime_binding["contract"]
+    ev = source_api._Evidence(data_root)
+    audit = ev.document(runtime_binding["runtime_build_audit_ref"])
+    base_receipt = ev.document(runtime_binding["base_build_receipt_ref"])
+    stages = {stage["stage"]: stage for stage in audit["provenance_chain"]}
+    base = stages["base_configuration_and_preprocessor_guards"]
+    inherited = stages["native_to_annotation"]
+    compiled = stages["annotation_compile_and_link"]
+    native_ref = stages["selection_to_native_output"]["native_build_receipt_ref"]
+    native = ev.document(native_ref)
+    native_manifest = ev.document(inherited["native_source_manifest_ref"])
+    annotation = ev.document(inherited["annotation_build_receipt_ref"])
+    annotation_manifest = ev.document(compiled["source_manifest_ref"])
+    if source_api._identity(source_root) != source_api._identity(annotation_manifest["base_source"]):
+        raise ValueError("tensor-storage source root is not the runtime's compiled base source")
+    build_root = Path(annotation["base"]).resolve()
+    annotation_build = Path(annotation["build"]).resolve()
+    commands = ev.document(base["compile_commands_ref"])
+    ninja = ev.text(base["build_ninja_ref"])
+    modules = binding["runtime_modules"]
+    roles = {"ggml.c": ("operators", "ggml-base.dll"), "ops.cpp": ("cpu_get_rows", "ggml-cpu.dll"),
+             "getrows.cu": ("cuda_get_rows", "ggml-cuda.dll"), "llama-graph.cpp": ("input_graph", "llama.dll")}
+    compilation = {}
+    for name, (role, module) in roles.items():
+        source = source_files[name]
+        sha = sources[str(source)]
+        source_api._equal_digests(sha, source_api._digest_at(base_receipt["source_sha256_before"], source),
+                                 source_api._digest_at(base_receipt["source_sha256_after"], source))
+        entry = source_api._compile_entry(commands, source, build_root)
+        obj = Path(entry["output"]).resolve()
+        source_api._ninja_source_link(ninja, source, obj, build_root, module)
+        if role == "cpu_get_rows":
+            continue
+        if role == "operators":
+            if source_api._identity(binding["source_compilation"]["operators"]["source"]) != source_api._identity(source):
+                raise ValueError("tensor-storage operator source differs from verified base-module compilation")
+            basis = "unchanged_ggml_base_module_from_verified_original_build"
+        else:
+            link = source_api._step(annotation, "link bin/" + module)
+            rsp_args = [arg[1:] for arg in link["argv"] if arg.startswith("@")]
+            if len(rsp_args) != 1:
+                raise ValueError("tensor-storage annotation link response is ambiguous")
+            rsp = Path(rsp_args[0]).resolve()
+            rsp_text = ev.text({"path": str(rsp), "sha256": source_api._digest_at(annotation["input_sha256"], rsp)})
+            args = source_api._tokens(rsp_text)
+            if not any(source_api._identity(arg) == source_api._identity(obj) for arg in args):
+                raise ValueError("tensor-storage original source object is absent from actual annotation link")
+            source_api._digest_at(annotation["input_sha256"], obj)
+            outputs = [arg[5:] for arg in args if arg.lower().startswith("/out:")]
+            if len(outputs) != 1 or source_api._identity(outputs[0]) != source_api._identity(annotation_build / "bin" / module):
+                raise ValueError("tensor-storage annotation link output does not match inherited module")
+            basis = "original_source_object_explicitly_reused_by_annotation_link_then_inherited_by_native"
+        compilation[role] = {"source": str(source), "sha256": sha, "object": str(obj),
+            "module": modules[module], "binding": basis}
+    # The CPU backend is rebuilt by native-thread-control, unlike ggml-base.
+    source = source_files["ops.cpp"]
+    units = [unit for unit in native_manifest["compile_units"]
+             if source_api._identity(unit.get("base_file", "")) == source_api._identity(source)]
+    if len(units) != 1:
+        raise ValueError("tensor-storage CPU GET_ROWS native compile unit is missing or ambiguous")
+    unit = units[0]
+    source_api._equal_digests(unit["sha256"], sources[str(source)], source_api._digest_at(native["readonly_input_sha256"], source))
+    overlay_source = Path(unit["file"]).resolve()
+    ev.read({"path": str(overlay_source), "sha256": unit["sha256"]})
+    step = source_api._step(native, "compile ops.cpp")
+    argv = step["argv"]
+    if "-c" not in argv or source_api._identity(argv[argv.index("-c")+1]) != source_api._identity(overlay_source):
+        raise ValueError("tensor-storage CPU compile did not consume the byte-identical native source")
+    outputs = [arg[3:] for arg in argv if arg.startswith("/Fo")]
+    if len(outputs) != 1:
+        raise ValueError("tensor-storage CPU compile output is ambiguous")
+    cpu_build = Path(step["cwd"]).resolve()
+    cpu_obj = (cpu_build / outputs[0]).resolve()
+    cpu_sha = source_api._digest_at(native["output_sha256"], Path(native["runtime_output"]) / "ggml-cpu.dll")
+    source_api._equal_digests(cpu_sha, native["new_cpu_dll_sha256"])
+    source_api._digest_at(native["output_sha256"], cpu_obj)
+    matching_commands = [command for command in native["commands"] if source_api._identity(command["file"]) == source_api._identity(overlay_source)]
+    if len(matching_commands) != 1 or matching_commands[0]["argv"] != argv or source_api._identity(matching_commands[0]["output"]) != source_api._identity(cpu_obj):
+        raise ValueError("tensor-storage CPU successful compile and saved command/object disagree")
+    link = source_api._step(native, "link ggml-cpu.dll")
+    rsp_args = [arg[1:] for arg in link["argv"] if arg.startswith("@")]
+    if len(rsp_args) != 1:
+        raise ValueError("tensor-storage CPU link response is ambiguous")
+    script_path = Path(native_ref["path"]).resolve().parent.parent / "build_native_threads.py"
+    script = ev.text({"path": str(script_path), "sha256": native["build_script_sha256"]})
+    syntax = ast.parse(script)
+    linker = [node.value for node in syntax.body if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "linkargs" for t in node.targets)]
+    expected_first = ast.parse("[*(str(e['obj']) for e in entries)]", mode="eval").body.elts[0]
+    if len(linker) != 1 or not isinstance(linker[0], ast.List) or ast.dump(linker[0].elts[0]) != ast.dump(expected_first):
+        raise ValueError("tensor-storage recorded CPU build script does not link every compiled source object")
+    expected_args = [command["output"] for command in native["commands"]] + [str(build_root / "ggml/src/ggml-base.lib"),
+        "kernel32.lib", "user32.lib", "gdi32.lib", "winspool.lib", "shell32.lib", "ole32.lib", "oleaut32.lib", "uuid.lib", "comdlg32.lib", "advapi32.lib",
+        "/machine:x64", "/INCREMENTAL:NO", "/dll", "/version:0.23", "/out:" + str(cpu_build / "bin/ggml-cpu.dll"),
+        "/implib:" + str(cpu_build / "ggml/src/ggml-cpu.lib"), "/pdb:" + str(cpu_build / "bin/ggml-cpu.pdb")]
+    response = ev.text(rsp_args[0])
+    if response.splitlines() != [subprocess.list2cmdline([arg]) for arg in expected_args]:
+        raise ValueError("tensor-storage CPU response differs from recorded build-script reconstruction")
+    cpu_module = {"path": str(cpu_build / "bin/ggml-cpu.dll"), "sha256": cpu_sha}
+    compilation["cpu_get_rows"] = {"source": str(source), "compiled_source": str(overlay_source),
+        "sha256": unit["sha256"], "object": str(cpu_obj), "module": cpu_module,
+        "binding": "byte_identical_source_recompiled_and_linked_by_recorded_native_thread_control_build",
+        "link_response_binding": "reconstructed_from_digest_bound_build_script_and_recorded_commands"}
+    for row in rows:
+        selected = source_api._native_module_map(row["native_runtime_refs"])
+        if "ggml-cpu.dll" not in selected or source_api._identity(selected["ggml-cpu.dll"]["path"]) != source_api._identity(cpu_module["path"]):
+            raise ValueError("tensor-storage selected CPU module differs from native rebuilt output")
+        source_api._equal_digests(selected["ggml-cpu.dll"]["sha256"], cpu_sha)
+        for ref in runtime_binding["cells"][row["cell_id"]]["native_record_refs"]:
+            record = ev.document(ref)
+            for key in ("runtime_before", "runtime_after"):
+                captured = source_api._native_module_map(record[key]["actual_modules"])
+                module = captured.get("ggml-cpu.dll", {})
+                if source_api._identity(module.get("path", "")) != source_api._identity(cpu_module["path"]):
+                    raise ValueError("tensor-storage native CPU module was not captured at the compiled output path")
+                source_api._equal_digests(module.get("sha256"), cpu_sha)
+    refs = {ref["path"]: ref for ref in [contract_ref, *source_refs, *runtime_binding["evidence_refs"], *ev.refs.values()]}
+    verify_refs(list(refs.values()))
+    return {"contract": payload, "contract_ref": contract_ref, "evidence_refs": list(refs.values()),
+        "runtime_source_binding_ref": runtime_binding["contract_ref"], "source_compilation": compilation,
+        "f32_hidden_storage_requested": f32_hidden_storage, "native_latency_used": False,
+        "host_offload_treatment_enabled_by_this_validation": False, "native_dispatch_proven": False,
+        "qualification_required_after_static_bindings": True,
+        "limits": ["Only the four listed generic tensor/input/GET_ROWS translation units are bound; architecture-specific qwen35.cpp source equivalence is not claimed",
+                   "Row dequantization/conversion timing, repeated-index cache reuse, cache-line/page/write-allocation costs remain unmodeled",
+                   "Full embedding table capacity and any existing cross-device staging remain separate from selected-row traffic"]}
+
+
+def apply_tensor_storage_static_contract(scenario, inputs):
+    proof = inputs.get("tensor_storage_evidence")
+    if proof is None:
+        return scenario
+    contract = inputs.get("tensor_storage_contract")
+    flag = inputs.get("tensor_storage_f32_hidden", False)
+    if not isinstance(proof, Mapping) or contract != proof.get("contract") or type(flag) is not bool or flag is not proof.get("f32_hidden_storage_requested"):
+        raise ValueError("tensor-storage static contract/flag differs from verified evidence")
+    from heterollm_sim.llama_tensor_storage import apply_llama_tensor_storage_contract
+    return apply_llama_tensor_storage_contract(scenario, contract, f32_hidden_storage=flag)
+
+
 IQ_PANEL_SOURCE_SCHEMA = "llama.cpp.cpu.iq-panel-source-contract/v1"
 IQ_PANEL_VARIABLE = "GGML_NO_IQ_PANEL"
 
@@ -630,7 +798,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -679,6 +847,9 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "slot_order_evidence": slot_order,
         "host_offload_source_contract": host_binding["source_contract"] if host_binding else None,
         "host_offload_evidence": host_binding,
+        "tensor_storage_contract": tensor_storage["contract"] if tensor_storage else None,
+        "tensor_storage_evidence": tensor_storage,
+        "tensor_storage_f32_hidden": tensor_storage["f32_hidden_storage_requested"] if tensor_storage else False,
         "cpu_iq_panel_reuse": iq_panel["dispatch"] if iq_panel else None,
         "cpu_iq_panel_evidence": iq_panel,
         "hardware_ref": row["static_hardware"].get("frozen_hardware_ref"),
@@ -754,6 +925,12 @@ def unsupported_dimensions(inputs, model=None):
             "historical_state": "unknown", "assume_default_unset": inputs["cpu_iq_panel_reuse"]["assume_default_unset"],
             "native_dispatch_proven": False, "evaluation_scope": inputs["cpu_iq_panel_reuse"]["evaluation_scope"],
             "reason": "Historical GGML_NO_IQ_PANEL was not captured; candidate assumption never becomes observed native dispatch evidence"})
+    tensor_storage = inputs.get("tensor_storage_evidence")
+    if isinstance(tensor_storage, Mapping):
+        rows.append({"dimension": "tensor_storage_timing_completeness", "status": "conditional",
+            "f32_hidden_storage_requested": inputs.get("tensor_storage_f32_hidden", False),
+            "native_dispatch_proven": False, "reason": "Source-bound logical GET_ROWS traffic and storage do not price row dequantization, repeated-index cache reuse, cache-line/page or write-allocation effects",
+            "limits": tensor_storage.get("limits", [])})
     if raw.get("gpu_layers") == -1:
         rows.append({"dimension": "auto_gpu_layer_fit", "status": "conditional", "native": -1, "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."})
     rows.append({"dimension": "cuda_graph_lifecycle", "status": "conditional", "compiled_cuda_graphs": raw.get("compiled_cuda_graphs"), "reason": "No CUDA Graph replay timing or prior native profile is applied; direct launch/synchronization parity remains unvalidated."})
@@ -954,7 +1131,7 @@ def compact_dispatch_evidence(metadata):
     """Read named core ledgers before general metadata truncation can hide them."""
     metadata = metadata if isinstance(metadata, Mapping) else {}
     return {key: bounded_value(dict(value)) if isinstance(value, Mapping) else None
-        for key in ("cpu_iq_panel_reuse", "host_gemm_offload")
+        for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage")
         for value in (metadata.get(key),)}
 
 
@@ -965,6 +1142,8 @@ def dispatch_qualification(scenario, inputs=None):
     inputs = inputs or {}
     host = metadata.get("llama_cpp_cuda_op_offload")
     host = host if isinstance(host, Mapping) else {}
+    storage = metadata.get("llama_cpp_tensor_storage")
+    storage = storage if isinstance(storage, Mapping) else {}
     slot = metadata.get("llama_cpp_slot_order")
     slot = slot if isinstance(slot, Mapping) else {}
     iq = inputs.get("cpu_iq_panel_reuse")
@@ -985,6 +1164,10 @@ def dispatch_qualification(scenario, inputs=None):
             "op_offload": host.get("op_offload"), "cuda_backend_available": host.get("cuda_backend_available"),
             "minimum_m": host.get("minimum_m"), "environment": bounded_value(host.get("environment")),
             "actual_dispatch_requires_physical_invocation_evidence": True},
+        "tensor_storage": {"requested": inputs.get("tensor_storage_contract") is not None,
+            "f32_hidden_storage_requested": inputs.get("tensor_storage_f32_hidden", False),
+            "native_dispatch_proven": False if inputs.get("tensor_storage_contract") is not None else None,
+            **{key: bounded_value(storage.get(key)) for key in ("qualified", "status", "reasons", "previous_f32_hidden_storage", "timing_completeness", "scope")}},
         "storage": {"f32_hidden_storage": metadata.get("llama_cpp_f32_hidden_storage"),
             "evidence_source": "final_scenario.workload.metadata.llama_cpp_f32_hidden_storage"},
         "slot_order": {key: bounded_value(slot.get(key)) for key in (
@@ -1003,7 +1186,7 @@ def retained_dispatch_summary(result):
         "count_scope": "simulator physical tasks in retained serving batch ledgers",
         "retained_batch_count": len(batches), "total_batches": total,
         "history_complete": complete, "native_timing_used": False}
-    for key in ("cpu_iq_panel_reuse", "host_gemm_offload"):
+    for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage"):
         ledgers = []
         for batch in batches:
             metadata = getattr(getattr(batch, "cost", None), "metadata", {})
@@ -1017,6 +1200,9 @@ def retained_dispatch_summary(result):
             "reason": None if ledgers else "core ledger was not retained; no zero is inferred"}
         numeric_keys = {name for ledger in ledgers for name, value in ledger.items()
             if name.endswith("_tasks") and type(value) is int}
+        if key == "tensor_storage":
+            numeric_keys.update(name for ledger in ledgers for name, value in ledger.items()
+                if type(value) is int and "capacity" not in name and name.endswith(("_bytes", "_rows", "_elements")))
         for name in sorted(numeric_keys):
             values = [ledger.get(name) for ledger in ledgers]
             observed = sum(values) if all(type(value) is int and value >= 0 for value in values) else None
@@ -1031,6 +1217,13 @@ def retained_dispatch_summary(result):
                     if type(value) is int and value >= 0:
                         counts[str(label)] += value
             summary[name] = dict(sorted(counts.items()))
+        if key == "tensor_storage":
+            capacity_keys = {name for ledger in ledgers for name, value in ledger.items()
+                if type(value) is int and "capacity" in name and name.endswith("_bytes")}
+            for name in sorted(capacity_keys):
+                summary["maximum_observed_" + name] = max(ledger.get(name, 0) for ledger in ledgers)
+            summary["capacity_semantics"] = "maximum retained table footprint; never a sum of repeated batch capacities"
+            summary["timing_completeness"] = "partial; selected-row conversion/dequantization, cache-line/page and write-allocation costs remain unpriced"
         if key == "host_gemm_offload":
             observed = summary.get("observed_applied_tasks")
             summary["actual_cpu_to_gpu_offload"] = True if type(observed) is int and observed > 0 else False if summary.get("applied_tasks") == 0 else None
@@ -1133,6 +1326,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         hardware_snapshot=inputs["hardware_snapshot"], runtime_binary=Path(inputs["runtime_ref"]["path"]),
         runtime_environment=dict(env), **simulator_config)
     scenario = apply_host_offload_static_contract(scenario, inputs)
+    scenario = apply_tensor_storage_static_contract(scenario, inputs)
     profiles = {kind: dict(values) for kind, values in scenario.component_profiles.items()}
     changed = []
     for ident, profile in profiles.get("gpu", {}).items():
@@ -1178,6 +1372,9 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
             "slot_order_contract": inputs.get("slot_order_contract"),
             "host_offload_source_contract": inputs.get("host_offload_source_contract"),
             "host_offload_binding": inputs.get("host_offload_evidence"),
+            "tensor_storage_contract": inputs.get("tensor_storage_contract"),
+            "tensor_storage_f32_hidden_requested": inputs.get("tensor_storage_f32_hidden", False),
+            "tensor_storage_binding": inputs.get("tensor_storage_evidence"),
             "slot_order_treatment": {"requested": inputs.get("slot_order_contract") is not None,
                 "qualified": slot_qualification.get("qualified", False), "applied": slot_qualification.get("applied", False),
                 "status": slot_qualification.get("status", "qualification_not_reported"),
@@ -1255,7 +1452,7 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
@@ -1267,6 +1464,11 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     recurrent = verified_recurrent_batching_contract(recurrent_batching_contract_path, rows, data_root) if recurrent_batching_contract_path else None
     slot_order = verified_slot_order_contract(slot_order_contract_path, rows, data_root, source_chain_contract_path=recurrent_batching_contract_path) if slot_order_contract_path else None
     host_offload = verified_host_offload_source_contract(host_offload_source_contract_path, rows, data_root) if host_offload_source_contract_path else None
+    if type(tensor_storage_f32_hidden) is not bool or (tensor_storage_f32_hidden and tensor_storage_contract_path is None):
+        raise ValueError("tensor-storage F32 hidden treatment requires its explicit source contract and boolean flag")
+    tensor_storage = verified_tensor_storage_contract(tensor_storage_contract_path, rows, data_root,
+        f32_hidden_storage=tensor_storage_f32_hidden, runtime_binding=host_offload,
+        runtime_source_contract_path=host_offload_source_contract_path) if tensor_storage_contract_path else None
     if iq_panel_assume_default_unset and iq_panel_source_contract_path is None:
         raise ValueError("IQ panel default-unset assumption requires an explicit source contract")
     iq_panel = verified_iq_panel_source_contract(iq_panel_source_contract_path, rows, data_root,
@@ -1284,7 +1486,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -1295,7 +1497,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "selection_sha256": selection_ref["sha256"], "selection_created_utc": selection.get("created_utc"),
         "selected_denominator": len(entries), "native_grid_denominator": selection.get("native_grid_denominator", selection.get("planned_cells", 162)),
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
-        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload,
+        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage,
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -1309,6 +1511,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(slot_order["evidence_refs"])
     if host_offload:
         verify_refs(host_offload["evidence_refs"])
+    if tensor_storage:
+        verify_refs(tensor_storage["evidence_refs"])
     return freeze
 
 
@@ -1330,6 +1534,9 @@ def verify_freeze_references(freeze):
     host_offload = freeze.get("host_offload_source")
     if host_offload:
         refs += host_offload["evidence_refs"]
+    tensor_storage = freeze.get("tensor_storage")
+    if tensor_storage:
+        refs += tensor_storage["evidence_refs"]
     verify_refs(refs)
 
 
@@ -1668,6 +1875,9 @@ def main(argv=None):
     parser.add_argument("--recurrent-batching-contract", type=Path, help="explicit source-derived hybrid batching treatment for a new freeze; baseline default is none")
     parser.add_argument("--slot-order-contract", type=Path, help="source-bound stable slot traversal for a qualified fresh same-arrival cohort; default off")
     parser.add_argument("--host-offload-source-contract", type=Path, help="verified source/build/native-runtime binding for host MUL_MAT CUDA dispatch; initial freeze only, default off")
+    parser.add_argument("--tensor-storage-contract", type=Path, help="source/build-bound indexed GET_ROWS storage traffic; initial freeze only, default off")
+    parser.add_argument("--tensor-storage-f32-hidden", action=argparse.BooleanOptionalAction, default=None,
+        help="separate full F32 hidden-storage ablation; requires tensor-storage contract; default false")
     parser.add_argument("--iq-panel-source-contract", type=Path, help="explicit frozen CPU IQ panel source/build/history contract; default off")
     parser.add_argument("--iq-panel-assume-default-unset", action="store_true", help="explicit conditional ablation for unknown GGML_NO_IQ_PANEL; never proves native dispatch")
     parser.add_argument("--model-snapshot-map", type=Path, help="JSON object mapping native model paths to byte-identical prediction copy paths; initial freeze only")
@@ -1690,11 +1900,13 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract) and (not args.selection or args.resume):
-        parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload contracts are only accepted for an initial selection freeze")
+    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None) and (not args.selection or args.resume):
+        parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage contracts are only accepted for an initial selection freeze")
+    if args.tensor_storage_f32_hidden is not None and args.tensor_storage_contract is None:
+        parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract)
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden))
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

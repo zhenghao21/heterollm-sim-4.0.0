@@ -173,66 +173,65 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 10. 当前版本与证据等级（动态，原位更新）
 
-当前已按用户要求固定native数据，并完成第一轮自动机制优化的131格回归。原生162/162格完整有效，严格六项波动<5%固定选择131格（80.86%）；原始选择与131 raw/894正式请求身份始终未变。v2基线和第一轮混批候选均131/131预测完成、0失败/超时。首轮消除了已发现的prompt饥饿，但三项Engine误差同时<10%仍只有1/131格，各主要分组尚未全部达到目标。
+当前native仍固定为162/162格有效中的131个稳定格（80.86%），131 raw、894正式请求以及选择SHA均保持原样。第五轮完整F32存储和GET_ROWS行访问候选已完成全131格，0失败/超时；这是本循环第2/4次完整评估。6/131格三项Engine误差同时<10%，全部主要分组验收仍失败。
 
-这是已揭示且按native稳定性筛选的开发/回归数据，不是独立盲测或泛化验收。三次单进程重复仅为初筛；31格未入选、14条旧失败attempt及四格用户批准的频率例外均保留。当前工作正补齐fixed slot顺序、当前runtime的算子卸载绑定、F32存储与GET_ROWS物理访存；这些差异尚未闭合，不能以文件身份通过替代准确性证明。
+当前语义候选为round_005/f32_and_gather_r2；完整候选未获准确性晋级。27B显著改善，但小模型GPU低估加重，必须同时保留。当前固定数据已经揭示，只作为开发/回归，不能称独立盲测、跨模型或跨硬件验收。31格未选择、14条历史失败和四格Smol用户批准频率例外保留在原始162分母及证据中。
 
 ## 11. 本轮修改与验证（动态，原位更新）
 
-- 固定native选择仍为SHA `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`，131 raw/894正式请求在各次冻结和评分前后保持一致。旧raw、选择成员、native binary和计时契约未改动。
-- 第一轮混批完成全131，104个格×指标改善、31个退化、258个不变；保留失败和退化。第二轮IQ-only三个锚点因F32资格缺失零应用，未强填dtype。第三轮fresh固定slot顺序完成12配对，源码边界更准确但成本误差仍未过。
-- 第四轮完成源码、编译、链接、模块继承和captured argv/env核验；131格均可绑定当前CUDA规则，物理M阈值32。六个配对锚点0失败：CPU权重27B P512/O128/C2的三项APE为4.49%/4.43%/2.50%；P1536/O128/C1为15.58%/14.85%/2.24%。两个GPU控制场景精确不变。
-- 第四轮仅用来源与静态条件恢复临时卸载，没有使用LLM时延拟合。逐批物理GEMM汇总已单独保留，避免被诊断截断吞掉；P512/O128/C2在模拟内记录7424次卸载，native逐算子实际派发仍未有trace证明。来源工具38项、包装86项、加入计数后105项相关检查通过。
-- 第五轮GET_ROWS/F32存储核心已完成26项结构检查：27B的64行读取348160B packed权重、256B索引、写1310720B F32，总1659136B；整表容量1350860800B仍保留。真实GGUF对照发现模型绑定在graph.attributes.metadata内，首版资格只读顶层导致零应用。已修复嵌套兼容和身份冲突拒收，133项回归通过，正在用真实六组静态图确认应用数并建立独立r2冻结；首版零应用预测保留。解量化仅有工作量、未赋吞吐，不能称完整成本模型。
-- 通用合成矩阵微基准已增加可选算子标记与缓存排除。CPU/GPU冷热四个正确性检查通过，记录原始时间戳；随后1次Nsight profile+1次无profile对照共48调用，24个NVTX区间关联72个GEMM kernel，清扫kernel在区间外，3项解析回归通过。Nsight2024.6.2不支持driver13.4并回退CUPTI12.8，兼容性门未过；GPU未锁频，当前仅结构诊断，不进入性能校准。应用保存的是QPC派生相对纳秒，不伪称绝对tick。没有运行任何新的LLM native测量。
-- 用户新增每轮本地commit+GitHub push已落实：规则提交`de26d58`和已完成后端检查点`715a083`已推送；第四轮`69273ca`已独立提交并推送；第五轮等待修正版冻结对照完成后独立提交。在隔离代码树中143项可移植测试通过，17项明确依赖未上传本机native档案而跳过；本机对应来源测试已另行通过，不能将跳过算通过。
+- 第五轮修正CPU embedding把整词表当作每次访存的错误。GET_ROWS只读实际索引对应的packed行和I32索引，输出F32；整表容量和真实跨设备暂存仍保留，不重复累计路由流量。27B M64逻辑读取/写入总量为1659136B，权重整表容量为1350860800B；解量化工作量已记录但吞吐未标定。
+- 原资格判断漏读graph.attributes.metadata中的GGUF身份，导致首版14锚点零应用。首版结果独立保留；修正读取嵌套身份、拒绝冲突后，六组实际图资格和行访问均生效。14锚点三路消融完成，独立审核126个请求和2399条embedding记录，token、时间、字节守恒通过。
+- 完整131格采用源码要求的F32+行访问。gather-only在部分GPU场景误差较低，但保留错误hidden位宽不能作为优化。与v2/首轮的完整比较含多轮修正；第五轮的独立因果证据来自14锚点三路对照。
+- 本机133项关联回归通过；本轮精确暂存版本在隔离树128 passed、21 skipped，跳过项明确依赖未上传的本地native档案，不能计为通过。本机来源/身份集成检查另已完成。
+- 第六轮物理GPU投影、融合和可选MMQ成本三路已冻结，147项结构检查通过。三个关闭开关的控制格逐请求和聚合时延与第五轮完全一致；批次只增加诊断字段，旧字段完全一致。两路候选正在跑12锚点。历史模型专用include哈希缺失，合同维持conditional和native_dispatch_proven=false。
+- 合成算子trace工具已完成1次profile和1次无profile对照，24 NVTX调用对应72个kernel；Nsight与driver兼容性门失败且没有锁频，不能用于性能标定。没有运行新的LLM native。
+- 每轮commit+GitHub push规则已推送（de26d58）；后端检查点715a083、第四轮69273ca、诊断工具ff9ca8d已推送。本轮完成记录、代码、测试和小型证据一并提交上传；不混入第六轮在途代码或历史前端修改。
 
 ## 12. 当前测量与预测差距（动态，原位更新）
 
-首轮候选131/131预测完成。下表为Engine绝对相对误差中位数，格式为v2基线→首轮混批候选；全部P90、最坏、有符号和毫秒误差见round_001/candidate/errors.0002.json。
+第五轮完整131格Engine APE如下；每格先计算模拟请求中位数，与三个native run中位数的中位数比较。表中均为“中位 / P90 / 最坏”，单位%。
 
-| 模型/部署 | 固定格数 | TTFT中位APE | TPOT中位APE | E2E中位APE |
+| 模型/部署 | 固定格数 | TTFT APE | TPOT APE | E2E APE |
 |---|---:|---:|---:|---:|
-| qwen25 | 17 | 61.90% → 61.90% | 32.37% → 32.37% | 35.40% → 35.40% |
-| qwen35 | 22 | 101.19% → 23.93% | 15.28% → 11.90% | 12.01% → 12.59% |
-| qwen38 | 20 | 802.89% → 746.76% | 35.00% → 15.82% | 153.81% → 190.68% |
-| smollm2 | 23 | 28.78% → 28.78% | 11.46% → 11.46% | 7.41% → 7.41% |
-| tinyllama | 22 | 45.34% → 45.34% | 41.58% → 41.58% | 41.55% → 41.55% |
-| qwen38_gpu | 27 | 274.36% → 64.93% | 48.50% → 52.20% | 101.62% → 56.89% |
+| qwen25 | 17 | 82.65 / 85.01 / 86.74 | 62.45 / 74.23 / 74.95 | 65.38 / 77.66 / 79.93 |
+| qwen35 | 22 | 45.01 / 67.72 / 68.04 | 58.37 / 63.38 / 64.24 | 56.24 / 63.94 / 64.36 |
+| qwen38 | 20 | 7.18 / 37.31 / 42.27 | 20.42 / 26.64 / 32.18 | 10.99 / 20.43 / 28.54 |
+| smollm2 | 23 | 53.26 / 70.50 / 75.63 | 17.93 / 40.42 / 68.32 | 22.70 / 50.77 / 71.78 |
+| tinyllama | 22 | 63.18 / 72.00 / 78.18 | 52.72 / 61.29 / 76.71 | 53.58 / 66.48 / 77.90 |
+| qwen38_gpu | 27 | 24.81 / 60.93 / 69.53 | 7.65 / 16.71 / 33.55 | 11.27 / 27.96 / 46.98 |
 
-三项同时<10%仍只有1/131格。首轮改善104个格×指标，回退31个，其余不变。CPU27B E2E中位与最坏误差扩大，不能被整体平均改善掩盖。源码与时间线已进一步定位prompt槽位顺序偏差、新binary的CUDA临时卸载绑定缺失，以及CPU GET_ROWS整表访存计费疑点。后两项尚未接入或验收，不能当作已修复。
+全部主要分组均未同时通过。三项逐格同时<10%为6/131；相对v2，格×指标改善148、退化245、不变0。相对首轮改善121、退化272、不变0。源语义正确与误差降低必须分别判断。
+
+完整绝对毫秒、有符号、逐run和失败覆盖见round_005/f32_and_gather_r2/report.html及errors.0002.json。CPU权重27B TTFT中位误差由v2的802.89%降至7.18%，但TPOT为20.42%；GPU27B TPOT为7.65%，TTFT为24.81%。小模型GPU普遍低估，下一步检查实际物理算子数、量化路径、kernel及同步成本，不能用场景倍率补齐。
 
 ## 13. 下一轮优化顺序（动态，原位更新）
 
-1. 持续核验固定native和全部raw身份，禁止更换成员、覆盖时延或重写既有预测。
-2. 第四轮六锚点源码绑定已完成并保留；提交代码、测试、任务书和精简证据后推送GitHub，不改动第五轮在途代码。
-3. 第五轮先完成嵌套GGUF资格修复的真实六组静态图检查，再用独立r2冻结进行“仅行访问/F32输出”和“完整F32 hidden存储”两路对照；首版零应用保留，不覆盖、不混分数。
-4. 资格和结构正确后进行下一次完整131格评估；CPU IQ复用仅在当前实际CPU投影具备F32证据时重新检查，历史逃生变量仍unknown。
-5. 第六轮已发现GPU逻辑合并投影、FFN融合条件及量化kernel入口缺少原生映射。按真实物理矩阵建立独立开关，保持真正单矩阵QKV/Q+gate；M1与M>1融合规则分开，MMQ源成本单独消融。不以模型名修时延。
-6. 每轮更新任务书后本地提交并推送；按照剩余最差分组、覆盖率和预定预算决定保留/回滚。固定开发集结果不冒充独立盲测，缺证据或阈值失败如实交付。
+1. 持续核验固定native选择和131 raw，冻结、恢复、评分前后均校验；原生不重测，不改变场景成员和计时口径。
+2. 完成第五轮全131结果记录、本地提交与GitHub推送。保留首版零应用、gather-only消融及所有退化。
+3. 第六轮先完成12锚点物理映射与映射+MMQ的对照，补齐同版本baseline。核查Q/K/V、gate/up、alpha/beta物理调用、M1融合和M>1拆分、F32到F16 KV写入，以及MMQ主矩阵/conversion/fixup的独立计数。
+4. 来源与结构资格通过后，按源语义选择候选做第3/4次全131评估。MMVQ、融合分支和未定价项显式保留；不因误差较低启用身份不合格的旧profile。
+5. 准备独立CUDA launch/同步微基准，计时只在计算资源空闲且硬件状态合格时进行。仅在独立证据和现有预算内考虑第六轮成本子消融；不使用不兼容CUPTI结果标定，也不拟合目标LLM时延。
+6. 每轮原位更新任务书，结构回归、消融和分组评估后提交推送。6轮机制、4次全量、8小时预算不扩大；未达标就保留失败范围与下一项所需证据，不宣称验收通过。
 
-## 14. 冻结与预算状态（动态，原位更新）
+## 14. 冻结、复用与循环预算（动态，原位更新）
 
-- 原primary/supplement_sse_v2不变；GPU正式gpu_extension/formal_readonly/native于20:00完成，4格clock_exception_supplement/native于20:09完成，均在预算内、结束身份通过且时钟/电源已恢复。27B只读副本与原内容同SHA；历史摘要异常保留且原因未证实。
-- native选择：stable_native_dataset.json，创建`2026-09-15T12:14:57.855036+00:00`，SHA256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`，131入选/31排除。
-- v2冻结创建`2026-09-15T12:40:42.682184+00:00`，源码集合SHA `11c1a4f3dd322fb12455e5bb8d1229e994624572bbb519e0d86e3495964620c5`；两个试点和剩余129格均完成，最终manifest为131成功/0失败/0待运行。
-- 本轮sim使用4并发、每格600秒有界进程，run receipts保留预算、筛选试点、全部结果。v1失败历史独立保留，v2没有覆盖或混用。
-- 自动循环状态位于optimization_loop/state.json；上限6轮机制、4次全131评估、8小时（本机2026-09-16 05:27:44前），每格600秒/4并发。预算预先记录，不因结果放宽阈值；首轮12配对锚点及第1/4次全131格候选评估完成，0失败；全部分组准确性目标仍未通过，三项同时<10%仍1/131格。
-- 当前结论是误差目标失败；本轮无跨硬件验证，无独立盲测通过声明。原自动跟进id135不存在，不声称有后台自动接续。
+- native选择SHA固定cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5，选择文件只读；模型、binary、实际argv/env、prompt/output policy、extractor和原始时间戳均不变。
+- 预测输入使用同SHA的27B只读权重副本，映射保存在prediction_model_snapshot_map.json。各轮独立source/freeze/predictions；首版错误或零应用也不覆盖。
+- 自动循环状态在optimization_loop/state.json。预定上限6轮机制、4次全131评估、8小时，截止本机2026-09-16 05:27:44。全量已完成2/4次，第六轮当前12锚点对照；每格600秒、总4个预测worker。
+- 固定数据仅作开发回归；完整预测覆盖100%不等于准确性通过。没有独立盲测或真实跨硬件验收；不以配置中的算力/带宽修改冒充换硬件验证。
+- 每轮提交上传规则已授权；只上传本轮代码、测试、任务书、精简证据，不上传权重、运行库、大型raw/trace或整份冻结源码。
 
 ## 15. 最近结果与交付位置（动态，原位更新）
 
 路径根为artifacts/development/native_long_grid_135_20260915/。
 
-- report_162/report.json、report.html与三张native_variability.svg：原162格、来源、稳定性、全部排除和失败历史。
-- stable_native_dataset.json：不可覆盖的131格选择与逐请求raw/token时间戳引用。
-- stable_simulation_v2/freeze.json、predictions/、manifest.0002.json、errors.0001.json：冻结身份、131预测与分组/逐格/逐run误差。
-- stable_simulation_v2/report.html、report.md、heatmap_ttft/tpot/e2e.svg及PNG：完整测评表与热图；灰格为未选择，不补零。
-- stable_simulation_v2/runtime_build_audit.json、final_verification.json：构建继承链和最终身份/计时核验。
-- stable_simulation_v2/error_trend_audit.json、error_trend_audit.md：独立评分复算结论与固定P/C改变O的TTFT趋势诊断。
-- optimization_loop/state.json、control_profile_audit.json、round_001/recurrent_source_contract.json：当前循环状态、固定数据与资格证据。
-- tools/verify_fixed_native.py --state <optimization_loop/state.json>：每轮原生身份核验入口。
-- stable_simulation_v2/reproduce.ps1 -Output <新目录>：从冻结源码重新运行sim、评分及报告，复用native；入口已做语法检查，不会再次启动原生测量。
+- report_162/report.json、report.html与native_variability.svg：完整162格、稳定性、排除和失败历史；stable_native_dataset.json保存131格固定选择及逐请求原始时间戳引用。
+- stable_simulation_v2与optimization_loop/round_001/candidate：既有两路完整131对照，预测和评分保留。
+- optimization_loop/round_005/full_evaluation.json、decision.json：第五轮完整分组统计、退化、保留决定；repaired_paired_anchor_comparison.json、repaired_output_audit.json为14锚点消融与独立审核。
+- optimization_loop/round_005/f32_and_gather_r2/freeze.json、predictions/、errors.0002.json、report.html、report.md及三热图：第五轮完整冻结、逐请求预测、逐格/逐run误差。
+- optimization_loop/round_006/baseline、physical_mapping、physical_mapping_mmq：第六轮三路冻结；baseline_control_verification.json记录关闭新开关的精确控制核验。
+- optimization_loop/operator_microbench_v2：合成算子工具、静态设备属性和带兼容性失败标记的trace诊断。
+- tools/verify_fixed_native.py --state <optimization_loop/state.json>为固定native核验入口；各候选source/tools/predict_stable_native_dataset.py --output <候选目录> --resume/--score执行复用预测/评分；tools/render_stable_native_evaluation.py生成报告。
 
 ## 16. 历史实验索引（稳定格式，短表）
 

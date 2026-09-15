@@ -8894,6 +8894,52 @@ def summarize_host_gemm_offload(tasks: Sequence[TaskSpec]) -> Mapping[str, objec
     }
 
 
+
+def summarize_tensor_storage(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
+    """Keep indexed row traffic separate from capacity and routed staging."""
+    total = audited = applied = capacity = 0
+    sums = {key: 0 for key in ("selected_weight_read_bytes", "index_read_bytes", "output_write_bytes", "selected_rows", "selected_elements")}
+    reasons: Dict[str, int] = {}
+    staging: Dict[str, int] = {}
+    for task in tasks:
+        meta = task.metadata
+        if meta.get("weight_access_semantics") == "full_weight_staging_before_row_lookup":
+            ident = meta.get("weight_read_invocation_id")
+            amount = meta.get("rank_weight_capacity_bytes", meta.get("rank_weight_bytes"))
+            if isinstance(ident, str) and ident and type(amount) is int and amount >= 0:
+                staging[ident] = max(staging.get(ident, 0), amount)
+        if meta.get("event_kind") != "embedding" or meta.get("phase") not in {"cpu_memory", "gpu_memory"}:
+            continue
+        total += 1
+        audit = meta.get("native_get_rows_storage")
+        if not isinstance(audit, Mapping) or audit.get("requested") is not True:
+            continue
+        audited += 1
+        if audit.get("qualified") is not True:
+            for reason in set(audit.get("reasons", ())):
+                reasons[reason] = reasons.get(reason, 0) + 1
+            continue
+        values = {key: audit.get(key) for key in (*sums, "rank_weight_capacity_bytes")}
+        if any(type(value) is not int or value < 0 for value in values.values()):
+            raise ValueError("qualified embedding storage audit lacks nonnegative byte/row evidence")
+        applied += 1
+        for key in sums:
+            sums[key] += values[key]
+        capacity = max(capacity, values["rank_weight_capacity_bytes"])
+    return {
+        "schema": "heterollm.tensor-storage-coverage/v1",
+        "counting_unit": "physical_embedding_memory_cost_task",
+        "embedding_tasks": total, "audited_tasks": audited, "applied_tasks": applied,
+        **sums, "rank_weight_capacity_bytes": capacity,
+        "full_table_staging_bytes": sum(staging.values()),
+        "staging_counting": "logical full-table bytes once per weight-read invocation; route hops not summed",
+        "capacity_counting": "maximum observed table capacity, never summed per invocation",
+        "uncovered_reason_counts": dict(sorted(reasons.items())),
+        "dequantization_compute_priced": False,
+        "timing_completeness": "logical row traffic only; conversion and cache-line/page effects unpriced",
+    }
+
+
 def _declared_mmq_work(
     scenario: ScenarioConfig,
     workload: GemmWorkload,
@@ -13232,6 +13278,15 @@ def _compile_parallel_embedding(
 ) -> str:
     """Lower one typed embedding lookup for a backbone invocation."""
 
+    from .llama_tensor_storage import (
+        qualify_llama_tensor_storage_contract, resolve_embedding_gather_access,
+    )
+    context = _active_compilation_context(scenario)
+    gather_qualification = (
+        qualify_llama_tensor_storage_contract(scenario) if context is None else
+        context.invariant(("llama_cpp_tensor_storage_qualification",),
+                          lambda: qualify_llama_tensor_storage_contract(scenario))
+    )
     execution_view = _execution_view(scenario)
     embedding_operators = tuple(
         operator
@@ -13329,19 +13384,30 @@ def _compile_parallel_embedding(
             rank.rank,
             logical_tensor,
         )
+        gather = resolve_embedding_gather_access(
+            scenario, token_rows=max(1, token_batch), hidden_width=hidden_size,
+            rank_weight_capacity_bytes=rank_weight_bytes, tp_degree=plan.tp_degree,
+            target_kind=_kind(_component(scenario, target_component_id)),
+            qualification=gather_qualification,
+        )
+        source_get_rows = gather["qualified"]
+        rank_output_bits = 32 if source_get_rows else output_bits
+        index_read_bytes = gather["index_read_bytes"] if source_get_rows else 0
         lookup_bytes = max(
             1,
             int(
                 math.ceil(
                     max(1, token_batch)
                     * hidden_shard.local_size
-                    * output_bits
+                    * rank_output_bits
                     / 8.0
                 )
             ),
         )
         lookup_read_bytes = lookup_bytes
-        if declared_f32_storage:
+        if source_get_rows:
+            lookup_read_bytes = gather["selected_weight_read_bytes"]
+        elif declared_f32_storage:
             vocabulary_size = scenario.model.vocabulary_size
             if vocabulary_size <= 0 or rank_weight_bytes % vocabulary_size:
                 raise ValueError("F32 embedding storage requires exact physical weight row bytes")
@@ -13373,7 +13439,7 @@ def _compile_parallel_embedding(
             "rank_weight_bytes": rank_weight_bytes,
             "rank_weight_capacity_bytes": rank_weight_bytes,
             "weight_read_bytes": (
-                lookup_read_bytes if declared_f32_storage or resident_sparse_lookup else rank_weight_bytes
+                lookup_read_bytes if source_get_rows or declared_f32_storage or resident_sparse_lookup else rank_weight_bytes
             ),
             "lookup_workload_bytes": lookup_bytes,
             "physical_weight_row_bytes": int(
@@ -13385,14 +13451,18 @@ def _compile_parallel_embedding(
             "physical_weight_row_bytes_semantics": (
                 "capacity_derived_not_a_dram_transaction_claim"
             ),
+            "native_get_rows_storage": gather,
             **weight_read_decision.audit_metadata(invocation_id),
         }
-        if declared_f32_storage:
+        if declared_f32_storage or source_get_rows:
             operation_metadata.update(
                 runtime_output_storage_bits=32,
                 lookup_read_bytes=lookup_read_bytes,
                 lookup_write_bytes=lookup_bytes,
-                embedding_dequant_compute="unmodeled_not_added_by_storage_contract",
+                lookup_index_read_bytes=index_read_bytes,
+                embedding_dequant_compute=gather["dequantization_compute"]["status"] if source_get_rows else "unmodeled_not_added_by_storage_contract",
+                embedding_dequant_selected_elements=gather.get("selected_elements") if source_get_rows else None,
+                embedding_traffic_semantics="native_indexed_row_gather" if source_get_rows else "legacy_declared_f32_storage",
             )
         prior = tuple(dependencies)
         rank_local_weight_source = (
@@ -13432,7 +13502,7 @@ def _compile_parallel_embedding(
                 ),
                 "bytes": operation_metadata["weight_read_bytes"],
             }
-            if declared_f32_storage and not compute_local_weight_source:
+            if (declared_f32_storage or source_get_rows) and not compute_local_weight_source:
                 access_metadata.update(
                     bytes=rank_weight_bytes,
                     weight_read_bytes=rank_weight_bytes,
@@ -13469,7 +13539,7 @@ def _compile_parallel_embedding(
                         **({
                             "weight_read_bytes": rank_weight_bytes,
                             "weight_access_semantics": "full_weight_staging_before_row_lookup",
-                        } if declared_f32_storage else {}),
+                        } if declared_f32_storage or source_get_rows else {}),
                         **_weight_transfer_metadata(
                             source_tensor,
                             logical_tensor,
@@ -13487,20 +13557,20 @@ def _compile_parallel_embedding(
             rank,
             OperatorClass.MEMORY,
             MemoryWorkload(
-                # GET_ROWS on CPU streams the resident quantized embedding
-                # backing through DRAM.  Preserve the row lookup write while
-                # charging the physical tensor read once; GPU-local weights
-                # keep the existing row-lookup behavior.
+                # A source-qualified GET_ROWS reads packed rows selected by
+                # I32 IDs and writes F32. Full-table capacity/staging remains
+                # separate above. The legacy whole-table CPU charge stays
+                # unchanged unless the explicit storage contract qualifies.
                 read_bytes=(
+                    lookup_read_bytes + index_read_bytes if source_get_rows else
                     max(lookup_read_bytes, rank_weight_bytes)
-                    if cpu_local_weight_source
-                    else lookup_read_bytes
+                    if cpu_local_weight_source else lookup_read_bytes
                 ),
                 write_bytes=lookup_bytes,
                 working_set_bytes=(
+                    lookup_read_bytes + index_read_bytes + lookup_bytes if source_get_rows else
                     max(lookup_read_bytes, rank_weight_bytes) + lookup_bytes
-                    if cpu_local_weight_source
-                    else lookup_read_bytes + lookup_bytes
+                    if cpu_local_weight_source else lookup_read_bytes + lookup_bytes
                 ),
                 reuse_factor=1.0,
                 streaming_fraction=1.0,
@@ -23719,6 +23789,12 @@ def _serving_lowering_from_builder(
         assumptions_en=manifest_assumptions_en,
         metadata={"cohort_id": cohort_id, "cohort_kind": kind},
     )
+    if scenario.workload.metadata.get("llama_cpp_tensor_storage_contract") is not None:
+        tensor_storage = summarize_tensor_storage(tasks)
+        enriched_extra_metadata["tensor_storage"] = tensor_storage
+        manifest = replace(manifest, metadata={
+            **manifest.metadata, "tensor_storage": tensor_storage,
+        })
     offload_coverage = summarize_host_gemm_offload(tasks)
     enriched_extra_metadata["host_gemm_offload"] = offload_coverage
     manifest = replace(manifest, metadata={

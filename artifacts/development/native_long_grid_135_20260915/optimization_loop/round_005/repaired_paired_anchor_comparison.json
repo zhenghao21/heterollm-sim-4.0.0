@@ -1,0 +1,1898 @@
+{
+  "schema": "paired-three-way-mechanism-anchors/v1",
+  "blind_evaluation": false,
+  "baseline_note": "All 14 same-source repaired baselines match the retained original baseline exactly for every request and primary metric.",
+  "rows": [
+    {
+      "cell_id": "qwen25_p1536_o128_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 72.24490491939872,
+          "native_median_ms": 301.60249999999996,
+          "native_run_medians_ms": [
+            302.822,
+            298.703,
+            301.60249999999996
+          ],
+          "signed_error_ms": -229.35759508060124,
+          "absolute_error_ms": 229.35759508060124,
+          "signed_error_pct": -76.04631761361436,
+          "absolute_percentage_error_pct": 76.04631761361436
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 3.1296563044570136,
+          "native_median_ms": 7.204169291338583,
+          "native_run_medians_ms": [
+            7.2244960629921255,
+            7.163366141732283,
+            7.204169291338583
+          ],
+          "signed_error_ms": -4.074512986881569,
+          "absolute_error_ms": 4.074512986881569,
+          "signed_error_pct": -56.557707378979394,
+          "absolute_percentage_error_pct": 56.557707378979394
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 469.71125558543946,
+          "native_median_ms": 1221.4045,
+          "native_run_medians_ms": [
+            1224.7285000000002,
+            1212.1,
+            1221.4045
+          ],
+          "signed_error_ms": -751.6932444145607,
+          "absolute_error_ms": 751.6932444145607,
+          "signed_error_pct": -61.54334984147845,
+          "absolute_percentage_error_pct": 61.54334984147845
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 38.15215217214062,
+          "native_median_ms": 301.60249999999996,
+          "native_run_medians_ms": [
+            302.822,
+            298.703,
+            301.60249999999996
+          ],
+          "signed_error_ms": -263.45034782785933,
+          "absolute_error_ms": 263.45034782785933,
+          "signed_error_pct": -87.35018702691767,
+          "absolute_percentage_error_pct": 87.35018702691767
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 1.7912013051414601,
+          "native_median_ms": 7.204169291338583,
+          "native_run_medians_ms": [
+            7.2244960629921255,
+            7.163366141732283,
+            7.204169291338583
+          ],
+          "signed_error_ms": -5.412967986197122,
+          "absolute_error_ms": 5.412967986197122,
+          "signed_error_pct": -75.13660169958828,
+          "absolute_percentage_error_pct": 75.13660169958828
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 265.6347179251061,
+          "native_median_ms": 1221.4045,
+          "native_run_medians_ms": [
+            1224.7285000000002,
+            1212.1,
+            1221.4045
+          ],
+          "signed_error_ms": -955.769782074894,
+          "absolute_error_ms": 955.769782074894,
+          "signed_error_pct": -78.25169975015598,
+          "absolute_percentage_error_pct": 78.25169975015598
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 39.982433747364915,
+          "native_median_ms": 301.60249999999996,
+          "native_run_medians_ms": [
+            302.822,
+            298.703,
+            301.60249999999996
+          ],
+          "signed_error_ms": -261.62006625263507,
+          "absolute_error_ms": 261.62006625263507,
+          "signed_error_pct": -86.74333477097673,
+          "absolute_percentage_error_pct": 86.74333477097673
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 1.8265572380436041,
+          "native_median_ms": 7.204169291338583,
+          "native_run_medians_ms": [
+            7.2244960629921255,
+            7.163366141732283,
+            7.204169291338583
+          ],
+          "signed_error_ms": -5.377612053294978,
+          "absolute_error_ms": 5.377612053294978,
+          "signed_error_pct": -74.6458312655196,
+          "absolute_percentage_error_pct": 74.6458312655196
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 271.95520297890266,
+          "native_median_ms": 1221.4045,
+          "native_run_medians_ms": [
+            1224.7285000000002,
+            1212.1,
+            1221.4045
+          ],
+          "signed_error_ms": -949.4492970210974,
+          "absolute_error_ms": 949.4492970210974,
+          "signed_error_pct": -77.73422293933724,
+          "absolute_percentage_error_pct": 77.73422293933724
+        }
+      }
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c2__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 48.99962893866064,
+          "native_median_ms": 86.364,
+          "native_run_medians_ms": [
+            86.362,
+            86.64150000000001,
+            86.364
+          ],
+          "signed_error_ms": -37.36437106133936,
+          "absolute_error_ms": 37.36437106133936,
+          "signed_error_pct": -43.26382643386059,
+          "absolute_percentage_error_pct": 43.26382643386059
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5.287648011002971,
+          "native_median_ms": 5.478516129032258,
+          "native_run_medians_ms": [
+            5.487854838709678,
+            5.478516129032258,
+            5.460274193548387
+          ],
+          "signed_error_ms": -0.19086811802928683,
+          "absolute_error_ms": 0.19086811802928683,
+          "signed_error_pct": -3.4839382331617297,
+          "absolute_percentage_error_pct": 3.4839382331617297
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 212.91671727975273,
+          "native_median_ms": 256.4755,
+          "native_run_medians_ms": [
+            256.4855,
+            256.4755,
+            255.6325
+          ],
+          "signed_error_ms": -43.55878272024728,
+          "absolute_error_ms": 43.55878272024728,
+          "signed_error_pct": -16.983603782913878,
+          "absolute_percentage_error_pct": 16.983603782913878
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 38.992368504822494,
+          "native_median_ms": 86.364,
+          "native_run_medians_ms": [
+            86.362,
+            86.64150000000001,
+            86.364
+          ],
+          "signed_error_ms": -47.37163149517751,
+          "absolute_error_ms": 47.37163149517751,
+          "signed_error_pct": -54.851131831755715,
+          "absolute_percentage_error_pct": 54.851131831755715
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 4.106933919147201,
+          "native_median_ms": 5.478516129032258,
+          "native_run_medians_ms": [
+            5.487854838709678,
+            5.478516129032258,
+            5.460274193548387
+          ],
+          "signed_error_ms": -1.371582209885057,
+          "absolute_error_ms": 1.371582209885057,
+          "signed_error_pct": -25.035651581212694,
+          "absolute_percentage_error_pct": 25.035651581212694
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 166.30731999838574,
+          "native_median_ms": 256.4755,
+          "native_run_medians_ms": [
+            256.4855,
+            256.4755,
+            255.6325
+          ],
+          "signed_error_ms": -90.16818000161427,
+          "absolute_error_ms": 90.16818000161427,
+          "signed_error_pct": -35.15664459241302,
+          "absolute_percentage_error_pct": 35.15664459241302
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 40.21181546484094,
+          "native_median_ms": 86.364,
+          "native_run_medians_ms": [
+            86.362,
+            86.64150000000001,
+            86.364
+          ],
+          "signed_error_ms": -46.152184535159066,
+          "absolute_error_ms": 46.152184535159066,
+          "signed_error_pct": -53.4391465600934,
+          "absolute_percentage_error_pct": 53.4391465600934
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 4.135525648458515,
+          "native_median_ms": 5.478516129032258,
+          "native_run_medians_ms": [
+            5.487854838709678,
+            5.478516129032258,
+            5.460274193548387
+          ],
+          "signed_error_ms": -1.342990480573743,
+          "absolute_error_ms": 1.342990480573743,
+          "signed_error_pct": -24.513763379409326,
+          "absolute_percentage_error_pct": 24.513763379409326
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 168.4131105670549,
+          "native_median_ms": 256.4755,
+          "native_run_medians_ms": [
+            256.4855,
+            256.4755,
+            255.6325
+          ],
+          "signed_error_ms": -88.06238943294511,
+          "absolute_error_ms": 88.06238943294511,
+          "signed_error_pct": -34.33559518665335,
+          "absolute_percentage_error_pct": 34.33559518665335
+        }
+      }
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 9.819974454211566,
+          "native_median_ms": 22.390500000000003,
+          "native_run_medians_ms": [
+            22.2065,
+            22.390500000000003,
+            22.415
+          ],
+          "signed_error_ms": -12.570525545788437,
+          "absolute_error_ms": 12.570525545788437,
+          "signed_error_pct": -56.14222793501009,
+          "absolute_percentage_error_pct": 56.14222793501009
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.580746461833238,
+          "native_median_ms": 4.438889763779528,
+          "native_run_medians_ms": [
+            4.438889763779528,
+            4.435200787401575,
+            4.556944881889764
+          ],
+          "signed_error_ms": -1.8581433019462903,
+          "absolute_error_ms": 1.8581433019462903,
+          "signed_error_pct": -41.86054173069077,
+          "absolute_percentage_error_pct": 41.86054173069077
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 337.46103953847023,
+          "native_median_ms": 588.323,
+          "native_run_medians_ms": [
+            588.323,
+            587.981,
+            603.489
+          ],
+          "signed_error_ms": -250.86196046152975,
+          "absolute_error_ms": 250.86196046152975,
+          "signed_error_pct": -42.64017562827388,
+          "absolute_percentage_error_pct": 42.64017562827388
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 8.250069148579698,
+          "native_median_ms": 22.390500000000003,
+          "native_run_medians_ms": [
+            22.2065,
+            22.390500000000003,
+            22.415
+          ],
+          "signed_error_ms": -14.140430851420305,
+          "absolute_error_ms": 14.140430851420305,
+          "signed_error_pct": -63.15370738223936,
+          "absolute_percentage_error_pct": 63.15370738223936
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.0536479032396837,
+          "native_median_ms": 4.438889763779528,
+          "native_run_medians_ms": [
+            4.438889763779528,
+            4.435200787401575,
+            4.556944881889764
+          ],
+          "signed_error_ms": -2.3852418605398444,
+          "absolute_error_ms": 2.3852418605398444,
+          "signed_error_pct": -53.73510015957033,
+          "absolute_percentage_error_pct": 53.73510015957033
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 269.21974120400284,
+          "native_median_ms": 588.323,
+          "native_run_medians_ms": [
+            588.323,
+            587.981,
+            603.489
+          ],
+          "signed_error_ms": -319.10325879599714,
+          "absolute_error_ms": 319.10325879599714,
+          "signed_error_pct": -54.23946689080609,
+          "absolute_percentage_error_pct": 54.23946689080609
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 8.881114530520444,
+          "native_median_ms": 22.390500000000003,
+          "native_run_medians_ms": [
+            22.2065,
+            22.390500000000003,
+            22.415
+          ],
+          "signed_error_ms": -13.50938546947956,
+          "absolute_error_ms": 13.50938546947956,
+          "signed_error_pct": -60.335345211047354,
+          "absolute_percentage_error_pct": 60.335345211047354
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.0825649730115736,
+          "native_median_ms": 4.438889763779528,
+          "native_run_medians_ms": [
+            4.438889763779528,
+            4.435200787401575,
+            4.556944881889764
+          ],
+          "signed_error_ms": -2.3563247907679545,
+          "absolute_error_ms": 2.3563247907679545,
+          "signed_error_pct": -53.08365190762572,
+          "absolute_percentage_error_pct": 53.08365190762572
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 273.78936961237537,
+          "native_median_ms": 588.323,
+          "native_run_medians_ms": [
+            588.323,
+            587.981,
+            603.489
+          ],
+          "signed_error_ms": -314.5336303876246,
+          "absolute_error_ms": 314.5336303876246,
+          "signed_error_pct": -53.4627458704869,
+          "absolute_percentage_error_pct": 53.4627458704869
+        }
+      }
+    },
+    {
+      "cell_id": "qwen35_p512_o256_c2__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 111.53389701462682,
+          "native_median_ms": 124.2915,
+          "native_run_medians_ms": [
+            125.14500000000001,
+            124.2915,
+            123.642
+          ],
+          "signed_error_ms": -12.757602985373182,
+          "absolute_error_ms": 12.757602985373182,
+          "signed_error_pct": -10.26426021519829,
+          "absolute_percentage_error_pct": 10.26426021519829
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5.118787220590526,
+          "native_median_ms": 5.395905882352942,
+          "native_run_medians_ms": [
+            5.395103921568627,
+            5.395905882352942,
+            5.424339215686275
+          ],
+          "signed_error_ms": -0.2771186617624162,
+          "absolute_error_ms": 0.2771186617624162,
+          "signed_error_pct": -5.135720818791889,
+          "absolute_percentage_error_pct": 5.135720818791889
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 1416.824638265211,
+          "native_median_ms": 1500.8965,
+          "native_run_medians_ms": [
+            1500.8965,
+            1500.2475,
+            1506.8485
+          ],
+          "signed_error_ms": -84.07186173478908,
+          "absolute_error_ms": 84.07186173478908,
+          "signed_error_pct": -5.601442986560971,
+          "absolute_percentage_error_pct": 5.601442986560971
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 42.95899123100121,
+          "native_median_ms": 124.2915,
+          "native_run_medians_ms": [
+            125.14500000000001,
+            124.2915,
+            123.642
+          ],
+          "signed_error_ms": -81.33250876899879,
+          "absolute_error_ms": 81.33250876899879,
+          "signed_error_pct": -65.43690338357715,
+          "absolute_percentage_error_pct": 65.43690338357715
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 1.9648097849740411,
+          "native_median_ms": 5.395905882352942,
+          "native_run_medians_ms": [
+            5.395103921568627,
+            5.395905882352942,
+            5.424339215686275
+          ],
+          "signed_error_ms": -3.4310960973789006,
+          "absolute_error_ms": 3.4310960973789006,
+          "signed_error_pct": -63.587026389769704,
+          "absolute_percentage_error_pct": 63.587026389769704
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 543.9854863993817,
+          "native_median_ms": 1500.8965,
+          "native_run_medians_ms": [
+            1500.8965,
+            1500.2475,
+            1506.8485
+          ],
+          "signed_error_ms": -956.9110136006184,
+          "absolute_error_ms": 956.9110136006184,
+          "signed_error_pct": -63.755962759631885,
+          "absolute_percentage_error_pct": 63.755962759631885
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 68.32676492997932,
+          "native_median_ms": 124.2915,
+          "native_run_medians_ms": [
+            125.14500000000001,
+            124.2915,
+            123.642
+          ],
+          "signed_error_ms": -55.96473507002068,
+          "absolute_error_ms": 55.96473507002068,
+          "signed_error_pct": -45.02700109824138,
+          "absolute_percentage_error_pct": 45.02700109824138
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.1118825525123377,
+          "native_median_ms": 5.395905882352942,
+          "native_run_medians_ms": [
+            5.395103921568627,
+            5.395905882352942,
+            5.424339215686275
+          ],
+          "signed_error_ms": -3.284023329840604,
+          "absolute_error_ms": 3.284023329840604,
+          "signed_error_pct": -60.86139012507333,
+          "absolute_percentage_error_pct": 60.86139012507333
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 606.8568158206253,
+          "native_median_ms": 1500.8965,
+          "native_run_medians_ms": [
+            1500.8965,
+            1500.2475,
+            1506.8485
+          ],
+          "signed_error_ms": -894.0396841793747,
+          "absolute_error_ms": 894.0396841793747,
+          "signed_error_pct": -59.567044375103464,
+          "absolute_percentage_error_pct": 59.567044375103464
+        }
+      }
+    },
+    {
+      "cell_id": "qwen35_p128_o256_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 66.29721692754993,
+          "native_median_ms": 88.27799999999999,
+          "native_run_medians_ms": [
+            88.27799999999999,
+            87.7895,
+            89.0475
+          ],
+          "signed_error_ms": -21.980783072450066,
+          "absolute_error_ms": 21.980783072450066,
+          "signed_error_pct": -24.899502789426663,
+          "absolute_percentage_error_pct": 24.899502789426663
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5.21850369313465,
+          "native_median_ms": 6.475666666666667,
+          "native_run_medians_ms": [
+            6.567364705882353,
+            6.475666666666667,
+            6.465911764705882
+          ],
+          "signed_error_ms": -1.257162973532017,
+          "absolute_error_ms": 1.257162973532017,
+          "signed_error_pct": -19.4136455479284,
+          "absolute_percentage_error_pct": 19.4136455479284
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 1403.5159946963283,
+          "native_median_ms": 1743.76,
+          "native_run_medians_ms": [
+            1767.1815000000001,
+            1743.76,
+            1742.2134999999998
+          ],
+          "signed_error_ms": -340.24400530367166,
+          "absolute_error_ms": 340.24400530367166,
+          "signed_error_pct": -19.512089123713793,
+          "absolute_percentage_error_pct": 19.512089123713793
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 18.931901550756265,
+          "native_median_ms": 88.27799999999999,
+          "native_run_medians_ms": [
+            88.27799999999999,
+            87.7895,
+            89.0475
+          ],
+          "signed_error_ms": -69.34609844924373,
+          "absolute_error_ms": 69.34609844924373,
+          "signed_error_pct": -78.55422466440533,
+          "absolute_percentage_error_pct": 78.55422466440533
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.1022454227211504,
+          "native_median_ms": 6.475666666666667,
+          "native_run_medians_ms": [
+            6.567364705882353,
+            6.475666666666667,
+            6.465911764705882
+          ],
+          "signed_error_ms": -4.373421243945517,
+          "absolute_error_ms": 4.373421243945517,
+          "signed_error_pct": -67.5362316973107,
+          "absolute_percentage_error_pct": 67.5362316973107
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 556.8035580999999,
+          "native_median_ms": 1743.76,
+          "native_run_medians_ms": [
+            1767.1815000000001,
+            1743.76,
+            1742.2134999999998
+          ],
+          "signed_error_ms": -1186.9564419,
+          "absolute_error_ms": 1186.9564419,
+          "signed_error_pct": -68.06879627356976,
+          "absolute_percentage_error_pct": 68.06879627356976
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 28.217053295832677,
+          "native_median_ms": 88.27799999999999,
+          "native_run_medians_ms": [
+            88.27799999999999,
+            87.7895,
+            89.0475
+          ],
+          "signed_error_ms": -60.060946704167314,
+          "absolute_error_ms": 60.060946704167314,
+          "signed_error_pct": -68.03614343796566,
+          "absolute_percentage_error_pct": 68.03614343796566
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.3157250744714313,
+          "native_median_ms": 6.475666666666667,
+          "native_run_medians_ms": [
+            6.567364705882353,
+            6.475666666666667,
+            6.465911764705882
+          ],
+          "signed_error_ms": -4.159941592195236,
+          "absolute_error_ms": 4.159941592195236,
+          "signed_error_pct": -64.23958808146243,
+          "absolute_percentage_error_pct": 64.23958808146243
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 622.1738447119754,
+          "native_median_ms": 1743.76,
+          "native_run_medians_ms": [
+            1767.1815000000001,
+            1743.76,
+            1742.2134999999998
+          ],
+          "signed_error_ms": -1121.5861552880247,
+          "absolute_error_ms": 1121.5861552880247,
+          "signed_error_pct": -64.31998413130388,
+          "absolute_percentage_error_pct": 64.31998413130388
+        }
+      }
+    },
+    {
+      "cell_id": "qwen35_p128_o128_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 66.3013155971106,
+          "native_median_ms": 88.28200000000001,
+          "native_run_medians_ms": [
+            88.28200000000001,
+            88.364,
+            87.751
+          ],
+          "signed_error_ms": -21.98068440288941,
+          "absolute_error_ms": 21.98068440288941,
+          "signed_error_pct": -24.898262842809867,
+          "absolute_percentage_error_pct": 24.898262842809867
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5.387517547326896,
+          "native_median_ms": 6.650799212598425,
+          "native_run_medians_ms": [
+            6.650799212598425,
+            6.611700787401574,
+            6.65086220472441
+          ],
+          "signed_error_ms": -1.2632816652715295,
+          "absolute_error_ms": 1.2632816652715295,
+          "signed_error_pct": -18.99443397537141,
+          "absolute_percentage_error_pct": 18.99443397537141
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 757.0330465788022,
+          "native_median_ms": 936.467,
+          "native_run_medians_ms": [
+            937.1904999999999,
+            932.495,
+            936.467
+          ],
+          "signed_error_ms": -179.43395342119777,
+          "absolute_error_ms": 179.43395342119777,
+          "signed_error_pct": -19.160734272665003,
+          "absolute_percentage_error_pct": 19.160734272665003
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 18.936000220317318,
+          "native_median_ms": 88.28200000000001,
+          "native_run_medians_ms": [
+            88.28200000000001,
+            88.364,
+            87.751
+          ],
+          "signed_error_ms": -69.3459997796827,
+          "absolute_error_ms": 69.3459997796827,
+          "signed_error_pct": -78.55055365723781,
+          "absolute_percentage_error_pct": 78.55055365723781
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.1384130076589773,
+          "native_median_ms": 6.650799212598425,
+          "native_run_medians_ms": [
+            6.650799212598425,
+            6.611700787401574,
+            6.65086220472441
+          ],
+          "signed_error_ms": -4.512386204939448,
+          "absolute_error_ms": 4.512386204939448,
+          "signed_error_pct": -67.84727760825736,
+          "absolute_percentage_error_pct": 67.84727760825736
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 292.3143456822699,
+          "native_median_ms": 936.467,
+          "native_run_medians_ms": [
+            937.1904999999999,
+            932.495,
+            936.467
+          ],
+          "signed_error_ms": -644.1526543177301,
+          "absolute_error_ms": 644.1526543177301,
+          "signed_error_pct": -68.7854088096783,
+          "absolute_percentage_error_pct": 68.7854088096783
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 28.22115196539342,
+          "native_median_ms": 88.28200000000001,
+          "native_run_medians_ms": [
+            88.28200000000001,
+            88.364,
+            87.751
+          ],
+          "signed_error_ms": -60.06084803460659,
+          "absolute_error_ms": 60.06084803460659,
+          "signed_error_pct": -68.03294899821775,
+          "absolute_percentage_error_pct": 68.03294899821775
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2.3788809257582475,
+          "native_median_ms": 6.650799212598425,
+          "native_run_medians_ms": [
+            6.650799212598425,
+            6.611700787401574,
+            6.65086220472441
+          ],
+          "signed_error_ms": -4.271918286840178,
+          "absolute_error_ms": 4.271918286840178,
+          "signed_error_pct": -64.23165322369078,
+          "absolute_percentage_error_pct": 64.23165322369078
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 333.7867466965313,
+          "native_median_ms": 936.467,
+          "native_run_medians_ms": [
+            937.1904999999999,
+            932.495,
+            936.467
+          ],
+          "signed_error_ms": -602.6802533034687,
+          "absolute_error_ms": 602.6802533034687,
+          "signed_error_pct": -64.3568063053443,
+          "absolute_percentage_error_pct": 64.3568063053443
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_p1536_o128_c1__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 26576.66477594786,
+          "native_median_ms": 22995.066,
+          "native_run_medians_ms": [
+            22995.066,
+            22936.359,
+            23051.142
+          ],
+          "signed_error_ms": 3581.5987759478594,
+          "absolute_error_ms": 3581.5987759478594,
+          "signed_error_pct": 15.57550987654421,
+          "absolute_percentage_error_pct": 15.57550987654421
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 217.77356945463578,
+          "native_median_ms": 255.75912598425197,
+          "native_run_medians_ms": [
+            255.7436535433071,
+            255.75912598425197,
+            257.92003937007877
+          ],
+          "signed_error_ms": -37.98555652961619,
+          "absolute_error_ms": 37.98555652961619,
+          "signed_error_pct": -14.85208255362708,
+          "absolute_percentage_error_pct": 14.85208255362708
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 54233.9080966866,
+          "native_median_ms": 55474.51,
+          "native_run_medians_ms": [
+            55474.51,
+            55417.768,
+            55806.987
+          ],
+          "signed_error_ms": -1240.6019033133998,
+          "absolute_error_ms": 1240.6019033133998,
+          "signed_error_pct": -2.2363458520199635,
+          "absolute_percentage_error_pct": 2.2363458520199635
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 26112.889918804947,
+          "native_median_ms": 22995.066,
+          "native_run_medians_ms": [
+            22995.066,
+            22936.359,
+            23051.142
+          ],
+          "signed_error_ms": 3117.8239188049483,
+          "absolute_error_ms": 3117.8239188049483,
+          "signed_error_pct": 13.55866479706972,
+          "absolute_percentage_error_pct": 13.55866479706972
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 198.44470962175527,
+          "native_median_ms": 255.75912598425197,
+          "native_run_medians_ms": [
+            255.7436535433071,
+            255.75912598425197,
+            257.92003937007877
+          ],
+          "signed_error_ms": -57.3144163624967,
+          "absolute_error_ms": 57.3144163624967,
+          "signed_error_pct": -22.40952933426343,
+          "absolute_percentage_error_pct": 22.40952933426343
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 51315.36804076787,
+          "native_median_ms": 55474.51,
+          "native_run_medians_ms": [
+            55474.51,
+            55417.768,
+            55806.987
+          ],
+          "signed_error_ms": -4159.141959232133,
+          "absolute_error_ms": 4159.141959232133,
+          "signed_error_pct": -7.49739287328925,
+          "absolute_percentage_error_pct": 7.49739287328925
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 26112.889918804947,
+          "native_median_ms": 22995.066,
+          "native_run_medians_ms": [
+            22995.066,
+            22936.359,
+            23051.142
+          ],
+          "signed_error_ms": 3117.8239188049483,
+          "absolute_error_ms": 3117.8239188049483,
+          "signed_error_pct": 13.55866479706972,
+          "absolute_percentage_error_pct": 13.55866479706972
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 198.44470962175527,
+          "native_median_ms": 255.75912598425197,
+          "native_run_medians_ms": [
+            255.7436535433071,
+            255.75912598425197,
+            257.92003937007877
+          ],
+          "signed_error_ms": -57.3144163624967,
+          "absolute_error_ms": 57.3144163624967,
+          "signed_error_pct": -22.40952933426343,
+          "absolute_percentage_error_pct": 22.40952933426343
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 51315.36804076787,
+          "native_median_ms": 55474.51,
+          "native_run_medians_ms": [
+            55474.51,
+            55417.768,
+            55806.987
+          ],
+          "signed_error_ms": -4159.141959232133,
+          "absolute_error_ms": 4159.141959232133,
+          "signed_error_pct": -7.49739287328925,
+          "absolute_percentage_error_pct": 7.49739287328925
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c2__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 10654.321563273239,
+          "native_median_ms": 11155.699,
+          "native_run_medians_ms": [
+            11137.351,
+            11155.699,
+            11185.2035
+          ],
+          "signed_error_ms": -501.3774367267615,
+          "absolute_error_ms": 501.3774367267615,
+          "signed_error_pct": -4.494361462484435,
+          "absolute_percentage_error_pct": 4.494361462484435
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 345.4725814785902,
+          "native_median_ms": 330.80639370078745,
+          "native_run_medians_ms": [
+            330.15888582677167,
+            331.23521259842516,
+            330.80639370078745
+          ],
+          "signed_error_ms": 14.666187777802747,
+          "absolute_error_ms": 14.666187777802747,
+          "signed_error_pct": 4.433465633396503,
+          "absolute_percentage_error_pct": 4.433465633396503
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 54529.33941105419,
+          "native_median_ms": 53197.6155,
+          "native_run_medians_ms": [
+            53067.529500000004,
+            53222.570999999996,
+            53197.6155
+          ],
+          "signed_error_ms": 1331.7239110541923,
+          "absolute_error_ms": 1331.7239110541923,
+          "signed_error_pct": 2.5033526381538516,
+          "absolute_percentage_error_pct": 2.5033526381538516
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 10403.085606113516,
+          "native_median_ms": 11155.699,
+          "native_run_medians_ms": [
+            11137.351,
+            11155.699,
+            11185.2035
+          ],
+          "signed_error_ms": -752.6133938864841,
+          "absolute_error_ms": 752.6133938864841,
+          "signed_error_pct": -6.746447657708263,
+          "absolute_percentage_error_pct": 6.746447657708263
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 325.45906742010743,
+          "native_median_ms": 330.80639370078745,
+          "native_run_medians_ms": [
+            330.15888582677167,
+            331.23521259842516,
+            330.80639370078745
+          ],
+          "signed_error_ms": -5.347326280680022,
+          "absolute_error_ms": 5.347326280680022,
+          "signed_error_pct": -1.616451913416356,
+          "absolute_percentage_error_pct": 1.616451913416356
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 51736.38716846716,
+          "native_median_ms": 53197.6155,
+          "native_run_medians_ms": [
+            53067.529500000004,
+            53222.570999999996,
+            53197.6155
+          ],
+          "signed_error_ms": -1461.2283315328386,
+          "absolute_error_ms": 1461.2283315328386,
+          "signed_error_pct": -2.7467929112966325,
+          "absolute_percentage_error_pct": 2.7467929112966325
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 10403.085606113516,
+          "native_median_ms": 11155.699,
+          "native_run_medians_ms": [
+            11137.351,
+            11155.699,
+            11185.2035
+          ],
+          "signed_error_ms": -752.6133938864841,
+          "absolute_error_ms": 752.6133938864841,
+          "signed_error_pct": -6.746447657708263,
+          "absolute_percentage_error_pct": 6.746447657708263
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 325.45906742010743,
+          "native_median_ms": 330.80639370078745,
+          "native_run_medians_ms": [
+            330.15888582677167,
+            331.23521259842516,
+            330.80639370078745
+          ],
+          "signed_error_ms": -5.347326280680022,
+          "absolute_error_ms": 5.347326280680022,
+          "signed_error_pct": -1.616451913416356,
+          "absolute_percentage_error_pct": 1.616451913416356
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 51736.38716846716,
+          "native_median_ms": 53197.6155,
+          "native_run_medians_ms": [
+            53067.529500000004,
+            53222.570999999996,
+            53197.6155
+          ],
+          "signed_error_ms": -1461.2283315328386,
+          "absolute_error_ms": 1461.2283315328386,
+          "signed_error_pct": -2.7467929112966325,
+          "absolute_percentage_error_pct": 2.7467929112966325
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_p128_o256_c1__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2215.768010635249,
+          "native_median_ms": 2345.876,
+          "native_run_medians_ms": [
+            2362.875,
+            2341.9,
+            2345.876
+          ],
+          "signed_error_ms": -130.10798936475112,
+          "absolute_error_ms": 130.10798936475112,
+          "signed_error_pct": -5.546243252616554,
+          "absolute_percentage_error_pct": 5.546243252616554
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 216.3544925316141,
+          "native_median_ms": 252.86439607843138,
+          "native_run_medians_ms": [
+            253.00816862745097,
+            252.86439607843138,
+            252.8275176470588
+          ],
+          "signed_error_ms": -36.50990354681727,
+          "absolute_error_ms": 36.50990354681727,
+          "signed_error_pct": -14.438530735459068,
+          "absolute_percentage_error_pct": 14.438530735459068
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 57386.16360619685,
+          "native_median_ms": 66822.321,
+          "native_run_medians_ms": [
+            66879.958,
+            66822.321,
+            66816.893
+          ],
+          "signed_error_ms": -9436.157393803143,
+          "absolute_error_ms": 9436.157393803143,
+          "signed_error_pct": -14.121265548084066,
+          "absolute_percentage_error_pct": 14.121265548084066
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2177.120105873343,
+          "native_median_ms": 2345.876,
+          "native_run_medians_ms": [
+            2362.875,
+            2341.9,
+            2345.876
+          ],
+          "signed_error_ms": -168.75589412665704,
+          "absolute_error_ms": 168.75589412665704,
+          "signed_error_pct": -7.193726101748644,
+          "absolute_percentage_error_pct": 7.193726101748644
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 197.02563269874244,
+          "native_median_ms": 252.86439607843138,
+          "native_run_medians_ms": [
+            253.00816862745097,
+            252.86439607843138,
+            252.8275176470588
+          ],
+          "signed_error_ms": -55.83876337968894,
+          "absolute_error_ms": 55.83876337968894,
+          "signed_error_pct": -22.082493322772628,
+          "absolute_percentage_error_pct": 22.082493322772628
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 52418.65644405266,
+          "native_median_ms": 66822.321,
+          "native_run_medians_ms": [
+            66879.958,
+            66822.321,
+            66816.893
+          ],
+          "signed_error_ms": -14403.664555947333,
+          "absolute_error_ms": 14403.664555947333,
+          "signed_error_pct": -21.55516950084289,
+          "absolute_percentage_error_pct": 21.55516950084289
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2177.120105873343,
+          "native_median_ms": 2345.876,
+          "native_run_medians_ms": [
+            2362.875,
+            2341.9,
+            2345.876
+          ],
+          "signed_error_ms": -168.75589412665704,
+          "absolute_error_ms": 168.75589412665704,
+          "signed_error_pct": -7.193726101748644,
+          "absolute_percentage_error_pct": 7.193726101748644
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 197.02563269874244,
+          "native_median_ms": 252.86439607843138,
+          "native_run_medians_ms": [
+            253.00816862745097,
+            252.86439607843138,
+            252.8275176470588
+          ],
+          "signed_error_ms": -55.83876337968894,
+          "absolute_error_ms": 55.83876337968894,
+          "signed_error_pct": -22.082493322772628,
+          "absolute_percentage_error_pct": 22.082493322772628
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 52418.65644405266,
+          "native_median_ms": 66822.321,
+          "native_run_medians_ms": [
+            66879.958,
+            66822.321,
+            66816.893
+          ],
+          "signed_error_ms": -14403.664555947333,
+          "absolute_error_ms": 14403.664555947333,
+          "signed_error_pct": -21.55516950084289,
+          "absolute_percentage_error_pct": 21.55516950084289
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_p128_o32_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5334.838361452508,
+          "native_median_ms": 6661.6605,
+          "native_run_medians_ms": [
+            6661.6605,
+            6680.644,
+            6622.272
+          ],
+          "signed_error_ms": -1326.8221385474917,
+          "absolute_error_ms": 1326.8221385474917,
+          "signed_error_pct": -19.91728846805525,
+          "absolute_percentage_error_pct": 19.91728846805525
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 688.131895107844,
+          "native_median_ms": 539.4894193548388,
+          "native_run_medians_ms": [
+            539.4299193548386,
+            539.4894193548388,
+            541.1588387096774
+          ],
+          "signed_error_ms": 148.64247575300521,
+          "absolute_error_ms": 148.64247575300521,
+          "signed_error_pct": 27.55243576987346,
+          "absolute_percentage_error_pct": 27.55243576987346
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 26666.92710979567,
+          "native_median_ms": 24102.67,
+          "native_run_medians_ms": [
+            24094.902000000002,
+            24118.942000000003,
+            24102.67
+          ],
+          "signed_error_ms": 2564.2571097956716,
+          "absolute_error_ms": 2564.2571097956716,
+          "signed_error_pct": 10.638892329338084,
+          "absolute_percentage_error_pct": 10.638892329338084
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5189.886284529452,
+          "native_median_ms": 6661.6605,
+          "native_run_medians_ms": [
+            6661.6605,
+            6680.644,
+            6622.272
+          ],
+          "signed_error_ms": -1471.7742154705484,
+          "absolute_error_ms": 1471.7742154705484,
+          "signed_error_pct": -22.09320357094974,
+          "absolute_percentage_error_pct": 22.09320357094974
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 666.6212811263833,
+          "native_median_ms": 539.4894193548388,
+          "native_run_medians_ms": [
+            539.4299193548386,
+            539.4894193548388,
+            541.1588387096774
+          ],
+          "signed_error_ms": 127.13186177154455,
+          "absolute_error_ms": 127.13186177154455,
+          "signed_error_pct": 23.565218743970586,
+          "absolute_percentage_error_pct": 23.565218743970586
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 25855.14599944734,
+          "native_median_ms": 24102.67,
+          "native_run_medians_ms": [
+            24094.902000000002,
+            24118.942000000003,
+            24102.67
+          ],
+          "signed_error_ms": 1752.4759994473425,
+          "absolute_error_ms": 1752.4759994473425,
+          "signed_error_pct": 7.270879116078603,
+          "absolute_percentage_error_pct": 7.270879116078603
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5189.886284529452,
+          "native_median_ms": 6661.6605,
+          "native_run_medians_ms": [
+            6661.6605,
+            6680.644,
+            6622.272
+          ],
+          "signed_error_ms": -1471.7742154705484,
+          "absolute_error_ms": 1471.7742154705484,
+          "signed_error_pct": -22.09320357094974,
+          "absolute_percentage_error_pct": 22.09320357094974
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 666.6212811263833,
+          "native_median_ms": 539.4894193548388,
+          "native_run_medians_ms": [
+            539.4299193548386,
+            539.4894193548388,
+            541.1588387096774
+          ],
+          "signed_error_ms": 127.13186177154455,
+          "absolute_error_ms": 127.13186177154455,
+          "signed_error_pct": 23.565218743970586,
+          "absolute_percentage_error_pct": 23.565218743970586
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 25855.14599944734,
+          "native_median_ms": 24102.67,
+          "native_run_medians_ms": [
+            24094.902000000002,
+            24118.942000000003,
+            24102.67
+          ],
+          "signed_error_ms": 1752.4759994473425,
+          "absolute_error_ms": 1752.4759994473425,
+          "signed_error_pct": 7.270879116078603,
+          "absolute_percentage_error_pct": 7.270879116078603
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 621.2247060512486,
+          "native_median_ms": 556.5605,
+          "native_run_medians_ms": [
+            556.5605,
+            558.656,
+            554.8755
+          ],
+          "signed_error_ms": 64.66420605124858,
+          "absolute_error_ms": 64.66420605124858,
+          "signed_error_pct": 11.618540311654991,
+          "absolute_percentage_error_pct": 11.618540311654991
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 50.581263155738895,
+          "native_median_ms": 37.64758267716535,
+          "native_run_medians_ms": [
+            37.64758267716535,
+            37.781897637795275,
+            37.637822834645675
+          ],
+          "signed_error_ms": 12.933680478573542,
+          "absolute_error_ms": 12.933680478573542,
+          "signed_error_pct": 34.354610731536546,
+          "absolute_percentage_error_pct": 34.354610731536546
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 7112.583753929694,
+          "native_median_ms": 5373.049,
+          "native_run_medians_ms": [
+            5373.049,
+            5391.4105,
+            5372.6145
+          ],
+          "signed_error_ms": 1739.5347539296936,
+          "absolute_error_ms": 1739.5347539296936,
+          "signed_error_pct": 32.37518872300799,
+          "absolute_percentage_error_pct": 32.37518872300799
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 318.13874262552736,
+          "native_median_ms": 556.5605,
+          "native_run_medians_ms": [
+            556.5605,
+            558.656,
+            554.8755
+          ],
+          "signed_error_ms": -238.4217573744727,
+          "absolute_error_ms": 238.4217573744727,
+          "signed_error_pct": -42.83842589879675,
+          "absolute_percentage_error_pct": 42.83842589879675
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 29.55264504134194,
+          "native_median_ms": 37.64758267716535,
+          "native_run_medians_ms": [
+            37.64758267716535,
+            37.781897637795275,
+            37.637822834645675
+          ],
+          "signed_error_ms": -8.094937635823413,
+          "absolute_error_ms": 8.094937635823413,
+          "signed_error_pct": -21.501878899473912,
+          "absolute_percentage_error_pct": 21.501878899473912
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 4109.7335642446415,
+          "native_median_ms": 5373.049,
+          "native_run_medians_ms": [
+            5373.049,
+            5391.4105,
+            5372.6145
+          ],
+          "signed_error_ms": -1263.3154357553585,
+          "absolute_error_ms": 1263.3154357553585,
+          "signed_error_pct": -23.512077328074962,
+          "absolute_percentage_error_pct": 23.512077328074962
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 390.87850127805274,
+          "native_median_ms": 556.5605,
+          "native_run_medians_ms": [
+            556.5605,
+            558.656,
+            554.8755
+          ],
+          "signed_error_ms": -165.6819987219473,
+          "absolute_error_ms": 165.6819987219473,
+          "signed_error_pct": -29.768910787227497,
+          "absolute_percentage_error_pct": 29.768910787227497
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 31.42260186137598,
+          "native_median_ms": 37.64758267716535,
+          "native_run_medians_ms": [
+            37.64758267716535,
+            37.781897637795275,
+            37.637822834645675
+          ],
+          "signed_error_ms": -6.2249808157893725,
+          "absolute_error_ms": 6.2249808157893725,
+          "signed_error_pct": -16.534875211430382,
+          "absolute_percentage_error_pct": 16.534875211430382
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 4433.1653009464735,
+          "native_median_ms": 5373.049,
+          "native_run_medians_ms": [
+            5373.049,
+            5391.4105,
+            5372.6145
+          ],
+          "signed_error_ms": -939.8836990535265,
+          "absolute_error_ms": 939.8836990535265,
+          "signed_error_pct": -17.492557746142396,
+          "absolute_percentage_error_pct": 17.492557746142396
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o256_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 621.2247060512486,
+          "native_median_ms": 558.711,
+          "native_run_medians_ms": [
+            555.7570000000001,
+            560.7919999999999,
+            558.711
+          ],
+          "signed_error_ms": 62.51370605124862,
+          "absolute_error_ms": 62.51370605124862,
+          "signed_error_pct": 11.188916282523275,
+          "absolute_percentage_error_pct": 11.188916282523275
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 48.985342489247955,
+          "native_median_ms": 36.70083725490196,
+          "native_run_medians_ms": [
+            36.68423137254902,
+            36.70083725490196,
+            36.70709607843138
+          ],
+          "signed_error_ms": 12.284505234345993,
+          "absolute_error_ms": 12.284505234345993,
+          "signed_error_pct": 33.47200269308627,
+          "absolute_percentage_error_pct": 33.47200269308627
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 13180.025667909085,
+          "native_median_ms": 9956.136999999999,
+          "native_run_medians_ms": [
+            9949.774,
+            9956.590499999998,
+            9956.136999999999
+          ],
+          "signed_error_ms": 3223.8886679090865,
+          "absolute_error_ms": 3223.8886679090865,
+          "signed_error_pct": 32.3809191045592,
+          "absolute_percentage_error_pct": 32.3809191045592
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 318.13874262552736,
+          "native_median_ms": 558.711,
+          "native_run_medians_ms": [
+            555.7570000000001,
+            560.7919999999999,
+            558.711
+          ],
+          "signed_error_ms": -240.57225737447266,
+          "absolute_error_ms": 240.57225737447266,
+          "signed_error_pct": -43.05844298295051,
+          "absolute_percentage_error_pct": 43.05844298295051
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 28.81034786677641,
+          "native_median_ms": 36.70083725490196,
+          "native_run_medians_ms": [
+            36.68423137254902,
+            36.70083725490196,
+            36.70709607843138
+          ],
+          "signed_error_ms": -7.890489388125552,
+          "absolute_error_ms": 7.890489388125552,
+          "signed_error_pct": -21.499480606730998,
+          "absolute_percentage_error_pct": 21.499480606730998
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 7703.186350022201,
+          "native_median_ms": 9956.136999999999,
+          "native_run_medians_ms": [
+            9949.774,
+            9956.590499999998,
+            9956.136999999999
+          ],
+          "signed_error_ms": -2252.950649977798,
+          "absolute_error_ms": 2252.950649977798,
+          "signed_error_pct": -22.628763043113995,
+          "absolute_percentage_error_pct": 22.628763043113995
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 390.87850127805274,
+          "native_median_ms": 558.711,
+          "native_run_medians_ms": [
+            555.7570000000001,
+            560.7919999999999,
+            558.711
+          ],
+          "signed_error_ms": -167.83249872194727,
+          "absolute_error_ms": 167.83249872194727,
+          "signed_error_pct": -30.039232934727842,
+          "absolute_percentage_error_pct": 30.039232934727842
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 30.470647164638702,
+          "native_median_ms": 36.70083725490196,
+          "native_run_medians_ms": [
+            36.68423137254902,
+            36.70083725490196,
+            36.70709607843138
+          ],
+          "signed_error_ms": -6.23019009026326,
+          "absolute_error_ms": 6.23019009026326,
+          "signed_error_pct": -16.975607523588913,
+          "absolute_percentage_error_pct": 16.975607523588913
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 8212.509891534592,
+          "native_median_ms": 9956.136999999999,
+          "native_run_medians_ms": [
+            9949.774,
+            9956.590499999998,
+            9956.136999999999
+          ],
+          "signed_error_ms": -1743.6271084654072,
+          "absolute_error_ms": 1743.6271084654072,
+          "signed_error_pct": -17.513088745819864,
+          "absolute_percentage_error_pct": 17.513088745819864
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o32_c2__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 1199.9676462520513,
+          "native_median_ms": 802.173,
+          "native_run_medians_ms": [
+            801.3544999999999,
+            802.173,
+            804.6865
+          ],
+          "signed_error_ms": 397.7946462520513,
+          "absolute_error_ms": 397.7946462520513,
+          "signed_error_pct": 49.58963294103034,
+          "absolute_percentage_error_pct": 49.58963294103034
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 65.62017082339374,
+          "native_median_ms": 36.59375806451613,
+          "native_run_medians_ms": [
+            36.59375806451613,
+            36.55298387096774,
+            36.64517741935484
+          ],
+          "signed_error_ms": 29.026412758877605,
+          "absolute_error_ms": 29.026412758877605,
+          "signed_error_pct": 79.32066640355161,
+          "absolute_percentage_error_pct": 79.32066640355161
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 3234.1929417772567,
+          "native_median_ms": 1935.761,
+          "native_run_medians_ms": [
+            1935.761,
+            1935.3155,
+            1940.687
+          ],
+          "signed_error_ms": 1298.4319417772567,
+          "absolute_error_ms": 1298.4319417772567,
+          "signed_error_pct": 67.07604615328322,
+          "absolute_percentage_error_pct": 67.07604615328322
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 755.7665148304973,
+          "native_median_ms": 802.173,
+          "native_run_medians_ms": [
+            801.3544999999999,
+            802.173,
+            804.6865
+          ],
+          "signed_error_ms": -46.40648516950273,
+          "absolute_error_ms": 46.40648516950273,
+          "signed_error_pct": -5.785096876796244,
+          "absolute_percentage_error_pct": 5.785096876796244
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 37.26468383350431,
+          "native_median_ms": 36.59375806451613,
+          "native_run_medians_ms": [
+            36.59375806451613,
+            36.55298387096774,
+            36.64517741935484
+          ],
+          "signed_error_ms": 0.6709257689881767,
+          "absolute_error_ms": 0.6709257689881767,
+          "signed_error_pct": 1.833443200354853,
+          "absolute_percentage_error_pct": 1.833443200354853
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 1910.9717136691306,
+          "native_median_ms": 1935.761,
+          "native_run_medians_ms": [
+            1935.761,
+            1935.3155,
+            1940.687
+          ],
+          "signed_error_ms": -24.789286330869345,
+          "absolute_error_ms": 24.789286330869345,
+          "signed_error_pct": -1.2805964336955515,
+          "absolute_percentage_error_pct": 1.2805964336955515
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 952.9265836130194,
+          "native_median_ms": 802.173,
+          "native_run_medians_ms": [
+            801.3544999999999,
+            802.173,
+            804.6865
+          ],
+          "signed_error_ms": 150.75358361301937,
+          "absolute_error_ms": 150.75358361301937,
+          "signed_error_pct": 18.793151055074077,
+          "absolute_percentage_error_pct": 18.793151055074077
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 41.38561459651011,
+          "native_median_ms": 36.59375806451613,
+          "native_run_medians_ms": [
+            36.59375806451613,
+            36.55298387096774,
+            36.64517741935484
+          ],
+          "signed_error_ms": 4.791856531993979,
+          "absolute_error_ms": 4.791856531993979,
+          "signed_error_pct": 13.094737423649576,
+          "absolute_percentage_error_pct": 13.094737423649576
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2235.880636104833,
+          "native_median_ms": 1935.761,
+          "native_run_medians_ms": [
+            1935.761,
+            1935.3155,
+            1940.687
+          ],
+          "signed_error_ms": 300.1196361048328,
+          "absolute_error_ms": 300.1196361048328,
+          "signed_error_pct": 15.503961289892338,
+          "absolute_percentage_error_pct": 15.503961289892338
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+      "baseline": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 4762.262812224424,
+          "native_median_ms": 2763.223,
+          "native_run_medians_ms": [
+            2763.0294999999996,
+            2763.223,
+            2766.455
+          ],
+          "signed_error_ms": 1999.0398122244242,
+          "absolute_error_ms": 1999.0398122244242,
+          "signed_error_pct": 72.34449815394646,
+          "absolute_percentage_error_pct": 72.34449815394646
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 173.05168018992813,
+          "native_median_ms": 90.45924193548387,
+          "native_run_medians_ms": [
+            90.45924193548387,
+            90.43743548387097,
+            90.60488709677419
+          ],
+          "signed_error_ms": 82.59243825444426,
+          "absolute_error_ms": 82.59243825444426,
+          "signed_error_pct": 91.30348263735145,
+          "absolute_percentage_error_pct": 91.30348263735145
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 8934.206564120337,
+          "native_median_ms": 5086.8845,
+          "native_run_medians_ms": [
+            5083.870000000001,
+            5086.8845,
+            5092.9529999999995
+          ],
+          "signed_error_ms": 3847.322064120337,
+          "absolute_error_ms": 3847.322064120337,
+          "signed_error_pct": 75.63218830937359,
+          "absolute_percentage_error_pct": 75.63218830937359
+        }
+      },
+      "gather_only": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 2637.0567623887964,
+          "native_median_ms": 2763.223,
+          "native_run_medians_ms": [
+            2763.0294999999996,
+            2763.223,
+            2766.455
+          ],
+          "signed_error_ms": -126.16623761120354,
+          "absolute_error_ms": 126.16623761120354,
+          "signed_error_pct": -4.565908636805771,
+          "absolute_percentage_error_pct": 4.565908636805771
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 96.61682051610813,
+          "native_median_ms": 90.45924193548387,
+          "native_run_medians_ms": [
+            90.45924193548387,
+            90.43743548387097,
+            90.60488709677419
+          ],
+          "signed_error_ms": 6.157578580624261,
+          "absolute_error_ms": 6.157578580624261,
+          "signed_error_pct": 6.807019878649752,
+          "absolute_percentage_error_pct": 6.807019878649752
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 5255.477059940906,
+          "native_median_ms": 5086.8845,
+          "native_run_medians_ms": [
+            5083.870000000001,
+            5086.8845,
+            5092.9529999999995
+          ],
+          "signed_error_ms": 168.59255994090563,
+          "absolute_error_ms": 168.59255994090563,
+          "signed_error_pct": 3.3142596404716014,
+          "absolute_percentage_error_pct": 3.3142596404716014
+        }
+      },
+      "f32_and_gather": {
+        "engine_ttft_ms": {
+          "status": "scored",
+          "simulator_median_ms": 3322.3514320722625,
+          "native_median_ms": 2763.223,
+          "native_run_medians_ms": [
+            2763.0294999999996,
+            2763.223,
+            2766.455
+          ],
+          "signed_error_ms": 559.1284320722625,
+          "absolute_error_ms": 559.1284320722625,
+          "signed_error_pct": 20.234647441493593,
+          "absolute_percentage_error_pct": 20.234647441493593
+        },
+        "engine_tpot_ms": {
+          "status": "scored",
+          "simulator_median_ms": 120.8070873775321,
+          "native_median_ms": 90.45924193548387,
+          "native_run_medians_ms": [
+            90.45924193548387,
+            90.43743548387097,
+            90.60488709677419
+          ],
+          "signed_error_ms": 30.347845442048225,
+          "absolute_error_ms": 30.347845442048225,
+          "signed_error_pct": 33.548640020322644,
+          "absolute_percentage_error_pct": 33.548640020322644
+        },
+        "engine_e2e_ms": {
+          "status": "scored",
+          "simulator_median_ms": 6610.91350346904,
+          "native_median_ms": 5086.8845,
+          "native_run_medians_ms": [
+            5083.870000000001,
+            5086.8845,
+            5092.9529999999995
+          ],
+          "signed_error_ms": 1524.0290034690397,
+          "absolute_error_ms": 1524.0290034690397,
+          "signed_error_pct": 29.9599686894609,
+          "absolute_percentage_error_pct": 29.9599686894609
+        }
+      }
+    }
+  ],
+  "same_source_baseline_controls_complete": 14
+}

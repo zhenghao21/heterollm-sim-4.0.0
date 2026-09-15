@@ -1206,3 +1206,182 @@ def test_actual_host_dispatch_requires_observation_and_absence_is_unknown():
     assert adapter.retained_dispatch_summary(empty)["host_gemm_offload"]["actual_cpu_to_gpu_offload"] is False
     empty.serving.scheduler_metrics.total_batches = 3
     assert adapter.retained_dispatch_summary(empty)["host_gemm_offload"]["actual_cpu_to_gpu_offload"] is None
+
+
+def fake_tensor_storage_proof(tmp_path, *, f32=False):
+    contract = {"schema": "test-tensor-storage-source", "get_rows_access": "selected_packed_rows_per_index"}
+    ref = document(tmp_path / "tensor_storage_test_contract.json", contract)
+    return {"contract": contract, "contract_ref": ref, "evidence_refs": [ref],
+        "f32_hidden_storage_requested": f32, "native_latency_used": False,
+        "limits": ["row conversion unpriced", "cache lines and write allocation unpriced"]}
+
+
+@pytest.mark.parametrize("f32", [False, True])
+def test_tensor_storage_freeze_requires_explicit_separate_hidden_flag(tmp_path, monkeypatch, f32):
+    path, _, _, calls = fixture(tmp_path, monkeypatch)
+    proof = fake_tensor_storage_proof(tmp_path, f32=f32)
+    observed = []
+    def verify(*args, **kwargs):
+        observed.append(kwargs)
+        return proof
+    monkeypatch.setattr(adapter, "verified_tensor_storage_contract", verify)
+    frozen = adapter.freeze_selection(path, tmp_path / "out", data_root=tmp_path,
+        tensor_storage_contract_path=Path(proof["contract_ref"]["path"]), tensor_storage_f32_hidden=f32)
+    inputs = frozen["cells"][0]["static_inputs"]
+    assert inputs["tensor_storage_contract"] == proof["contract"]
+    assert inputs["tensor_storage_f32_hidden"] is f32
+    assert observed[0]["f32_hidden_storage"] is f32
+    assert frozen["host_offload_source"] is None
+    assert inputs["host_offload_evidence"] is None
+    assert inputs["cpu_iq_panel_reuse"] is None and inputs["slot_order_contract"] is None
+    assert not calls["run"]
+    adapter.verify_freeze_references(frozen)
+
+
+def test_tensor_storage_default_off_and_f32_alone_is_rejected_before_freeze(tmp_path, monkeypatch):
+    path, selection, row, calls = fixture(tmp_path, monkeypatch)
+    inputs = adapter.static_inputs(row, selection, tmp_path)
+    assert inputs["tensor_storage_contract"] is None and inputs["tensor_storage_f32_hidden"] is False
+    assert adapter.apply_tensor_storage_static_contract(Scenario(), inputs) == Scenario()
+    with pytest.raises(ValueError, match="requires its explicit source contract"):
+        adapter.freeze_selection(path, tmp_path / "out", data_root=tmp_path, tensor_storage_f32_hidden=True)
+    assert not (tmp_path / "out").exists() and not calls["run"]
+
+
+@pytest.mark.parametrize("args", [["--tensor-storage-contract", "unread.json"],
+    ["--tensor-storage-f32-hidden"], ["--no-tensor-storage-f32-hidden"]])
+def test_tensor_storage_treatments_cannot_change_during_resume(tmp_path, monkeypatch, args):
+    path, _, _, _ = fixture(tmp_path, monkeypatch)
+    output = tmp_path / "out"
+    adapter.freeze_selection(path, output, data_root=tmp_path)
+    before = adapter.grid.file_ref(output / "freeze.json")
+    with pytest.raises(SystemExit):
+        adapter.main(["--output", str(output), "--resume", *args])
+    assert adapter.grid.file_ref(output / "freeze.json") == before
+
+
+@pytest.mark.parametrize("flag", ["--tensor-storage-f32-hidden", "--no-tensor-storage-f32-hidden"])
+def test_explicit_hidden_cli_option_requires_tensor_storage_contract(tmp_path, monkeypatch, flag):
+    path, _, _, _ = fixture(tmp_path, monkeypatch)
+    with pytest.raises(SystemExit):
+        adapter.main(["--selection", str(path), "--output", str(tmp_path / "out"), "--freeze-only", flag])
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("f32", [False, True])
+def test_tensor_storage_uses_core_apply_before_final_replanning(tmp_path, monkeypatch, f32):
+    from dataclasses import replace
+    from heterollm_sim import llama_tensor_storage
+    _, selection, row, calls = fixture(tmp_path, monkeypatch)
+    proof = fake_tensor_storage_proof(tmp_path, f32=f32)
+    inputs = adapter.static_inputs(row, selection, tmp_path, tensor_storage=proof)
+    def apply(case, contract, *, f32_hidden_storage):
+        assert contract is proof["contract"] and f32_hidden_storage is f32
+        return replace(case, workload=Metadata(metadata={"llama_cpp_tensor_storage": {
+            "qualified": True, "status": "enabled", "reasons": [],
+            "f32_hidden_storage_requested": f32, "timing_completeness": "row conversion unpriced"}}))
+    monkeypatch.setattr(llama_tensor_storage, "apply_llama_tensor_storage_contract", apply)
+    prediction = adapter.predict_cell(inputs)
+    assert calls["replan"][-1].workload.metadata["llama_cpp_tensor_storage"]["qualified"] is True
+    assert prediction["dispatch_qualification"]["tensor_storage"]["f32_hidden_storage_requested"] is f32
+    assert prediction["dispatch_qualification"]["tensor_storage"]["qualified"] is True
+    assert prediction["dispatch_qualification"]["storage"]["f32_hidden_storage"] is None
+    assert prediction["dispatch_summary"]["tensor_storage"]["applied_tasks"] is None
+    assert prediction["input_identity"]["tensor_storage_binding"] == proof
+
+
+@pytest.mark.parametrize("f32", [False, True])
+def test_tensor_storage_actual_row_bytes_and_capacity_remain_distinct(f32):
+    from tests import test_llama_tensor_storage as storage_tests
+    contract = storage_tests.contract.__wrapped__()
+    case = storage_tests.scenario()
+    proof = {"contract": contract, "f32_hidden_storage_requested": f32}
+    result = adapter.apply_tensor_storage_static_contract(case, {"tensor_storage_contract": contract,
+        "tensor_storage_evidence": proof, "tensor_storage_f32_hidden": f32})
+    task = storage_tests.compute_task(storage_tests.embedding_tasks(result))
+    assert task.metadata["rank_weight_capacity_bytes"] == 340000
+    assert task.metadata["weight_read_bytes"] == 2176
+    assert task.metadata["lookup_index_read_bytes"] == 256
+    assert task.metadata["lookup_write_bytes"] == 8192
+    assert task.metadata["embedding_dequant_compute"] == "unmodeled_selected_rows_only"
+    assert bool(result.workload.metadata.get("llama_cpp_f32_hidden_storage")) is f32
+    assert result.placement == case.placement
+
+
+def test_tensor_storage_flag_mismatch_cannot_bypass_frozen_treatment(tmp_path):
+    proof = fake_tensor_storage_proof(tmp_path)
+    with pytest.raises(ValueError, match="flag differs from verified evidence"):
+        adapter.apply_tensor_storage_static_contract(Scenario(), {"tensor_storage_evidence": proof,
+            "tensor_storage_contract": proof["contract"], "tensor_storage_f32_hidden": True})
+
+
+def test_tensor_storage_summary_preserves_explicit_bytes_and_does_not_sum_table_capacity():
+    result = dispatch_result(total=2)
+    ledger = {"embedding_tasks": 1, "audited_tasks": 1, "applied_tasks": 1,
+        "selected_weight_read_bytes": 2176, "index_read_bytes": 256, "output_write_bytes": 8192,
+        "rank_weight_capacity_bytes": 340000, "selected_rows": 64, "selected_elements": 2048,
+        "full_table_staging_bytes": 0, "uncovered_reason_counts": {"dequantization_compute_unpriced": 1}}
+    result.serving.batches[0].cost.metadata["tensor_storage"] = ledger
+    result.serving.batches = result.serving.batches * 2
+    batch = adapter.batch_schedule(result, [])["batches"][0]
+    assert batch["tensor_storage"] == ledger
+    assert "tensor_storage" not in batch["cost_metadata"]
+    summary = adapter.retained_dispatch_summary(result)["tensor_storage"]
+    assert summary["applied_tasks"] == 2
+    assert summary["selected_weight_read_bytes"] == 4352
+    assert summary["index_read_bytes"] == 512
+    assert summary["output_write_bytes"] == 16384
+    assert summary["maximum_observed_rank_weight_capacity_bytes"] == 340000
+    assert "rank_weight_capacity_bytes" not in summary
+    assert summary["uncovered_reason_counts"] == {"dequantization_compute_unpriced": 2}
+
+
+@pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
+def test_recorded_tensor_storage_contract_rederives_all_four_current_module_paths():
+    base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
+    source_path = base / "optimization_loop/round_005/tensor_storage_source_contract.json"
+    if not source_path.exists():
+        pytest.skip("recorded tensor storage contract unavailable")
+    selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
+    rows = adapter.selected_rows(selection)
+    selected = [next(row for row in rows if row["cell_id"] == "qwen38_p1536_o128_c1__fixed_runtime"),
+        next(row for row in rows if row["model_key"] == "qwen38_gpu")]
+    proof = adapter.verified_tensor_storage_contract(source_path, selected, adapter.ROOT)
+    roles = proof["source_compilation"]
+    assert set(roles) == {"operators", "cpu_get_rows", "cuda_get_rows", "input_graph"}
+    assert "recompiled" in roles["cpu_get_rows"]["binding"]
+    assert "native-thread-control" in roles["cpu_get_rows"]["compiled_source"]
+    assert "explicitly_reused" in roles["input_graph"]["binding"]
+    assert "explicitly_reused" in roles["cuda_get_rows"]["binding"]
+    assert proof["f32_hidden_storage_requested"] is False
+    assert proof["host_offload_treatment_enabled_by_this_validation"] is False
+    assert proof["native_dispatch_proven"] is False and proof["native_latency_used"] is False
+
+
+@pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
+def test_recorded_tensor_storage_rejects_forged_rule_even_if_document_is_resealed(tmp_path):
+    base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
+    source = base / "optimization_loop/round_005/tensor_storage_source_contract.json"
+    if not source.exists():
+        pytest.skip("recorded tensor storage contract unavailable")
+    contract, _ = adapter.grid.read_document(source)
+    contract["get_rows_access"] = "whole_table_always"
+    contract["content_sha256"] = adapter.grid.stable_hash(contract)
+    changed = tmp_path / "changed-storage-contract.json"
+    document(changed, contract)
+    with pytest.raises(ValueError, match="differs from re-derived source rules"):
+        adapter.verified_tensor_storage_contract(changed, [], adapter.ROOT)
+
+
+@pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
+def test_recorded_tensor_storage_rejects_selected_cpu_module_mismatch():
+    base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
+    source = base / "optimization_loop/round_005/tensor_storage_source_contract.json"
+    if not source.exists():
+        pytest.skip("recorded tensor storage contract unavailable")
+    selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
+    row = copy.deepcopy(next(r for r in adapter.selected_rows(selection) if r["cell_id"] == "qwen38_p1536_o128_c1__fixed_runtime"))
+    cpu = next(ref for ref in row["native_runtime_refs"] if Path(ref["path"]).name.lower() == "ggml-cpu.dll")
+    cpu["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="identity chain disagrees"):
+        adapter.verified_tensor_storage_contract(source, [row], adapter.ROOT)

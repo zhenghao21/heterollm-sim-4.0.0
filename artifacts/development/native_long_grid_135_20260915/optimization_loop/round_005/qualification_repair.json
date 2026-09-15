@@ -1,0 +1,13 @@
+{
+  "schema": "mechanism-integration-repair/v1",
+  "created_utc": "2026-09-15T16:06:52.854490+00:00",
+  "original_three_way_frozen_results_preserved": true,
+  "defect": "GET_ROWS qualifier ignored graph.attributes.metadata nested GGUF identity/binding, yielding zero applied tasks for real GGUF models",
+  "repair": "read both legacy flat and graph-nested evidence; conflicting identities reject; no model-name or latency rule",
+  "modified_predictive_source": [
+    "src/heterollm_sim/llama_tensor_storage.py"
+  ],
+  "structural_tests": 133,
+  "new_source_staging": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\repair_source",
+  "prior_test_failures": "three fixture assertions exposed duplicate evidence retained after deleting only the flat field, and two stripped required graph attributes; fixtures corrected to remove actual identity and retain graph semantics"
+}

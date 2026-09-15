@@ -1,0 +1,22 @@
+{
+  "schema": "retained-zero-effect-experiment/v1",
+  "created_utc": "2026-09-15T16:14:49.921186+00:00",
+  "reason": "Nested GGUF identity/binding was not read by the initial qualifier; repaired separately in r2 with actual six-model static validation.",
+  "native_selection_unchanged": true,
+  "results": [
+    {
+      "treatment": "gather_only",
+      "completed": 14,
+      "all_requests_primary_equal_baseline": 14,
+      "zero_storage_applied": 14
+    },
+    {
+      "treatment": "f32_and_gather",
+      "completed": 14,
+      "all_requests_primary_equal_baseline": 14,
+      "zero_storage_applied": 14
+    }
+  ],
+  "superseded_for_candidate_decisions": true,
+  "original_predictions_and_freezes_preserved": true
+}

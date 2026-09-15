@@ -1,0 +1,29 @@
+{
+  "round": 5,
+  "status": "full131_complete_mechanism_retained_accuracy_failed",
+  "completed_utc": "2026-09-15T16:55:59.517128+00:00",
+  "decision": "Retain full source-qualified F32 storage plus selected packed GET_ROWS rows; do not select wrong hidden dtype by lower latency error.",
+  "accuracy_promotion": false,
+  "all_targets_passed": false,
+  "full_evaluation_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\full_evaluation.json",
+    "sha256": "718ba5fa592c9f779dfa8e5c3763ed9ec6c94d9fa7361e785c7010d9b3f137b1",
+    "bytes": 20354
+  },
+  "paired_ablation_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\repaired_paired_anchor_comparison.json",
+    "sha256": "aff2e275a9f28f75ffed2eb468e4919a43b1e3e3c78ecf877d5bc88b48258e0d",
+    "bytes": 68106
+  },
+  "independent_audit_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\repaired_output_audit.json",
+    "sha256": "af6b2450542dc09522ccbbf5ffe15aa725b8ea5617fbdd1e61413c631d3c2dc4",
+    "bytes": 727856
+  },
+  "validation": {
+    "local_related_tests_passed": 133,
+    "staged_portable_passed": 128,
+    "staged_local_data_skipped": 21
+  },
+  "version_control_status": "ready_to_commit_and_push"
+}
