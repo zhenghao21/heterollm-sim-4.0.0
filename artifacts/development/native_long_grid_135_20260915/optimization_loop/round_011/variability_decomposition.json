@@ -1,0 +1,402 @@
+{
+  "scope": "read-only all12 configurations all30 formal batches; no filtering",
+  "rows": [
+    {
+      "config": "dev_Q5_0_m1_k896.event",
+      "raw_sha256": "b94678c01fbaa3cd33404d39eb6c440424e75fadc890fb6abe84f6fb36d21bba",
+      "batches": 30,
+      "host": {
+        "median_us": 748.8,
+        "min_us": 673.0,
+        "max_us": 1232.7,
+        "max_deviation_pct": 64.62339743589743
+      },
+      "submit": {
+        "median_us": 263.05,
+        "min_us": 240.4,
+        "max_us": 694.1,
+        "max_deviation_pct": 163.8661851359057
+      },
+      "wait": {
+        "median_us": 470.55,
+        "min_us": 39.2,
+        "max_us": 886.7,
+        "max_deviation_pct": 91.66932313250452
+      },
+      "event": {
+        "median_us": 583.264023,
+        "min_us": 523.455977,
+        "max_us": 1051.87201,
+        "max_deviation_pct": 80.342343865087
+      },
+      "corr_host_submit": 0.2650171212997085,
+      "corr_event_submit": 0.24439274054731402,
+      "median_submit_to_host": 0.351295405982906,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "dev_Q5_0_m2_k896.event",
+      "raw_sha256": "f1701579914f504e0119c5e66848fe1207455a22800fe0ad2b18adea33abb95a",
+      "batches": 30,
+      "host": {
+        "median_us": 734.1,
+        "min_us": 671.3,
+        "max_us": 1501.1,
+        "max_deviation_pct": 104.48167824547065
+      },
+      "submit": {
+        "median_us": 257.45,
+        "min_us": 239.6,
+        "max_us": 658.2,
+        "max_deviation_pct": 155.6612934550398
+      },
+      "wait": {
+        "median_us": 435.65,
+        "min_us": 49.8,
+        "max_us": 1235.9,
+        "max_deviation_pct": 183.69103638241708
+      },
+      "event": {
+        "median_us": 570.095986,
+        "min_us": 525.727987,
+        "max_us": 1360.03196,
+        "max_deviation_pct": 138.56192525446053
+      },
+      "corr_host_submit": -0.06038714872033365,
+      "corr_event_submit": -0.02503148464837955,
+      "median_submit_to_host": 0.3507015392998229,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "dev_Q5_0_m4_k896.event",
+      "raw_sha256": "448500a0ab3d7bc26dc6a1165cf1faaed99277436703f7e981674e2d5e7f1b56",
+      "batches": 30,
+      "host": {
+        "median_us": 829.9,
+        "min_us": 766.5,
+        "max_us": 1462.7,
+        "max_deviation_pct": 76.2501506205567
+      },
+      "submit": {
+        "median_us": 264.65,
+        "min_us": 232.0,
+        "max_us": 899.5,
+        "max_deviation_pct": 239.8828641602116
+      },
+      "wait": {
+        "median_us": 536.85,
+        "min_us": 51.3,
+        "max_us": 1162.0,
+        "max_deviation_pct": 116.44779733631368
+      },
+      "event": {
+        "median_us": 674.9439835,
+        "min_us": 623.776019,
+        "max_us": 1310.30405,
+        "max_deviation_pct": 94.13522929788441
+      },
+      "corr_host_submit": 0.04920196331434477,
+      "corr_event_submit": 0.11787426648057932,
+      "median_submit_to_host": 0.3188938426316424,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "dev_Q8_0_m1_k896.event",
+      "raw_sha256": "d29872d29b4eee9dad2d4f8085fdb0ef5d70aa66cdb117db9069c076aab2fc27",
+      "batches": 30,
+      "host": {
+        "median_us": 724.05,
+        "min_us": 653.1,
+        "max_us": 816.7,
+        "max_deviation_pct": 12.796077618948967
+      },
+      "submit": {
+        "median_us": 272.3,
+        "min_us": 230.9,
+        "max_us": 719.3,
+        "max_deviation_pct": 164.1571795813441
+      },
+      "wait": {
+        "median_us": 404.45,
+        "min_us": 39.1,
+        "max_us": 494.8,
+        "max_deviation_pct": 90.33255037705526
+      },
+      "event": {
+        "median_us": 575.6799879999999,
+        "min_us": 515.616,
+        "max_us": 662.559986,
+        "max_deviation_pct": 15.09171758807085
+      },
+      "corr_host_submit": 0.5703475470678847,
+      "corr_event_submit": 0.5434757510374671,
+      "median_submit_to_host": 0.376079000069056,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "dev_Q8_0_m2_k896.event",
+      "raw_sha256": "0e6e63a97a905bc2cbb2c51db970925be12aaccca2c19f7cdb1df80a904d6259",
+      "batches": 30,
+      "host": {
+        "median_us": 716.1,
+        "min_us": 675.9,
+        "max_us": 1131.2,
+        "max_deviation_pct": 57.96676441837732
+      },
+      "submit": {
+        "median_us": 269.75,
+        "min_us": 220.2,
+        "max_us": 787.6,
+        "max_deviation_pct": 191.97405004633922
+      },
+      "wait": {
+        "median_us": 417.0,
+        "min_us": 0.3,
+        "max_us": 815.0,
+        "max_deviation_pct": 99.92805755395683
+      },
+      "event": {
+        "median_us": 574.6720135,
+        "min_us": 530.304015,
+        "max_us": 1000.7679499999999,
+        "max_deviation_pct": 74.14593480982174
+      },
+      "corr_host_submit": 0.328435030588385,
+      "corr_event_submit": 0.2767457821162669,
+      "median_submit_to_host": 0.3766931992738444,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "dev_Q8_0_m4_k896.event",
+      "raw_sha256": "7990bbf5f7bc3b8642012663fcbee1542b1c4e6d7bf3541380a524b0e8760967",
+      "batches": 30,
+      "host": {
+        "median_us": 1293.4,
+        "min_us": 779.0,
+        "max_us": 1866.8,
+        "max_deviation_pct": 44.332766352249884
+      },
+      "submit": {
+        "median_us": 296.55,
+        "min_us": 227.4,
+        "max_us": 762.2,
+        "max_deviation_pct": 157.02242454897993
+      },
+      "wait": {
+        "median_us": 848.7,
+        "min_us": 372.0,
+        "max_us": 1266.6,
+        "max_deviation_pct": 56.16825733474726
+      },
+      "event": {
+        "median_us": 1133.664015,
+        "min_us": 635.327995,
+        "max_us": 1693.856,
+        "max_deviation_pct": 49.41428656002632
+      },
+      "corr_host_submit": 0.520635019180762,
+      "corr_event_submit": 0.44879365118104925,
+      "median_submit_to_host": 0.22927941858667078,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "validation_Q5_0_m1_k1024.event",
+      "raw_sha256": "5bc49891e09e3876c3214f7a41c5c3fbc372b87b6e12d1cc4b9fbf2db006fe46",
+      "batches": 30,
+      "host": {
+        "median_us": 729.45,
+        "min_us": 680.0,
+        "max_us": 1449.0,
+        "max_deviation_pct": 98.6428130783467
+      },
+      "submit": {
+        "median_us": 281.6,
+        "min_us": 238.1,
+        "max_us": 751.1,
+        "max_deviation_pct": 166.72585227272728
+      },
+      "wait": {
+        "median_us": 426.6,
+        "min_us": 0.5,
+        "max_us": 1124.0,
+        "max_deviation_pct": 163.47866854195968
+      },
+      "event": {
+        "median_us": 564.032018,
+        "min_us": 523.9359740000001,
+        "max_us": 1273.5680300000001,
+        "max_deviation_pct": 125.79711600698526
+      },
+      "corr_host_submit": 0.1725622777988368,
+      "corr_event_submit": 0.1483376316491338,
+      "median_submit_to_host": 0.3860442799369388,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "validation_Q5_0_m2_k1024.event",
+      "raw_sha256": "7c77510d6730b8f6116dae62d770821dc9f88ba12115fc20b949e22a6621f587",
+      "batches": 30,
+      "host": {
+        "median_us": 730.55,
+        "min_us": 679.2,
+        "max_us": 1134.3,
+        "max_deviation_pct": 55.2665799739922
+      },
+      "submit": {
+        "median_us": 283.4,
+        "min_us": 243.3,
+        "max_us": 839.8,
+        "max_deviation_pct": 196.3302752293578
+      },
+      "wait": {
+        "median_us": 424.35,
+        "min_us": 0.4,
+        "max_us": 744.0,
+        "max_deviation_pct": 99.90573818781667
+      },
+      "event": {
+        "median_us": 568.4960185,
+        "min_us": 523.0399970000001,
+        "max_us": 835.1680040000001,
+        "max_deviation_pct": 46.908329490789576
+      },
+      "corr_host_submit": 0.2599987777067213,
+      "corr_event_submit": 0.3956309314050085,
+      "median_submit_to_host": 0.3879269043871056,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "validation_Q5_0_m4_k1024.event",
+      "raw_sha256": "8252ccf43279d54fee8f4c47959f1d4fce6a835d338efe29347c8be56e4a0cff",
+      "batches": 30,
+      "host": {
+        "median_us": 847.05,
+        "min_us": 784.1,
+        "max_us": 1522.9,
+        "max_deviation_pct": 79.78867835428841
+      },
+      "submit": {
+        "median_us": 263.6,
+        "min_us": 224.0,
+        "max_us": 861.3,
+        "max_deviation_pct": 226.74506828528072
+      },
+      "wait": {
+        "median_us": 557.05,
+        "min_us": 72.4,
+        "max_us": 1197.7,
+        "max_deviation_pct": 115.00762947670766
+      },
+      "event": {
+        "median_us": 680.0479885,
+        "min_us": 612.4799849999999,
+        "max_us": 1344.8,
+        "max_deviation_pct": 97.75075035017181
+      },
+      "corr_host_submit": 0.0846348376512682,
+      "corr_event_submit": 0.1533063948739892,
+      "median_submit_to_host": 0.3111976860870079,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "validation_Q8_0_m1_k1024.event",
+      "raw_sha256": "eb2040030173acc1eaf9228f713f6611ad93cccc3a54b9f7af7fcfb14eb1138c",
+      "batches": 30,
+      "host": {
+        "median_us": 806.45,
+        "min_us": 756.2,
+        "max_us": 877.1,
+        "max_deviation_pct": 8.760617521235043
+      },
+      "submit": {
+        "median_us": 253.85,
+        "min_us": 230.9,
+        "max_us": 771.0,
+        "max_deviation_pct": 203.7226708686232
+      },
+      "wait": {
+        "median_us": 534.95,
+        "min_us": 42.0,
+        "max_us": 591.8,
+        "max_deviation_pct": 92.1487989531732
+      },
+      "event": {
+        "median_us": 669.4400009999999,
+        "min_us": 625.823975,
+        "max_us": 724.864006,
+        "max_deviation_pct": 8.27915943433445
+      },
+      "corr_host_submit": 0.6578511092497266,
+      "corr_event_submit": 0.5756868863157949,
+      "median_submit_to_host": 0.3147746295492591,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "validation_Q8_0_m2_k1024.event",
+      "raw_sha256": "3b9a3f8b54e3ed6cee68bf974bfecac07cf4fce02673c580e6a8b8e902d4cdcd",
+      "batches": 30,
+      "host": {
+        "median_us": 693.55,
+        "min_us": 645.6,
+        "max_us": 1278.0,
+        "max_deviation_pct": 84.26933890851417
+      },
+      "submit": {
+        "median_us": 273.95,
+        "min_us": 220.6,
+        "max_us": 702.7,
+        "max_deviation_pct": 156.50666179959848
+      },
+      "wait": {
+        "median_us": 427.65,
+        "min_us": 40.4,
+        "max_us": 930.5,
+        "max_deviation_pct": 117.58447328422776
+      },
+      "event": {
+        "median_us": 568.5119924999999,
+        "min_us": 528.608024,
+        "max_us": 1148.38398,
+        "max_deviation_pct": 101.99819795358145
+      },
+      "corr_host_submit": 0.1698150358746723,
+      "corr_event_submit": 0.12105081756595586,
+      "median_submit_to_host": 0.39499675582149807,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    },
+    {
+      "config": "validation_Q8_0_m4_k1024.event",
+      "raw_sha256": "7b5c5c10777c9e3ad22f587e4c178855270e0db306f6f841cc34c8b7a1bdcd96",
+      "batches": 30,
+      "host": {
+        "median_us": 848.4,
+        "min_us": 793.6,
+        "max_us": 1336.0,
+        "max_deviation_pct": 57.472890146157475
+      },
+      "submit": {
+        "median_us": 282.1,
+        "min_us": 225.3,
+        "max_us": 785.6,
+        "max_deviation_pct": 178.4828075150656
+      },
+      "wait": {
+        "median_us": 531.35,
+        "min_us": 0.4,
+        "max_us": 943.1,
+        "max_deviation_pct": 99.92472005269596
+      },
+      "event": {
+        "median_us": 687.0879825,
+        "min_us": 655.359983,
+        "max_us": 1129.27997,
+        "max_deviation_pct": 64.35740382055076
+      },
+      "corr_host_submit": 0.0430505777533333,
+      "corr_event_submit": -0.0027958026646850097,
+      "median_submit_to_host": 0.3325082508250825,
+      "not_additive": "event overlaps submit/wait; do not sum these intervals"
+    }
+  ],
+  "causality": "Correlation only, cannot distinguish OS scheduling/driver/firmware from device stalls; no coefficients inferred."
+}
