@@ -1005,7 +1005,9 @@
       "full_evaluation_completed": true,
       "scored_cells": 129,
       "identity_rejected_cells": 2,
-      "all3_strict_below10_cells": 9
+      "all3_strict_below10_cells": 9,
+      "native_prediction_completed_local": "2026-09-16T02:13:33.920+08:00",
+      "completed_before_deadline": true
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
@@ -1065,6 +1067,13 @@
       "status": "pushed",
       "pushed_to": "origin/main",
       "verified_utc": "2026-09-15T17:16:50.919958+00:00"
+    },
+    {
+      "kind": "round_006",
+      "commit": "bd729aa4a4011c8fa6766774259dd9d9bb550e6f",
+      "status": "pushed",
+      "pushed_to": "origin/main",
+      "verified_utc": "2026-09-15T22:09:19.867555+00:00"
     }
   ],
   "operator_microbenchmark": {

@@ -1,0 +1,16 @@
+{
+  "schema": "r6-failure-independent-audit-summary/v1",
+  "failed_before_simulation": 2,
+  "timeout_evidence": false,
+  "shared_digest_or_cache_path_found": false,
+  "actual_root_cause": "unknown",
+  "missing_evidence": [
+    "pre/post file identity for both metadata and hash opens",
+    "byte read count",
+    "chunk digest"
+  ],
+  "run_completed_local": "2026-09-16T02:13:33.920+08:00",
+  "within_budget": true,
+  "next_step": "serial read-only hash diagnostics before new-version retries; no gate relaxation",
+  "postrun_matching_sha_does_not_reclassify_failures": true
+}
