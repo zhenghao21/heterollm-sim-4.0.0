@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_quantized_reference_diagnosis",
+  "status": "active_measurement_variability_analysis",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1034,11 +1034,19 @@
       "evidence": "round_009/source_reference_diagnosis.json",
       "synthetic_configs": 6,
       "full_evaluation": false
+    },
+    {
+      "round": 10,
+      "status": "dual_reference_complete_timing_rejected",
+      "decision": "round_010/decision.json",
+      "accepted_configs": 4,
+      "total_configs": 12,
+      "full_evaluation": false
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Uniform wait and batched real-stream synthetic probe; MMVQ M1/2/4 Q5_0/Q8_0 K896 plus aligned controls; no costs fitted before independent acceptance.",
+  "next_round_hypothesis": "Dual mathematical and source-path Q5 reference, fresh frozen operator batches; no retroactive acceptance or LLM fitting.",
   "full_131_evaluations_started": 3,
   "full_131_evaluations_completed": 3,
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
@@ -1111,6 +1119,12 @@
     {
       "kind": "round_008",
       "commit": "edf9b410ce05b0849ccba66efe756be165cd2eca",
+      "status": "pushed",
+      "pushed_to": "origin/main"
+    },
+    {
+      "kind": "round_009",
+      "commit": "3b6b1481fbde9aae42f51122b4310ce7f73d4281",
       "status": "pushed",
       "pushed_to": "origin/main"
     }

@@ -1,0 +1,22 @@
+test_bad_reference_index_rejected (__main__.Contracts.test_bad_reference_index_rejected) ... ok
+test_complete_fixture (__main__.Contracts.test_complete_fixture) ... ok
+test_empty_manifest_rejected (__main__.Contracts.test_empty_manifest_rejected) ... ok
+test_forged_pass_with_bad_numeric_rejected (__main__.Contracts.test_forged_pass_with_bad_numeric_rejected) ... ok
+test_grid_and_gates (__main__.Contracts.test_grid_and_gates) ... ok
+test_impossible_event_duration_rejected (__main__.Contracts.test_impossible_event_duration_rejected) ... ok
+test_loaded_executable_mismatch_rejected (__main__.Contracts.test_loaded_executable_mismatch_rejected) ... ok
+test_missing_both_identities_rejected (__main__.Contracts.test_missing_both_identities_rejected) ... ok
+test_missing_dual_evidence_rejected (__main__.Contracts.test_missing_dual_evidence_rejected) ... ok
+test_partial_submission_rejected (__main__.Contracts.test_partial_submission_rejected) ... ok
+test_post_audit_raw_mutation_rejected (__main__.Contracts.test_post_audit_raw_mutation_rejected) ... ok
+test_q5_math_failure_preserved_without_path_failure (__main__.Contracts.test_q5_math_failure_preserved_without_path_failure) ... ok
+test_source_uniform_wait_and_batch (__main__.Contracts.test_source_uniform_wait_and_batch) ... ok
+test_tight_path_failure_rejected (__main__.Contracts.test_tight_path_failure_rejected) ... ok
+test_timing_derivation_rejected (__main__.Contracts.test_timing_derivation_rejected) ... ok
+test_wait_method_mismatch_rejected (__main__.Contracts.test_wait_method_mismatch_rejected) ... ok
+test_warmup_numeric_failure_rejected (__main__.Contracts.test_warmup_numeric_failure_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 2.556s
+
+OK

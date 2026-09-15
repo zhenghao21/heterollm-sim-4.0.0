@@ -1,0 +1,6 @@
+{
+  "parent": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_010\\stream_event_probe_dual",
+  "parent_manifest_sha256": "549b46f261e4b3bb77d5d8cc34f52345a94740bb54f923219c8ff86cf674b2a3",
+  "reason": "Pre-run lock rejected missing source_reference.h in manifest; new version adds required reference source freeze; previous failed lock retained",
+  "gpu_runs": 0
+}
