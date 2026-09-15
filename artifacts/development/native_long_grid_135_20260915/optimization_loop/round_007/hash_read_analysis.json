@@ -1,0 +1,70 @@
+{
+  "created_at_utc": "2026-09-15T22:28:07.287274+00:00",
+  "status": "three_serial_reads_complete_no_content_mismatch_reproduced",
+  "pid": 46312,
+  "facts": [
+    {
+      "pass": 1,
+      "sha_matches_expected": true,
+      "byte_count": 14865116128,
+      "chunk_count": 14177,
+      "eof_observed": true,
+      "path_stat_unchanged": true,
+      "handle_stat_unchanged": true,
+      "native_handle_unchanged": true,
+      "path_vs_handle_differing_fields": [
+        "st_ctime_ns"
+      ],
+      "cross_api_identity_size_mtime_match": true
+    },
+    {
+      "pass": 2,
+      "sha_matches_expected": true,
+      "byte_count": 14865116128,
+      "chunk_count": 14177,
+      "eof_observed": true,
+      "path_stat_unchanged": true,
+      "handle_stat_unchanged": true,
+      "native_handle_unchanged": true,
+      "path_vs_handle_differing_fields": [
+        "st_ctime_ns"
+      ],
+      "cross_api_identity_size_mtime_match": true
+    },
+    {
+      "pass": 3,
+      "sha_matches_expected": true,
+      "byte_count": 14865116128,
+      "chunk_count": 14177,
+      "eof_observed": true,
+      "path_stat_unchanged": true,
+      "handle_stat_unchanged": true,
+      "native_handle_unchanged": true,
+      "path_vs_handle_differing_fields": [
+        "st_ctime_ns"
+      ],
+      "cross_api_identity_size_mtime_match": true
+    }
+  ],
+  "every_chunk_identical_between_passes": true,
+  "historical_hash_mismatch_root_cause": "unknown",
+  "diagnostic_tool_issue": {
+    "field": "st_ctime_ns",
+    "finding": "Path and handle stat each stable, but different from one another on this Windows/Python runtime. The diagnostic used full-dict cross-API equality and classified all three as mismatch_or_identity_change. These raw classifications are retained, not rewritten.",
+    "observed_path_ctime_ns": 1789472350762515400,
+    "observed_handle_ctime_ns": 1789472354505642300,
+    "cause_of_cross_api_field_difference": "not established; do not assert GGUF modification",
+    "recommended_identity_comparison_keys": [
+      "st_dev",
+      "st_ino",
+      "st_size",
+      "st_mtime_ns",
+      "st_mode",
+      "st_file_attributes"
+    ]
+  },
+  "implementation_recommendation": "Use one open handle for metadata parse plus hash; compare before/after identity, length and mtime on that same handle and verify bytes read. Keep fresh path identity checks before/after, but do not assume all stat fields have equivalent cross-API semantics. This is evidence-quality hardening, not a proven cure for historical hash failures.",
+  "source_freeze": "executed_diagnostic_source.py",
+  "no_native_or_performance_measurements": true,
+  "gpu_timing_may_start": true
+}

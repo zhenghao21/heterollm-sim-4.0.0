@@ -1,6 +1,9 @@
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+from hashlib import sha256
 from pathlib import Path
 
 from heterollm_sim.config import model_from_dict
@@ -52,6 +55,45 @@ class GGUFParityTests(unittest.TestCase):
         # (Q8_K), which is validated separately below.
         self.assertEqual(got.quantization, "MOSTLY_Q4_K_M")
         self.assertEqual(len(got.sha256), 64)
+
+    def test_metadata_and_hash_use_one_open_handle(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "model.gguf"
+            payload = self._fixture(vocab=8)
+            path.write_bytes(payload)
+            original_open = Path.open
+            calls = []
+            def tracked_open(target, *args, **kwargs):
+                calls.append(target)
+                return original_open(target, *args, **kwargs)
+            with patch.object(Path, "open", tracked_open):
+                got = read_gguf_metadata(path)
+            self.assertEqual(calls, [path])
+            self.assertEqual(got.sha256, sha256(payload).hexdigest())
+
+    def test_changed_handle_identity_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "model.gguf"
+            path.write_bytes(self._fixture(vocab=8))
+            original = path.stat()
+            changed = SimpleNamespace(**{key: getattr(original, key) for key in
+                ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")})
+            changed.st_mtime_ns += 1
+            with patch("heterollm_sim.gguf_parity.os.fstat", side_effect=[original, changed]):
+                with self.assertRaisesRegex(GGUFError, "changed during metadata/hash"):
+                    read_gguf_metadata(path)
+
+    def test_short_hash_read_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "model.gguf"
+            path.write_bytes(self._fixture(vocab=8))
+            original = path.stat()
+            enlarged = SimpleNamespace(**{key: getattr(original, key) for key in
+                ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")})
+            enlarged.st_size += 1
+            with patch("heterollm_sim.gguf_parity.os.fstat", return_value=enlarged):
+                with self.assertRaisesRegex(GGUFError, "bytes_read="):
+                    read_gguf_metadata(path)
 
     def test_geometry_match_passes_and_layer_mismatch_fails_closed(self):
         model = model_from_dict(materialize_model_payload("qwen2_5-0_5b"))

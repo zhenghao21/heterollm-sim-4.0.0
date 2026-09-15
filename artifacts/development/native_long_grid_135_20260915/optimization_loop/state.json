@@ -1,8 +1,8 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "budget_closed_accuracy_failed",
-  "user_goal": "固定这组native，按任务书自动优化机制并持续推进",
+  "status": "active_independent_operator_evidence",
+  "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
     "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
@@ -674,9 +674,12 @@
     "max_mechanism_rounds": 6,
     "max_full_131_evaluations": 4,
     "max_wall_seconds": 28800,
-    "deadline_utc": "2026-09-15T21:27:44.987878+00:00",
+    "deadline_utc": "2026-09-16T06:22:41.555440+00:00",
     "prediction_workers": 4,
-    "per_cell_timeout_seconds": 600
+    "per_cell_timeout_seconds": 600,
+    "start_utc": "2026-09-15T22:22:41.555440+00:00",
+    "starting_round": 7,
+    "starting_full_evaluations_completed": 3
   },
   "targets": {
     "per_group_per_metric_median_ape_pct_strict": 10,
@@ -1012,7 +1015,7 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Resolve transient model-read identity discrepancies; independently measure source-specific MMVQ/MMQ costs, preserving native actual. New experiment budget required before starting further optimization.",
+  "next_round_hypothesis": "Read identity diagnostics followed by independent real-stream operator envelopes; no target LLM latency fitting.",
   "full_131_evaluations_started": 3,
   "full_131_evaluations_completed": 3,
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
@@ -1099,13 +1102,29 @@
       "timing_note": "Host wall and device event span contain overlapping intervals; fixed protocol forbids adding them or claiming event span is pure kernel sum."
     },
     "stream_event_probe": {
-      "status": "compiled_not_measured",
+      "status": "measured_all_quality_rejected",
       "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\stream_event_probe",
       "scheduled_after_simulator_idle": true,
       "source_scope": "single synthetic MUL_MAT actual backend stream event envelope",
       "llm_actual_fit": false,
-      "coefficient_candidate": null
+      "coefficient_candidate": null,
+      "decision": "round_007/stream_probe_decision.json"
     }
   },
-  "budget_close_utc": "2026-09-15T22:06:30.572094+00:00"
+  "budget_close_utc": "2026-09-15T22:06:30.572094+00:00",
+  "budget_history": [
+    {
+      "budget": {
+        "max_mechanism_rounds": 6,
+        "max_full_131_evaluations": 4,
+        "max_wall_seconds": 28800,
+        "deadline_utc": "2026-09-15T21:27:44.987878+00:00",
+        "prediction_workers": 4,
+        "per_cell_timeout_seconds": 600
+      },
+      "closed_utc": "2026-09-15T22:06:30.572094+00:00",
+      "status": "budget_closed_accuracy_failed",
+      "full_evaluations_completed": 3
+    }
+  ]
 }

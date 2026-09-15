@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 import struct
+import os
 from typing import Any, BinaryIO, Mapping
 
 
@@ -157,6 +158,7 @@ def _as_int(value: Any) -> int | None:
 def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
     p = Path(path)
     with p.open("rb") as f:
+        initial_stat = os.fstat(f.fileno())
         head = f.read(24)
         if len(head) != 24 or head[:4] != b"GGUF":
             raise GGUFError(f"not a GGUF file: {p}")
@@ -202,14 +204,33 @@ def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
             n_bytes = (elements // block_size) * block_bytes
             directory.append(GGUFTensor(name, dims, type_id, type_name, block_size, n_bytes, offset))
         data_start = ((f.tell() + alignment - 1) // alignment) * alignment
-        file_size = p.stat().st_size
+        file_size = initial_stat.st_size
         for tensor in directory:
             if data_start + tensor.offset + tensor.n_bytes > file_size:
                 raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
-    digest = sha256()
-    with p.open("rb") as f:
+        # Hash the same open file that supplied metadata, then reject changes.
+        # This closes the two-open identity gap; it does not diagnose historical
+        # read corruption or replace the caller's expected SHA comparison.
+        digest = sha256()
+        f.seek(0)
+        bytes_read = 0
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             digest.update(chunk)
+            bytes_read += len(chunk)
+        final_stat = os.fstat(f.fileno())
+        path_stat = p.stat()
+        # Windows fstat/stat can differ in timestamp semantics; ctime
+        # is not a portable content-change clock. Check identity, size and mtime.
+        identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size,
+                                 stat.st_mtime_ns)
+        if (bytes_read != file_size or identity(initial_stat) != identity(final_stat)
+                or identity(final_stat) != identity(path_stat)):
+            raise GGUFError(
+                f"GGUF changed during metadata/hash read: {p}; "
+                f"bytes_read={bytes_read}, expected_bytes={file_size}; "
+                f"initial={identity(initial_stat)}, final={identity(final_stat)}, "
+                f"path={identity(path_stat)}"
+            )
     arch = metadata.get("general.architecture")
     prefix = str(arch) if arch else ""
     pick = lambda suffix: metadata.get(f"{prefix}.{suffix}") if prefix else None

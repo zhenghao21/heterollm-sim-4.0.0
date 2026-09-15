@@ -1,0 +1,10 @@
+{
+  "portable_tests": "6 passed, 4 explicitly deselected local-model tests",
+  "additional_synthetic_checks": "3 passed",
+  "native_selection_unchanged": true,
+  "native_raw_files": 131,
+  "formal_requests": 894,
+  "historical_sha_mismatch_cause": "unknown",
+  "mechanism": "single handle metadata/hash plus identity, size, mtime, byte-count guards",
+  "timing_cost_change": false
+}
