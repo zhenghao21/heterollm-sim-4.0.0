@@ -8862,6 +8862,38 @@ def summarize_cpu_iq_panel_reuse(tasks: Sequence[TaskSpec]) -> Mapping[str, obje
     }
 
 
+
+def summarize_host_gemm_offload(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
+    """Count physical GEMM cost tasks once, never launch/copy/marker phases."""
+    total = audited = applied = conditional = proven = 0
+    reasons: Dict[str, int] = {}
+    for task in tasks:
+        metadata = task.metadata
+        if metadata.get("phase") not in {"cpu_gemm", "gpu_gemm"}:
+            continue
+        total += 1
+        decision = metadata.get("host_gemm_offload_applied")
+        if not isinstance(decision, bool):
+            continue
+        audited += 1
+        reason = metadata.get("host_gemm_offload_reason")
+        if isinstance(reason, str) and reason:
+            reasons[reason] = reasons.get(reason, 0) + 1
+        if decision:
+            applied += 1
+            provenance = metadata.get("host_gemm_offload_provenance", {})
+            known = isinstance(provenance, Mapping) and provenance.get("native_dispatch_proven") is True
+            proven += int(known)
+            conditional += int(not known)
+    return {
+        "schema": "heterollm.host-gemm-offload-coverage/v1",
+        "counting_unit": "physical_cpu_or_gpu_gemm_cost_task_not_native_kernel",
+        "gemm_tasks": total, "audited_tasks": audited, "applied_tasks": applied,
+        "conditional_tasks": conditional, "native_dispatch_proven_tasks": proven,
+        "uncovered_tasks": total - audited, "reason_counts": dict(sorted(reasons.items())),
+    }
+
+
 def _declared_mmq_work(
     scenario: ScenarioConfig,
     workload: GemmWorkload,
@@ -23687,6 +23719,11 @@ def _serving_lowering_from_builder(
         assumptions_en=manifest_assumptions_en,
         metadata={"cohort_id": cohort_id, "cohort_kind": kind},
     )
+    offload_coverage = summarize_host_gemm_offload(tasks)
+    enriched_extra_metadata["host_gemm_offload"] = offload_coverage
+    manifest = replace(manifest, metadata={
+        **manifest.metadata, "host_gemm_offload": offload_coverage,
+    })
     iq_panel_contract = scenario.workload.metadata.get("llama_cpp_cpu_iq_panel_reuse")
     if isinstance(iq_panel_contract, Mapping) and iq_panel_contract.get("enabled") is True:
         iq_panel_coverage = summarize_cpu_iq_panel_reuse(tasks)

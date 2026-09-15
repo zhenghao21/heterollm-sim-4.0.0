@@ -973,3 +973,236 @@ def test_slot_order_final_static_replan_retains_core_qualification(variation, re
         assert refreshed.workload.scheduler.phase_candidate_order == case.workload.scheduler.phase_candidate_order
     else:
         assert refreshed.workload.scheduler.phase_candidate_order == "stable_admission"
+
+
+def dispatch_result(*, total=1, with_summary=True):
+    metadata = {"unrelated_" + str(index): index for index in range(40)}
+    if with_summary:
+        metadata["cpu_iq_panel_reuse"] = {
+            "schema": "heterollm.cpu-iq-panel-reuse-coverage/v1", "cpu_gemm_tasks": 6,
+            "audited_tasks": 6, "applied_tasks": 2, "conditional_tasks": 2,
+            "native_dispatch_proven_tasks": 0, "uncovered_tasks": 4,
+            "uncovered_reason_counts": {"F32_hidden_storage_unproven": 4}}
+        metadata["host_gemm_offload"] = {
+            "schema": "test-host-offload-ledger", "audited_tasks": 4, "applied_tasks": 3,
+            "reason_counts": {"physical_m_below_threshold": 1}}
+    batch = SimpleNamespace(kind="prefill", cohort_id="c0", request_ids=(), items=(),
+        token_count=64, start_ns=0, end_ns=10, metadata={},
+        cost=SimpleNamespace(metadata=metadata, duration_ns=10))
+    return SimpleNamespace(serving=SimpleNamespace(batches=(batch,),
+        scheduler_metrics=SimpleNamespace(total_batches=total)), retention_policy="aggregate")
+
+
+def test_named_dispatch_ledgers_survive_general_metadata_bounds():
+    result = dispatch_result()
+    scheduled = adapter.batch_schedule(result, [])
+    row = scheduled["batches"][0]
+    assert "cpu_iq_panel_reuse" not in row["cost_metadata"]
+    assert row["cpu_iq_panel_reuse"]["applied_tasks"] == 2
+    assert row["cpu_iq_panel_reuse"]["uncovered_reason_counts"] == {"F32_hidden_storage_unproven": 4}
+    assert row["host_gemm_offload"]["applied_tasks"] == 3
+    summary = adapter.retained_dispatch_summary(result)
+    assert summary["history_complete"] is True
+    assert summary["cpu_iq_panel_reuse"]["applied_tasks"] == 2
+    assert summary["cpu_iq_panel_reuse"]["conditional_tasks"] == 2
+    assert summary["cpu_iq_panel_reuse"]["native_dispatch_proven_tasks"] == 0
+    assert summary["host_gemm_offload"]["applied_tasks"] == 3
+
+
+def test_dispatch_ledger_absence_or_partial_history_is_not_reported_as_zero():
+    old = adapter.retained_dispatch_summary(dispatch_result(with_summary=False))
+    assert old["cpu_iq_panel_reuse"]["applied_tasks"] is None
+    assert old["host_gemm_offload"]["observed_applied_tasks"] is None
+    partial = adapter.retained_dispatch_summary(dispatch_result(total=2))
+    assert partial["history_complete"] is False
+    assert partial["cpu_iq_panel_reuse"]["applied_tasks"] is None
+    assert partial["cpu_iq_panel_reuse"]["observed_applied_tasks"] == 2
+    assert partial["host_gemm_offload"]["applied_tasks"] is None
+    assert partial["host_gemm_offload"]["observed_applied_tasks"] == 3
+
+
+def test_dispatch_qualification_retains_native_unknown_and_actual_storage():
+    case = Scenario(workload=Metadata(metadata={"llama_cpp_f32_hidden_storage": True,
+        "llama_cpp_cuda_op_offload": {"status": "enabled", "reason": "source_qualified_physical_m_dispatch", "minimum_m": 32},
+        "llama_cpp_slot_order": {"qualified": False, "applied": False, "reasons": ["arrival_stream_unproven"]}}))
+    inputs = {"cpu_iq_panel_reuse": {"enabled": True, "no_iq_panel_environment_state": "unknown",
+        "assume_default_unset": True, "native_dispatch_proven": False,
+        "evaluation_scope": "conditional_default_unset_ablation"}}
+    facts = adapter.dispatch_qualification(case, inputs)
+    assert facts["cpu_iq_panel_reuse"]["native_dispatch_proven"] is False
+    assert facts["cpu_iq_panel_reuse"]["conditional"] is True
+    assert facts["storage"]["f32_hidden_storage"] is True
+    assert facts["host_gemm_offload"]["qualified"] is True
+    assert facts["slot_order"]["applied"] is False
+    assert facts["slot_order"]["reasons"] == ["arrival_stream_unproven"]
+    assert adapter.dispatch_qualification(None)["storage"]["f32_hidden_storage"] is None
+
+
+def test_host_offload_default_off_and_verified_apply_precedes_replan_without_forcing_storage(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from heterollm_sim import runtime_adapters
+    _, selection, row, calls = fixture(tmp_path, monkeypatch)
+    baseline_inputs = adapter.static_inputs(row, selection, tmp_path)
+    baseline = adapter.predict_cell(baseline_inputs)
+    assert baseline_inputs["host_offload_source_contract"] is None
+    assert baseline["dispatch_qualification"]["host_gemm_offload"]["requested"] is False
+    contract = {"schema": "test-forwarded-source", "minimum_m": 32}
+    proof = {"requested": True, "status": "verified", "source_contract": contract,
+        "op_offload_enabled": True, "cuda_backend_available": True, "uncovered_reasons": []}
+    inputs = {**baseline_inputs, "host_offload_source_contract": contract, "host_offload_evidence": proof}
+    monkeypatch.setattr(adapter.grid, "build_matching_scenario", lambda *args, **kwargs: Scenario(
+        llama_cpp_config=SimpleNamespace(op_offload=True)))
+    def apply(case, config, *, source_contract, cuda_backend_available):
+        assert source_contract is contract and cuda_backend_available is True
+        return replace(case, workload=Metadata(metadata={"llama_cpp_cuda_op_offload": {
+            "status": "enabled", "reason": "source_qualified_physical_m_dispatch", "minimum_m": 32}}))
+    monkeypatch.setattr(runtime_adapters, "apply_llama_cuda_op_offload", apply)
+    predicted = adapter.predict_cell(inputs)
+    assert calls["replan"][-1].workload.metadata["llama_cpp_cuda_op_offload"]["status"] == "enabled"
+    assert predicted["dispatch_qualification"]["host_gemm_offload"]["qualified"] is True
+    assert predicted["dispatch_qualification"]["storage"]["f32_hidden_storage"] is None
+    assert predicted["dispatch_summary"]["host_gemm_offload"]["applied_tasks"] is None
+    assert predicted["aggregate"] == baseline["aggregate"]
+
+
+def test_host_offload_uncovered_does_not_install_capability_and_mismatched_cli_fails(tmp_path, monkeypatch):
+    from heterollm_sim import runtime_adapters
+    case = Scenario(llama_cpp_config=SimpleNamespace(op_offload=False))
+    monkeypatch.setattr(runtime_adapters, "apply_llama_cuda_op_offload", lambda *args, **kwargs: pytest.fail("must not apply"))
+    proof = {"requested": True, "status": "uncovered", "source_contract": None,
+        "uncovered_reasons": ["historical_GGML_OP_OFFLOAD_MIN_BATCH_not_captured"]}
+    assert adapter.apply_host_offload_static_contract(case, {"host_offload_evidence": proof}) is case
+    qualification = adapter.dispatch_qualification(case, {"host_offload_evidence": proof})
+    assert qualification["host_gemm_offload"]["requested"] is True
+    assert qualification["host_gemm_offload"]["binding_status"] == "uncovered"
+    verified = {"status": "verified", "source_contract": {"test": True},
+        "op_offload_enabled": True, "cuda_backend_available": True}
+    with pytest.raises(ValueError, match="differs from captured CLI"):
+        adapter.apply_host_offload_static_contract(case, {"host_offload_evidence": verified,
+            "host_offload_source_contract": verified["source_contract"]})
+
+
+@pytest.mark.parametrize("enabled,available", [(True, True), (False, True), (True, False)])
+def test_host_offload_uses_existing_adapter_storage_and_capability_semantics(enabled, available):
+    from tests.test_runtime_op_offload import host_case, contract
+    case = host_case(enabled=enabled, available=False)
+    source = contract()
+    proof = {"status": "verified", "source_contract": source,
+        "op_offload_enabled": enabled, "cuda_backend_available": available}
+    result = adapter.apply_host_offload_static_contract(case, {
+        "host_offload_source_contract": source, "host_offload_evidence": proof})
+    assert result.placement == case.placement
+    assert (result.gpu_profile.host_gemm_offload is not None) is (enabled and available)
+    assert bool(result.workload.metadata.get("llama_cpp_f32_hidden_storage")) is (enabled and available)
+
+
+def test_host_offload_cannot_be_added_during_resume(tmp_path, monkeypatch):
+    path, _, _, _ = fixture(tmp_path, monkeypatch)
+    output = tmp_path / "out"
+    adapter.freeze_selection(path, output, data_root=tmp_path)
+    before = adapter.grid.file_ref(output / "freeze.json")
+    with pytest.raises(SystemExit):
+        adapter.main(["--output", str(output), "--resume", "--host-offload-source-contract", "unread.json"])
+    assert adapter.grid.file_ref(output / "freeze.json") == before
+
+
+def fake_host_build_binding(tmp_path, monkeypatch, *, status="verified"):
+    from tools import llama_runtime_source_binding as source_api
+    audit = document(tmp_path / "runtime_build_audit.json", {"schema": "stable-native-runtime-build-posthoc-audit/v1"})
+    receipt = document(tmp_path / "base_build_receipt.json", {"source_sha256_before": {},
+        "source_sha256_after": {}, "source_unchanged": True, "returncode": 0})
+    source = {"schema": "test-physical-offload", "minimum_m": 32,
+        "environment": {"name": "GGML_OP_OFFLOAD_MIN_BATCH", "value": None, "status": "captured_absent"}}
+    binding = {"schema": source_api.SCHEMA, "status": "verified_build_chain", "evidence_refs": [audit, receipt]}
+    path = tmp_path / "binding.json"
+    document(path, binding)
+    monkeypatch.setattr(source_api, "verify_llama_runtime_source_binding", lambda *args, **kwargs: copy.deepcopy(binding))
+    def bind(*args, **kwargs):
+        return {"status": status, "source_contract": source if status == "verified" else None,
+            "cuda_backend_available": True, "op_offload_enabled": True if status == "verified" else None,
+            "op_offload_cli_basis": "test-only-captured", "uncovered_reasons": [] if status == "verified" else ["CLI_unbound"],
+            "evidence_refs": [kwargs["native_record_ref"]], "native_dispatch_proven": False,
+            "native_timing_must_not_leak": 123456, "required_workload_metadata": {"llama_cpp_f32_hidden_storage": True}}
+    monkeypatch.setattr(source_api, "bind_llama_cuda_op_offload_contract", bind)
+    return path, binding, source
+
+
+def test_host_offload_freeze_rederives_binding_and_preserves_independent_treatments(tmp_path, monkeypatch):
+    selection_path, _, row, calls = fixture(tmp_path, monkeypatch)
+    source_path, binding, source = fake_host_build_binding(tmp_path, monkeypatch)
+    proof = adapter.verified_host_offload_source_contract(source_path, [row], tmp_path)
+    assert proof["verified_cell_count"] == 1 and proof["uncovered_cell_count"] == 0
+    cell = proof["cells"][row["cell_id"]]
+    assert "native_timing_must_not_leak" not in cell and "required_workload_metadata" not in cell
+    frozen = adapter.freeze_selection(selection_path, tmp_path / "out", data_root=tmp_path,
+        host_offload_source_contract_path=source_path)
+    inputs = frozen["cells"][0]["static_inputs"]
+    assert inputs["host_offload_source_contract"] == source
+    assert inputs["config"]["op_offload"] is True
+    assert inputs["cpu_iq_panel_reuse"] is None and inputs["slot_order_contract"] is None
+    assert inputs["recurrent_batching_contract"] is None and not calls["run"]
+    assert "native_timing_must_not_leak" not in json.dumps(inputs)
+    adapter.verify_freeze_references(frozen)
+
+
+def test_host_offload_binding_rejects_source_mutation_and_selected_environment_mismatch(tmp_path, monkeypatch):
+    _, _, row, _ = fixture(tmp_path, monkeypatch)
+    path, binding, _ = fake_host_build_binding(tmp_path, monkeypatch)
+    tampered = copy.deepcopy(binding)
+    tampered["fabricated"] = True
+    document(path, tampered)
+    with pytest.raises(ValueError, match="differs from re-derived"):
+        adapter.verified_host_offload_source_contract(path, [row], tmp_path)
+    document(path, binding)
+    row["config"]["environment"]["GGML_OP_OFFLOAD_MIN_BATCH"] = "99"
+    with pytest.raises(ValueError, match="captured environment differs"):
+        adapter.verified_host_offload_source_contract(path, [row], tmp_path)
+
+
+def test_uncovered_host_offload_binding_is_retained_but_never_enabled(tmp_path, monkeypatch):
+    _, selection, row, _ = fixture(tmp_path, monkeypatch)
+    path, _, _ = fake_host_build_binding(tmp_path, monkeypatch, status="uncovered")
+    proof = adapter.verified_host_offload_source_contract(path, [row], tmp_path)
+    assert proof["verified_cell_count"] == 0 and proof["uncovered_cell_count"] == 1
+    inputs = adapter.static_inputs(row, selection, tmp_path, host_offload=proof)
+    assert inputs["host_offload_source_contract"] is None
+    assert inputs["host_offload_evidence"]["uncovered_reasons"] == ["CLI_unbound"]
+    assert "op_offload" not in inputs["config"]
+
+
+@pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
+def test_recorded_host_offload_binding_uses_current_runtime_and_captured_threshold_without_native_execution():
+    base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
+    audit = base / "optimization_loop/round_004/runtime_source_binding_structural_audit.json"
+    if not audit.is_file():
+        pytest.skip("recorded host-offload build audit unavailable")
+    selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
+    rows = adapter.selected_rows(selection)
+    selected = [next(row for row in rows if row["cell_id"] == "qwen38_p1536_o128_c1__fixed_runtime"),
+        next(row for row in rows if row["model_key"] == "qwen38_gpu")]
+    proof = adapter.verified_host_offload_source_contract(audit, selected, adapter.ROOT)
+    assert proof["verified_cell_count"] == 2
+    assert proof["uncovered_cell_count"] == 0
+    for cell in proof["cells"].values():
+        source = cell["source_contract"]
+        assert source["minimum_m"] == 32
+        assert source["environment"]["status"] == "captured_absent"
+        assert source["native_dispatch_proven"] is False
+        assert source["source_runtime_binding"] == "verified_annotation_cuda_and_original_base_inherited_by_selected_native_runtime"
+        assert cell["cuda_backend_available"] is True
+        assert cell["op_offload_enabled"] is True
+        assert "llama_cpp_f32_hidden_storage" not in cell
+        assert "execution_environment" not in cell
+    assert proof["native_latency_used"] is False
+
+
+def test_actual_host_dispatch_requires_observation_and_absence_is_unknown():
+    observed = adapter.retained_dispatch_summary(dispatch_result())
+    assert observed["host_gemm_offload"]["actual_cpu_to_gpu_offload"] is True
+    unknown = adapter.retained_dispatch_summary(dispatch_result(with_summary=False))
+    assert unknown["host_gemm_offload"]["actual_cpu_to_gpu_offload"] is None
+    empty = dispatch_result()
+    empty.serving.batches[0].cost.metadata["host_gemm_offload"]["applied_tasks"] = 0
+    assert adapter.retained_dispatch_summary(empty)["host_gemm_offload"]["actual_cpu_to_gpu_offload"] is False
+    empty.serving.scheduler_metrics.total_batches = 3
+    assert adapter.retained_dispatch_summary(empty)["host_gemm_offload"]["actual_cpu_to_gpu_offload"] is None

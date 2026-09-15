@@ -383,6 +383,123 @@ def verified_slot_order_contract(path, rows, data_root, *, source_chain_contract
         "limits": chain["limits"]}
 
 
+def verified_host_offload_source_contract(path, rows, data_root):
+    """Revalidate a saved build binding, then bind each selected native capture."""
+    from tools import llama_runtime_source_binding as binding_api
+    from heterollm_sim.runtime_adapters import apply_llama_cuda_op_offload
+    if not {"source_contract", "cuda_backend_available"}.issubset(inspect.signature(apply_llama_cuda_op_offload).parameters):
+        raise ValueError("host-offload treatment requires the source-qualified runtime adapter")
+    saved_document, contract_ref = grid.read_document(path)
+    saved = saved_document.get("build_binding") if saved_document.get("schema") == "llama-runtime-source-binding-validation/v1" else saved_document
+    if not isinstance(saved, Mapping):
+        raise ValueError("host-offload validation audit lacks its saved build binding")
+    if saved.get("schema") != binding_api.SCHEMA or saved.get("status") != "verified_build_chain":
+        raise ValueError("host-offload source contract must be a saved verified runtime build binding")
+    references = saved.get("evidence_refs", [])
+    if not isinstance(references, list) or not references:
+        raise ValueError("host-offload source binding requires its input evidence references")
+    audit_refs, base_refs = [], []
+    for ref in references:
+        if Path(ref["path"]).suffix.lower() != ".json":
+            continue
+        evidence_path = grid.resolve_data(ref["path"], data_root)
+        actual_ref = grid.file_ref(evidence_path)
+        if actual_ref["sha256"] != ref["sha256"]:
+            raise ValueError("host-offload source evidence SHA256 mismatch: " + str(evidence_path))
+        document = json.loads(evidence_path.read_text(encoding="utf-8-sig"))
+        if not isinstance(document, Mapping):
+            continue
+        if document.get("schema") == "stable-native-runtime-build-posthoc-audit/v1":
+            audit_refs.append(actual_ref)
+        if all(key in document for key in ("source_sha256_before", "source_sha256_after", "source_unchanged", "returncode")):
+            base_refs.append(actual_ref)
+    if len(audit_refs) != 1 or len(base_refs) != 1:
+        raise ValueError("host-offload source binding has missing or ambiguous audit/base-build inputs")
+    derived = binding_api.verify_llama_runtime_source_binding(audit_refs[0]["path"],
+        base_build_receipt_path=base_refs[0]["path"], data_root=data_root)
+    if json.loads(json.dumps(derived)) != saved:
+        raise ValueError("host-offload binding differs from re-derived source/build/runtime facts")
+    refs = {ref["path"]: ref for ref in [contract_ref, *derived["evidence_refs"]]}
+    # CUDA availability consumes immutable device identity, not snapshot clocks.
+    # A matching UUID/architecture capture already declared by another selected
+    # cell can establish the same device; each run must still match that UUID.
+    hardware_documents = {}
+    for row in rows:
+        for ref in row.get("static_hardware", {}).get("hardware_refs", []):
+            if ref["path"] not in hardware_documents:
+                hardware, actual_ref = grid.read_document(grid.resolve_data(ref["path"], data_root), ref["sha256"])
+                hardware_documents[ref["path"]] = hardware, actual_ref
+    cells = {}
+    for row in rows:
+        native_records = {ref["raw_ref"]["path"]: ref["raw_ref"]
+            for ref in row.get("static_hardware", {}).get("state_refs", []) if isinstance(ref.get("raw_ref"), Mapping)}
+        if not native_records:
+            raise ValueError("host-offload source binding requires each cell's recorded runtime evidence")
+        physical = row["static_hardware"].get("frozen_hardware", {}).get("gpu", {})
+        hardware_refs = []
+        for hardware, actual_ref in hardware_documents.values():
+            gpu = hardware.get("gpu")
+            if not isinstance(gpu, Mapping) or not physical.get("uuid") or gpu.get("uuid") != physical["uuid"]:
+                continue
+            if not all(gpu.get(key) == physical.get(key) for key in ("name", "compute_capability")):
+                raise ValueError("host-offload device identity contradicts selected frozen hardware")
+            hardware_refs.append(actual_ref)
+        hardware_refs.sort(key=lambda ref: ref["path"])
+        bound_records = [binding_api.bind_llama_cuda_op_offload_contract(derived,
+            native_runtime_refs=row["native_runtime_refs"], native_record_ref=ref, data_root=data_root,
+            hardware_evidence_ref=hardware_refs[0] if hardware_refs else None) for ref in native_records.values()]
+        reference = bound_records[0]
+        static_keys = ("status", "source_contract", "cuda_backend_available", "op_offload_enabled", "op_offload_cli_basis", "uncovered_reasons")
+        if any(any(bound.get(key) != reference.get(key) for key in static_keys) for bound in bound_records[1:]):
+            raise ValueError("host-offload source/environment/runtime binding differs across selected cell captures")
+        contract = reference.get("source_contract")
+        if reference["status"] == "verified":
+            if not isinstance(contract, Mapping) or type(reference.get("op_offload_enabled")) is not bool or type(reference.get("cuda_backend_available")) is not bool:
+                raise ValueError("verified host-offload binding lacks its explicit contract and runtime switches")
+            environment = row.get("config", {}).get("environment", {})
+            captured = contract.get("environment", {})
+            name = captured.get("name")
+            if name not in environment or environment[name] != captured.get("value"):
+                raise ValueError("host-offload captured environment differs from selected static input")
+            authored = row.get("config", {}).get("op_offload")
+            if authored is not None and authored is not reference["op_offload_enabled"]:
+                raise ValueError("host-offload captured CLI differs from selected static input")
+        elif contract is not None:
+            raise ValueError("uncovered host-offload binding must not provide an applicable source contract")
+        evidence_refs = {ref["path"]: ref for bound in bound_records for ref in bound["evidence_refs"]}
+        refs.update(evidence_refs)
+        # Keep only static evidence. Do not carry native timing payloads into workers,
+        # and let apply_llama_cuda_op_offload itself establish any F32 storage flag.
+        cells[row["cell_id"]] = {key: reference.get(key) for key in (
+            *static_keys, "device_evidence", "native_dispatch_proven", "performance_accuracy_validated",
+            "per_operator_requirements", "host_weight_buffer_evidence", "staging_evidence", "limits")}
+        cells[row["cell_id"]].update(requested=True, native_record_refs=list(native_records.values()),
+            evidence_refs=list(evidence_refs.values()), storage_binding_method="existing_apply_llama_cuda_op_offload_semantics",
+            hardware_evidence_scope="selected-dataset GPU identity/architecture matched to each run UUID; clocks remain from that run")
+    verify_refs(list(refs.values()))
+    return {"contract": saved, "contract_ref": contract_ref, "evidence_refs": list(refs.values()), "cells": cells,
+        "verified_cell_count": sum(cell["status"] == "verified" for cell in cells.values()),
+        "uncovered_cell_count": sum(cell["status"] != "verified" for cell in cells.values()),
+        "native_latency_used": False, "runtime_build_audit_ref": audit_refs[0], "base_build_receipt_ref": base_refs[0]}
+
+
+def apply_host_offload_static_contract(scenario, inputs):
+    """Install a verified capability through the existing typed adapter only."""
+    proof = inputs.get("host_offload_evidence")
+    if not isinstance(proof, Mapping) or proof.get("status") != "verified":
+        return scenario
+    from heterollm_sim.runtime_adapters import apply_llama_cuda_op_offload
+    contract = inputs.get("host_offload_source_contract")
+    if not isinstance(contract, Mapping) or contract != proof.get("source_contract"):
+        raise ValueError("host-offload static contract and verified evidence disagree")
+    if type(proof.get("cuda_backend_available")) is not bool or type(proof.get("op_offload_enabled")) is not bool:
+        raise ValueError("host-offload capability requires explicit captured runtime switches")
+    if scenario.llama_cpp_config.op_offload is not proof["op_offload_enabled"]:
+        raise ValueError("host-offload typed runtime config differs from captured CLI evidence")
+    return apply_llama_cuda_op_offload(scenario, scenario.llama_cpp_config,
+        source_contract=contract, cuda_backend_available=proof["cuda_backend_available"])
+
+
 IQ_PANEL_SOURCE_SCHEMA = "llama.cpp.cpu.iq-panel-source-contract/v1"
 IQ_PANEL_VARIABLE = "GGML_NO_IQ_PANEL"
 
@@ -513,7 +630,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -549,6 +666,9 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
     if config.get("compiled_cuda_graphs") is not None and config["compiled_cuda_graphs"] != graph_evidence["compiled_cuda_graphs"]:
         raise ValueError("compiled CUDA Graphs flag lacks matching artifact evidence")
     config["compiled_cuda_graphs"] = graph_evidence["compiled_cuda_graphs"]
+    host_binding = host_offload["cells"][row["cell_id"]] if host_offload else None
+    if host_binding and host_binding["status"] == "verified":
+        config["op_offload"] = host_binding["op_offload_enabled"]
     return {"cell_id": row["cell_id"], "model_key": row["model_key"],
         "deployment": row.get("deployment", "explicit_gpu_layers_" + str(config.get("gpu_layers"))),
         "config": config, "hardware_snapshot": physical,
@@ -557,6 +677,8 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "recurrent_batching_evidence": recurrent_batching,
         "slot_order_contract": slot_order["contract"] if slot_order else None,
         "slot_order_evidence": slot_order,
+        "host_offload_source_contract": host_binding["source_contract"] if host_binding else None,
+        "host_offload_evidence": host_binding,
         "cpu_iq_panel_reuse": iq_panel["dispatch"] if iq_panel else None,
         "cpu_iq_panel_evidence": iq_panel,
         "hardware_ref": row["static_hardware"].get("frozen_hardware_ref"),
@@ -618,6 +740,15 @@ def unsupported_dimensions(inputs, model=None):
         {"dimension": "cpu_worker_binding", "status": "conditional", "native": {k: raw.get(k) for k in ("threads", "threads_batch", "worker_cpu_mask", "poll", "priority")}, "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."},
         {"dimension": "kv_shared_physical_pool", "status": "conditional", "native_total_context_tokens": 2048 * raw.get("parallel", 1), "simulator_slot_context_tokens": 2048, "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."},
         {"dimension": "runtime_op_offload_contract", "status": "unsupported", "runtime_ref": inputs["runtime_ref"], "op_offload": raw.get("op_offload", True), "reason": "Actual new runtime identity is retained and does not inherit the old semantic-runtime CUDA op-offload contract."}]
+    host_binding = inputs.get("host_offload_evidence")
+    if isinstance(host_binding, Mapping):
+        rows[2] = {"dimension": "runtime_op_offload_contract",
+            "status": "conditional" if host_binding.get("status") == "verified" else "unsupported",
+            "runtime_ref": inputs["runtime_ref"], "source_binding_status": host_binding.get("status"),
+            "op_offload": host_binding.get("op_offload_enabled"),
+            "uncovered_reasons": host_binding.get("uncovered_reasons", []),
+            "native_dispatch_proven": False,
+            "reason": "Verified source/build/runtime capability remains subject to per-invocation tensor/layout/buffer qualification and analytical cost limits" if host_binding.get("status") == "verified" else "Recorded source/runtime evidence does not yet qualify host CUDA offload"}
     if inputs.get("cpu_iq_panel_reuse") is not None:
         rows.append({"dimension": "cpu_iq_panel_historical_dispatch", "status": "conditional",
             "historical_state": "unknown", "assume_default_unset": inputs["cpu_iq_panel_reuse"]["assume_default_unset"],
@@ -818,7 +949,96 @@ def engine_cohort_span(requests):
         "overlap_semantics": "request engine-clock intervals, not proof of simultaneous kernel execution"}
 
 
-def batch_schedule(result, requests):
+
+def compact_dispatch_evidence(metadata):
+    """Read named core ledgers before general metadata truncation can hide them."""
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    return {key: bounded_value(dict(value)) if isinstance(value, Mapping) else None
+        for key in ("cpu_iq_panel_reuse", "host_gemm_offload")
+        for value in (metadata.get(key),)}
+
+
+def dispatch_qualification(scenario, inputs=None):
+    """Keep actual adapter decisions distinct from source proof or dispatch counts."""
+    metadata = getattr(getattr(scenario, "workload", None), "metadata", {})
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    inputs = inputs or {}
+    host = metadata.get("llama_cpp_cuda_op_offload")
+    host = host if isinstance(host, Mapping) else {}
+    slot = metadata.get("llama_cpp_slot_order")
+    slot = slot if isinstance(slot, Mapping) else {}
+    iq = inputs.get("cpu_iq_panel_reuse")
+    iq = iq if isinstance(iq, Mapping) else metadata.get("llama_cpp_cpu_iq_panel_reuse", {})
+    iq = iq if isinstance(iq, Mapping) else {}
+    return {
+        "cpu_iq_panel_reuse": {"requested": bool(iq),
+            "historical_state": iq.get("no_iq_panel_environment_state"),
+            "conditional": iq.get("assume_default_unset"),
+            "native_dispatch_proven": iq.get("native_dispatch_proven"),
+            "evaluation_scope": iq.get("evaluation_scope")},
+        "host_gemm_offload": {"requested": inputs.get("host_offload_evidence") is not None,
+            "binding_status": (inputs.get("host_offload_evidence") or {}).get("status"),
+            "binding_uncovered_reasons": (inputs.get("host_offload_evidence") or {}).get("uncovered_reasons"),
+            "native_dispatch_proven": (inputs.get("host_offload_evidence") or {}).get("native_dispatch_proven"),
+            "qualified": host.get("status") == "enabled" if host else None,
+            "status": host.get("status"), "reason": host.get("reason"),
+            "op_offload": host.get("op_offload"), "cuda_backend_available": host.get("cuda_backend_available"),
+            "minimum_m": host.get("minimum_m"), "environment": bounded_value(host.get("environment")),
+            "actual_dispatch_requires_physical_invocation_evidence": True},
+        "storage": {"f32_hidden_storage": metadata.get("llama_cpp_f32_hidden_storage"),
+            "evidence_source": "final_scenario.workload.metadata.llama_cpp_f32_hidden_storage"},
+        "slot_order": {key: bounded_value(slot.get(key)) for key in (
+            "qualified", "applied", "status", "reasons", "phase_candidate_order",
+            "preserves_engine_start_definition")},
+    }
+
+
+def retained_dispatch_summary(result):
+    """Aggregate retained core ledgers; absent observations remain unknown."""
+    serving = getattr(result, "serving", None)
+    batches = tuple(getattr(serving, "batches", ()) or ())
+    total = getattr(getattr(serving, "scheduler_metrics", None), "total_batches", None)
+    complete = total == len(batches) if type(total) is int else None
+    result_summary = {"schema": "stable-native-retained-dispatch-summary/v1",
+        "count_scope": "simulator physical tasks in retained serving batch ledgers",
+        "retained_batch_count": len(batches), "total_batches": total,
+        "history_complete": complete, "native_timing_used": False}
+    for key in ("cpu_iq_panel_reuse", "host_gemm_offload"):
+        ledgers = []
+        for batch in batches:
+            metadata = getattr(getattr(batch, "cost", None), "metadata", {})
+            value = metadata.get(key) if isinstance(metadata, Mapping) else None
+            if isinstance(value, Mapping):
+                ledgers.append(value)
+        summary = {"status": "observed" if ledgers else "unavailable",
+            "summarized_batch_count": len(ledgers), "missing_batch_summaries": len(batches) - len(ledgers),
+            "all_batches_summarized": bool(batches) and len(ledgers) == len(batches) and complete is True,
+            "applied_tasks": None, "observed_applied_tasks": None,
+            "reason": None if ledgers else "core ledger was not retained; no zero is inferred"}
+        numeric_keys = {name for ledger in ledgers for name, value in ledger.items()
+            if name.endswith("_tasks") and type(value) is int}
+        for name in sorted(numeric_keys):
+            values = [ledger.get(name) for ledger in ledgers]
+            observed = sum(values) if all(type(value) is int and value >= 0 for value in values) else None
+            summary["observed_" + name] = observed
+            summary[name] = observed if summary["all_batches_summarized"] else None
+        count_keys = {name for ledger in ledgers for name, value in ledger.items()
+            if name.endswith("_counts") and isinstance(value, Mapping)}
+        for name in sorted(count_keys):
+            counts = Counter()
+            for ledger in ledgers:
+                for label, value in ledger.get(name, {}).items():
+                    if type(value) is int and value >= 0:
+                        counts[str(label)] += value
+            summary[name] = dict(sorted(counts.items()))
+        if key == "host_gemm_offload":
+            observed = summary.get("observed_applied_tasks")
+            summary["actual_cpu_to_gpu_offload"] = True if type(observed) is int and observed > 0 else False if summary.get("applied_tasks") == 0 else None
+            summary["dispatch_observation_domain"] = "simulation only; native per-operator dispatch remains unproven"
+        result_summary[key] = summary
+    return result_summary
+
+def batch_schedule(result, requests, *, scenario=None, inputs=None):
     serving = getattr(result, "serving", None)
     batches = getattr(serving, "batches", None)
     if batches is None:
@@ -850,6 +1070,8 @@ def batch_schedule(result, requests):
                 "token_count": getattr(batch, "token_count", None), "cost_duration_ns": finite_time(getattr(cost, "duration_ns", None)),
                 "items": [{key: getattr(item, key, None) for key in ("request_id", "phase", "token_count", "context_tokens", "completion_cursor")} for item in items[:32]],
                 "items_truncated": len(items) > 32, "metadata": bounded_value(getattr(batch, "metadata", {})),
+                **compact_dispatch_evidence(getattr(cost, "metadata", {})),
+                "dispatch_qualification": dispatch_qualification(scenario, inputs),
                 "cost_metadata": bounded_value(getattr(cost, "metadata", {}))})
     for request in requests:
         info = per_request[request["request_id"]]
@@ -910,6 +1132,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     scenario = grid.build_matching_scenario(prompt, output, model=model,
         hardware_snapshot=inputs["hardware_snapshot"], runtime_binary=Path(inputs["runtime_ref"]["path"]),
         runtime_environment=dict(env), **simulator_config)
+    scenario = apply_host_offload_static_contract(scenario, inputs)
     profiles = {kind: dict(values) for kind, values in scenario.component_profiles.items()}
     changed = []
     for ident, profile in profiles.get("gpu", {}).items():
@@ -953,6 +1176,8 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
             "native_model_ref": inputs.get("native_model_ref"), "prediction_model_ref": inputs.get("prediction_model_ref"),
             "control_plane_replan": placement_refresh, "cpu_iq_panel_reuse": inputs.get("cpu_iq_panel_reuse"),
             "slot_order_contract": inputs.get("slot_order_contract"),
+            "host_offload_source_contract": inputs.get("host_offload_source_contract"),
+            "host_offload_binding": inputs.get("host_offload_evidence"),
             "slot_order_treatment": {"requested": inputs.get("slot_order_contract") is not None,
                 "qualified": slot_qualification.get("qualified", False), "applied": slot_qualification.get("applied", False),
                 "status": slot_qualification.get("status", "qualification_not_reported"),
@@ -966,7 +1191,9 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
             "gpu_clock": clock, "frequency_mapped_profile_ids": changed,
             "runtime_ref": inputs["runtime_ref"], "hardware_snapshot": inputs["hardware_snapshot"], "runtime_build_evidence": inputs.get("runtime_build_evidence")},
         "requests": requests, "aggregate": grid.aggregate(requests, config["parallel"]),
-        "cohort_engine_timeline": engine_cohort_span(requests), "batch_schedule": batch_schedule(result, requests),
+        "cohort_engine_timeline": engine_cohort_span(requests),
+        "dispatch_qualification": dispatch_qualification(scenario, inputs), "dispatch_summary": retained_dispatch_summary(result),
+        "batch_schedule": batch_schedule(result, requests, scenario=scenario, inputs=inputs),
         "absolute_engine_timepoints_complete": bool(requests) and all(r["timepoint_validation"]["status"] == "verified" for r in requests)}
     if diagnostic_events:
         prediction["_diagnostic_events"] = diagnostic_event_trace(result, diagnostic_event_limit)
@@ -1028,7 +1255,7 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
@@ -1039,6 +1266,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     build_audit = verified_runtime_build_audit(runtime_build_audit_path, data_root) if runtime_build_audit_path else None
     recurrent = verified_recurrent_batching_contract(recurrent_batching_contract_path, rows, data_root) if recurrent_batching_contract_path else None
     slot_order = verified_slot_order_contract(slot_order_contract_path, rows, data_root, source_chain_contract_path=recurrent_batching_contract_path) if slot_order_contract_path else None
+    host_offload = verified_host_offload_source_contract(host_offload_source_contract_path, rows, data_root) if host_offload_source_contract_path else None
     if iq_panel_assume_default_unset and iq_panel_source_contract_path is None:
         raise ValueError("IQ panel default-unset assumption requires an explicit source contract")
     iq_panel = verified_iq_panel_source_contract(iq_panel_source_contract_path, rows, data_root,
@@ -1056,7 +1284,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -1067,7 +1295,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "selection_sha256": selection_ref["sha256"], "selection_created_utc": selection.get("created_utc"),
         "selected_denominator": len(entries), "native_grid_denominator": selection.get("native_grid_denominator", selection.get("planned_cells", 162)),
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
-        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order,
+        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload,
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -1079,6 +1307,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(iq_panel["evidence_refs"])
     if slot_order:
         verify_refs(slot_order["evidence_refs"])
+    if host_offload:
+        verify_refs(host_offload["evidence_refs"])
     return freeze
 
 
@@ -1097,6 +1327,9 @@ def verify_freeze_references(freeze):
     slot_order = freeze.get("slot_order")
     if slot_order:
         refs += slot_order["evidence_refs"]
+    host_offload = freeze.get("host_offload_source")
+    if host_offload:
+        refs += host_offload["evidence_refs"]
     verify_refs(refs)
 
 
@@ -1434,6 +1667,7 @@ def main(argv=None):
     parser.add_argument("--runtime-build-audit", type=Path, help="verified annotation/native CUDA build chain for a new freeze")
     parser.add_argument("--recurrent-batching-contract", type=Path, help="explicit source-derived hybrid batching treatment for a new freeze; baseline default is none")
     parser.add_argument("--slot-order-contract", type=Path, help="source-bound stable slot traversal for a qualified fresh same-arrival cohort; default off")
+    parser.add_argument("--host-offload-source-contract", type=Path, help="verified source/build/native-runtime binding for host MUL_MAT CUDA dispatch; initial freeze only, default off")
     parser.add_argument("--iq-panel-source-contract", type=Path, help="explicit frozen CPU IQ panel source/build/history contract; default off")
     parser.add_argument("--iq-panel-assume-default-unset", action="store_true", help="explicit conditional ablation for unknown GGML_NO_IQ_PANEL; never proves native dispatch")
     parser.add_argument("--model-snapshot-map", type=Path, help="JSON object mapping native model paths to byte-identical prediction copy paths; initial freeze only")
@@ -1456,11 +1690,11 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract) and (not args.selection or args.resume):
-        parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order contracts are only accepted for an initial selection freeze")
+    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract) and (not args.selection or args.resume):
+        parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload contracts are only accepted for an initial selection freeze")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract)
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract)
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

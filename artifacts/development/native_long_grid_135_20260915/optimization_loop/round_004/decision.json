@@ -1,0 +1,23 @@
+{
+  "round": 4,
+  "status": "paired_anchors_complete_mechanism_retained",
+  "hypothesis": "Bind inherited current CUDA backend to captured host-weight offload policy and its required F32 storage; preserve static ownership and per-call transfers.",
+  "anchors": [
+    "qwen38_p1536_o128_c1__fixed_runtime",
+    "qwen38_p128_o32_c4__fixed_runtime",
+    "qwen38_p512_o128_c2__fixed_runtime",
+    "qwen38_p128_o256_c1__fixed_runtime",
+    "qwen38_gpu_p128_o128_c4__fixed_runtime",
+    "qwen25_p1536_o128_c4__fixed_runtime"
+  ],
+  "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\baseline",
+  "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\candidate",
+  "full_evaluation_started": false,
+  "native_dispatch_proven": false,
+  "completed_anchor_cells": 6,
+  "failed_anchor_cells": 0,
+  "comparison_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\paired_anchor_comparison.json",
+  "completed_utc": "2026-09-15T15:43:35.973991+00:00",
+  "decision": "Retain current-runtime source binding: large CPU-weight prefill error reduced without latency fitting; GPU controls identical. 1 of 6 anchor cells meets all3<10, not a full-group or independent acceptance. Proceed to storage ablation before full131.",
+  "pending_version_control": true
+}
