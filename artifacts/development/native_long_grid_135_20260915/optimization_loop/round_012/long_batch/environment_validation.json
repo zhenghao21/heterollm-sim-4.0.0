@@ -1,0 +1,29 @@
+{
+  "cpp": {
+    "values": {
+      "GGML_CUDA_FORCE_MMQ": null,
+      "GGML_CUDA_FORCE_CUBLAS": null,
+      "CUDA_VISIBLE_DEVICES": null,
+      "LLAMA_TRACE_ANNOTATIONS": null,
+      "GGML_CUDA_DISABLE_FUSION": null,
+      "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+    },
+    "all_absent": true,
+    "gpu_access": false,
+    "compiler_msvc": 1944
+  },
+  "python": {
+    "removed_values": {
+      "GGML_CUDA_FORCE_MMQ": null,
+      "GGML_CUDA_FORCE_CUBLAS": null,
+      "CUDA_VISIBLE_DEVICES": null,
+      "LLAMA_TRACE_ANNOTATIONS": null,
+      "GGML_CUDA_DISABLE_FUSION": null,
+      "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+    },
+    "all_absent": true,
+    "gpu_access": false
+  },
+  "passed": true,
+  "gpu_access": false
+}

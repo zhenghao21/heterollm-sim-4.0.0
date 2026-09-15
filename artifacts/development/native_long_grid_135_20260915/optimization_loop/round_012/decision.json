@@ -1,0 +1,14 @@
+{
+  "status": "retain_long_window_diagnostic_accuracy_not_achieved",
+  "accepted_configs": 12,
+  "total_configs": 12,
+  "evidence_complete": true,
+  "event_max_deviation_pct_range": [
+    10.180850263960172,
+    21.421286135243477
+  ],
+  "calibration_eligible": false,
+  "cost_model_updated": false,
+  "native_llm_remeasured": false,
+  "next_evidence": "independent operator coverage for large weights/cache regimes and runtime dispatch; batch envelope cannot be assigned as isolated kernel cost"
+}
