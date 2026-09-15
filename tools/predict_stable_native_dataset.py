@@ -668,6 +668,187 @@ def apply_tensor_storage_static_contract(scenario, inputs):
     return apply_llama_tensor_storage_contract(scenario, contract, f32_hidden_storage=flag)
 
 
+def captured_kernel_environment(record, selected_environment=None):
+    """Normalize only historically recorded kernel controls; absence stays unknown."""
+    observed = record.get("execution_environment", {})
+    if not isinstance(observed, Mapping):
+        raise ValueError("captured kernel environment must be an object")
+    values, evidence = {}, {}
+    for key in ("GGML_CUDA_DISABLE_FUSION",):
+        if key not in observed:
+            evidence[key] = {"captured": False, "state": "unknown", "value": None}
+            continue
+        item = observed[key]
+        if isinstance(item, Mapping):
+            present, value = item.get("is_set"), item.get("value")
+            if type(present) is not bool or (present and not isinstance(value, str)) or (not present and value is not None):
+                raise ValueError("captured kernel environment presence/value disagree")
+        elif item is None or isinstance(item, str):
+            value = item
+            present = item is not None
+        else:
+            raise ValueError("captured kernel environment requires a string or observed absence")
+        if isinstance(selected_environment, Mapping) and key in selected_environment and selected_environment[key] != value:
+            raise ValueError("captured kernel environment differs from selected static input")
+        values[key] = value
+        evidence[key] = {"captured": True, "state": "captured_present" if present else "captured_absent", "value": value}
+    return values, evidence
+
+
+def verify_gpu_invocation_source_links(runtime_binding, data_root):
+    """Bind added GPU/graph source objects to the inherited annotation modules."""
+    from tools import llama_runtime_source_binding as source_api
+    ev = source_api._Evidence(data_root)
+    audit = ev.document(runtime_binding["runtime_build_audit_ref"])
+    stages = {stage["stage"]: stage for stage in audit["provenance_chain"]}
+    base = stages["base_configuration_and_preprocessor_guards"]
+    annotation = ev.document(stages["native_to_annotation"]["annotation_build_receipt_ref"])
+    base_receipt = ev.document(runtime_binding["base_build_receipt_ref"])
+    binding = runtime_binding["contract"]
+    root = Path(binding["source_paths"]["scheduler"]).parents[2]
+    build = Path(annotation["base"]).resolve()
+    commands, ninja = ev.document(base["compile_commands_ref"]), ev.text(base["build_ninja_ref"])
+    result = {}
+    for name, relative, module in (
+        ("graph", "src/llama-graph.cpp", "llama.dll"),
+        ("model", "src/llama-model.cpp", "llama.dll"),
+        ("kv_cache", "src/llama-kv-cache.cpp", "llama.dll"),
+        ("mmvq", "ggml/src/ggml-cuda/mmvq.cu", "ggml-cuda.dll"),
+        ("mmq", "ggml/src/ggml-cuda/mmq.cu", "ggml-cuda.dll"),
+        ("set_rows", "ggml/src/ggml-cuda/set-rows.cu", "ggml-cuda.dll")):
+        source = root / relative
+        sha = source_api._digest_at(base_receipt["source_sha256_before"], source)
+        source_api._equal_digests(sha, source_api._digest_at(base_receipt["source_sha256_after"], source))
+        ev.read({"path": str(source), "sha256": sha})
+        entry = source_api._compile_entry(commands, source, build)
+        obj = Path(entry["output"]).resolve()
+        source_api._ninja_source_link(ninja, source, obj, build, module)
+        link = source_api._step(annotation, "link bin/" + module)
+        responses = [arg[1:] for arg in link["argv"] if arg.startswith("@")]
+        if len(responses) != 1:
+            raise ValueError("GPU invocation source link response is ambiguous")
+        response = Path(responses[0]).resolve()
+        args = source_api._tokens(ev.text({"path": str(response), "sha256": source_api._digest_at(annotation["input_sha256"], response)}))
+        if not any(source_api._identity(arg) == source_api._identity(obj) for arg in args):
+            raise ValueError("GPU invocation original source object is not in the inherited module link")
+        object_sha = source_api._digest_at(annotation["input_sha256"], obj)
+        expected = Path(annotation["build"]) / "bin" / module
+        outputs = [arg[5:] for arg in args if arg.lower().startswith("/out:")]
+        if len(outputs) != 1 or source_api._identity(outputs[0]) != source_api._identity(expected):
+            raise ValueError("GPU invocation source link output differs from inherited module")
+        source_api._equal_digests(source_api._digest_at(annotation["output_sha256"], expected), binding["runtime_modules"][module]["sha256"])
+        result[name] = {"source": str(source), "source_sha256": sha, "recorded_object_sha256": object_sha,
+            "module": binding["runtime_modules"][module], "historical_source_content_bound": True}
+    return {"source_compilation": result, "evidence_refs": list(ev.refs.values()),
+        "architecture_specific_model_source_content": "conditional; historical unity include body hashes unavailable"}
+
+
+def verified_gpu_invocation_contract(path, rows, data_root, *, enable_mmq_source_costs=False,
+                                     runtime_binding=None, runtime_source_contract_path=None):
+    """Validate a source template, then derive every cell from captured controls."""
+    from heterollm_sim.llama_gpu_invocations import SCHEMA, derive_llama_gpu_invocation_contract, apply_llama_gpu_invocation_contract
+    if type(enable_mmq_source_costs) is not bool or not {"enabled", "enable_mmq_source_costs"}.issubset(inspect.signature(apply_llama_gpu_invocation_contract).parameters):
+        raise ValueError("GPU invocation treatment requires separate explicit geometry and source-cost switches")
+    saved, contract_ref = grid.read_document(path)
+    if saved.get("schema") != SCHEMA:
+        raise ValueError("GPU invocation source contract schema mismatch")
+    if runtime_binding is None:
+        if runtime_source_contract_path is None:
+            candidates = {parent / "round_004/runtime_source_binding_structural_audit.json" for parent in Path(path).resolve().parents}
+            present = sorted({candidate.resolve() for candidate in candidates if candidate.is_file()}, key=str)
+            if len(present) > 1:
+                raise ValueError("GPU invocation runtime source binding is ambiguous")
+            runtime_source_contract_path = present[0] if present else Path(path).resolve().parent.parent / "round_004/runtime_source_binding_structural_audit.json"
+        runtime_binding = verified_host_offload_source_contract(runtime_source_contract_path, rows, data_root)
+    linkage = verify_gpu_invocation_source_links(runtime_binding, data_root)
+    template_environment = {}
+    for key, fact in saved.get("kernel_environment", {}).items():
+        if not isinstance(fact, Mapping) or type(fact.get("captured")) is not bool:
+            raise ValueError("GPU invocation template has malformed kernel environment evidence")
+        if fact["captured"]:
+            if fact.get("value") is not None and not isinstance(fact["value"], str):
+                raise ValueError("GPU invocation template has malformed captured environment value")
+            template_environment[key] = fact.get("value")
+    mmq = saved.get("mmq_device_evidence", {})
+    mmq_argument = mmq if isinstance(mmq, Mapping) and mmq.get("available") is True else None
+    canonical = derive_llama_gpu_invocation_contract(runtime_binding["contract"],
+        captured_kernel_environment=template_environment, cuda_compute_capability=saved.get("cuda_compute_capability"),
+        mmq_device_evidence=mmq_argument)
+    if json.loads(json.dumps(canonical)) != saved:
+        raise ValueError("GPU invocation contract differs from re-derived source/build/device facts")
+    refs = {ref["path"]: ref for ref in [contract_ref, *runtime_binding["evidence_refs"], *linkage["evidence_refs"], *canonical["source_refs"]]}
+    def derivation_key(environment, cc):
+        return grid.stable_hash({"environment": environment, "cuda_compute_capability": cc,
+            "runtime_binding_sha256": runtime_binding["contract"].get("content_sha256"), "mmq_device_evidence": mmq_argument})
+    # Identical static facts share one source derivation; every raw capture is
+    # still checked and all source references are postverified before freezing.
+    contract_cache = {derivation_key(template_environment, canonical["cuda_compute_capability"]): canonical}
+    cells = {}
+    for row in rows:
+        runtime = runtime_binding["cells"][row["cell_id"]]
+        evidence = runtime.get("device_evidence") or {}
+        device_cc = evidence.get("compute_capability")
+        match = re.fullmatch(r"(\d+)\.(\d+)", str(device_cc or ""))
+        if runtime.get("cuda_backend_available") is not True or match is None:
+            cells[row["cell_id"]] = {"status": "uncovered", "contract": None,
+                "uncovered_reasons": ["captured_cuda_backend_or_architecture_unavailable"],
+                "native_dispatch_proven": False, "mmq_source_costs_requested": enable_mmq_source_costs}
+            continue
+        cc = 100 * int(match[1]) + 10 * int(match[2])
+        if cc != canonical["cuda_compute_capability"]:
+            raise ValueError("GPU invocation contract architecture differs from captured native device")
+        if mmq_argument and mmq_argument.get("gpu_uuid") != evidence.get("gpu_uuid"):
+            raise ValueError("GPU invocation MMQ property probe differs from selected native GPU UUID")
+        record_facts = []
+        for native_ref in runtime["native_record_refs"]:
+            raw, raw_ref = grid.read_document(grid.resolve_data(native_ref["path"], data_root), native_ref["sha256"])
+            env, env_evidence = captured_kernel_environment(raw, row.get("config", {}).get("environment"))
+            record_facts.append((env, env_evidence, raw_ref))
+            refs[raw_ref["path"]] = raw_ref
+        if not record_facts or any(value[:2] != record_facts[0][:2] for value in record_facts[1:]):
+            raise ValueError("GPU invocation kernel environment differs across selected cell captures")
+        env, env_evidence, _ = record_facts[0]
+        key = derivation_key(env, cc)
+        if key not in contract_cache:
+            contract_cache[key] = derive_llama_gpu_invocation_contract(runtime_binding["contract"],
+                captured_kernel_environment=env, cuda_compute_capability=cc, mmq_device_evidence=mmq_argument)
+        contract = contract_cache[key]
+        for ref in contract["source_refs"]:
+            refs[ref["path"]] = ref
+        cells[row["cell_id"]] = {"status": contract["status"], "contract": contract,
+            "kernel_environment": env_evidence, "cuda_compute_capability": cc,
+            "device_evidence": evidence, "native_record_refs": [value[2] for value in record_facts],
+            "mmq_source_costs_requested": enable_mmq_source_costs, "native_dispatch_proven": False,
+            "uncovered_reasons": contract.get("uncovered_reasons", []),
+            "conditional_reasons": contract.get("conditional_reasons", []), "unpriced_terms": contract.get("unpriced_terms", [])}
+    verify_refs(list(refs.values()))
+    return {"contract": saved, "contract_ref": contract_ref, "evidence_refs": list(refs.values()), "cells": cells,
+        "runtime_source_binding_ref": runtime_binding["contract_ref"], "source_linkage": linkage,
+        "mmq_source_costs_requested": enable_mmq_source_costs,
+        "source_derivation_variants": len(contract_cache),
+        "conditional_cell_count": sum(cell["status"] == "conditional" for cell in cells.values()),
+        "uncovered_cell_count": sum(cell["status"] == "uncovered" for cell in cells.values()),
+        "template_environment_is_runtime_evidence": False, "per_cell_environment_source": "captured execution_environment only",
+        "native_dispatch_proven": False, "native_latency_used": False, "today_environment_read": False,
+        "host_offload_treatment_enabled_by_this_validation": False}
+
+
+def apply_gpu_invocation_static_contract(scenario, inputs):
+    proof = inputs.get("gpu_invocation_evidence")
+    if proof is None:
+        return scenario
+    if not isinstance(proof, Mapping):
+        raise ValueError("GPU invocation evidence must be a frozen mapping")
+    if proof.get("contract") is None:
+        return scenario
+    contract = inputs.get("gpu_invocation_contract")
+    flag = inputs.get("gpu_mmq_source_costs", False)
+    if not isinstance(proof, Mapping) or contract != proof.get("contract") or type(flag) is not bool or flag is not proof.get("mmq_source_costs_requested"):
+        raise ValueError("GPU invocation static contract or source-cost switch differs from frozen evidence")
+    from heterollm_sim.llama_gpu_invocations import apply_llama_gpu_invocation_contract
+    return apply_llama_gpu_invocation_contract(scenario, contract, enabled=True, enable_mmq_source_costs=flag)
+
+
 IQ_PANEL_SOURCE_SCHEMA = "llama.cpp.cpu.iq-panel-source-contract/v1"
 IQ_PANEL_VARIABLE = "GGML_NO_IQ_PANEL"
 
@@ -798,7 +979,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -835,6 +1016,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         raise ValueError("compiled CUDA Graphs flag lacks matching artifact evidence")
     config["compiled_cuda_graphs"] = graph_evidence["compiled_cuda_graphs"]
     host_binding = host_offload["cells"][row["cell_id"]] if host_offload else None
+    gpu_binding = gpu_invocation["cells"][row["cell_id"]] if gpu_invocation else None
     if host_binding and host_binding["status"] == "verified":
         config["op_offload"] = host_binding["op_offload_enabled"]
     return {"cell_id": row["cell_id"], "model_key": row["model_key"],
@@ -850,6 +1032,9 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "tensor_storage_contract": tensor_storage["contract"] if tensor_storage else None,
         "tensor_storage_evidence": tensor_storage,
         "tensor_storage_f32_hidden": tensor_storage["f32_hidden_storage_requested"] if tensor_storage else False,
+        "gpu_invocation_contract": gpu_binding["contract"] if gpu_binding else None,
+        "gpu_invocation_evidence": gpu_binding,
+        "gpu_mmq_source_costs": gpu_invocation["mmq_source_costs_requested"] if gpu_invocation else False,
         "cpu_iq_panel_reuse": iq_panel["dispatch"] if iq_panel else None,
         "cpu_iq_panel_evidence": iq_panel,
         "hardware_ref": row["static_hardware"].get("frozen_hardware_ref"),
@@ -931,6 +1116,14 @@ def unsupported_dimensions(inputs, model=None):
             "f32_hidden_storage_requested": inputs.get("tensor_storage_f32_hidden", False),
             "native_dispatch_proven": False, "reason": "Source-bound logical GET_ROWS traffic and storage do not price row dequantization, repeated-index cache reuse, cache-line/page or write-allocation effects",
             "limits": tensor_storage.get("limits", [])})
+    invocation = inputs.get("gpu_invocation_evidence")
+    if isinstance(invocation, Mapping):
+        rows.append({"dimension": "gpu_physical_invocation_and_source_costs", "status": "conditional",
+            "binding_status": invocation.get("status"), "native_dispatch_proven": False,
+            "mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
+            "conditional_reasons": invocation.get("conditional_reasons", []),
+            "uncovered_reasons": invocation.get("uncovered_reasons", []), "unpriced_terms": invocation.get("unpriced_terms", []),
+            "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"})
     if raw.get("gpu_layers") == -1:
         rows.append({"dimension": "auto_gpu_layer_fit", "status": "conditional", "native": -1, "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."})
     rows.append({"dimension": "cuda_graph_lifecycle", "status": "conditional", "compiled_cuda_graphs": raw.get("compiled_cuda_graphs"), "reason": "No CUDA Graph replay timing or prior native profile is applied; direct launch/synchronization parity remains unvalidated."})
@@ -1131,7 +1324,7 @@ def compact_dispatch_evidence(metadata):
     """Read named core ledgers before general metadata truncation can hide them."""
     metadata = metadata if isinstance(metadata, Mapping) else {}
     return {key: bounded_value(dict(value)) if isinstance(value, Mapping) else None
-        for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage")
+        for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage", "gpu_invocations", "mmq_source_work")
         for value in (metadata.get(key),)}
 
 
@@ -1144,6 +1337,8 @@ def dispatch_qualification(scenario, inputs=None):
     host = host if isinstance(host, Mapping) else {}
     storage = metadata.get("llama_cpp_tensor_storage")
     storage = storage if isinstance(storage, Mapping) else {}
+    invocation = metadata.get("llama_cpp_gpu_native_invocations")
+    invocation = invocation if isinstance(invocation, Mapping) else {}
     slot = metadata.get("llama_cpp_slot_order")
     slot = slot if isinstance(slot, Mapping) else {}
     iq = inputs.get("cpu_iq_panel_reuse")
@@ -1168,6 +1363,13 @@ def dispatch_qualification(scenario, inputs=None):
             "f32_hidden_storage_requested": inputs.get("tensor_storage_f32_hidden", False),
             "native_dispatch_proven": False if inputs.get("tensor_storage_contract") is not None else None,
             **{key: bounded_value(storage.get(key)) for key in ("qualified", "status", "reasons", "previous_f32_hidden_storage", "timing_completeness", "scope")}},
+        "gpu_invocations": {"requested": inputs.get("gpu_invocation_evidence") is not None,
+            "mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
+            "kernel_environment": bounded_value((inputs.get("gpu_invocation_evidence") or {}).get("kernel_environment")),
+            "binding_uncovered_reasons": (inputs.get("gpu_invocation_evidence") or {}).get("uncovered_reasons"),
+            **{key: bounded_value(invocation.get(key)) for key in ("applied", "status", "conditional", "native_dispatch_proven",
+                "reasons", "qualified_projection_groups", "uncovered_group_reason_counts", "fusion_enabled",
+                "mmq_source_costs", "cache_write_qualified", "cache_write_reason", "unpriced_terms")}},
         "storage": {"f32_hidden_storage": metadata.get("llama_cpp_f32_hidden_storage"),
             "evidence_source": "final_scenario.workload.metadata.llama_cpp_f32_hidden_storage"},
         "slot_order": {key: bounded_value(slot.get(key)) for key in (
@@ -1186,7 +1388,7 @@ def retained_dispatch_summary(result):
         "count_scope": "simulator physical tasks in retained serving batch ledgers",
         "retained_batch_count": len(batches), "total_batches": total,
         "history_complete": complete, "native_timing_used": False}
-    for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage"):
+    for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage", "gpu_invocations", "mmq_source_work"):
         ledgers = []
         for batch in batches:
             metadata = getattr(getattr(batch, "cost", None), "metadata", {})
@@ -1327,6 +1529,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         runtime_environment=dict(env), **simulator_config)
     scenario = apply_host_offload_static_contract(scenario, inputs)
     scenario = apply_tensor_storage_static_contract(scenario, inputs)
+    scenario = apply_gpu_invocation_static_contract(scenario, inputs)
     profiles = {kind: dict(values) for kind, values in scenario.component_profiles.items()}
     changed = []
     for ident, profile in profiles.get("gpu", {}).items():
@@ -1375,6 +1578,9 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
             "tensor_storage_contract": inputs.get("tensor_storage_contract"),
             "tensor_storage_f32_hidden_requested": inputs.get("tensor_storage_f32_hidden", False),
             "tensor_storage_binding": inputs.get("tensor_storage_evidence"),
+            "gpu_invocation_contract": inputs.get("gpu_invocation_contract"),
+            "gpu_invocation_binding": inputs.get("gpu_invocation_evidence"),
+            "gpu_mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
             "slot_order_treatment": {"requested": inputs.get("slot_order_contract") is not None,
                 "qualified": slot_qualification.get("qualified", False), "applied": slot_qualification.get("applied", False),
                 "status": slot_qualification.get("status", "qualification_not_reported"),
@@ -1452,7 +1658,7 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
@@ -1469,6 +1675,11 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     tensor_storage = verified_tensor_storage_contract(tensor_storage_contract_path, rows, data_root,
         f32_hidden_storage=tensor_storage_f32_hidden, runtime_binding=host_offload,
         runtime_source_contract_path=host_offload_source_contract_path) if tensor_storage_contract_path else None
+    if type(gpu_mmq_source_costs) is not bool or (gpu_mmq_source_costs and gpu_invocation_contract_path is None):
+        raise ValueError("GPU MMQ source costs require a GPU invocation source contract and explicit boolean")
+    gpu_invocation = verified_gpu_invocation_contract(gpu_invocation_contract_path, rows, data_root,
+        enable_mmq_source_costs=gpu_mmq_source_costs, runtime_binding=host_offload,
+        runtime_source_contract_path=host_offload_source_contract_path) if gpu_invocation_contract_path else None
     if iq_panel_assume_default_unset and iq_panel_source_contract_path is None:
         raise ValueError("IQ panel default-unset assumption requires an explicit source contract")
     iq_panel = verified_iq_panel_source_contract(iq_panel_source_contract_path, rows, data_root,
@@ -1486,7 +1697,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -1497,7 +1708,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "selection_sha256": selection_ref["sha256"], "selection_created_utc": selection.get("created_utc"),
         "selected_denominator": len(entries), "native_grid_denominator": selection.get("native_grid_denominator", selection.get("planned_cells", 162)),
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
-        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage,
+        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation,
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -1513,6 +1724,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(host_offload["evidence_refs"])
     if tensor_storage:
         verify_refs(tensor_storage["evidence_refs"])
+    if gpu_invocation:
+        verify_refs(gpu_invocation["evidence_refs"])
     return freeze
 
 
@@ -1537,6 +1750,9 @@ def verify_freeze_references(freeze):
     tensor_storage = freeze.get("tensor_storage")
     if tensor_storage:
         refs += tensor_storage["evidence_refs"]
+    gpu_invocation = freeze.get("gpu_invocation")
+    if gpu_invocation:
+        refs += gpu_invocation["evidence_refs"]
     verify_refs(refs)
 
 
@@ -1876,6 +2092,9 @@ def main(argv=None):
     parser.add_argument("--slot-order-contract", type=Path, help="source-bound stable slot traversal for a qualified fresh same-arrival cohort; default off")
     parser.add_argument("--host-offload-source-contract", type=Path, help="verified source/build/native-runtime binding for host MUL_MAT CUDA dispatch; initial freeze only, default off")
     parser.add_argument("--tensor-storage-contract", type=Path, help="source/build-bound indexed GET_ROWS storage traffic; initial freeze only, default off")
+    parser.add_argument("--gpu-invocation-contract", type=Path, help="conditional source/build-bound physical GPU projection and fusion mapping; initial freeze only, default off")
+    parser.add_argument("--gpu-mmq-source-costs", action=argparse.BooleanOptionalAction, default=None,
+        help="separate source MMQ/MMVQ cost treatment; requires GPU invocation contract; default false")
     parser.add_argument("--tensor-storage-f32-hidden", action=argparse.BooleanOptionalAction, default=None,
         help="separate full F32 hidden-storage ablation; requires tensor-storage contract; default false")
     parser.add_argument("--iq-panel-source-contract", type=Path, help="explicit frozen CPU IQ panel source/build/history contract; default off")
@@ -1900,13 +2119,15 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None) and (not args.selection or args.resume):
-        parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage contracts are only accepted for an initial selection freeze")
+    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None) and (not args.selection or args.resume):
+        parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
+    if args.gpu_mmq_source_costs is not None and args.gpu_invocation_contract is None:
+        parser.error("--gpu-mmq-source-costs requires --gpu-invocation-contract")
     if args.tensor_storage_f32_hidden is not None and args.tensor_storage_contract is None:
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden))
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs))
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

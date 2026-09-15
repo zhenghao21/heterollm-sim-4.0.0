@@ -1,0 +1,2106 @@
+{
+  "schema": "r6-small-model-difference-diagnosis/v1",
+  "created_utc": "2026-09-15T17:20:09.397Z",
+  "scope": "Read-only four selected small-model anchor outputs, original native records, frozen simulator source and existing generic diagnostic probes; no new tests/sim/native or source edits",
+  "evaluated_candidate": "round_006/physical_mapping_mmq (12-anchor original snapshot, before parallel core repairs)",
+  "score_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\errors.0001.json",
+    "bytes": 873290,
+    "sha256": "ac360e636a8146969222c3c75cd662e3947a49101cf1f19204aa4f402d363607"
+  },
+  "freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\freeze.json",
+    "sha256": "75a5bccbdbbc86fda4b11533f89abbd1617e931d460d0a5067960c8bafb73025",
+    "size_bytes": 24482677
+  },
+  "core_review_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\core_review.json",
+    "bytes": 44268,
+    "sha256": "67b37c832b677cfc8b5717bb5f7ce9bebe266e5d7a4ee20443593115fb9f0f20"
+  },
+  "score_prediction_identity_passed": true,
+  "cases": [
+    {
+      "cell_id": "qwen25_p512_o32_c1__fixed_runtime",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\predictions\\qwen25_p512_o32_c1__fixed_runtime.prediction.json",
+        "bytes": 1409368,
+        "sha256": "603a5cef50615693a097798450049e3eab386c893c9d9057a7076442f9101777"
+      },
+      "native_raw_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c1__fixed_runtime__b00.json",
+        "sha256": "70d688c759470674f916ac557afec2ea663eaf04826d7ac8fcd37e0201c021c2",
+        "bytes": 468239
+      },
+      "native_raw_hash_reverified": true,
+      "metrics": {
+        "ttft": {
+          "native_ms": 59.568,
+          "simulator_ms": 15.045857593379461,
+          "signed_error_ms": -44.52214240662054,
+          "ape_pct": 74.74171099687842
+        },
+        "tpot": {
+          "native_ms": 3.608967741935484,
+          "simulator_ms": 2.021082529865646,
+          "signed_error_ms": -1.5878852120698381,
+          "ape_pct": 43.99832100517079
+        },
+        "e2e": {
+          "native_ms": 171.446,
+          "simulator_ms": 77.6994160192145,
+          "signed_error_ms": -93.7465839807855,
+          "ape_pct": 54.67994819405848
+        }
+      },
+      "native_request_boundaries": [
+        {
+          "repeat": 0,
+          "request_index": 0,
+          "engine_start_rank": 0,
+          "prompt_n": 512,
+          "predicted_n": 32,
+          "cache_n": 0,
+          "engine_request_begin_us": 2086438,
+          "engine_prompt_last_us": 2146678,
+          "engine_first_token_us": 2146678,
+          "engine_last_token_us": 2258688,
+          "engine_token_time_count": 32,
+          "ttft_ms": 60.24,
+          "tpot_ms": 3.6132258064516125,
+          "e2e_ms": 172.25
+        },
+        {
+          "repeat": 1,
+          "request_index": 0,
+          "engine_start_rank": 0,
+          "prompt_n": 512,
+          "predicted_n": 32,
+          "cache_n": 0,
+          "engine_request_begin_us": 2336680,
+          "engine_prompt_last_us": 2396070,
+          "engine_first_token_us": 2396070,
+          "engine_last_token_us": 2507583,
+          "engine_token_time_count": 32,
+          "ttft_ms": 59.39,
+          "tpot_ms": 3.5971935483870965,
+          "e2e_ms": 170.903
+        },
+        {
+          "repeat": 2,
+          "request_index": 0,
+          "engine_start_rank": 0,
+          "prompt_n": 512,
+          "predicted_n": 32,
+          "cache_n": 0,
+          "engine_request_begin_us": 2586717,
+          "engine_prompt_last_us": 2646285,
+          "engine_first_token_us": 2646285,
+          "engine_last_token_us": 2758163,
+          "engine_token_time_count": 32,
+          "ttft_ms": 59.568,
+          "tpot_ms": 3.608967741935484,
+          "e2e_ms": 171.446
+        }
+      ],
+      "native_counts_and_prompt_end_equal_first_token": true,
+      "native_log_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c1__fixed_runtime__b00.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "native_log_has_no_operator_or_ubatch_events": true,
+      "compiled_cuda_graphs": false,
+      "calibration_applied": false,
+      "actual_config": {
+        "batch": 64,
+        "ubatch": 64,
+        "gpu_layers": -1,
+        "parallel": 1,
+        "threads": 16,
+        "flash_attn": false,
+        "environment": {
+          "GGML_OP_OFFLOAD_MIN_BATCH": null,
+          "LLAMA_ENGINE_TOKEN_TIMES": "1",
+          "CUDA_VISIBLE_DEVICES": null,
+          "CUDA_MODULE_LOADING": null,
+          "OMP_NUM_THREADS": null,
+          "GGML_CUDA_DISABLE_GRAPHS": null,
+          "LLAMA_TRACE_ANNOTATIONS": "0",
+          "LLAMA_GRAPH_REUSE_DISABLE": null,
+          "GGML_CPU_OPERATOR_TRACE": null,
+          "GGML_CPU_DISABLE_FUSION": null,
+          "GGML_CUDA_DISABLE_FUSION": null,
+          "GGML_CUDA_GRAPH_OPT": null,
+          "GGML_CUDA_NO_PINNED": null,
+          "GGML_CUDA_REGISTER_HOST": null,
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+          "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+        }
+      },
+      "simulator_request_shape_and_boundaries": [
+        {
+          "request_id": "request-0000",
+          "prompt_rows": 512,
+          "prompt_items": 8,
+          "item_sizes": {
+            "64": 8
+          },
+          "minimum_full_size_prompt_chunks": 8,
+          "visible_output": 32,
+          "engine_begin_ns": 9387.434666666666,
+          "first_token_ns": 15055245.028046127,
+          "last_token_ns": 77708803.45388116,
+          "engine_start_source": "first_prompt_batch_processing"
+        }
+      ],
+      "simulator_batch_counts": {
+        "prefill": 8,
+        "decode": 31
+      },
+      "simulator_phase_costs": {
+        "prefill": {
+          "logical_batches": 8,
+          "reported_cost_duration_ms": 15.118945321174067,
+          "host_orchestration_ms": 0.06878597462214715,
+          "gpu_frontend_busy_ms": 4.035,
+          "gpu_tensor_core_busy_ms": 5.8063100832286505,
+          "gpu_hbm_fabric_busy_ms": 10.442969949992504,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 8
+        },
+        "mixed": {
+          "logical_batches": 0,
+          "reported_cost_duration_ms": 0,
+          "host_orchestration_ms": 0,
+          "gpu_frontend_busy_ms": 0,
+          "gpu_tensor_core_busy_ms": 0,
+          "gpu_hbm_fabric_busy_ms": 0,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 0
+        },
+        "decode": {
+          "logical_batches": 31,
+          "reported_cost_duration_ms": 62.6535584258363,
+          "host_orchestration_ms": 0.2424421017535366,
+          "gpu_frontend_busy_ms": 17.205,
+          "gpu_tensor_core_busy_ms": 9.045840004691108,
+          "gpu_hbm_fabric_busy_ms": 45.64125092243189,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 31
+        }
+      },
+      "mmq_summary": {
+        "status": "observed",
+        "summarized_batch_count": 39,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 192,
+        "observed_applied_tasks": 192,
+        "reason": null,
+        "observed_audited_tasks": 7712,
+        "audited_tasks": 7712,
+        "observed_conditional_tasks": 192,
+        "conditional_tasks": 192,
+        "observed_conversion_tasks": 192,
+        "conversion_tasks": 192,
+        "observed_fixup_tasks": 192,
+        "fixup_tasks": 192,
+        "observed_gpu_gemm_tasks": 7712,
+        "gpu_gemm_tasks": 7712,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "matrix_status_counts": {
+          "applied": 192,
+          "mmvq_precedes_mmq": 3720,
+          "uncovered": 3800
+        },
+        "uncovered_reason_counts": {
+          "fixed-source MMQ requires k to be a multiple of 256": 1152,
+          "mmvq_precedes_mmq": 3720,
+          "one_physical_projection_not_proven": 744,
+          "runtime_rhs_is_not_a_physical_model_weight": 1872,
+          "unsupported_or_mixed_physical_weight_format": 32
+        }
+      },
+      "gpu_invocation_summary": {
+        "status": "observed",
+        "summarized_batch_count": 39,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 5840,
+        "observed_applied_tasks": 5840,
+        "reason": null,
+        "observed_audited_tasks": 5840,
+        "audited_tasks": 5840,
+        "observed_conditional_tasks": 5840,
+        "conditional_tasks": 5840,
+        "observed_gpu_gemm_tasks": 7712,
+        "gpu_gemm_tasks": 7712,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "observed_uncovered_tasks": 1872,
+        "uncovered_tasks": 1872,
+        "group_counts": {
+          "attention.k": 936,
+          "attention.output": 936,
+          "attention.q": 936,
+          "attention.v": 936,
+          "mlp.down": 936,
+          "mlp.gate": 192,
+          "mlp.up": 192,
+          "mlp.up_gate": 744,
+          "other_weight_projection": 32
+        }
+      },
+      "unsupported_dimensions": [
+        {
+          "dimension": "cpu_worker_binding",
+          "status": "conditional",
+          "native": {
+            "threads": 16,
+            "threads_batch": 16,
+            "worker_cpu_mask": "0x55555555",
+            "poll": 0,
+            "priority": 0
+          },
+          "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."
+        },
+        {
+          "dimension": "kv_shared_physical_pool",
+          "status": "conditional",
+          "native_total_context_tokens": 2048,
+          "simulator_slot_context_tokens": 2048,
+          "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."
+        },
+        {
+          "dimension": "runtime_op_offload_contract",
+          "status": "conditional",
+          "runtime_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-server.exe",
+            "sha256": "9882ee2a07ff0649d9dfd22e5fd4ed2a796c92eae46c53acde8017bf0ed79dae",
+            "bytes": 10752
+          },
+          "source_binding_status": "verified",
+          "op_offload": true,
+          "uncovered_reasons": [],
+          "native_dispatch_proven": false,
+          "reason": "Verified source/build/runtime capability remains subject to per-invocation tensor/layout/buffer qualification and analytical cost limits"
+        },
+        {
+          "dimension": "tensor_storage_timing_completeness",
+          "status": "conditional",
+          "f32_hidden_storage_requested": true,
+          "native_dispatch_proven": false,
+          "reason": "Source-bound logical GET_ROWS traffic and storage do not price row dequantization, repeated-index cache reuse, cache-line/page or write-allocation effects",
+          "limits": [
+            "Only the four listed generic tensor/input/GET_ROWS translation units are bound; architecture-specific qwen35.cpp source equivalence is not claimed",
+            "Row dequantization/conversion timing, repeated-index cache reuse, cache-line/page/write-allocation costs remain unmodeled",
+            "Full embedding table capacity and any existing cross-device staging remain separate from selected-row traffic"
+          ]
+        },
+        {
+          "dimension": "gpu_physical_invocation_and_source_costs",
+          "status": "conditional",
+          "binding_status": "conditional",
+          "native_dispatch_proven": false,
+          "mmq_source_costs_requested": true,
+          "conditional_reasons": [
+            "model-specific unity include historical source-body hashes were not captured; caller graph remains conditional"
+          ],
+          "uncovered_reasons": [],
+          "unpriced_terms": [
+            "native cache conversion instruction throughput",
+            "exact gather/scatter index transaction multiplicity",
+            "vector-kernel main throughput without an independent MMVQ cost treatment"
+          ],
+          "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"
+        },
+        {
+          "dimension": "auto_gpu_layer_fit",
+          "status": "conditional",
+          "native": -1,
+          "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."
+        },
+        {
+          "dimension": "cuda_graph_lifecycle",
+          "status": "conditional",
+          "compiled_cuda_graphs": false,
+          "reason": "No CUDA Graph replay timing or prior native profile is applied; direct launch/synchronization parity remains unvalidated."
+        }
+      ],
+      "native_ubatch_count_status": "8 inferred from full 512 uncached prompt and b=ub=64, not observed native trace",
+      "cost_accounting_warning": "Resource busy times overlap; reported batch-cost sums are not interchangeable with absolute request interval, and do not sum host wall with CUDA union."
+    },
+    {
+      "cell_id": "qwen25_p1536_o128_c4__fixed_runtime",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\predictions\\qwen25_p1536_o128_c4__fixed_runtime.prediction.json",
+        "bytes": 7790357,
+        "sha256": "a420276f8dfe095d4baf65e7db0bec69e749e72529116023b7b90730aaf19f97"
+      },
+      "native_raw_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o128_c4__fixed_runtime__b00.json",
+        "sha256": "a37de95e38e01c8c0d3ceb6e86a1377d4386cdfb5db61d79e04a6bb4995e0066",
+        "bytes": 3065430
+      },
+      "native_raw_hash_reverified": true,
+      "metrics": {
+        "ttft": {
+          "native_ms": 301.60249999999996,
+          "simulator_ms": 54.660901598022406,
+          "signed_error_ms": -246.94159840197756,
+          "ape_pct": 81.87650911447273
+        },
+        "tpot": {
+          "native_ms": 7.204169291338583,
+          "simulator_ms": 2.4018756468839824,
+          "signed_error_ms": -4.8022936444546005,
+          "ape_pct": 66.65992219572483
+        },
+        "e2e": {
+          "native_ms": 1221.4045,
+          "simulator_ms": 360.175278967094,
+          "signed_error_ms": -861.229221032906,
+          "ape_pct": 70.51138431477091
+        }
+      },
+      "native_request_boundaries": [
+        {
+          "repeat": 0,
+          "request_index": 0,
+          "engine_start_rank": 2,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 6656993,
+          "engine_prompt_last_us": 6971699,
+          "engine_first_token_us": 6971699,
+          "engine_last_token_us": 7798739,
+          "engine_token_time_count": 128,
+          "ttft_ms": 314.706,
+          "tpot_ms": 6.512125984251968,
+          "e2e_ms": 1141.746
+        },
+        {
+          "repeat": 0,
+          "request_index": 1,
+          "engine_start_rank": 3,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 6960774,
+          "engine_prompt_last_us": 7266689,
+          "engine_first_token_us": 7266689,
+          "engine_last_token_us": 7894025,
+          "engine_token_time_count": 128,
+          "ttft_ms": 305.915,
+          "tpot_ms": 4.939653543307086,
+          "e2e_ms": 933.251
+        },
+        {
+          "repeat": 0,
+          "request_index": 2,
+          "engine_start_rank": 0,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 6100518,
+          "engine_prompt_last_us": 6370183,
+          "engine_first_token_us": 6370183,
+          "engine_last_token_us": 7549186,
+          "engine_token_time_count": 128,
+          "ttft_ms": 269.665,
+          "tpot_ms": 9.283488188976378,
+          "e2e_ms": 1448.668
+        },
+        {
+          "repeat": 0,
+          "request_index": 3,
+          "engine_start_rank": 1,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 6370214,
+          "engine_prompt_last_us": 6669943,
+          "engine_first_token_us": 6669943,
+          "engine_last_token_us": 7677925,
+          "engine_token_time_count": 128,
+          "ttft_ms": 299.729,
+          "tpot_ms": 7.936866141732284,
+          "e2e_ms": 1307.711
+        },
+        {
+          "repeat": 1,
+          "request_index": 0,
+          "engine_start_rank": 2,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 8999460,
+          "engine_prompt_last_us": 9309399,
+          "engine_first_token_us": 9309399,
+          "engine_last_token_us": 10130421,
+          "engine_token_time_count": 128,
+          "ttft_ms": 309.939,
+          "tpot_ms": 6.464740157480315,
+          "e2e_ms": 1130.961
+        },
+        {
+          "repeat": 1,
+          "request_index": 1,
+          "engine_start_rank": 0,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 8450421,
+          "engine_prompt_last_us": 8716599,
+          "engine_first_token_us": 8716599,
+          "engine_last_token_us": 9884335,
+          "engine_token_time_count": 128,
+          "ttft_ms": 266.178,
+          "tpot_ms": 9.194771653543306,
+          "e2e_ms": 1433.914
+        },
+        {
+          "repeat": 1,
+          "request_index": 2,
+          "engine_start_rank": 1,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 8716625,
+          "engine_prompt_last_us": 9011391,
+          "engine_first_token_us": 9011391,
+          "engine_last_token_us": 10009864,
+          "engine_token_time_count": 128,
+          "ttft_ms": 294.766,
+          "tpot_ms": 7.861992125984252,
+          "e2e_ms": 1293.239
+        },
+        {
+          "repeat": 1,
+          "request_index": 3,
+          "engine_start_rank": 3,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 9298755,
+          "engine_prompt_last_us": 9601395,
+          "engine_first_token_us": 9601395,
+          "engine_last_token_us": 10232321,
+          "engine_token_time_count": 128,
+          "ttft_ms": 302.64,
+          "tpot_ms": 4.9679212598425195,
+          "e2e_ms": 933.566
+        },
+        {
+          "repeat": 2,
+          "request_index": 0,
+          "engine_start_rank": 2,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 11367249,
+          "engine_prompt_last_us": 11679633,
+          "engine_first_token_us": 11679633,
+          "engine_last_token_us": 12503585,
+          "engine_token_time_count": 128,
+          "ttft_ms": 312.384,
+          "tpot_ms": 6.487811023622047,
+          "e2e_ms": 1136.336
+        },
+        {
+          "repeat": 2,
+          "request_index": 1,
+          "engine_start_rank": 3,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 11668294,
+          "engine_prompt_last_us": 11970933,
+          "engine_first_token_us": 11970933,
+          "engine_last_token_us": 12601864,
+          "engine_token_time_count": 128,
+          "ttft_ms": 302.639,
+          "tpot_ms": 4.96796062992126,
+          "e2e_ms": 933.57
+        },
+        {
+          "repeat": 2,
+          "request_index": 2,
+          "engine_start_rank": 0,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 10808326,
+          "engine_prompt_last_us": 11077950,
+          "engine_first_token_us": 11077950,
+          "engine_last_token_us": 12255585,
+          "engine_token_time_count": 128,
+          "ttft_ms": 269.624,
+          "tpot_ms": 9.27271653543307,
+          "e2e_ms": 1447.259
+        },
+        {
+          "repeat": 2,
+          "request_index": 3,
+          "engine_start_rank": 1,
+          "prompt_n": 1536,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 11077984,
+          "engine_prompt_last_us": 11378550,
+          "engine_first_token_us": 11378550,
+          "engine_last_token_us": 12384457,
+          "engine_token_time_count": 128,
+          "ttft_ms": 300.566,
+          "tpot_ms": 7.9205275590551185,
+          "e2e_ms": 1306.473
+        }
+      ],
+      "native_counts_and_prompt_end_equal_first_token": true,
+      "native_log_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o128_c4__fixed_runtime__b00.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "native_log_has_no_operator_or_ubatch_events": true,
+      "compiled_cuda_graphs": false,
+      "calibration_applied": false,
+      "actual_config": {
+        "batch": 64,
+        "ubatch": 64,
+        "gpu_layers": -1,
+        "parallel": 4,
+        "threads": 16,
+        "flash_attn": false,
+        "environment": {
+          "GGML_OP_OFFLOAD_MIN_BATCH": null,
+          "LLAMA_ENGINE_TOKEN_TIMES": "1",
+          "CUDA_VISIBLE_DEVICES": null,
+          "CUDA_MODULE_LOADING": null,
+          "OMP_NUM_THREADS": null,
+          "GGML_CUDA_DISABLE_GRAPHS": null,
+          "LLAMA_TRACE_ANNOTATIONS": "0",
+          "LLAMA_GRAPH_REUSE_DISABLE": null,
+          "GGML_CPU_OPERATOR_TRACE": null,
+          "GGML_CPU_DISABLE_FUSION": null,
+          "GGML_CUDA_DISABLE_FUSION": null,
+          "GGML_CUDA_GRAPH_OPT": null,
+          "GGML_CUDA_NO_PINNED": null,
+          "GGML_CUDA_REGISTER_HOST": null,
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+          "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+        }
+      },
+      "simulator_request_shape_and_boundaries": [
+        {
+          "request_id": "request-0000",
+          "prompt_rows": 1536,
+          "prompt_items": 24,
+          "item_sizes": {
+            "64": 24
+          },
+          "minimum_full_size_prompt_chunks": 24,
+          "visible_output": 128,
+          "engine_begin_ns": 9393.112062015503,
+          "first_token_ns": 45067086.77901548,
+          "last_token_ns": 341193648.1600382,
+          "engine_start_source": "first_prompt_batch_processing"
+        },
+        {
+          "request_id": "request-0001",
+          "prompt_rows": 1536,
+          "prompt_items": 25,
+          "item_sizes": {
+            "24": 1,
+            "63": 24
+          },
+          "minimum_full_size_prompt_chunks": 24,
+          "visible_output": 128,
+          "engine_begin_ns": 45067086.77901548,
+          "first_token_ns": 98177319.92529929,
+          "last_token_ns": 402635218.760076,
+          "engine_start_source": "first_prompt_batch_processing"
+        },
+        {
+          "request_id": "request-0002",
+          "prompt_rows": 1536,
+          "prompt_items": 26,
+          "item_sizes": {
+            "9": 1,
+            "39": 1,
+            "62": 24
+          },
+          "minimum_full_size_prompt_chunks": 24,
+          "visible_output": 128,
+          "engine_begin_ns": 96065517.9050202,
+          "first_token_ns": 152277087.9547812,
+          "last_token_ns": 461043255.6787987,
+          "engine_start_source": "first_prompt_batch_processing"
+        },
+        {
+          "request_id": "request-0003",
+          "prompt_rows": 1536,
+          "prompt_items": 26,
+          "item_sizes": {
+            "19": 1,
+            "53": 1,
+            "61": 24
+          },
+          "minimum_full_size_prompt_chunks": 24,
+          "visible_output": 128,
+          "engine_begin_ns": 150028064.50953826,
+          "first_token_ns": 207191974.98891097,
+          "last_token_ns": 512810490.4626658,
+          "engine_start_source": "first_prompt_batch_processing"
+        }
+      ],
+      "simulator_batch_counts": {
+        "prefill": 24,
+        "mixed": 75,
+        "decode": 127
+      },
+      "simulator_phase_costs": {
+        "prefill": {
+          "logical_batches": 24,
+          "reported_cost_duration_ms": 45.29175334399086,
+          "host_orchestration_ms": 0.20635792386644147,
+          "gpu_frontend_busy_ms": 12.099,
+          "gpu_tensor_core_busy_ms": 18.40436438184051,
+          "gpu_hbm_fabric_busy_ms": 30.847157394968796,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 24
+        },
+        "mixed": {
+          "logical_batches": 75,
+          "reported_cost_duration_ms": 162.12488820987352,
+          "host_orchestration_ms": 0.6724948548293114,
+          "gpu_frontend_busy_ms": 38.025,
+          "gpu_tensor_core_busy_ms": 62.77685415492573,
+          "gpu_hbm_fabric_busy_ms": 118.36913186738254,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 75
+        },
+        "decode": {
+          "logical_batches": 127,
+          "reported_cost_duration_ms": 305.6185154737026,
+          "host_orchestration_ms": 1.0382906388301636,
+          "gpu_frontend_busy_ms": 77.829,
+          "gpu_tensor_core_busy_ms": 40.314952028373874,
+          "gpu_hbm_fabric_busy_ms": 231.95952378247517,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 127
+        }
+      },
+      "mmq_summary": {
+        "status": "observed",
+        "summarized_batch_count": 226,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 2376,
+        "observed_applied_tasks": 2376,
+        "reason": null,
+        "observed_audited_tasks": 48419,
+        "audited_tasks": 48419,
+        "observed_conditional_tasks": 2376,
+        "conditional_tasks": 2376,
+        "observed_conversion_tasks": 2376,
+        "conversion_tasks": 2376,
+        "observed_fixup_tasks": 2376,
+        "fixup_tasks": 2376,
+        "observed_gpu_gemm_tasks": 48419,
+        "gpu_gemm_tasks": 48419,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "matrix_status_counts": {
+          "applied": 2376,
+          "mmvq_precedes_mmq": 20136,
+          "uncovered": 25907
+        },
+        "uncovered_reason_counts": {
+          "fixed-source MMQ requires k to be a multiple of 256": 14256,
+          "mmvq_precedes_mmq": 20136,
+          "one_physical_projection_not_proven": 600,
+          "runtime_rhs_is_not_a_physical_model_weight": 10848,
+          "unsupported_or_mixed_physical_weight_format": 203
+        }
+      },
+      "gpu_invocation_summary": {
+        "status": "observed",
+        "summarized_batch_count": 226,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 37571,
+        "observed_applied_tasks": 37571,
+        "reason": null,
+        "observed_audited_tasks": 37571,
+        "audited_tasks": 37571,
+        "observed_conditional_tasks": 37571,
+        "conditional_tasks": 37571,
+        "observed_gpu_gemm_tasks": 48419,
+        "gpu_gemm_tasks": 48419,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "observed_uncovered_tasks": 10848,
+        "uncovered_tasks": 10848,
+        "group_counts": {
+          "attention.k": 5424,
+          "attention.output": 5424,
+          "attention.q": 5424,
+          "attention.v": 5424,
+          "mlp.down": 5424,
+          "mlp.gate": 4824,
+          "mlp.up": 4824,
+          "mlp.up_gate": 600,
+          "other_weight_projection": 203
+        }
+      },
+      "unsupported_dimensions": [
+        {
+          "dimension": "cpu_worker_binding",
+          "status": "conditional",
+          "native": {
+            "threads": 16,
+            "threads_batch": 16,
+            "worker_cpu_mask": "0x55555555",
+            "poll": 0,
+            "priority": 0
+          },
+          "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."
+        },
+        {
+          "dimension": "kv_shared_physical_pool",
+          "status": "conditional",
+          "native_total_context_tokens": 8192,
+          "simulator_slot_context_tokens": 2048,
+          "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."
+        },
+        {
+          "dimension": "runtime_op_offload_contract",
+          "status": "conditional",
+          "runtime_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-server.exe",
+            "sha256": "9882ee2a07ff0649d9dfd22e5fd4ed2a796c92eae46c53acde8017bf0ed79dae",
+            "bytes": 10752
+          },
+          "source_binding_status": "verified",
+          "op_offload": true,
+          "uncovered_reasons": [],
+          "native_dispatch_proven": false,
+          "reason": "Verified source/build/runtime capability remains subject to per-invocation tensor/layout/buffer qualification and analytical cost limits"
+        },
+        {
+          "dimension": "tensor_storage_timing_completeness",
+          "status": "conditional",
+          "f32_hidden_storage_requested": true,
+          "native_dispatch_proven": false,
+          "reason": "Source-bound logical GET_ROWS traffic and storage do not price row dequantization, repeated-index cache reuse, cache-line/page or write-allocation effects",
+          "limits": [
+            "Only the four listed generic tensor/input/GET_ROWS translation units are bound; architecture-specific qwen35.cpp source equivalence is not claimed",
+            "Row dequantization/conversion timing, repeated-index cache reuse, cache-line/page/write-allocation costs remain unmodeled",
+            "Full embedding table capacity and any existing cross-device staging remain separate from selected-row traffic"
+          ]
+        },
+        {
+          "dimension": "gpu_physical_invocation_and_source_costs",
+          "status": "conditional",
+          "binding_status": "conditional",
+          "native_dispatch_proven": false,
+          "mmq_source_costs_requested": true,
+          "conditional_reasons": [
+            "model-specific unity include historical source-body hashes were not captured; caller graph remains conditional"
+          ],
+          "uncovered_reasons": [],
+          "unpriced_terms": [
+            "native cache conversion instruction throughput",
+            "exact gather/scatter index transaction multiplicity",
+            "vector-kernel main throughput without an independent MMVQ cost treatment"
+          ],
+          "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"
+        },
+        {
+          "dimension": "auto_gpu_layer_fit",
+          "status": "conditional",
+          "native": -1,
+          "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."
+        },
+        {
+          "dimension": "cuda_graph_lifecycle",
+          "status": "conditional",
+          "compiled_cuda_graphs": false,
+          "reason": "No CUDA Graph replay timing or prior native profile is applied; direct launch/synchronization parity remains unvalidated."
+        }
+      ],
+      "native_ubatch_count_status": "not directly observed; mixed decode tokens can reduce per-slot prompt rows below 64",
+      "cost_accounting_warning": "Resource busy times overlap; reported batch-cost sums are not interchangeable with absolute request interval, and do not sum host wall with CUDA union."
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c1__fixed_runtime",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\predictions\\tinyllama_p512_o32_c1__fixed_runtime.prediction.json",
+        "bytes": 1386740,
+        "sha256": "be8301f0d3d6afd6dc2cd88fd41eccec827ab5a0d13ac4b1df099fec60d94404"
+      },
+      "native_raw_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o32_c1__fixed_runtime__b00.json",
+        "sha256": "1bca472f4bd84b9b5c39a33bd62586124f55ffb76f6a7d61b64192e5c193482d",
+        "bytes": 457487
+      },
+      "native_raw_hash_reverified": true,
+      "metrics": {
+        "ttft": {
+          "native_ms": 54.738,
+          "simulator_ms": 27.22380587419164,
+          "signed_error_ms": -27.51419412580836,
+          "ape_pct": 50.265252887954176
+        },
+        "tpot": {
+          "native_ms": 3.1494516129032255,
+          "simulator_ms": 2.3822141877599523,
+          "signed_error_ms": -0.7672374251432732,
+          "ape_pct": 24.36098468698234
+        },
+        "e2e": {
+          "native_ms": 152.215,
+          "simulator_ms": 101.07244569475016,
+          "signed_error_ms": -51.142554305249845,
+          "ape_pct": 33.59889255674529
+        }
+      },
+      "native_request_boundaries": [
+        {
+          "repeat": 0,
+          "request_index": 0,
+          "engine_start_rank": 0,
+          "prompt_n": 512,
+          "predicted_n": 32,
+          "cache_n": 0,
+          "engine_request_begin_us": 1709259,
+          "engine_prompt_last_us": 1763997,
+          "engine_first_token_us": 1763997,
+          "engine_last_token_us": 1861474,
+          "engine_token_time_count": 32,
+          "ttft_ms": 54.738,
+          "tpot_ms": 3.1444193548387096,
+          "e2e_ms": 152.215
+        },
+        {
+          "repeat": 1,
+          "request_index": 0,
+          "engine_start_rank": 0,
+          "prompt_n": 512,
+          "predicted_n": 32,
+          "cache_n": 0,
+          "engine_request_begin_us": 1914678,
+          "engine_prompt_last_us": 1970352,
+          "engine_first_token_us": 1970352,
+          "engine_last_token_us": 2071157,
+          "engine_token_time_count": 32,
+          "ttft_ms": 55.674,
+          "tpot_ms": 3.2517741935483873,
+          "e2e_ms": 156.479
+        },
+        {
+          "repeat": 2,
+          "request_index": 0,
+          "engine_start_rank": 0,
+          "prompt_n": 512,
+          "predicted_n": 32,
+          "cache_n": 0,
+          "engine_request_begin_us": 2120475,
+          "engine_prompt_last_us": 2174995,
+          "engine_first_token_us": 2174995,
+          "engine_last_token_us": 2272628,
+          "engine_token_time_count": 32,
+          "ttft_ms": 54.52,
+          "tpot_ms": 3.149451612903226,
+          "e2e_ms": 152.153
+        }
+      ],
+      "native_counts_and_prompt_end_equal_first_token": true,
+      "native_log_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o32_c1__fixed_runtime__b00.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "native_log_has_no_operator_or_ubatch_events": true,
+      "compiled_cuda_graphs": false,
+      "calibration_applied": false,
+      "actual_config": {
+        "batch": 64,
+        "ubatch": 64,
+        "gpu_layers": -1,
+        "parallel": 1,
+        "threads": 16,
+        "flash_attn": false,
+        "environment": {
+          "GGML_OP_OFFLOAD_MIN_BATCH": null,
+          "LLAMA_ENGINE_TOKEN_TIMES": "1",
+          "CUDA_VISIBLE_DEVICES": null,
+          "CUDA_MODULE_LOADING": null,
+          "OMP_NUM_THREADS": null,
+          "GGML_CUDA_DISABLE_GRAPHS": null,
+          "LLAMA_TRACE_ANNOTATIONS": "0",
+          "LLAMA_GRAPH_REUSE_DISABLE": null,
+          "GGML_CPU_OPERATOR_TRACE": null,
+          "GGML_CPU_DISABLE_FUSION": null,
+          "GGML_CUDA_DISABLE_FUSION": null,
+          "GGML_CUDA_GRAPH_OPT": null,
+          "GGML_CUDA_NO_PINNED": null,
+          "GGML_CUDA_REGISTER_HOST": null,
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+          "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+        }
+      },
+      "simulator_request_shape_and_boundaries": [
+        {
+          "request_id": "request-0000",
+          "prompt_rows": 512,
+          "prompt_items": 8,
+          "item_sizes": {
+            "64": 8
+          },
+          "minimum_full_size_prompt_chunks": 8,
+          "visible_output": 32,
+          "engine_begin_ns": 9132.380279069766,
+          "first_token_ns": 27232938.25447071,
+          "last_token_ns": 101081578.07502922,
+          "engine_start_source": "first_prompt_batch_processing"
+        }
+      ],
+      "simulator_batch_counts": {
+        "prefill": 8,
+        "decode": 31
+      },
+      "simulator_phase_costs": {
+        "prefill": {
+          "logical_batches": 8,
+          "reported_cost_duration_ms": 27.300793601986204,
+          "host_orchestration_ms": 0.06878597462214715,
+          "gpu_frontend_busy_ms": 5.811,
+          "gpu_tensor_core_busy_ms": 9.273958753755021,
+          "gpu_hbm_fabric_busy_ms": 23.328882814472788,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 8
+        },
+        "mixed": {
+          "logical_batches": 0,
+          "reported_cost_duration_ms": 0,
+          "host_orchestration_ms": 0,
+          "gpu_frontend_busy_ms": 0,
+          "gpu_tensor_core_busy_ms": 0,
+          "gpu_hbm_fabric_busy_ms": 0,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 0
+        },
+        "decode": {
+          "logical_batches": 31,
+          "reported_cost_duration_ms": 73.84863982056247,
+          "host_orchestration_ms": 0.2424421017535366,
+          "gpu_frontend_busy_ms": 15.779,
+          "gpu_tensor_core_busy_ms": 19.035418080685893,
+          "gpu_hbm_fabric_busy_ms": 58.26633515569931,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 31
+        }
+      },
+      "mmq_summary": {
+        "status": "observed",
+        "summarized_batch_count": 39,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 1232,
+        "observed_applied_tasks": 1232,
+        "reason": null,
+        "observed_audited_tasks": 7072,
+        "audited_tasks": 7072,
+        "observed_conditional_tasks": 1232,
+        "conditional_tasks": 1232,
+        "observed_conversion_tasks": 1232,
+        "conversion_tasks": 1232,
+        "observed_fixup_tasks": 1232,
+        "fixup_tasks": 1232,
+        "observed_gpu_gemm_tasks": 7072,
+        "gpu_gemm_tasks": 7072,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "matrix_status_counts": {
+          "applied": 1232,
+          "mmvq_precedes_mmq": 3410,
+          "uncovered": 2430
+        },
+        "uncovered_reason_counts": {
+          "mmvq_precedes_mmq": 3410,
+          "one_physical_projection_not_proven": 682,
+          "runtime_rhs_is_not_a_physical_model_weight": 1716,
+          "unsupported_or_mixed_physical_weight_format": 32
+        }
+      },
+      "gpu_invocation_summary": {
+        "status": "observed",
+        "summarized_batch_count": 39,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 5356,
+        "observed_applied_tasks": 5356,
+        "reason": null,
+        "observed_audited_tasks": 5356,
+        "audited_tasks": 5356,
+        "observed_conditional_tasks": 5356,
+        "conditional_tasks": 5356,
+        "observed_gpu_gemm_tasks": 7072,
+        "gpu_gemm_tasks": 7072,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "observed_uncovered_tasks": 1716,
+        "uncovered_tasks": 1716,
+        "group_counts": {
+          "attention.k": 858,
+          "attention.output": 858,
+          "attention.q": 858,
+          "attention.v": 858,
+          "mlp.down": 858,
+          "mlp.gate": 176,
+          "mlp.up": 176,
+          "mlp.up_gate": 682,
+          "other_weight_projection": 32
+        }
+      },
+      "unsupported_dimensions": [
+        {
+          "dimension": "cpu_worker_binding",
+          "status": "conditional",
+          "native": {
+            "threads": 16,
+            "threads_batch": 16,
+            "worker_cpu_mask": "0x55555555",
+            "poll": 0,
+            "priority": 0
+          },
+          "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."
+        },
+        {
+          "dimension": "kv_shared_physical_pool",
+          "status": "conditional",
+          "native_total_context_tokens": 2048,
+          "simulator_slot_context_tokens": 2048,
+          "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."
+        },
+        {
+          "dimension": "runtime_op_offload_contract",
+          "status": "conditional",
+          "runtime_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-server.exe",
+            "sha256": "9882ee2a07ff0649d9dfd22e5fd4ed2a796c92eae46c53acde8017bf0ed79dae",
+            "bytes": 10752
+          },
+          "source_binding_status": "verified",
+          "op_offload": true,
+          "uncovered_reasons": [],
+          "native_dispatch_proven": false,
+          "reason": "Verified source/build/runtime capability remains subject to per-invocation tensor/layout/buffer qualification and analytical cost limits"
+        },
+        {
+          "dimension": "tensor_storage_timing_completeness",
+          "status": "conditional",
+          "f32_hidden_storage_requested": true,
+          "native_dispatch_proven": false,
+          "reason": "Source-bound logical GET_ROWS traffic and storage do not price row dequantization, repeated-index cache reuse, cache-line/page or write-allocation effects",
+          "limits": [
+            "Only the four listed generic tensor/input/GET_ROWS translation units are bound; architecture-specific qwen35.cpp source equivalence is not claimed",
+            "Row dequantization/conversion timing, repeated-index cache reuse, cache-line/page/write-allocation costs remain unmodeled",
+            "Full embedding table capacity and any existing cross-device staging remain separate from selected-row traffic"
+          ]
+        },
+        {
+          "dimension": "gpu_physical_invocation_and_source_costs",
+          "status": "conditional",
+          "binding_status": "conditional",
+          "native_dispatch_proven": false,
+          "mmq_source_costs_requested": true,
+          "conditional_reasons": [
+            "model-specific unity include historical source-body hashes were not captured; caller graph remains conditional"
+          ],
+          "uncovered_reasons": [],
+          "unpriced_terms": [
+            "native cache conversion instruction throughput",
+            "exact gather/scatter index transaction multiplicity",
+            "vector-kernel main throughput without an independent MMVQ cost treatment"
+          ],
+          "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"
+        },
+        {
+          "dimension": "auto_gpu_layer_fit",
+          "status": "conditional",
+          "native": -1,
+          "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."
+        },
+        {
+          "dimension": "cuda_graph_lifecycle",
+          "status": "conditional",
+          "compiled_cuda_graphs": false,
+          "reason": "No CUDA Graph replay timing or prior native profile is applied; direct launch/synchronization parity remains unvalidated."
+        }
+      ],
+      "native_ubatch_count_status": "8 inferred from full 512 uncached prompt and b=ub=64, not observed native trace",
+      "cost_accounting_warning": "Resource busy times overlap; reported batch-cost sums are not interchangeable with absolute request interval, and do not sum host wall with CUDA union."
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c4__fixed_runtime",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\predictions\\tinyllama_p128_o128_c4__fixed_runtime.prediction.json",
+        "bytes": 4756305,
+        "sha256": "b95746d77c5dbf5e10892b7348dab97b54d96eb447eb4f335d06734bd0191388"
+      },
+      "native_raw_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o128_c4__fixed_runtime__b00.json",
+        "sha256": "050e2c03d48c1b2062679ac2a44392c0bab5ffed49ed22e3a08d3767cd3f99f9",
+        "bytes": 2502859
+      },
+      "native_raw_hash_reverified": true,
+      "metrics": {
+        "ttft": {
+          "native_ms": 22.390500000000003,
+          "simulator_ms": 10.862057404506793,
+          "signed_error_ms": -11.52844259549321,
+          "ape_pct": 51.48809805718144
+        },
+        "tpot": {
+          "native_ms": 4.438889763779528,
+          "simulator_ms": 2.86496019784088,
+          "signed_error_ms": -1.573929565938648,
+          "ape_pct": 35.45773041677235
+        },
+        "e2e": {
+          "native_ms": 588.323,
+          "simulator_ms": 374.5285433439351,
+          "signed_error_ms": -213.79445665606488,
+          "ape_pct": 36.33963939129779
+        }
+      },
+      "native_request_boundaries": [
+        {
+          "repeat": 0,
+          "request_index": 0,
+          "engine_start_rank": 3,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 3668675,
+          "engine_prompt_last_us": 3688732,
+          "engine_first_token_us": 3688732,
+          "engine_last_token_us": 4242406,
+          "engine_token_time_count": 128,
+          "ttft_ms": 20.057,
+          "tpot_ms": 4.3596377952755905,
+          "e2e_ms": 573.731
+        },
+        {
+          "repeat": 0,
+          "request_index": 1,
+          "engine_start_rank": 0,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 3618551,
+          "engine_prompt_last_us": 3635104,
+          "engine_first_token_us": 3635104,
+          "engine_last_token_us": 4215863,
+          "engine_token_time_count": 128,
+          "ttft_ms": 16.553,
+          "tpot_ms": 4.572905511811023,
+          "e2e_ms": 597.312
+        },
+        {
+          "repeat": 0,
+          "request_index": 2,
+          "engine_start_rank": 1,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 3635120,
+          "engine_prompt_last_us": 3659932,
+          "engine_first_token_us": 3659932,
+          "engine_last_token_us": 4227704,
+          "engine_token_time_count": 128,
+          "ttft_ms": 24.812,
+          "tpot_ms": 4.470645669291339,
+          "e2e_ms": 592.584
+        },
+        {
+          "repeat": 0,
+          "request_index": 3,
+          "engine_start_rank": 2,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 3651734,
+          "engine_prompt_last_us": 3676090,
+          "engine_first_token_us": 3676090,
+          "engine_last_token_us": 4235796,
+          "engine_token_time_count": 128,
+          "ttft_ms": 24.356,
+          "tpot_ms": 4.407133858267716,
+          "e2e_ms": 584.062
+        },
+        {
+          "repeat": 1,
+          "request_index": 0,
+          "engine_start_rank": 2,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 4829723,
+          "engine_prompt_last_us": 4853927,
+          "engine_first_token_us": 4853927,
+          "engine_last_token_us": 5413073,
+          "engine_token_time_count": 128,
+          "ttft_ms": 24.204,
+          "tpot_ms": 4.402724409448819,
+          "e2e_ms": 583.35
+        },
+        {
+          "repeat": 1,
+          "request_index": 1,
+          "engine_start_rank": 0,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 4796485,
+          "engine_prompt_last_us": 4812880,
+          "engine_first_token_us": 4812880,
+          "engine_last_token_us": 5393202,
+          "engine_token_time_count": 128,
+          "ttft_ms": 16.395,
+          "tpot_ms": 4.569464566929134,
+          "e2e_ms": 596.717
+        },
+        {
+          "repeat": 1,
+          "request_index": 2,
+          "engine_start_rank": 3,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 4846153,
+          "engine_prompt_last_us": 4866730,
+          "engine_first_token_us": 4866730,
+          "engine_last_token_us": 5420562,
+          "engine_token_time_count": 128,
+          "ttft_ms": 20.577,
+          "tpot_ms": 4.360881889763779,
+          "e2e_ms": 574.409
+        },
+        {
+          "repeat": 1,
+          "request_index": 3,
+          "engine_start_rank": 1,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 4812896,
+          "engine_prompt_last_us": 4838113,
+          "engine_first_token_us": 4838113,
+          "engine_last_token_us": 5405508,
+          "engine_token_time_count": 128,
+          "ttft_ms": 25.217,
+          "tpot_ms": 4.467677165354331,
+          "e2e_ms": 592.612
+        },
+        {
+          "repeat": 2,
+          "request_index": 0,
+          "engine_start_rank": 2,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 5984587,
+          "engine_prompt_last_us": 6009094,
+          "engine_first_token_us": 6009094,
+          "engine_last_token_us": 6583862,
+          "engine_token_time_count": 128,
+          "ttft_ms": 24.507,
+          "tpot_ms": 4.525732283464566,
+          "e2e_ms": 599.275
+        },
+        {
+          "repeat": 2,
+          "request_index": 1,
+          "engine_start_rank": 0,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 5951137,
+          "engine_prompt_last_us": 5967912,
+          "engine_first_token_us": 5967912,
+          "engine_last_token_us": 6563316,
+          "engine_token_time_count": 128,
+          "ttft_ms": 16.775,
+          "tpot_ms": 4.688220472440944,
+          "e2e_ms": 612.179
+        },
+        {
+          "repeat": 2,
+          "request_index": 2,
+          "engine_start_rank": 1,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 5967926,
+          "engine_prompt_last_us": 5992933,
+          "engine_first_token_us": 5992933,
+          "engine_last_token_us": 6575629,
+          "engine_token_time_count": 128,
+          "ttft_ms": 25.007,
+          "tpot_ms": 4.588157480314961,
+          "e2e_ms": 607.703
+        },
+        {
+          "repeat": 2,
+          "request_index": 3,
+          "engine_start_rank": 3,
+          "prompt_n": 128,
+          "predicted_n": 128,
+          "cache_n": 0,
+          "engine_request_begin_us": 6001556,
+          "engine_prompt_last_us": 6021879,
+          "engine_first_token_us": 6021879,
+          "engine_last_token_us": 6590329,
+          "engine_token_time_count": 128,
+          "ttft_ms": 20.323,
+          "tpot_ms": 4.475984251968503,
+          "e2e_ms": 588.773
+        }
+      ],
+      "native_counts_and_prompt_end_equal_first_token": true,
+      "native_log_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o128_c4__fixed_runtime__b00.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "native_log_has_no_operator_or_ubatch_events": true,
+      "compiled_cuda_graphs": false,
+      "calibration_applied": false,
+      "actual_config": {
+        "batch": 64,
+        "ubatch": 64,
+        "gpu_layers": -1,
+        "parallel": 4,
+        "threads": 16,
+        "flash_attn": false,
+        "environment": {
+          "GGML_OP_OFFLOAD_MIN_BATCH": null,
+          "LLAMA_ENGINE_TOKEN_TIMES": "1",
+          "CUDA_VISIBLE_DEVICES": null,
+          "CUDA_MODULE_LOADING": null,
+          "OMP_NUM_THREADS": null,
+          "GGML_CUDA_DISABLE_GRAPHS": null,
+          "LLAMA_TRACE_ANNOTATIONS": "0",
+          "LLAMA_GRAPH_REUSE_DISABLE": null,
+          "GGML_CPU_OPERATOR_TRACE": null,
+          "GGML_CPU_DISABLE_FUSION": null,
+          "GGML_CUDA_DISABLE_FUSION": null,
+          "GGML_CUDA_GRAPH_OPT": null,
+          "GGML_CUDA_NO_PINNED": null,
+          "GGML_CUDA_REGISTER_HOST": null,
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+          "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+        }
+      },
+      "simulator_request_shape_and_boundaries": [
+        {
+          "request_id": "request-0000",
+          "prompt_rows": 128,
+          "prompt_items": 2,
+          "item_sizes": {
+            "64": 2
+          },
+          "minimum_full_size_prompt_chunks": 2,
+          "visible_output": 128,
+          "engine_begin_ns": 9138.057674418604,
+          "first_token_ns": 7165030.055540513,
+          "last_token_ns": 374967766.3389962,
+          "engine_start_source": "first_prompt_batch_processing"
+        },
+        {
+          "request_id": "request-0001",
+          "prompt_rows": 128,
+          "prompt_items": 3,
+          "item_sizes": {
+            "2": 1,
+            "63": 2
+          },
+          "minimum_full_size_prompt_chunks": 2,
+          "visible_output": 128,
+          "engine_begin_ns": 7165030.055540513,
+          "first_token_ns": 18354372.79551276,
+          "last_token_ns": 383272900.1590228,
+          "engine_start_source": "first_prompt_batch_processing"
+        },
+        {
+          "request_id": "request-0002",
+          "prompt_rows": 128,
+          "prompt_items": 3,
+          "item_sizes": {
+            "5": 1,
+            "61": 1,
+            "62": 1
+          },
+          "minimum_full_size_prompt_chunks": 2,
+          "visible_output": 128,
+          "engine_begin_ns": 14524916.32439052,
+          "first_token_ns": 25842011.84286551,
+          "last_token_ns": 388623374.73093903,
+          "engine_start_source": "first_prompt_batch_processing"
+        },
+        {
+          "request_id": "request-0003",
+          "prompt_rows": 128,
+          "prompt_items": 3,
+          "item_sizes": {
+            "10": 1,
+            "57": 1,
+            "61": 1
+          },
+          "minimum_full_size_prompt_chunks": 2,
+          "visible_output": 128,
+          "engine_begin_ns": 21961586.794412896,
+          "first_token_ns": 32496358.863454238,
+          "last_token_ns": 393374199.6168785,
+          "engine_start_source": "first_prompt_batch_processing"
+        }
+      ],
+      "simulator_batch_counts": {
+        "prefill": 2,
+        "mixed": 7,
+        "decode": 127
+      },
+      "simulator_phase_costs": {
+        "prefill": {
+          "logical_batches": 2,
+          "reported_cost_duration_ms": 7.164490244693823,
+          "host_orchestration_ms": 0.017196493655536788,
+          "gpu_frontend_busy_ms": 1.455,
+          "gpu_tensor_core_busy_ms": 2.2503264081887857,
+          "gpu_hbm_fabric_busy_ms": 6.179335243682536,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 2
+        },
+        "mixed": {
+          "logical_batches": 7,
+          "reported_cost_duration_ms": 25.331328807913522,
+          "host_orchestration_ms": 0.06233198416344817,
+          "gpu_frontend_busy_ms": 4.795,
+          "gpu_tensor_core_busy_ms": 7.440504964167406,
+          "gpu_hbm_fabric_busy_ms": 21.983067494034714,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 7
+        },
+        "decode": {
+          "logical_batches": 127,
+          "reported_cost_duration_ms": 360.877840753465,
+          "host_orchestration_ms": 1.0653006205231477,
+          "gpu_frontend_busy_ms": 72.893,
+          "gpu_tensor_core_busy_ms": 75.23826345794839,
+          "gpu_hbm_fabric_busy_ms": 293.4134660299731,
+          "synchronization_critical_path_ms": 0,
+          "host_submission_count": 127
+        }
+      },
+      "mmq_summary": {
+        "status": "observed",
+        "summarized_batch_count": 136,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 1232,
+        "observed_applied_tasks": 1232,
+        "reason": null,
+        "observed_audited_tasks": 27019,
+        "audited_tasks": 27019,
+        "observed_conditional_tasks": 1232,
+        "conditional_tasks": 1232,
+        "observed_conversion_tasks": 1232,
+        "conversion_tasks": 1232,
+        "observed_fixup_tasks": 1232,
+        "fixup_tasks": 1232,
+        "observed_gpu_gemm_tasks": 27019,
+        "gpu_gemm_tasks": 27019,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "matrix_status_counts": {
+          "applied": 1232,
+          "mmvq_precedes_mmq": 19470,
+          "uncovered": 6317
+        },
+        "uncovered_reason_counts": {
+          "mmvq_precedes_mmq": 19470,
+          "one_physical_projection_not_proven": 44,
+          "runtime_rhs_is_not_a_physical_model_weight": 5984,
+          "source allocation high-water does not cover MMQ consumer range": 154,
+          "unsupported_or_mixed_physical_weight_format": 135
+        }
+      },
+      "gpu_invocation_summary": {
+        "status": "observed",
+        "summarized_batch_count": 136,
+        "missing_batch_summaries": 0,
+        "all_batches_summarized": true,
+        "applied_tasks": 21035,
+        "observed_applied_tasks": 21035,
+        "reason": null,
+        "observed_audited_tasks": 21035,
+        "audited_tasks": 21035,
+        "observed_conditional_tasks": 21035,
+        "conditional_tasks": 21035,
+        "observed_gpu_gemm_tasks": 27019,
+        "gpu_gemm_tasks": 27019,
+        "observed_native_dispatch_proven_tasks": 0,
+        "native_dispatch_proven_tasks": 0,
+        "observed_uncovered_tasks": 5984,
+        "uncovered_tasks": 5984,
+        "group_counts": {
+          "attention.k": 2992,
+          "attention.output": 2992,
+          "attention.q": 2992,
+          "attention.v": 2992,
+          "mlp.down": 2992,
+          "mlp.gate": 2948,
+          "mlp.up": 2948,
+          "mlp.up_gate": 44,
+          "other_weight_projection": 135
+        }
+      },
+      "unsupported_dimensions": [
+        {
+          "dimension": "cpu_worker_binding",
+          "status": "conditional",
+          "native": {
+            "threads": 16,
+            "threads_batch": 16,
+            "worker_cpu_mask": "0x55555555",
+            "poll": 0,
+            "priority": 0
+          },
+          "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."
+        },
+        {
+          "dimension": "kv_shared_physical_pool",
+          "status": "conditional",
+          "native_total_context_tokens": 8192,
+          "simulator_slot_context_tokens": 2048,
+          "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."
+        },
+        {
+          "dimension": "runtime_op_offload_contract",
+          "status": "conditional",
+          "runtime_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-server.exe",
+            "sha256": "9882ee2a07ff0649d9dfd22e5fd4ed2a796c92eae46c53acde8017bf0ed79dae",
+            "bytes": 10752
+          },
+          "source_binding_status": "verified",
+          "op_offload": true,
+          "uncovered_reasons": [],
+          "native_dispatch_proven": false,
+          "reason": "Verified source/build/runtime capability remains subject to per-invocation tensor/layout/buffer qualification and analytical cost limits"
+        },
+        {
+          "dimension": "tensor_storage_timing_completeness",
+          "status": "conditional",
+          "f32_hidden_storage_requested": true,
+          "native_dispatch_proven": false,
+          "reason": "Source-bound logical GET_ROWS traffic and storage do not price row dequantization, repeated-index cache reuse, cache-line/page or write-allocation effects",
+          "limits": [
+            "Only the four listed generic tensor/input/GET_ROWS translation units are bound; architecture-specific qwen35.cpp source equivalence is not claimed",
+            "Row dequantization/conversion timing, repeated-index cache reuse, cache-line/page/write-allocation costs remain unmodeled",
+            "Full embedding table capacity and any existing cross-device staging remain separate from selected-row traffic"
+          ]
+        },
+        {
+          "dimension": "gpu_physical_invocation_and_source_costs",
+          "status": "conditional",
+          "binding_status": "conditional",
+          "native_dispatch_proven": false,
+          "mmq_source_costs_requested": true,
+          "conditional_reasons": [
+            "model-specific unity include historical source-body hashes were not captured; caller graph remains conditional"
+          ],
+          "uncovered_reasons": [],
+          "unpriced_terms": [
+            "native cache conversion instruction throughput",
+            "exact gather/scatter index transaction multiplicity",
+            "vector-kernel main throughput without an independent MMVQ cost treatment"
+          ],
+          "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"
+        },
+        {
+          "dimension": "auto_gpu_layer_fit",
+          "status": "conditional",
+          "native": -1,
+          "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."
+        },
+        {
+          "dimension": "cuda_graph_lifecycle",
+          "status": "conditional",
+          "compiled_cuda_graphs": false,
+          "reason": "No CUDA Graph replay timing or prior native profile is applied; direct launch/synchronization parity remains unvalidated."
+        }
+      ],
+      "native_ubatch_count_status": "not directly observed; mixed decode tokens can reduce per-slot prompt rows below 64",
+      "cost_accounting_warning": "Resource busy times overlap; reported batch-cost sums are not interchangeable with absolute request interval, and do not sum host wall with CUDA union."
+    }
+  ],
+  "findings": [
+    {
+      "id": "D1",
+      "class": "fact",
+      "conclusion": "The four inspected cells have correct native/sim token counts and compatible engine boundary definitions; no evidence of skipped prompt tokens or client time substituted for engine time.",
+      "evidence": "native raw timestamp/count rows and simulator batch items",
+      "limit": "Native ubatch counters are not retained; only within-request durations can be compared across different native/simulator clock epochs"
+    },
+    {
+      "id": "D2",
+      "class": "fact",
+      "conclusion": "All four frozen configurations explicitly record compiled_cuda_graphs=false. Missing CUDA Graph replay is not supported as the explanation.",
+      "evidence": "prediction input_identity.native_configuration",
+      "limit": "CPU-side graph reuse/planning is a separate behavior; do not conflate it with CUDA Graph replay"
+    },
+    {
+      "id": "D3",
+      "class": "fact",
+      "conclusion": "Kernel launches are already charged, while separately calibrated synchronize/phase/startup additions are unavailable.",
+      "evidence": "positive gpu0.frontend busy service plus frozen GPUProfile and calibration source",
+      "limit": "launch busy time, host API wall and GPU kernel time are different overlapping domains"
+    },
+    {
+      "id": "D4",
+      "class": "inference_from_static_geometry_and_recorded_counts",
+      "conclusion": "For C1/P512 with cache_n=0 and b=ub=64, 8 prompt chunks is the source-consistent expectation and matches sim. C4 mixed batches have reduced prompt rows after decode occupancy; ceil(P/64) per slot is only a lower bound.",
+      "evidence": "P512 counts; C4 per-slot item sizes preserved",
+      "limit": "Native log files contain zero bytes, so actual physical ubatch/kernel cadence is unknown"
+    },
+    {
+      "id": "D5",
+      "class": "fact",
+      "conclusion": "R6 source MMQ cost coverage is narrow for Qwen2.5 and not the dominant low-M decode treatment. Qwen2.5 static tensors include Q5_0/Q8_0 K896, while source cost requires K%256==0; many calls explicitly fall back.",
+      "evidence": "static tensor directory plus matrix_status_counts/uncovered_reason_counts",
+      "limit": "These are pre-repair simulator ledger counts, not native dispatch or ground-truth kernel counts"
+    },
+    {
+      "id": "D6",
+      "class": "unknown",
+      "conclusion": "The residual cannot yet be apportioned between actual submit cadence/sync, unsupported MMVQ/nonaligned shapes, graph planning and cache conversion, or residency/split behavior.",
+      "evidence": "source eligibility gaps and missing native physical events",
+      "limit": "Do not regress LLM residuals into a launch constant, throughput multiplier, per-token fixed cost or model-specific correction"
+    }
+  ],
+  "fallback_cost_terms": [
+    {
+      "term": "CUDA kernel launch",
+      "fact": "Analytical reference retains kernel_launch_ns=1000 and charges gpu0.frontend; real retained busy times are positive.",
+      "fallback": "fixed analytical service, not zero and not independently calibrated",
+      "risk": "one host_submit record per cohort is not native CUDA API/kernel count; CPU supply timing is not established by GPU frontend busy sums"
+    },
+    {
+      "term": "GEMM compute",
+      "fact": "Base dense BF16 peak 112.6 TFLOP/s at 84 SM/2.617GHz is scaled to captured frequency; generic compute uses structural peak*0.65 efficiency*0.85 occupancy.",
+      "fallback": "hardware-derived analytical roofline with fixed efficiency/occupancy, not measured current kernel throughput",
+      "risk": "MMVQ and mixed/unsupported projection paths remain generic, not a verified vector-kernel execution model"
+    },
+    {
+      "term": "HBM traffic",
+      "fact": "Builder uses 960GB/s and inherited efficiency 0.75, then output-tile-wave utilization shapes bandwidth.",
+      "fallback": "analytical base 720GB/s plus geometry proxy; no eligible current profiler correction",
+      "risk": "logical compulsory bytes and tile proxy are not actual transaction or cache/driver evidence"
+    },
+    {
+      "term": "synchronize / phase boundary / first decode / request marker",
+      "fact": "Legacy qwen25/tinyllama profiles contain these terms but fail binary/runtime identity. Unqualified optional profile hooks add no extra calibrated service; retained synchronization category is 0.",
+      "fallback": "no additional identity-qualified host/driver boundary term",
+      "risk": "dependency joins still wait on modeled GPU work; adding the whole measured sync API wall would double-count its GPU execution/wait portion"
+    },
+    {
+      "term": "quantization / conversion",
+      "fact": "GET_ROWS conversion compute remains unpriced. Generic packed-dot transformation is priced at analytical scalar throughput. Source MMQ conversion/fixup only apply to qualified tasks.",
+      "fallback": "mixture of generic analytical work, explicit partial MMQ and genuinely unpriced terms",
+      "risk": "do not call all dequantization zero; MMVQ main throughput and non-256 K source treatment remain incomplete"
+    },
+    {
+      "term": "CPU orchestration / transfer",
+      "fact": "Retained prompt cohorts carry about 8.6 microseconds orchestration; topology/DMA/PCIe demands are nonzero.",
+      "fallback": "analytical scheduling and copy costs; old empirical d2h/phase/startup terms not reused",
+      "risk": "not a proven model of native graph planning, driver enqueue pacing, logits/sampler synchronization or physical split count"
+    }
+  ],
+  "blocked_profile_evidence": {
+    "ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
+      "bytes": 2524,
+      "sha256": "e24e246d71666bfee56b9b3e8ba1b56c0f23003a58891e740b09cdf2f14c277d"
+    },
+    "eligible_count": 0,
+    "profiles": [
+      {
+        "status": "blocked",
+        "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\gpu_decode_startup_profile_qwen25_v1.json",
+        "reasons": [
+          "profile binary_sha256 missing or malformed",
+          "profile runtime_artifacts missing"
+        ],
+        "model_key": "qwen25",
+        "profile_sha256": "d0f10961b11972035249da8731570d96bef197a023696c337ed1a6846376a805",
+        "native_identity_source": "frozen selection native_runtime_refs, not current filesystem"
+      },
+      {
+        "status": "blocked",
+        "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\tinyllama_semantic_calibration_phase_v2.json",
+        "reasons": [
+          "profile binary_sha256 missing or malformed",
+          "profile runtime_artifacts missing"
+        ],
+        "model_key": "tinyllama",
+        "profile_sha256": "c1711060a0f7121d3dfb2c976b4d1019605de343ad2d0430566e8df129c4eea3",
+        "native_identity_source": "frozen selection native_runtime_refs, not current filesystem"
+      }
+    ],
+    "old_profile_values_used": false
+  },
+  "qwen25_static_tensors": {
+    "ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\static_gpu_shapes.json",
+      "bytes": 1290201,
+      "sha256": "37537d771feb2e49d01e08388bfddea16944038ef5514b3d1100795e29f99a02"
+    },
+    "sample_tensors": [
+      {
+        "name": "blk.0.ffn_down.weight",
+        "shape": [
+          4864,
+          896
+        ],
+        "format": "Q6_K",
+        "physical_bytes": 3575040
+      },
+      {
+        "name": "blk.0.ffn_gate.weight",
+        "shape": [
+          896,
+          4864
+        ],
+        "format": "Q5_0",
+        "physical_bytes": 2996224
+      },
+      {
+        "name": "blk.0.ffn_up.weight",
+        "shape": [
+          896,
+          4864
+        ],
+        "format": "Q5_0",
+        "physical_bytes": 2996224
+      },
+      {
+        "name": "blk.0.attn_k.weight",
+        "shape": [
+          896,
+          128
+        ],
+        "format": "Q5_0",
+        "physical_bytes": 78848
+      },
+      {
+        "name": "blk.0.attn_output.weight",
+        "shape": [
+          896,
+          896
+        ],
+        "format": "Q5_0",
+        "physical_bytes": 551936
+      },
+      {
+        "name": "blk.0.attn_q.weight",
+        "shape": [
+          896,
+          896
+        ],
+        "format": "Q5_0",
+        "physical_bytes": 551936
+      },
+      {
+        "name": "blk.0.attn_v.weight",
+        "shape": [
+          896,
+          128
+        ],
+        "format": "Q8_0",
+        "physical_bytes": 121856
+      }
+    ]
+  },
+  "generic_launch_probe": {
+    "summary_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\runs\\20260915T170407248390Z\\diagnostic_summary.json",
+      "bytes": 49857,
+      "sha256": "09edf7c92371925c3749282fe35e12fdace654526a7e7b106f1f91e2f317c89e"
+    },
+    "status": "valid_raw",
+    "formal_samples": 480,
+    "configurations": 16,
+    "all_configuration_statuses_unresolved": true,
+    "transferable_constant_count": 0,
+    "empty_kernel_supply_comparison": [
+      {
+        "supply_mode": "continuous_enqueue",
+        "burst_length": 1,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 1250,
+          "host_sync_call_total_ns": 24500,
+          "total_wall_ns": 26900,
+          "cuda_event_span_ns": 2192.000043578446
+        }
+      },
+      {
+        "supply_mode": "continuous_enqueue",
+        "burst_length": 4,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 4600,
+          "host_sync_call_total_ns": 27300,
+          "total_wall_ns": 33400,
+          "cuda_event_span_ns": 8255.99953532219
+        }
+      },
+      {
+        "supply_mode": "continuous_enqueue",
+        "burst_length": 16,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 20650,
+          "host_sync_call_total_ns": 45350,
+          "total_wall_ns": 70800,
+          "cuda_event_span_ns": 37744.00055408478
+        }
+      },
+      {
+        "supply_mode": "continuous_enqueue",
+        "burst_length": 64,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 96000,
+          "host_sync_call_total_ns": 127050,
+          "total_wall_ns": 228200,
+          "cuda_event_span_ns": 201232.00118541718
+        }
+      },
+      {
+        "supply_mode": "stream_sync_each",
+        "burst_length": 1,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 1100,
+          "host_sync_call_total_ns": 47950,
+          "total_wall_ns": 50450,
+          "cuda_event_span_ns": 26032.00078010559
+        }
+      },
+      {
+        "supply_mode": "stream_sync_each",
+        "burst_length": 4,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 4650,
+          "host_sync_call_total_ns": 122500,
+          "total_wall_ns": 128800,
+          "cuda_event_span_ns": 103488.0019724369
+        }
+      },
+      {
+        "supply_mode": "stream_sync_each",
+        "burst_length": 16,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 17250,
+          "host_sync_call_total_ns": 427550,
+          "total_wall_ns": 450800,
+          "cuda_event_span_ns": 425952.0024061203
+        }
+      },
+      {
+        "supply_mode": "stream_sync_each",
+        "burst_length": 64,
+        "status": "unresolved_diagnostic",
+        "transferable_kernel_launch_ns": null,
+        "medians_ns": {
+          "host_enqueue_call_total_ns": 68700,
+          "host_sync_call_total_ns": 1702350,
+          "total_wall_ns": 1776750,
+          "cuda_event_span_ns": 1719727.9930114746
+        }
+      }
+    ],
+    "use": "interval/supply diagnosis only; no LLM multiplier or launch constant"
+  },
+  "existing_mmq_trace": {
+    "summary_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\trace_pilot\\result_summary.json",
+      "bytes": 20045,
+      "sha256": "454b58d5063155475bbd171b66cedaf2d5830cd10b3c89e4f4284ea9be94e574"
+    },
+    "compatibility_gate_passed": false,
+    "scope": "Q4_K M64 N4096 K1024 synthetic; CUDA13.4 driver fell back to CUPTI12.8 in old Nsight",
+    "host_wall_and_kernel_union_not_additive": true,
+    "calibration_eligible": false
+  },
+  "minimum_general_microbenchmarks": [
+    {
+      "priority": 1,
+      "item": "Direct-submit GGML boundary and supply cadence",
+      "design": "One independent GGML graph, direct CUDA build, same runtime DLL identities; distinguish repeated kernel enqueue, host-paced enqueue and only-real-boundary synchronization. Record QPC enqueue/sync/total wall and CUDA event interval; separate already-overlapped GPU execution.",
+      "why": "The existing 16 launch-probe configurations are all unresolved and supply mode changes wall time strongly.",
+      "acceptance": "Stable independent shape/session holdout, documented clock/thermal regime and resource-domain boundary; no automatic transfer of empty-kernel constants"
+    },
+    {
+      "priority": 2,
+      "item": "MMVQ low-M and K896 ordinary quantized matmul",
+      "design": "Synthetic Q5_0/Q8_0 at K896 with representative N128/N896/N4864, and Q4_K/Q6_K at aligned dimensions; M1/2/4 plus M64 control. Use explicit valid buffer layout and source dispatch qualification; retain correct numerical output and actual selected kernel names when compatible trace is available.",
+      "why": "Qwen2.5 K896 exclusions and both models low-M mmvq_precedes_mmq leave the generic fallback dominant.",
+      "acceptance": "Source-derived operation/bytes model and separate evaluation on unseen synthetic dimensions, never LLM wall-time fitting"
+    },
+    {
+      "priority": 3,
+      "item": "Conversion/cache writeback and graph split boundary",
+      "design": "Synthetic GET_ROWS and transposed KV/cache conversion plus CPU-to-GPU and logits return boundaries with recorded index geometry. Measure isolated conversion and dependency chain separately.",
+      "why": "Conversion arithmetic and true index/cache transactions are explicitly unpriced; number and location of native backend synchronizations are not yet observed.",
+      "acceptance": "Do not sum nested API wait + kernel union; unsupported layout remains uncovered rather than forced into an average term"
+    }
+  ],
+  "source_refs": [
+    {
+      "kind": "frozen_simulator_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\source\\src\\heterollm_sim\\reference.py",
+        "bytes": 20585,
+        "sha256": "90dad69a6c5ff3d6f607ffda4341be541bd28950a66fad43d7fe383d052f59c9"
+      },
+      "line": 421,
+      "anchor": "kernel_launch_ns=1000.0"
+    },
+    {
+      "kind": "frozen_simulator_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\source\\src\\heterollm_sim\\reference.py",
+        "bytes": 20585,
+        "sha256": "90dad69a6c5ff3d6f607ffda4341be541bd28950a66fad43d7fe383d052f59c9"
+      },
+      "line": 419,
+      "anchor": "occupancy=0.85"
+    },
+    {
+      "kind": "frozen_simulator_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\source\\tools\\native_llama_compare.py",
+        "bytes": 120814,
+        "sha256": "9693d0de97d50e3bb7b63a3428f53535938979343427ad08a466957b8394eb5e"
+      },
+      "line": 1281,
+      "anchor": "Dense BF16 peak = 112.6"
+    },
+    {
+      "kind": "frozen_simulator_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\source\\src\\heterollm_sim\\cost_models.py",
+        "bytes": 201731,
+        "sha256": "142479dd07f440809fff165381668464c55eb7977eba9cd4190e956502d7fad8"
+      },
+      "line": 2484,
+      "anchor": "structural_peak_tops = tensor_core.peak_tops"
+    },
+    {
+      "kind": "frozen_simulator_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\source\\src\\heterollm_sim\\cost_models.py",
+        "bytes": 201731,
+        "sha256": "142479dd07f440809fff165381668464c55eb7977eba9cd4190e956502d7fad8"
+      },
+      "line": 2641,
+      "anchor": "roofline_ns = max("
+    },
+    {
+      "kind": "frozen_simulator_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\source\\src\\heterollm_sim\\calibration.py",
+        "bytes": 54672,
+        "sha256": "ab93a65e5daaae0b3ef2af5de02b2fd0964ddc8fd09e2444885ad2e977da8331"
+      },
+      "line": 833,
+      "anchor": "def phase_boundary_calibration_ns("
+    },
+    {
+      "kind": "frozen_simulator_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq\\source\\src\\heterollm_sim\\calibration.py",
+        "bytes": 54672,
+        "sha256": "ab93a65e5daaae0b3ef2af5de02b2fd0964ddc8fd09e2444885ad2e977da8331"
+      },
+      "line": 820,
+      "anchor": "def synchronize_calibration_ns("
+    },
+    {
+      "kind": "existing_native_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\src\\llama-context.cpp",
+        "bytes": 159825,
+        "sha256": "6a9d17f10caa586c1bf299e8bb217bcd14c1d1f62485020cd41e78c3b70b022b"
+      },
+      "line": 2528,
+      "anchor": "ggml_backend_sched_graph_compute_async(sched.get(), gf)",
+      "source_binding_limit": "use recorded build chain; model-specific historical unity bodies remain conditional"
+    },
+    {
+      "kind": "existing_native_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\src\\llama-context.cpp",
+        "bytes": 159825,
+        "sha256": "6a9d17f10caa586c1bf299e8bb217bcd14c1d1f62485020cd41e78c3b70b022b"
+      },
+      "line": 3880,
+      "anchor": "float * llama_get_logits_ith(",
+      "source_binding_limit": "use recorded build chain; model-specific historical unity bodies remain conditional"
+    },
+    {
+      "kind": "existing_native_source",
+      "file_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-backend.cpp",
+        "bytes": 101709,
+        "sha256": "803298af097545b4b611df53a2e9ac39f43c18c095c0d3b4c879d2ae911a2d79"
+      },
+      "line": 455,
+      "anchor": "enum ggml_status ggml_backend_graph_compute(",
+      "source_binding_limit": "use recorded build chain; model-specific historical unity bodies remain conditional"
+    }
+  ],
+  "not_done": [
+    "no LLM timing fitting",
+    "no changes to predictions/errors/native/source/state/task brief",
+    "no execution of new native, simulator or tests",
+    "no claim that launch-probe wall minus GPU span is transferable CPU cost"
+  ],
+  "accuracy_promotion": false,
+  "dispatch_inferred_from_error": false,
+  "limits": [
+    "Four R6 core boundary findings are being repaired elsewhere; do not treat this old snapshot as the repaired candidate.",
+    "Native logs are empty and no identity-qualified per-ubatch native trace exists for these four cells.",
+    "Actual all-layer placement with ngl=-1 remains marked conditional in frozen prediction inputs.",
+    "Resource busy times overlap and may exceed host wall; reported batch cost sum is not a substitute for request boundary intervals."
+  ]
+}

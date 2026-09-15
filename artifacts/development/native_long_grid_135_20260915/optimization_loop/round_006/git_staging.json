@@ -1,0 +1,34 @@
+{
+  "scope": "R6 mapping/MMQ and four source/summary edge repairs only; other native/frontend WIP excluded",
+  "index_tree": "0b16ea52d3f299dfc8d288274837d7028eed365a",
+  "test_tree": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\checkpoint_r6_test_tree",
+  "validation": {
+    "isolated_combined": {
+      "passed": 169,
+      "skipped": 28,
+      "failed": 1,
+      "failure_reason": "test checked presence of static device probe but did not check missing native hardware record"
+    },
+    "portable_guard_repair": {
+      "isolated_hardware_record_test": "explicitly skipped because local native hardware record absent",
+      "local_hardware_record_test": "passed with actual local record",
+      "combined_effective_passed": 169,
+      "combined_effective_skipped": 29,
+      "note": "No blanket re-run claimed; unchanged 169 passes retained, one fixed test rerun separately."
+    },
+    "local_combined": {
+      "passed": 150,
+      "failed": 2,
+      "failure_reason": "immutable old contract fixture rejected by new source derivation as intended"
+    },
+    "contract_fixture_repair": {
+      "updated_source_contract_tests_passed": 2,
+      "keeps_old_contract_rejection_assertion": true
+    },
+    "additional_worker_structural": {
+      "passed": 79,
+      "overlaps_local_combined": true
+    }
+  },
+  "created_utc": "2026-09-15T17:36:14.568080+00:00"
+}

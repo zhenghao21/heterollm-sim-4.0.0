@@ -1385,3 +1385,364 @@ def test_recorded_tensor_storage_rejects_selected_cpu_module_mismatch():
     cpu["sha256"] = "0" * 64
     with pytest.raises(ValueError, match="identity chain disagrees"):
         adapter.verified_tensor_storage_contract(source, [row], adapter.ROOT)
+
+
+def fake_gpu_invocation_contract_api(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+    api = ModuleType("heterollm_sim.llama_gpu_invocations")
+    api.SCHEMA = "llama.cpp.gpu-native-invocations/v1"
+    source_ref = document(tmp_path / "gpu-rule.json", {"source": "test-only"})
+    def derive(binding, *, captured_kernel_environment, cuda_compute_capability, mmq_device_evidence=None):
+        captured = "GGML_CUDA_DISABLE_FUSION" in captured_kernel_environment
+        value = captured_kernel_environment.get("GGML_CUDA_DISABLE_FUSION")
+        return {"schema": api.SCHEMA, "status": "conditional" if captured else "uncovered",
+            "cuda_compute_capability": cuda_compute_capability,
+            "runtime_binding_sha256": binding.get("content_sha256"),
+            "kernel_environment": {"GGML_CUDA_DISABLE_FUSION": {"captured": captured, "value": value}},
+            "fusion_enabled": (value is None or value == "0") if captured else None,
+            "mmq_device_evidence": dict(mmq_device_evidence) if mmq_device_evidence else {"available": False, "reason": "missing_device_evidence"},
+            "source_refs": [source_ref], "native_dispatch_proven": False,
+            "uncovered_reasons": [] if captured else ["historical_cuda_fusion_environment_unknown"],
+            "conditional_reasons": ["historical_model_body_unbound"], "unpriced_terms": ["vector_main_unpriced"]}
+    api.derive_llama_gpu_invocation_contract = derive
+    api.apply_llama_gpu_invocation_contract = lambda scenario, contract, *, enabled=False, enable_mmq_source_costs=False: scenario
+    monkeypatch.setitem(sys.modules, api.__name__, api)
+    binding_ref = document(tmp_path / "gpu-build-binding.json", {"content_sha256": "test-binding"})
+    template = derive({"content_sha256": "test-binding"}, captured_kernel_environment={"GGML_CUDA_DISABLE_FUSION": None}, cuda_compute_capability=1200)
+    path = tmp_path / "gpu-invocation-contract.json"
+    document(path, template)
+    monkeypatch.setattr(adapter, "verify_gpu_invocation_source_links", lambda *args, **kwargs: {"source_compilation": {}, "evidence_refs": [source_ref]})
+    return api, path, template, binding_ref
+
+
+def fake_gpu_runtime_binding(tmp_path, row, binding_ref, *, fusion_recorded=True, value=None):
+    raw_ref = document(tmp_path / "gpu-record.json", {"execution_environment": {
+        "GGML_CUDA_DISABLE_FUSION": {"is_set": value is not None, "value": value}} if fusion_recorded else {},
+        "native_timing_must_not_propagate": 987654})
+    return {"contract": {"content_sha256": "test-binding"}, "contract_ref": binding_ref,
+        "evidence_refs": [binding_ref, raw_ref], "cells": {row["cell_id"]: {
+            "cuda_backend_available": True, "device_evidence": {"compute_capability": "12.0", "gpu_uuid": "GPU-test"},
+            "native_record_refs": [raw_ref]}}}
+
+
+def test_kernel_environment_missing_stays_unknown_despite_today_or_selected_default(monkeypatch):
+    monkeypatch.setenv("GGML_CUDA_DISABLE_FUSION", "1")
+    values, facts = adapter.captured_kernel_environment({}, {"GGML_CUDA_DISABLE_FUSION": None})
+    assert values == {}
+    assert facts["GGML_CUDA_DISABLE_FUSION"] == {"captured": False, "state": "unknown", "value": None}
+    values, facts = adapter.captured_kernel_environment({"execution_environment": {
+        "GGML_CUDA_DISABLE_FUSION": {"is_set": False, "value": None}}})
+    assert values == {"GGML_CUDA_DISABLE_FUSION": None}
+    assert facts["GGML_CUDA_DISABLE_FUSION"]["state"] == "captured_absent"
+    with pytest.raises(ValueError, match="presence/value disagree"):
+        adapter.captured_kernel_environment({"execution_environment": {
+            "GGML_CUDA_DISABLE_FUSION": {"is_set": False, "value": "0"}}})
+    with pytest.raises(ValueError, match="differs from selected"):
+        adapter.captured_kernel_environment({"execution_environment": {"GGML_CUDA_DISABLE_FUSION": "1"}}, {"GGML_CUDA_DISABLE_FUSION": None})
+
+
+@pytest.mark.parametrize("captured", [False, True])
+def test_gpu_invocation_each_cell_rederives_environment_instead_of_borrowing_template(tmp_path, monkeypatch, captured):
+    _, _, row, _ = fixture(tmp_path, monkeypatch)
+    _, source_path, template, binding_ref = fake_gpu_invocation_contract_api(tmp_path, monkeypatch)
+    runtime = fake_gpu_runtime_binding(tmp_path, row, binding_ref, fusion_recorded=captured)
+    monkeypatch.setenv("GGML_CUDA_DISABLE_FUSION", "0")
+    proof = adapter.verified_gpu_invocation_contract(source_path, [row], tmp_path, runtime_binding=runtime)
+    cell = proof["cells"][row["cell_id"]]
+    assert proof["contract"] == template
+    assert proof["template_environment_is_runtime_evidence"] is False
+    assert cell["contract"]["status"] == ("conditional" if captured else "uncovered")
+    assert cell["kernel_environment"]["GGML_CUDA_DISABLE_FUSION"]["captured"] is captured
+    assert cell["native_dispatch_proven"] is False
+    assert "native_timing_must_not_propagate" not in json.dumps(proof)
+    assert proof["today_environment_read"] is False
+
+
+def test_gpu_invocation_source_and_device_mismatch_fail_closed(tmp_path, monkeypatch):
+    _, _, row, _ = fixture(tmp_path, monkeypatch)
+    _, path, template, binding_ref = fake_gpu_invocation_contract_api(tmp_path, monkeypatch)
+    runtime = fake_gpu_runtime_binding(tmp_path, row, binding_ref)
+    document(path, {**template, "fusion_enabled": False})
+    with pytest.raises(ValueError, match="differs from re-derived"):
+        adapter.verified_gpu_invocation_contract(path, [row], tmp_path, runtime_binding=runtime)
+    document(path, template)
+    runtime["cells"][row["cell_id"]]["device_evidence"]["compute_capability"] = "8.0"
+    with pytest.raises(ValueError, match="differs from captured native device"):
+        adapter.verified_gpu_invocation_contract(path, [row], tmp_path, runtime_binding=runtime)
+
+
+@pytest.mark.parametrize("costs", [False, True])
+def test_gpu_invocation_freeze_and_apply_keep_source_cost_treatment_separate(tmp_path, monkeypatch, costs):
+    from dataclasses import replace
+    selection_path, selection, row, calls = fixture(tmp_path, monkeypatch)
+    api, source_path, _, binding_ref = fake_gpu_invocation_contract_api(tmp_path, monkeypatch)
+    runtime = fake_gpu_runtime_binding(tmp_path, row, binding_ref)
+    monkeypatch.setattr(adapter, "verified_host_offload_source_contract", lambda *args, **kwargs: runtime)
+    def apply(case, contract, *, enabled=False, enable_mmq_source_costs=False):
+        assert enabled is True and enable_mmq_source_costs is costs
+        return replace(case, workload=Metadata(metadata={"llama_cpp_gpu_native_invocations": {
+            "applied": True, "conditional": True, "status": "conditional", "native_dispatch_proven": False,
+            "qualified_projection_groups": 4, "uncovered_group_reason_counts": {"layout_unbound": 1},
+            "mmq_source_costs": {"requested": costs, "applied": False, "reason": "device_evidence_missing"}}}))
+    api.apply_llama_gpu_invocation_contract = apply
+    frozen = adapter.freeze_selection(selection_path, tmp_path / "out", data_root=tmp_path,
+        gpu_invocation_contract_path=source_path, gpu_mmq_source_costs=costs)
+    inputs = frozen["cells"][0]["static_inputs"]
+    assert inputs["gpu_mmq_source_costs"] is costs
+    assert inputs["host_offload_evidence"] is None and frozen["host_offload_source"] is None
+    assert inputs["tensor_storage_contract"] is None and inputs["slot_order_contract"] is None
+    prediction = adapter.predict_cell(inputs)
+    audit = prediction["dispatch_qualification"]["gpu_invocations"]
+    assert audit["applied"] is True and audit["mmq_source_costs_requested"] is costs
+    assert audit["mmq_source_costs"]["applied"] is False
+    assert audit["native_dispatch_proven"] is False and audit["conditional"] is True
+    assert calls["replan"][-1].workload.metadata["llama_cpp_gpu_native_invocations"]["applied"] is True
+    assert "llama_cpp_mmq_source_work" not in calls["replan"][-1].workload.metadata
+    adapter.verify_freeze_references(frozen)
+
+
+def test_gpu_invocation_default_off_and_costs_alone_are_rejected(tmp_path, monkeypatch):
+    path, selection, row, calls = fixture(tmp_path, monkeypatch)
+    inputs = adapter.static_inputs(row, selection, tmp_path)
+    assert inputs["gpu_invocation_contract"] is None and inputs["gpu_mmq_source_costs"] is False
+    assert adapter.apply_gpu_invocation_static_contract(Scenario(), inputs) == Scenario()
+    with pytest.raises(ValueError, match="require a GPU invocation source contract"):
+        adapter.freeze_selection(path, tmp_path / "out", data_root=tmp_path, gpu_mmq_source_costs=True)
+    assert not (tmp_path / "out").exists() and not calls["run"]
+
+
+@pytest.mark.parametrize("switches", [["--gpu-invocation-contract", "unread.json"], ["--gpu-mmq-source-costs"], ["--no-gpu-mmq-source-costs"]])
+def test_gpu_invocation_switches_cannot_be_added_during_resume(tmp_path, monkeypatch, switches):
+    path, _, _, _ = fixture(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    adapter.freeze_selection(path, out, data_root=tmp_path)
+    before = adapter.grid.file_ref(out / "freeze.json")
+    with pytest.raises(SystemExit):
+        adapter.main(["--output", str(out), "--resume", *switches])
+    assert adapter.grid.file_ref(out / "freeze.json") == before
+
+
+@pytest.mark.parametrize("flag", ["--gpu-mmq-source-costs", "--no-gpu-mmq-source-costs"])
+def test_gpu_cost_cli_option_requires_invocation_contract(tmp_path, monkeypatch, flag):
+    path, _, _, _ = fixture(tmp_path, monkeypatch)
+    with pytest.raises(SystemExit):
+        adapter.main(["--selection", str(path), "--output", str(tmp_path / "out"), "--freeze-only", flag])
+    assert not (tmp_path / "out").exists()
+
+
+def test_gpu_geometry_and_mmq_cost_ledgers_remain_independent_and_not_truncated():
+    result = dispatch_result()
+    meta = result.serving.batches[0].cost.metadata
+    meta["gpu_invocations"] = {"projection_tasks": 12, "audited_tasks": 12, "applied_tasks": 10,
+        "conditional_tasks": 10, "native_dispatch_proven_tasks": 0,
+        "uncovered_reason_counts": {"physical_alias_unproven": 2}}
+    meta["mmq_source_work"] = {"audited_tasks": 8, "applied_tasks": 5,
+        "matrix_tasks": 3, "conversion_tasks": 2,
+        "uncovered_reason_counts": {"unsupported_k_geometry": 3}}
+    batch = adapter.batch_schedule(result, [])["batches"][0]
+    assert "gpu_invocations" not in batch["cost_metadata"]
+    assert batch["gpu_invocations"] == meta["gpu_invocations"]
+    assert batch["mmq_source_work"] == meta["mmq_source_work"]
+    summary = adapter.retained_dispatch_summary(result)
+    assert summary["gpu_invocations"]["applied_tasks"] == 10
+    assert summary["gpu_invocations"]["native_dispatch_proven_tasks"] == 0
+    assert summary["mmq_source_work"]["applied_tasks"] == 5
+    assert summary["mmq_source_work"]["uncovered_reason_counts"] == {"unsupported_k_geometry": 3}
+    missing = adapter.retained_dispatch_summary(dispatch_result(with_summary=False))
+    assert missing["gpu_invocations"]["applied_tasks"] is None
+    assert missing["mmq_source_work"]["applied_tasks"] is None
+
+
+def test_gpu_invocation_identical_captures_share_one_derivation_but_preserve_each_identity(tmp_path, monkeypatch):
+    _, _, row, _ = fixture(tmp_path, monkeypatch)
+    api, source_path, _, binding_ref = fake_gpu_invocation_contract_api(tmp_path, monkeypatch)
+    second = copy.deepcopy(row)
+    second["cell_id"] = "second-cell"
+    runtime = fake_gpu_runtime_binding(tmp_path, row, binding_ref)
+    second_raw = document(tmp_path / "second-gpu-record.json", {"execution_environment": {"GGML_CUDA_DISABLE_FUSION": None}})
+    runtime["cells"][second["cell_id"]] = {**runtime["cells"][row["cell_id"]], "native_record_refs": [second_raw]}
+    calls = []
+    derive = api.derive_llama_gpu_invocation_contract
+    def observe(*args, **kwargs):
+        calls.append(kwargs)
+        return derive(*args, **kwargs)
+    api.derive_llama_gpu_invocation_contract = observe
+    proof = adapter.verified_gpu_invocation_contract(source_path, [row, second], tmp_path, runtime_binding=runtime)
+    assert len(calls) == 1 and proof["source_derivation_variants"] == 1
+    assert proof["conditional_cell_count"] == 2
+    assert proof["cells"][second["cell_id"]]["native_record_refs"] == [second_raw]
+
+
+def write_imported_projection_gguf(path):
+    """A small real GGUF file exercises importer metadata and physical aliases."""
+    import struct
+    from tests.test_gguf_parity import _kv, _str
+    items = [_kv("general.architecture", 8, _str("qwen2"))]
+    for key, value in {"general.file_type": 7, "qwen2.block_count": 1,
+        "qwen2.embedding_length": 256, "qwen2.feed_forward_length": 512,
+        "qwen2.attention.head_count": 4, "qwen2.attention.head_count_kv": 2,
+        "qwen2.context_length": 256, "general.vocab_size": 64}.items():
+        items.append(_kv(key, 4, struct.pack("<I", value)))
+    tensors = [("token_embd.weight", (256, 64), 8), ("output.weight", (256, 64), 8),
+        ("output_norm.weight", (256,), 0), ("blk.0.attn_norm.weight", (256,), 0),
+        ("blk.0.ffn_norm.weight", (256,), 0), ("blk.0.attn_q.weight", (256, 256), 8),
+        ("blk.0.attn_k.weight", (256, 128), 8), ("blk.0.attn_v.weight", (256, 128), 8),
+        ("blk.0.attn_output.weight", (256, 256), 8), ("blk.0.ffn_gate.weight", (256, 512), 8),
+        ("blk.0.ffn_up.weight", (256, 512), 8), ("blk.0.ffn_down.weight", (512, 256), 8)]
+    directory, offset = [], 0
+    for name, shape, kind in tensors:
+        directory.append(_str(name) + struct.pack("<I", len(shape)) + struct.pack("<" + "Q" * len(shape), *shape)
+            + struct.pack("<IQ", kind, offset))
+        elements = 1
+        for extent in shape:
+            elements *= extent
+        size = elements * 4 if kind == 0 else elements // 32 * 34
+        offset += (size + 31) // 32 * 32
+    header = b"GGUF" + struct.pack("<IQQ", 3, len(tensors), len(items)) + b"".join(items) + b"".join(directory)
+    path.write_bytes(header + b"\0" * ((-len(header)) % 32 + offset))
+    return path
+
+
+@pytest.mark.parametrize("costs", [False, True])
+def test_gpu_invocation_real_gguf_import_nested_identity_and_final_replan(tmp_path, costs):
+    from heterollm_sim.gguf_parity import read_gguf_metadata, build_model_from_gguf
+    from heterollm_sim.control_plane_state import mapping_fingerprint_status
+    from heterollm_sim import planner
+    from tools.native_llama_compare import build_matching_scenario
+    from tests.test_llama_gpu_invocations import contract
+    gguf = read_gguf_metadata(write_imported_projection_gguf(tmp_path / "actual-import.gguf"))
+    model = build_model_from_gguf(gguf)
+    assert model.metadata.get("gguf_sha256") is None
+    assert model.metadata["metadata"]["gguf_sha256"] == gguf.sha256
+    case = build_matching_scenario(4, 2, model=model, ctx=128, parallel=1, batch=64, ubatch=64,
+        threads=16, gpu_layers=-1, runtime_binary=adapter.ROOT / adapter.grid.RUNTIME)
+    source = contract()
+    proof = {"contract": source, "mmq_source_costs_requested": costs}
+    inputs = {"gpu_invocation_contract": source, "gpu_invocation_evidence": proof, "gpu_mmq_source_costs": costs}
+    lowered = adapter.apply_gpu_invocation_static_contract(case, inputs)
+    audit = lowered.workload.metadata["llama_cpp_gpu_native_invocations"]
+    assert audit["applied"] is True and audit["model_sha256"] == gguf.sha256
+    assert audit["qualified_projection_groups"] == 2
+    assert audit["native_dispatch_proven"] is False and audit["conditional"] is True
+    assert audit["mmq_source_costs"]["requested"] is costs
+    assert audit["mmq_source_costs"]["applied"] is False
+    before = planner._execution_layers(case)[0].metadata["weight_projection_descriptors"]["projections"]
+    after = planner._execution_layers(lowered)[0].metadata["weight_projection_descriptors"]["projections"]
+    assert all(key not in before for key in ("attention.q", "attention.k", "attention.v"))
+    assert all(len(after[key]["segments"]) == 1 for key in ("attention.q", "attention.k", "attention.v"))
+    assert [after[key]["segments"][0]["physical_tensor_name"] for key in ("attention.q", "attention.k", "attention.v")] == ["blk.0.attn_q.weight", "blk.0.attn_k.weight", "blk.0.attn_v.weight"]
+    final, evidence = adapter.replan_final_static_scenario(lowered)
+    assert evidence["normal_validation_passed"] is True
+    assert mapping_fingerprint_status(final)["mapping_stale"] is False
+    assert final.model.embedding_weight_bytes == case.model.embedding_weight_bytes
+    assert sum(layer.weight_bytes for layer in planner._execution_layers(final)) == sum(layer.weight_bytes for layer in planner._execution_layers(case))
+
+
+def local_gpu_invocation_contract(*, mmq=False):
+    base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
+    name = "derived_source_contract_mmq_optional.json" if mmq else "derived_source_contract.json"
+    source = base / "optimization_loop/round_006/candidate_src" / name
+    if not source.is_file():
+        pytest.skip("recorded GPU invocation source contract unavailable")
+    return base, source
+
+
+def import_actual_gguf_audited_header(model_key):
+    """Use the real parser/importer but read only the digest-bound GGUF header."""
+    import hashlib
+    import inspect
+    from heterollm_sim import gguf_parity
+    base, _ = local_gpu_invocation_contract()
+    audit, _ = adapter.grid.read_document(base / "optimization_loop/round_006/gpu_invocation_dispatch_audit.json")
+    selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
+    evidence = next(item for item in audit["model_header_evidence"] if item["model_key"] == model_key)
+    row = next(item for item in adapter.selected_rows(selection) if item["model_key"] == model_key)
+    expected_sha = evidence["recorded_model_sha256_not_recomputed"]
+    assert expected_sha == row["model_ref"]["sha256"]
+    path = Path(evidence["path"])
+    assert path.resolve() == Path(row["model_ref"]["path"]).resolve()
+    if not path.is_file():
+        pytest.skip("fixed real GGUF header artifact unavailable")
+    parser = inspect.getsource(gguf_parity.read_gguf_metadata)
+    hashing = '    digest = sha256()\n    with p.open("rb") as f:\n        for chunk in iter(lambda: f.read(1024 * 1024), b""):\n            digest.update(chunk)\n'
+    assert parser.count(hashing) == 1
+    parser = parser.replace(hashing, '    verify_header(p, data_start)\n    digest = SimpleNamespace(hexdigest=lambda: expected_sha)\n')
+    def verify_header(path, size):
+        assert size == evidence["header_bytes"] and size < 32 * 1024 * 1024
+        with path.open("rb") as handle:
+            header = handle.read(size)
+        assert hashlib.sha256(header).hexdigest() == evidence["header_sha256"]
+    namespace = {**vars(gguf_parity), "SimpleNamespace": SimpleNamespace,
+        "expected_sha": expected_sha, "verify_header": verify_header}
+    exec(compile(parser, "<verified-native-gguf-header-parser>", "exec"), namespace)
+    metadata = namespace["read_gguf_metadata"](path)
+    return gguf_parity.build_model_from_gguf(metadata), row
+
+
+@pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
+@pytest.mark.parametrize("model_key", ["qwen25", "smollm2", "tinyllama", "qwen35", "qwen38_gpu"])
+def test_gpu_invocation_fixed_real_gguf_header_qualifies_after_import_and_replan(model_key):
+    from heterollm_sim import planner
+    from heterollm_sim.control_plane_state import mapping_fingerprint_status
+    from tools.native_llama_compare import build_matching_scenario
+    model, row = import_actual_gguf_audited_header(model_key)
+    _, source = local_gpu_invocation_contract()
+    contract, _ = adapter.grid.read_document(source)
+    runtime = next(ref for ref in row["native_runtime_refs"] if Path(ref["path"]).name == "llama-server.exe")
+    case = build_matching_scenario(4, 2, model=model, ctx=2048, parallel=1, batch=64, ubatch=64,
+        threads=16, gpu_layers=-1, runtime_binary=Path(runtime["path"]), hardware_snapshot=row["static_hardware"]["frozen_hardware"])
+    before_layers = planner._execution_layers(case)
+    original_descriptors = copy.deepcopy([layer.metadata["weight_projection_descriptors"] for layer in before_layers])
+    proof = {"contract": contract, "mmq_source_costs_requested": False}
+    changed = adapter.apply_gpu_invocation_static_contract(case, {"gpu_invocation_contract": contract,
+        "gpu_invocation_evidence": proof, "gpu_mmq_source_costs": False})
+    audit = changed.workload.metadata["llama_cpp_gpu_native_invocations"]
+    assert audit["applied"] is True
+    assert audit["qualified_projection_groups"] > 0 and audit["model_sha256"] == row["model_ref"]["sha256"]
+    assert audit["native_dispatch_proven"] is False and audit["conditional"] is True
+    assert [layer.metadata["weight_projection_descriptors"] for layer in before_layers] == original_descriptors
+    final, replanning = adapter.replan_final_static_scenario(changed)
+    assert replanning["normal_validation_passed"] is True
+    assert mapping_fingerprint_status(final)["mapping_stale"] is False
+    assert sum(layer.weight_bytes for layer in planner._execution_layers(final)) == sum(layer.weight_bytes for layer in before_layers)
+    assert final.model.embedding_weight_bytes == case.model.embedding_weight_bytes
+
+
+@pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
+@pytest.mark.parametrize("costs", [False, True])
+def test_gpu_invocation_real_contract_rederives_source_runtime_and_driver_probe(costs, tmp_path):
+    base, source = local_gpu_invocation_contract(mmq=costs)
+    selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
+    rows = adapter.selected_rows(selection)
+    selected = [next(row for row in rows if row["model_key"] == "qwen25"),
+        next(row for row in rows if row["model_key"] == "qwen38_gpu")]
+    # Historical snapshots are immutable: reject their obsolete derivation,
+    # then create a new contract from the currently locked native sources.
+    from heterollm_sim.llama_gpu_invocations import derive_llama_gpu_invocation_contract
+    previous, _ = adapter.grid.read_document(source)
+    runtime_path = base / "optimization_loop/round_004/runtime_source_binding_structural_audit.json"
+    runtime = adapter.verified_host_offload_source_contract(runtime_path, selected, adapter.ROOT)
+    captured = {key: fact.get("value") for key, fact in previous["kernel_environment"].items() if fact["captured"]}
+    device = previous["mmq_device_evidence"] if previous["mmq_device_evidence"]["available"] else None
+    current = derive_llama_gpu_invocation_contract(runtime["contract"], captured_kernel_environment=captured,
+        cuda_compute_capability=previous["cuda_compute_capability"], mmq_device_evidence=device)
+    if current != previous:
+        with pytest.raises(ValueError, match="differs from re-derived"):
+            adapter.verified_gpu_invocation_contract(source, selected, adapter.ROOT,
+                enable_mmq_source_costs=costs, runtime_binding=runtime)
+    source = tmp_path / "current_gpu_invocation_contract.json"
+    source.write_text(json.dumps(current), encoding="utf-8")
+    proof = adapter.verified_gpu_invocation_contract(source, selected, adapter.ROOT,
+        enable_mmq_source_costs=costs, runtime_binding=runtime)
+    assert proof["conditional_cell_count"] == 2 and proof["uncovered_cell_count"] == 0
+    assert proof["source_derivation_variants"] == 1
+    assert set(proof["source_linkage"]["source_compilation"]) == {"graph", "model", "kv_cache", "mmvq", "mmq", "set_rows"}
+    for cell in proof["cells"].values():
+        assert cell["contract"]["cuda_compute_capability"] == 1200
+        assert cell["contract"]["mmq_device_evidence"]["available"] is costs
+        assert cell["kernel_environment"]["GGML_CUDA_DISABLE_FUSION"]["state"] == "captured_absent"
+        assert cell["native_dispatch_proven"] is False
+        assert cell["conditional_reasons"]
+    assert proof["today_environment_read"] is False
+    assert proof["host_offload_treatment_enabled_by_this_validation"] is False

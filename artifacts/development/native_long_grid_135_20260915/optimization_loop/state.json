@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_005_complete_round_006_anchors_running",
+  "status": "budget_closed_accuracy_failed",
   "user_goal": "固定这组native，按任务书自动优化机制并持续推进",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -963,7 +963,7 @@
     },
     {
       "round": 6,
-      "status": "three_way_anchors_complete_review_repairs_pending",
+      "status": "completed_accuracy_failed_with_two_identity_rejections",
       "hypothesis": "Map physical CUDA projection/fusion boundaries; separately price source MMQ conversion, matrix, and fixup. Keep unsupported MMVQ and fused branches explicit.",
       "anchors": [
         "qwen25_p1536_o128_c4__fixed_runtime",
@@ -982,7 +982,7 @@
       "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\baseline",
       "mapping_only": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping",
       "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq",
-      "full_evaluation_started": false,
+      "full_evaluation_started": true,
       "native_dispatch_proven": false,
       "unpriced_terms": [
         "MMVQ throughput",
@@ -992,15 +992,28 @@
       "completed_anchor_cells_per_treatment": 12,
       "baseline_all12_exact_equal_round5": true,
       "paired_anchor_comparison": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\paired_anchor_comparison.json",
-      "edge_case_review_repairs_pending": 4
+      "edge_case_review_repairs_pending": 0,
+      "repaired_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
+      "repaired_source_contract": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\repaired_source_contract.json",
+      "static_control_comparisons_passed": 72,
+      "frozen_files_unchanged_verified": 315,
+      "validation": "150 combined regression checks passed; 2 obsolete-source-contract tests rejected correctly, fixture now re-derives current contract and verifies historical rejection; both updated tests passed.",
+      "full_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
+      "full_started_utc": "2026-09-15T17:31:12.005230+00:00",
+      "repaired_controls_exact_equal": 3,
+      "selection_reason": "Physical source geometry plus independently derived MMQ terms; unsupported MMVQ remains analytic. Choose source-cost mechanism for full regression, not a scenario-fit coefficient.",
+      "full_evaluation_completed": true,
+      "scored_cells": 129,
+      "identity_rejected_cells": 2,
+      "all3_strict_below10_cells": 9
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Source physical GPU invocation mapping and separate optional MMQ cost. Compare 12 paired anchors then evaluate the source-valid candidate on all131 within remaining budget.",
-  "full_131_evaluations_started": 2,
-  "full_131_evaluations_completed": 2,
-  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\f32_and_gather_r2",
+  "next_round_hypothesis": "Resolve transient model-read identity discrepancies; independently measure source-specific MMVQ/MMQ costs, preserving native actual. New experiment budget required before starting further optimization.",
+  "full_131_evaluations_started": 3,
+  "full_131_evaluations_completed": 3,
+  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
   "best_candidate_status": "No all-group accuracy winner. R5 semantic candidate greatly reduces 27B errors but small-model GPU underprediction worsens; retain prior controls and all failures.",
   "version_control_policy": {
     "enabled": true,
@@ -1045,6 +1058,13 @@
       "status": "pushed",
       "verified_utc": "2026-09-15T16:57:22.193514+00:00",
       "validation": "128 staged portable passed; 21 explicit local-native data skips; local related 133 passed; 131/131 predictions scored; native hashes unchanged"
+    },
+    {
+      "kind": "independent_launch_diagnostic_and_explicit_report_tool",
+      "commit": "5270301a086d4deebafc8b1c190bab8139a176e1",
+      "status": "pushed",
+      "pushed_to": "origin/main",
+      "verified_utc": "2026-09-15T17:16:50.919958+00:00"
     }
   ],
   "operator_microbenchmark": {
@@ -1068,6 +1088,15 @@
       "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\runs\\20260915T170407248390Z\\diagnostic_summary.json",
       "qpc_resolution_note": "Consecutive QPC-read median was zero ticks; this does not prove zero observation overhead. Preserve raw controls and do not derive a correction coefficient.",
       "timing_note": "Host wall and device event span contain overlapping intervals; fixed protocol forbids adding them or claiming event span is pure kernel sum."
+    },
+    "stream_event_probe": {
+      "status": "compiled_not_measured",
+      "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\stream_event_probe",
+      "scheduled_after_simulator_idle": true,
+      "source_scope": "single synthetic MUL_MAT actual backend stream event envelope",
+      "llm_actual_fit": false,
+      "coefficient_candidate": null
     }
-  }
+  },
+  "budget_close_utc": "2026-09-15T22:06:30.572094+00:00"
 }

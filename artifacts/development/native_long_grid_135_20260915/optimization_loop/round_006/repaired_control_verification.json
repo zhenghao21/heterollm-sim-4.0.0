@@ -1,0 +1,24 @@
+{
+  "created_utc": "2026-09-15T17:30:17.723027+00:00",
+  "passed": true,
+  "rows": [
+    {
+      "cell_id": "qwen25_p512_o32_c1__fixed_runtime",
+      "requests_exact_equal": true,
+      "aggregate_exact_equal": true,
+      "mmq_counts_equal": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c4__fixed_runtime",
+      "requests_exact_equal": true,
+      "aggregate_exact_equal": true,
+      "mmq_counts_equal": true
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c2__fixed_runtime",
+      "requests_exact_equal": true,
+      "aggregate_exact_equal": true,
+      "mmq_counts_equal": true
+    }
+  ]
+}

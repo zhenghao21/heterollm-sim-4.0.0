@@ -117,6 +117,11 @@ from .final_layer_output_selection import (
     resolve_declaration as _resolve_final_output_declaration,
 )
 from .serde import stable_hash
+from .llama_gpu_invocations import (
+    SOURCE_KEY as _GPU_INVOCATION_KEY,
+    gpu_invocation_group as _gpu_invocation_group,
+    gpu_projection_invocation_audit as _gpu_projection_invocation_audit,
+)
 
 
 def _model_gguf_sha256(model: object) -> Optional[str]:
@@ -8588,9 +8593,19 @@ def _parallel_named_target(
 def _declared_physical_projections(
     scenario: ScenarioConfig, layer: LayerSpec, projection_ids: Sequence[str],
     *, combined_projection_id: Optional[str] = None,
+    execution_component_id: Optional[str] = None,
 ) -> bool:
     """Use physical call boundaries only for the declared backend contract."""
 
+    group = combined_projection_id or "linear_attention.controls"
+    native_gpu = _gpu_invocation_group(scenario, layer, execution_component_id, group)
+    if native_gpu:
+        return not native_gpu.get("packed_qkv", False)
+    # GPU-only generated aliases must never activate a legacy CPU capability.
+    layer_gpu = layer.metadata.get(_GPU_INVOCATION_KEY, {})
+    if (isinstance(layer_gpu, Mapping)
+            and any(key in layer_gpu.get("generated_gpu_aliases", ()) for key in projection_ids)):
+        return False
     if not _serving_bool_capability(
         scenario, ("llama_cpp_physical_projection_invocations",)
     ):
@@ -8940,6 +8955,130 @@ def summarize_tensor_storage(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
     }
 
 
+
+def _coverage_task_id(task: TaskSpec) -> str:
+    ident = getattr(task, "task_id", None)
+    if not isinstance(ident, str) or not ident:
+        raise ValueError("source coverage requires a physical task operation identity")
+    return ident
+
+
+def summarize_gpu_invocations(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
+    """Count qualified physical calls, retaining uncovered group diagnostics."""
+    total = audited = applied = matrices = 0
+    group_counts: Dict[str, int] = {}
+    reasons: Dict[str, int] = {}
+    seen = set()
+    for task in tasks:
+        meta = task.metadata
+        if meta.get("phase") != "gpu_gemm":
+            continue
+        ident = _coverage_task_id(task)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        total += 1
+        audit = meta.get("gpu_native_invocation")
+        if not isinstance(audit, Mapping):
+            reason = "no_qualified_gpu_weight_projection_label"
+        else:
+            audited += 1
+            if audit.get("applied") is True:
+                applied += 1
+                group = str(audit.get("group", meta.get("projection_id", "other_weight_projection")))
+                group_counts[group] = group_counts.get(group, 0) + 1
+                matrices += int(audit.get("physical_weight_matrices", 1))
+                continue
+            reason = str(audit.get("reason") or "physical_projection_group_not_qualified")
+        reasons[reason] = reasons.get(reason, 0) + 1
+    return {
+        "schema": "heterollm.gpu-invocation-coverage/v1",
+        "counting_unit": "simulator_physical_gpu_gemm_with_conditional_invocation_contract",
+        "gpu_gemm_tasks": total, "audited_tasks": audited, "applied_tasks": applied,
+        "conditional_tasks": applied, "native_dispatch_proven_tasks": 0,
+        "qualified_physical_weight_matrices": matrices,
+        "uncovered_tasks": total - applied, "group_counts": dict(sorted(group_counts.items())),
+        "uncovered_reason_counts": dict(sorted(reasons.items())),
+        "observed_domain": "simulation contract labels; not native trace counts",
+    }
+
+
+def summarize_mmq_source_work(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
+    """Use physical task/dependency identities, including launch-only fixups."""
+    total = audited = applied = 0
+    status_counts: Dict[str, int] = {}
+    reasons: Dict[str, int] = {}
+    stages = {"conversion": {}, "fixup": {}}
+    main_seen = set()
+    for task in tasks:
+        meta = task.metadata
+        audit = meta.get("mmq_source_work")
+        if meta.get("phase") == "gpu_gemm":
+            ident = _coverage_task_id(task)
+            if ident not in main_seen:
+                main_seen.add(ident)
+                total += 1
+                if isinstance(audit, Mapping) and audit.get("stage") == "matrix":
+                    audited += 1
+                    status = str(audit.get("status", "unknown"))
+                    status_counts[status] = status_counts.get(status, 0) + 1
+                    applied += int(status == "applied")
+                    if status != "applied":
+                        reason = str(audit.get("reason", status))
+                        reasons[reason] = reasons.get(reason, 0) + 1
+        if isinstance(audit, Mapping) and audit.get("stage") in stages:
+            name, owner = meta.get("op_name"), getattr(task, "request_id", None)
+            if not isinstance(name, str) or not name or not isinstance(owner, str) or not owner:
+                raise ValueError("MMQ conversion/fixup audit requires an operation identity")
+            if meta.get("phase") not in {"kernel_launch", "gpu_elementwise", "gpu_tensor_kernel"}:
+                raise ValueError("unsupported MMQ conversion/fixup physical phase")
+            stages[audit["stage"]][_coverage_task_id(task)] = task
+
+    def count_operations(stage_tasks):
+        roots = {}
+        visiting = set()
+
+        def root(ident):
+            if ident in roots:
+                return roots[ident]
+            if ident in visiting:
+                raise ValueError("MMQ operation identity dependencies contain a cycle")
+            visiting.add(ident)
+            task = stage_tasks[ident]
+            meta = task.metadata
+            prior_roots = set()
+            # Every dispatch begins a new call, even with a repeated name.
+            # Without a dispatch, repeated device phases are distinct calls.
+            if meta["phase"] != "kernel_launch":
+                for dep in task.dependencies:
+                    predecessor = stage_tasks.get(dep)
+                    if (predecessor is not None and predecessor.request_id == task.request_id
+                            and predecessor.metadata.get("op_name") == meta["op_name"]
+                            and predecessor.metadata.get("target_component") == meta.get("target_component")
+                            and predecessor.metadata.get("phase") != meta["phase"]):
+                        prior_roots.add(root(dep))
+            if len(prior_roots) > 1:
+                raise ValueError("MMQ physical phase joins multiple operation identities")
+            roots[ident] = next(iter(prior_roots), ident)
+            visiting.remove(ident)
+            return roots[ident]
+
+        return len({root(ident) for ident in stage_tasks})
+
+    return {
+        "schema": "heterollm.mmq-source-work-coverage/v1",
+        "counting_unit": "physical_gpu_gemm_main_task_and_distinct_conversion_fixup_operation",
+        "operation_identity_basis": "request_and_physical_task_dependency_chain",
+        "gpu_gemm_tasks": total, "audited_tasks": audited, "applied_tasks": applied,
+        "conditional_tasks": applied, "native_dispatch_proven_tasks": 0,
+        "conversion_tasks": count_operations(stages["conversion"]),
+        "fixup_tasks": count_operations(stages["fixup"]),
+        "matrix_status_counts": dict(sorted(status_counts.items())),
+        "uncovered_reason_counts": dict(sorted(reasons.items())),
+        "observed_domain": "simulation source mechanism; not measured kernel timing",
+    }
+
+
 def _declared_mmq_work(
     scenario: ScenarioConfig,
     workload: GemmWorkload,
@@ -9189,6 +9328,14 @@ def _add_rank_gemm(
     )
     iq_panel_audit = None
     operation_metadata = dict(metadata or {})
+    gpu_graph_audit = scenario.workload.metadata.get(_GPU_INVOCATION_KEY, {})
+    if (isinstance(gpu_graph_audit, Mapping) and gpu_graph_audit.get("applied") is True
+            and target_component_id in gpu_graph_audit.get("gpu_component_ids", ()) and model_weight_read and not dynamic_rhs):
+        operation_metadata["gpu_native_invocation"] = _gpu_projection_invocation_audit(
+            scenario, _layer_for_gemm_operation(scenario, name, operation_metadata),
+            target_component_id, operation_metadata.get("projection_id"),
+            m=workload.m, k=workload.k, n=workload.n,
+        )
     operation_metadata.setdefault("operator_class", OperatorClass.GEMM.value)
     if _f32_hidden_storage_enabled(scenario):
         operation_metadata.update(
@@ -10068,9 +10215,12 @@ def _add_rank_tensor_kernel(
     metadata: Optional[Mapping[str, object]] = None,
     execution_component_id: Optional[str] = None,
     input_is_local: bool = False,
+    emit_kernel_launch: bool = True,
 ) -> str:
-    """Lower a local non-GEMM tensor kernel on one logical GPU rank."""
+    """Lower a local tensor operation; a source D2D memcpy is not a kernel launch."""
 
+    if type(emit_kernel_launch) is not bool or (workload.launch_only and not emit_kernel_launch):
+        raise ValueError("tensor operation requires a valid kernel-dispatch declaration")
     execution_id = execution_component_id or rank.component_id
     if _kind(_component(scenario, execution_id)) != "gpu":
         raise ValueError("tensor kernel execution component must be a GPU")
@@ -10106,6 +10256,8 @@ def _add_rank_tensor_kernel(
     )
     last = ""
     for phase in estimate.phases:
+        if phase.name == "kernel_launch" and not emit_kernel_launch:
+            continue
         demands = tuple(
             _namespace_demand(
                 scenario,
@@ -12030,12 +12182,98 @@ def _task_segment_dynamic_task_overrides(
     return overrides
 
 
+
+def _gpu_invocation_kv_contract(
+    scenario: ScenarioConfig, router: TopologyRouter, plan: ParallelPlan,
+    rank: LogicalRank, layer: LayerSpec, token_batch: int,
+    kv_materialized_tokens: int, kv_append_tokens: int,
+) -> Mapping[str, object]:
+    active = scenario.workload.metadata.get(_GPU_INVOCATION_KEY, {})
+    if not isinstance(active, Mapping) or active.get("applied") is not True:
+        return {}
+    target = _parallel_target(scenario, layer, "attention", rank)
+    declared = _gpu_invocation_group(scenario, layer, target, "attention.qkv")
+    if not declared:
+        return {}
+    audit = {"status": "uncovered", "schema": declared["schema"],
+             "native_dispatch_proven": False, "source": "gpu_physical_invocation_contract"}
+    if not declared.get("cache_write_qualified"):
+        return {**audit, "reason": declared.get("cache_write_reason")}
+    if (plan.world_size != 1 or token_batch <= 0 or token_batch != kv_materialized_tokens
+            or token_batch != kv_append_tokens):
+        return {**audit, "reason": "ordinary_single_rank_equal_cache_rows_required"}
+    cache, _offload, ratio = _kv_components(scenario, rank, target)
+    if target != rank.component_id or cache not in {rank.component_id, rank.memory_component_id} or ratio != 0:
+        return {**audit, "reason": "gpu_local_cache_without_offload_required"}
+    bits, artifact = _kv_dtype_bits(scenario, layer)
+    if bits != 16 or artifact is not None:
+        return {**audit, "reason": "only_captured_f16_cache_write_is_qualified"}
+    execution = _attention_execution_descriptor(layer)
+    q_width = execution.q_projection_width if execution is not None else layer.hidden_size
+    kv_width = _physical_kv_width_for_rank(layer, plan.tp_degree)
+    matrices = declared["physical_matrices"]
+    if declared.get("packed_qkv"):
+        if matrices[0]["n"] != q_width + 2 * kv_width:
+            return {**audit, "reason": "packed_qkv_width_disagrees_with_runtime_geometry"}
+    elif tuple(row["n"] for row in matrices) != (q_width, kv_width, kv_width):
+        return {**audit, "reason": "physical_qkv_and_cache_widths_disagree"}
+    v_materialization = None
+    if declared.get("packed_qkv") and declared["v_cache_transposed"]:
+        layout = declared.get("packed_qkv_cache_layout", {})
+        expected_layout = {
+            "schema":"llama.cpp.packed-qkv-reshape-v1", "matmul_output_dtype":"F32",
+            "view":"reshape_3d_with_packed_token_stride", "copy_required_when_flash_off":True,
+            "strided_copy":"f32_scalar_kernel", "single_token_copy":"cuda_memcpy_d2d",
+        }
+        head_dim = layer.hidden_size // layer.attention_heads
+        if (not isinstance(layout, Mapping) or any(layout.get(k) != v for k, v in expected_layout.items())
+                or execution is not None or declared["rope_type"] not in {"normal", "neox"}
+                or layer.hidden_size % layer.attention_heads or head_dim <= 0
+                or q_width != layer.hidden_size or kv_width != head_dim * layer.kv_heads):
+            return {**audit, "reason": "packed_qkv_v_view_layout_not_proven"}
+        v_materialization = {
+            "source_layout": "packed_qkv_f32_3d_view", "destination_layout": "contiguous_f32_2d",
+            "source_shape": (head_dim, layer.kv_heads, token_batch),
+            "destination_shape": (kv_width, token_batch),
+            "source_token_stride_bytes": 4 * matrices[0]["n"],
+            "destination_token_stride_bytes": 4 * kv_width,
+            "read_bytes": 4 * token_batch * kv_width, "write_bytes": 4 * token_batch * kv_width,
+            "execution": "f32_scalar_kernel" if token_batch > 1 else "cuda_memcpy_d2d",
+            "kernel_launch": token_batch > 1,
+            "submission_service_priced": token_batch > 1,
+            "native_dispatch_proven": False,
+        }
+    rope_target = _primitive_target(scenario, router, rank, OperatorClass.ELEMENTWISE,
+        "{}.attention.rope".format(layer.layer_id), fallback_keys=("{}.attention".format(layer.layer_id),))
+    if rope_target != target:
+        return {**audit, "reason": "native_qkv_rope_and_cache_producer_must_match"}
+    normalized = execution is not None and execution.qk_norm
+    # Normalized/IMRoPE variants use separately materialized rotation outputs;
+    # this contract does not invent a combined RMSNorm+RoPE cache kernel.
+    fused_k = (declared["fusion_enabled"] is True and declared["rope_type"] in {"normal", "neox"}
+               and not normalized)
+    return {**audit, "status": "applied", "reason": None,
+        "producer_component": target, "cache_component": cache, "cache_format": "f16",
+        "rope_type": declared["rope_type"], "k_rope_set_rows_fused": fused_k,
+        "v_cache_transposed": declared["v_cache_transposed"], "rows": token_batch,
+        "v_contiguous_materialization": v_materialization,
+        "k_set_rows_index_bytes": 8 * token_batch,
+        "v_set_rows_index_bytes": 8 * token_batch * (kv_width if declared["v_cache_transposed"] else 1),
+        "source_input_dtype": "F32", "cache_output_dtype": "F16",
+        "unpriced_terms": tuple(declared["unpriced_terms"]),
+        "rope_arithmetic": "inherited_three_ops_and_precomputed_sin_cos_approximation"}
+
+
 def _native_local_kv_contract(
     scenario: ScenarioConfig, router: TopologyRouter, plan: ParallelPlan,
     rank: LogicalRank, layer: LayerSpec, token_batch: int,
     kv_materialized_tokens: int, kv_append_tokens: int,
 ) -> Mapping[str, object]:
     """Qualify the fixed ordinary CUDA cache graph before changing QKV output."""
+    gpu_invocation = _gpu_invocation_kv_contract(scenario, router, plan, rank, layer,
+        token_batch, kv_materialized_tokens, kv_append_tokens)
+    if gpu_invocation:
+        return gpu_invocation
     if scenario.workload.metadata.get("llama_cpp_mmq_source_work") is not True:
         return {}
     audit: Dict[str, object] = {"status": "uncovered"}
@@ -12124,7 +12362,7 @@ def _add_native_local_kv_writeback(
     common = {key: value for key, value in metadata.items() if key != "phase"}
     common["execution_phase"] = metadata.get("phase")
     target_bytes = _kv_tensor_bytes(scenario, layer, plan.tp_degree, token_batch)
-    index_bytes = 8 * token_batch
+    index_bytes = int(contract.get("k_set_rows_index_bytes", 8 * token_batch))
     prior = tuple(dependencies)
     query_end = ""
     if already_rotated is not None:
@@ -12160,7 +12398,25 @@ def _add_native_local_kv_writeback(
             _discard_side_branch_rank_value(builder, end, rank)
         prior = (end,)
     for part in (("v",) if contract["k_rope_set_rows_fused"] else ("k", "v")):
-        read_bytes = 4 * token_batch * kv_width + index_bytes
+        materialization = contract.get("v_contiguous_materialization") if part == "v" else None
+        if materialization is not None:
+            copied = _add_rank_tensor_kernel(
+                builder, scenario, router, plan, rank,
+                TensorKernelWorkload(operations=0, read_bytes=materialization["read_bytes"],
+                    write_bytes=materialization["write_bytes"], streaming_fraction=1.0,
+                    name="native_v_contiguous"),
+                name + ".v_contiguous", prior, input_is_local=True,
+                emit_kernel_launch=materialization["kernel_launch"],
+                metadata={**common, "event_kind":"kv_native_v_contiguous",
+                    "modeled_memory_write_bytes":materialization["write_bytes"],
+                    "persistent_output_bytes":0,
+                    "native_kv_work":{**contract, "stage":"v_contiguous", **materialization,
+                        "persistent_write_bytes":0,
+                        "timing_completeness":"analytical_copy_traffic; memcpy_submission_unpriced"}},
+            )
+            prior = (copied,)
+        part_index_bytes = int(contract.get(part + "_set_rows_index_bytes", index_bytes))
+        read_bytes = 4 * token_batch * kv_width + part_index_bytes
         end = _add_rank_tensor_kernel(
             builder, scenario, router, plan, rank,
             TensorKernelWorkload(operations=0, read_bytes=read_bytes,
@@ -12171,7 +12427,13 @@ def _add_native_local_kv_writeback(
                 "modeled_memory_write_bytes": target_bytes,
                 "native_kv_work": {**contract, "stage": part + "_set_rows",
                     "read_bytes": read_bytes, "write_bytes": target_bytes,
-                    "persistent_write_bytes": target_bytes, "index_unique_bytes": index_bytes},
+                    "persistent_write_bytes": target_bytes, "index_unique_bytes": part_index_bytes,
+                    **({"source_value_bytes": 4 * token_batch * kv_width,
+                        "source_input_dtype": "F32", "cache_output_dtype": "F16",
+                        "layout": "element_rows_transposed_v" if part == "v" and contract.get("v_cache_transposed") else "token_rows",
+                        "conversion_execution": "inside_set_rows_no_extra_conversion_launch",
+                        "conversion_instructions_priced": False}
+                       if contract.get("source") == "gpu_physical_invocation_contract" else {})},
                 **({"input_tensor_id": contract[part + "_input_tensor_id"]}
                    if part + "_input_tensor_id" in contract else {}),
                 "persistent_output_bytes": target_bytes},
@@ -14486,7 +14748,7 @@ def _compile_parallel_layer_body(
         )
         split_qkv = _declared_physical_projections(
             scenario, layer, ("attention.q", "attention.k", "attention.v"),
-            combined_projection_id="attention.qkv",
+            combined_projection_id="attention.qkv", execution_component_id=qkv_target,
         )
         qkv_workload = _layer_gemm(
             layer,
@@ -14538,6 +14800,12 @@ def _compile_parallel_layer_body(
                     "fusion_reason": "explicit_qk_rmsnorm_boundary",
                 }
             )
+        gpu_qkv_invocation = _gpu_invocation_group(scenario, layer, qkv_target, "attention.qkv")
+        if gpu_qkv_invocation:
+            # A physically packed weight stays one MUL_MAT, but native CUDA
+            # does not fuse its full QKV projection with the following RoPE.
+            qkv_rope_fused = False
+            qkv_rope_audit.update(fusion_enabled=False, fusion_decision="native_projection_before_rope")
         if split_qkv:
             qkv_rope_fused = False
             qkv_rope_audit = dict(qkv_rope_audit)
@@ -15773,15 +16041,14 @@ def _compile_parallel_linear_mixer_uncached(
     recurrent_elements = int(
         math.ceil(geometry.recurrent_state_elements / float(plan.tp_degree))
     )
-    physical_projection_invocations = _declared_physical_projections(
-        scenario,
-        layer,
-        ("linear_attention.alpha", "linear_attention.beta"),
-    )
     rank_ends: List[str] = []
     scaling = "O(T)" if token_batch > 1 or phase.startswith("prefill") else "O(1)"
     for rank in ranks:
         target = _parallel_target(scenario, layer, "linear_attention", rank)
+        physical_projection_invocations = _declared_physical_projections(
+            scenario, layer, ("linear_attention.alpha", "linear_attention.beta"),
+            execution_component_id=target,
+        )
         projection_workload = _layer_gemm(
             layer,
             token_batch,
@@ -16643,8 +16910,9 @@ def _compile_parallel_dense_mlp_uncached(
         )
         split_mlp = gated_mlp and _declared_physical_projections(
             scenario, layer, ("mlp.gate", "mlp.up"),
-            combined_projection_id="mlp.up_gate",
+            combined_projection_id="mlp.up_gate", execution_component_id=target,
         )
+        gpu_ffn_invocation = _gpu_invocation_group(scenario, layer, target, "mlp.up_gate")
         up_workload = _layer_gemm(
             layer,
             token_batch,
@@ -16682,6 +16950,23 @@ def _compile_parallel_dense_mlp_uncached(
             activation_fused = False
             activation_audit = {"fusion_enabled": False, "fusion_decision": "ungated_ffn"}
         activation_audit = dict(activation_audit)
+        if gpu_ffn_invocation:
+            fusion_reason = None
+            if gpu_ffn_invocation.get("fusion_enabled") is not True:
+                fusion_reason = "captured_cuda_fusion_disabled"
+            elif not gpu_ffn_invocation.get("fusion_shape_compatible"):
+                fusion_reason = "native_gate_up_type_shape_stride_not_compatible"
+            elif gpu_ffn_invocation.get("fusion_extra_inputs_present"):
+                fusion_reason = "native_bias_scale_or_adapter_fusion_not_covered"
+            if fusion_reason:
+                activation_fused = False
+                activation_audit.update(fusion_enabled=False, fusion_decision=fusion_reason)
+            activation_audit["gpu_native_invocation"] = {
+                "schema": gpu_ffn_invocation["schema"], "status": "conditional",
+                "group": "mlp.up_gate", "physical_m": token_batch,
+                "physical_weight_matrices": len(gpu_ffn_invocation["physical_matrices"]),
+                "native_dispatch_proven": False,
+            }
         if split_mlp and token_batch != 1:
             activation_fused = False
             activation_audit.update(
@@ -23794,6 +24079,16 @@ def _serving_lowering_from_builder(
         enriched_extra_metadata["tensor_storage"] = tensor_storage
         manifest = replace(manifest, metadata={
             **manifest.metadata, "tensor_storage": tensor_storage,
+        })
+    gpu_contract = scenario.workload.metadata.get(_GPU_INVOCATION_KEY, {})
+    if isinstance(gpu_contract, Mapping) and gpu_contract.get("applied") is True:
+        gpu_invocations = summarize_gpu_invocations(tasks)
+        mmq_source_work = summarize_mmq_source_work(tasks)
+        enriched_extra_metadata["gpu_invocations"] = gpu_invocations
+        enriched_extra_metadata["mmq_source_work"] = mmq_source_work
+        manifest = replace(manifest, metadata={
+            **manifest.metadata, "gpu_invocations": gpu_invocations,
+            "mmq_source_work": mmq_source_work,
         })
     offload_coverage = summarize_host_gemm_offload(tasks)
     enriched_extra_metadata["host_gemm_offload"] = offload_coverage
