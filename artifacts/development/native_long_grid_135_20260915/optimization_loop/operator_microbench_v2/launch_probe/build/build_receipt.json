@@ -1,0 +1,168 @@
+{
+  "attempt": 1,
+  "started_utc": "2026-09-15T16:56:29.413349+00:00",
+  "command": [
+    "E:\\cuda\\bin\\nvcc.exe",
+    "-std=c++17",
+    "-O3",
+    "-arch=sm_120",
+    "--cudart",
+    "static",
+    "-Xcompiler",
+    "/EHsc",
+    "-Xcompiler",
+    "/W3",
+    "-I",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\launch_probe.cu",
+    "-o",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build\\launch_probe.exe",
+    "-Xlinker",
+    "bcrypt.lib"
+  ],
+  "source_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\launch_probe.cu",
+    "sha256": "2cf0b9c6839c0713903fb07da9522e10b8564736a219b088d3cc85920eb78a32",
+    "bytes": 15007
+  },
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\protocol.json",
+    "sha256": "de1a4bd404a66df57215b164f4b720437ca608fa5d9ab2d4739591a83ba3c73d",
+    "bytes": 5926
+  },
+  "timed_execution": false,
+  "budget": 2,
+  "status": "complete",
+  "returncode": 0,
+  "finished_utc": "2026-09-15T16:56:33.150524+00:00",
+  "inputs": {
+    "source": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\launch_probe.cu",
+      "sha256": "2cf0b9c6839c0713903fb07da9522e10b8564736a219b088d3cc85920eb78a32",
+      "bytes": 15007
+    },
+    "protocol": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\protocol.json",
+      "sha256": "de1a4bd404a66df57215b164f4b720437ca608fa5d9ab2d4739591a83ba3c73d",
+      "bytes": 5926
+    },
+    "build_script": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build_probe.py",
+      "sha256": "c066f2573960dcf7dec4de954c94887a2e4ba0a35aff465dfb81a8b0daa99703",
+      "bytes": 6152
+    },
+    "nvcc": {
+      "path": "E:\\cuda\\bin\\nvcc.exe",
+      "sha256": "07565c215cc96e3b3609a931eb6eaffb1ecca24339442603f92832494c656727",
+      "bytes": 17741312
+    },
+    "host_compiler": {
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+      "sha256": "88c8344236a27a6e727e0a8edc49aaa2690bdc7a9464b9d18cc7abe70a9f1c0d",
+      "bytes": 677736
+    },
+    "vcvars64": {
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
+      "sha256": "6b516d8fcf543c14b2d861e1f45661e0029230fe0dc48e86ce78522801822209",
+      "bytes": 39
+    },
+    "cuda_header": {
+      "path": "E:\\cuda\\include\\cuda.h",
+      "sha256": "167e383a3791226c5e809dfd6a9614b29b1e11f4d6346c29a921943a71e3e566",
+      "bytes": 1183268
+    },
+    "cuda_runtime_header": {
+      "path": "E:\\cuda\\include\\cuda_runtime_api.h",
+      "sha256": "6c60f63697575ff18156d397ec506ab286b147f33a5ce9e72f95bfec162fd3ea",
+      "bytes": 670876
+    },
+    "cuda_static_runtime": {
+      "path": "E:\\cuda\\lib\\x64\\cudart_static.lib",
+      "sha256": "af41c66fc8543dc5876d39ce1327032bbbca87424d9016f9c066460476a251b0",
+      "bytes": 2852804
+    },
+    "nvcc_version": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build\\nvcc_version.txt",
+      "sha256": "584ec5d3cb4d0a32b9baac0a680317188e804e20462dde652cd4d1532e8af024",
+      "bytes": 231
+    },
+    "generated_identity_header": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build\\build_identity.h",
+      "sha256": "520c2dfc1a84791befc87a3baf59a99d22a12f99f257afcf71c1bdb587c7302a",
+      "bytes": 1077
+    }
+  },
+  "compile_log_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build\\compile.log",
+    "sha256": "09fda1952d74981c3571b74084948612a3911ff005c583b2e589dc3b0987ce90",
+    "bytes": 1184
+  },
+  "no_probe_executed": true,
+  "no_native_dll_modified": true,
+  "no_Nsight_or_CUPTI_dependency": true,
+  "device_identity_binding": {
+    "index": 0,
+    "required_gpu_uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "required_compute_capability": [
+      12,
+      0
+    ],
+    "required_sm_count": 84,
+    "recorded_driver_version": "616.64",
+    "reference_hardware": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\hardware.json",
+      "sha256": "78737ac5d71cc4be817721af1361155e74309fa260d8ccf4eb42a59ae0da0a73",
+      "bytes": 1278
+    },
+    "reference_driver_properties": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\driver_device_properties.json",
+      "sha256": "351f81b15fd1706021fb449da7330000559b628a6cae5914a0cfb9bcd3783eaa",
+      "bytes": 1313
+    }
+  },
+  "model_profile_update": false,
+  "binary_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build\\launch_probe.exe",
+    "sha256": "6357d642b7cb4421af4951f3445f6b2e59f9d5f752fd6b944c57cc9d328574c7",
+    "bytes": 509440
+  },
+  "supporting_file_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\run_probe.py",
+      "sha256": "201b1966018567c0ba2d906209c2d0f22d9aeae9559215b1209b71d664ca5803",
+      "bytes": 4379
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\analyze_results.py",
+      "sha256": "331daaed9df266f70215a87028243cfe7f40c1f15fc2736e0c40db6f48aa80bd",
+      "bytes": 10195
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\README.md",
+      "sha256": "f753211610af889a9d1099cd6c18e1fc732b41dcc9e94b4caa070987ce9aa308",
+      "bytes": 3708
+    }
+  ],
+  "supporting_file_refs_at_compile": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\run_probe.py",
+      "sha256": "201b1966018567c0ba2d906209c2d0f22d9aeae9559215b1209b71d664ca5803",
+      "bytes": 4379
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\analyze_results.py",
+      "sha256": "a56d15ccf5790a9099fb131cc876b6503a2ce7aa1fa3007fdad22d12d24d497e",
+      "bytes": 10169
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\README.md",
+      "sha256": "f753211610af889a9d1099cd6c18e1fc732b41dcc9e94b4caa070987ce9aa308",
+      "bytes": 3708
+    }
+  ],
+  "post_build_support_validation_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\build\\post_build_support_validation.json",
+    "sha256": "859b28607b76ca243959ad3841e65844c012f58ed88baf2017b5f366cc46ce6b",
+    "bytes": 2954
+  }
+}

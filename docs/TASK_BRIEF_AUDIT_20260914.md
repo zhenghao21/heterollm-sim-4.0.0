@@ -183,9 +183,9 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 - 原资格判断漏读graph.attributes.metadata中的GGUF身份，导致首版14锚点零应用。首版结果独立保留；修正读取嵌套身份、拒绝冲突后，六组实际图资格和行访问均生效。14锚点三路消融完成，独立审核126个请求和2399条embedding记录，token、时间、字节守恒通过。
 - 完整131格采用源码要求的F32+行访问。gather-only在部分GPU场景误差较低，但保留错误hidden位宽不能作为优化。与v2/首轮的完整比较含多轮修正；第五轮的独立因果证据来自14锚点三路对照。
 - 本机133项关联回归通过；本轮精确暂存版本在隔离树128 passed、21 skipped，跳过项明确依赖未上传的本地native档案，不能计为通过。本机来源/身份集成检查另已完成。
-- 第六轮物理GPU投影、融合和可选MMQ成本三路已冻结，147项结构检查通过。三个关闭开关的控制格逐请求和聚合时延与第五轮完全一致；批次只增加诊断字段，旧字段完全一致。两路候选正在跑12锚点。历史模型专用include哈希缺失，合同维持conditional和native_dispatch_proven=false。
-- 合成算子trace工具已完成1次profile和1次无profile对照，24 NVTX调用对应72个kernel；Nsight与driver兼容性门失败且没有锁频，不能用于性能标定。没有运行新的LLM native。
-- 每轮commit+GitHub push规则已推送（de26d58）；后端检查点715a083、第四轮69273ca、诊断工具ff9ca8d已推送。本轮完成记录、代码、测试和小型证据一并提交上传；不混入第六轮在途代码或历史前端修改。
+- 第六轮物理GPU投影、融合和可选MMQ成本三路已冻结，147项结构检查通过。三个关闭开关的控制格逐请求和聚合时延与第五轮完全一致；批次只增加诊断字段，旧字段完全一致。三路12锚点已完成；关闭开关的全部12场景逐请求与第五轮精确一致。四项边界/披露问题正在修复，新修订独立冻结，不覆盖已完成预测。历史模型专用include哈希缺失，合同维持conditional和native_dispatch_proven=false。
+- 合成算子trace工具已完成1次profile和1次无profile对照，24 NVTX调用对应72个kernel；Nsight与driver兼容性门失败且没有锁频，不能用于性能标定。独立CUDA启动/同步诊断已在空闲窗口完成160 warmup+480 formal、0错误，16种配置均未通过全部预定稳定性门，没有产出或应用系数。QPC连续对读中位为0 tick不代表观测开销为零。没有运行新的LLM native。
+- 每轮commit+GitHub push规则已推送（de26d58）；后端检查点715a083、第四轮69273ca、诊断工具ff9ca8d已推送。第五轮216fb8b已提交推送，远端SHA已核验；第六轮在途代码和历史前端修改独立保留。
 
 ## 12. 当前测量与预测差距（动态，原位更新）
 
@@ -207,17 +207,17 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 ## 13. 下一轮优化顺序（动态，原位更新）
 
 1. 持续核验固定native选择和131 raw，冻结、恢复、评分前后均校验；原生不重测，不改变场景成员和计时口径。
-2. 完成第五轮全131结果记录、本地提交与GitHub推送。保留首版零应用、gather-only消融及所有退化。
-3. 第六轮先完成12锚点物理映射与映射+MMQ的对照，补齐同版本baseline。核查Q/K/V、gate/up、alpha/beta物理调用、M1融合和M>1拆分、F32到F16 KV写入，以及MMQ主矩阵/conversion/fixup的独立计数。
+2. 第五轮全131结果、本地提交及GitHub推送已完成；保留首版零应用、gather-only消融及所有退化。
+3. 第六轮12锚点三路对照已完成，先修复独立审核指出的重复apply、packed V连续化、逐投影资格和跨请求计数边界，再独立冻结。核查Q/K/V、gate/up、alpha/beta物理调用、M1融合和M>1拆分、F32到F16 KV写入，以及MMQ主矩阵/conversion/fixup的独立计数。
 4. 来源与结构资格通过后，按源语义选择候选做第3/4次全131评估。MMVQ、融合分支和未定价项显式保留；不因误差较低启用身份不合格的旧profile。
-5. 准备独立CUDA launch/同步微基准，计时只在计算资源空闲且硬件状态合格时进行。仅在独立证据和现有预算内考虑第六轮成本子消融；不使用不兼容CUPTI结果标定，也不拟合目标LLM时延。
+5. 独立CUDA launch/同步诊断已完成，16种配置均未通过全部稳定性门，当前不生成参数。仅在现有预算内、另有预定独立传递验证证据时考虑成本子消融；不使用不兼容CUPTI或不稳定数据标定，不拟合目标LLM时延。
 6. 每轮原位更新任务书，结构回归、消融和分组评估后提交推送。6轮机制、4次全量、8小时预算不扩大；未达标就保留失败范围与下一项所需证据，不宣称验收通过。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
 - native选择SHA固定cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5，选择文件只读；模型、binary、实际argv/env、prompt/output policy、extractor和原始时间戳均不变。
 - 预测输入使用同SHA的27B只读权重副本，映射保存在prediction_model_snapshot_map.json。各轮独立source/freeze/predictions；首版错误或零应用也不覆盖。
-- 自动循环状态在optimization_loop/state.json。预定上限6轮机制、4次全131评估、8小时，截止本机2026-09-16 05:27:44。全量已完成2/4次，第六轮当前12锚点对照；每格600秒、总4个预测worker。
+- 自动循环状态在optimization_loop/state.json。预定上限6轮机制、4次全131评估、8小时，截止本机2026-09-16 05:27:44。全量已完成2/4次，第六轮12锚点已完成，边界修复后待新冻结；每格600秒、总4个预测worker。
 - 固定数据仅作开发回归；完整预测覆盖100%不等于准确性通过。没有独立盲测或真实跨硬件验收；不以配置中的算力/带宽修改冒充换硬件验证。
 - 每轮提交上传规则已授权；只上传本轮代码、测试、任务书、精简证据，不上传权重、运行库、大型raw/trace或整份冻结源码。
 
@@ -230,7 +230,8 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 - optimization_loop/round_005/full_evaluation.json、decision.json：第五轮完整分组统计、退化、保留决定；repaired_paired_anchor_comparison.json、repaired_output_audit.json为14锚点消融与独立审核。
 - optimization_loop/round_005/f32_and_gather_r2/freeze.json、predictions/、errors.0002.json、report.html、report.md及三热图：第五轮完整冻结、逐请求预测、逐格/逐run误差。
 - optimization_loop/round_006/baseline、physical_mapping、physical_mapping_mmq：第六轮三路冻结；baseline_control_verification.json记录关闭新开关的精确控制核验。
-- optimization_loop/operator_microbench_v2：合成算子工具、静态设备属性和带兼容性失败标记的trace诊断。
+- optimization_loop/operator_microbench_v2：合成算子工具、静态设备属性和带兼容性失败标记的trace诊断；launch_probe保留独立CUDA启动/同步工具及160 warmup、480 formal原始结果，当前不生成系数。
+- optimization_loop/report_checkpoint_r5/report.html、report.md、summary.json：v2/R1/R5完整131与R6两路12锚点独立列示；评分文件显式固定，来源校验无失败；不混合覆盖或宣称准确性晋级。
 - tools/verify_fixed_native.py --state <optimization_loop/state.json>为固定native核验入口；各候选source/tools/predict_stable_native_dataset.py --output <候选目录> --resume/--score执行复用预测/评分；tools/render_stable_native_evaluation.py生成报告。
 
 ## 16. 历史实验索引（稳定格式，短表）

@@ -25,5 +25,6 @@
     "staged_portable_passed": 128,
     "staged_local_data_skipped": 21
   },
-  "version_control_status": "ready_to_commit_and_push"
+  "version_control_status": "pushed",
+  "commit": "216fb8bec5c1e75370ace4ead40f979631439138"
 }

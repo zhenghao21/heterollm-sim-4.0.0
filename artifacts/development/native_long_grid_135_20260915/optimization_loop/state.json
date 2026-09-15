@@ -963,7 +963,7 @@
     },
     {
       "round": 6,
-      "status": "three_way_anchors_running_control_verified",
+      "status": "three_way_anchors_complete_review_repairs_pending",
       "hypothesis": "Map physical CUDA projection/fusion boundaries; separately price source MMQ conversion, matrix, and fixup. Keep unsupported MMVQ and fused branches explicit.",
       "anchors": [
         "qwen25_p1536_o128_c4__fixed_runtime",
@@ -988,7 +988,11 @@
         "MMVQ throughput",
         "conversion instruction costs",
         "graph entry/launch/synchronization service"
-      ]
+      ],
+      "completed_anchor_cells_per_treatment": 12,
+      "baseline_all12_exact_equal_round5": true,
+      "paired_anchor_comparison": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\paired_anchor_comparison.json",
+      "edge_case_review_repairs_pending": 4
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
@@ -1033,6 +1037,14 @@
       "commit": "ff9ca8daa462254e232c4dea4705be2ffcc375a7",
       "status": "pushed",
       "pushed_to": "origin/main"
+    },
+    {
+      "kind": "round_005",
+      "commit": "216fb8bec5c1e75370ace4ead40f979631439138",
+      "pushed_to": "origin/main",
+      "status": "pushed",
+      "verified_utc": "2026-09-15T16:57:22.193514+00:00",
+      "validation": "128 staged portable passed; 21 explicit local-native data skips; local related 133 passed; 131/131 predictions scored; native hashes unchanged"
     }
   ],
   "operator_microbenchmark": {
@@ -1041,6 +1053,21 @@
     "compatibility_gate_passed": false,
     "profile_runs": 1,
     "unprofiled_controls": 1,
-    "source_commit": "ff9ca8daa462254e232c4dea4705be2ffcc375a7"
+    "source_commit": "ff9ca8daa462254e232c4dea4705be2ffcc375a7",
+    "launch_sync_diagnostic": {
+      "recorded_utc": "2026-09-15T17:07:33.567738+00:00",
+      "result": "all_raw_valid_all16_diagnostic_strata_unresolved",
+      "formal_samples": 480,
+      "warmup_samples": 160,
+      "invalid_sample_count": 0,
+      "strata_count": 16,
+      "stable_all_metric_strata": 0,
+      "coefficient_candidate": null,
+      "native_llm_run": false,
+      "profile_updated": false,
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\runs\\20260915T170407248390Z\\diagnostic_summary.json",
+      "qpc_resolution_note": "Consecutive QPC-read median was zero ticks; this does not prove zero observation overhead. Preserve raw controls and do not derive a correction coefficient.",
+      "timing_note": "Host wall and device event span contain overlapping intervals; fixed protocol forbids adding them or claiming event span is pure kernel sum."
+    }
   }
 }

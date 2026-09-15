@@ -1,0 +1,12 @@
+{
+  "command": [
+    "C:\\WINDOWS\\System32\\nvidia-smi.exe",
+    "--query-gpu=uuid,name,driver_version,pstate,clocks.current.sm,clocks.current.memory,power.draw,temperature.gpu,utilization.gpu,memory.used",
+    "--format=csv,noheader,nounits"
+  ],
+  "returncode": 0,
+  "stdout": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b, NVIDIA GeForce RTX 5080, 616.64, P1, 2940, 15001, 50.85, 43, 20, 1674\n",
+  "stderr": "",
+  "created_utc": "2026-09-15T17:04:07.782214+00:00",
+  "changes_device_configuration": false
+}
