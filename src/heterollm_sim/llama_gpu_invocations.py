@@ -71,7 +71,7 @@ def _historical_sources(binding, refs):
     root=Path(binding["source_paths"]["scheduler"]).parents[2]
     wanted={"graph":"src/llama-graph.cpp","model":"src/llama-model.cpp", "kv_cache":"src/llama-kv-cache.cpp",
             "set_rows":"ggml/src/ggml-cuda/set-rows.cu", "mmvq":"ggml/src/ggml-cuda/mmvq.cu", "mmq":"ggml/src/ggml-cuda/mmq.cu",
-            "copy":"ggml/src/ggml-cuda/cpy.cu"}
+            "copy":"ggml/src/ggml-cuda/cpy.cu", "quantize":"ggml/src/ggml-cuda/quantize.cu"}
     texts={}
     for role,relative in wanted.items():
         path=root/relative
@@ -79,7 +79,9 @@ def _historical_sources(binding, refs):
         if before!=_unique_digest(base["source_sha256_after"],path):
             raise ValueError("historical source changed during build: "+relative)
         texts[role]=_checked_text(path,before,refs)
-    for role,relative in (("mmvq_header","ggml/src/ggml-cuda/mmvq.cuh"),("cuda_common","ggml/src/ggml-cuda/common.cuh")):
+    for role,relative in (("mmvq_header","ggml/src/ggml-cuda/mmvq.cuh"),("cuda_common","ggml/src/ggml-cuda/common.cuh"),
+                          ("mmq_header","ggml/src/ggml-cuda/mmq.cuh"),
+                          ("mmq_load_tiles","ggml/src/ggml-cuda/mmq-load-tiles.cuh")):
         path=root/relative
         texts[role]=_checked_text(path,_unique_digest(header["files"],path),refs)
     return texts
@@ -205,6 +207,20 @@ def derive_llama_gpu_invocation_contract(
              "cuda_compute_capability":cuda_compute_capability,"warp_size":warp,
              "cache_properties_recorded_not_applied":{"l2_bytes":attrs.get("CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE"),
                  "per_sm_shared_bytes":attrs.get("CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR")}}
+    # The tail extension depends on logical-block scheduling and a final
+    # tensor buffer pad, not a per-row stride change. Pin all source bodies.
+    tail_requirements = {
+        "mmq": ("GGML_PAD(ne10, MATRIX_ROW_PADDING)", "ne00, ne01"),
+        "mmq_header": ("args.ncols_x / ggml_cuda_type_traits<type>::qk",
+                       "fastmodulo(kbc,      blocks_per_ne00) % blocks_per_iter",
+                       "kb0 < kb0_stop"),
+        "quantize": ("i0 < ne00",),
+        "cuda_common": ("#define MATRIX_ROW_PADDING 512",),
+        "cuda": ("size += ggml_row_size(tensor->type, MATRIX_ROW_PADDING - ne0 % MATRIX_ROW_PADDING)",),
+    }
+    for role, literals in tail_requirements.items():
+        if any(literal not in source[role] for literal in literals):
+            raise ValueError("MMQ tail source rule not recognized: " + role)
     result={"schema":SCHEMA,"status":"conditional" if not reasons else "uncovered",
             "runtime_binding_sha256":claimed,"runtime_modules":binding["runtime_modules"],
             "cuda_compute_capability":cuda_compute_capability,
@@ -217,6 +233,7 @@ def derive_llama_gpu_invocation_contract(
                 "strided_copy":"f32_scalar_kernel", "single_token_copy":"cuda_memcpy_d2d",
             },
             "source_rule":"physical projection boundaries; quantized M1 FFN fusion only; F32 outputs then SET_ROWS casts",
+            "mmq_reduction_tail_contract":"logical-k-streamk-tail/v1",
             "mmq_device_evidence":mmq,"source_refs":list(refs.values()),"uncovered_reasons":reasons,
             "native_dispatch_proven":False,"accuracy_validated":False,
             "conditional_reasons":["model-specific unity include historical source-body hashes were not captured; caller graph remains conditional"],
@@ -416,7 +433,8 @@ def apply_llama_gpu_invocation_contract(
         if device.get("available") is True and device.get("sm_count")==profile.tensor_core.sm_count:
             component_metadata["llama_cpp_mmq_contract"]={"backend_commit":"0f3a71be15af836d277c9f918adfafb45732677e",
                 "compiled_int8_mma":True,"force_cublas":False,"ordinary_contiguous_2d":True,
-                "max_shared_memory_per_block_optin_bytes":device["max_shared_memory_per_block_optin_bytes"]}
+                "max_shared_memory_per_block_optin_bytes":device["max_shared_memory_per_block_optin_bytes"],
+                "reduction_tail_contract":payload.get("mmq_reduction_tail_contract")}
             flags.update(llama_cpp_mmq_source_work=True,llama_cpp_f32_q8_1_mmvq=True)
             audit["mmq_source_costs"].update(applied=True,reason=None)
         else:audit["mmq_source_costs"].update(reason="source_mmq_device_properties_missing_or_profile_mismatch")

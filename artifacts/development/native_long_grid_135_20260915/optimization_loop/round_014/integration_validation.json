@@ -1,0 +1,13 @@
+{
+  "tests_passed": 120,
+  "source_aligned_combinations_unchanged": 896,
+  "evaluated_cells": 20,
+  "final_unique_tail_read_bytes": {
+    "Q5_0_K896": 88,
+    "Q8_0_K896": 136
+  },
+  "tail_read_does_not_change_storage_or_launch": true,
+  "physical_allocation_actual_unverified": true,
+  "conditional_evidence": true,
+  "native_remeasured": false
+}

@@ -9169,6 +9169,8 @@ def _declared_mmq_work(
     mmvq_limit = MMVQ_MAX_BATCH_SIZE[formats[0]]
     if workload.m <= mmvq_limit:
         return None, {**audit, "status": "mmvq_precedes_mmq", "mmvq_max_m": mmvq_limit}, mmvq_limit
+    if workload.k % 256 and contract.get("reduction_tail_contract") != "logical-k-streamk-tail/v1":
+        return uncovered("missing_logical_k_tail_source_contract")
     try:
         work = derive_mmq_work(
             m=workload.m, k=workload.k, n=workload.n,

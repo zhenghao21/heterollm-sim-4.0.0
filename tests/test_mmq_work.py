@@ -93,6 +93,119 @@ class MMQWorkTests(unittest.TestCase):
         self.assertEqual((partial.u_tiles, partial.block_count, partial.partial_writer_count), (8, 84, 24))
         self.assertEqual(partial.main_partial_write_bytes, 4 * 24 * 128 * 128)
 
+    def test_qk32_tail_uses_true_source_stream_k_partition(self):
+        for fmt in ("Q5_0", "Q8_0"):
+            with self.subTest(fmt=fmt):
+                tail = work(k=896, n=128 * 14, fmt=fmt)
+                aligned = work(k=1024, n=128 * 14, fmt=fmt)
+                self.assertEqual((tail.k, tail.k_padded, tail.k_execution), (896, 1024, 1024))
+                self.assertEqual((tail.u_tiles, tail.block_count), (14, 84))
+                self.assertEqual((tail.source_nonempty_block_count, tail.partial_writer_count), (42, 28))
+                self.assertEqual((aligned.source_nonempty_block_count, aligned.partial_writer_count), (56, 42))
+                self.assertEqual(tail.fixup_tile_indices, tuple(range(14)))
+                self.assertEqual(tail.fixup_valid_elements, 14 * 128 * 128)
+                self.assertEqual(tail.conversion_read_bytes, 4 * 128 * 896)
+                self.assertEqual(tail.conversion_write_bytes, 144 * 128 * 1024 // 128)
+                self.assertEqual(tail.consumer_unique_bytes, 144 * 128 * 1024 // 128)
+                self.assertEqual(tail.consumer_extra_bytes, 144 * 128)
+                self.assertEqual(tail.source_repeated_bytes, aligned.source_repeated_bytes)
+                self.assertEqual(tail.logical_arithmetic_operations, 2 * 128 * 1792 * 896)
+                self.assertEqual(tail.execution_arithmetic_operations, 2 * 128 * 1792 * 1024)
+                self.assertEqual(tail.source_nominal_arithmetic_operations, aligned.source_nominal_arithmetic_operations)
+                self.assertEqual(tail.stream_k_boundaries_qblocks[-1], 14 * 28)
+                self.assertNotEqual(tail.stream_k_boundaries_qblocks, aligned.stream_k_boundaries_qblocks)
+
+    def test_weight_tail_is_final_tensor_range_not_per_row_allocation(self):
+        for fmt, block_bytes in (("Q5_0", 22), ("Q8_0", 34)):
+            with self.subTest(fmt=fmt):
+                tail = work(k=896, n=1792, fmt=fmt)
+                logical = 1792 * 28 * block_bytes
+                self.assertEqual(tail.logical_weight_bytes, logical)
+                self.assertEqual(tail.weight_tail_read_bytes_per_row, 4 * block_bytes)
+                self.assertEqual(tail.weight_read_high_water_bytes, logical + 4 * block_bytes)
+                self.assertEqual(tail.weight_tail_range_bytes, (logical, logical + 4 * block_bytes))
+                self.assertLess(tail.weight_read_high_water_bytes, 1792 * 32 * block_bytes)
+                self.assertFalse(tail.to_metadata()["weight_tail_allocation_proven"])
+                aligned = work(k=1024, n=1792, fmt=fmt)
+                self.assertEqual(aligned.weight_tail_read_bytes_per_row, 0)
+                self.assertEqual(aligned.weight_tail_range_bytes, (aligned.logical_weight_bytes,) * 2)
+
+    def test_qk32_sub_block_tails_and_format_alignment(self):
+        for fmt in MMVQ_MAX_BATCH_SIZE:
+            with self.subTest(fmt=fmt):
+                if fmt not in ("Q5_0", "Q8_0"):
+                    with self.assertRaisesRegex(UnsupportedMMQ, "multiple of 256"):
+                        work(k=896, fmt=fmt)
+                    continue
+                with self.assertRaisesRegex(UnsupportedMMQ, "multiple of 32"):
+                    work(k=897, fmt=fmt)
+                for k in (32, 64, 96, 160, 224, 288, 864, 928, 992):
+                    tail = work(k=k, fmt=fmt)
+                    self.assertEqual(tail.k_iterations, (k + 255) // 256)
+                    self.assertEqual(tail.k_execution, 256 * ((k + 255) // 256))
+                    self.assertEqual(tail.k_padded, 512 * ((k + 511) // 512))
+                    self.assertEqual(tail.conversion_effective_bytes, 144 * 128 * ((k + 127) // 128))
+                    self.assertEqual(tail.consumer_unique_bytes, 144 * 128 * tail.k_execution // 128)
+                    self.assertLessEqual(tail.consumer_unique_bytes, tail.source_allocation_bytes)
+                with self.assertRaisesRegex(UnsupportedMMQ, "high-water"):
+                    work(m=9, k=896, fmt=fmt)
+
+    def test_source_partition_loop_covers_every_tile_and_tail_once(self):
+        # A direct transcription of process_tile span iteration, independent
+        # of the aggregate traffic/partial writer formulas in derive_mmq_work.
+        for k in (32, 224, 256, 288, 768, 800, 896, 992, 1024):
+            for n in (128, 130, 128 * 14, 128 * 84):
+                with self.subTest(k=k, n=n):
+                    item = work(m=129, k=k, n=n, fmt="Q8_0")
+                    B, R = k // 32, 8
+                    starts = item.stream_k_boundaries_qblocks
+                    loop_iterations = 0
+                    partial_tiles = []
+                    for start, end in zip(starts, starts[1:]):
+                        cursor = start
+                        while cursor < end:
+                            tile, local_start = divmod(cursor, B)
+                            local_stop = min(B, local_start + end - cursor)
+                            loop_iterations += len(range(local_start, local_stop, R))
+                            if local_stop < B:
+                                partial_tiles.append(tile)
+                            cursor += local_stop - local_start
+                    self.assertEqual(loop_iterations, item.u_tiles * ((k + 255) // 256))
+                    self.assertEqual(len(partial_tiles), item.partial_writer_count)
+                    self.assertEqual(tuple(sorted(set(partial_tiles))), item.fixup_tile_indices)
+                    self.assertEqual(item.source_nominal_arithmetic_operations, 2 * loop_iterations * item.i * item.j * 256)
+                    self.assertTrue(all(start <= end for start, end in zip(starts, starts[1:])))
+                    self.assertEqual((starts[0], starts[-1]), (0, item.u_tiles * B))
+
+    def test_all_seven_aligned_formats_preserve_legacy_numeric_accounting(self):
+        # Golden quantities captured before extending K coverage. They include
+        # output tails, shared-memory selection, stream-K and fixup behavior.
+        fields = (
+            "i", "j", "jmax", "k_padded", "x_tiles", "y_tiles", "u_tiles", "k_iterations",
+            "consumer_load_window_bytes", "consumer_extra_bytes", "source_repeated_bytes",
+            "source_allocation_bytes", "block_count", "partial_writer_count", "fixup_valid_elements",
+            "main_partial_write_bytes", "fixup_read_bytes", "fixup_write_bytes", "fixup_operations",
+        )
+        fixtures = (
+            ((16, 256, 128, 101376), (128, 16, 16, 512, 1, 1, 1, 1, 3072, 768, 6144, 11520, 84, 0, 0, 0, 0, 0, 0)),
+            ((128, 768, 128, 101376), (128, 128, 128, 1024, 1, 1, 1, 3, 18432, 0, 110592, 165888, 84, 2, 16384, 131072, 196608, 65536, 49152)),
+            ((129, 768, 130, 49152), (128, 64, 128, 1024, 3, 2, 6, 3, 9216, 9072, 331776, 167040, 84, 12, 16770, 393216, 460296, 67080, 115074)),
+            ((128, 1024, 1792, 101376), (128, 128, 128, 1024, 1, 14, 14, 4, 18432, 0, 2064384, 165888, 84, 42, 229376, 2752512, 3670016, 917504, 917504)),
+        )
+        for fmt in MMVQ_MAX_BATCH_SIZE:
+            for (m, k, n, shared), expected in fixtures:
+                with self.subTest(fmt=fmt, m=m, k=k, n=n, shared=shared):
+                    item = work(m=m, k=k, n=n, shared=shared, fmt=fmt)
+                    metadata = item.to_metadata()
+                    self.assertEqual(tuple(metadata[field] for field in fields), expected)
+                    self.assertEqual(item.conversion_effective_bytes, 144 * m * k // 128)
+                    self.assertEqual(item.conversion_read_bytes, 4 * m * k)
+                    self.assertEqual(item.conversion_write_bytes, 144 * m * item.k_padded // 128)
+                    self.assertEqual(item.conversion_operations, (20 if fmt in ("Q4_K", "Q5_K") else 14) * m * item.k_padded // 4)
+                    self.assertEqual(item.k_execution, k)
+                    self.assertEqual(item.execution_arithmetic_operations, item.logical_arithmetic_operations)
+                    self.assertEqual(item.weight_tail_read_bytes_per_row, 0)
+
     def test_gemm_adds_partial_writes_without_changing_final_output(self):
         item = work(k=1024, n=128 * 8)
         mmq_gemm = gemm(item)

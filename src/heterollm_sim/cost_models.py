@@ -2433,6 +2433,16 @@ def estimate_gpu_gemm(
         if workload.mmq_work is not None
         else {}
     )
+    mmq_tail_read_bytes = (
+        workload.mmq_work.weight_read_high_water_bytes - workload.mmq_work.logical_weight_bytes
+        if workload.mmq_work is not None else 0
+    )
+    if workload.mmq_work is not None:
+        mmq_metadata.update(
+            source_unique_weight_tail_read_bytes=mmq_tail_read_bytes,
+            weight_tail_accounting="one_final_tensor_tail_overlapping_interior_rows",
+            weight_tail_buffer_assumption="standard_cuda_buffer_tail_required_actual_allocation_unverified",
+        )
     source_dtype_name = _gemm_tensor_dtype(workload)
     quantized_capability = (
         gpu.resolve_quantized_matmul_capability(workload)
@@ -2469,8 +2479,18 @@ def estimate_gpu_gemm(
         raise ValueError(
             "GPU tensor core does not support GEMM dtype {}".format(dtype_name)
         )
+    # MMQ consumes the final partial K tile as a complete source iteration.
+    # Keep logical K for useful work and weight storage; only execution work
+    # uses the source-qualified reduction extent. Aligned calls are unchanged.
+    execution_k = workload.mmq_work.k_execution if workload.mmq_work is not None else workload.k
+    if workload.mmq_work is not None:
+        mmq_metadata.update(
+            logical_reduction_k=workload.k,
+            executed_reduction_k=execution_k,
+            reduction_tail_policy="source_full_iteration_logical_storage_stride",
+        )
     tile_wave = mma_output_tile_wave_proxy(
-        workload.m, workload.k, workload.n,
+        workload.m, execution_k, workload.n,
         sm_count=tensor_core.sm_count,
         tensor_cores_per_sm=tensor_core.tensor_cores_per_sm,
         mma_m=tensor_core.mma_m, mma_n=tensor_core.mma_n,
@@ -2593,7 +2613,7 @@ def estimate_gpu_gemm(
     }
     memory_demands, cache_metadata = _cache_memory_demands(
         hierarchy=gpu.cache_hierarchy,
-        read_bytes=workload.activation_bytes + workload.weight_bytes,
+        read_bytes=workload.activation_bytes + workload.weight_bytes + mmq_tail_read_bytes,
         write_bytes=(
             workload.output_bytes
             + (
@@ -2602,7 +2622,7 @@ def estimate_gpu_gemm(
             )
         ),
         working_set_bytes=(
-            workload.minimum_io_bytes
+            workload.minimum_io_bytes + mmq_tail_read_bytes
             + (
                 workload.mmq_work.main_partial_write_bytes
                 if workload.mmq_work is not None else 0
@@ -2771,7 +2791,7 @@ def estimate_gpu_gemm(
             "activation_bytes": workload.activation_bytes,
             "weight_bytes": workload.weight_bytes,
             "output_bytes": workload.output_bytes,
-            "minimum_io_bytes": workload.minimum_io_bytes,
+            "minimum_io_bytes": workload.minimum_io_bytes + mmq_tail_read_bytes,
             **mmq_metadata,
             "epilogue_name": workload.epilogue_name,
             "epilogue_operations": workload.epilogue_operations,
