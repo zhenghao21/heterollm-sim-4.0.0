@@ -19171,11 +19171,14 @@ def _add_host_visible_logits_sampling_commit(
         filter_scan_metadata: Dict[str, object] = {}
         if (
             sampling.top_k is not None
-            and 2 <= sampling.top_k <= min(128, vocabulary_size)
+            and 1 <= sampling.top_k <= min(128, vocabulary_size)
             and sampling.top_k < vocabulary_size
         ):
             # Only the mandatory tail scan: every remaining candidate is
-            # compared with the heap root. Heap repair and sorting stay unknown.
+            # compared with the heap root. K=1 still scans all V-1 remaining
+            # materialized records through a one-element partial_sort heap;
+            # this is not the separate greedy-reduction shortcut below.
+            # Root replacement, heap repair and sorting costs stay unknown.
             per_row_comparisons = vocabulary_size - sampling.top_k
             filter_estimate = estimate_cpu_logical_stream(
                 cpu_profile,
@@ -19235,7 +19238,9 @@ def _add_host_visible_logits_sampling_commit(
                 ),
                 "rows_execution": _LLAMA_CPP_CPU_SAMPLER_ROWS_EXECUTION,
                 "top_k_algorithm": (
-                    _LLAMA_CPP_CPU_SAMPLER_TOP_K_ALGORITHM
+                    "partial_sort_one_element_heap"
+                    if sampling.top_k == 1
+                    else _LLAMA_CPP_CPU_SAMPLER_TOP_K_ALGORITHM
                 ),
                 "top_k": sampling.top_k,
                 "top_p": sampling.top_p,
@@ -19249,7 +19254,9 @@ def _add_host_visible_logits_sampling_commit(
                     "temperature",
                     "distribution",
                 ),
-                "comparison_complexity_proxy": "O(V log K)",
+                "comparison_complexity_proxy": (
+                    "O(V)" if sampling.top_k == 1 else "O(V log K)"
+                ),
                 "comparison_complexity_timing_use": "metadata_only",
                 "filter_chain_service_ns": sum(
                     (demand.service_ns for demand in filter_demands), 0.0

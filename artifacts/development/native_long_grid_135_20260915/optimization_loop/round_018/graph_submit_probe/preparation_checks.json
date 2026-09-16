@@ -1,0 +1,31 @@
+{
+  "schema": "graph-submit-preparation-check/v1",
+  "pass": true,
+  "gpu_access": false,
+  "native_libraries_loaded": false,
+  "numerator_stage_checks": 8160,
+  "configs": 6,
+  "protocol_sha256": "f0fb287c38300a21d36115703a0fe209be3de4772cf64892b88ce4146d6da0ea",
+  "cpp_sha256": "e84ebed12fc23a03fa8334cf47a5e51dbb905ed78091431f470b0721832fa675",
+  "checks": [
+    "six Cartesian configurations",
+    "all possible exact F32 numerator/stage references",
+    "no overflow/subnormal at 32 layers",
+    "native graph mode retained",
+    "explicit node-granularity trace required",
+    "Python source AST"
+  ],
+  "python_sources_sha256": {
+    "build_probe.py": "c777f6fe318d797f063d5bb09c203d3c5512230deb60e0a457d89d219669a67d",
+    "reference_check.py": "9b762f03c0cfac9fff41ef277709d319e0a0998c173a5401289b038442e693ad"
+  },
+  "not_checked": [
+    "C++ compilation",
+    "native dynamic linking",
+    "GPU numerical results",
+    "actual kernel counts",
+    "PowerShell parser (separate host check)",
+    "hardware state",
+    "timing accuracy"
+  ]
+}

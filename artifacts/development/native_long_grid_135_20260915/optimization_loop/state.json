@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_round_018_graph_submit_evidence_preparation",
+  "status": "active_round_019_cpu_sampling_probe_review_fix",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1174,18 +1174,43 @@
     },
     {
       "round": 18,
-      "status": "preparing_independent_multi_operator_graph_and_high_resolution_sampling",
+      "status": "completed_partial_accuracy_improvement_goal_failed",
       "native_remeasured": false,
-      "updated_utc": "2026-09-16T04:47:44.155306+00:00"
+      "updated_utc": "2026-09-16T06:22:43.358290+00:00",
+      "sampling_contract_cells": 131,
+      "graph_stage_count": 54,
+      "graph_pairs_completed": 18,
+      "graph_configs_quality_accepted": 0,
+      "graph_controller_clock_reset_success": true,
+      "root_tests": {
+        "sampling_core_and_validator": 68,
+        "predictor_and_hardware": 139,
+        "graph_collector_and_independent_review": 39
+      },
+      "metric_comparisons": 60,
+      "improved_metrics": 60,
+      "regressed_metrics": 0,
+      "strict_pass_cells": 0,
+      "evaluated_cells": 20,
+      "unrun_selected_cells": 111,
+      "gate_B": "unvalidated",
+      "report": "round_018/ablation.json",
+      "strict_gate": "round_018/strict_gate.0002.json"
+    },
+    {
+      "round": 19,
+      "status": "cpu_sampling_probe_identity_and_frequency_gate_repairs",
+      "native_remeasured": false,
+      "started_utc": "2026-09-16T06:22:43.358290+00:00"
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Independent multi-operator graph submission and source quantizer instruction proof; no target LLM latency fit.",
+  "next_round_hypothesis": "Independent source-equivalent candidate materialization and original DLL top-k CPU costs, plus pre-call validation/driver submission schedule diagnosis; no target inference fit.",
   "full_131_evaluations_started": 3,
   "full_131_evaluations_completed": 3,
-  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_014\\tail_candidate_r2",
-  "best_candidate_status": "R14 partial20-cell source correction improves Qwen2.5; no all-cell accuracy winner, R6 full baseline retained.",
+  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling",
+  "best_candidate_status": "R18 source-correct sampling improves all60 same20 anchor metrics;0strict pass. No new full131 winner; prior full results kept separate.",
   "version_control_policy": {
     "enabled": true,
     "effective_utc": "2026-09-15T15:14:39.539409+00:00",
@@ -1388,14 +1413,28 @@
       },
       "transition": "automatic_review_checkpoint",
       "reason": "user-authorized continue until both declared goals; prior six rounds completed"
+    },
+    {
+      "completed_stage": {
+        "stage": 3,
+        "starting_round": 13,
+        "started_utc": "2026-09-16T01:27:11.734008+00:00",
+        "review_after_rounds": 6,
+        "review_at_utc": "2026-09-16T09:27:11.734008+00:00",
+        "review_only_not_stop": true,
+        "full_evaluations_review_limit": 4
+      },
+      "reviewed_utc": "2026-09-16T06:22:43.358290+00:00",
+      "outcome": "source/evidence gaps closed, R18all60anchor errors improved but0cells passed; nextstageCPUcost+hostdriver mechanism, no thresholdsrelaxed",
+      "not_a_stop": true
     }
   ],
   "current_stage": {
-    "stage": 3,
-    "starting_round": 13,
-    "started_utc": "2026-09-16T01:27:11.734008+00:00",
+    "stage": 4,
+    "starting_round": 19,
+    "started_utc": "2026-09-16T06:22:43.358290+00:00",
     "review_after_rounds": 6,
-    "review_at_utc": "2026-09-16T09:27:11.734008+00:00",
+    "review_at_utc": "2026-09-16T14:22:43.358290+00:00",
     "review_only_not_stop": true,
     "full_evaluations_review_limit": 4
   }

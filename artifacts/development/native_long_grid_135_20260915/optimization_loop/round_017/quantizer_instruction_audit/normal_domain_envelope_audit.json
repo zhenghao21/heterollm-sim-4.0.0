@@ -1,0 +1,234 @@
+{
+  "schema": "conditional-normal-domain-reciprocal-envelope/v1",
+  "diagnostic_only_no_gate_acceptance": true,
+  "GPU_executed": false,
+  "no_tolerance_or_reference_patch": true,
+  "host_tests": {
+    "exact_positive_RN32_ties_test": true,
+    "reciprocal_envelope_boundary_test": true,
+    "half_away_discontinuity_test": true,
+    "LOP3_sign_half_truth_table": true,
+    "GPU_executed": false
+  },
+  "inputs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.input_f32.bin",
+      "bytes": 262144,
+      "sha256": "853d9cdaa9c6c57b2761588349a9c0513d7915510ea1b43c92610f7338619a76"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.q8_1_d4.bin",
+      "bytes": 73728,
+      "sha256": "313be32ba3637a22a3dbceaecab836caf450da899eccb32ae2005bd2966b9112"
+    }
+  ],
+  "contract_status": "CONDITIONAL. PTX rcp.approx.f32 has documented max 1 ULP, but active original DLL has no embedded PTX. MUFU.RCP mnemonic alone does not establish this exact numeric contract for this deployed SASS. No production conversion pass may be inferred.",
+  "normal_domain": "Finite binary32 inputs, each nonzero input normal; amax>0; all enumerated reciprocals, inverse and nonzero scaled products finite normal. Zero blocks, subnormals, overflow/underflow, NaN and infinity remain unsupported, not passed.",
+  "reciprocal_relative_bound": {
+    "u": 5.960464477539063e-08,
+    "rho": 1.7881394143159923e-07,
+    "exact_formula": "rho=3u+2u^2; conservative bound covering RN-reference ULP convention"
+  },
+  "inverse_relative_bound": {
+    "alpha": 2.384185968651313e-07,
+    "formula": "(1+rho)*(1+u)-1"
+  },
+  "scaled_product_relative_bound": {
+    "tau": 2.980232558513777e-07,
+    "formula": "(1+rho)*(1+u)^2-1",
+    "absolute_upper_bound_if_abs_x_le_amax": 3.784895349312497e-05
+  },
+  "scale_relative_interval": {
+    "lower_ratio": 0.9999995827675612,
+    "upper_ratio": 1.0000004172326378,
+    "formula": "(1-rho)/(1+alpha) <= d/(amax/127) <= (1+rho)/(1-alpha)"
+  },
+  "blocks_examined": 2048,
+  "normal_supported_blocks": 2048,
+  "unsupported_blocks": [],
+  "blocks_with_joint_32_codes_and_scale_witness": 2048,
+  "joint_witness_failure_count": 0,
+  "joint_witness_failures": [],
+  "independent_code_outside_envelope_count": 0,
+  "independent_scale_outside_envelope_count": 0,
+  "codes_with_multiple_permitted_values": 4,
+  "blocks_with_ambiguous_codes": 4,
+  "observed_scale_minus_CPU_scale_bit_steps_histogram": {
+    "-3": 19,
+    "-2": 184,
+    "-1": 281,
+    "0": 1223,
+    "1": 204,
+    "2": 130,
+    "3": 7
+  },
+  "target_block": {
+    "row": 11,
+    "block32": 1,
+    "amax": 0.4986572265625,
+    "amax_bits": 1056919552,
+    "k33_x": 0.24932861328125,
+    "ideal_scaled_value": 63.5,
+    "actual_q_k33": 63,
+    "actual_d4": 0.003926435019820929,
+    "actual_d4_bits": 998287699,
+    "allowed_k33_codes": [
+      63,
+      64
+    ],
+    "candidate_paths": [
+      {
+        "inverse": 254.68394470214844,
+        "inverse_bits": 1132375831,
+        "possible_first_reciprocals": [
+          2.005385398864746
+        ],
+        "codes": [
+          -100,
+          63,
+          61,
+          61,
+          -50,
+          -28,
+          -29,
+          0,
+          -9,
+          87,
+          88,
+          -45,
+          107,
+          -82,
+          -86,
+          127,
+          -47,
+          -53,
+          60,
+          89,
+          81,
+          -80,
+          -113,
+          -121,
+          95,
+          -99,
+          -36,
+          4,
+          -111,
+          41,
+          110,
+          -67
+        ],
+        "possible_scale_bits": [
+          998287698,
+          998287699,
+          998287700
+        ],
+        "codes_match": true,
+        "scale_matches": true,
+        "q_k33": 63
+      },
+      {
+        "inverse": 254.68397521972656,
+        "inverse_bits": 1132375833,
+        "possible_first_reciprocals": [
+          2.005385637283325
+        ],
+        "codes": [
+          -100,
+          64,
+          61,
+          61,
+          -50,
+          -28,
+          -29,
+          0,
+          -9,
+          87,
+          88,
+          -45,
+          107,
+          -82,
+          -86,
+          127,
+          -47,
+          -53,
+          60,
+          89,
+          81,
+          -80,
+          -113,
+          -121,
+          95,
+          -99,
+          -36,
+          4,
+          -111,
+          41,
+          110,
+          -67
+        ],
+        "possible_scale_bits": [
+          998287697,
+          998287698,
+          998287699
+        ],
+        "codes_match": false,
+        "scale_matches": true,
+        "q_k33": 64
+      },
+      {
+        "inverse": 254.6840057373047,
+        "inverse_bits": 1132375835,
+        "possible_first_reciprocals": [
+          2.0053858757019043
+        ],
+        "codes": [
+          -100,
+          64,
+          61,
+          61,
+          -50,
+          -28,
+          -29,
+          0,
+          -9,
+          87,
+          88,
+          -45,
+          107,
+          -82,
+          -86,
+          127,
+          -47,
+          -53,
+          60,
+          89,
+          81,
+          -80,
+          -113,
+          -121,
+          95,
+          -99,
+          -36,
+          4,
+          -111,
+          41,
+          110,
+          -67
+        ],
+        "possible_scale_bits": [
+          998287696,
+          998287697,
+          998287698
+        ],
+        "codes_match": false,
+        "scale_matches": false,
+        "q_k33": 64
+      }
+    ],
+    "joint_witness_inverse_bits": [
+      1132375831
+    ],
+    "joint_witnesses_are_not_observed_registers": true
+  },
+  "portable_exact_reference_obstruction": "Same allowed normal-domain reciprocal contract permits q=63 and q=64 at ideal scaled value 63.5. A CPU point oracle cannot choose the hardware result from source arithmetic/error bounds alone. This is input-generic half-integer discontinuity, never an index-specific exception."
+}

@@ -35,6 +35,7 @@ for import_root in (ROOT, ROOT / "src"):
     sys.path.insert(0, str(import_root))
 from tools import native_grid_predict as grid
 from tools import native_162_dataset as selector
+from heterollm_sim.config import SamplingPolicy
 
 METRICS = grid.METRICS
 ALIASES = dict(zip(("ttft", "tpot", "e2e"), METRICS))
@@ -983,7 +984,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -1026,6 +1027,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
     return {"cell_id": row["cell_id"], "model_key": row["model_key"],
         "deployment": row.get("deployment", "explicit_gpu_layers_" + str(config.get("gpu_layers"))),
         "config": config, "hardware_snapshot": physical,
+        "sampling_binding": sampling["cells"][row["cell_id"]] if sampling else None,
         "native_model_ref": dict(model_ref), "prediction_model_ref": prediction_model_ref,
         "recurrent_batching_contract": recurrent_batching["contract"] if recurrent_batching else None,
         "recurrent_batching_evidence": recurrent_batching,
@@ -1132,6 +1134,11 @@ def unsupported_dimensions(inputs, model=None):
             "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"})
     if raw.get("gpu_layers") == -1:
         rows.append({"dimension": "auto_gpu_layer_fit", "status": "conditional", "native": -1, "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."})
+    sampling = inputs.get("sampling_binding")
+    rows.append({"dimension": "cpu_sampling_chain", "status": "conditional" if sampling else "unmodeled",
+        "policy_bound": sampling is not None,
+        "reason": "Source-bound candidate materialization and top-k scan; bias/suppression, filter tail, RNG and accept remain partial" if sampling else "No source/config sampling policy bound; sampling cost is absent",
+        "limitations": sampling.get("limitations", []) if isinstance(sampling, Mapping) else []})
     rows.append({"dimension": "cuda_graph_lifecycle", "status": "conditional", "compiled_cuda_graphs": raw.get("compiled_cuda_graphs"), "reason": "No CUDA Graph replay timing or prior native profile is applied; direct launch/synchronization parity remains unvalidated."})
     if model is not None and ("qwen35" in str(getattr(model, "architecture", "")) or "qwen3" in str(getattr(model, "name", "")).lower()):
         rows.append({"dimension": "hybrid_recurrent_invocation_geometry", "status": "conditional", "reason": "Native hybrid/recurrent ubatch invocation geometry is unvalidated for this cell."})
@@ -1553,7 +1560,9 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         raise ValueError(f"GGUF SHA256 mismatch: path={path}; expected={expected}; actual={gguf.sha256}; native_model_path={inputs['config']['model']}")
     loading_mapping = gpu_layer_mapping(inputs, gguf, model)
     simulator_config = {**config, "gpu_layers": loading_mapping["simulator_gpu_layers"]}
-    scenario = grid.build_matching_scenario(prompt, output, model=model,
+    sampling = inputs.get("sampling_binding")
+    policy = SamplingPolicy(**sampling["typed_policy"]) if sampling is not None else None
+    scenario = grid.build_matching_scenario(prompt, output, model=model, sampling_policy=policy,
         hardware_snapshot=inputs["hardware_snapshot"], runtime_binary=Path(inputs["runtime_ref"]["path"]),
         runtime_environment=dict(env), **simulator_config)
     scenario = apply_host_offload_static_contract(scenario, inputs)
@@ -1569,6 +1578,8 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     if not changed:
         raise ValueError("no tensor-core frequency input available")
     metadata = dict(scenario.workload.metadata)
+    if sampling is not None:
+        metadata["native_sampling_binding"] = sampling
     metadata["serving_runtime"] = {**metadata.get("serving_runtime", {}), "kv_slot_context_tokens": 2048, "compiled_cuda_graphs": inputs["config"].get("compiled_cuda_graphs"), "cuda_graph_replay_cost_applied": False}
     if inputs.get("cpu_iq_panel_reuse") is not None:
         metadata["llama_cpp_cpu_iq_panel_reuse"] = dict(inputs["cpu_iq_panel_reuse"])
@@ -1598,7 +1609,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     prediction = {"status": "predicted" if complete else "incomplete", "reason": None if complete else "Missing request, token or timing boundary",
         "prediction_type": PREDICTION_TYPE, "native_answers_used": False, "calibration_applied": False, "formal_prediction_eligible": False,
         "unsupported_dimensions": unsupported_dimensions(inputs, model), "input_identity": {
-            "static_inputs_sha256": grid.stable_hash(inputs), "model": {"path": str(path), "sha256": gguf.sha256},
+            "static_inputs_sha256": grid.stable_hash(inputs), "sampling_binding": sampling, "model": {"path": str(path), "sha256": gguf.sha256},
             "native_model_ref": inputs.get("native_model_ref"), "prediction_model_ref": inputs.get("prediction_model_ref"),
             "control_plane_replan": placement_refresh, "cpu_iq_panel_reuse": inputs.get("cpu_iq_panel_reuse"),
             "slot_order_contract": inputs.get("slot_order_contract"),
@@ -1688,13 +1699,17 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
     selection, selection_ref = grid.read_document(selection_path)
     data_root = Path(data_root or selection.get("data_root") or ROOT).resolve(strict=True)
     rows = selected_rows(selection)
+    sampling = None
+    if sampling_contract_path is not None:
+        from tools.native_sampling_contract import verify_sampling_contract
+        sampling = verify_sampling_contract(sampling_contract_path, rows, selection_ref, data_root)
     snapshots = verified_model_snapshot_map(rows, model_snapshot_map, data_root)
     build_audit = verified_runtime_build_audit(runtime_build_audit_path, data_root) if runtime_build_audit_path else None
     recurrent = verified_recurrent_batching_contract(recurrent_batching_contract_path, rows, data_root) if recurrent_batching_contract_path else None
@@ -1733,7 +1748,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -1744,7 +1759,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "selection_sha256": selection_ref["sha256"], "selection_created_utc": selection.get("created_utc"),
         "selected_denominator": len(entries), "native_grid_denominator": selection.get("native_grid_denominator", selection.get("planned_cells", 162)),
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
-        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation,
+        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation, "sampling": sampling,
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -1762,6 +1777,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(tensor_storage["evidence_refs"])
     if gpu_invocation:
         verify_refs(gpu_invocation["evidence_refs"])
+    if sampling:
+        verify_refs(sampling["evidence_refs"])
     return freeze
 
 
@@ -1789,6 +1806,9 @@ def verify_freeze_references(freeze):
     gpu_invocation = freeze.get("gpu_invocation")
     if gpu_invocation:
         refs += gpu_invocation["evidence_refs"]
+    sampling = freeze.get("sampling")
+    if sampling:
+        refs += sampling["evidence_refs"]
     verify_refs(refs)
 
 
@@ -2128,6 +2148,7 @@ def main(argv=None):
     parser.add_argument("--slot-order-contract", type=Path, help="source-bound stable slot traversal for a qualified fresh same-arrival cohort; default off")
     parser.add_argument("--host-offload-source-contract", type=Path, help="verified source/build/native-runtime binding for host MUL_MAT CUDA dispatch; initial freeze only, default off")
     parser.add_argument("--tensor-storage-contract", type=Path, help="source/build-bound indexed GET_ROWS storage traffic; initial freeze only, default off")
+    parser.add_argument("--sampling-contract", type=Path, help="source/config-bound native CPU sampling policy; initial freeze only, default off")
     parser.add_argument("--gpu-invocation-contract", type=Path, help="conditional source/build-bound physical GPU projection and fusion mapping; initial freeze only, default off")
     parser.add_argument("--gpu-mmq-source-costs", action=argparse.BooleanOptionalAction, default=None,
         help="separate source MMQ/MMVQ cost treatment; requires GPU invocation contract; default false")
@@ -2157,7 +2178,7 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
+    if (args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
         parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
     if args.gpu_mmq_source_costs is not None and args.gpu_invocation_contract is None:
         parser.error("--gpu-mmq-source-costs requires --gpu-invocation-contract")
@@ -2167,7 +2188,7 @@ def main(argv=None):
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs))
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract)
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

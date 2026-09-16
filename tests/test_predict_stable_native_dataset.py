@@ -1479,8 +1479,9 @@ def test_gpu_invocation_freeze_and_apply_keep_source_cost_treatment_separate(tmp
     api, source_path, _, binding_ref = fake_gpu_invocation_contract_api(tmp_path, monkeypatch)
     runtime = fake_gpu_runtime_binding(tmp_path, row, binding_ref)
     monkeypatch.setattr(adapter, "verified_host_offload_source_contract", lambda *args, **kwargs: runtime)
-    def apply(case, contract, *, enabled=False, enable_mmq_source_costs=False):
+    def apply(case, contract, *, enabled=False, enable_mmq_source_costs=False, enable_conversion_cta_costs=False):
         assert enabled is True and enable_mmq_source_costs is costs
+        assert enable_conversion_cta_costs is False
         return replace(case, workload=Metadata(metadata={"llama_cpp_gpu_native_invocations": {
             "applied": True, "conditional": True, "status": "conditional", "native_dispatch_proven": False,
             "qualified_projection_groups": 4, "uncovered_group_reason_counts": {"layout_unbound": 1},
@@ -1649,7 +1650,7 @@ def local_gpu_invocation_contract(*, mmq=False):
 
 
 def import_actual_gguf_audited_header(model_key):
-    """Use the real parser/importer but read only the digest-bound GGUF header."""
+    """Validate the actual GGUF identity and audited header without inference."""
     import hashlib
     import inspect
     from heterollm_sim import gguf_parity
@@ -1664,19 +1665,18 @@ def import_actual_gguf_audited_header(model_key):
     assert path.resolve() == Path(row["model_ref"]["path"]).resolve()
     if not path.is_file():
         pytest.skip("fixed real GGUF header artifact unavailable")
-    parser = inspect.getsource(gguf_parity.read_gguf_metadata)
-    hashing = '    digest = sha256()\n    with p.open("rb") as f:\n        for chunk in iter(lambda: f.read(1024 * 1024), b""):\n            digest.update(chunk)\n'
-    assert parser.count(hashing) == 1
-    parser = parser.replace(hashing, '    verify_header(p, data_start)\n    digest = SimpleNamespace(hexdigest=lambda: expected_sha)\n')
-    def verify_header(path, size):
-        assert size == evidence["header_bytes"] and size < 32 * 1024 * 1024
-        with path.open("rb") as handle:
-            header = handle.read(size)
-        assert hashlib.sha256(header).hexdigest() == evidence["header_sha256"]
-    namespace = {**vars(gguf_parity), "SimpleNamespace": SimpleNamespace,
-        "expected_sha": expected_sha, "verify_header": verify_header}
-    exec(compile(parser, "<verified-native-gguf-header-parser>", "exec"), namespace)
-    metadata = namespace["read_gguf_metadata"](path)
+    # Run the production parser and its same-open-file identity checks. Old
+    # test-only source rewriting bypassed those checks and broke when the
+    # parser closed its historical two-open gap. This check reads the weights
+    # but does not execute native inference or change any archived evidence.
+    size = evidence["header_bytes"]
+    assert 0 < size < 32 * 1024 * 1024
+    with path.open("rb") as handle:
+        header = handle.read(size)
+    assert len(header) == size
+    assert hashlib.sha256(header).hexdigest() == evidence["header_sha256"]
+    metadata = gguf_parity.read_gguf_metadata(path)
+    assert metadata.sha256 == expected_sha
     return gguf_parity.build_model_from_gguf(metadata), row
 
 
@@ -1746,3 +1746,37 @@ def test_gpu_invocation_real_contract_rederives_source_runtime_and_driver_probe(
         assert cell["conditional_reasons"]
     assert proof["today_environment_read"] is False
     assert proof["host_offload_treatment_enabled_by_this_validation"] is False
+
+
+def test_sampling_policy_static_binding_reaches_builder_without_native_answers(tmp_path, monkeypatch):
+    _, selection, row, calls = fixture(tmp_path, monkeypatch)
+    policy = {"mode": "greedy", "temperature": 0.0, "implementation": "llama_cpp_cpu_chain",
+              "top_k": 1, "top_p": 0.95, "min_p": 0.05, "min_keep": 0}
+    binding = {"typed_policy": policy, "backend_sampling": False,
+               "effective_settings": {"ignore_eos": True}, "limitations": ["filter tail unpriced"]}
+    inputs = adapter.static_inputs(row, selection, tmp_path, sampling={"cells": {row["cell_id"]: binding}})
+    assert inputs["sampling_binding"] == binding
+    assert "native_actuals" not in json.dumps(inputs)
+    assert "native_latency_ms" not in json.dumps(inputs)
+    result = adapter.predict_cell(inputs)
+    actual = calls["build"][0][1]["sampling_policy"]
+    assert actual.implementation == "llama_cpp_cpu_chain" and actual.min_keep == 0
+    assert actual.top_k == 1 and actual.temperature == 0.0
+    assert result["input_identity"]["sampling_binding"] == binding
+    assert calls["run"][0].workload.metadata["native_sampling_binding"] == binding
+    status = next(x for x in result["unsupported_dimensions"] if x["dimension"] == "cpu_sampling_chain")
+    assert status["policy_bound"] and status["status"] == "conditional"
+
+
+def test_missing_sampling_binding_remains_explicitly_unmodeled(tmp_path, monkeypatch):
+    _, selection, row, calls = fixture(tmp_path, monkeypatch)
+    inputs = adapter.static_inputs(row, selection, tmp_path)
+    result = adapter.predict_cell(inputs)
+    assert calls["build"][0][1]["sampling_policy"] is None
+    status = next(x for x in result["unsupported_dimensions"] if x["dimension"] == "cpu_sampling_chain")
+    assert status["status"] == "unmodeled" and not status["policy_bound"]
+
+
+def test_sampling_contract_cannot_change_on_resume(tmp_path):
+    with pytest.raises(SystemExit):
+        adapter.main(["--output", str(tmp_path), "--resume", "--sampling-contract", str(tmp_path / "contract.json")])

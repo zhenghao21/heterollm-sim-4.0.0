@@ -1,0 +1,242 @@
+{
+  "schema": "graph-submit-mechanism-summary/v1",
+  "totals": {
+    "stage_receipts": 54,
+    "pairs": 18,
+    "configs": 6,
+    "profile_calls": 648,
+    "direct_calls": 648,
+    "profile_kernels_observed": 8856,
+    "GraphLaunch_API_records": 0,
+    "graph_capture_or_update_API_records": 0,
+    "runtime_API_counts": {
+      "cudaStreamCreateWithFlags_v5000": 18,
+      "cudaLaunchKernelExC_v11060": 8856,
+      "cudaStreamSynchronize_v3020": 648
+    },
+    "API_table_counts": {
+      "CUPTI_ACTIVITY_KIND_RUNTIME": 9522
+    },
+    "configuration_quality_accepted": 0,
+    "configuration_quality_rejected": 6,
+    "quality_rejection_counts": {
+      "direct_host_p90_p10": 10,
+      "profile_direct_perturbation": 11
+    },
+    "all_clock_numeric_trace_identity_passed": true
+  },
+  "native_graphs_compiled": false,
+  "no_fit": true,
+  "configs": [
+    {
+      "config": "scale_f32_e1024_g1",
+      "nodes": 1,
+      "elements": 1024,
+      "quality": "diagnostic_quality_rejected",
+      "direct_submit_process_medians_us": [
+        1.5,
+        1.6,
+        1.4
+      ],
+      "direct_sync_process_medians_us": [
+        15.95,
+        30.1,
+        15.05
+      ],
+      "direct_wall_process_medians_us": [
+        17.85,
+        31.9,
+        16.65
+      ],
+      "device_profile_union_median_us": 0.768,
+      "gpu_during_submit_fraction": 0.0,
+      "successor_api_begins_before_previous_kernel_end_count": 0,
+      "potential_successor_pairs": 0,
+      "between_call_validation_medians_us": [
+        25.55,
+        35.2,
+        22.8
+      ],
+      "preceding_gap_medians_us": [
+        39.85,
+        47.3,
+        34.65
+      ]
+    },
+    {
+      "config": "scale_f32_e1024_g8",
+      "nodes": 8,
+      "elements": 1024,
+      "quality": "diagnostic_quality_rejected",
+      "direct_submit_process_medians_us": [
+        14.8,
+        11.65,
+        10.9
+      ],
+      "direct_sync_process_medians_us": [
+        29.7,
+        29.95,
+        29.2
+      ],
+      "direct_wall_process_medians_us": [
+        44.65,
+        41.95,
+        40.25
+      ],
+      "device_profile_union_median_us": 6.048,
+      "gpu_during_submit_fraction": 0.0,
+      "successor_api_begins_before_previous_kernel_end_count": 630,
+      "potential_successor_pairs": 630,
+      "between_call_validation_medians_us": [
+        27.45,
+        25.05,
+        21.55
+      ],
+      "preceding_gap_medians_us": [
+        44.55,
+        42.2,
+        33.35
+      ]
+    },
+    {
+      "config": "scale_f32_e1024_g32",
+      "nodes": 32,
+      "elements": 1024,
+      "quality": "diagnostic_quality_rejected",
+      "direct_submit_process_medians_us": [
+        50.5,
+        50.3,
+        101.2
+      ],
+      "direct_sync_process_medians_us": [
+        65.0,
+        65.45,
+        54.35
+      ],
+      "direct_wall_process_medians_us": [
+        115.6,
+        115.75,
+        143.3
+      ],
+      "device_profile_union_median_us": 24.161,
+      "gpu_during_submit_fraction": 0.576230321679376,
+      "successor_api_begins_before_previous_kernel_end_count": 2789,
+      "potential_successor_pairs": 2790,
+      "between_call_validation_medians_us": [
+        18.65,
+        19.8,
+        33.45
+      ],
+      "preceding_gap_medians_us": [
+        30.8,
+        32.45,
+        45.8
+      ]
+    },
+    {
+      "config": "scale_f32_e262144_g1",
+      "nodes": 1,
+      "elements": 262144,
+      "quality": "diagnostic_quality_rejected",
+      "direct_submit_process_medians_us": [
+        3.0,
+        2.5,
+        3.2
+      ],
+      "direct_sync_process_medians_us": [
+        30.55,
+        26.35,
+        31.35
+      ],
+      "direct_wall_process_medians_us": [
+        35.75,
+        29.85,
+        34.25
+      ],
+      "device_profile_union_median_us": 1.92,
+      "gpu_during_submit_fraction": 0.0,
+      "successor_api_begins_before_previous_kernel_end_count": 0,
+      "potential_successor_pairs": 0,
+      "between_call_validation_medians_us": [
+        1580.35,
+        1649.95,
+        1648.7
+      ],
+      "preceding_gap_medians_us": [
+        1596.55,
+        1664.05,
+        1681.6
+      ]
+    },
+    {
+      "config": "scale_f32_e262144_g8",
+      "nodes": 8,
+      "elements": 262144,
+      "quality": "diagnostic_quality_rejected",
+      "direct_submit_process_medians_us": [
+        12.75,
+        12.4,
+        13.6
+      ],
+      "direct_sync_process_medians_us": [
+        52.0,
+        48.3,
+        56.7
+      ],
+      "direct_wall_process_medians_us": [
+        63.8,
+        61.6,
+        79.6
+      ],
+      "device_profile_union_median_us": 15.585,
+      "gpu_during_submit_fraction": 0.0,
+      "successor_api_begins_before_previous_kernel_end_count": 630,
+      "potential_successor_pairs": 630,
+      "between_call_validation_medians_us": [
+        1638.3,
+        1653.35,
+        1651.95
+      ],
+      "preceding_gap_medians_us": [
+        1668.75,
+        1669.7,
+        1679.35
+      ]
+    },
+    {
+      "config": "scale_f32_e262144_g32",
+      "nodes": 32,
+      "elements": 262144,
+      "quality": "diagnostic_quality_rejected",
+      "direct_submit_process_medians_us": [
+        54.2,
+        56.7,
+        99.5
+      ],
+      "direct_sync_process_medians_us": [
+        138.85,
+        145.05,
+        139.9
+      ],
+      "direct_wall_process_medians_us": [
+        194.65,
+        200.6,
+        226.5
+      ],
+      "device_profile_union_median_us": 62.466,
+      "gpu_during_submit_fraction": 0.3659753660636769,
+      "successor_api_begins_before_previous_kernel_end_count": 2789,
+      "potential_successor_pairs": 2790,
+      "between_call_validation_medians_us": [
+        1617.75,
+        1641.1,
+        1654.75
+      ],
+      "preceding_gap_medians_us": [
+        1634.4,
+        1656.8,
+        1670.95
+      ]
+    }
+  ]
+}

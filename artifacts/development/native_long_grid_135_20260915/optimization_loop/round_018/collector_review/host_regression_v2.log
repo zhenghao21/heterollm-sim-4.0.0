@@ -1,0 +1,67 @@
+FFF...                                                                   [100%]
+================================== FAILURES ===================================
+___________ test_completed_stage_rejects_absent_required_artifacts ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000021352849100>
+tmp_path = WindowsPath('F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_018/collector_review/pytest_scratch_v2/test_completed_stage_rejects_a0')
+
+    def test_completed_stage_rejects_absent_required_artifacts(monkeypatch,tmp_path):
+        anchor={'path':str(tmp_path/'clock.json'),'sha256':'b'*64,'bytes':10}
+        receipt={'clock_control_binding':{'receipt_ref':anchor},'external_approved_sha256':'a'*64,
+                 'child_process_exited':True,'status':'completed','returncode':0,
+                 'freeze_after':{'passed':True},'artifacts':[]}
+        def fake_load(path):
+            name=Path(path).name
+            if name=='complete.json':return receipt
+            if name=='protocol.json':return {'gpu_identity':{'uuid':'device0'}}
+            if name=='clock-control-binding.json':return {'receipt_ref':anchor}
+            raise AssertionError('unexpected read '+str(path))
+        monkeypatch.setattr(extract,'load',fake_load)
+        monkeypatch.setattr(extract,'verify_clock_receipt',lambda *args:{'receipt_ref':anchor})
+>       with pytest.raises((ValueError,KeyError,TypeError,OSError)):
+E       Failed: DID NOT RAISE (<class 'ValueError'>, <class 'KeyError'>, <class 'TypeError'>, <class 'OSError'>)
+
+artifacts\development\native_long_grid_135_20260915\optimization_loop\round_018\collector_review\test_evidence_binding.py:33: Failed
+__________ test_raw_audit_rejects_missing_process_and_pair_identity ___________
+
+tmp_path = WindowsPath('F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_018/collector_review/pytest_scratch_v2/test_raw_audit_rejects_missing0')
+
+    def test_raw_audit_rejects_missing_process_and_pair_identity(tmp_path):
+        config=probe_adapter.protocol_document()['configs'][1]
+        records=fixtures.raw_fixture(config)
+        # Frozen C++ actually emits these fields; a receipt with missing identity
+        # cannot establish independent processes, paired argv, or originating time.
+        for key in ('pid','argv','qpc_start','utc_start'):
+            records[0].pop(key,None)
+        records[1].pop('pair_id',None)
+        path=tmp_path/'missing_identity.jsonl';path.write_text('\n'.join(json.dumps(r) for r in records)+'\n',encoding='utf-8')
+        try:result=probe_adapter.audit_raw(probe_adapter.read_raw(path),config,{})
+        except ValueError:return
+>       assert result['valid_raw'] is False, result
+E       AssertionError: {'calibration_eligible': False, 'graph_calls': 36, 'issues': [], 'numeric_proof_scope': 'Counts and result summaries from frozen independent closed-form C++ reference; raw tensor bit patterns not retained.', ...}
+E       assert True is False
+
+artifacts\development\native_long_grid_135_20260915\optimization_loop\round_018\collector_review\test_evidence_binding.py:48: AssertionError
+____________ test_trace_rejects_different_native_process_identity _____________
+
+    def test_trace_rejects_different_native_process_identity():
+        config=probe_adapter.protocol_document()['configs'][1]
+        raw,app=fixtures.trace_fixture(config)
+        # Fixture target globalPid is 1<<24. The native app claims another process;
+        # identical labels/configuration do not authorize cross-process pairing.
+        app['header']={'pid':22222}
+        try:result=extract.correlate(raw,app,config)
+        except ValueError:return
+>       assert result['all36_chain_complete'] is False, {
+            'app_pid':app['header']['pid'],
+            'trace_globalPid':raw['tables']['CUPTI_ACTIVITY_KIND_KERNEL'][0]['globalPid'],
+            'accepted':result['all36_chain_complete']}
+E       AssertionError: {'accepted': True, 'app_pid': 22222, 'trace_globalPid': 16777216}
+E       assert True is False
+
+artifacts\development\native_long_grid_135_20260915\optimization_loop\round_018\collector_review\test_evidence_binding.py:59: AssertionError
+=========================== short test summary info ===========================
+FAILED artifacts/development/native_long_grid_135_20260915/optimization_loop/round_018/collector_review/test_evidence_binding.py::test_completed_stage_rejects_absent_required_artifacts
+FAILED artifacts/development/native_long_grid_135_20260915/optimization_loop/round_018/collector_review/test_evidence_binding.py::test_raw_audit_rejects_missing_process_and_pair_identity
+FAILED artifacts/development/native_long_grid_135_20260915/optimization_loop/round_018/collector_review/test_evidence_binding.py::test_trace_rejects_different_native_process_identity
+3 failed, 3 passed in 0.08s

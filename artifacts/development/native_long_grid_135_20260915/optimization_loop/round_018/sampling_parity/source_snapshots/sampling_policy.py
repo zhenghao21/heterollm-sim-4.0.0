@@ -268,18 +268,14 @@ class SamplingPolicy:
             )
         for field_name in ("top_k", "min_keep"):
             value = getattr(self, field_name)
-            # Native min_keep=0 disables the minimum-count constraint; it
-            # does not request an empty candidate set. top_k stays positive.
-            minimum = 0 if field_name == "min_keep" else 1
             if value is not None and (
                 isinstance(value, bool)
                 or not isinstance(value, int)
-                or value < minimum
+                or value <= 0
             ):
                 raise ValueError(
-                    "sampling {} must be a {} integer".format(
-                        field_name,
-                        "non-negative" if minimum == 0 else "positive",
+                    "sampling {} must be a positive integer".format(
+                        field_name
                     )
                 )
         for field_name in ("top_p", "min_p"):

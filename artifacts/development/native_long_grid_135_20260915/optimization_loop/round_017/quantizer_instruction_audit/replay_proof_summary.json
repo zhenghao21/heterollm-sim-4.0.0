@@ -1,0 +1,200 @@
+{
+  "schema": "original-DLL-owned-replay-observed-proof/v2",
+  "date_local": "2026-09-16",
+  "root_executed_GPU": true,
+  "this_instruction_audit_executed_GPU": false,
+  "status": "observed_owned_replay_and_frozen_sources_verified",
+  "source_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json",
+      "bytes": 3876,
+      "sha256": "43dc2516724fb935b90aea4d55dd0727ffb8203ebc1fc4c49eac5c3a6457072b"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.receipt.json",
+      "bytes": 4463,
+      "sha256": "bca3de861d0b75c4bb1795a38dcece44eaeea39131febd8b531fb0526c23cae5"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.analysis.json",
+      "bytes": 187898,
+      "sha256": "61d74abb177ad3943145587ce944a3ee79f6c25c65f48da3b9e2dbc13bfe1178"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.q8_1_d4.bin",
+      "bytes": 73728,
+      "sha256": "313be32ba3637a22a3dbceaecab836caf450da899eccb32ae2005bd2966b9112"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.input_f32.bin",
+      "bytes": 262144,
+      "sha256": "853d9cdaa9c6c57b2761588349a9c0513d7915510ea1b43c92610f7338619a76"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.weights_q8_0.bin",
+      "bytes": 974848,
+      "sha256": "4a38682d8cb2b39eb983c93fb401b5af4b59ed8b79ca07ae64af5f40261c6e58"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\replay.0001.json.graph_f32.bin",
+      "bytes": 229376,
+      "sha256": "9159abe2800d8769ab03c03410ad10ac2dc9fe06bc5daea3c4c4ca9ed4cce231"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\sample_baseline.json",
+      "bytes": 12394,
+      "sha256": "b42f2e43c581130c027fea97261ea469af0b5361b8fd654bafa36090bb375333"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\origin_lock.json",
+      "bytes": 2269,
+      "sha256": "36c6bcf082a3a12b99134a5a94de3ffc5d9dc4554ed4c264604a877908f84484"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\build_manifest.json",
+      "bytes": 78878,
+      "sha256": "7962936b845978cb47adf3f994db63e37edc8d4774424ea4c051f3f23a66c659"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\launch_replay.cpp",
+      "bytes": 26584,
+      "sha256": "030d262115458d357eccee51849d11e1d086d73c45fc0eaf5f89342128cb830f"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\conversion_capture\\replay_r1\\analyze_replay.py",
+      "bytes": 10285,
+      "sha256": "b62d939d8b4c6baf28b30d49ce3eff6db8c08e133ea1f904a8f4757d824faca2"
+    }
+  ],
+  "capture_identity": {
+    "symbol": "_Z17quantize_mmq_q8_1IL18mmq_q8_1_ds_layout0ELb0EEvPKfPKiPvxxxxxiii",
+    "correlation": 1,
+    "context_uid": 1,
+    "context_handle": "0x1f974d05b00",
+    "runtime_func": "0x7ffafa87b1a0",
+    "runtime_func_decimal": 140715921748384,
+    "stream": "0x1f905bcb980",
+    "grid": [
+      64,
+      2,
+      1
+    ],
+    "block": [
+      128,
+      1,
+      1
+    ],
+    "shared": 0,
+    "conversion_signature_decoded": true,
+    "signature_valid": true,
+    "arguments": {
+      "x": 124798296064,
+      "ids": 0,
+      "vy": 146028888064,
+      "ne00": 1024,
+      "s01": 1024,
+      "s02": 65536,
+      "s03": 65536,
+      "ne0": 1024,
+      "ne1": 64,
+      "ne2": 1,
+      "n_expert_used": 0
+    }
+  },
+  "runtime_func_host_module": {
+    "api": "GetModuleHandleExA(FROM_ADDRESS)",
+    "host_address_only_not_device_module_resolution": true,
+    "resolved": true,
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll"
+  },
+  "function_attributes": {
+    "api": "cudaFuncGetAttributes",
+    "binaryVersion": 120,
+    "ptxVersion": 120,
+    "numRegs": 22,
+    "sharedSizeBytes": 0,
+    "constSizeBytes": 0,
+    "localSizeBytes": 0,
+    "maxThreadsPerBlock": 1024,
+    "cacheModeCA": 0,
+    "maxDynamicSharedSizeBytes": 49152,
+    "preferredShmemCarveout": -1,
+    "clusterDimMustBeSet": 0,
+    "requiredClusterWidth": 0,
+    "requiredClusterHeight": 0,
+    "requiredClusterDepth": 0
+  },
+  "same_process_replay": {
+    "same_process_runtime_func": "0x7ffafa87b1a0",
+    "same_stream": "0x1f905bcb980",
+    "same_grid": [
+      64,
+      2,
+      1
+    ],
+    "same_block": [
+      128,
+      1,
+      1
+    ],
+    "same_shared": 0,
+    "argument_slots_substituted": [
+      0,
+      2
+    ],
+    "arguments": {
+      "x": 124798787584,
+      "ids": 0,
+      "vy": 124799049728,
+      "ne00": 1024,
+      "s01": 1024,
+      "s02": 65536,
+      "s03": 65536,
+      "ne0": 1024,
+      "ne1": 64,
+      "ne2": 1,
+      "n_expert_used": 0
+    },
+    "all_captured_scalars_preserved": true,
+    "owned_input_bytes": 262144,
+    "owned_output_bytes": 73728,
+    "output_init_byte": 165
+  },
+  "target": {
+    "row": 11,
+    "k": 33,
+    "block_index": 11,
+    "q_byte_offset": 1633,
+    "scale_byte_offset": 1588,
+    "input_f32": 0.24932861328125,
+    "q": 63,
+    "d4": 0.003926435019820929,
+    "d4_bits": 998287699,
+    "q_raw_hex": "3f",
+    "d4_raw_little_endian_hex": "53a9803b"
+  },
+  "row11_sample_count": 64,
+  "all_64_original_graph_values_equal_frozen_operator_actual": true,
+  "all_64_observed_operand_CPU_predictions_within_unchanged_tolerance": true,
+  "max_abs_prediction_minus_graph": 7.140915840864182e-07,
+  "frozen_source_path_gate_failures_preserved": 60,
+  "all_codes_examined": 65536,
+  "code_difference_count_vs_CPU_source_math": 1,
+  "scale_bit_difference_count_vs_CPU_source_math": 825,
+  "scale_bit_delta_histogram": {
+    "-3": 19,
+    "-2": 184,
+    "-1": 281,
+    "0": 1223,
+    "1": 204,
+    "2": 130,
+    "3": 7
+  },
+  "scope_limits": [
+    "The 73728 bytes are owned-buffer replay output from the same-process captured original runtime func, not a copy of the original conversion pool buffer.",
+    "The graph-versus-replay agreement establishes consistency for these 64 samples, not complete conversion validation or complete main-kernel validation for all dimensions.",
+    "No device reciprocal register value or instruction-by-instruction execution trace was captured.",
+    "No original source reference, FP32 math gate, correctness tolerance, prior rejection, or performance fit was modified.",
+    "Only operator microbenchmark records and owned replay data were read, never LLM actual outputs."
+  ]
+}

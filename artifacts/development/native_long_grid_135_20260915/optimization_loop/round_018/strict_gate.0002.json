@@ -1,0 +1,3469 @@
+{
+  "schema": "strict-engine-acceptance/v1",
+  "gate_A": {
+    "verdict": "accuracy_failed",
+    "passed_cells": 0,
+    "accuracy_failed_cells": 20,
+    "insufficient_evidence_cells": 111,
+    "required_cells": 131,
+    "required_metrics": 393,
+    "failure_counts_may_overlap": true,
+    "passing_metrics": 2,
+    "threshold_pct_strict": 10,
+    "prediction_coverage_pct": 15.267175572519085
+  },
+  "gate_B": {
+    "verdict": "unvalidated",
+    "reason": "No registered independent acceptance and joint uncertainty evidence supplied; development gate never promotes B."
+  },
+  "task_complete": false,
+  "next_action": "repair_evidence_and_next_mechanism_round",
+  "native_evaluable_coverage": {
+    "selected": 131,
+    "planned": 162,
+    "pct": 80.8641975308642
+  },
+  "native_lock": {
+    "native_locked": true,
+    "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "selected_cells": 131,
+    "raw_files": 131,
+    "formal_requests": 894
+  },
+  "sources": {
+    "state": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\state.json",
+      "sha256": "c77d73f1339326fa4fd8f8c9a67000293b0b1a42a626341fc167a393812ac482",
+      "bytes": 78802
+    },
+    "selection": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
+      "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+      "bytes": 9290976
+    },
+    "freeze": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling\\freeze.json",
+      "sha256": "7e8b79ee0fb1e6b68a49a9225705b0b770e17dc855bd6fea46243c82ccc60aad",
+      "bytes": 27288024
+    },
+    "score": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling\\errors.0001.json",
+      "sha256": "5f01db25b3c92665815aaa9122d33dbdf818f0751a80fc3a08a8907ed8d9efa1",
+      "bytes": 883448
+    },
+    "evaluator_sha256": "a87eaea4d367e4a89f60029207fcf84f122be2c69765ddf4955452faebe5fe56",
+    "implementation": {
+      "before": {
+        "evaluator": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\evaluate_strict_engine_goal.py",
+          "sha256": "a87eaea4d367e4a89f60029207fcf84f122be2c69765ddf4955452faebe5fe56",
+          "bytes": 13298
+        },
+        "report": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\render_optimization_loop_report.py",
+          "sha256": "5acd64b074b939cee1686657d2361480ee92353df836fa5de7243074b2dfca26",
+          "bytes": 33105
+        },
+        "predictor": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\predict_stable_native_dataset.py",
+          "sha256": "337abd7ca1b53c39f9968920a029e6d5162b91043818f74c8061576a1d7b2992",
+          "bytes": 158470
+        },
+        "native_lock": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\verify_fixed_native.py",
+          "sha256": "ed8580608ec9d6269ed6ded0ef3657d8ad672bfe1c2c8ab9c5cc107b2c9aa66d",
+          "bytes": 3676
+        },
+        "grid": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\native_grid_predict.py",
+          "sha256": "7bf97514bdb2c90ff13d336b3bca657c42a117f92ee9f47bff1648f491c8d729",
+          "bytes": 18651
+        }
+      },
+      "after": {
+        "evaluator": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\evaluate_strict_engine_goal.py",
+          "sha256": "a87eaea4d367e4a89f60029207fcf84f122be2c69765ddf4955452faebe5fe56",
+          "bytes": 13298
+        },
+        "report": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\render_optimization_loop_report.py",
+          "sha256": "5acd64b074b939cee1686657d2361480ee92353df836fa5de7243074b2dfca26",
+          "bytes": 33105
+        },
+        "predictor": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\predict_stable_native_dataset.py",
+          "sha256": "337abd7ca1b53c39f9968920a029e6d5162b91043818f74c8061576a1d7b2992",
+          "bytes": 158470
+        },
+        "native_lock": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\verify_fixed_native.py",
+          "sha256": "ed8580608ec9d6269ed6ded0ef3657d8ad672bfe1c2c8ab9c5cc107b2c9aa66d",
+          "bytes": 3676
+        },
+        "grid": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\native_grid_predict.py",
+          "sha256": "7bf97514bdb2c90ff13d336b3bca657c42a117f92ee9f47bff1648f491c8d729",
+          "bytes": 18651
+        }
+      },
+      "unchanged": true
+    }
+  },
+  "cells": [
+    {
+      "cell_id": "qwen25_p1536_o256_c4__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 70.94578288319403,
+          "native_median_ms": 270.928,
+          "absolute_percentage_error_pct": 73.81378710092939,
+          "signed_error_ms": -199.98221711680597,
+          "absolute_error_ms": 199.98221711680597,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.6979240737662558,
+          "native_median_ms": 5.66954705882353,
+          "absolute_percentage_error_pct": 52.413763466916286,
+          "signed_error_ms": -2.971622985057274,
+          "absolute_error_ms": 2.971622985057274,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 756.5521023894977,
+          "native_median_ms": 1726.8075,
+          "absolute_percentage_error_pct": 56.18781465858251,
+          "signed_error_ms": -970.2553976105022,
+          "absolute_error_ms": 970.2553976105022,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 19.808967914911754,
+          "native_median_ms": 53.772,
+          "absolute_percentage_error_pct": 63.16118441770484,
+          "signed_error_ms": -33.963032085088244,
+          "absolute_error_ms": 33.963032085088244,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.0553546972252237,
+          "native_median_ms": 3.1882117647058825,
+          "absolute_percentage_error_pct": 35.53267947950022,
+          "signed_error_ms": -1.1328570674806588,
+          "absolute_error_ms": 1.1328570674806588,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 543.9244157073438,
+          "native_median_ms": 866.736,
+          "absolute_percentage_error_pct": 37.24451093443174,
+          "signed_error_ms": -322.8115842926562,
+          "absolute_error_ms": 322.8115842926562,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p1536_o128_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 59.328849365895174,
+          "native_median_ms": 168.359,
+          "absolute_percentage_error_pct": 64.7605121401914,
+          "signed_error_ms": -109.03015063410484,
+          "absolute_error_ms": 109.03015063410484,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.0975591133945874,
+          "native_median_ms": 3.208425196850394,
+          "absolute_percentage_error_pct": 34.62340604188957,
+          "signed_error_ms": -1.1108660834558064,
+          "absolute_error_ms": 1.1108660834558064,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 325.71885676700776,
+          "native_median_ms": 576.084,
+          "absolute_percentage_error_pct": 43.45983280788777,
+          "signed_error_ms": -250.36514323299218,
+          "absolute_error_ms": 250.36514323299218,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p1536_o256_c2__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 63.895402215997464,
+          "native_median_ms": 209.816,
+          "absolute_percentage_error_pct": 69.54693530712746,
+          "signed_error_ms": -145.92059778400255,
+          "absolute_error_ms": 145.92059778400255,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.399304312407776,
+          "native_median_ms": 4.251127450980392,
+          "absolute_percentage_error_pct": 43.560753233722735,
+          "signed_error_ms": -1.851823138572616,
+          "absolute_error_ms": 1.851823138572616,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 675.7180018799803,
+          "native_median_ms": 1291.6680000000001,
+          "absolute_percentage_error_pct": 47.68640224268309,
+          "signed_error_ms": -615.9499981200198,
+          "absolute_error_ms": 615.9499981200198,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 8.475170156161784,
+          "native_median_ms": 23.41,
+          "absolute_percentage_error_pct": 63.79679557384971,
+          "signed_error_ms": -14.934829843838216,
+          "absolute_error_ms": 14.934829843838216,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.453440891177139,
+          "native_median_ms": 4.511196850393701,
+          "absolute_percentage_error_pct": 45.61441292540754,
+          "signed_error_ms": -2.0577559592165624,
+          "absolute_error_ms": 2.0577559592165624,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 319.2145836138043,
+          "native_median_ms": 597.0435,
+          "absolute_percentage_error_pct": 46.534116255548504,
+          "signed_error_ms": -277.8289163861957,
+          "absolute_error_ms": 277.8289163861957,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c2__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 22.063300075962008,
+          "native_median_ms": 66.1325,
+          "absolute_percentage_error_pct": 66.6377347356262,
+          "signed_error_ms": -44.06919992403799,
+          "absolute_error_ms": 44.06919992403799,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.309494975787132,
+          "native_median_ms": 4.436809803921568,
+          "absolute_percentage_error_pct": 47.94694661588071,
+          "signed_error_ms": -2.127314828134436,
+          "absolute_error_ms": 2.127314828134436,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 610.9845189016808,
+          "native_median_ms": 1196.68,
+          "absolute_percentage_error_pct": 48.943366739505905,
+          "signed_error_ms": -585.6954810983193,
+          "absolute_error_ms": 585.6954810983193,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c4__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 24.864501609429073,
+          "native_median_ms": 87.7165,
+          "absolute_percentage_error_pct": 71.6535639139397,
+          "signed_error_ms": -62.85199839057093,
+          "absolute_error_ms": 62.85199839057093,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.530844249311661,
+          "native_median_ms": 5.236419607843137,
+          "absolute_percentage_error_pct": 51.66842157719849,
+          "signed_error_ms": -2.705575358531476,
+          "absolute_error_ms": 2.705575358531476,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 669.1992822149172,
+          "native_median_ms": 1423.739,
+          "absolute_percentage_error_pct": 52.99705337741558,
+          "signed_error_ms": -754.5397177850829,
+          "absolute_error_ms": 754.5397177850829,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p1536_o32_c2__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 63.90441330847827,
+          "native_median_ms": 231.2045,
+          "absolute_percentage_error_pct": 72.3602207965337,
+          "signed_error_ms": -167.30008669152173,
+          "absolute_error_ms": 167.30008669152173,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.4114263974340204,
+          "native_median_ms": 6.199741935483871,
+          "absolute_percentage_error_pct": 61.104406884545334,
+          "signed_error_ms": -3.7883155380498508,
+          "absolute_error_ms": 3.7883155380498508,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 138.6586316289329,
+          "native_median_ms": 424.00699999999995,
+          "absolute_percentage_error_pct": 67.29803243132002,
+          "signed_error_ms": -285.34836837106707,
+          "absolute_error_ms": 285.34836837106707,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p1536_o256_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 59.328849365895174,
+          "native_median_ms": 189.699,
+          "absolute_percentage_error_pct": 68.72474321641381,
+          "signed_error_ms": -130.37015063410485,
+          "absolute_error_ms": 130.37015063410485,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.100377914143922,
+          "native_median_ms": 3.5653333333333332,
+          "absolute_percentage_error_pct": 41.08887675362972,
+          "signed_error_ms": -1.4649554191894114,
+          "absolute_error_ms": 1.4649554191894114,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 594.9252174725953,
+          "native_median_ms": 1098.111,
+          "absolute_percentage_error_pct": 45.82285238262842,
+          "signed_error_ms": -503.18578252740485,
+          "absolute_error_ms": 503.18578252740485,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p128_o32_c4__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 8.475170156161784,
+          "native_median_ms": 25.288,
+          "absolute_percentage_error_pct": 66.48540748116979,
+          "signed_error_ms": -16.812829843838216,
+          "absolute_error_ms": 16.812829843838216,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.4621103170523027,
+          "native_median_ms": 5.122419354838709,
+          "absolute_percentage_error_pct": 51.93462021561045,
+          "signed_error_ms": -2.6603090377864067,
+          "absolute_error_ms": 2.6603090377864067,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 83.9683965986427,
+          "native_median_ms": 185.4775,
+          "absolute_percentage_error_pct": 54.72852685708902,
+          "signed_error_ms": -101.5091034013573,
+          "absolute_error_ms": 101.5091034013573,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c4__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 24.864501609429073,
+          "native_median_ms": 85.833,
+          "absolute_percentage_error_pct": 71.03153611148501,
+          "signed_error_ms": -60.96849839057093,
+          "absolute_error_ms": 60.96849839057093,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.5600234869866507,
+          "native_median_ms": 6.640306451612904,
+          "absolute_percentage_error_pct": 61.44720871482021,
+          "signed_error_ms": -4.080282964626253,
+          "absolute_error_ms": 4.080282964626253,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 103.32725096910477,
+          "native_median_ms": 292.5185,
+          "absolute_percentage_error_pct": 64.67667823775085,
+          "signed_error_ms": -189.19124903089525,
+          "absolute_error_ms": 189.19124903089525,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p128_o256_c2__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 6.556950080187855,
+          "native_median_ms": 18.8925,
+          "absolute_percentage_error_pct": 65.29336996063064,
+          "signed_error_ms": -12.335549919812143,
+          "absolute_error_ms": 12.335549919812143,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.2746378499923736,
+          "native_median_ms": 4.330535294117647,
+          "absolute_percentage_error_pct": 47.474441483432486,
+          "signed_error_ms": -2.0558974441252733,
+          "absolute_error_ms": 2.0558974441252733,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 586.5896018282431,
+          "native_median_ms": 1123.102,
+          "absolute_percentage_error_pct": 47.77058523373273,
+          "signed_error_ms": -536.512398171757,
+          "absolute_error_ms": 536.512398171757,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 19.809152041181072,
+          "native_median_ms": 59.568,
+          "absolute_percentage_error_pct": 66.74531285055555,
+          "signed_error_ms": -39.758847958818926,
+          "absolute_error_ms": 39.758847958818926,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.0502207727597144,
+          "native_median_ms": 3.608967741935484,
+          "absolute_percentage_error_pct": 43.190936595621,
+          "signed_error_ms": -1.5587469691757696,
+          "absolute_error_ms": 1.5587469691757696,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 83.36599599673222,
+          "native_median_ms": 171.446,
+          "absolute_percentage_error_pct": 51.37477923268421,
+          "signed_error_ms": -88.08000400326777,
+          "absolute_error_ms": 88.08000400326777,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p512_o128_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 19.80925774227573,
+          "native_median_ms": 59.463,
+          "absolute_percentage_error_pct": 66.68641383334894,
+          "signed_error_ms": -39.653742257724275,
+          "absolute_error_ms": 39.653742257724275,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.0525030223544096,
+          "native_median_ms": 3.557181102362205,
+          "absolute_percentage_error_pct": 42.2997321954901,
+          "signed_error_ms": -1.5046780800077952,
+          "absolute_error_ms": 1.5046780800077952,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 280.4771415812857,
+          "native_median_ms": 511.045,
+          "absolute_percentage_error_pct": 45.1169385120125,
+          "signed_error_ms": -230.5678584187143,
+          "absolute_error_ms": 230.5678584187143,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c2__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 22.063444989643997,
+          "native_median_ms": 70.55799999999999,
+          "absolute_percentage_error_pct": 68.73005897326455,
+          "signed_error_ms": -48.494555010355995,
+          "absolute_error_ms": 48.494555010355995,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.320130106942057,
+          "native_median_ms": 4.907225806451613,
+          "absolute_percentage_error_pct": 52.720127451813156,
+          "signed_error_ms": -2.5870956995095566,
+          "absolute_error_ms": 2.5870956995095566,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 93.98747830484774,
+          "native_median_ms": 221.4595,
+          "absolute_percentage_error_pct": 57.55996996974718,
+          "signed_error_ms": -127.47202169515225,
+          "absolute_error_ms": 127.47202169515225,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p1536_o128_c4__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 70.94578288319403,
+          "native_median_ms": 301.60249999999996,
+          "absolute_percentage_error_pct": 76.47705742386285,
+          "signed_error_ms": -230.65671711680594,
+          "absolute_error_ms": 230.65671711680594,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.6819576660917797,
+          "native_median_ms": 7.204169291338583,
+          "absolute_percentage_error_pct": 62.7721454392217,
+          "signed_error_ms": -4.522211625246803,
+          "absolute_error_ms": 4.522211625246803,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 409.4014774659745,
+          "native_median_ms": 1221.4045,
+          "absolute_percentage_error_pct": 66.48108980554971,
+          "signed_error_ms": -812.0030225340256,
+          "absolute_error_ms": 812.0030225340256,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen25_p1536_o32_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 59.3336483226076,
+          "native_median_ms": 188.28,
+          "absolute_percentage_error_pct": 68.48648378871488,
+          "signed_error_ms": -128.94635167739239,
+          "absolute_error_ms": 128.94635167739239,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.0954412062178487,
+          "native_median_ms": 3.6385483870967743,
+          "absolute_percentage_error_pct": 42.4099672922086,
+          "signed_error_ms": -1.5431071808789256,
+          "absolute_error_ms": 1.5431071808789256,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 124.2923257153609,
+          "native_median_ms": 300.126,
+          "absolute_percentage_error_pct": 58.58661838182599,
+          "signed_error_ms": -175.83367428463907,
+          "absolute_error_ms": 175.83367428463907,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "smollm2_p1536_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p128_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p128_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p128_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p128_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 38.79930506559529,
+          "native_median_ms": 66.059,
+          "absolute_percentage_error_pct": 41.26567906629635,
+          "signed_error_ms": -27.259694934404706,
+          "absolute_error_ms": 27.259694934404706,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 3.7643858599732645,
+          "native_median_ms": 3.9196129032258065,
+          "absolute_percentage_error_pct": 3.9602646252335663,
+          "signed_error_ms": -0.155227043252542,
+          "absolute_error_ms": 0.155227043252542,
+          "passed": true
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 155.49526672476648,
+          "native_median_ms": 188.056,
+          "absolute_percentage_error_pct": 17.31438150084737,
+          "signed_error_ms": -32.56073327523353,
+          "absolute_error_ms": 32.56073327523353,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p128_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p512_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "smollm2_p1536_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p1536_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p128_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p1536_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p1536_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p1536_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p128_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p128_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p128_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 27.229942825096032,
+          "native_median_ms": 54.738,
+          "absolute_percentage_error_pct": 50.25404138789135,
+          "signed_error_ms": -27.508057174903968,
+          "absolute_error_ms": 27.508057174903968,
+          "passed": false
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.3883511386643392,
+          "native_median_ms": 3.1494516129032255,
+          "absolute_percentage_error_pct": 24.16612692573769,
+          "signed_error_ms": -0.7611004742388863,
+          "absolute_error_ms": 0.7611004742388863,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 101.26882812369055,
+          "native_median_ms": 152.215,
+          "absolute_percentage_error_pct": 33.46987608074726,
+          "signed_error_ms": -50.94617187630945,
+          "absolute_error_ms": 50.94617187630945,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "tinyllama_p1536_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "tinyllama_p1536_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p1536_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p1536_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p1536_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p1536_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p1536_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p1536_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p128_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen35_p512_o32_c1__fixed_runtime",
+      "verdict": "accuracy_failed",
+      "issues": [],
+      "metrics": {
+        "engine_ttft_ms": {
+          "simulator_median_ms": 70.034609752599,
+          "native_median_ms": 76.446,
+          "absolute_percentage_error_pct": 8.38682239410957,
+          "signed_error_ms": -6.411390247401002,
+          "absolute_error_ms": 6.411390247401002,
+          "passed": true
+        },
+        "engine_tpot_ms": {
+          "simulator_median_ms": 2.3556288531322753,
+          "native_median_ms": 4.48483870967742,
+          "absolute_percentage_error_pct": 47.47572865777133,
+          "signed_error_ms": -2.1292098565451445,
+          "absolute_error_ms": 2.1292098565451445,
+          "passed": false
+        },
+        "engine_e2e_ms": {
+          "simulator_median_ms": 143.05910419969956,
+          "native_median_ms": 215.476,
+          "absolute_percentage_error_pct": 33.60787085350593,
+          "signed_error_ms": -72.41689580030044,
+          "absolute_error_ms": 72.41689580030044,
+          "passed": false
+        }
+      },
+      "all3_below10": false,
+      "accuracy_failed": true,
+      "insufficient_evidence": false
+    },
+    {
+      "cell_id": "qwen38_p1536_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p512_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p1536_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p512_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p1536_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p512_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p512_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p1536_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p128_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_p1536_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o32_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o256_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o256_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o32_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o256_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c2__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c1__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+      "verdict": "insufficient_evidence",
+      "issues": [
+        "证据引用缺少路径"
+      ],
+      "metrics": {},
+      "all3_below10": false,
+      "accuracy_failed": false,
+      "insufficient_evidence": true
+    }
+  ],
+  "scope": "Fixed disclosed development gate only; no inference run, refit, or native remeasurement.",
+  "snapshots": {
+    "policy": {
+      "encoding": "canonical-json/utf-8",
+      "sha256": "c9eb601429797ebc5fe97c0e86cdad8ddcc72930cc8abe4e39b1e03b29141a95",
+      "bytes": 495,
+      "document": {
+        "gate_A": {
+          "cell_pass_requires": "all three metrics and complete validated request/native evidence",
+          "comparison": "absolute_percentage_error_pct < threshold_pct_strict",
+          "metrics": [
+            "engine_ttft_ms",
+            "engine_tpot_ms",
+            "engine_e2e_ms"
+          ],
+          "native_remeasurement_allowed": false,
+          "native_run_groups": 3,
+          "required_cells": 131,
+          "required_metrics": 393,
+          "threshold_pct_strict": 10
+        },
+        "gate_B": {
+          "development_gate_may_promote_B": false,
+          "verdict": "unvalidated"
+        },
+        "schema": "strict-engine-gate-policy/v1",
+        "task_complete": false
+      }
+    },
+    "state": {
+      "encoding": "canonical-json/utf-8",
+      "sha256": "44d73a006c15a5a8db32e11ce6bbbcc5b0c2f3559b8df27672e72333336b0b66",
+      "bytes": 67199,
+      "document": {
+        "baseline_evaluation": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
+        "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
+        "best_candidate_status": "R14 partial20-cell source correction improves Qwen2.5; no all-cell accuracy winner, R6 full baseline retained.",
+        "budget": {
+          "deadline_utc": "2026-09-16T09:27:11.734008+00:00",
+          "limit_semantics": "review_checkpoint_not_termination",
+          "max_full_131_evaluations": 4,
+          "max_mechanism_rounds": 6,
+          "max_wall_seconds": 28800,
+          "per_cell_timeout_seconds": 600,
+          "prediction_workers": 4,
+          "start_utc": "2026-09-16T01:27:11.734008+00:00",
+          "starting_full_evaluations_completed": 3,
+          "starting_round": 13
+        },
+        "budget_history": [
+          {
+            "budget": {
+              "deadline_utc": "2026-09-15T21:27:44.987878+00:00",
+              "max_full_131_evaluations": 4,
+              "max_mechanism_rounds": 6,
+              "max_wall_seconds": 28800,
+              "per_cell_timeout_seconds": 600,
+              "prediction_workers": 4
+            },
+            "closed_utc": "2026-09-15T22:06:30.572094+00:00",
+            "full_evaluations_completed": 3,
+            "status": "budget_closed_accuracy_failed"
+          }
+        ],
+        "continuation_policy": {
+          "auto_continue_until_target": true,
+          "completion_requires": "both_A_and_B_within_declared_scope",
+          "independent_work_continues_when_possible": true,
+          "no_progress_review_after_rounds": 3,
+          "stage_round_and_wall_limits": "review_checkpoint_not_stop",
+          "stop_only": [
+            "target_met",
+            "explicit_user_pause",
+            "explicit_user_hard_resource_limit",
+            "unresolvable_external_blocker"
+          ]
+        },
+        "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
+        "created_utc": "2026-09-15T13:27:44.987878+00:00",
+        "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_014\\tail_candidate_r2",
+        "current_stage": {
+          "full_evaluations_review_limit": 4,
+          "review_after_rounds": 6,
+          "review_at_utc": "2026-09-16T09:27:11.734008+00:00",
+          "review_only_not_stop": true,
+          "stage": 3,
+          "started_utc": "2026-09-16T01:27:11.734008+00:00",
+          "starting_round": 13
+        },
+        "dataset_role": "Previously disclosed development/regression data; never independent blind validation.",
+        "full_131_evaluations_completed": 3,
+        "full_131_evaluations_started": 3,
+        "goal_audit": {
+          "formal_repeatability_accepted_cells": 0,
+          "native_evaluable_coverage_pct": 80.8641975308642,
+          "no_native_remeasurement_this_change": true,
+          "observed_batches_per_cell": 3,
+          "threshold_not_relaxed": true
+        },
+        "goal_evaluator_status": "A_implemented_B_unvalidated",
+        "historical_group_targets_not_active": {
+          "per_group_per_metric_median_ape_pct_strict": 10,
+          "per_group_per_metric_p90_ape_pct_max": 20,
+          "per_group_per_metric_worst_ape_pct_max": 30
+        },
+        "native_policy": "Never modify selection, native values, original freeze, binary, prompts or extraction contract; verify selection/raw hashes before and after each evaluated round.",
+        "native_raw_refs": [
+          {
+            "bytes": 5086875,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o256_c4__fixed_runtime__b00.json",
+            "sha256": "75d9c613cc66de06e746027b80b2a7f77f72c5321b6dbcbacd5638275ca6eb21"
+          },
+          {
+            "bytes": 1347553,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o256_c1__fixed_runtime__b00.json",
+            "sha256": "14894257d585b4cb5360d41eed1cb07c83af275363d192e6c236418150371c42"
+          },
+          {
+            "bytes": 970952,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o128_c1__fixed_runtime__b00.json",
+            "sha256": "989ad39143ea618f48299a8c3996b9598da531b076024714ceb9b562cac9d721"
+          },
+          {
+            "bytes": 2675993,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o256_c2__fixed_runtime__b00.json",
+            "sha256": "ef6d58bc27d700e6d1e910c423db6196f2abd5af4c2d8b6d4f5fff322813a31f"
+          },
+          {
+            "bytes": 2533561,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p128_o128_c4__fixed_runtime__b00.json",
+            "sha256": "e66164259656b35dbda5990f6309727eef3d6be6089e436640f49774932dd26c"
+          },
+          {
+            "bytes": 2460804,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o256_c2__fixed_runtime__b00.json",
+            "sha256": "549bbc9fa0ead6ac119696676dd65a2d96bc7b65e06a284e1c167cf55dabf832"
+          },
+          {
+            "bytes": 4695604,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o256_c4__fixed_runtime__b00.json",
+            "sha256": "1bc987930b78b509039f4431dc1a62c390cbbce44042f6a04b60fae7f3c8a363"
+          },
+          {
+            "bytes": 913628,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o32_c2__fixed_runtime__b00.json",
+            "sha256": "0b79cc8f04907c3a5cd385421aa58f7755009de0da2ad344521cc944997ab509"
+          },
+          {
+            "bytes": 1474122,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o256_c1__fixed_runtime__b00.json",
+            "sha256": "527667c592ef448d18c2136f044adc50e8430cb047d8fc1fc3f94ba5d78411cd"
+          },
+          {
+            "bytes": 1028717,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p128_o32_c4__fixed_runtime__b00.json",
+            "sha256": "42f75bc43ccf3ef0e452b08d4d1f6c74b9bbe84462378871a9aa4e3bc81097a5"
+          },
+          {
+            "bytes": 1170900,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c4__fixed_runtime__b00.json",
+            "sha256": "ec9cbfd4c0b43a44cc7293bde6476dab7781b533dbda72b5bab434c2c487f0fb"
+          },
+          {
+            "bytes": 2380032,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p128_o256_c2__fixed_runtime__b00.json",
+            "sha256": "6bfeb367667e608ecbe02e233baeb48818176f85fb4e8568605429990b1ed11f"
+          },
+          {
+            "bytes": 468239,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c1__fixed_runtime__b00.json",
+            "sha256": "70d688c759470674f916ac557afec2ea663eaf04826d7ac8fcd37e0201c021c2"
+          },
+          {
+            "bytes": 845148,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o128_c1__fixed_runtime__b00.json",
+            "sha256": "ddb069f52df76e793f45ac7e79d99f92f6e2bfde980e7e6b0d8ed2ae552ee2f9"
+          },
+          {
+            "bytes": 702641,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p512_o32_c2__fixed_runtime__b00.json",
+            "sha256": "89e63ca640692dd313637584a06d4b5c73b6bb9a9e53d38bab10a9c4e36cb9e8"
+          },
+          {
+            "bytes": 3065430,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o128_c4__fixed_runtime__b00.json",
+            "sha256": "a37de95e38e01c8c0d3ceb6e86a1377d4386cdfb5db61d79e04a6bb4995e0066"
+          },
+          {
+            "bytes": 593485,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o32_c1__fixed_runtime__b00.json",
+            "sha256": "3900ab2d3203e82b1fde0363d02d2201e47107ba727a984ac709dd9da34ae5f0"
+          },
+          {
+            "bytes": 5068313,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o256_c4__fixed_runtime__b00.json",
+            "sha256": "5dec8bcbd5dba00a10681fd6ca6877039a171a452c57b96be3b7fe06d7d95a1a"
+          },
+          {
+            "bytes": 417497,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o32_c1__fixed_runtime__b00.json",
+            "sha256": "469d17db283f271a4d35507dae72f052e30c2eefadf15957102746bfc1931fee"
+          },
+          {
+            "bytes": 3045458,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o128_c4__fixed_runtime__b00.json",
+            "sha256": "47fca0d4dbbf7345e86d60a2b0437d987721165dd210dc9c9fa0788a0aeea8dc"
+          },
+          {
+            "bytes": 1370452,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p128_o128_c2__fixed_runtime__b00.json",
+            "sha256": "b428e136e672c1288412f64ff8ea0604271894f441b8e3c4221e6581c47d9359"
+          },
+          {
+            "bytes": 4670447,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o256_c4__fixed_runtime__b00.json",
+            "sha256": "751929bd292834f8ab6ab2250bb6ab12cc4ffb6db0685e5d5a2b57fe40987dfb"
+          },
+          {
+            "bytes": 1296056,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o256_c1__fixed_runtime__b00.json",
+            "sha256": "249bdc1245c32e78b89e1d03a17f1bfb46683ad5b3614a3884ddf653afd0a28e"
+          },
+          {
+            "bytes": 1468728,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o256_c1__fixed_runtime__b00.json",
+            "sha256": "a8ce63a9d15d4f9f654498f947fbfdad8587c77503ec48b30a4fa84f3fd690d4"
+          },
+          {
+            "bytes": 900401,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o32_c2__fixed_runtime__b00.json",
+            "sha256": "8fecd34999d43ceb156e7148e1c262510a2772fa381e62e7508433c558f27949"
+          },
+          {
+            "bytes": 1341836,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o256_c1__fixed_runtime__b00.json",
+            "sha256": "a62d5c92c86f13cc0ac6c5003bc1958178cb2eb36fc9b849f333fde037a34088"
+          },
+          {
+            "bytes": 1659006,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p1536_o128_c2__fixed_runtime__b00.json",
+            "sha256": "06b755e73390132fa5280e85466b0524ad764add6ed30a0e1ba2caa454ceaa90"
+          },
+          {
+            "bytes": 586451,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o32_c1__fixed_runtime__b00.json",
+            "sha256": "eeccf513825ce47385c746221f9fbf3d83e0780693a9c2a520ee5b09095212c4"
+          },
+          {
+            "bytes": 4528091,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o256_c4__fixed_runtime__b00.json",
+            "sha256": "3c5ba686113c9310c45f7090a1e36755a6b2216a7e8515c291b6a632c55462e0"
+          },
+          {
+            "bytes": 1447020,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p512_o128_c2__fixed_runtime__b00.json",
+            "sha256": "b8489c297327d5c901dbba4b567c1e686a01197b264da6651678d00c6a38176a"
+          },
+          {
+            "bytes": 462691,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o32_c1__fixed_runtime__b00.json",
+            "sha256": "16ce48a197865b1650c552b7774ed3c3803568414dcda52cc1d56ba832b37b09"
+          },
+          {
+            "bytes": 692539,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\clock_exception_supplement\\native\\smollm2_p512_o32_c2__fixed_runtime__b00.json",
+            "sha256": "74a937adecf573fc3829818c7f054b64524f97fc2dff90efad9a4aa218be23cb"
+          },
+          {
+            "bytes": 2653965,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o128_c4__fixed_runtime__b00.json",
+            "sha256": "f8970f6cbf08f1bc2f49fd06ac57a03042d9b25b8f9384a50afb62b035d0f336"
+          },
+          {
+            "bytes": 2372505,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p128_o256_c2__fixed_runtime__b00.json",
+            "sha256": "dc9a995ebce1ff265abba3af5e127310fad2fc50d76437e9dea19f8a920d50a3"
+          },
+          {
+            "bytes": 2451341,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o256_c2__fixed_runtime__b00.json",
+            "sha256": "2ea679e35f8564f0e15b501e5a46b1d53344fb3b841becc684ed722cb877a0b6"
+          },
+          {
+            "bytes": 1149582,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o32_c4__fixed_runtime__b00.json",
+            "sha256": "b31cf67b258207260286150eefb4bed3ce77cd4754ef23003e907c7ad2cc2c4a"
+          },
+          {
+            "bytes": 1528793,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o32_c4__fixed_runtime__b00.json",
+            "sha256": "2572c9d746aabe802481683335b4b8c3b2e6bfa146765254ed717a3c3bb8640f"
+          },
+          {
+            "bytes": 839370,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p512_o128_c1__fixed_runtime__b00.json",
+            "sha256": "3602c4fdf9c082d7930fce2c2e7748f64adb113bb5dd724993e605a3710c9c6a"
+          },
+          {
+            "bytes": 2669438,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o256_c2__fixed_runtime__b00.json",
+            "sha256": "37cfeb7fa126b2ad660bd37ad42c38df16c09d989b948187b99c43e4b8c2f951"
+          },
+          {
+            "bytes": 963971,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\smollm2_p1536_o128_c1__fixed_runtime__b00.json",
+            "sha256": "fb0050142c1dbdb2f2b2ddb04661078f900cf67bbd3ff55f99303e6dce72b904"
+          },
+          {
+            "bytes": 1629750,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o128_c2__fixed_runtime__b00.json",
+            "sha256": "83c535cd967c3115a43724314b32ba2b051b274814fb128038b7692a59cf1f90"
+          },
+          {
+            "bytes": 2502859,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o128_c4__fixed_runtime__b00.json",
+            "sha256": "050e2c03d48c1b2062679ac2a44392c0bab5ffed49ed22e3a08d3767cd3f99f9"
+          },
+          {
+            "bytes": 2439496,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o256_c2__fixed_runtime__b00.json",
+            "sha256": "845730945750b444137de5d38069058a2aca2e3fbd33b21ceb807a75b814db22"
+          },
+          {
+            "bytes": 1292359,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o256_c1__fixed_runtime__b00.json",
+            "sha256": "c6216d9942adf5ac38f72d896ab766eb75ed41aba77c29cf7d0bddbc8fc7df76"
+          },
+          {
+            "bytes": 2642568,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o256_c2__fixed_runtime__b00.json",
+            "sha256": "b27e336ec8c103e8cead47b99df1d1bf9a4709afd3e30f27311a6f200df2bf17"
+          },
+          {
+            "bytes": 1336025,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o256_c1__fixed_runtime__b00.json",
+            "sha256": "a5202b590bab7d91eec49f49048558cf673c9c3d0383bea5a18ddaedc42b253e"
+          },
+          {
+            "bytes": 790593,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o128_c1__fixed_runtime__b00.json",
+            "sha256": "5c93d6a1bbbc05e1497bc9cf88571ae461ccd6c574b0010f75872474a17ad2af"
+          },
+          {
+            "bytes": 2631301,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o128_c4__fixed_runtime__b00.json",
+            "sha256": "25d35224cc081ced73c0a3d1584103616eb829c0ae2c2aa16874be359c007446"
+          },
+          {
+            "bytes": 951348,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o128_c1__fixed_runtime__b00.json",
+            "sha256": "49bad9a4dede2663774bae4f02a053f0e5f9ee655ced5278c7428dc0bc5e731b"
+          },
+          {
+            "bytes": 1434161,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\tinyllama_p512_o128_c2__fixed_runtime__b00.json",
+            "sha256": "8b2b4aae3dcde6e7057bc3db6db1ccdc7864e86d0b36cf591160f9cafdde8050"
+          },
+          {
+            "bytes": 833756,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o128_c1__fixed_runtime__b00.json",
+            "sha256": "644f8754abe28082b66c49521541ae01089c002f2aa152cfab3f9dd5fd5e43b7"
+          },
+          {
+            "bytes": 680570,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o32_c2__fixed_runtime__b00.json",
+            "sha256": "7315355ef513ffca3023c8a51777fc214827d9ed0b279a6474aee8f772bdf670"
+          },
+          {
+            "bytes": 1126718,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\tinyllama_p512_o32_c4__fixed_runtime__b00.json",
+            "sha256": "4052cf902fa0883d906b87bcda5c33b55f833a8e721ec3aab63eb97cf6fbd6a1"
+          },
+          {
+            "bytes": 1455015,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o256_c1__fixed_runtime__b00.json",
+            "sha256": "05525925e301593b678ce8a14386580835f1c979e5d1d12ff88feeaece75b7e5"
+          },
+          {
+            "bytes": 414566,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o32_c1__fixed_runtime__b00.json",
+            "sha256": "cbb359b1cdc16ef9629ba54fd20618cae83db4895b90baa2a55349dd90c2cd09"
+          },
+          {
+            "bytes": 2364955,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o256_c2__fixed_runtime__b00.json",
+            "sha256": "af3ab44c577a273143675e9d1b8881d03d4ebf320428cc1d3cd488c7e565b5b1"
+          },
+          {
+            "bytes": 4646636,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o256_c4__fixed_runtime__b00.json",
+            "sha256": "a7681deb83097cfb660edde32fb048d0fcaf2f766145b48e28af35c653b74027"
+          },
+          {
+            "bytes": 4512048,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p128_o256_c4__fixed_runtime__b00.json",
+            "sha256": "4ed224a99556368c5b847dfcf828a7d214bfa5b3479460e1abe248f4ab29a064"
+          },
+          {
+            "bytes": 457487,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p512_o32_c1__fixed_runtime__b00.json",
+            "sha256": "1bca472f4bd84b9b5c39a33bd62586124f55ffb76f6a7d61b64192e5c193482d"
+          },
+          {
+            "bytes": 1476167,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o32_c4__fixed_runtime__b00.json",
+            "sha256": "b8e7bfe0bbbb73d7569a108f45aa2537e9382140c992ab485814ec58f0ffaa45"
+          },
+          {
+            "bytes": 1362180,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\tinyllama_p128_o128_c2__fixed_runtime__b00.json",
+            "sha256": "0a615e8863b09ed64d2bfa0a6f27abb1f53f5c32d39f94c62822df80dd02158d"
+          },
+          {
+            "bytes": 874840,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\tinyllama_p1536_o32_c2__fixed_runtime__b00.json",
+            "sha256": "ce4a62e5e38d9786f957e0f06a6d7cac0b46fe8146fb5229647434c36e6b5555"
+          },
+          {
+            "bytes": 5082008,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o256_c4__fixed_runtime__b00.json",
+            "sha256": "85d405a1af704de86f91153b74623b0bda57ecb234c85ddcef4703277bbc6e23"
+          },
+          {
+            "bytes": 843051,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o128_c1__fixed_runtime__b00.json",
+            "sha256": "1b86d810ab1e8b9d1b825d39d6ade35c238dacabb387ea58859293b51d5a92d9"
+          },
+          {
+            "bytes": 1302709,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o256_c1__fixed_runtime__b00.json",
+            "sha256": "a9f02041704427f7531510a3bf06893cc5d545a9888467b8486c27cc3c055810"
+          },
+          {
+            "bytes": 1024946,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o32_c4__fixed_runtime__b00.json",
+            "sha256": "3f674b9dcc81e4bac022d4b6f978ff9a810c78e750d1a2569866d0d399246941"
+          },
+          {
+            "bytes": 420772,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o32_c1__fixed_runtime__b00.json",
+            "sha256": "9abf54126dae1a3c43f4f78b010903036ec4e07e76ac53dc2b46732d3e6bfa9d"
+          },
+          {
+            "bytes": 1543018,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o32_c4__fixed_runtime__b00.json",
+            "sha256": "c36ec042dda604fff6cf33b40a684562b912677b2ace8852e56ef51bc5939567"
+          },
+          {
+            "bytes": 1346078,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o256_c1__fixed_runtime__b00.json",
+            "sha256": "dc689003010f4a16495a9c9919498b83fd0b7d0524f26613fa00c58413de338a"
+          },
+          {
+            "bytes": 2459921,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o256_c2__fixed_runtime__b00.json",
+            "sha256": "dcecf7c34b12fcdf7e3b14d870f2f14a521c5d9b835686ca664c23bf954ea03c"
+          },
+          {
+            "bytes": 1663081,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o128_c2__fixed_runtime__b00.json",
+            "sha256": "a68ca9c5a212972066122a3a52e9ef9476567d74f2646c3af5704873d698da77"
+          },
+          {
+            "bytes": 4693380,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o256_c4__fixed_runtime__b00.json",
+            "sha256": "8ade4a6ff18028185359aaa63b36fabf96da0c6eeca81dc165b7680baa6e9cc0"
+          },
+          {
+            "bytes": 2674889,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o256_c2__fixed_runtime__b00.json",
+            "sha256": "8887ae137621acee66e59325a91324108ebfce974f65b3a88fe7f2d5cba4a552"
+          },
+          {
+            "bytes": 4557603,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o256_c4__fixed_runtime__b00.json",
+            "sha256": "8faca35b2b0837df3c338cc9e795fdd9dbfae0430ca4300533e8af8ac49f8282"
+          },
+          {
+            "bytes": 798352,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o128_c1__fixed_runtime__b00.json",
+            "sha256": "54acdd7abd62e7ec57551ca89ddc6d3e0d1df5d2354f60fccf78848505f6d268"
+          },
+          {
+            "bytes": 967926,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o128_c1__fixed_runtime__b00.json",
+            "sha256": "037b462d3b8ce6fb040af781fa344a41520bae6c61c80bbde1bdb26b845c06da"
+          },
+          {
+            "bytes": 2533606,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o128_c4__fixed_runtime__b00.json",
+            "sha256": "8056b4db982c4f7d72831ec9a9ed6777d61c1c5053b67d2d9914ebf9e6e9503a"
+          },
+          {
+            "bytes": 698961,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o32_c2__fixed_runtime__b00.json",
+            "sha256": "60f948be8a9208995efa13fb0f163b894e7a5146efcbe70685fa585d0757730f"
+          },
+          {
+            "bytes": 1163021,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o32_c4__fixed_runtime__b00.json",
+            "sha256": "df20584fd71300f4b4b86d2263eccb2d7161ae4fe88660d6ac7acd3af4f3fd9d"
+          },
+          {
+            "bytes": 1451647,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o128_c2__fixed_runtime__b00.json",
+            "sha256": "58597ebd85a6f2b18dc4fec9b3fa5f14cf2aaf9eddf700a15927f0b768eed624"
+          },
+          {
+            "bytes": 3057172,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p1536_o128_c4__fixed_runtime__b00.json",
+            "sha256": "9ad58eed420e16b034bf6aabee11602a4e0025bc92b00c6e1ba8da46f38956fa"
+          },
+          {
+            "bytes": 622180,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o32_c2__fixed_runtime__b00.json",
+            "sha256": "99b489bf8fe26bd324a5999fef4cca0ca5134b061fe44053cf5f059daedb3746"
+          },
+          {
+            "bytes": 1377145,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p128_o128_c2__fixed_runtime__b00.json",
+            "sha256": "850deb6ef0ecc3b254909442cec5b4766105d561fe4476c3c92fd29cb301a536"
+          },
+          {
+            "bytes": 466432,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen35_p512_o32_c1__fixed_runtime__b00.json",
+            "sha256": "282c7c1ee8c1b4d5befa7dcb1e5cdeba57c4c4497eed58798dba13d9f270b7be"
+          },
+          {
+            "bytes": 973567,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o128_c1__fixed_runtime__b00.json",
+            "sha256": "400d4fcc4054700369c637e76e2aa99d837c6b259742f679c3ef2dc74a81586f"
+          },
+          {
+            "bytes": 1355012,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o256_c1__fixed_runtime__b00.json",
+            "sha256": "e9b899df116e7c39ac03be835abb3b500bd072e3dd6475f354e728c53bc8d33a"
+          },
+          {
+            "bytes": 1460942,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o128_c2__fixed_runtime__b00.json",
+            "sha256": "f0e004816828a8789f2f9f5971967f95f13038adc833f09e425566cb842299e6"
+          },
+          {
+            "bytes": 2399057,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o256_c2__fixed_runtime__b00.json",
+            "sha256": "2c422c72456429d6d6aedc10772c1263c9982417e12d007bf760a339f16043a7"
+          },
+          {
+            "bytes": 911973,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o32_c2__fixed_runtime__b00.json",
+            "sha256": "24fec09f87f0190c418bb485fd586f972cbb865ab8316aa6d40071bb160b6904"
+          },
+          {
+            "bytes": 2688657,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o128_c4__fixed_runtime__b00.json",
+            "sha256": "c75d71b2037bba74b28bf39f2d6ef811592ed52570369288eac35aa971db2c37"
+          },
+          {
+            "bytes": 467925,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o32_c1__fixed_runtime__b00.json",
+            "sha256": "2d189d98aed4ae7004b8671ae19ba7c41d180973981c0a24d28a5e2b1fa0aa2c"
+          },
+          {
+            "bytes": 421822,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o32_c1__fixed_runtime__b00.json",
+            "sha256": "6dc81fdf9313d3273dec1b84f90df34b3f5e0965b50177c45a1fb0fdcb7b7cc5"
+          },
+          {
+            "bytes": 591887,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o32_c1__fixed_runtime__b00.json",
+            "sha256": "e0df43db3493db8034f8226f8d32db8525ad17504aa7b6fc6e34713953988211"
+          },
+          {
+            "bytes": 1308787,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o256_c1__fixed_runtime__b00.json",
+            "sha256": "ac4b1cf51f738c2384e8d67bfbc62fd5c573d43e2a5c83c120a9ec9d0cb55077"
+          },
+          {
+            "bytes": 1029544,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o32_c4__fixed_runtime__b00.json",
+            "sha256": "c74aada8e2a9f037f7782f1aa6409992a709152f7612712f965bc175d48767d0"
+          },
+          {
+            "bytes": 624502,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o32_c2__fixed_runtime__b00.json",
+            "sha256": "4622ed7efb78ec22d5e0d18d20322fea58829121c7d2436d901e95ddd9081346"
+          },
+          {
+            "bytes": 4580362,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o256_c4__fixed_runtime__b00.json",
+            "sha256": "3e4fbc46ee70f3faeb9bcd6a709504fc84595f70a737e15d16a7d4d1c05a8ad4"
+          },
+          {
+            "bytes": 4722835,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o256_c4__fixed_runtime__b00.json",
+            "sha256": "71b1dcdafadb1299f5f390d51c523db32fbd256bb90fe1761e8700a88b15a90b"
+          },
+          {
+            "bytes": 846864,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o128_c1__fixed_runtime__b00.json",
+            "sha256": "4b02fbd11ccf6d36a70d65c9083d27ea7989d9c94c507e7183a3e7a461d51ab8"
+          },
+          {
+            "bytes": 701037,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p512_o32_c2__fixed_runtime__b00.json",
+            "sha256": "7eb8af0038966dfd98cd9235c89cc91fc7f767622faf68d8ffcde44eca82e641"
+          },
+          {
+            "bytes": 2694802,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o256_c2__fixed_runtime__b00.json",
+            "sha256": "ea41caceea9105c804a2278087080535f05b16bce99565ecc7da832b8f6244ee"
+          },
+          {
+            "bytes": 1384515,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o128_c2__fixed_runtime__b00.json",
+            "sha256": "aae27049a9fcb209b414f68aa24499b839c23d30dababf1e7741149d5dbfd938"
+          },
+          {
+            "bytes": 801525,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p128_o128_c1__fixed_runtime__b00.json",
+            "sha256": "84c5d27987f1ee5a568ffe07faa432a4581a8f5d6ec1f365eca3a68eb42f03cf"
+          },
+          {
+            "bytes": 1552962,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o32_c4__fixed_runtime__b00.json",
+            "sha256": "ddefc97a7ed36635d3b70e8ab1544eef7e4f4941a0c5035513bd25c9b5052dff"
+          },
+          {
+            "bytes": 5106329,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o256_c4__fixed_runtime__b00.json",
+            "sha256": "d01d0c4602844b8b02dc2a915a8234208abc97507d7b57c7f1195ae25bbc0ea7"
+          },
+          {
+            "bytes": 1672755,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o128_c2__fixed_runtime__b00.json",
+            "sha256": "e94ef0dc227b0b84e225cc7c724a00aed2d5bca5f19cda19c4f000201e985bc7"
+          },
+          {
+            "bytes": 973029,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o128_c1__fixed_runtime__b00.json",
+            "sha256": "d1188a65f54a090493dc3f668d61e1ec31ae7a236f8ef7cfb244138fd7fcea01"
+          },
+          {
+            "bytes": 1351860,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o256_c1__fixed_runtime__b00.json",
+            "sha256": "cc3bdd169494a6614c514ea18ad18bfaf332f96f0aeff49fdf7ea87d29a486de"
+          },
+          {
+            "bytes": 1460606,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o128_c2__fixed_runtime__b00.json",
+            "sha256": "cd99663aaa282f1f76e02674d9be11310960eeb564243ed9ff331280b84c3ed2"
+          },
+          {
+            "bytes": 1480982,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o256_c1__fixed_runtime__b00.json",
+            "sha256": "a0df70908fd7d10defc644b8eb7b3f3bc6aeefa2fb9ba5aa0826e3ddbfbc0164"
+          },
+          {
+            "bytes": 2391853,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o256_c2__fixed_runtime__b00.json",
+            "sha256": "c86e7787f09f3ee1010db08a3ec6f98e1c3c8d16de0b84ac7ecb22e6f6bb0dc6"
+          },
+          {
+            "bytes": 911837,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o32_c2__fixed_runtime__b00.json",
+            "sha256": "ad493486cd7516793736892b8dfe5d8d4a6cad055dc32d2f569aa9aed6b5c202"
+          },
+          {
+            "bytes": 2685582,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o128_c4__fixed_runtime__b00.json",
+            "sha256": "2272912b516dc8ecdda1cfae207ca3e99dfaed95ab74a2bc818b3d87dba5f7ea"
+          },
+          {
+            "bytes": 3073276,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o128_c4__fixed_runtime__b00.json",
+            "sha256": "6afb50b3390ce6dbbf1ef514e1977fc39bb009b121e65e7794b8f46ead30aae1"
+          },
+          {
+            "bytes": 466917,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o32_c1__fixed_runtime__b00.json",
+            "sha256": "eb71898c9f403f5cc8aaf2e505aed7645cc828668150cd1bd2d40f5d206bf5c2"
+          },
+          {
+            "bytes": 2543221,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o128_c4__fixed_runtime__b00.json",
+            "sha256": "514d36ab2663d2d780a1611bc2908e5f88f6980deb28394c5166c72f663b8ba1"
+          },
+          {
+            "bytes": 421036,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o32_c1__fixed_runtime__b00.json",
+            "sha256": "917ea55fddb408df366b016db13c899e6b2f803d36a9e89eedde58ea3415b221"
+          },
+          {
+            "bytes": 591991,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o32_c1__fixed_runtime__b00.json",
+            "sha256": "88648eca2136ec1c9692a0fd83da15ee31c9e7505c8b1dda81d249ca5a243b9d"
+          },
+          {
+            "bytes": 2472538,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o256_c2__fixed_runtime__b00.json",
+            "sha256": "82e9b432ba6d0d164dbc01b14843a32dcbfd99304f41563a5831fe8482a9c6b5"
+          },
+          {
+            "bytes": 1305494,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o256_c1__fixed_runtime__b00.json",
+            "sha256": "dd0342125799263fc15a3a8af07e395dd9c12ddc524d7294dfd10e62d45a84a3"
+          },
+          {
+            "bytes": 1028341,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o32_c4__fixed_runtime__b00.json",
+            "sha256": "f5513746cd3671f16f9c31c2fca73f7c41dfd78baa3a2a8fff129002ed311aa5"
+          },
+          {
+            "bytes": 623438,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o32_c2__fixed_runtime__b00.json",
+            "sha256": "7a9bef64fba33e1cdcd193f6c137a21ef579a9dd3898bdefb3a63affd5fd1f56"
+          },
+          {
+            "bytes": 4565048,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o256_c4__fixed_runtime__b00.json",
+            "sha256": "0fe256607a4e7c6e06ec2db0251e34e294da2bdb21b1d0a1fa64340a6fc00fa3"
+          },
+          {
+            "bytes": 4710030,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o256_c4__fixed_runtime__b00.json",
+            "sha256": "295df303a71f10d0f115135351ea05f781542339ddfa640b732b5c5f6e9eb521"
+          },
+          {
+            "bytes": 846201,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o128_c1__fixed_runtime__b00.json",
+            "sha256": "ee3bc4737ed0115b61398844f9a8b378e641fe5051dbd60cb48ff75b81fe97ad"
+          },
+          {
+            "bytes": 701653,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o32_c2__fixed_runtime__b00.json",
+            "sha256": "533da9d94772a28bbc3df1bd2b48ef1234c5475871cc0fd49c1a2550363f3686"
+          },
+          {
+            "bytes": 2688612,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o256_c2__fixed_runtime__b00.json",
+            "sha256": "9b5ea68625af5ca8a45b6028ee00b22211efd70b26355e4489ebb12f9091d515"
+          },
+          {
+            "bytes": 1381054,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o128_c2__fixed_runtime__b00.json",
+            "sha256": "bca37cb20fd221d6bc18c671db690fdb695e52b4cc6e1ffb49a13bd1bcbf9af4"
+          },
+          {
+            "bytes": 1169005,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p512_o32_c4__fixed_runtime__b00.json",
+            "sha256": "2a2bafad3486962b42a3bc06ed364cb5526a287f63472af60e9a800cf78c3804"
+          },
+          {
+            "bytes": 800052,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p128_o128_c1__fixed_runtime__b00.json",
+            "sha256": "477f4e62dee1f6ab1abd19bf97c310f5a21c20c7ec07c318f2a7934f7b993fad"
+          },
+          {
+            "bytes": 1550290,
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\formal_readonly\\native\\qwen38_gpu_p1536_o32_c4__fixed_runtime__b00.json",
+            "sha256": "730d97be7b8ef51499894bf0a6717a8b6a8fcf10d0f6bff26db560a61f43a3ef"
+          }
+        ],
+        "native_remeasurement_allowed_in_this_loop": false,
+        "native_selected_cells": 131,
+        "native_selection_ref": {
+          "bytes": 9290976,
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
+          "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5"
+        },
+        "next_round_hypothesis": "Complete sampling policy three-way anchors, then source-bound CPU sampling microbench; graph matrix quality0/6 no calibration.",
+        "operator_microbenchmark": {
+          "calibration_eligible": false,
+          "compatibility_gate_passed": false,
+          "launch_sync_diagnostic": {
+            "coefficient_candidate": null,
+            "formal_samples": 480,
+            "invalid_sample_count": 0,
+            "native_llm_run": false,
+            "profile_updated": false,
+            "qpc_resolution_note": "Consecutive QPC-read median was zero ticks; this does not prove zero observation overhead. Preserve raw controls and do not derive a correction coefficient.",
+            "recorded_utc": "2026-09-15T17:07:33.567738+00:00",
+            "result": "all_raw_valid_all16_diagnostic_strata_unresolved",
+            "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\launch_probe\\runs\\20260915T170407248390Z\\diagnostic_summary.json",
+            "stable_all_metric_strata": 0,
+            "strata_count": 16,
+            "timing_note": "Host wall and device event span contain overlapping intervals; fixed protocol forbids adding them or claiming event span is pure kernel sum.",
+            "warmup_samples": 160
+          },
+          "profile_runs": 1,
+          "scope": "synthetic diagnostic only",
+          "source_commit": "ff9ca8daa462254e232c4dea4705be2ffcc375a7",
+          "stream_event_probe": {
+            "coefficient_candidate": null,
+            "decision": "round_007/stream_probe_decision.json",
+            "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\operator_microbench_v2\\stream_event_probe",
+            "llm_actual_fit": false,
+            "scheduled_after_simulator_idle": true,
+            "source_scope": "single synthetic MUL_MAT actual backend stream event envelope",
+            "status": "measured_all_quality_rejected"
+          },
+          "unprofiled_controls": 1
+        },
+        "original_grid_denominator": 162,
+        "rounds": [
+          {
+            "anchor_evaluation_completed_utc": "2026-09-15T14:09:42.853060+00:00",
+            "anchor_result": "Mixed scheduling fixes output-dependent prompt starvation. All unaffected controls equal. CPU27B C4 E2E regresses; full regression required; not an acceptance pass.",
+            "anchors": [
+              "qwen38_gpu_p128_o128_c4__fixed_runtime",
+              "qwen38_gpu_p128_o256_c4__fixed_runtime",
+              "qwen38_gpu_p512_o32_c2__fixed_runtime",
+              "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+              "qwen35_p128_o128_c4__fixed_runtime",
+              "qwen35_p128_o256_c4__fixed_runtime",
+              "qwen35_p512_o256_c2__fixed_runtime",
+              "qwen38_p1536_o128_c1__fixed_runtime",
+              "qwen38_p128_o32_c4__fixed_runtime",
+              "qwen25_p1536_o128_c4__fixed_runtime",
+              "tinyllama_p128_o128_c4__fixed_runtime",
+              "smollm2_p512_o32_c2__fixed_runtime"
+            ],
+            "baseline_equals_v2_all_primary_metrics": true,
+            "baseline_freeze_ref": {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\baseline\\freeze.json",
+              "sha256": "bec4006b04ecdd7a37c1c641037ba55b321f77d366309bddab76153c550ffc97"
+            },
+            "calibrated_control": "unavailable: no identity-qualified old profile; never force it onto current native.",
+            "candidate_freeze_ref": {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate\\freeze.json",
+              "sha256": "f9f4205712ea144276a33ea120e1050967c995087d6a66faaf3295bd8314c924"
+            },
+            "completed_cells": 131,
+            "completed_utc": "2026-09-15T14:37:57.781458+00:00",
+            "dataset_partition_note": "Diagnostic anchors vs within-development regression; all 131 were previously disclosed, not independent validation.",
+            "decision_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\decision.json",
+            "errors_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate\\errors.0002.json",
+            "evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\recurrent_source_contract.json",
+            "failed_cells": 0,
+            "full_evaluation_started": true,
+            "hypothesis": "The recurrent mixed-batch gate disables native-supported equal-length hybrid ubatches and serializes later prefill behind prior decode. Enable only source-qualified equal-length stateful batches; do not change metric anchors or costs.",
+            "paired_anchors_scored": 12,
+            "regression_cell_ids": [
+              "qwen25_p1536_o256_c4__fixed_runtime",
+              "qwen25_p512_o256_c1__fixed_runtime",
+              "qwen25_p1536_o128_c1__fixed_runtime",
+              "qwen25_p1536_o256_c2__fixed_runtime",
+              "qwen25_p128_o128_c4__fixed_runtime",
+              "qwen25_p512_o256_c2__fixed_runtime",
+              "qwen25_p512_o256_c4__fixed_runtime",
+              "qwen25_p1536_o32_c2__fixed_runtime",
+              "qwen25_p1536_o256_c1__fixed_runtime",
+              "qwen25_p128_o32_c4__fixed_runtime",
+              "qwen25_p512_o32_c4__fixed_runtime",
+              "qwen25_p128_o256_c2__fixed_runtime",
+              "qwen25_p512_o32_c1__fixed_runtime",
+              "qwen25_p512_o128_c1__fixed_runtime",
+              "qwen25_p512_o32_c2__fixed_runtime",
+              "qwen25_p1536_o32_c1__fixed_runtime",
+              "smollm2_p1536_o256_c4__fixed_runtime",
+              "smollm2_p128_o32_c1__fixed_runtime",
+              "smollm2_p1536_o128_c4__fixed_runtime",
+              "smollm2_p128_o128_c2__fixed_runtime",
+              "smollm2_p512_o256_c4__fixed_runtime",
+              "smollm2_p128_o256_c1__fixed_runtime",
+              "smollm2_p1536_o256_c1__fixed_runtime",
+              "smollm2_p1536_o32_c2__fixed_runtime",
+              "smollm2_p512_o256_c1__fixed_runtime",
+              "smollm2_p1536_o128_c2__fixed_runtime",
+              "smollm2_p1536_o32_c1__fixed_runtime",
+              "smollm2_p128_o256_c4__fixed_runtime",
+              "smollm2_p512_o128_c2__fixed_runtime",
+              "smollm2_p512_o32_c1__fixed_runtime",
+              "smollm2_p512_o128_c4__fixed_runtime",
+              "smollm2_p128_o256_c2__fixed_runtime",
+              "smollm2_p512_o256_c2__fixed_runtime",
+              "smollm2_p512_o32_c4__fixed_runtime",
+              "smollm2_p1536_o32_c4__fixed_runtime",
+              "smollm2_p512_o128_c1__fixed_runtime",
+              "smollm2_p1536_o256_c2__fixed_runtime",
+              "smollm2_p1536_o128_c1__fixed_runtime",
+              "tinyllama_p1536_o128_c2__fixed_runtime",
+              "tinyllama_p512_o256_c2__fixed_runtime",
+              "tinyllama_p128_o256_c1__fixed_runtime",
+              "tinyllama_p1536_o256_c2__fixed_runtime",
+              "tinyllama_p512_o256_c1__fixed_runtime",
+              "tinyllama_p128_o128_c1__fixed_runtime",
+              "tinyllama_p512_o128_c4__fixed_runtime",
+              "tinyllama_p1536_o128_c1__fixed_runtime",
+              "tinyllama_p512_o128_c2__fixed_runtime",
+              "tinyllama_p512_o128_c1__fixed_runtime",
+              "tinyllama_p512_o32_c2__fixed_runtime",
+              "tinyllama_p512_o32_c4__fixed_runtime",
+              "tinyllama_p1536_o256_c1__fixed_runtime",
+              "tinyllama_p128_o32_c1__fixed_runtime",
+              "tinyllama_p128_o256_c2__fixed_runtime",
+              "tinyllama_p512_o256_c4__fixed_runtime",
+              "tinyllama_p128_o256_c4__fixed_runtime",
+              "tinyllama_p512_o32_c1__fixed_runtime",
+              "tinyllama_p1536_o32_c4__fixed_runtime",
+              "tinyllama_p128_o128_c2__fixed_runtime",
+              "tinyllama_p1536_o32_c2__fixed_runtime",
+              "qwen35_p1536_o256_c4__fixed_runtime",
+              "qwen35_p512_o128_c1__fixed_runtime",
+              "qwen35_p128_o256_c1__fixed_runtime",
+              "qwen35_p128_o32_c4__fixed_runtime",
+              "qwen35_p128_o32_c1__fixed_runtime",
+              "qwen35_p1536_o32_c4__fixed_runtime",
+              "qwen35_p512_o256_c1__fixed_runtime",
+              "qwen35_p1536_o128_c2__fixed_runtime",
+              "qwen35_p512_o256_c4__fixed_runtime",
+              "qwen35_p1536_o256_c2__fixed_runtime",
+              "qwen35_p128_o128_c1__fixed_runtime",
+              "qwen35_p1536_o128_c1__fixed_runtime",
+              "qwen35_p512_o32_c2__fixed_runtime",
+              "qwen35_p512_o32_c4__fixed_runtime",
+              "qwen35_p512_o128_c2__fixed_runtime",
+              "qwen35_p1536_o128_c4__fixed_runtime",
+              "qwen35_p128_o32_c2__fixed_runtime",
+              "qwen35_p128_o128_c2__fixed_runtime",
+              "qwen35_p512_o32_c1__fixed_runtime",
+              "qwen38_p512_o256_c1__fixed_runtime",
+              "qwen38_p512_o128_c2__fixed_runtime",
+              "qwen38_p128_o256_c2__fixed_runtime",
+              "qwen38_p1536_o32_c2__fixed_runtime",
+              "qwen38_p512_o128_c4__fixed_runtime",
+              "qwen38_p512_o32_c1__fixed_runtime",
+              "qwen38_p128_o32_c1__fixed_runtime",
+              "qwen38_p1536_o32_c1__fixed_runtime",
+              "qwen38_p128_o256_c1__fixed_runtime",
+              "qwen38_p128_o32_c2__fixed_runtime",
+              "qwen38_p128_o256_c4__fixed_runtime",
+              "qwen38_p512_o256_c4__fixed_runtime",
+              "qwen38_p512_o128_c1__fixed_runtime",
+              "qwen38_p512_o32_c2__fixed_runtime",
+              "qwen38_p1536_o256_c2__fixed_runtime",
+              "qwen38_p128_o128_c2__fixed_runtime",
+              "qwen38_p128_o128_c1__fixed_runtime",
+              "qwen38_p1536_o32_c4__fixed_runtime",
+              "qwen38_gpu_p1536_o256_c4__fixed_runtime",
+              "qwen38_gpu_p1536_o128_c2__fixed_runtime",
+              "qwen38_gpu_p1536_o128_c1__fixed_runtime",
+              "qwen38_gpu_p512_o256_c1__fixed_runtime",
+              "qwen38_gpu_p512_o128_c2__fixed_runtime",
+              "qwen38_gpu_p1536_o256_c1__fixed_runtime",
+              "qwen38_gpu_p128_o256_c2__fixed_runtime",
+              "qwen38_gpu_p1536_o32_c2__fixed_runtime",
+              "qwen38_gpu_p512_o128_c4__fixed_runtime",
+              "qwen38_gpu_p1536_o128_c4__fixed_runtime",
+              "qwen38_gpu_p512_o32_c1__fixed_runtime",
+              "qwen38_gpu_p128_o32_c1__fixed_runtime",
+              "qwen38_gpu_p1536_o32_c1__fixed_runtime",
+              "qwen38_gpu_p512_o256_c2__fixed_runtime",
+              "qwen38_gpu_p128_o256_c1__fixed_runtime",
+              "qwen38_gpu_p128_o32_c4__fixed_runtime",
+              "qwen38_gpu_p128_o32_c2__fixed_runtime",
+              "qwen38_gpu_p512_o256_c4__fixed_runtime",
+              "qwen38_gpu_p512_o128_c1__fixed_runtime",
+              "qwen38_gpu_p1536_o256_c2__fixed_runtime",
+              "qwen38_gpu_p128_o128_c2__fixed_runtime",
+              "qwen38_gpu_p512_o32_c4__fixed_runtime",
+              "qwen38_gpu_p128_o128_c1__fixed_runtime"
+            ],
+            "round": 1,
+            "same_source_content": true,
+            "status": "complete_targets_failed_semantic_candidate_retained",
+            "structural_tests_passed": 27
+          },
+          {
+            "actual_timing_effect": false,
+            "anchors": [
+              "qwen38_p1536_o128_c1__fixed_runtime",
+              "qwen38_p128_o32_c4__fixed_runtime",
+              "qwen38_gpu_p128_o128_c4__fixed_runtime"
+            ],
+            "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\baseline",
+            "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate",
+            "completed_anchor_cells": 3,
+            "decision_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\decision.json",
+            "full_evaluation_started": false,
+            "hypothesis": "Source IQ panel unpack reused across physical M; apply only qualified CPU F32 projections. Historical disable switch unknown, so conditional default-unset ablation only.",
+            "round": 2,
+            "status": "no_effect_deferred_until_source_storage_parity"
+          },
+          {
+            "anchors": [
+              "qwen38_gpu_p128_o128_c4__fixed_runtime",
+              "qwen38_gpu_p128_o256_c4__fixed_runtime",
+              "qwen38_gpu_p512_o32_c2__fixed_runtime",
+              "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+              "qwen35_p128_o128_c4__fixed_runtime",
+              "qwen35_p128_o256_c4__fixed_runtime",
+              "qwen35_p512_o256_c2__fixed_runtime",
+              "qwen38_p1536_o128_c1__fixed_runtime",
+              "qwen38_p128_o32_c4__fixed_runtime",
+              "qwen25_p1536_o128_c4__fixed_runtime",
+              "tinyllama_p128_o128_c4__fixed_runtime",
+              "smollm2_p512_o32_c2__fixed_runtime"
+            ],
+            "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\baseline",
+            "baseline_equals_round1": true,
+            "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_003\\candidate",
+            "comparison_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_003\\paired_anchor_comparison.json",
+            "completed_anchor_cells": 12,
+            "completed_utc": "2026-09-15T15:00:26.486990+00:00",
+            "decision": "Keep source-qualified fresh-slot semantics in development; no accuracy promotion. Slot order changes physical mixed-batch frequency and exposes unresolved costs. Correct current runtime offload and storage before spending the next full131 evaluation.",
+            "full_evaluation_started": false,
+            "hypothesis": "Fixed fresh-cohort slot traversal rather than least-recently-served prompt chunks. Existing engine start event follows first actual eligible prompt processing.",
+            "round": 3,
+            "status": "paired_anchors_complete_semantics_retained_accuracy_failed"
+          },
+          {
+            "anchors": [
+              "qwen38_p1536_o128_c1__fixed_runtime",
+              "qwen38_p128_o32_c4__fixed_runtime",
+              "qwen38_p512_o128_c2__fixed_runtime",
+              "qwen38_p128_o256_c1__fixed_runtime",
+              "qwen38_gpu_p128_o128_c4__fixed_runtime",
+              "qwen25_p1536_o128_c4__fixed_runtime"
+            ],
+            "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\baseline",
+            "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\candidate",
+            "commit": "69273ca7c3e2a011701be394caad84d2280d91d8",
+            "comparison_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\paired_anchor_comparison.json",
+            "completed_anchor_cells": 6,
+            "completed_utc": "2026-09-15T15:43:35.973991+00:00",
+            "decision": "Retain current-runtime source binding: large CPU-weight prefill error reduced without latency fitting; GPU controls identical. 1 of 6 anchor cells meets all3<10, not a full-group or independent acceptance. Proceed to storage ablation before full131.",
+            "failed_anchor_cells": 0,
+            "full_evaluation_started": false,
+            "hypothesis": "Bind inherited current CUDA backend to captured host-weight offload policy and its required F32 storage; preserve static ownership and per-call transfers.",
+            "native_dispatch_proven": false,
+            "pending_version_control": false,
+            "push_status": "pushed_origin_main",
+            "round": 4,
+            "status": "paired_anchors_complete_mechanism_retained"
+          },
+          {
+            "accuracy_promotion": false,
+            "all3_strict_below10_cells": 6,
+            "anchors": [
+              "qwen38_gpu_p128_o128_c4__fixed_runtime",
+              "qwen38_gpu_p128_o256_c4__fixed_runtime",
+              "qwen38_gpu_p512_o32_c2__fixed_runtime",
+              "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+              "qwen35_p128_o128_c4__fixed_runtime",
+              "qwen35_p128_o256_c4__fixed_runtime",
+              "qwen35_p512_o256_c2__fixed_runtime",
+              "qwen38_p1536_o128_c1__fixed_runtime",
+              "qwen38_p128_o32_c4__fixed_runtime",
+              "qwen25_p1536_o128_c4__fixed_runtime",
+              "tinyllama_p128_o128_c4__fixed_runtime",
+              "smollm2_p512_o32_c2__fixed_runtime",
+              "qwen38_p512_o128_c2__fixed_runtime",
+              "qwen38_p128_o256_c1__fixed_runtime"
+            ],
+            "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\baseline",
+            "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\f32_and_gather",
+            "completed_full_cells": 131,
+            "completed_repaired_anchor_cells": 14,
+            "full_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\f32_and_gather_r2",
+            "full_evaluation": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\full_evaluation.json",
+            "full_evaluation_completed": true,
+            "full_evaluation_started": true,
+            "gather_only": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\gather_only",
+            "hypothesis": "Source GET_ROWS reads selected packed rows plus indices and writes F32; full-table capacity is not per-call traffic. Full F32 hidden storage is a separate treatment.",
+            "known_limits": [
+              "embedding dequantization is still unpriced",
+              "cache-line/page/write-allocation effects unproved"
+            ],
+            "original_run_status": "zero_applied_due_nested_gguf_metadata_bug_preserved",
+            "repair_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\repair_source",
+            "repaired_baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\baseline_r2",
+            "repaired_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\f32_and_gather_r2",
+            "repaired_gather_only": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_005\\gather_only_r2",
+            "round": 5,
+            "selection_reason": "Full F32 storage is the source-qualified semantic treatment. Gather-only has lower error on some GPU cells, but does not correct activation storage; keep as ablation, not selected by latency fit.",
+            "status": "full131_complete_mechanism_retained_accuracy_failed",
+            "structural_regressions_passed": 133
+          },
+          {
+            "all3_strict_below10_cells": 9,
+            "anchors": [
+              "qwen25_p1536_o128_c4__fixed_runtime",
+              "qwen25_p512_o32_c1__fixed_runtime",
+              "tinyllama_p128_o128_c4__fixed_runtime",
+              "tinyllama_p512_o32_c1__fixed_runtime",
+              "smollm2_p512_o32_c2__fixed_runtime",
+              "qwen35_p128_o128_c4__fixed_runtime",
+              "qwen35_p512_o256_c2__fixed_runtime",
+              "qwen38_gpu_p128_o128_c4__fixed_runtime",
+              "qwen38_gpu_p512_o32_c2__fixed_runtime",
+              "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+              "qwen38_p512_o128_c2__fixed_runtime",
+              "qwen38_p1536_o128_c1__fixed_runtime"
+            ],
+            "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\baseline",
+            "baseline_all12_exact_equal_round5": true,
+            "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq",
+            "completed_anchor_cells_per_treatment": 12,
+            "completed_before_deadline": true,
+            "edge_case_review_repairs_pending": 0,
+            "frozen_files_unchanged_verified": 315,
+            "full_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
+            "full_evaluation_completed": true,
+            "full_evaluation_started": true,
+            "full_started_utc": "2026-09-15T17:31:12.005230+00:00",
+            "hypothesis": "Map physical CUDA projection/fusion boundaries; separately price source MMQ conversion, matrix, and fixup. Keep unsupported MMVQ and fused branches explicit.",
+            "identity_rejected_cells": 2,
+            "mapping_only": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping",
+            "native_dispatch_proven": false,
+            "native_prediction_completed_local": "2026-09-16T02:13:33.920+08:00",
+            "paired_anchor_comparison": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\paired_anchor_comparison.json",
+            "repaired_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
+            "repaired_controls_exact_equal": 3,
+            "repaired_source_contract": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\repaired_source_contract.json",
+            "round": 6,
+            "scored_cells": 129,
+            "selection_reason": "Physical source geometry plus independently derived MMQ terms; unsupported MMVQ remains analytic. Choose source-cost mechanism for full regression, not a scenario-fit coefficient.",
+            "static_control_comparisons_passed": 72,
+            "status": "completed_accuracy_failed_with_two_identity_rejections",
+            "unpriced_terms": [
+              "MMVQ throughput",
+              "conversion instruction costs",
+              "graph entry/launch/synchronization service"
+            ],
+            "validation": "150 combined regression checks passed; 2 obsolete-source-contract tests rejected correctly, fixture now re-derives current contract and verifies historical rejection; both updated tests passed."
+          },
+          {
+            "decision": "round_007/decision.json",
+            "full_evaluation": false,
+            "predicted_cells": 2,
+            "round": 7,
+            "status": "completed_integrity_retained_accuracy_failed"
+          },
+          {
+            "accepted_microbenchmark_configs": 2,
+            "decision": "round_008/decision.json",
+            "full_evaluation": false,
+            "round": 8,
+            "status": "completed_diagnostic_rejected_no_cost_fit",
+            "supplemental_integrity_passed": true,
+            "total_microbenchmark_configs": 12
+          },
+          {
+            "evidence": "round_009/source_reference_diagnosis.json",
+            "full_evaluation": false,
+            "round": 9,
+            "status": "reference_path_diagnosed_no_cost_fit",
+            "synthetic_configs": 6
+          },
+          {
+            "accepted_configs": 4,
+            "decision": "round_010/decision.json",
+            "full_evaluation": false,
+            "round": 10,
+            "status": "dual_reference_complete_timing_rejected",
+            "total_configs": 12
+          },
+          {
+            "evidence": "round_011/variability_decomposition.json",
+            "full_evaluation": false,
+            "round": 11,
+            "status": "variability_decomposed_no_fit"
+          },
+          {
+            "decision": "round_012/decision.json",
+            "full_evaluation": false,
+            "round": 12,
+            "status": "long_window_diagnostic_passed_not_calibration"
+          },
+          {
+            "accuracy_failed_cells": 120,
+            "evidence": "round_013/gate_r6_v2.json",
+            "full_evaluation": false,
+            "insufficient_evidence_cells": 2,
+            "passed_cells": 9,
+            "round": 13,
+            "status": "strict_A_gate_implemented_accuracy_failed"
+          },
+          {
+            "candidate": "round_014/tail_candidate_r2",
+            "controls_unchanged": true,
+            "decision": "round_014/comparison_r2.json",
+            "mechanism": "logical K vs conversion padding vs execution extent and stream-K boundaries",
+            "native_remeasurement": false,
+            "round": 14,
+            "scheduled_cells": 20,
+            "status": "completed_source_fix_accuracy_failed"
+          },
+          {
+            "decision": "round_015/decision.json",
+            "full_evaluation": false,
+            "native_remeasurement": false,
+            "round": 15,
+            "status": "compatible_trace_completed_not_calibration"
+          },
+          {
+            "analytical_prediction_sha256": "66da88e6b8d24a1728945ddb17454ba42d028ec524f7b118fb3b175f1acb3c20",
+            "collection_freeze_sha256": "a79996cdc181000b24fa3373ff9675b510ec00ebed9ed59cac79f16d3f4f9a76",
+            "collection_revision": "round_016/collection_r3",
+            "first_mmq_pair_cost_eligible": false,
+            "first_mmq_pair_numeric_dispatch_clock_pass": true,
+            "first_pair_calibration_pass": false,
+            "first_pair_numeric_dispatch_clock_pass": true,
+            "first_pair_rejection": "direct_host_p90_p10_above_1.5",
+            "llm_accuracy_changed": false,
+            "mechanism": "exact joint kernel keys with raw evidence semantic validation; synthetic 26-shape device interval collection",
+            "native_remeasured": false,
+            "new_collection_result": {
+              "accepted_configs": 0,
+              "all_children_exited": true,
+              "clocks_restored": true,
+              "completed_stages": 145,
+              "completed_success": 132,
+              "identity_failed": 1,
+              "numeric_failed": 12,
+              "planned_pairs": 78,
+              "planned_stages": 234,
+              "stop_reason": "formal_clock_bracket_too_wide",
+              "successful_pairs": 42
+            },
+            "prior_collection_status": {
+              "accepted_configs": 0,
+              "all_children_exited": true,
+              "clocks_restored": true,
+              "complete_pairs": 8,
+              "completed_stages": 25,
+              "planned_pairs": 78,
+              "planned_stages": 234,
+              "revision": "collection_r2"
+            },
+            "prior_probe_failure": "r2 strict module identity rejected unloaded ggml.dll before timing; old records retained",
+            "probe_manifest_sha256": "3ba824ac8617394a826c4938fe5cf3756e4776cdf9b112f7c8f141b6ba4c44a0",
+            "probe_revision": "round_016/operator_probe/r3",
+            "resolver_tests": {
+              "full": 141,
+              "subsequent_actual_schema_targeted": 13
+            },
+            "round": 16,
+            "status": "completed_diagnostic_collection_no_calibration",
+            "updated_utc": "2026-09-16T04:15:36.359215+00:00"
+          },
+          {
+            "changed_metrics": 0,
+            "common_anchor_cells": 20,
+            "compared_metrics": 60,
+            "decision": "keep_default_off_structural_cap_and_query_ledger; no_accuracy_promotion; proceed_graph_submission_evidence",
+            "hypothesis": "Explicit conversion CTA resource upperbound and vector CTA geometry; complete staticquery coverage; no calibration from rejected evidence",
+            "native_remeasured": false,
+            "round": 17,
+            "status": "completed_source_cap_no_accuracy_effect",
+            "strict_A": {
+              "accuracy_failed": 20,
+              "insufficient_evidence": 111,
+              "passed": 0,
+              "passing_metrics": 2
+            },
+            "updated_utc": "2026-09-16T04:47:44.155306+00:00"
+          },
+          {
+            "graph_configs_quality_accepted": 0,
+            "graph_controller_clock_reset_success": true,
+            "graph_pairs_completed": 18,
+            "graph_stage_count": 54,
+            "native_remeasured": false,
+            "root_tests": {
+              "graph_collector_and_independent_review": 39,
+              "predictor_and_hardware": 139,
+              "sampling_core_and_validator": 68
+            },
+            "round": 18,
+            "sampling_contract_cells": 131,
+            "status": "frozen_three_way_anchor_predictions_running",
+            "updated_utc": "2026-09-16T05:56:32.214505+00:00"
+          }
+        ],
+        "schema": "fixed-native-optimization-loop/v1",
+        "stage_history": [
+          {
+            "previous_budget": {
+              "deadline_utc": "2026-09-16T06:22:41.555440+00:00",
+              "max_full_131_evaluations": 4,
+              "max_mechanism_rounds": 6,
+              "max_wall_seconds": 28800,
+              "per_cell_timeout_seconds": 600,
+              "prediction_workers": 4,
+              "start_utc": "2026-09-15T22:22:41.555440+00:00",
+              "starting_full_evaluations_completed": 3,
+              "starting_round": 7
+            },
+            "reason": "user-authorized continue until both declared goals; prior six rounds completed",
+            "transition": "automatic_review_checkpoint"
+          }
+        ],
+        "status": "active_round_018_sampling_three_way_frozen_prediction",
+        "targets": {
+          "acceptance_unit": "each_cell_each_engine_metric_separately_for_development_and_independent_acceptance",
+          "also_report_strict_all3_below10_cells": true,
+          "development_gate": {
+            "evidence_role": "initial_screen_development_regression",
+            "formal_acceptance": false,
+            "required_cells": 131,
+            "required_metric_values": 393,
+            "threshold_pct_strict": 10
+          },
+          "every_cell_every_metric_ape_pct_strict": 10,
+          "fixed_set_prediction_coverage_min_pct": 100,
+          "formal_gate": {
+            "cross_hardware_required_for_single_hardware_claim": false,
+            "independent_set_required": true,
+            "joint_confidence_level": 0.95,
+            "registered_domain_required": true,
+            "sampling_plan_frozen_before_collection": true,
+            "threshold_pct_strict": 10,
+            "uncertainty_crossing_threshold": "insufficient_evidence"
+          },
+          "group_statistics_are_diagnostic": true,
+          "missing_failed_nonfinite_or_insufficient_evidence_passes": false,
+          "required_cells": 131,
+          "required_metric_values": 393,
+          "rounding_before_comparison": false,
+          "single_frozen_version_required": true,
+          "verdicts": [
+            "passed",
+            "accuracy_failed",
+            "insufficient_evidence",
+            "unvalidated"
+          ]
+        },
+        "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
+        "version_control_policy": {
+          "effective_utc": "2026-09-15T15:14:39.539409+00:00",
+          "enabled": true,
+          "exclude": "unrelated/WIP edits; GGUF; runtime binaries; large native raw and traces",
+          "force_push_allowed": false,
+          "per_completed_optimization": "local_commit_then_push_current_github_upstream",
+          "scope": "completed round code, relevant tests, task brief, compact evidence only",
+          "user_authorized": true
+        },
+        "version_control_receipts": [
+          {
+            "commit": "de26d58ce5da7ae43e5224b87f4fb520af7c98ec",
+            "kind": "policy",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "715a083dedbcaba4f42c63104c499e8854f85fd9",
+            "kind": "completed_backend_checkpoint_through_round3",
+            "pushed_to": "origin/main",
+            "status": "pushed",
+            "validation": "143 portable tests passed; 17 local-data integration tests explicitly skipped in isolated tree; prior local data tests passed",
+            "verified_utc": "2026-09-15T15:36:26.455376+00:00"
+          },
+          {
+            "commit": "69273ca7c3e2a011701be394caad84d2280d91d8",
+            "kind": "round_004",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "ff9ca8daa462254e232c4dea4705be2ffcc375a7",
+            "kind": "generic_operator_diagnostic_tooling",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "216fb8bec5c1e75370ace4ead40f979631439138",
+            "kind": "round_005",
+            "pushed_to": "origin/main",
+            "status": "pushed",
+            "validation": "128 staged portable passed; 21 explicit local-native data skips; local related 133 passed; 131/131 predictions scored; native hashes unchanged",
+            "verified_utc": "2026-09-15T16:57:22.193514+00:00"
+          },
+          {
+            "commit": "5270301a086d4deebafc8b1c190bab8139a176e1",
+            "kind": "independent_launch_diagnostic_and_explicit_report_tool",
+            "pushed_to": "origin/main",
+            "status": "pushed",
+            "verified_utc": "2026-09-15T17:16:50.919958+00:00"
+          },
+          {
+            "commit": "bd729aa4a4011c8fa6766774259dd9d9bb550e6f",
+            "kind": "round_006",
+            "pushed_to": "origin/main",
+            "status": "pushed",
+            "verified_utc": "2026-09-15T22:09:19.867555+00:00"
+          },
+          {
+            "commit": "1f0c7650d92a91c234f5fe1df6d2a17e6e5150fa",
+            "kind": "round_007",
+            "pushed_to": "origin/main",
+            "status": "pushed",
+            "verified_utc": "2026-09-15T22:42:00.225547+00:00"
+          },
+          {
+            "commit": "edf9b410ce05b0849ccba66efe756be165cd2eca",
+            "kind": "round_008",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "3b6b1481fbde9aae42f51122b4310ce7f73d4281",
+            "kind": "round_009",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "83f645271083cb3d6804ce921690b269ad839e9d",
+            "kind": "round_010",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "78cecc23a5ab354639fa98f738f7d405bacd0411",
+            "kind": "round_011",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "6e74a99feaef12fcf115a071478b751e03c95b36",
+            "kind": "round_013",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "622a80d3c3dd031f999219653726e9378ee59c46",
+            "kind": "round_013_provenance",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "140b9aa3fcc802023b6bb047f99c2c325a915419",
+            "kind": "round_015",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          },
+          {
+            "commit": "a636137218f90728ad6709558e38ae4d9d2be657",
+            "kind": "round_014",
+            "pushed_to": "origin/main",
+            "status": "pushed"
+          }
+        ]
+      },
+      "original_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\state.json",
+        "sha256": "c77d73f1339326fa4fd8f8c9a67000293b0b1a42a626341fc167a393812ac482",
+        "bytes": 78802
+      },
+      "scope": "Historical audit input; later intentional changes to the live state do not change this embedded snapshot."
+    }
+  }
+}

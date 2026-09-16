@@ -1,0 +1,43 @@
+{
+  "schema": "sampling-regression-completion/v1",
+  "review": "R18 sampling integration independent review",
+  "completed_on": "2026-09-16",
+  "status": "passed",
+  "focused_pytest": {
+    "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_sampling_binding_replan.py",
+    "result": "1 passed in 0.48s",
+    "passed_tests": 1,
+    "failed_tests": 0
+  },
+  "regression": {
+    "test_file": "tests/test_sampling_binding_replan.py",
+    "test_file_sha256": "7000ffddbb6e8a9e5b3e4db8cfb66c92da16e444df8c1c008282f39e343ec68a",
+    "test_name": "test_real_static_replan_preserves_typed_top_k_one_sampling_policy",
+    "real_functions": [
+      "tools.native_llama_compare.build_matching_scenario",
+      "tools.predict_stable_native_dataset.replan_final_static_scenario"
+    ],
+    "fixture": "fixed RTX 5080/9950X3D hardware snapshot derived from test_native_hardware_parity",
+    "typed_policy": {
+      "mode": "greedy",
+      "temperature": 0.0,
+      "implementation": "llama_cpp_cpu_chain",
+      "top_k": 1,
+      "top_p": 0.95,
+      "min_p": 0.05,
+      "min_keep": 0
+    },
+    "assertions": [
+      "The authored scenario retains the complete typed policy.",
+      "The scenario returned by the real static replan retains the complete typed policy.",
+      "The llama_cpp_cpu_chain, top_k=1, and min_keep=0 fields remain exact.",
+      "Replan evidence reports the typed runtime placement method and successful normal validation.",
+      "The focused test fails if replan attempts to call run_scenario."
+    ],
+    "execution_boundary": {
+      "run_scenario_invoked": false,
+      "native_process_invoked": false,
+      "gpu_or_llm_execution_invoked": false
+    }
+  }
+}

@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.model_presets import materialize_model_payload
-from heterollm_sim.config import model_from_dict
+from heterollm_sim.config import SamplingPolicy, model_from_dict
 from heterollm_sim.ir import model_graph_execution_view
 from heterollm_sim.reporting import run_scenario
 from heterollm_sim.runtime_adapters import (LlamaCppRuntimeConfig, derive_llama_cuda_op_offload_contract, apply_llama_cuda_op_offload)
@@ -1101,13 +1101,16 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
                             op_offload: bool = True,
                             runtime_binary: str | Path | None = None,
                             runtime_environment: Mapping[str, str | None] | None = None,
-                            cuda_backend_available: bool | None = None):
+                            cuda_backend_available: bool | None = None,
+                            sampling_policy: SamplingPolicy | None = None):
     """Build a parity scenario using measured physical host inputs.
 
     The optional snapshot keeps legacy callers working while allowing the
     matrix runner to bind VRAM, host memory, and negotiated PCIe facts.  Cost
     efficiencies stay analytical and are never inferred from timing errors.
     """
+    if sampling_policy is not None and not isinstance(sampling_policy, SamplingPolicy):
+        raise ValueError("sampling_policy must be a typed SamplingPolicy or None")
     measured = _hardware_inputs(hardware_snapshot)
     if threads == -1:
         threads = measured.get("logical_processors")
@@ -1310,7 +1313,7 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
         "gpu_identity": measured["gpu_name"],
         "hardware_fingerprint": _hardware_fingerprint(hardware_snapshot) if hardware_snapshot is not None else None,
     })
-    authored = replace(base, name="native-llama-parity-rtx5080", model=model, hardware=hardware, placement=placement, workload=workload, component_profiles=profiles, fusion_policy=replace(base.fusion_policy, flash_attention=False), llama_cpp_config=runtime_config, assumptions=base.assumptions + (f"llama.cpp ctx={ctx} batch={batch} ubatch={ubatch} threads={threads} parallel={parallel} gpu_layers={gpu_layers} ctk=ctv:f16",))
+    authored = replace(base, name="native-llama-parity-rtx5080", sampling_policy=sampling_policy, model=model, hardware=hardware, placement=placement, workload=workload, component_profiles=profiles, fusion_policy=replace(base.fusion_policy, flash_attention=False), llama_cpp_config=runtime_config, assumptions=base.assumptions + (f"llama.cpp ctx={ctx} batch={batch} ubatch={ubatch} threads={threads} parallel={parallel} gpu_layers={gpu_layers} ctk=ctv:f16",))
     lowered = apply_llama_runtime_config(authored, runtime_config, materialize_placement=True)
     # This parity builder targets the project's locked source deployment.  An
     # unrelated executable cannot inherit its CUDA dispatch rules.  Legacy

@@ -1,0 +1,91 @@
+{
+  "schema": "sampling-validator-integration-ready/v1",
+  "status": "ready",
+  "public_api": "verify_sampling_contract(path, rows, selection_ref, data_root)",
+  "accepted_contract_schema": "source-bound-native-sampling-parity/v1",
+  "accepted_contract_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling_parity\\static_sampling_contract.json",
+    "bytes": 316362,
+    "sha256": "d309cc5503a2e716fa3a611527920c77df052f4bbf3968fa1e7175b1d5546d37"
+  },
+  "complete_request_resolved_projection_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling_parity\\static_contract.json",
+    "bytes": 2527873,
+    "sha256": "fb530c4cc0feee7a6a5e740344d94fefa068cf33c4ac6359975c71bcf0d32957"
+  },
+  "complete_projection_is_supplemental_not_the_validator_input": true,
+  "module_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\native_sampling_contract.py",
+    "bytes": 28689,
+    "sha256": "0b7c043610985e54d999938fa594879a573da93d701dd1fe965dfc94ad9ec210"
+  },
+  "tests_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tests\\test_native_sampling_contract.py",
+    "bytes": 16940,
+    "sha256": "56f28b57c61dba53648d016f4469ddd2a0f55b6a0010c8e779ca7a70f857d3eb"
+  },
+  "tests": {
+    "command": "E:/anaconda/python.exe -m pytest -q tests/test_native_sampling_contract.py",
+    "passed": 30,
+    "failed": 0,
+    "returncode": 0,
+    "native_or_GPU_execution": false
+  },
+  "actual_131_verification": {
+    "schema": "sampling-validator-production-static-check/v1",
+    "contract_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling_parity\\static_sampling_contract.json",
+      "sha256": "d309cc5503a2e716fa3a611527920c77df052f4bbf3968fa1e7175b1d5546d37",
+      "bytes": 316362
+    },
+    "summary": {
+      "selected_cells": 131,
+      "raw_blocks_verified": 131,
+      "resolved_request_settings_checked": {
+        "warmup": 596,
+        "runs": 894
+      },
+      "distinct_sampling_profiles": 4,
+      "all_backend_sampling_false": true,
+      "all_min_keep_zero": true,
+      "latency_fields_projected_or_used": false,
+      "self_reported_summary_used_for_acceptance": false,
+      "qualification": "source_bound_host_visible_llama_cpp_cpu_chain"
+    },
+    "evidence_ref_count": 175,
+    "GPU_executed": false,
+    "native_inference_executed": false,
+    "latency_fields_exported": false
+  },
+  "return_shape": {
+    "keys": [
+      "contract_ref",
+      "evidence_refs",
+      "cells",
+      "summary"
+    ],
+    "cells_container": "dict keyed by cell_id",
+    "cell_keys": [
+      "typed_policy",
+      "backend_sampling",
+      "effective_settings",
+      "provenance",
+      "limitations"
+    ]
+  },
+  "key_guarantees": [
+    "Every request payload/resolved profile is re-derived from SHA256-verified raw evidence.",
+    "Complete unique selection IDs, raw refs, each row runtime, selected build/header lineage and independently reviewed native source hashes are bound.",
+    "No arbitrary exporter execution.",
+    "No generated content, timing objects or native_actuals in returned cells.",
+    "Baseline simulator originals may change; only their frozen snapshot copies are verified and returned as evidence.",
+    "Native min_keep=0 is preserved; neutral modifiers and CPU chain domain are qualified.",
+    "Sampling tail, bias/suppress, accept/history and singleton RNG remain explicitly partial with no invented delays."
+  ],
+  "owned_source_files_only": [
+    "tools/native_sampling_contract.py",
+    "tests/test_native_sampling_contract.py"
+  ],
+  "GPU_executed": false,
+  "core_or_predictor_files_modified": false
+}

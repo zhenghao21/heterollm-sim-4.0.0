@@ -1,0 +1,44 @@
+{
+  "schema": "graph-collection-readiness/v1",
+  "status": "prepared_pending_external_approval",
+  "freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\freeze.json",
+    "bytes": 425361,
+    "sha256": "446e22520e8924e852922c60602862ea0e4b7927b880806a35056f4061e3589a"
+  },
+  "configs": 6,
+  "process_pairs": 18,
+  "profile_processes": 18,
+  "direct_processes": 18,
+  "export_processes": 18,
+  "expected_calls_per_process": 36,
+  "expected_formal_per_process": 30,
+  "gpu_executed": false,
+  "execution_entry": [
+    "E:\\anaconda\\python.exe",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\runner.py",
+    "run",
+    "--expected-freeze-sha256",
+    "446e22520e8924e852922c60602862ea0e4b7927b880806a35056f4061e3589a",
+    "--root-reviewed",
+    "--idle-window-confirmed",
+    "--clock-control-receipt",
+    "<ROOT_RECEIPT_PATH>",
+    "--clock-control-sha256",
+    "<ROOT_RECEIPT_SHA256>"
+  ],
+  "resume_entry": [
+    "E:\\anaconda\\python.exe",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\runner.py",
+    "run",
+    "--expected-freeze-sha256",
+    "446e22520e8924e852922c60602862ea0e4b7927b880806a35056f4061e3589a",
+    "--root-reviewed",
+    "--idle-window-confirmed",
+    "--clock-control-receipt",
+    "<ROOT_RECEIPT_PATH>",
+    "--clock-control-sha256",
+    "<ROOT_RECEIPT_SHA256>"
+  ],
+  "external_approval_required_for_this_literal_sha256": true
+}

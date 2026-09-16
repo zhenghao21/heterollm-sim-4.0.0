@@ -1,0 +1,208 @@
+{
+  "schema": "graph-submit-probe-protocol/v1",
+  "status": "source_prepared_not_compiled_not_measured",
+  "purpose": "H4: isolate same-backend graph submission, final synchronization, and traced device execution using independent synthetic graphs; no target LLM timing is consumed.",
+  "configs": [
+    {
+      "id": "scale_f32_e1024_g1",
+      "elements": 1024,
+      "nodes": 1,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e1024_g8",
+      "elements": 1024,
+      "nodes": 8,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e1024_g32",
+      "elements": 1024,
+      "nodes": 32,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e262144_g1",
+      "elements": 262144,
+      "nodes": 1,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e262144_g8",
+      "elements": 262144,
+      "nodes": 8,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e262144_g32",
+      "elements": 262144,
+      "nodes": 32,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    }
+  ],
+  "execution": {
+    "pairs": 3,
+    "arms": [
+      "direct",
+      "profile"
+    ],
+    "pair_order": "alternate direct/profile then profile/direct using (config_index + pair_index) parity; each arm fresh process; sequential only",
+    "first": 1,
+    "warmup": 5,
+    "formal": 30,
+    "graph_calls_per_sample": 1,
+    "final_backend_synchronize_calls_per_graph": 1,
+    "caller_threads": 1,
+    "cpu_backend_nodes": 0,
+    "cuda_index": 0,
+    "nvtx_in_both_arms": true,
+    "probe_cuda_events": false,
+    "cuda_graph_mode": "native default; environment variable absent; actual direct/capture/replay mode must come from trace",
+    "fusion_mode": "native default; never force disabled",
+    "timeout_seconds_per_process": 300,
+    "timeout_action": "record still_running and stop scheduling new processes; do not terminate child or profiler; await root coordination"
+  },
+  "math": {
+    "input": "(((i * 73 + 19) % 255) - 127) / 256; exactly representable F32",
+    "node": "out[j] = 0.5 * out[j-1] + 0; distinct allocated tensor, src0 points to predecessor",
+    "independent_reference": "integer numerator times 2^(-8-stage); no GGML CPU kernel or target data",
+    "validation": "all final elements every first/warmup/formal call; all intermediate tensors after first and final formal; bitwise F32 equality required, finite required",
+    "max_abs_input": 0.49609375,
+    "minimum_nonzero_final_g32": 9.094947017729282e-13,
+    "quantization": "none; generic SCALE controller workload only; not a quantized GEMM performance model"
+  },
+  "cache_policy": {
+    "allocation": "one graph and one backend buffer per process; fixed distinct tensor addresses",
+    "input_upload": "once before first graph, timed separately",
+    "between_calls": "full final tensor D2H validation and JSONL logging outside graph timer; no input rewrite, cache sweep, or per-node synchronization during graph compute",
+    "intermediate_validation": "only after first and after last formal; first is followed by 5 warmups; no intermediate read within formal sequence",
+    "classification": "repeated buffers; cache residency observed only indirectly, not cold HBM and not assumed identical across shapes or node counts",
+    "payload_bytes_per_tensor": "elements * 4",
+    "logical_graph_read_bytes": "nodes * elements * 4",
+    "logical_graph_write_bytes": "nodes * elements * 4",
+    "allocated_payload_bytes": "(nodes + 1) * elements * 4; allocator padding recorded separately"
+  },
+  "timing": {
+    "clock": "absolute Windows QueryPerformanceCounter ticks plus frequency; UTC is metadata only",
+    "ranges": [
+      "graph_submit/<config>/<phase>/<index>",
+      ".../host_submit",
+      ".../final_sync"
+    ],
+    "host_submit": "qpc_submit_end - qpc_submit_start brackets ggml_backend_graph_compute_async only",
+    "final_wait": "qpc_sync_end - qpc_sync_start brackets ggml_backend_synchronize only",
+    "submission_to_completion_envelope": "qpc_sync_end - qpc_submit_start; includes measured between-range instrumentation gap",
+    "instrumentation_gap": "qpc_sync_start - qpc_submit_end; reported, not silently attributed to GGML",
+    "outer_nvtx": "push/pop QPC intervals saved separately",
+    "setup": "CPU reference, backend initialization, graph build, allocation, H2D upload, post-measurement validation and output excluded",
+    "clock_domains": "never subtract Nsight times from QPC; link using exact semantic labels; perform GPU/API partitions within Nsight clock only",
+    "double_counting": "driver APIs may overlap GPU; submit/wait and kernel time are not additive"
+  },
+  "runtime": {
+    "native_protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native_protocol.json",
+      "sha256": "1e41472b9ad0186336b6a4d456543f718d4b03cbdb74993ec013d15af729e31b",
+      "bytes": 1497139
+    },
+    "environment": {
+      "GGML_OP_OFFLOAD_MIN_BATCH": null,
+      "LLAMA_ENGINE_TOKEN_TIMES": "1",
+      "CUDA_VISIBLE_DEVICES": null,
+      "CUDA_MODULE_LOADING": null,
+      "OMP_NUM_THREADS": null,
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "LLAMA_TRACE_ANNOTATIONS": "0",
+      "LLAMA_GRAPH_REUSE_DISABLE": null,
+      "GGML_CPU_OPERATOR_TRACE": null,
+      "GGML_CPU_DISABLE_FUSION": null,
+      "GGML_CUDA_DISABLE_FUSION": null,
+      "GGML_CUDA_GRAPH_OPT": null,
+      "GGML_CUDA_NO_PINNED": null,
+      "GGML_CUDA_REGISTER_HOST": null,
+      "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+      "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+    },
+    "extra_clear_environment": [
+      "GGML_CUDA_FORCE_MMQ",
+      "GGML_CUDA_FORCE_CUBLAS",
+      "GGML_SCHED_DEBUG",
+      "GGML_NO_IQ_PANEL",
+      "CUDA_LAUNCH_BLOCKING"
+    ],
+    "native_cpu_pool": {
+      "threads": 16,
+      "threads_batch": 16,
+      "worker_cpu_mask": "0x55555555",
+      "applicability": "native CPU pool only; synthetic CUDA-only graph creates no CPU worker pool. A single host submitter does not establish 16-thread CPU scheduler equivalence."
+    },
+    "host_scheduling": "normal process/thread priority; inherited process affinity captured from runtime. No new CPU pinning policy. Native --cpu-mask applies to CPU worker pool, not a synthetic one-thread backend caller.",
+    "gpu_expected": {
+      "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+      "name": "NVIDIA GeForce RTX 5080",
+      "driver": "616.64",
+      "compute_capability": "12.0"
+    },
+    "native_expected_sm_clock_mhz": 2400,
+    "native_sm_clock_tolerance_mhz": 30,
+    "hardware_fingerprint": "actual CUDA properties + loaded driver module + external GPU telemetry before/after; expected values are not copied into actual fields"
+  },
+  "profiler": {
+    "path": "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\nsys.exe",
+    "options": [
+      "profile",
+      "--kill=false",
+      "--trace=cuda,nvtx",
+      "--cuda-graph-trace=node",
+      "--sample=none",
+      "--cpuctxsw=none",
+      "--force-overwrite=false"
+    ],
+    "node_trace_reason": "default graph-granularity tracing does not collect graph child kernel activities; node tracing is required for actual count and shape path",
+    "observer_effect": "node tracing may materially perturb graph replay; pair with event-free direct. Difference is a protocol-conditioned observation effect, not automatically pure CUPTI overhead."
+  },
+  "quality": {
+    "all_calls_required": 36,
+    "each_arm_process_pairs_required": 3,
+    "math_failure": "retain run; no calibration eligibility",
+    "trace_required": [
+      "all formal graph labels matched exactly once",
+      "actual kernels counted from CUPTI including graph child activity",
+      "actual graph-launch/capture/update and runtime/driver API counts",
+      "actual kernel names/grid/block and explicit graph dependence validation",
+      "no replacement of observed count by planned GGML node count",
+      "per-call kernel/API/sync/idle union partition closes within one Nsight clock"
+    ],
+    "formal_profile_direct_median_wall_relative_difference_limit": 0.2,
+    "formal_p90_p10_max": 1.5,
+    "failure_handling": "retain missing, failed, timed-out and unstable pairs; no automatic coefficient output or silent deletion",
+    "untraced_direct_count": "null, not nodes; direct correctness does not replace profile dispatch evidence",
+    "acceptance_scope": "diagnostic protocol review, not final LLM acceptance and not evidence that every-cell Engine error is below 10%",
+    "source_runtime_mapping": "annotation-control build receipt and copied CUDA object provenance must pass before interpreting source geometry as runtime fact"
+  },
+  "further_arms": "No event arm or graph-disabled arm in initial 6x3 plan. Propose a separately frozen diagnostic only if paired results fail to resolve a specific mechanism; do not merge its timing as native-equivalent.",
+  "execution_gate": "Parent review followed by build/freeze and idle-window coordination is required. This directory currently contains preparation only."
+}

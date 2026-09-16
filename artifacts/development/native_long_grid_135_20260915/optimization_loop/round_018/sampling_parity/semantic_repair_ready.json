@@ -1,0 +1,144 @@
+{
+  "schema": "sampling-semantic-repair-ready/v1",
+  "core_semantic_repair_ready": true,
+  "requires_timing_evidence": false,
+  "coverage_audit_status": "131-cell exporter in progress; semantic domain already source-proven",
+  "proven_request": {
+    "temperature": 0.0,
+    "top_k": 1,
+    "seed": 42,
+    "ignore_eos": true,
+    "cache_prompt": false
+  },
+  "resolved_response_settings": {
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "min_keep": 0,
+    "backend_sampling": false,
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "mirostat": 0,
+    "n_probs": 0
+  },
+  "safe_typed_candidate": {
+    "mode": "greedy",
+    "temperature": 0.0,
+    "implementation": "llama_cpp_cpu_chain",
+    "top_k": 1,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "min_keep": 0
+  },
+  "precise_min_keep_domain": {
+    "native_type": "size_t in top-p/min-p initialization; common_params_sampling int32 default 0",
+    "typed_domain": "integer, not bool, min_keep>=0; keep top_k as positive integer and preserve existing <=top_k constraint for the bounded implemented chain",
+    "zero_semantics": "disable minimum-count constraint; it does not request zero output candidates",
+    "safe_change": "Change only min_keep positive restriction to non-negative; do not clamp it to 1 and do not broaden top_k domain."
+  },
+  "semantic_repairs": [
+    "Preserve sampling fields from frozen request/resolved configuration through static projection into build_matching_scenario and ScenarioConfig.sampling_policy.",
+    "Use mode=greedy plus implementation=llama_cpp_cpu_chain and explicit chain parameters; greedy mode alone models a different route.",
+    "Add top_k==1 full-candidate argmax scan work: V-1 comparisons for finite candidate logits, with stride-12 logit fields. Current chain filter scan branch begins at top_k>=2.",
+    "Do not omit candidate materialization: read V F32 logits and write V records of int32 id,float logit,float p (12 bytes each).",
+    "Retain filter-tail/dispatch/probability/commit incompleteness explicitly. Native size-one dist sampler still consumes a uniform RNG draw.",
+    "Native sample/accept is included in the engine token boundary; it is not just an HTTP/client bookkeeping operation."
+  ],
+  "source_refs": {
+    "common_defaults": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\common\\common.h",
+      "bytes": 52301,
+      "sha256": "6e678df90075831853a3b509a7a3fe01e5aa4cbeb1b3ae4364c0ac51442b36c3"
+    },
+    "sampler_implementation": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\src\\llama-sampler.cpp",
+      "bytes": 156124,
+      "sha256": "a2637a34869a95008c847461e6b10e5edb71ba4c6d19f99a3dbd1875d66dada8"
+    },
+    "common_chain": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\common\\sampling.cpp",
+      "bytes": 35691,
+      "sha256": "a38a6624109ce01d317d6c89f5d1ff27c1427fd5934bddcf71c77d922fcf15b2"
+    },
+    "historical_header_snapshot": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\evidence\\header_snapshot.json",
+      "bytes": 85981,
+      "sha256": "9400f25f32d530685c0b5cc5c5bb104aef6dff96bdce2f8ae348f74406019686"
+    },
+    "annotation_build_receipt": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\evidence\\build_receipt.json",
+      "bytes": 88117,
+      "sha256": "cce702b121119a155e4633399fc954e7a7dee8bfa977c8ba1c72737a28bd1533"
+    },
+    "native_build_receipt": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\evidence\\build_receipt.json",
+      "bytes": 140839,
+      "sha256": "c807d0b2cd1bdd8f7758b6078b57517da348ad0d95322284619a1b3fd0a41035"
+    },
+    "server_schema": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\tools\\server\\server-schema.cpp",
+      "bytes": 33501,
+      "sha256": "4b419ef42556cf8dda5c0471ed9294388da613b62eeee56efa2e13ed34252238"
+    },
+    "server_task_serialization": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\tools\\server\\server-task.cpp",
+      "bytes": 69262,
+      "sha256": "4ef9e2c0a78ee4480b795d5056a4f979f10529c89e2c3526c728e6d7f6107613"
+    },
+    "server_sample_accept_boundary": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\tools\\server\\server-context.cpp",
+      "bytes": 236530,
+      "sha256": "99f7aead4dd6b190292db2a14b2586d4076871a3710a49a94c71424b6f05501e"
+    },
+    "selected_sample_raw": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native\\qwen25_p1536_o256_c4__fixed_runtime__b00.json",
+      "bytes": 5086875,
+      "sha256": "75d9c613cc66de06e746027b80b2a7f77f72c5321b6dbcbacd5638275ca6eb21"
+    }
+  },
+  "source_lines": {
+    "common_params_sampling": [
+      224,
+      296
+    ],
+    "native_top_p_accepts_min_keep_zero": [
+      1549,
+      1584,
+      1722
+    ],
+    "native_min_p_first_token_kept": [
+      1749,
+      1799
+    ],
+    "native_single_candidate_dist_still_draws_rng": [
+      1150,
+      1171
+    ],
+    "native_engine_sample_accept_boundary": [
+      4100,
+      4128
+    ],
+    "current_config_min_keep_positive_guard": [
+      269,
+      279
+    ],
+    "current_planner_filter_scan_excludes_top_k_one": [
+      19173,
+      19184
+    ]
+  },
+  "bounds": [
+    "No existing core/tools files edited by this agent.",
+    "No GPU, model execution, simulation, timing extraction or cost fit used.",
+    "CPU chain identity is not inferred from temperature alone.",
+    "Current typed candidate becomes constructible after the min_keep domain repair; all default values here are non-null."
+  ]
+}

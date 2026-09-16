@@ -1,0 +1,144 @@
+0000  LDC R1, c[0x0][0x37c]
+0010  S2R R2, SR_CTAID.Y
+0020  LDCU UR4, c[0x0][0x360]
+0030  S2R R3, SR_TID.X
+0040  LDCU.64 UR6, c[0x0][0x3b8]
+0050  IMAD R2, R2, UR4, R3
+0060  HFMA2 R3, -RZ, RZ, 0, 0
+0070  IMAD.SHL.U32 R2, R2, 0x4, RZ
+0080  ISETP.GE.S64.AND P0, PT, R2, UR6, PT
+0090  @P0 EXIT
+00a0  LDC.64 R4, c[0x0][0x388]
+00b0  S2R R0, SR_CTAID.X
+00c0  LDCU.64 UR8, c[0x0][0x358]
+00d0  ACQBULK
+00e0  LDCU.64 UR6, c[0x0][0x398]
+00f0  LDC R9, c[0x0][0x3c4]
+0100  ISETP.NE.S64.AND P0, PT, R4, RZ, PT
+0110  @P0 IMAD.WIDE.U32 R4, R0, 0x4, R4
+0120  @P0 LDG.E.CONSTANT R11, desc[UR8][R4.64]
+0130  I2F.U32.RP R8, R9
+0140  S2UR UR5, SR_CTAID.Z
+0150  BSSY.RECONVERGENT B0, 0x420
+0160  LOP3.LUT R5, RZ, R9, RZ, 0x33, !PT
+0170  MUFU.RCP R8, R8
+0180  IADD3 R6, PT, PT, R8, 0xffffffe, RZ
+0190  F2I.FTZ.U32.TRUNC.NTZ R7, R6
+01a0  MOV R6, RZ
+01b0  IADD3 R10, PT, PT, RZ, -R7, RZ
+01c0  IMAD R13, R10, R9, RZ
+01d0  IMAD.HI.U32 R7, R7, R13, R6
+01e0  IMAD.HI.U32 R7, R7, UR5, RZ
+01f0  IADD3 R4, PT, PT, -R7, RZ, RZ
+0200  IMAD R4, R9, R4, UR5
+0210  ISETP.GE.U32.AND P2, PT, R4, R9, PT
+0220  @P2 IADD3 R4, PT, PT, R4, -R9.reuse, RZ
+0230  @P2 IADD3 R7, PT, PT, R7, 0x1, RZ
+0240  ISETP.NE.U32.AND P2, PT, R9, RZ, PT
+0250  ISETP.GE.U32.AND P1, PT, R4, R9, PT
+0260  @P1 IADD3 R4, PT, PT, R4, -R9, RZ
+0270  @P1 IADD3 R7, PT, PT, R7, 0x1, RZ
+0280  ISETP.GE.S64.AND P1, PT, R2, UR6, PT
+0290  SEL R9, R5.reuse, R4, !P2
+02a0  SEL R13, R5, R7, !P2
+02b0  CS2R R4, SRZ
+02c0  CS2R R6, SRZ
+02d0  @!P0 MOV R11, R0
+02e0  @P1 BRA 0x410
+02f0  LDCU.128 UR12, c[0x0][0x3a0]
+0300  MOV R7, RZ
+0310  LDCU.64 UR6, c[0x0][0x3b0]
+0320  IMAD.WIDE.U32 R4, R9, UR14, R2
+0330  IMAD R5, R9, UR15, R5
+0340  IMAD.WIDE.U32 R4, R13, UR6, R4
+0350  IMAD R5, R13, UR7, R5
+0360  LDCU.64 UR6, c[0x0][0x380]
+0370  IMAD.WIDE.U32 R4, R11, UR12, R4
+0380  IMAD R5, R11, UR13, R5
+0390  SHF.R.S32.HI R6, RZ, 0x1f, R5
+03a0  SHF.R.U32.HI R6, RZ, 0x1e, R6
+03b0  IADD.64 R4, R4, R6
+03c0  SHF.L.U64.HI R5, R4.reuse, 0x2, R5
+03d0  IMAD.SHL.U32 R6, R4, 0x4, RZ
+03e0  LOP3.LUT R4, R6, 0xfffffff0, RZ, 0xc0, !PT
+03f0  IADD.64 R4, R4, UR6
+0400  LDG.E.128.CONSTANT R4, desc[UR8][R4.64]
+0410  BSYNC.RECONVERGENT B0
+0420  FMNMX.FTZ R3, |R5|, |R4|, !PT
+0430  LDCU UR6, c[0x0][0x370]
+0440  LOP3.LUT P0, RZ, R2, 0x1c, RZ, 0xc0, !PT
+0450  FMNMX.FTZ R8, R3, |R6|, !PT
+0460  LDCU UR7, c[0x0][0x3c0]
+0470  FMNMX.FTZ R10, R8, |R7|, !PT
+0480  SHFL.BFLY PT, R3, R10, 0x4, 0x1f
+0490  FMNMX.FTZ R11, R10, R3, !PT
+04a0  HFMA2 R10, -RZ, RZ, 1.75, 0
+04b0  SHFL.BFLY PT, R8, R11, 0x2, 0x1f
+04c0  FMNMX.FTZ R14, R11, R8, !PT
+04d0  LDC R8, c[0x0][0x374]
+04e0  SHFL.BFLY PT, R3, R14, 0x1, 0x1f
+04f0  IMAD.WIDE.U32 R8, R8, UR6, RZ
+0500  USHF.R.S32.HI UR6, URZ, 0x1f, UR7
+0510  FMNMX.FTZ R15, R14, R3, !PT
+0520  IMAD R19, R9, UR4, RZ
+0530  IMAD.WIDE.U32 R12, R8, UR4, RZ
+0540  MUFU.RCP R3, R15
+0550  LDC.64 R8, c[0x0][0x390]
+0560  IADD3 R19, PT, PT, R13, R19, RZ
+0570  SHF.R.U64 R17, R12, 0x5, R19.reuse
+0580  SHF.R.U32.HI R12, RZ, 0x5, R19
+0590  FMUL.FTZ R3, R3, 127
+05a0  FMUL.FTZ R11, R3.reuse, R4
+05b0  FMUL.FTZ R13, R3.reuse, R5
+05c0  HFMA2 R5, -RZ, RZ, 0, 0
+05d0  FMUL.FTZ R15, R3.reuse, R6
+05e0  FMUL.FTZ R7, R3, R7
+05f0  LOP3.LUT R4, R10, 0x80000000, R11, 0xb8, !PT
+0600  LOP3.LUT R6, R10.reuse, 0x80000000, R15, 0xb8, !PT
+0610  FADD.FTZ.RZ R11, R11, R4
+0620  MOV R4, R0
+0630  LOP3.LUT R0, R10.reuse, 0x80000000, R13, 0xb8, !PT
+0640  FADD.FTZ.RZ R6, R15, R6
+0650  LOP3.LUT R10, R10, 0x80000000, R7, 0xb8, !PT
+0660  IMAD.WIDE.U32 R4, R17, UR5, R4
+0670  FADD.FTZ.RZ R0, R13, R0
+0680  SHF.R.U64 R13, R2, 0x7, RZ
+0690  F2I.TRUNC.NTZ R11, R11
+06a0  IMAD R17, R12, UR5, RZ
+06b0  FADD.FTZ.RZ R10, R7, R10
+06c0  IADD3 R5, PT, PT, R5, R17, RZ
+06d0  F2I.TRUNC.NTZ R0, R0
+06e0  IMAD.WIDE.U32 R4, R13, UR7, R4
+06f0  IMAD R7, R13, UR6, R5
+0700  F2I.TRUNC.NTZ R6, R6
+0710  IMAD.WIDE.U32 R4, R4, 0x90, R8
+0720  LOP3.LUT R8, R2, 0x7c, RZ, 0xc0, !PT
+0730  MOV R9, RZ
+0740  IMAD R7, R7, 0x90, RZ
+0750  PRMT R11, R0, 0x7604, R11
+0760  F2I.TRUNC.NTZ R10, R10
+0770  IADD3 R5, PT, PT, R5, R7, RZ
+0780  PRMT R11, R6, 0x7054, R11
+0790  IADD.64 R6, R4, R8
+07a0  PRMT R11, R10, 0x654, R11
+07b0  STG.E desc[UR8][R6.64+0x10], R11
+07c0  @P0 EXIT
+07d0  MUFU.RCP R3, R3
+07e0  SHF.R.U64 R8, R8, 0x3, RZ
+07f0  MOV R9, RZ
+0800  IADD.64 R4, R4, R8
+0810  STG.E desc[UR8][R4.64], R3
+0820  EXIT
+0830  BRA 0x830;                                                                                     /* 0xfffffffc00fc7947 */
+0840  NOP;                                                                                           /* 0x0000000000007918 */
+0850  NOP;                                                                                           /* 0x0000000000007918 */
+0860  NOP;                                                                                           /* 0x0000000000007918 */
+0870  NOP;                                                                                           /* 0x0000000000007918 */
+0880  NOP;                                                                                           /* 0x0000000000007918 */
+0890  NOP;                                                                                           /* 0x0000000000007918 */
+08a0  NOP;                                                                                           /* 0x0000000000007918 */
+08b0  NOP;                                                                                           /* 0x0000000000007918 */
+08c0  NOP;                                                                                           /* 0x0000000000007918 */
+08d0  NOP;                                                                                           /* 0x0000000000007918 */
+08e0  NOP;                                                                                           /* 0x0000000000007918 */
+08f0  NOP;                                                                                           /* 0x0000000000007918 */

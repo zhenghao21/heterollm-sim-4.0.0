@@ -1,0 +1,499 @@
+--- before/collection/runner.py
++++ after/collection/runner.py
+@@ -100,11 +100,8 @@
+ 
+ 
+ def commands(stage,protocol):
+-    directory=stage_path(stage);c=next(c for c in protocol['configs'] if c['id']==stage['config_id'])
+-    app=[protocol['executable']['path'],*app_argv(c,directory/'microbench.json')]
+-    if stage['mode']=='direct':return app
+-    if stage['mode']=='profile':return [protocol['nsys']['executable']['path'],'profile',*protocol['nsys_profile_options'],'--output='+str(directory/'trace'),*app]
+-    return [protocol['nsys']['executable']['path'],'export','--type=sqlite','--force-overwrite=false','--output='+str(directory/'trace.sqlite'),str(directory.parent/'profile/trace.nsys-rep')]
++    import probe_adapter
++    return probe_adapter.stage_command(stage,stage_path(stage),protocol)
+ 
+ 
+ def wait_checkpoint(proc,seconds=180):
+@@ -154,6 +151,11 @@
+             state=load(receipt)
+             if state.get('status')=='failed_identity' or state.get('freeze_after_error'):return terminal_identity_stop(freeze,expected_freeze_sha256,'existing_stage_identity_failure',str(receipt))
+             if state.get('child_process_exited') is False:return {'status':'unresolved_running','stage':stage,'receipt':ref(receipt)}
++            if state.get('status')=='completed':
++                try:
++                    from extract import stage_complete
++                    stage_complete(directory,expected_freeze_sha256)
++                except (ValueError,KeyError,TypeError,OSError) as exc:return terminal_identity_stop(freeze,expected_freeze_sha256,'completed_stage_origin_failure',str(exc))
+             completed.append({'stage':stage,'receipt':ref(receipt),'status':state['status']});continue
+         if directory.exists():
+             launched_ref=directory/'supervisor.json'
+@@ -168,7 +170,8 @@
+             write_new(receipt,{'status':'blocked_missing_profile_report','stage':stage,'utc':utc(),'returncode':None});continue
+         spec={'schema':'graph-collection-process-spec/v1','stage':stage,'directory':str(directory),'freeze':str(freeze),'expected_freeze_sha256':expected_freeze_sha256,'clock_control_binding':clock_binding,
+             'argv':commands(stage,protocol),'cwd':protocol['probe_root'],'environment':protocol['environment_explicit'],
+-            'path_prefix':protocol['native_bin']+os.pathsep+r'E:\cuda\bin','telemetry':stage['mode']!='export','gpu_identity':protocol['gpu_identity']}
++            'path_prefix':protocol['native_bin']+os.pathsep+r'E:\cuda\bin','telemetry':stage['mode']!='export','gpu_identity':protocol['gpu_identity'],
++             'input_artifacts':[ref(directory.parent/'profile/trace.nsys-rep')] if stage['mode']=='export' else []}
+         write_new(directory/'spec.json',spec)
+         out=(directory/'supervisor.stdout.txt').open('xb');err=(directory/'supervisor.stderr.txt').open('xb')
+         try:proc=subprocess.Popen([sys.executable,str(HERE/'worker.py'),str(directory/'spec.json')],cwd=HERE,stdout=out,stderr=err,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+@@ -182,6 +185,11 @@
+         state=load(receipt)
+         if state.get('status')=='failed_identity' or state.get('freeze_after_error'):return terminal_identity_stop(freeze,expected_freeze_sha256,'new_stage_identity_failure',str(receipt))
+         if state.get('child_process_exited') is False:return {'status':'unresolved_running','stage':stage,'receipt':ref(receipt)}
++        if state.get('status')=='completed':
++            try:
++                from extract import stage_complete
++                stage_complete(directory,expected_freeze_sha256)
++            except (ValueError,KeyError,TypeError,OSError) as exc:return terminal_identity_stop(freeze,expected_freeze_sha256,'new_stage_origin_failure',str(exc))
+         completed.append({'stage':stage,'receipt':ref(receipt),'status':state['status']})
+     after=checked_identity(freeze,expected_freeze_sha256,'session_end')
+     if after.get('status')=='identity_terminal_stop':return after
+--- before/collection/probe_adapter.py
++++ after/collection/probe_adapter.py
+@@ -1,6 +1,7 @@
+ """Strict adapter for the graph probe protocol. No inferred legacy GEMM arguments."""
+ from pathlib import Path
+ import json
++from datetime import datetime
+ import re
+ from common import PROBE,POLICY,IdentityError,ref,verify_ref,load
+ 
+@@ -80,8 +81,74 @@
+     validate_protocol(protocol_document())
+     if config not in protocol_document()['configs']:raise IdentityError('config absent from actual graph protocol')
+     pair=Path(output).parent.parent.name
+-    if re.fullmatch(r'pair_[0-9]{2}',pair) is None:raise IdentityError('output path lacks explicit frozen pair identity')
++    if re.fullmatch(r'pair_0[123]',pair) is None:raise IdentityError('output path lacks explicit frozen pair identity')
+     return ['--run','--config',config['id'],'--pair-id',config['id']+'/'+pair,'--output',str(output)]
++
++
++
++def stage_command(stage,directory,protocol):
++    """Single source of argv construction and later evidence checks, never executes."""
++    directory=Path(directory).resolve()
++    selected=[c for c in protocol['configs'] if c['id']==stage.get('config_id')]
++    if len(selected)!=1 or type(stage.get('pair')) is not int or not 0<=stage['pair']<3:
++        raise IdentityError('stage config/pair outside frozen matrix')
++    if directory.name!=stage.get('mode') or directory.parent.name!=f"pair_{stage['pair']+1:02d}" or directory.parent.parent.name!=stage['config_id']:
++        raise IdentityError('stage directory does not match config/pair/mode')
++    config=selected[0];app=[protocol['executable']['path'],*app_argv(config,directory/'microbench.json')]
++    if stage['mode']=='direct':return app
++    if stage['mode']=='profile':return [protocol['nsys']['executable']['path'],'profile',*protocol['nsys_profile_options'],'--output='+str(directory/'trace'),*app]
++    if stage['mode']=='export':return [protocol['nsys']['executable']['path'],'export','--type=sqlite','--force-overwrite=false','--output='+str(directory/'trace.sqlite'),str(directory.parent/'profile/trace.nsys-rep')]
++    raise IdentityError('unknown stage mode')
++
++
++def process_origin(document,config):
++    """Validate actual C++ origin, without manufacturing identity from its case."""
++    header,setup,footer=document['header'],document['setup'],document['footer']
++    def positive(value,name):
++        if type(value) is not int or value<=0:raise IdentityError('missing or invalid native '+name)
++        return value
++    pid=positive(header.get('pid'),'PID');start=positive(header.get('qpc_start'),'start QPC');end=positive(footer.get('qpc_end'),'end QPC')
++    if pid>=1<<24:raise IdentityError('native PID exceeds reviewed Nsight24-bit process encoding')
++    if end<=start:raise IdentityError('native process QPC lifetime reversed')
++    for field,value in [('utc_start',header.get('utc_start')),('utc_end',footer.get('utc_end'))]:
++        if not isinstance(value,str) or not value.endswith('Z'):raise IdentityError('missing native UTC origin: '+field)
++        try:timestamp=datetime.fromisoformat(value.replace('Z','+00:00'))
++        except ValueError as exc:raise IdentityError('invalid native UTC origin: '+field) from exc
++        if timestamp.utcoffset().total_seconds()!=0:raise IdentityError('native UTC origin is not UTC')
++    pair=setup.get('pair_id')
++    if not isinstance(pair,str) or re.fullmatch(re.escape(config['id'])+r'/pair_0[123]',pair) is None:
++        raise IdentityError('missing or invalid native pair identity')
++    raw_path=document.get('source_raw',{}).get('path')
++    if not isinstance(raw_path,str) or not Path(raw_path).is_absolute():raise IdentityError('actual raw source path absent')
++    argv=header.get('argv')
++    expected=[str((PROBE/'graph-submit-probe.exe').resolve()),'--run','--config',config['id'],'--pair-id',pair,'--output',str(Path(raw_path).resolve())]
++    if not isinstance(argv,list) or any(not isinstance(x,str) for x in argv) or argv!=expected:
++        raise IdentityError('native argv/executable/output does not match captured raw origin')
++    for call in document.get('runs',[]):
++        lo,hi=call.get('qpc_start'),call.get('qpc_end')
++        if type(lo) is not int or type(hi) is not int or not start<=lo<hi<=end:
++            raise IdentityError('graph call outside actual native QPC lifetime')
++    tid=setup.get('scheduling',{}).get('caller_thread_id')
++    positive(tid,'caller thread ID')
++    if tid>=1<<24:raise IdentityError('native thread ID exceeds reviewed Nsight24-bit thread encoding')
++    return {'pid':pid,'caller_thread_id':tid,'qpc_start':start,'qpc_end':end,
++            'utc_start':header['utc_start'],'utc_end':footer['utc_end'],'pair_id':pair,
++            'argv':argv,'raw_ref':document['source_raw'],'process_identity_source':'frozen_cpp_actual_header_and_footer'}
++
++
++def unique_process_origins(pairs):
++    """Reject copied process evidence; permit genuine OS PID reuse after exit."""
++    seen={};intervals={};issues=[]
++    for pair in pairs:
++        for arm,origin in pair.get('process_origins',{}).items():
++            key=(origin['pid'],origin['qpc_start']);owner=(pair.get('pair'),arm)
++            previous=seen.get(key)
++            if previous is not None:issues.append({'reason':'duplicate_native_process_origin','first':previous,'second':owner})
++            seen[key]=owner
++            for lo,hi,other in intervals.setdefault(origin['pid'],[]):
++                if origin['qpc_start']<hi and origin['qpc_end']>lo:issues.append({'reason':'same_PID_overlapping_native_lifetimes','first':other,'second':owner})
++            intervals[origin['pid']].append((origin['qpc_start'],origin['qpc_end'],owner))
++    return issues
+ 
+ 
+ def _unique_object(pairs):
+@@ -138,6 +205,8 @@
+     def check(condition,message):
+         if not condition:issues.append(message)
+     header,setup,footer=document['header'],document['setup'],document['footer']
++    try:process_origin(document,config)
++    except (IdentityError,KeyError,TypeError) as exc:issues.append('native_process_origin_invalid:'+str(exc))
+     protocol=protocol_document();validate_protocol(protocol)
+     check(config in protocol['configs'],'config_not_frozen')
+     check(header.get('protocol_sha256')==ref(PROBE/'protocol.json')['sha256'],'probe_protocol_sha_mismatch')
+--- before/collection/extract.py
++++ after/collection/extract.py
+@@ -76,6 +76,21 @@
+     apis=[{**r,'evidence_table':table} for table in ('CUPTI_ACTIVITY_KIND_RUNTIME','CUPTI_ACTIVITY_KIND_DRIVER') for r in tables.get(table,[])]
+     wanted=probe_adapter.expected_labels(app,config)
+     selected=[m for m in markers if m.get('resolved_text') in wanted]
++    native_pid=app.get('header',{}).get('pid')
++    native_tid=app.get('setup',{}).get('scheduling',{}).get('caller_thread_id')
++    if type(native_pid) is not int or not 0<native_pid<(1<<24) or type(native_tid) is not int or not 0<native_tid<(1<<24):
++        raise ValueError('actual native PID/caller TID missing or outside reviewed Nsight encoding')
++    # NVIDIA Nsight Systems Analysis Guide: globalTid encodes 24-bit thread ID,
++    # 24-bit process ID, then 16-bit VM/hardware namespace. Do not compare the
++    # whole globalPid to pid<<24: live exports contain a nonzero upper namespace.
++    # https://docs.nvidia.com/nsight-systems/AnalysisGuide/index.html#global-process-and-thread-ids
++    actual_namespaces=set()
++    for marker in selected:
++        value=marker.get('globalTid')
++        if type(value) is not int or value<=0 or ((value>>24)&0xFFFFFF)!=native_pid or (value&0xFFFFFF)!=native_tid:
++            raise ValueError('trace target process/thread does not match actual native header')
++        actual_namespaces.add(value&PROCESS_MASK)
++    if len(actual_namespaces)!=1:raise ValueError('trace spans multiple or missing process/VM namespaces')
+     if len(selected)!=36 or len(wanted)!=36 or Counter(m['resolved_text'] for m in selected)!=Counter(wanted.keys()):
+         raise ValueError('36 full graph semantic labels not uniquely captured')
+     used=set();calls=[]
+@@ -144,6 +159,9 @@
+         'formal_kernel_union':distribution(formal) if formal and all(v>0 for v in formal) else {},
+         'actual_kernels_mapped':len(used),'unmapped_kernel_rowids':[k['evidence_rowid'] for k in kernels if k['evidence_rowid'] not in used],
+         'all_diagnostics_verbatim':diagnostics,'warning_diagnostics_verbatim':warnings,
++        'native_process_binding':{'native_header_pid':native_pid,'native_caller_thread_id':native_tid,
++            'trace_global_pid':next(iter(actual_namespaces)),'trace_decoded_pid':(next(iter(actual_namespaces))>>24)&0xFFFFFF,
++            'verified_actual_identity_match':True},
+         'native_source_equivalence_proven':False,'calibration_eligible':False,'direct_untraced_kernel_count':None}
+ 
+ 
+@@ -167,18 +185,93 @@
+ 
+ 
+ def stage_complete(path,expected_freeze_sha256):
+-    r=load(path/'complete.json')
+-    protocol=load(HERE/'protocol.json');clock=r.get('clock_control_binding',{}).get('receipt_ref',{})
++    """Bind each consumed artifact to the exact stage, launch, and actual process."""
++    import probe_adapter
++    path=Path(path).resolve(strict=True);protocol=load(HERE/'protocol.json');r=load(path/'complete.json')
++    if path.name not in ('direct','profile','export') or re.fullmatch(r'pair_0[123]',path.parent.name) is None:
++        raise ValueError('invalid completed stage location')
++    stage={'config_id':path.parent.parent.name,'pair':int(path.parent.name[-2:])-1,'mode':path.name}
++    expected_path=(HERE/'runs'/stage['config_id']/path.parent.name/path.name).resolve()
++    if path!=expected_path:raise ValueError('completed stage outside this frozen collection')
++    selected=[c for c in protocol['configs'] if c['id']==stage['config_id']]
++    if len(selected)!=1:raise ValueError('completed stage configuration not frozen')
++    config=selected[0];expected_argv=probe_adapter.stage_command(stage,path,protocol)
++    if r.get('schema')!='graph-collection-process/v1':raise ValueError('invalid process receipt schema')
++    clock=r.get('clock_control_binding',{}).get('receipt_ref',{})
+     binding=verify_clock_receipt(clock.get('path'),clock.get('sha256'),protocol['gpu_identity']['uuid'])
+     anchor=load(HERE/'clock-control-binding.json')
+     if anchor.get('receipt_ref')!=binding['receipt_ref']:raise ValueError('stage clock session differs from approved session')
+-    if r.get('external_approved_sha256')!=expected_freeze_sha256 or r.get('child_process_exited') is not True:raise ValueError('stage is not bound to approved freeze or confirmed exit')
+-    if r.get('status')!='completed' or r.get('returncode')!=0 or r.get('freeze_after',{}).get('passed') is not True:raise ValueError('process not completed successfully: '+str(path))
+-    for artifact in r.get('artifacts',[]):
+-        # Validate permanent process evidence; supervisor stdio may close immediately after receipt publication.
+-        if Path(artifact['path']).name in ('microbench.json','trace.nsys-rep','trace.sqlite','stdout.txt','stderr.txt','telemetry.json'):
+-            if ref(artifact['path'])!=artifact:raise ValueError('process artifact identity changed')
+-    return r
++    if r.get('external_approved_sha256')!=expected_freeze_sha256 or r.get('child_process_exited') is not True:
++        raise ValueError('stage not bound to approved freeze and confirmed exit')
++    after=r.get('freeze_after',{})
++    if r.get('status')!='completed' or r.get('returncode')!=0 or after.get('passed') is not True or after.get('external_approved_sha256')!=expected_freeze_sha256:
++        raise ValueError('stage did not complete with the approved identity')
++    # Some logs are legitimately empty; an absent or nonlocal artifact is not.
++    artifacts=r.get('artifacts')
++    if not isinstance(artifacts,list) or not artifacts:raise ValueError('required process artifact set missing')
++    refs={}
++    for artifact in artifacts:
++        if not isinstance(artifact,dict) or set(artifact)!={'path','sha256','bytes'}:
++            raise ValueError('malformed artifact reference')
++        item_path=artifact['path']
++        if not isinstance(item_path,str) or not Path(item_path).is_absolute() or Path(item_path).resolve().parent!=path:
++            raise ValueError('artifact is not inside its completed stage')
++        if not isinstance(artifact['sha256'],str) or re.fullmatch('[a-f0-9]{64}',artifact['sha256']) is None or type(artifact['bytes']) is not int or artifact['bytes']<0:
++            raise ValueError('missing artifact hash or byte identity')
++        name=Path(item_path).name
++        if name.casefold() in refs or name=='complete.json':raise ValueError('duplicate or recursive artifact reference')
++        refs[name.casefold()]=artifact
++        # The supervisor can append its own redirected logs after its receipt.
++        # They are explicitly not consumed as evidence by this extractor.
++        if name not in ('supervisor.stdout.txt','supervisor.stderr.txt') and ref(item_path)!=artifact:
++            raise ValueError('completed process artifact changed')
++    required={'spec.json','supervisor-started.json','launched.json','stdout.txt','stderr.txt'}
++    required|={'trace.sqlite'} if path.name=='export' else {'microbench.json','telemetry.json'}
++    if path.name=='profile':required.add('trace.nsys-rep')
++    if not required.issubset(refs):raise ValueError('missing necessary stage artifacts: '+','.join(sorted(required-set(refs))))
++    for name in required:
++        if Path(refs[name]['path'])!=path/name:raise ValueError('artifact reference path differs from consumed path')
++        if name not in ('stdout.txt','stderr.txt') and refs[name]['bytes']<=0:raise ValueError('empty required stage evidence: '+name)
++    spec_ref=refs['spec.json']
++    if r.get('spec_ref')!=spec_ref:raise ValueError('process receipt spec binding mismatch')
++    spec=load(spec_ref['path']);launched=load(refs['launched.json']['path']);supervisor=load(refs['supervisor-started.json']['path'])
++    if spec.get('schema')!='graph-collection-process-spec/v1' or spec.get('stage')!=stage or spec.get('directory')!=str(path):
++        raise ValueError('captured spec stage identity mismatch')
++    if spec.get('freeze')!=str(HERE/'freeze.json') or spec.get('expected_freeze_sha256')!=expected_freeze_sha256:
++        raise ValueError('captured spec freeze mismatch')
++    if spec.get('argv')!=expected_argv or r.get('argv')!=expected_argv or launched.get('argv')!=expected_argv:
++        raise ValueError('launched argv differs from frozen stage command')
++    if spec.get('cwd')!=protocol['probe_root'] or r.get('cwd')!=spec['cwd'] or spec.get('environment')!=protocol['environment_explicit']:
++        raise ValueError('captured cwd/runtime environment mismatch')
++    if spec.get('gpu_identity')!=protocol['gpu_identity'] or spec.get('telemetry') is not (path.name!='export'):
++        raise ValueError('captured device or telemetry stage identity mismatch')
++    if spec.get('clock_control_binding',{}).get('receipt_ref')!=binding['receipt_ref']:
++        raise ValueError('spec clock binding differs')
++    if supervisor.get('spec')!=spec_ref or supervisor.get('freeze_before',{}).get('passed') is not True or supervisor.get('freeze_before',{}).get('external_approved_sha256')!=expected_freeze_sha256:
++        raise ValueError('supervisor startup identity incomplete')
++    for key in ('process_pid','supervisor_pid','qpc_frequency','qpc_launch_start','qpc_process_complete'):
++        if type(r.get(key)) is not int or r[key]<=0:raise ValueError('missing actual receipt identity: '+key)
++    if launched.get('pid')!=r['process_pid'] or launched.get('supervisor_pid')!=r['supervisor_pid'] or supervisor.get('pid')!=r['supervisor_pid']:
++        raise ValueError('receipt/actual launched PID mismatch')
++    if type(launched.get('qpc_after_launch')) is not int or not r['qpc_launch_start']<=launched['qpc_after_launch']<=r['qpc_process_complete']:
++        raise ValueError('launched QPC lifetime mismatch')
++    if path.name=='export':
++        input_ref=ref(path.parent/'profile/trace.nsys-rep')
++        if spec.get('input_artifacts')!=[input_ref]:raise ValueError('export source report content not bound to launch spec')
++        origin=None
++    else:
++        if spec.get('input_artifacts')!=[]:raise ValueError('unexpected native-stage input artifacts')
++        doc=probe_adapter.read_raw(refs['microbench.json']['path'])
++        if doc['source_raw']!=refs['microbench.json']:raise ValueError('raw changed after artifact verification')
++        origin=probe_adapter.process_origin(doc,config)
++        if origin['pair_id']!=stage['config_id']+'/'+path.parent.name or origin['argv']!=[protocol['executable']['path'],*probe_adapter.app_argv(config,path/'microbench.json')]:
++            raise ValueError('actual native process belongs to a different pair/stage')
++        if doc['qpc_frequency']!=r['qpc_frequency'] or not r['qpc_launch_start']<=origin['qpc_start']<origin['qpc_end']<=r['qpc_process_complete']:
++            raise ValueError('native QPC lifecycle is outside its actual parent launch')
++        if path.name=='direct' and origin['pid']!=r['process_pid']:raise ValueError('direct native PID differs from launched child')
++        if path.name=='profile' and origin['pid']==r['process_pid']:raise ValueError('profile target PID incorrectly claims the Nsight wrapper')
++    return {**r,'evidence_binding':{'stage':stage,'artifacts':refs,'process_origin':origin,
++            'spec_ref':spec_ref,'verified_actual_argv_and_PID':True,'export_input_content_bound':path.name=='export'}}
+ 
+ 
+ def extract_pair(config,pair,output,freeze,expected_freeze_sha256):
+@@ -187,17 +280,24 @@
+     try:
+         stages={}
+         for mode in ('profile','direct','export'):
+-            try:stage_complete(base/mode,expected_freeze_sha256);stages[mode]={'complete':True}
++            try:
++                receipt=stage_complete(base/mode,expected_freeze_sha256)
++                stages[mode]={'complete':True,'evidence_binding':receipt['evidence_binding']}
+             except (ValueError,KeyError,TypeError,OSError) as exc:stages[mode]={'complete':False,'reason':str(exc)}
+         result['stage_statuses']=stages
+         if not all(v['complete'] for v in stages.values()):raise ValueError('one or more stages failed or incomplete; all statuses retained')
+         app,profile=numeric_document(base/'profile/microbench.json',config,freeze)
+         direct_app,direct=numeric_document(base/'direct/microbench.json',config,freeze)
+-        result.update(profile_raw=profile,direct_raw=direct,profile_host=profile['formal_host'],direct_host=direct['formal_host'])
++        if profile['source']!=stages['profile']['evidence_binding']['artifacts']['microbench.json'] or direct['source']!=stages['direct']['evidence_binding']['artifacts']['microbench.json']:
++            raise ValueError('consumed raw differs from completed-stage artifact')
++        origins={mode:stages[mode]['evidence_binding']['process_origin'] for mode in ('profile','direct')}
++        result.update(profile_raw=profile,direct_raw=direct,profile_host=profile['formal_host'],direct_host=direct['formal_host'],process_origins=origins)
+         gates={mode:clock_readback_gate(document,load(base/mode/'telemetry.json')) for mode,document in (('profile',app),('direct',direct_app))}
+         result['clock_domain_gates']=gates;result['clock_domain_validated']=all(g['passed'] for g in gates.values())
+         result['numerics_all_rows']=profile['audit']['valid_raw'] and direct['audit']['valid_raw'] and profile['signature']==direct['signature']
+-        trace=read_trace(base/'export/trace.sqlite');write_new(output/'raw_events.json',trace)
++        trace=read_trace(base/'export/trace.sqlite')
++        if trace['source_sqlite']!=stages['export']['evidence_binding']['artifacts']['trace.sqlite']:raise ValueError('consumed SQLite differs from completed export')
++        write_new(output/'raw_events.json',trace)
+         mapped=correlate(trace,app,config);write_new(output/'mapped_calls.json',mapped)
+         result.update(trace_chain_complete=mapped['all36_chain_complete'],source_path_matches_observed_family=mapped['source_path_matches_observed_family'],profile_kernel=mapped['formal_kernel_union'])
+         messages=[]
+@@ -218,7 +318,12 @@
+     rows=[]
+     for config in protocol['configs']:
+         pairs=[extract_pair(config,p,output/config['id']/f'pair_{p+1:02d}',freeze,expected_freeze_sha256) for p in range(3)]
+-        row=quality(config,pairs);write_new(output/config['id']/'quality.json',row);rows.append(row)
++        import probe_adapter
++        origin_issues=probe_adapter.unique_process_origins(pairs)
++        if origin_issues:
++            for pair in pairs:pair['numerics_all_rows']=False;pair.setdefault('issues',[]).append('independent_process_origins_not_proven')
++        row=quality(config,pairs);row['process_origin_issues']=origin_issues
++        write_new(output/config['id']/'quality.json',row);rows.append(row)
+     after=verify_freeze(HERE/'freeze.json',expected_freeze_sha256)
+     result={'schema':'graph-matrix-collection-summary/v1','utc':utc(),'freeze_ref':ref(HERE/'freeze.json'),'verification_before':before,'verification_after':after,
+         'configs_required':6,'configs_reported':len(rows),'pairs_required':18,'formal_profile_calls_required':540,'formal_direct_calls_required':540,
+--- before/collection/test_collection.py
++++ after/collection/test_collection.py
+@@ -95,14 +95,16 @@
+     assert common.POLICY['high_frequency_fields']==['sm_mhz']
+ 
+ 
+-def raw_fixture(config):
++def raw_fixture(config,output=None,pair=1,pid=1):
+     protocol=probe_adapter.protocol_document();records=[]
+-    records.append({'record':'header','schema':'graph-submit-probe/v1','qpc_frequency':1000000,'protocol_sha256':common.ref(common.PROBE/'protocol.json')['sha256'],'probe_cuda_events':False,'trace_clock_subtraction_allowed':False})
++    output=Path(output or 'synthetic_unused_output.jsonl').resolve();pair_id=config['id']+f'/pair_{pair:02d}'
++    argv=[str((common.PROBE/'graph-submit-probe.exe').resolve()),'--run','--config',config['id'],'--pair-id',pair_id,'--output',str(output)]
++    records.append({'pid':pid,'argv':argv,'qpc_start':1000,'utc_start':'2026-09-16T00:00:00.000Z','record':'header','schema':'graph-submit-probe/v1','qpc_frequency':1000000,'protocol_sha256':common.ref(common.PROBE/'protocol.json')['sha256'],'probe_cuda_events':False,'trace_clock_subtraction_allowed':False})
+     environment=dict(protocol['runtime']['environment']);environment.update({k:None for k in protocol['runtime']['extra_clear_environment']})
+     nodes=[];elements=config['elements'];count=config['nodes']
+     for i in range(count):nodes.append({'index':i,'name':'scale_'+str(i+1),'src0':'graph_input' if i==0 else 'scale_'+str(i),'operator':'SCALE','dtype':'F32','scale':.5,'bias':0,'ne':[elements,1,1,1],'nb':[4,4*elements,4*elements,4*elements]})
+     module={'name':'mock','path':'mock','sha256':'a'*64}
+-    records.append({'record':'setup','config':config['id'],'elements':elements,'requested_nodes':count,'actual_ggml_nodes':count,'tensor_payload_bytes':4*elements,'allocated_payload_bytes':(count+1)*4*elements,'allocated_buffer_bytes':(count+1)*4*elements,'logical_read_bytes':count*4*elements,'logical_write_bytes':count*4*elements,'environment':environment,'scheduling':{'CPU_worker_pool_created':False,'process_priority_class':32,'caller_thread_priority':0,'process_affinity':255},'hardware_actual':{'uuid':protocol['runtime']['gpu_expected']['uuid'],'name':protocol['runtime']['gpu_expected']['name'],'cc_major':12,'cc_minor':0,'SMs':84,'L2_bytes':67108864,'total_memory_bytes':16*1024**3},'graph_nodes':nodes,'loaded_modules_before':[module]})
++    records.append({'record':'setup','pair_id':pair_id,'config':config['id'],'elements':elements,'requested_nodes':count,'actual_ggml_nodes':count,'tensor_payload_bytes':4*elements,'allocated_payload_bytes':(count+1)*4*elements,'allocated_buffer_bytes':(count+1)*4*elements,'logical_read_bytes':count*4*elements,'logical_write_bytes':count*4*elements,'environment':environment,'scheduling':{'CPU_worker_pool_created':False,'process_priority_class':32,'caller_thread_priority':0,'process_affinity':255,'caller_thread_id':5},'hardware_actual':{'uuid':protocol['runtime']['gpu_expected']['uuid'],'name':protocol['runtime']['gpu_expected']['name'],'cc_major':12,'cc_minor':0,'SMs':84,'L2_bytes':67108864,'total_memory_bytes':16*1024**3},'graph_nodes':nodes,'loaded_modules_before':[module]})
+     for ordinal,(phase,index) in enumerate([('first',0)]+[('warmup',i) for i in range(5)]+[('formal',i) for i in range(30)]):
+         label=f"graph_submit/{config['id']}/{phase}/{index}";base=10000+ordinal*10000
+         keys=['qpc_outer_push_start','qpc_outer_push_end','qpc_submit_push_start','qpc_submit_push_end','qpc_submit_start','qpc_submit_end','qpc_submit_pop_start','qpc_submit_pop_end','qpc_sync_push_start','qpc_sync_push_end','qpc_sync_start','qpc_sync_end','qpc_sync_pop_start','qpc_sync_pop_end','qpc_outer_pop_start','qpc_outer_pop_end']
+@@ -111,13 +113,13 @@
+         records.append({'record':'validation','label':label,'phase':phase,'index':index,'stage':count,'qpc_validation_start':base+2000,'qpc_validation_end':base+3000,'result':result})
+         if ordinal in (0,35):
+             records.extend({'record':'intermediate_validation','label':label,'stage':j,'qpc_start':base+3000+j*100,'qpc_end':base+3000+j*100+1,'result':result} for j in range(1,count))
+-    records.append({'record':'footer','status':'complete','math_pass':True,'graph_calls':36,'modules_stable':True,'loaded_modules_after':[module]})
++    records.append({'record':'footer','qpc_end':400000,'utc_end':'2026-09-16T00:00:00.400Z','status':'complete','math_pass':True,'graph_calls':36,'modules_stable':True,'loaded_modules_after':[module]})
+     return records
+ 
+ 
+ def test_graph_jsonl_shape_count_dependency_and_exact_validation(tmp_path):
+     import json
+-    c=probe_adapter.protocol_document()['configs'][2];path=tmp_path/'graph.jsonl';records=raw_fixture(c)
++    c=probe_adapter.protocol_document()['configs'][2];path=tmp_path/'graph.jsonl';records=raw_fixture(c,output=path)
+     path.write_text('\n'.join(json.dumps(r) for r in records)+'\n')
+     doc=probe_adapter.read_raw(path);assert probe_adapter.audit_raw(doc,c,{})['valid_raw']
+     assert len(probe_adapter.expected_labels(doc,c))==36
+@@ -128,8 +130,8 @@
+ 
+ def test_partial_or_numeric_failed_graph_record_denied(tmp_path):
+     import json
+-    c=probe_adapter.protocol_document()['configs'][0];records=raw_fixture(c);records[3]['result']['mismatches']=1
+-    path=tmp_path/'bad.jsonl';path.write_text('\n'.join(json.dumps(r) for r in records)+'\n')
++    c=probe_adapter.protocol_document()['configs'][0];path=tmp_path/'bad.jsonl';records=raw_fixture(c,output=path);records[3]['result']['mismatches']=1
++    path.write_text('\n'.join(json.dumps(r) for r in records)+'\n')
+     assert not probe_adapter.audit_raw(probe_adapter.read_raw(path),c,{})['valid_raw']
+     records.pop();path.write_text('\n'.join(json.dumps(r) for r in records)+'\n')
+     with pytest.raises(ValueError,match='footer'):probe_adapter.read_raw(path)
+@@ -147,7 +149,7 @@
+     """Synthetic schema-shaped evidence, not an actual Nsight export."""
+     tables={'NVTX_EVENTS':[],'CUPTI_ACTIVITY_KIND_RUNTIME':[],
+         'CUPTI_ACTIVITY_KIND_DRIVER':[],'CUPTI_ACTIVITY_KIND_KERNEL':[]}
+-    app={'runs':[]};pid=1<<24;tid=pid+5
++    app={'runs':[],'header':{'pid':1},'setup':{'scheduling':{'caller_thread_id':5}}};pid=1<<24;tid=pid+5
+     for ordinal,(phase,index) in enumerate(common.expected_calls()):
+         base=ordinal*1000000;correlation=ordinal+100
+         label=f"graph_submit/{config['id']}/{phase}/{index}"
+@@ -197,3 +199,116 @@
+     raw['tables']['DIAGNOSTIC_EVENT']=[{'severity':999,'text':'unclassified diagnostic'}]
+     result=correlate(raw,app,config)
+     assert result['warning_diagnostics_verbatim']==raw['tables']['DIAGNOSTIC_EVENT']
++
++
++# End-to-end evidence fixtures below isolate the stage binding gate. All files,
++# PIDs and QPC values are synthetic; no native process, CUDA or NVML is invoked.
++def completed_stage_fixture(monkeypatch,tmp_path,mode='direct'):
++    import extract,json
++    root=tmp_path/'collection';config=probe_adapter.protocol_document()['configs'][1]
++    directory=root/'runs'/config['id']/'pair_01'/mode;directory.mkdir(parents=True)
++    monkeypatch.setattr(extract,'HERE',root)
++    probe=probe_adapter.protocol_document();environment=dict(probe['runtime']['environment'])
++    environment.update({name:None for name in probe['runtime']['extra_clear_environment']})
++    protocol={'configs':probe['configs'],'probe_root':str(common.PROBE),
++        'executable':{'path':str(common.PROBE/'graph-submit-probe.exe')},
++        'nsys':{'executable':{'path':probe['profiler']['path']}},'nsys_profile_options':probe['profiler']['options'][1:],
++        'gpu_identity':{'uuid':probe['runtime']['gpu_expected']['uuid']},'environment_explicit':environment}
++    def put(path,value):Path(path).write_text(json.dumps(value),encoding='utf-8')
++    put(root/'protocol.json',protocol)
++    anchor={'path':str(root/'clock.json'),'sha256':'b'*64,'bytes':10}
++    put(root/'clock-control-binding.json',{'receipt_ref':anchor})
++    def clock(path,sha,gpu):
++        assert path==anchor['path'] and sha==anchor['sha256'] and gpu==protocol['gpu_identity']['uuid']
++        return {'receipt_ref':anchor}
++    monkeypatch.setattr(extract,'verify_clock_receipt',clock)
++    stage={'config_id':config['id'],'pair':0,'mode':mode}
++    argv=probe_adapter.stage_command(stage,directory,protocol)
++    inputs=[]
++    if mode=='export':
++        source=directory.parent/'profile/trace.nsys-rep';source.parent.mkdir(exist_ok=True);source.write_bytes(b'synthetic report; never parsed as actual trace')
++        inputs=[common.ref(source)];(directory/'trace.sqlite').write_bytes(b'synthetic SQLite; evidence identity test only')
++    else:
++        raw=directory/'microbench.json';raw.write_text('\n'.join(json.dumps(x) for x in raw_fixture(config,output=raw,pid=100))+'\n',encoding='utf-8')
++        put(directory/'telemetry.json',{'synthetic_test_only':True})
++        if mode=='profile':(directory/'trace.nsys-rep').write_bytes(b'synthetic report')
++    spec={'schema':'graph-collection-process-spec/v1','stage':stage,'directory':str(directory),'freeze':str(root/'freeze.json'),
++        'expected_freeze_sha256':'a'*64,'argv':argv,'cwd':protocol['probe_root'],'environment':environment,
++        'gpu_identity':protocol['gpu_identity'],'telemetry':mode!='export','clock_control_binding':{'receipt_ref':anchor},'input_artifacts':inputs}
++    put(directory/'spec.json',spec);spec_ref=common.ref(directory/'spec.json')
++    actual_pid=100 if mode=='direct' else 200
++    put(directory/'launched.json',{'pid':actual_pid,'supervisor_pid':50,'qpc_after_launch':800,'argv':argv})
++    put(directory/'supervisor-started.json',{'pid':50,'spec':spec_ref,'freeze_before':{'passed':True,'external_approved_sha256':'a'*64}})
++    (directory/'stdout.txt').write_bytes(b'');(directory/'stderr.txt').write_bytes(b'')
++    receipt={'schema':'graph-collection-process/v1','clock_control_binding':{'receipt_ref':anchor},'external_approved_sha256':'a'*64,
++        'child_process_exited':True,'status':'completed','returncode':0,'freeze_after':{'passed':True,'external_approved_sha256':'a'*64},
++        'spec_ref':spec_ref,'argv':argv,'cwd':protocol['probe_root'],'process_pid':actual_pid,'supervisor_pid':50,
++        'qpc_frequency':1000000,'qpc_launch_start':500,'qpc_process_complete':500000,
++        'artifacts':[common.ref(f) for f in directory.iterdir() if f.is_file()]}
++    def save():put(directory/'complete.json',receipt)
++    save();return directory,receipt,save
++
++
++@pytest.mark.parametrize('mode',['direct','profile','export'])
++def test_full_stage_evidence_accepts_only_its_bound_process(monkeypatch,tmp_path,mode):
++    import extract
++    path,receipt,save=completed_stage_fixture(monkeypatch,tmp_path,mode)
++    result=extract.stage_complete(path,'a'*64)
++    assert result['evidence_binding']['stage']['mode']==mode
++    assert result['evidence_binding']['verified_actual_argv_and_PID'] is True
++    if mode!='export':assert result['evidence_binding']['process_origin']['pid']==100
++    # Both empty native stdout and stderr are valid evidence with real zero size.
++    assert result['evidence_binding']['artifacts']['stdout.txt']['bytes']==0
++
++
++@pytest.mark.parametrize('mutation',['empty','missing_raw','missing_telemetry','duplicate','foreign_path','missing_hash'])
++def test_full_stage_artifact_set_rejects_incomplete_or_foreign(monkeypatch,tmp_path,mutation):
++    import extract
++    path,receipt,save=completed_stage_fixture(monkeypatch,tmp_path)
++    if mutation=='empty':receipt['artifacts']=[]
++    elif mutation.startswith('missing_') and mutation!='missing_hash':
++        name='microbench.json' if mutation=='missing_raw' else 'telemetry.json'
++        receipt['artifacts']=[r for r in receipt['artifacts'] if Path(r['path']).name!=name]
++    elif mutation=='duplicate':receipt['artifacts'].append(copy.deepcopy(receipt['artifacts'][0]))
++    elif mutation=='foreign_path':
++        foreign=tmp_path/'microbench.json';foreign.write_bytes((path/'microbench.json').read_bytes())
++        receipt['artifacts']=[common.ref(foreign) if Path(r['path']).name=='microbench.json' else r for r in receipt['artifacts']]
++    elif mutation=='missing_hash':receipt['artifacts'][0]['sha256']=None
++    save()
++    with pytest.raises((ValueError,KeyError,TypeError,OSError)):extract.stage_complete(path,'a'*64)
++
++
++@pytest.mark.parametrize('mutation',['pid','pair','argv_output','before_parent_launch','missing_pid'])
++def test_full_stage_rejects_raw_from_another_origin(monkeypatch,tmp_path,mutation):
++    import extract,json
++    path,receipt,save=completed_stage_fixture(monkeypatch,tmp_path)
++    raw=path/'microbench.json';records=[json.loads(x) for x in raw.read_text().splitlines()]
++    if mutation=='pid':records[0]['pid']=101
++    elif mutation=='missing_pid':records[0].pop('pid')
++    elif mutation=='pair':
++        records[1]['pair_id']=records[1]['pair_id'].replace('pair_01','pair_02');records[0]['argv'][5]=records[1]['pair_id']
++    elif mutation=='argv_output':records[0]['argv'][-1]=str(tmp_path/'other.jsonl')
++    elif mutation=='before_parent_launch':records[0]['qpc_start']=200
++    raw.write_text('\n'.join(json.dumps(x) for x in records)+'\n',encoding='utf-8')
++    receipt['artifacts']=[common.ref(raw) if Path(r['path']).name=='microbench.json' else r for r in receipt['artifacts']];save()
++    with pytest.raises((ValueError,KeyError,TypeError,OSError)):extract.stage_complete(path,'a'*64)
++
++
++def test_trace_nonzero_VM_namespace_binds_actual_PID_and_TID():
++    config=probe_adapter.protocol_document()['configs'][1];raw,app=trace_fixture(config)
++    for table,field in [('NVTX_EVENTS','globalTid'),('CUPTI_ACTIVITY_KIND_RUNTIME','globalTid'),('CUPTI_ACTIVITY_KIND_DRIVER','globalTid'),('CUPTI_ACTIVITY_KIND_KERNEL','globalPid')]:
++        for row in raw['tables'][table]:row[field]|=3<<48
++    result=correlate(raw,app,config)
++    assert result['all36_chain_complete'] is True
++    assert result['native_process_binding']['trace_global_pid']==(3<<48)|(1<<24)
++    app['setup']['scheduling']['caller_thread_id']=6
++    with pytest.raises(ValueError,match='process/thread'):correlate(raw,app,config)
++
++
++def test_independent_origins_reject_duplicate_but_allow_later_PID_reuse():
++    one={'pid':10,'qpc_start':100,'qpc_end':200}
++    two={'pid':10,'qpc_start':300,'qpc_end':400}
++    pairs=[{'pair':0,'process_origins':{'direct':one}},{'pair':1,'process_origins':{'direct':two}}]
++    assert probe_adapter.unique_process_origins(pairs)==[]
++    pairs[1]['process_origins']['direct']=copy.deepcopy(one)
++    assert any(i['reason']=='duplicate_native_process_origin' for i in probe_adapter.unique_process_origins(pairs))

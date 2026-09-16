@@ -1,0 +1,54 @@
+{
+  "old_collector_readonly": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3",
+  "copied_files": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\common.py",
+      "bytes": 14237,
+      "sha256": "31adfc161d102aae791f424ecb45cef33d81dcf60d636e10598eaa28665ca08d"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runner.py",
+      "bytes": 17238,
+      "sha256": "d38184bdb8fd7b2fb0ffdc55794ac7f2ffa03849a5f3669397a7623e525c6e67"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\worker.py",
+      "bytes": 6864,
+      "sha256": "0080b31bd289f64c19b62f1639ec882fdb6c3c4255fd7b85baa6094275605c44"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\extract.py",
+      "bytes": 19011,
+      "sha256": "da145e76dab9fcf9e58edff96f727a6af292b270ce62aad48bdc287db2a52403"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\quality.py",
+      "bytes": 3186,
+      "sha256": "4285dbdef3bfb05352b625c4ce8a6f634b2791a94f0c46ad923ca144afd4dcfb"
+    }
+  ],
+  "telemetry_source_files": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_017\\telemetry_v2\\sampler.py",
+      "bytes": 16555,
+      "sha256": "f57c40469137344d41806fb738e0e261e04cc8754440c330a36083af202db6ec"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_017\\telemetry_v2\\assess.py",
+      "bytes": 5883,
+      "sha256": "dda04d24134cf1bd9028528372fa1bf9a38f0f31930d1e27d26dcd43bfff6285"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_017\\telemetry_v2\\protocol.json",
+      "bytes": 1297,
+      "sha256": "672eb798a092cf191193afc58b3fd256b7a685cd9cead4b7528fe368034a7056"
+    }
+  ],
+  "controller_source": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\clock_control_run_r2.py",
+    "bytes": 15729,
+    "sha256": "d899352d01ee3c062671deec8874f3cefd44a9efc3f18ae2ba13fabdf5a42e60"
+  },
+  "originals_modified": false,
+  "GPU_runs": 0
+}

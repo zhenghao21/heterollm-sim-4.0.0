@@ -1,0 +1,481 @@
+{
+  "schema": "graph-matrix-collection-protocol/v1",
+  "probe_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\graph_submit_probe",
+  "created_utc": "2026-09-16T05:42:12.353120+00:00",
+  "probe_protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\graph_submit_probe\\protocol.json",
+    "bytes": 9794,
+    "sha256": "f0fb287c38300a21d36115703a0fe209be3de4772cf64892b88ce4146d6da0ea"
+  },
+  "probe_manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\graph_submit_probe\\build_manifest.json",
+    "bytes": 78167,
+    "sha256": "15fc2cf1c449968d4cc756d4c43cafb319c2764aa49e9a69c197269eb07fb617"
+  },
+  "configs": [
+    {
+      "id": "scale_f32_e1024_g1",
+      "elements": 1024,
+      "nodes": 1,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e1024_g8",
+      "elements": 1024,
+      "nodes": 8,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e1024_g32",
+      "elements": 1024,
+      "nodes": 32,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e262144_g1",
+      "elements": 262144,
+      "nodes": 1,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e262144_g8",
+      "elements": 262144,
+      "nodes": 8,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    },
+    {
+      "id": "scale_f32_e262144_g32",
+      "elements": 262144,
+      "nodes": 32,
+      "dtype": "F32",
+      "layout": "contiguous_1d",
+      "operator": "SCALE",
+      "scale": 0.5,
+      "bias": 0.0
+    }
+  ],
+  "quality_policy": {
+    "config_count": 6,
+    "process_pairs": 3,
+    "calls_per_process": 36,
+    "formal_calls_per_process": 30,
+    "pair_order_rule": "config_index_plus_pair_index_parity_direct_first_when_even",
+    "checkpoint_seconds": 180,
+    "terminate_on_checkpoint": false,
+    "kernel_formal_p90_div_p10_max": 1.5,
+    "profile_process_median_max_relative_deviation": 0.05,
+    "profile_direct_host_median_max_relative_difference": 0.2,
+    "direct_host_formal_p90_div_p10_max": 1.5,
+    "all_first_warmup_formal_numeric_rows_pass_required": true,
+    "all_profile_process_kernel_chain_and_source_path_required": true,
+    "clock_sampling_method": "high_resolution_waitable_timer_absolute_QPC_SM_read_windows",
+    "high_frequency_fields": [
+      "sm_mhz"
+    ],
+    "full_state_telemetry_in_formal": false,
+    "quantile_method": "linear interpolation at (n-1)*q",
+    "median_deviation_center": "median of three profiled process medians",
+    "host_ratio_denominator": "paired direct process host median",
+    "within_profile_dispersion": "each of three formal kernel-union distributions",
+    "target_sm_clock_mhz": 2400,
+    "sm_clock_tolerance_mhz": 30,
+    "telemetry_period_seconds": 0.005,
+    "maximum_formal_clock_bracket_gap_ms": 25,
+    "every_formal_interval_bracketed_required": true,
+    "diagnostic_labels_only": true,
+    "coefficients_emitted": false,
+    "validation_group_never_fitted": true
+  },
+  "execution_plan": [
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g1",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g8",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e1024_g32",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g1",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g8",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "scale_f32_e262144_g32",
+      "pair": 2,
+      "mode": "export"
+    }
+  ],
+  "executable": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\graph_submit_probe\\graph-submit-probe.exe",
+    "bytes": 134656,
+    "sha256": "86d268a3ceb9a223f1caa578ba1a68ac57ad8f971eac2b738aef81047f406a0b"
+  },
+  "native_bin": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin",
+  "nsys": {
+    "executable": {
+      "path": "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\nsys.exe",
+      "bytes": 69242496,
+      "sha256": "e597347ef6cb45456612c0c9593401bb6d1b85497bb18534968f309955831291"
+    },
+    "information": {
+      "version": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_015\\trace_2026_5\\nsys_version.txt",
+        "bytes": 59,
+        "sha256": "385508f033db65f74b6604911887f6feb756a8356f1ac83be463b4c48a39b21d"
+      },
+      "profile_help": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_015\\trace_2026_5\\nsys_profile_help.txt",
+        "bytes": 27916,
+        "sha256": "3dd4f4057251a3b4a80ae8dd521aa6f22e1825475c935eb8e172d8016c1b6392"
+      },
+      "export_help": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_015\\trace_2026_5\\nsys_export_help.txt",
+        "bytes": 12208,
+        "sha256": "43640298031188814864497f2f26f8ad76ec701b882579a3fe35292f044a9de7"
+      }
+    },
+    "profile_options": [
+      "--trace=cuda,nvtx",
+      "--sample=none",
+      "--cpuctxsw=none",
+      "--backtrace=none",
+      "--cuda-graph-trace=node",
+      "--kill=false",
+      "--duration=60",
+      "--wait=primary",
+      "--stop-on-exit=true",
+      "--stats=false",
+      "--export=none",
+      "--force-overwrite=false"
+    ]
+  },
+  "nsys_profile_options": [
+    "--kill=false",
+    "--trace=cuda,nvtx",
+    "--cuda-graph-trace=node",
+    "--sample=none",
+    "--cpuctxsw=none",
+    "--force-overwrite=false"
+  ],
+  "gpu_identity": {
+    "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "name": "NVIDIA GeForce RTX 5080",
+    "driver_version": "616.64",
+    "nvml_library": {
+      "path": "C:\\Windows\\System32\\nvml.dll",
+      "bytes": 1499368,
+      "sha256": "5ee24ec769a7a7404a48fb0cc1e534dd2913477fb4abfcd830c8fc9093e6d26b"
+    }
+  },
+  "environment_explicit": {
+    "GGML_OP_OFFLOAD_MIN_BATCH": null,
+    "LLAMA_ENGINE_TOKEN_TIMES": "1",
+    "CUDA_VISIBLE_DEVICES": null,
+    "CUDA_MODULE_LOADING": null,
+    "OMP_NUM_THREADS": null,
+    "GGML_CUDA_DISABLE_GRAPHS": null,
+    "LLAMA_TRACE_ANNOTATIONS": "0",
+    "LLAMA_GRAPH_REUSE_DISABLE": null,
+    "GGML_CPU_OPERATOR_TRACE": null,
+    "GGML_CPU_DISABLE_FUSION": null,
+    "GGML_CUDA_DISABLE_FUSION": null,
+    "GGML_CUDA_GRAPH_OPT": null,
+    "GGML_CUDA_NO_PINNED": null,
+    "GGML_CUDA_REGISTER_HOST": null,
+    "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+    "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+    "GGML_CUDA_FORCE_MMQ": null,
+    "GGML_CUDA_FORCE_CUBLAS": null,
+    "GGML_SCHED_DEBUG": null,
+    "GGML_NO_IQ_PANEL": null,
+    "CUDA_LAUNCH_BLOCKING": null
+  },
+  "clock_domain": {
+    "target_sm_clock_mhz": 2400,
+    "sm_clock_tolerance_mhz": 30,
+    "external_receipt_required": true,
+    "actual_readback_each_stage_required": true,
+    "collector_sets_clocks": false
+  },
+  "mode_contract": "Direct/profile are the same event-free graph program, native-default CUDA graphs and fusion. Profile adds reviewed Nsight node tracing only; raw kernel counts for untraced direct remain null.",
+  "event_free_control_scope": "Direct/profile are the same event-free graph program, native-default CUDA graphs and fusion. Profile adds reviewed Nsight node tracing only; raw kernel counts for untraced direct remain null.",
+  "root_review_required_before_gpu": true,
+  "prepared_only": true,
+  "native_llm_executed": false,
+  "calibration_eligible": false,
+  "sampler_method_change": "Copied high-resolution SM read-window sampler; multi-field NVML no longer sampled in formal; no cosmetic reuse of old telemetry identity",
+  "source_runtime_dispatch_proof": "Native DLL observation is empirical; incomplete original build/source closure is retained as conditional transfer, never promoted to source equivalence."
+}

@@ -1,0 +1,49 @@
+{
+  "schema": "operator-clock-control-receipt/v1",
+  "created_utc": "2026-09-16T05:43:01.744459+00:00",
+  "gpu_uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+  "target_sm_clock_mhz": 2400,
+  "sm_clock_tolerance_mhz": 30,
+  "requested_lock_min_mhz": 2400,
+  "requested_lock_max_mhz": 2400,
+  "lock_command_returncode": 0,
+  "command": [
+    "C:\\Windows\\System32\\nvidia-smi.exe",
+    "-lgc",
+    "2400,2400"
+  ],
+  "stdout_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\graph_clock_control_lock.stdout.txt",
+    "sha256": "68883ce038ee91bc2eaed841d86c46f3eb0c6c80a158d15f3c634b1264f8fbf4",
+    "bytes": 90
+  },
+  "stderr_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\graph_clock_control_lock.stderr.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "restore_on_exit_planned": true,
+  "readback": {
+    "command": [
+      "C:\\Windows\\System32\\nvidia-smi.exe",
+      "--query-gpu=uuid,clocks.sm",
+      "--format=csv,noheader,nounits"
+    ],
+    "returncode": 0,
+    "stdout_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\graph_clock_control_readback.stdout.txt",
+      "sha256": "9276d3dfae19e770b80ff73d554a71f817adc152e4605636f47afd4853e89782",
+      "bytes": 48
+    },
+    "stderr_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\graph_clock_control_readback.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "controller_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\clock_controller.py",
+    "sha256": "cc140a8caae26ea93eda9e6a7a775e0f56f74de27fc39058714707d261e93610",
+    "bytes": 15720
+  }
+}
