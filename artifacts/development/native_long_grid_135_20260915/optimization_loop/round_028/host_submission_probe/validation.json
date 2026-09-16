@@ -1,0 +1,44 @@
+{
+  "schema": "host-submission-preparation-validation/v1",
+  "created_utc": "2026-09-16T18:52:39.541745+00:00",
+  "build_manifest": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_submission_probe\\build_manifest.0004.json",
+    "sha256": "56b2174bccb270fbb189ccc0272d7968789c1861ec010daf25b46625a4ae8142"
+  },
+  "host_test_result": {
+    "schema": "host-submission-host-test/v1",
+    "build_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_submission_probe\\build_manifest.0004.json",
+      "bytes": 81394,
+      "sha256": "56b2174bccb270fbb189ccc0272d7968789c1861ec010daf25b46625a4ae8142"
+    },
+    "returncode": 0,
+    "stdout": "{\"status\":\"passed\",\"tests\":23,\"GPU_API_calls\":0,\"target_DLL_loaded\":false,\"performance_measured\":false}\n",
+    "stderr": "",
+    "target_executed": false,
+    "GPU_executed": false
+  },
+  "python_tests": {
+    "command": "E:/anaconda/python.exe -m pytest -q test_host_probe.py",
+    "passed": 23,
+    "failed": 0
+  },
+  "host_cpp_tests": 23,
+  "target_executable_compiled": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_submission_probe\\host-submission-target.0004.exe",
+    "bytes": 92672,
+    "sha256": "a1d798f9ac8388c04e96b556fb4c09eb783739356108a7cdfdc4bfd1158109cb"
+  },
+  "target_executable_executed": false,
+  "GPU_executed": false,
+  "target_DLL_rebuilt": false,
+  "performance_measured": false,
+  "new_cost_coefficients": 0,
+  "current_GPU_runtime_qualification": "not run; runtime kernel,API topology and numerical identity remain unqualified",
+  "source_and_clock_limits": [
+    "Synthetic external GGML only, no llama_context can_reuse/model.build_graph internal observation.",
+    "Windows calling-thread CPU counters raw; visibility threshold is not measured resolution or reliable service proof.",
+    "GPU event envelope includes host/synchronization gaps; pure GPU service remains null."
+  ],
+  "historical_build_attempts": "0001 compiler succeeded but include-evidence gate failed due localized log parser; preserved.0002/0003 superseded before any target execution.0004 current."
+}

@@ -1918,6 +1918,13 @@
       "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/off/runs/run.0001.start.json",
       "bytes": 6938,
       "sha256": "050a8e6c12b885ab7def847ffad991cd4d4cc7b99dfb75ea4e370b5fd2e61f85"
+    },
+    "inflight_identity_failure": {
+      "cell_id": "qwen38_p512_o128_c2__fixed_runtime",
+      "note": "round_027/identity_failure_observation.0001.json",
+      "cause": "unresolved",
+      "preserved": true,
+      "retried": false
     }
   },
   "round_026_wrapper_correctness": {
@@ -1955,10 +1962,24 @@
     "performance_parameters_admitted": 0
   },
   "round_028_preparation": {
-    "status": "source_and_host_test_preparation_only",
-    "scope": "synthetic target-DLL multi-node host submission lifecycle",
+    "status": "build0005_host_validated_not_executed",
+    "scope": "synthetic target-DLL 1/4/16 RMS_NORM graph lifecycle; chain development/fanout held out",
+    "build_manifest_sha256": "562873a6b0ddec92d3a072d3935d34e66c86bf2003d63bb0c05583cb75301061",
+    "python_tests": 57,
+    "Cpp_host_tests": 23,
+    "compiler_headers": 294,
+    "process_guard": "before/after project test processes; no desktop GPU empty-list requirement",
     "native_LLM_latency_fitting": false,
-    "gpu_execution_performed": false
+    "gpu_execution_performed": false,
+    "thread_CPU_precision_validated": false,
+    "GPU_event_scope": "envelope including host/sync gaps",
+    "new_cost_parameters": 0,
+    "required_before_service_admission": [
+      "counter precision and observer-overhead controls",
+      "window convergence/backpressure qualification",
+      "independent K/G variation and held-out topology",
+      "exact existing cost ownership replacement"
+    ]
   },
   "round_027_postprocess": {
     "status": "prepared_before_scoring",

@@ -1,0 +1,13 @@
+{
+  "schema": "host-submission-host-test/v1",
+  "build_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_submission_probe\\build_manifest.0005.json",
+    "bytes": 81396,
+    "sha256": "562873a6b0ddec92d3a072d3935d34e66c86bf2003d63bb0c05583cb75301061"
+  },
+  "returncode": 0,
+  "stdout": "{\"status\":\"passed\",\"tests\":23,\"GPU_API_calls\":0,\"target_DLL_loaded\":false,\"performance_measured\":false}\n",
+  "stderr": "",
+  "target_executed": false,
+  "GPU_executed": false
+}

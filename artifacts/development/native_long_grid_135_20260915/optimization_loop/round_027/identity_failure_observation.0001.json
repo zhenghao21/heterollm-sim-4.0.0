@@ -1,0 +1,37 @@
+{
+  "schema": "r27-inflight-identity-failure-observation/v1",
+  "observed_utc": "2026-09-16T19:26:16.625Z",
+  "status": "cause_unresolved",
+  "failed_cell": "qwen38_p512_o128_c2__fixed_runtime",
+  "prediction_ref": {
+    "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/off/predictions/qwen38_p512_o128_c2__fixed_runtime.prediction.json",
+    "bytes": 235720,
+    "sha256": "4a0061bc2c39b6819b849cf1333e716e620229449abc77163489909e0e39f186"
+  },
+  "reason": "ValueError: GGUF SHA256 mismatch: path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf; expected=157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406; actual=86c0ee73142d34ff4e9e35251b0d4596db166c2463df6058f86e051a919e8485; native_model_path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.gguf",
+  "reader_ref": {
+    "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/off/source/src/heterollm_sim/gguf_parity.py",
+    "bytes": 26150,
+    "sha256": "0e7087e29e07db38b0c879f81b6efbf9521386cf0da4f9db1f2d1c6d61b09dfb"
+  },
+  "static_reader_observation": "The same open file supplies metadata and SHA256, reading 1MiB immutable byte chunks; reader checks byte count, file identity, size and mtime before returning. No obvious implementation cause was established by this read-only audit.",
+  "file_stat_observation": {
+    "bytes": 14865116128,
+    "Windows_attributes": 33,
+    "ReadOnly": true,
+    "Archive": true,
+    "last_write_utc": "2026-08-18T16:24:28.8134916Z"
+  },
+  "WHEA_query": {
+    "provider": "Microsoft-Windows-WHEA-Logger",
+    "log": "System",
+    "window": "previous 2 days at query time",
+    "maximum_events": 20,
+    "result": "No events found matching filter; not proof of healthy hardware or storage."
+  },
+  "extra_large_file_hash_runs": 0,
+  "failed_prediction_changed": false,
+  "retry_performed": false,
+  "scored": false,
+  "next_evidence": "After current campaign naturally terminates, use a bounded separate identity-read diagnostic with independent hashing implementations and retained observations; no acceptance through retries or weakened SHA checks."
+}

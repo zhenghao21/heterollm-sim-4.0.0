@@ -189,6 +189,8 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 最新已评分版本为R24：131终态中130预测、1个完整GGUF SHA校验失败，9/131格三项Engine误差严格<10%。A未通过；B与跨硬件未验证。R25为同源末层选行开关对照，off131格全部预测成功，但on在启动校验时因配置证明错位被拒绝，0格预测、未评分；进程已自然退出，execution_closed.json已封存。其语义资格为conditional，不能升级为原生分派已验证。分组/配对报告入口已准备，4项测试验证严格阈值、失败分母、两路native一致和评分前拒收；尚未对R25运行报告。
 
+R27仍在执行，off中qwen38_p512_o128_c2出现新的完整GGUF SHA不匹配，已保留失败、不重试；原因未定，源码和只读系统记录检查尚不足以定位，不与精度误差混为一谈。
+
 R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复为预测；另1格qwen38_gpu_p512_o128_c1完整SHA不匹配，未重试覆盖。预测前后全文校验正常不解释这次瞬时异常的根因，也不能追认该失败通过。
 
 ## 11. 已完成修改与验证（动态，原位更新）
@@ -218,7 +220,7 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 2. 评估选行修正的实际影响。依据源码预先限定受影响算子：普通架构的末层FFN缩行可能降低原本偏低的TTFT；混合架构的final norm及gather补全可能增时。结构正确性、源码条件资格与精度收益分开报告；不承诺全模型或TPOT改善。
 3. R27完整结束后执行R26 wrapper与target动态对照。固定Q5_0/M1/K4096/N3072的target路径与旧wrapper数值资格已分别通过。新shim已按连续布局补齐六个stride，两个cubin与目标黄金字节一致，33项Python主机检查及CPU布局程序通过；入口须先验证R27的262终态屏障。捕获pass中conversion→main相邻发射、中间不插同步/D2H，随后关闭CUPTI，用独立fixture重新验证新shim数值。QI5_ERRATUM已依据锁定源码更正QI=4、每迭代64 blocks，旧contract/原始记录不变。动态匹配与新shim数值仍未执行；M4仍留出，0性能参数准入。
 4. 仅在路径、数值与测量资格通过后冻结合成性能实验。分别测CUDA-event主kernel/转换、warm复用和超过L2的旋转工作集；CUPTI采集只作路径证据。先规定development/holdout、样本量、波动门限和失败规则，再运行；不按131格误差选择系数，也不以CTA数直接换经验带宽。
-5. 下一机制优先定位MMVQ访存几何与host建图/提交重叠。R28正在准备锁定target DLL的独立多节点合成图探针，分别记录提交wall、线程CPU服务、GPU事件与同步等待；它不能直接证明LLM内部can_reuse/build_graph时段，暂无新时延参数。真实microbatch、nonflash物理KV、retained高水位、slot生命周期作为源码约束；已有nonflash、logits、sampling、launch和sync成本先查重。固定三档prompt没有ubatch尾块，c不能替代kernel M，native token时间戳仅作诊断。未知成本标未定价，不追加p/c残差；连续工具完善须按第8节复盘，转入可改变预测的机制验证。
+5. 下一机制优先定位MMVQ访存几何与host建图/提交重叠。R28已准备锁定target DLL的1/4/16节点RMS_NORM chain/fanout探针，构建0005通过57项Python回归和23项C++主机测试，目标程序未执行。执行器已补齐环境隔离、项目进程互斥、前后身份及异常终态。先在R27结束后验证实际路径；线程CPU计数精度、观察开销及K/G成本可辨识性须另行验证，当前GPU事件仅为包络，不准入1000ns/250ns或其他服务参数。外部GGML探针不能代表LLM内部can_reuse/build_graph。真实microbatch、nonflash物理KV、retained高水位、slot生命周期作为源码约束；已有nonflash、logits、sampling、launch和sync成本先查重。固定三档prompt没有ubatch尾块，c不能替代kernel M，native token时间戳仅作诊断。未知成本标未定价，不追加p/c残差；连续工具完善须按第8节复盘，转入可改变预测的机制验证。
 6. 每轮原位更新任务书、提交、推送并核验远端。A固定131/131格、393/393项均严格<10%；不达标继续有证据的机制假设。通过A后另用独立B，当前B尚未验证。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
