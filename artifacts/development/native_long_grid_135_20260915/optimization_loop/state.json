@@ -1925,7 +1925,17 @@
       "cause": "unresolved",
       "preserved": true,
       "retried": false
-    }
+    },
+    "inflight_identity_failures": [
+      {
+        "cell_id": "qwen38_p512_o128_c2__fixed_runtime",
+        "reason": "ValueError: GGUF SHA256 mismatch: path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf; expected=157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406; actual=86c0ee73142d34ff4e9e35251b0d4596db166c2463df6058f86e051a919e8485; native_model_path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.gguf"
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o128_c4__fixed_runtime",
+        "reason": "ValueError: GGUF SHA256 mismatch: path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf; expected=157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406; actual=9df5e6ab054d2109059acf24092d8d4a469871e9ee9546bafd1ab3e6bd3b25a4; native_model_path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf"
+      }
+    ]
   },
   "round_026_wrapper_correctness": {
     "status": "rejected",
@@ -1979,7 +1989,8 @@
       "window convergence/backpressure qualification",
       "independent K/G variation and held-out topology",
       "exact existing cost ownership replacement"
-    ]
+    ],
+    "next_controls": "GPU lightweight HES U/A/B/AB observer-effect controls; host clock and K/G identifiability controls; preparation only while R27 runs"
   },
   "round_027_postprocess": {
     "status": "prepared_before_scoring",
@@ -2022,5 +2033,15 @@
     "runtime_match_verified": false,
     "new_shim_numerical_qualification": false,
     "performance_parameter_admitted": false
+  },
+  "round_027_execution": {
+    "off": {
+      "terminal": 131,
+      "predicted": 129,
+      "failed": 2
+    },
+    "on": "running",
+    "scored": false,
+    "failures_preserved": true
   }
 }
