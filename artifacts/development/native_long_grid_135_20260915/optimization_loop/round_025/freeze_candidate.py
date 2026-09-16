@@ -45,8 +45,16 @@ def compare_inputs(off,on):
         from copy import deepcopy
         x,y=deepcopy(x),deepcopy(y)
         for inputs in (x,y):
-            ref=inputs['retained_kv_warmup_evidence']['extractor_ref']
-            ref['path']='arm_source_copy'
+            proof=inputs['retained_kv_warmup_evidence']
+            contract=proof.get('contract')
+            s.require(inputs.get('retained_kv_warmup_contract')==contract,'retained contract alias differs')
+            if contract is not None:
+                evidence={k:v for k,v in proof.items() if k!='contract'}
+                s.require(contract.get('evidence_sha256')==s.stable_hash(evidence),'retained evidence digest invalid')
+                # Verified derived digest changes with the extractor copy path.
+                contract['evidence_sha256']='verified_arm_evidence_digest'
+                inputs['retained_kv_warmup_contract']['evidence_sha256']='verified_arm_evidence_digest'
+            proof['extractor_ref']['path']='arm_source_copy'
         s.require(x==y,'non-treatment static difference: '+ident)
     return len(a)
 

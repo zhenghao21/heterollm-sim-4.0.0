@@ -23,3 +23,14 @@ def test_other_changes_rejected(monkeypatch,change):
     if change=='source':b['source']['same']='changed'
     if change=='unknown':i['unknown']=True
     with pytest.raises(ValueError):d.compare_inputs(a,b)
+
+
+def test_derived_retained_digest_is_verified_before_normalization(monkeypatch):
+    a,b=pair(monkeypatch)
+    for arm in (a,b):
+        i=arm['cells']['cell']['static_inputs'];proof=i['retained_kv_warmup_evidence']
+        c={'evidence_sha256':d.s.stable_hash(proof),'rows':64}
+        proof['contract']=c;i['retained_kv_warmup_contract']=copy.deepcopy(c)
+    assert d.compare_inputs(a,b)==1
+    b['cells']['cell']['static_inputs']['retained_kv_warmup_evidence']['contract']['evidence_sha256']='forged'
+    with pytest.raises(ValueError):d.compare_inputs(a,b)
