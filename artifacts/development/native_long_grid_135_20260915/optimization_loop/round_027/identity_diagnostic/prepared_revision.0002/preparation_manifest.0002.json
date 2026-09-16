@@ -1,0 +1,93 @@
+{
+  "schema": "dual-hash-preparation/v1",
+  "created_utc": "2026-09-16T20:03:35.692522+00:00",
+  "files": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\dual_hash.py",
+      "bytes": 10664,
+      "sha256": "76bdfcccc8c9f2e46682a3f2af9c118b7b4ea22b534f32bd874d2b0a453f2234"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\diagnostic.py",
+      "bytes": 16417,
+      "sha256": "91ec454f1bf6470e30593162a56e140dfe2944e7817b5a2f7734d25aa46323c2"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\prepare.py",
+      "bytes": 5742,
+      "sha256": "3c22e9a2e7341666558d9e5cad3964e62cd8e1f31f274e6842cb08eca81a9f0d"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\test_identity_diagnostic.py",
+      "bytes": 14166,
+      "sha256": "1d84aa548798c09de1e9a4ed22eaa69e84e5ab76a70076e7dcf51e308d4a8536"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\README.md",
+      "bytes": 4602,
+      "sha256": "a0310f69721bccab778df8244b73469bb2d53ddad411ad6749ffbfaed15f3a82"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\protocol.json",
+      "bytes": 18304,
+      "sha256": "5f5de68db9e64156339e7b18cbfaeb92e65f5cf82976d5a2805f7963b7c1ba9f"
+    }
+  ],
+  "runtime_files": [
+    {
+      "path": "E:\\anaconda\\python.exe",
+      "bytes": 104208,
+      "sha256": "6965927a96b81d1717c1d2186de7feb9b29ebf8775464020ebc2f25de6ef8ee0"
+    },
+    {
+      "path": "E:\\anaconda\\DLLs\\_hashlib.pyd",
+      "bytes": 62736,
+      "sha256": "8ba3c84887a20aa37fc6abb3827c2e263b5c624bf48d66e7911a55ba0a23a6c1"
+    },
+    {
+      "path": "E:\\anaconda\\Library\\bin\\libcrypto-3-x64.dll",
+      "bytes": 5297992,
+      "sha256": "2124998938de36d25dfa32adc8ffcdb324eac0cc98552a160a08e41f17aade9a"
+    },
+    {
+      "path": "C:\\Windows\\System32\\bcrypt.dll",
+      "bytes": 183376,
+      "sha256": "b5691584e857caf0c6c590dda13779966b383d66be3c87d5b3cbbc2f5005495b"
+    },
+    {
+      "path": "C:\\Windows\\System32\\bcryptprimitives.dll",
+      "bytes": 716408,
+      "sha256": "46c06a0f0323d25a32c2b16da1a4a09e9234d282be7714469b7985bb98031ab6"
+    }
+  ],
+  "crypto_environment": {
+    "OPENSSL_ia32cap": null,
+    "OPENSSL_CONF": null,
+    "OPENSSL_MODULES": null
+  },
+  "small_known_vector_self_test": {
+    "known_vectors_passed": 2,
+    "openssl_version": "OpenSSL 3.0.18 30 Sep 2025",
+    "openssl_module": "E:\\anaconda\\DLLs\\_hashlib.pyd",
+    "CNG_provider": "Microsoft Primitive Provider",
+    "independent_algorithms": [
+      "_hashlib.openssl_sha256",
+      "BCrypt SHA256"
+    ],
+    "model_file_reads": 0,
+    "million_a_control": false,
+    "maximum_update_bytes": 3,
+    "fallback_used": false
+  },
+  "metadata_read_bytes": 208309772,
+  "model_content_bytes_read": 0,
+  "target_stat_after_prepare": {
+    "st_dev": 6505727182273004405,
+    "st_ino": 281474976982460,
+    "st_size": 14865116128,
+    "st_mtime_ns": 1787070268813491600,
+    "st_ctime_ns": 1789472350762515400,
+    "st_atime_ns": 1789589008997231500,
+    "st_file_attributes": 33
+  }
+}

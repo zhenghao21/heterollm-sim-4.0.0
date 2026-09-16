@@ -187,11 +187,11 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 固定native为131格、894请求，选择文件SHA为cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5。覆盖五个模型、六种部署：qwen25 17、smollm2 23、tinyllama 22、qwen35 22、qwen38 CPU 20、qwen38 GPU 27。原162格及31格既定稳定性排除保留，本阶段目标LLM重测0、专属时延拟合0。
 
-最新已评分版本为R24：131终态中130预测、1个完整GGUF SHA校验失败，9/131格三项Engine误差严格<10%。A未通过；B与跨硬件未验证。R25为同源末层选行开关对照，off131格全部预测成功，但on在启动校验时因配置证明错位被拒绝，0格预测、未评分；进程已自然退出，execution_closed.json已封存。其语义资格为conditional，不能升级为原生分派已验证。分组/配对报告入口已准备，4项测试验证严格阈值、失败分母、两路native一致和评分前拒收；尚未对R25运行报告。
+最新完整对照为R27：off与on共262条终态、自然退出后才统一评分。off为129预测/2个完整GGUF SHA失败，on为131预测/0失败；固定分母均131。on有9格三项严格<10%，但共同有效129格的达标数两路均为7；多出的2格来自覆盖恢复，不能宣称精度收益。共同387项中192项改善、195项退化，6项没有有效成对结果。A未通过；B与跨硬件未验证。
 
-R27的off已完成131终态：129成功、2个完整GGUF SHA失败（qwen38_p512_o128_c2、qwen38_gpu_p1536_o128_c4），on仍在执行。失败保持、不重试，暂不评分。原因未定，源码和只读系统记录尚不足以定位；正在准备同chunk OpenSSL/CNG独立哈希与已知向量对照，须本批结束后运行，不将身份异常混为成本误差。
+R27的两个off失败（qwen38_p512_o128_c2、qwen38_gpu_p1536_o128_c4）及R24历史SHA异常保持，不重试覆盖或追认；根因未定。独立同块OpenSSL/CNG诊断0003已完成41项主机测试，尚未读真实GGUF。它修正Windows path-stat/fstat的ctime语义差异、spawn进程归属及CNG清理错误记录，不能据此推断历史SHA异常原因。
 
-R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复为预测；另1格qwen38_gpu_p512_o128_c1完整SHA不匹配，未重试覆盖。预测前后全文校验正常不解释这次瞬时异常的根因，也不能追认该失败通过。
+R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封存。R27末层选行语义仍为锁定源码条件资格，不能升级为实际原生分派证明。R24与更早版本完整保留，均不是独立盲测通过。
 
 ## 11. 已完成修改与验证（动态，原位更新）
 
@@ -202,26 +202,28 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 
 ## 12. 最新误差及主要缺口（动态，原位更新）
 
-下表为R24的130个可评分场景；1个失败仍在固定131分母，不能将R23的104格总体分布与此表直接比较后宣称改善。
+下表为R27/on全部131格；off有2格失败，跨版本总体分布必须与共同有效集合变化分开解读。
 
 | Engine指标 | APE中位数 | 场景误差P90 | 最坏APE | 绝对ms中位数 | 最坏ms |
 |---|---:|---:|---:|---:|---:|
-| TTFT | 42.651% | 66.967% | 72.496% | 88.720 | 2667.094 |
-| TPOT | 25.143% | 51.746% | 64.773% | 2.574 | 125.907 |
-| E2E | 29.877% | 54.474% | 66.189% | 364.967 | 25473.633 |
+| TTFT | 43.048% | 67.733% | 72.668% | 101.243 | 2668.068 |
+| TPOT | 24.845% | 51.721% | 64.975% | 2.583 | 125.908 |
+| E2E | 29.868% | 54.440% | 66.477% | 370.426 | 25474.034 |
 
-普通attention62格仍无三项全过；多数系统性偏低不能用已筛选native波动解释。既有894 native请求及292条R22预测请求的逐请求E2E闭合通过，最大残差2.91e−11ms；独立聚合中位数不保证加法恒等式。三次batch中位数CV最大TTFT2.5313%、TPOT1.9039%、E2E1.7986%，仅为现有样本诊断，不是正式稳定性保证。
+末层选行修正没有增加共同集合的三项达标格；普通attention模型仍系统性偏低。既有894 native请求及292条R22预测请求的逐请求E2E闭合通过，最大残差2.91e−11ms；独立取中位数不保证加法恒等式。三次batch中位数CV最大TTFT2.5313%、TPOT1.9039%、E2E1.7986%，只为现有样本诊断，不能抵扣模型误差或充当正式稳定性保证。
 
-目前有证据的成本缺口包括MMVQ访存仍耦合MMA输出tile利用率、host图构建/提交与GPU重叠边界尚未独立定价。权重字节无重复、已有nonflash/logits/sampling/launch不能整段再加。P128/512/1536均整除ubatch64，不能默认长prompt存在尾块；c不等于实际kernel M。
+新静态覆盖审计检查R27/on的131条已存预测，共157类MMVQ签名：现有Q5_0/M1/K4096/N3072微基准在已表示签名中命中0；Q4_K/M1/K2048/N2048出现在SmolLM2/TinyLlama共45格、171200个任务。账本未表示部分仍为未知，不能把缺记录当成不存在；所有签名cache/native dispatch资格仍未知，不能因shape匹配直接准入成本。下一轮优先覆盖实际结构，零命中shape仅作工具链资格验证。
+
+明确缺口仍为MMVQ访存采用MMA输出tile效率的族混用、host提交/建图/同步重叠尚未独立定价。字节账本未发现重复；已有nonflash、logits、sampling、launch不能整段再加。P128/512/1536均整除ubatch64，不能默认有尾块；c不等于kernel M。
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
-1. 完成正在执行的R27末层选行对照。两路freeze及lock均已通过冻结源码的真实131格worker预检，off/on及R25/off基线静态输入逐项对照通过；115个源码中仅替换两个已提交的规范化修复文件，32项结构测试和独立复审通过。off已结束且失败保留，on正在执行；每路131格、4个worker、每格600秒预算，所有262个终态落盘后统一评分。后处理入口已通过8项合成测试，将生成off/on及差值热图并按原工具分卷归档；缺少完整评分时拒绝读取，固定集内失败显示X、固定集外显示短横线，尚未作图。R25启动失败与R27创建前Git换行拒收均保留，不修改旧结果、不放宽身份校验。
-2. 评估选行修正的实际影响。依据源码预先限定受影响算子：普通架构的末层FFN缩行可能降低原本偏低的TTFT；混合架构的final norm及gather补全可能增时。结构正确性、源码条件资格与精度收益分开报告；不承诺全模型或TPOT改善。
-3. R27完整结束后执行R26 wrapper与target动态对照。固定Q5_0/M1/K4096/N3072的target路径与旧wrapper数值资格已分别通过。新shim已按连续布局补齐六个stride，两个cubin与目标黄金字节一致，33项Python主机检查及CPU布局程序通过；入口须先验证R27的262终态屏障。捕获pass中conversion→main相邻发射、中间不插同步/D2H，随后关闭CUPTI，用独立fixture重新验证新shim数值。QI5_ERRATUM已依据锁定源码更正QI=4、每迭代64 blocks，旧contract/原始记录不变。动态匹配与新shim数值仍未执行；M4仍留出，0性能参数准入。
-4. 仅在路径、数值与测量资格通过后冻结合成性能实验。分别测CUDA-event主kernel/转换、warm复用和超过L2的旋转工作集；CUPTI采集只作路径证据。先规定development/holdout、样本量、波动门限和失败规则，再运行；不按131格误差选择系数，也不以CTA数直接换经验带宽。
-5. 下一机制优先定位MMVQ访存几何与host建图/提交重叠。R28已准备锁定target DLL的1/4/16节点RMS_NORM chain/fanout探针，构建0005通过57项Python回归和23项C++主机测试，目标程序未执行。执行器已补齐环境隔离、项目进程互斥、前后身份及异常终态。先在R27结束后验证实际路径；线程CPU计数精度、观察开销及K/G成本可辨识性须另行验证，当前GPU事件仅为包络，不准入1000ns/250ns或其他服务参数。外部GGML探针不能代表LLM内部can_reuse/build_graph。真实microbatch、nonflash物理KV、retained高水位、slot生命周期作为源码约束；已有nonflash、logits、sampling、launch和sync成本先查重。固定三档prompt没有ubatch尾块，c不能替代kernel M，native token时间戳仅作诊断。未知成本标未定价，不追加p/c残差；连续工具完善须按第8节复盘，转入可改变预测的机制验证。
-6. 每轮原位更新任务书、提交、推送并核验远端。A固定131/131格、393/393项均严格<10%；不达标继续有证据的机制假设。通过A后另用独立B，当前B尚未验证。
+1. 封存R27结论、三张热图和逐字节证据。262终态、两路评分及分组报告已完成，热图已视觉核对。旧递归归档包含主机测试夹具，保留本机但不发布；后继归档仅选择真实冻结、预测、评分及执行证据，禁止夹具和复制源码混入。A仍失败，不能将7→9的覆盖变化称精度改善。
+2. 串行执行已准备的R26新wrapper动态与数值对照，然后执行R27身份诊断0003；两者须真实验证262终态及项目idle，不重试旧失败、不重测LLM。新shim连续stride与目标cubin静态一致，旧数值通过不能替代新shim资格。
+3. 收敛下一轮微基准范围到实际算子。Q5_0零命中工具已修复HES非法反事实、强杀及资格混用并通过47项主机测试，暂不投入其5-block正式性能采集。Q4_K/M1/K2048/N2048是优先取证点；先按锁定源码/实际target分派与独立数值验证，再跨small-K边界、M和CTA供给留出。不要按131格误差选择数值或最优shape。
+4. 分开推进两条可改变预测的机制：完整MMVQ源契约上的执行K账本补全及去除MMA带宽折扣的默认关闭分析候选；锁定DLL宿主计数/提交控制先取得有界pilot与实际路径证据。名义带宽候选不是测量过的MMVQ带宽，不能把CTA≥SM称为饱和；条件经验值只能命中完整适用键，cache未知不得补填。每kernel frontend、driver queue、GPU command processor、CPU command-build逐项查owner，不能用一段API wall同时更新多个费用。
+5. 计时资格按边界分别验收。合法HES调用成功+STATE仅构成SDK契约下的启用资格，没有直接模式readback；U/A/B/AB整体wall/event扰动≤5%不能证明短kernel服务偏差≤5%。kernel observed duration可用于限定条件的开发假设，必须单列未识别系统偏差，不能宣称无扰动成本已合格。host原始100ns单位/周期数不证明精度；先用有限busy/Sleep与窗口收敛诊断，不把等待wall塞入CPU服务或新增场景残差。
+6. 每轮完成修改及相关验证后原位更新任务书、提交、推送并核验远端，再检查A固定131/131格、393/393项严格<10%。不达标继续有证据的候选；连轮工具完善必须回到实际覆盖和成本所有权。通过A后另做独立B，当前B未验证。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
@@ -236,8 +238,10 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 以下路径根为artifacts/development/native_long_grid_135_20260915/。
 
 - stable_native_dataset.json、optimization_loop/state.json：固定native与循环状态。
-- optimization_loop/round_024/REPORT.md、identity_repair_report.json、repaired/errors.0001.json：最新完整评分、104格精确复现及失败。
-- optimization_loop/round_024/full_engine_error_heatmap.png/svg：最新131格热图；X为失败，短横线为固定集之外。
+- optimization_loop/round_027/report.json、grouped_paired_report.md/json、review_outcome.json：最新262终态后的配对评分、共同129格与覆盖变化。
+- optimization_loop/round_024/REPORT.md、identity_repair_report.json、repaired/errors.0001.json：历史完整评分、104格精确复现及失败。
+- optimization_loop/round_027/heatmaps.0001/：off、on与APE差值的PNG/SVG热图；X为失败，短横线为固定集之外。
+- optimization_loop/round_028/static_kernel_coverage.0001.json、verify_static_kernel_coverage.py：131预测静态签名、微基准覆盖及独立重算入口。
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
 - optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、execution_closed.json：已拒绝批次的冻结、131配置错位重导和退出记录，未评分。
 - optimization_loop/round_024/mmvq_device_probe/r5_device_code_compare/、r6_shared_abi/：设备代码及共享ABI证据，均无性能系数。

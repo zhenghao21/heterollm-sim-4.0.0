@@ -1,0 +1,58 @@
+{
+  "schema": "dual-hash-preparation-validation/v2",
+  "created_utc": "2026-09-16T20:36:44.530535+00:00",
+  "revision": "0003",
+  "manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\preparation_manifest.0003.json",
+    "bytes": 4483,
+    "sha256": "f5f433e54fc536d7fcffc20c9179756f903446e71b2753cdfaa5c61dd395eef8"
+  },
+  "tests_passed": 41,
+  "tests_failed": 0,
+  "prior_source_snapshot_matches_0002": [
+    {
+      "name": "dual_hash.py",
+      "matches_old_manifest": true
+    },
+    {
+      "name": "diagnostic.py",
+      "matches_old_manifest": true
+    },
+    {
+      "name": "prepare.py",
+      "matches_old_manifest": true
+    },
+    {
+      "name": "test_identity_diagnostic.py",
+      "matches_old_manifest": true
+    },
+    {
+      "name": "README.md",
+      "matches_old_manifest": true
+    },
+    {
+      "name": "protocol.json",
+      "matches_old_manifest": true
+    }
+  ],
+  "prepared_inputs_verified": true,
+  "model_file_content_bytes_read": 0,
+  "formal_serial_or_four_worker_matrix_executed": false,
+  "real_R27_terminal_gate_invoked": false,
+  "runs_directory_exists": false,
+  "test_scope": [
+    "actual 3-byte Windows path-stat/fstat regression",
+    "same-API ctime change rejection",
+    "exact GPU collector and relative runner rejection",
+    "spawn ancestor, missing-parent and cycle rejection",
+    "explicit host test process allowance",
+    "CNG DestroyHash and CloseProvider failure rejection",
+    "original update exception plus both cleanup errors retained",
+    "full computed digest invalidated on outer cleanup failure"
+  ],
+  "maximum_model_read_bytes": 74325580640,
+  "maximum_explicit_file_read_bytes": 76473064288,
+  "old_failures_modified": false,
+  "GPU_executed": false,
+  "cost_parameters": 0
+}

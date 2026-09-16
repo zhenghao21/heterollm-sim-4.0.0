@@ -1,0 +1,17 @@
+{
+  "schema": "r28-gpu-timing-host-tests/v1",
+  "created_utc": "2026-09-16T20:07:32.024691+00:00",
+  "returncode": 0,
+  "manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\gpu_operator_timing\\build_manifest.json",
+    "sha256": "ceabe68155dc1a1029524a785490f0f5e9e7ec0c9d6f7f72114675675013bf50",
+    "bytes": 117329
+  },
+  "log_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\gpu_operator_timing\\host_tests.log",
+    "sha256": "61c85915426571399b7ab53de759c3d7da61265e710b3a4deda54ca5f4aab747",
+    "bytes": 101
+  },
+  "inputs_unchanged": true,
+  "GPU_executed": false
+}

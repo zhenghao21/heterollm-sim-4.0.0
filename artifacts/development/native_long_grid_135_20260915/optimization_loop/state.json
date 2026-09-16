@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_027_running_paired_full262",
+  "status": "round_027_scored_A_failed_next_mechanism_evidence",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1548,10 +1548,10 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "R27: inherit frozen R25/off inputs, repair normalized final-output proof binding, preflight both serialized freezes before any prediction, then score paired 131+131 final-output selection ablation; independently qualify MMVQ numerical/dynamic paths before any timing parameter admission.",
+  "next_round_hypothesis": "R28: first finish exact wrapper path/numeric and identity diagnosis; static ledger shows reference Q5 benchmark zero represented matches, prioritize actual Q4_K M1 K2048 N2048 and source-valid MMVQ analytical family separation; host pilot before CPU-service claims.",
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 6,
-  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\retained",
+  "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
   "best_candidate_status": "No new accuracy candidate admitted. Latest scored R24:130 predicted/1 failed,9/131 all-three pass; R25 startup rejection preserved, not scored. A fails and B remains unvalidated.",
   "version_control_policy": {
     "enabled": true,
@@ -2040,8 +2040,119 @@
       "predicted": 129,
       "failed": 2
     },
-    "on": "running",
-    "scored": false,
+    "on": {
+      "terminal": 131,
+      "predicted": 131,
+      "failed": 0
+    },
+    "scored": true,
     "failures_preserved": true
+  },
+  "round_027_result": {
+    "candidate_passed_cells": 9,
+    "fixed_denominator": 131,
+    "common_set": {
+      "common_cells": 129,
+      "before_pass": 7,
+      "after_pass": 7,
+      "newly_passing_common": [],
+      "lost_pass_common": [],
+      "new_coverage_pass": [
+        "qwen38_p512_o128_c2__fixed_runtime",
+        "qwen38_gpu_p1536_o128_c4__fixed_runtime"
+      ]
+    },
+    "paired_metric_outcomes": {
+      "regressed": 195,
+      "improved": 192,
+      "unscored": 6
+    },
+    "latest_candidate_metrics": {
+      "engine_ttft_ms": {
+        "absolute_percentage_error_pct": {
+          "count": 131,
+          "median": 43.04818555804124,
+          "p90": 67.73274278968759,
+          "worst": 72.66763034787502
+        },
+        "absolute_error_ms": {
+          "count": 131,
+          "median": 101.24334587594453,
+          "p90": 582.0793922399207,
+          "worst": 2668.068263688303
+        },
+        "signed_error_pct": {
+          "count": 131,
+          "median": -43.04818555804124,
+          "p90": 4.611833692965265,
+          "worst": 37.57756357885405
+        },
+        "unscored_count": 0
+      },
+      "engine_tpot_ms": {
+        "absolute_percentage_error_pct": {
+          "count": 131,
+          "median": 24.84454041904673,
+          "p90": 51.72081716361823,
+          "worst": 64.9752874000419
+        },
+        "absolute_error_ms": {
+          "count": 131,
+          "median": 2.582857813933203,
+          "p90": 42.20845792780892,
+          "worst": 125.90755095796214
+        },
+        "signed_error_pct": {
+          "count": 131,
+          "median": -24.84454041904673,
+          "p90": 17.508199768900546,
+          "worst": 23.693085988105153
+        },
+        "unscored_count": 0
+      },
+      "engine_e2e_ms": {
+        "absolute_percentage_error_pct": {
+          "count": 131,
+          "median": 29.86762150848165,
+          "p90": 54.440016693193826,
+          "worst": 66.47701938998986
+        },
+        "absolute_error_ms": {
+          "count": 131,
+          "median": 370.4264859388853,
+          "p90": 2762.382761159184,
+          "worst": 25474.033982638794
+        },
+        "signed_error_pct": {
+          "count": 131,
+          "median": -29.863165796567284,
+          "p90": 13.414215551596541,
+          "worst": 30.05507405149568
+        },
+        "unscored_count": 0
+      }
+    },
+    "gate_A": "not_passed",
+    "gate_B": "unvalidated",
+    "formal_success": false
+  },
+  "round_027_identity_diagnostic": {
+    "status": "prepared0003_not_executed",
+    "manifest_sha256": "f5f433e54fc536d7fcffc20c9179756f903446e71b2753cdfaa5c61dd395eef8",
+    "host_tests": 41,
+    "model_bytes_read": 0
+  },
+  "round_028_static_coverage": {
+    "reference_shape_tasks": 0,
+    "observed_shapes": 157,
+    "shared_Q4_K_M1_K2048_N2048_cells": 45,
+    "shared_tasks": 171200,
+    "cache_and_native_dispatch_qualified": false
+  },
+  "round_028_gpu_timing": {
+    "status": "prepared0005_not_executed_zero_coverage_reference_deferred",
+    "host_tests": 47,
+    "manifest_sha256": "09e1532c980a37b3cb7c53b6acb39f9ff79564d21f74269866d0f3cd41363a41",
+    "performance_parameters_admitted": 0
   }
 }
