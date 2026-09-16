@@ -1,0 +1,211 @@
+{
+  "schema": "stable-native-prediction-run/v1",
+  "phase": "finish",
+  "created_utc": "2026-09-16T12:15:01.619984+00:00",
+  "run_id": "run.0001",
+  "start_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\runs\\run.0001.start.json",
+    "sha256": "aea8bee3c7adb10ec6231e4fef7572f610c88a4109c4c8d2522c49c5f2ce20c5",
+    "size_bytes": 2927
+  },
+  "freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\freeze.json",
+    "sha256": "fd12b3fb0d426f80b2140f971ad4a2262494013ecfa1400131a086c4cdd0bfa8",
+    "size_bytes": 30389198
+  },
+  "execution_budget": {
+    "workers": 4,
+    "maximum_workers": 8,
+    "per_cell_timeout_seconds": 600.0,
+    "max_cells": null,
+    "scheduled_cells": 20,
+    "nominal_timeout_rounds_seconds": 3000.0
+  },
+  "cells": [
+    {
+      "cell_id": "qwen25_p1536_o256_c4__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p1536_o256_c4__fixed_runtime.prediction.json",
+        "sha256": "4f543322a6df3390af42b23bd497f9f132b83abd9df06420a02c0c65065902ad",
+        "size_bytes": 13074375
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p512_o256_c1__fixed_runtime.prediction.json",
+        "sha256": "4acbf282dc30db6f3c1086e1f0fa1a98747b4a7f04ab2432f936e63ee0491e9a",
+        "size_bytes": 9321092
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o128_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p1536_o128_c1__fixed_runtime.prediction.json",
+        "sha256": "af63a7d860b70c5bbfbcd19ff097bf8bb140665c967ac188d0c96a0e9ca10bdb",
+        "size_bytes": 5427753
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o256_c2__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p1536_o256_c2__fixed_runtime.prediction.json",
+        "sha256": "a60a55c8d9a581b88819f188702a0180c7c5ab7089cb0379f0e115b5c082acb1",
+        "size_bytes": 11097726
+      }
+    },
+    {
+      "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p128_o128_c4__fixed_runtime.prediction.json",
+        "sha256": "eb6a8788a7ac504b661bebc6a63f47742b4ada05ae448e97afa12dd959b37226",
+        "size_bytes": 5193734
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c2__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p512_o256_c2__fixed_runtime.prediction.json",
+        "sha256": "3698b4dfe31850cf8d401260a6b22517a45f289c27944212f2b46f832346a875",
+        "size_bytes": 9985524
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c4__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p512_o256_c4__fixed_runtime.prediction.json",
+        "sha256": "0d4ad514284317959793368f0b209e0a56ceaa44ce11392594e436aa7ff6f714",
+        "size_bytes": 10747238
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o32_c2__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p1536_o32_c2__fixed_runtime.prediction.json",
+        "sha256": "1275f1d42820b73353bfcbf412d00a4d0cb1a0eba83b2b50294e63cb6d9997e3",
+        "size_bytes": 3013287
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o256_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p1536_o256_c1__fixed_runtime.prediction.json",
+        "sha256": "237408ef58e2d87433377042251afae7c6962a2352191f5ceb7995f8fa08a06b",
+        "size_bytes": 9878600
+      }
+    },
+    {
+      "cell_id": "qwen25_p128_o32_c4__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p128_o32_c4__fixed_runtime.prediction.json",
+        "sha256": "6533d8e7efb5120b3a882c86b1dc78acf5394ef1ee0716808f980261e04e8dac",
+        "size_bytes": 1663148
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c4__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p512_o32_c4__fixed_runtime.prediction.json",
+        "sha256": "e817ebac22d4fa2891d81c39fd08b56544cd50ceaac378732e91c802b8c97b73",
+        "size_bytes": 2509125
+      }
+    },
+    {
+      "cell_id": "qwen25_p128_o256_c2__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p128_o256_c2__fixed_runtime.prediction.json",
+        "sha256": "f6da2e326d2b9bbfaa74c508edf84c9aaeabcbcf53f939869093eea3eb0847a8",
+        "size_bytes": 9567363
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "186b1395c2c825a80f953303366b43fb93235436f8021f2eab1a4ccc1786efa7",
+        "size_bytes": 1533628
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o128_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p512_o128_c1__fixed_runtime.prediction.json",
+        "sha256": "4764dc3c2de1d8f14812d77db385298e880d525445b31eb6a9f5efd0b8c9a7cd",
+        "size_bytes": 4871114
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c2__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p512_o32_c2__fixed_runtime.prediction.json",
+        "sha256": "25bce2a871ca8a3db4d15cffedbfc2a990aeda61d843364c607297355099cdf6",
+        "size_bytes": 1900509
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o128_c4__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p1536_o128_c4__fixed_runtime.prediction.json",
+        "sha256": "19481dbb6a3534ccac1400dbe05503226ef4bf12ff879b9fa3fbe1f09368c7e5",
+        "size_bytes": 8366818
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o32_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen25_p1536_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "6f3527fe43dbdcdd6b6fbfce49c35620a564aa71959e4c1982ed15855db5d309",
+        "size_bytes": 2089684
+      }
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\smollm2_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "ca0bd5820d65ceab628035dd9b100f6e27d2a059607740d42607732306a39d2b",
+        "size_bytes": 1523473
+      }
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\tinyllama_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "fbc0e7f0250416f6946472d5af8d6967d038d33961c56d4f2ecd44995994de85",
+        "size_bytes": 1510557
+      }
+    },
+    {
+      "cell_id": "qwen35_p512_o32_c1__fixed_runtime",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_only\\predictions\\qwen35_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "754e132949168af5e64c822a96a804005f2f528c6c0ebc31270a10ec1b8e0ba3",
+        "size_bytes": 1791404
+      }
+    }
+  ],
+  "successful_cells": 20,
+  "failed_or_incomplete_cells": 0,
+  "pending_cells": 111,
+  "selected_denominator": 131,
+  "content_sha256": "6197943a5e7ec05a9e9f59331ad8eef620a52746ff49026888419031e9a89ca2"
+}

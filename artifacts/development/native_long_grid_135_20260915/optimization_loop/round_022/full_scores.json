@@ -1,0 +1,22 @@
+{
+  "schema": "r22-score-receipt/v1",
+  "phase": "full",
+  "created_utc": "2026-09-16T13:11:15.791664+00:00",
+  "controls_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\evaluation_controls.json",
+    "sha256": "b84282e1743b221e1d7388da616a3c3a8aacda668979d4295963d06dd9f39a32",
+    "bytes": 2459
+  },
+  "prediction_barrier_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\full_predictions.json",
+    "sha256": "1fa05ba2b5c44232a2c0972c783205fdb73574bd525805afd4a88485f127ae2f",
+    "bytes": 55491
+  },
+  "scores": {
+    "cta_issue": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_issue\\errors.0002.json",
+      "sha256": "b0a11da917d0ac31caf6090b8865a95cf3d9e0beda47753002b348c55b435824",
+      "bytes": 1070810
+    }
+  }
+}

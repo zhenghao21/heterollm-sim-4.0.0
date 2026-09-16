@@ -185,11 +185,11 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 10. 当前版本与证据状态（动态，原位更新）
 
-第21轮完整131格结果已提交并推送c46a393，远端SHA核对一致。固定native仍为131格、894请求，选择SHA不变；A门9/131格三项Engine误差严格<10%，122格失败，单项通过75/393。B门及跨硬件仍未验证。最新准确性结论仍以第21轮全量结果为准，不能把本轮结构回归当成误差改善。
+固定native仍为131格、894请求，选择文件SHA保持cab8f3a4…df9c5，目标LLM重测0、专属时延拟合0。R22主机制代码已提交并推送5e32f3f，远端SHA一致；本轮四路20锚点和主候选全131执行已完成，等待结果归档上传。131格都有终态，129格可评分，2格worker文件身份校验失败；9/131格三项Engine误差严格<10%，120格准确性失败。A失败，B和跨硬件未验证。
 
-第22轮进入MMVQ条件指令下界的对照实验。核心与适配器已在主区集成，277项联合回归通过，真实131格静态资格为131 conditional、0 uncovered；这不代表每格都应用MMVQ，也不代表已获准确性验证。尚未运行本轮LLM仿真评分，目标LLM重测0、专属时延拟合0。
+R22与R21 physical共同可评分的129格数值完全一致；20锚点CTA-only和CTA+issue三项均不变，不能宣称精度改善。两个失败格分别报告PDF与模型SHA不符；原始记录保留、不重试。后续.NET/OpenSSL/HACL复核一致，512次PDF双算法及一次整模型双算法检查无错，但历史失败原因未确定。
 
-长图首版12个native阶段在正式计时前失败，6个export完成不能当有效计时；全部18阶段与原始证据保留，GPU时钟恢复返回0。r2已修复scheduler末端CPU要求与配套结构校验，非计时冒烟数值正确，38项collector回归通过。提交上传后创建新的r2执行冻结，再自然运行完整18阶段；旧失败目录不重试。
+R22-r2独立合成长图自然完成18/18，数值、时钟、CUPTI链完整，GPU时钟恢复返回0；0/2组通过完整host成本准入，direct host P90/P10=2.05–2.74超过1.5。设备kernel跨进程中位偏差0.0274%/0.0803%，不据此追认host系数。固定CUDA DLL的CUDA Graph编译关闭，观察路径为逐节点launch。
 
 ## 11. 本轮修改与验证（动态，原位更新）
 
@@ -201,26 +201,23 @@ MMVQ新开关默认关闭。对受支持的Q5_0、Q8_0及小M的Q4_K、Q6_K，�
 
 ## 12. 当前测量与预测差距（动态，原位更新）
 
-第21轮同一个physical冻结的完整131格；以下为APE中位/P90/最坏，单位%。
+最新R22完成131格，129格可评分、2格失败仍计入分母。下列分布只针对可评分格，三项通过为9/131。129个共同有效场景与R21数值完全一致；整体统计变化来自2格本轮不可评分，不能称改善或退化。
 
-| 模型/部署 | 可评分 | 三项<10% | TTFT APE 中位/P90/最坏 | TPOT | E2E |
+| 指标 | APE中位数 | P90 | 最坏 | 绝对ms中位数 | 最坏ms |
 |---|---:|---:|---:|---:|---:|
-| qwen25 | 17/17 | 0/17 | 68.474 / 72.723 / 76.170 | 48.546 / 61.761 / 65.332 | 51.262 / 66.277 / 68.147 |
-| qwen35 | 22/22 | 0/22 | 31.244 / 59.536 / 59.881 | 46.749 / 53.146 / 54.311 | 44.227 / 54.125 / 54.511 |
-| qwen38 | 20/20 | 5/20 | 8.092 / 38.156 / 43.049 | 20.150 / 26.528 / 32.073 | 11.773 / 20.485 / 28.811 |
-| qwen38_gpu | 27/27 | 4/27 | 19.705 / 36.623 / 37.498 | 11.182 / 18.148 / 23.686 | 12.531 / 21.250 / 30.001 |
-| smollm2 | 23/23 | 0/23 | 51.944 / 71.211 / 77.568 | 21.624 / 53.835 / 70.694 | 29.157 / 58.513 / 72.829 |
-| tinyllama | 22/22 | 0/22 | 55.981 / 65.036 / 72.665 | 37.222 / 50.143 / 70.847 | 39.652 / 57.424 / 72.499 |
+| TTFT | 42.854% | 68.249% | 77.568% | 80.672 | 2667.094 |
+| TPOT | 27.517% | 53.684% | 70.847% | 2.585 | 125.907 |
+| E2E | 31.320% | 56.400% | 72.829% | 382.285 | 25473.633 |
 
-全131三项APE中位数：42.476 / 26.099 / 30.001%；P90：68.193 / 53.545 / 56.263%；最坏：77.568 / 70.847 / 72.829%。绝对毫秒误差中位数：99.321 / 2.628 / 382.285ms；最坏：2667.094 / 125.907 / 25473.633ms。三项通过9/131，仅是开发筛查结果；逐请求与分组证据见本轮完整报告。
+检查的真实生产decode图中120个主GEMM实际应用MMVQ issue下界，但全部由HBM demand主导。代表Q5_0/Q6_K矩阵的物理字节计费正确；shape带宽仍含未标定的利用率模型。新下界没有改变资源瓶颈，不能仅继续降低compute项期待绝对误差自动下降。分组、逐格及失败明细见round_022/ablation_full.json/md和closeout.json。
 
 ## 13. 下一轮优化顺序（动态，原位更新）
 
-1. 提交并上传本轮已验证的MMVQ核心/适配器、r2修复和失败证据，核对远端SHA；固定131格native不变。
-2. 在新目录为r2创建执行冻结并验证。串行运行12个独立合成native进程与6个export，等待自然退出并核对完整分母、数值、trace、时钟、扰动与波动质量门；未通过不生成性能系数。built-once探针不能代表CPU建图/split/alloc，也不能把wall减kernel直接当CPU常数。
-3. 冻结同源码四路：分析pure、沿用R21 physical的current、CTA-only、CTA+issue。以CTA-only对current分离转换成本；以CTA+issue对CTA-only分离MMVQ机制包。先保存各路同一组20锚点预测再评分，保留全部失败；完成候选全131逐格复核，不能以锚点代替A门。
-4. 验证固定协议中实际warmup完成、distinct slot和保留KV状态证据。仅在成功完成且普通单owner attention路径资格齐全时推导P+O-1及slot占用和；不从fresh cohort、并发数或目标时延臆造历史高水位，hybrid/SWA等另行限定。
-5. 继续补CPU建图、分图、分配、输入设置与GPU提交/同步的覆盖边界；选有源码和独立底层证据的最小机制修改。每轮原位更新任务书、commit、push、核验远端并检查逐格三项<10%；未达到继续下一轮，A通过后进入独立B门。
+1. 完成本轮全131报告/热力图、微基准原始证据、两个SHA失败和静态校验诊断的归档，提交上传并核对远端。保留全部失败，原R22冻结/预测/分数不改。
+2. 合入隔离R23 retained-slot生命周期与适配器，通过主区联合回归后更新任务书、提交和上传。启用路径必须绑定可重派生warmup证据、实际GGUF架构与同源码提取器；62格ordinary候选应用，69格hybrid显式回退原机制且不删减预测覆盖。任何执行异常使retained账本失效，拒绝失败后复用。
+3. 新建同源码retained-off/retained-on冻结，先完成输入字节与独立哈希一致性校验；若再次出现身份异常则保留终态并调查，不成功导向重试。先保存预测后统一评分，比较同一固定131格三项Engine误差，未达A门继续下一机制。
+4. 继续审计MMVQ访存并发/有效带宽与slot实际清理/保留状态；优先修能证明的图、shape、字节、资源占用问题。submit/sync后验分解不作系数，逐节点launch只能用新预注册的独立底层测量标定；不从LLM时延反推。
+5. 每轮原位更新任务书、commit、push、远端核验并检查逐格三项严格<10%；没有达标自动进入下一轮。A门通过后仍需新的独立证据验收B门。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
@@ -234,9 +231,10 @@ MMVQ新开关默认关闭。对受支持的Q5_0、Q8_0及小M的Q4_K、Q6_K，�
 以下路径根为artifacts/development/native_long_grid_135_20260915/。
 
 - stable_native_dataset.json、optimization_loop/state.json：固定131格、不可变原始引用与循环状态。
-- optimization_loop/round_021/REPORT.md、closeout.json、strict_gate.json、physical/errors.0002.json：最新完整131格误差、逐请求门禁、失败和未验证范围。
-- optimization_loop/round_021/reporting_v2/full_engine_error_heatmap_v2.png/svg与reporting_full/：完整热力图和分组报告。R21原始证据可从detailed_evidence.parts.json的4个分卷安全恢复。
-- optimization_loop/round_022/core_validation.json/log、mmvq_issue_bound_review.md、mmvq_analytic_cost_audit.md：本轮277项联合回归、独立审阅与MMVQ机制依据。
-- optimization_loop/round_022/closeout_initial.json、long_graph_collection/controller_result.json：首版失败完整分母、原始失败引用及GPU时钟恢复证据。
-- optimization_loop/round_022/long_graph_probe_r2/、long_graph_collection_r2/、r2_readiness_closeout.json：修复后的探针源码/构建链、非计时数值冒烟、38项采集器回归与待冻结执行入口。
-- optimization_loop/round_022/graph_build_scope_audit.md、retained_kv_occupancy_audit.md：CPU图生命周期和warmup后KV保留状态的源码覆盖边界。
+- optimization_loop/round_022/REPORT.md、closeout.json、ablation_full.json/md、cta_issue/errors.0002.json：最新完整结果、四路消融、失败原因及129共同格数值复现。
+- optimization_loop/round_022/full_engine_error_heatmap.png/svg：完整131格热力图，X为本轮失败；ablation_*_heatmap.svg仅为20锚点四路对照。
+- optimization_loop/round_022/evaluation_protocol.json、evaluation_controls.json、anchors/full的prediction/score凭据：输入冻结与先预测后评分检查。
+- optimization_loop/round_022/long_graph_collection_r2/RESULT.md、result_summary.json：完整18阶段与host质量拒收；dispatch_build_scope.json、submit_sync_diagnostic.json、mmvq_application_diagnostic.json：编译路径、提交/同步和真实成本账审计。
+- optimization_loop/round_022/hash_integrity_protocol.json/result.json、closeout.json：当前字节复核与两格历史失败，不能追认原失败通过。
+- optimization_loop/round_022/qualify_retained_warmup.py、retained_warmup_rederived.json：可重派生静态warmup资格；原位保存的初版qualification已将payload与文件SHA分开。
+- optimization_loop/round_021/REPORT.md及detailed_evidence.parts.json：前次131完整结果与4个分卷恢复入口，历史不覆盖。

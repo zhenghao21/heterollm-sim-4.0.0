@@ -1,0 +1,231 @@
+{
+  "schema": "r22-dispatch-build-scope/v1",
+  "scope": "Read-only build and frozen-profile diagnosis. Created after the R22 long-graph collection; it is not part of that collection freeze and contains no timing coefficient or target-LLM latency.",
+  "r22_collection_freeze": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\execution_freeze.json",
+    "sha256": "43fd1af86de220b2748dfa61689237e3d1dd5947f0fdbcc63152e665951e6e5e",
+    "bytes": 128520
+  },
+  "fixed_runtime_dll": {
+    "role": "R22 synthetic probe actual loaded CUDA DLL and current/cta_issue frozen native runtime CUDA DLL",
+    "actual": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+      "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+      "bytes": 26091520
+    },
+    "r22_freeze_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+      "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+      "bytes": 26091520
+    },
+    "current_freeze": {
+      "freeze": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\freeze.json",
+        "sha256": "b34399af8a2a1bb00af128fd7aa577d28f8ee27eabf146c00d8574252f16a937",
+        "bytes": 30389479
+      },
+      "runtime_module": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+        "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+        "basis": "historical_output_and_unchanged_runtime_receipts"
+      }
+    },
+    "cta_issue_freeze": {
+      "freeze": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_issue\\freeze.json",
+        "sha256": "1a65fc2b6de86a15edf65f7a0a187b2fb7ae6958ee5391f15babb709d0ad58df",
+        "bytes": 38826496
+      },
+      "runtime_module": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+        "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+        "basis": "historical_output_and_unchanged_runtime_receipts"
+      }
+    },
+    "identity_conclusion": "same SHA256 across R22, current and cta_issue: fixed native CUDA DLL identity matches; no LLM timing was read."
+  },
+  "build_scope": {
+    "annotation_cuda_source": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\ggml\\src\\ggml-cuda\\ggml-cuda.cu",
+      "sha256": "38b7fbbaa33cd7ca4f3b59cd1b19dcd9d2fdff3109e05eeeadc274dd69f708e6",
+      "bytes": 238863
+    },
+    "common_cuda_header": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\common.cuh",
+      "sha256": "1cc3186a56426d5b929e9c29f9fae2d61d583f5f7abf0764d363c21cbbcbe932",
+      "bytes": 66691
+    },
+    "semantic_compile_commands": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\compile_commands.json",
+      "sha256": "224073b5254c9ac9d5e6e1027ad6c1d7e4cb97ca4f1c6507335434d0ec6b5155",
+      "bytes": 867669
+    },
+    "ggml_cuda_compile_command_sha256": "fbe6a1c9bbac96e3d1c2e9b3138e48de75075da422acd299198b89ca1d810051",
+    "compile_command_token_checks": {
+      "defines_GGML_CUDA_USE_GRAPHS": false,
+      "defines_GGML_HIP_GRAPHS": false,
+      "defines_GGML_MUSA_GRAPHS": false,
+      "defines_GGML_CUDA_NVTX": true,
+      "defines_GGML_CUDA_NO_FA": true,
+      "conclusion": "USE_CUDA_GRAPH cannot be defined by common.cuh from this recorded ggml-cuda compile command because none of the enabling graph macros is present."
+    },
+    "source_conditions": [
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\common.cuh",
+        "lines": "1261-1263",
+        "condition": "USE_CUDA_GRAPH is defined only by GGML_CUDA_USE_GRAPHS, GGML_HIP_GRAPHS or GGML_MUSA_GRAPHS."
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\common.cuh",
+        "lines": "1291-1294",
+        "condition": "Even compiled graph support is disabled by GGML_CUDA_DISABLE_GRAPHS environment presence or pre-Volta architecture."
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\ggml\\src\\ggml-cuda\\ggml-cuda.cu",
+        "lines": "2598-2628",
+        "condition": "MUL_MAT_ID paths that require stream synchronization make a graph incompatible."
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\ggml\\src\\ggml-cuda\\ggml-cuda.cu",
+        "lines": "2631-2674",
+        "condition": "first-node graph key, graph uid and copied tensor/node properties determine update/stability."
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\ggml\\src\\ggml-cuda\\ggml-cuda.cu",
+        "lines": "4479-4510",
+        "condition": "capture needs graph support, eligibility, then two stable calls; changed properties reset warmup."
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\ggml\\src\\ggml-cuda\\ggml-cuda.cu",
+        "lines": "4416-4445",
+        "condition": "capture/end/instantiate/update/replay APIs execute only in USE_CUDA_GRAPH branch."
+      }
+    ],
+    "protocol_environment": {
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe_r2\\protocol.json",
+        "sha256": "d80e8e1fb16b5311560ad064227d8d50be7b8cc586f87d496e17c3f5ad3d57a1",
+        "bytes": 10073
+      },
+      "GGML_CUDA_DISABLE_GRAPHS": "explicitly null/unset in r2 protocol; build-time disabled support is the decisive condition"
+    },
+    "import_table_observation": {
+      "method": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\dumpbin.exe /imports F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+      "method_is_read_only": true,
+      "observed_cuda_imports": [
+        "cudaLaunchKernel",
+        "cudaLaunchKernelExC"
+      ],
+      "absent_cuda_graph_imports": [
+        "cudaGraphLaunch",
+        "cudaStreamBeginCapture",
+        "cudaStreamEndCapture",
+        "cudaGraphInstantiate",
+        "cudaGraphExecUpdate"
+      ],
+      "conclusion": "The fixed DLL imports per-kernel launch APIs but no CUDA Graph APIs. This independently agrees with the build macro test and R22 CUPTI per-node cudaLaunchKernelExC observations."
+    },
+    "conclusion": "For the fixed DLL, CUDA Graph replay was compiled out. Do not attribute R22 per-node launches to WDDM, graph-shape instability, or runtime warmup failure."
+  },
+  "frozen_current_cta_launch_profile": {
+    "shared_source_refs": {
+      "reference": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\src\\heterollm_sim\\reference.py",
+        "sha256": "90dad69a6c5ff3d6f607ffda4341be541bd28950a66fad43d7fe383d052f59c9",
+        "bytes": 20585
+      },
+      "scenario_builder": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\tools\\native_llama_compare.py",
+        "sha256": "1c51e5f479fce3e6bfc14222f56b049893a1701edb813579ba19d61db54a0182",
+        "bytes": 121112
+      },
+      "predictor": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\tools\\predict_stable_native_dataset.py",
+        "sha256": "a7e386f347b2f44737b0c78c7743ae8a5c1fb25432b900a0479b6d4f26e46b35",
+        "bytes": 192018
+      },
+      "cost_models": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\src\\heterollm_sim\\cost_models.py",
+        "sha256": "f571793f57453812c0c86e89c3aa39641d767c0140d2d9bac35209a328221cc7",
+        "bytes": 211173
+      },
+      "planner": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\src\\heterollm_sim\\planner.py",
+        "sha256": "2b7b0e1f60b6447dc7370278989b38752e64d5b2f1c54513b7587a21baa35454",
+        "bytes": 1048569
+      },
+      "calibration": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\src\\heterollm_sim\\calibration.py",
+        "sha256": "ab93a65e5daaae0b3ef2af5de02b2fd0964ddc8fd09e2444885ad2e977da8331",
+        "bytes": 54672
+      },
+      "control_plane": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\src\\heterollm_sim\\control_plane_planner.py",
+        "sha256": "b96364bb91f4a7a1b89b18dd12ba1e090f24549f90ce0ed2a6fd3d2c11a789b5",
+        "bytes": 204390
+      },
+      "invocation": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\current\\source\\src\\heterollm_sim\\invocation.py",
+        "sha256": "0759507f412bc553870d075d53d3cd9145d9ad0a432f57c984e18e40bd17302a",
+        "bytes": 10336
+      }
+    },
+    "frozen_state": {
+      "current": {
+        "compiled_cuda_graphs_values": [
+          false
+        ],
+        "calibration_applied": false
+      },
+      "cta_issue": {
+        "compiled_cuda_graphs_values": [
+          false
+        ],
+        "calibration_applied": false
+      }
+    },
+    "profile_lineage": {
+      "base_profile": "build_matching_scenario calls build_reference_scenario; frozen reference GPU profile supplies kernel_launch_ns=1000.0, launch_resource_id=gpu0.frontend.",
+      "frozen_profile_value_ns": 1000.0,
+      "launch_resource_id": "gpu0.frontend",
+      "frequency_change_only": "predict_cell replaces tensor_core.frequency_ghz from frozen clock but does not replace kernel_launch_ns.",
+      "launch_calibration": "both freezes declare calibration_applied=false. Frozen calibration code replaces GPU kernel_launch_ns only when explicit apply_launch and a launch profile are both present; that path is not active here.",
+      "graph_replay_metadata": "predict_cell writes compiled_cuda_graphs from frozen config and cuda_graph_replay_cost_applied=false."
+    },
+    "charging_path": {
+      "base": "Generic GPU cost models append a kernel_launch CostPhase with ResourceDemand(gpu.launch_resource_id, gpu.kernel_launch_ns).",
+      "planner": "_lower_tensor_operation turns each cost phase into a TaskSpec. It defaults emit_kernel_launch=true and only overrides a kernel-launch phase when an explicit phase launch calibration exists.",
+      "current_interpretation": "The 1000ns amount is a GPU frontend resource demand attached to modeled cost phases, not a host resource and not a pure unowned additive constant.",
+      "physicality_limit": "This frozen path has no mapped native kernel ledger demonstrating one modeled launch phase equals one physical CUDA launch for every semantic operator. Limited fusion can reduce cost through eliminated_launches*kernel_launch_ns, but that is a planner decision, not R22-derived physical-kernel proof."
+    },
+    "double_count_or_gap_evidence": [
+      {
+        "finding": "No active CUDA Graph replay charge in current/cta_issue",
+        "evidence": "All frozen configs set compiled_cuda_graphs=false and predictor metadata sets cuda_graph_replay_cost_applied=false."
+      },
+      {
+        "finding": "InvocationLifecycle exists but is not production-wired in frozen source",
+        "evidence": "Only invocation.py and unit tests reference InvocationLifecycle/InvocationOverheads; no production caller was found in frozen current/cta_issue source."
+      },
+      {
+        "finding": "Future replay double-count risk",
+        "evidence": "InvocationLifecycle would add capture/update/launch/synchronize tasks while generic cost phases already add per-operator kernel_launch tasks. A replay integration must suppress/rewrite per-op launch phases within the same physical graph invocation."
+      },
+      {
+        "finding": "Future eager under-count risk",
+        "evidence": "Conversely, replacing all per-op phases with one invocation launch would under-count R22-style eager paths, which observed 64 or 256 cudaLaunchKernelExC calls per formal graph."
+      },
+      {
+        "finding": "Fusion accounting scope",
+        "evidence": "control_plane_planner computes fusion_credit_ns as eliminated_launches*profile.kernel_launch_ns. It has no source-qualified CUDA Graph state, so it must remain separate from capture/replay eligibility."
+      }
+    ],
+    "next_mechanism_requirements": [
+      "Add a source-qualified dispatch mode per physical invocation: eager_per_node, graph_capture, graph_update_or_recapture, graph_replay, or unsupported.",
+      "Require build macro, effective environment, GPU CC, compatibility blockers, graph key/uid, node-property stability, warmup and graph-instance state before selecting a graph mode.",
+      "Create a physical launch ledger that maps modeled operator phases to observed/evidenced launch cardinality; do not infer one semantic operation equals one CUDA kernel.",
+      "Make launch ownership exclusive: eager uses per-physical-launch frontend demand; replay uses one graph-launch demand plus capture/update transition costs; never charge both for the same invocation.",
+      "Keep final synchronization separately modeled and do not derive a CPU constant from host wall minus kernel-only timing."
+    ]
+  }
+}

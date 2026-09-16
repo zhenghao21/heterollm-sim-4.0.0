@@ -1,0 +1,17 @@
+{
+  "pid": 46252,
+  "argv": [
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe_r2\\long-graph-probe.exe",
+    "--run",
+    "--config",
+    "scale_f32_e262144_g64",
+    "--arm",
+    "buffered",
+    "--pair-id",
+    "r22_long_graph.scale_f32_e262144_g64.pair2",
+    "--output",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\runs\\scale_f32_e262144_g64\\pair_02\\direct\\raw.jsonl"
+  ],
+  "utc": "2026-09-16T11:40:20.037069+00:00",
+  "freeze_sha256": "43fd1af86de220b2748dfa61689237e3d1dd5947f0fdbcc63152e665951e6e5e"
+}

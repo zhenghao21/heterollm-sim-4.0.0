@@ -1,0 +1,2852 @@
+{
+  "schema": "r22-closeout/v1",
+  "created_utc": "2026-09-16T13:18:20.568270+00:00",
+  "native_selected_cells": 131,
+  "native_requests": 894,
+  "native_selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+  "native_remeasured": false,
+  "target_latency_fit": false,
+  "coefficients_added": 0,
+  "terminal_predictions": 131,
+  "scored_cells": 129,
+  "failed_cells": 2,
+  "strict_all3_below10_cells": 9,
+  "accuracy_failed_scored_cells": 120,
+  "gate_A": "failed",
+  "gate_B": "unvalidated",
+  "scope": "development/regression; unresolved transient read/hash failures preserved, not an independent acceptance",
+  "overall": {
+    "engine_ttft_ms": {
+      "selected_cells": 131,
+      "scored_cells": 129,
+      "missing_cells": 2,
+      "signed_error_pct": {
+        "median": -42.8538261689781,
+        "p90": 4.552257665237542,
+        "max": 37.49807714888594
+      },
+      "absolute_percentage_error_pct": {
+        "median": 42.8538261689781,
+        "p90": 68.24917076388742,
+        "max": 77.5676987061138
+      },
+      "absolute_error_ms": {
+        "median": 80.67232737949254,
+        "p90": 645.7230625753413,
+        "max": 2667.094360327199
+      },
+      "signed_error_ms": {
+        "median": -46.96829183166349,
+        "p90": 131.4512394211318,
+        "max": 2667.094360327199
+      }
+    },
+    "engine_tpot_ms": {
+      "selected_cells": 131,
+      "scored_cells": 129,
+      "missing_cells": 2,
+      "signed_error_pct": {
+        "median": -27.51685148292542,
+        "p90": 17.512124288978985,
+        "max": 23.685809589219346
+      },
+      "absolute_percentage_error_pct": {
+        "median": 27.51685148292542,
+        "p90": 53.68363237608487,
+        "max": 70.84704361867442
+      },
+      "absolute_error_ms": {
+        "median": 2.5849515575621353,
+        "p90": 44.42068408054902,
+        "max": 125.90717545726022
+      },
+      "signed_error_ms": {
+        "median": -1.8129678733344967,
+        "p90": 4.460568695971542,
+        "max": 125.90717545726022
+      }
+    },
+    "engine_e2e_ms": {
+      "selected_cells": 131,
+      "scored_cells": 129,
+      "missing_cells": 2,
+      "signed_error_pct": {
+        "median": -31.3200355178252,
+        "p90": 12.704519822745663,
+        "max": 30.001066233500573
+      },
+      "absolute_percentage_error_pct": {
+        "median": 31.3200355178252,
+        "p90": 56.40034367699007,
+        "max": 72.82913275416276
+      },
+      "absolute_error_ms": {
+        "median": 382.28537726154036,
+        "p90": 2878.2201890852803,
+        "max": 25473.632791393087
+      },
+      "signed_error_ms": {
+        "median": -253.26507217677806,
+        "p90": 663.1615730820757,
+        "max": 25473.632791393087
+      }
+    }
+  },
+  "previous_candidate_comparison": {
+    "reference": "round_021/physical",
+    "comparable_cells": 129,
+    "changed_cells": 0,
+    "rows": [
+      {
+        "cell_id": "qwen25_p1536_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p512_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p1536_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p1536_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p512_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p512_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p1536_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p1536_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p128_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p512_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p128_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p512_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p512_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p512_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p1536_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen25_p1536_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p128_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p128_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p128_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p128_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p128_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p512_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "smollm2_p1536_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p1536_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p128_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p128_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p1536_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p128_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p1536_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p1536_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p128_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p128_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p128_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p512_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p1536_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p128_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "tinyllama_p1536_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p1536_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p1536_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p1536_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p1536_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p1536_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p1536_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p128_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen35_p512_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p1536_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p512_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p512_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p1536_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p512_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p512_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p1536_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p512_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p512_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p512_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p1536_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p128_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_p1536_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o128_c2__fixed_runtime",
+        "comparisons": [],
+        "all3_comparable": false
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o128_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o32_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o256_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o32_c4__fixed_runtime",
+        "comparisons": [],
+        "all3_comparable": false
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o256_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o32_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o256_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o128_c2__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p512_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o128_c1__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      },
+      {
+        "cell_id": "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+        "comparisons": [
+          {
+            "metric": "engine_ttft_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_tpot_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          },
+          {
+            "metric": "engine_e2e_ms",
+            "simulator_delta_ms": 0.0,
+            "ape_delta_pct": 0.0
+          }
+        ],
+        "all3_comparable": true
+      }
+    ]
+  },
+  "failed_predictions": [
+    {
+      "cell_id": "qwen38_gpu_p128_o32_c4__fixed_runtime",
+      "status": "failed",
+      "reason": "ValueError: GGUF SHA256 mismatch: path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf; expected=157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406; actual=9f9f4e325b4f8345ffa1d2c76972a5126e45ff66818fc5a66a3eeebf78e73d90; native_model_path=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_issue\\predictions\\qwen38_gpu_p128_o32_c4__fixed_runtime.prediction.json",
+        "sha256": "03edd0400730ac20cef81a9f71526ca9d02118c62435d47ea48f7244d65204f9",
+        "bytes": 200091
+      }
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o128_c2__fixed_runtime",
+      "status": "failed",
+      "reason": "ValueError: MMVQ hardware document content SHA256 mismatch",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_issue\\predictions\\qwen38_gpu_p1536_o128_c2__fixed_runtime.prediction.json",
+        "sha256": "96eb627d2b602c0a853c4bd29ba9a4bcd12e84ffe18dda451a690a249e4eae58",
+        "bytes": 218659
+      }
+    }
+  ],
+  "r2_microbenchmark": {
+    "complete_stages": 18,
+    "planned_stages": 18,
+    "quality_accepted_configurations": 0,
+    "clock_reset_returncode": 0,
+    "device_kernel_stable": true,
+    "host_quality_rejected": true
+  },
+  "next": "Integrate independently reviewed retained KV lifecycle in a new frozen version after closeout push; keep both hash failures, verify all new inputs and no success-seeking retries."
+}

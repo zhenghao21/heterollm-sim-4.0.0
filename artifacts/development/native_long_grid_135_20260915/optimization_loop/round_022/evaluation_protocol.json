@@ -1,0 +1,125 @@
+{
+  "schema": "mmvq-four-way-ablation/v1",
+  "created_utc": "2026-09-16T12:00:53.887634+00:00",
+  "native_lock": {
+    "native_locked": true,
+    "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "selected_cells": 131,
+    "raw_files": 131,
+    "formal_requests": 894
+  },
+  "variants": [
+    "pure",
+    "current",
+    "cta_only",
+    "cta_issue"
+  ],
+  "candidate": "cta_issue",
+  "treatments": {
+    "pure": {
+      "mmq": false,
+      "sampling": false,
+      "nonflash": false,
+      "cta": false,
+      "issue": false
+    },
+    "current": {
+      "mmq": true,
+      "sampling": true,
+      "nonflash": true,
+      "cta": false,
+      "issue": false
+    },
+    "cta_only": {
+      "mmq": true,
+      "sampling": true,
+      "nonflash": true,
+      "cta": true,
+      "issue": false
+    },
+    "cta_issue": {
+      "mmq": true,
+      "sampling": true,
+      "nonflash": true,
+      "cta": true,
+      "issue": true
+    }
+  },
+  "declared_variants": {
+    "pure": "R21 analytical baseline: no source MMQ, sampling or nonflash KV treatment",
+    "current": "R21 physical mechanism: source MMQ, sampling and nonflash KV; CTA/issue off",
+    "cta_only": "current plus conversion CTA compute-resource cap",
+    "cta_issue": "cta_only plus conditional source/PTX MMVQ integer issue bound"
+  },
+  "anchor_ids": [
+    "qwen25_p128_o128_c4__fixed_runtime",
+    "qwen25_p128_o256_c2__fixed_runtime",
+    "qwen25_p128_o32_c4__fixed_runtime",
+    "qwen25_p1536_o128_c1__fixed_runtime",
+    "qwen25_p1536_o128_c4__fixed_runtime",
+    "qwen25_p1536_o256_c1__fixed_runtime",
+    "qwen25_p1536_o256_c2__fixed_runtime",
+    "qwen25_p1536_o256_c4__fixed_runtime",
+    "qwen25_p1536_o32_c1__fixed_runtime",
+    "qwen25_p1536_o32_c2__fixed_runtime",
+    "qwen25_p512_o128_c1__fixed_runtime",
+    "qwen25_p512_o256_c1__fixed_runtime",
+    "qwen25_p512_o256_c2__fixed_runtime",
+    "qwen25_p512_o256_c4__fixed_runtime",
+    "qwen25_p512_o32_c1__fixed_runtime",
+    "qwen25_p512_o32_c2__fixed_runtime",
+    "qwen25_p512_o32_c4__fixed_runtime",
+    "qwen35_p512_o32_c1__fixed_runtime",
+    "smollm2_p512_o32_c1__fixed_runtime",
+    "tinyllama_p512_o32_c1__fixed_runtime"
+  ],
+  "anchor_denominator": 20,
+  "full_denominator": 131,
+  "threshold_pct_strict": 10.0,
+  "metrics": [
+    "engine_ttft_ms",
+    "engine_tpot_ms",
+    "engine_e2e_ms"
+  ],
+  "gate_B": "unvalidated",
+  "is_blind": false,
+  "formal_acceptance": false,
+  "native_remeasurement": false,
+  "calibration_added": false,
+  "accuracy_selected_subset": false,
+  "baseline_freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\freeze.json",
+    "sha256": "51cc65d7308d0c25ddaa00b70669a1fa0831eb64b796f6b25077d7b54e807750",
+    "bytes": 30389249
+  },
+  "driver_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\evaluate_candidate.py",
+    "sha256": "22232360a5b21e2932080e317cec9273c05415774c1e0179b4b6aae7cdcc6791",
+    "bytes": 14156
+  },
+  "summarizer_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\summarize_ablation.py",
+    "sha256": "f623eaff819bb3e25361f371aea67ad5e75fb4cfa89da431ccf7a44d97628ab1",
+    "bytes": 42609
+  },
+  "existing_static_freezes_adopted": [
+    "pure",
+    "current",
+    "cta_only",
+    "cta_issue"
+  ],
+  "registered_before_predictions": true,
+  "workflow": "Freeze all four full131 variants, lock controls, save all80 terminal anchor predictions, then score all four; continue cta_issue to fixed131 while retaining failures.",
+  "continuation_criterion": "Mechanism/source identity checks; never select cells or censor failures based on errors.",
+  "issue_scope": "Conditional source/PTX dot issue floor with complete source snapshot and header-compilation condition; no actual DP4A throughput calibration.",
+  "comparisons": [
+    {
+      "before": "current",
+      "after": "cta_only"
+    },
+    {
+      "before": "cta_only",
+      "after": "cta_issue"
+    }
+  ]
+}
