@@ -1866,7 +1866,7 @@
     "performance_parameter_admitted": false
   },
   "round_027_preparation": {
-    "status": "drivers_prepared_not_frozen",
+    "status": "pre_freeze_commit_byte_check_rejected_CRLF_only",
     "baseline": "round_025/off/freeze.json",
     "source_files": 115,
     "inherited_source_files": 113,
@@ -1881,6 +1881,16 @@
       "native_or_simulation": false
     },
     "predictions_run": false,
-    "gate_B": "unvalidated"
+    "gate_B": "unvalidated",
+    "rejection": "round_027/preparation_rejected.0001.json"
+  },
+  "round_026_wrapper_correctness": {
+    "status": "rejected",
+    "run": "round_026/wrapper_correctness_run.0001",
+    "returncode": null,
+    "gpu_execution_performed": false,
+    "reason": "all reported GPU processes incorrectly required empty for non-timed correctness",
+    "numerical_qualification": false,
+    "performance_parameters_admitted": 0
   }
 }

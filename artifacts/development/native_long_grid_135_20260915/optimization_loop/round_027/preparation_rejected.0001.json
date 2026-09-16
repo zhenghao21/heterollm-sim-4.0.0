@@ -1,0 +1,20 @@
+{
+  "schema": "r27-preparation-rejection/v1",
+  "created_utc": "2026-09-16T18:37:37.147Z",
+  "reviewed_commit": "0d370e2befa62fe593d0783fc46812743dcc473d",
+  "status": "rejected_before_freeze_creation",
+  "reason": "reviewed Git helper bytes differed from already-existing working bytes solely by one CRLF vs LF sequence",
+  "path": "tools/verify_fixed_native.py",
+  "working_ref": {
+    "bytes": 3676,
+    "sha256": "ed8580608ec9d6269ed6ded0ef3657d8ad672bfe1c2c8ab9c5cc107b2c9aa66d"
+  },
+  "git_ref": {
+    "bytes": 3675,
+    "sha256": "02df37dbfad57cd4b75d1249d6be61c606e5e48e0e703a03058df5f8e3a31933"
+  },
+  "protocol_created": false,
+  "arm_freezes_created": false,
+  "predictions_run": false,
+  "fix": "Preserve existing working helper bytes with Git -text; re-review a new commit. Do not change frozen evidence or relax byte comparisons."
+}

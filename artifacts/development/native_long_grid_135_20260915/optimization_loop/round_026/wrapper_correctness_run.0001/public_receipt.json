@@ -1,0 +1,61 @@
+{
+  "schema": "r26-correctness-rejected-local-evidence/v1",
+  "created_utc": "2026-09-16T18:38:11.188Z",
+  "status": "rejected_before_GPU_execution",
+  "native_child_started": false,
+  "reason": "A non-timed numerical runner incorrectly required the entire reported GPU process list to be empty.",
+  "identity_unchanged": true,
+  "performance_parameters_admitted": 0,
+  "raw_evidence_storage": "Original OS process snapshots and full failure details retained locally; Git stores exact hashes and lengths.",
+  "finish_ref": {
+    "relative": "finish.json",
+    "bytes": 10576,
+    "sha256": "3d2f2ce0f9a7739bec8cda05af9580f669a4d78df8b4141fbb01e717cbae0ff4"
+  },
+  "retained_files": {
+    "hardware_after.compute.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "hardware_after.compute.stdout.log": {
+      "bytes": 2102,
+      "sha256": "5da3925ed9c59d0d6181cda1f0e74812f959f7c9db44df3d62f7b9ade9de4b8f"
+    },
+    "hardware_after.gpu.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "hardware_after.gpu.stdout.log": {
+      "bytes": 133,
+      "sha256": "bf7c70c4c58c1198df9dd2c900e5419b961dfcf8df847662c0e983b61ab1cf6b"
+    },
+    "hardware_after.json": {
+      "bytes": 5934,
+      "sha256": "1a0d8a4ae325cd99046e3a8aa62e16b683e0d47df60c947efbc988aa0c4fbbae"
+    },
+    "hardware_before.compute.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "hardware_before.compute.stdout.log": {
+      "bytes": 2102,
+      "sha256": "5da3925ed9c59d0d6181cda1f0e74812f959f7c9db44df3d62f7b9ade9de4b8f"
+    },
+    "hardware_before.gpu.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "hardware_before.gpu.stdout.log": {
+      "bytes": 133,
+      "sha256": "bf7c70c4c58c1198df9dd2c900e5419b961dfcf8df847662c0e983b61ab1cf6b"
+    },
+    "hardware_before.json": {
+      "bytes": 5938,
+      "sha256": "8023f7dd540aed4be248125e9f77ed34bc58639ea85502792ee26143cc9b0fee"
+    },
+    "start.json": {
+      "bytes": 5012,
+      "sha256": "6b5048541fabe7bf8a52dd99e161e71fd807b432e764373120ae24ca157da79a"
+    }
+  }
+}
