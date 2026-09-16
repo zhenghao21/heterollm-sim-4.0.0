@@ -216,7 +216,7 @@ R22/R23共同104格312项：117改善、3退化、192不变；62普通attention�
 ## 13. 下一轮优化顺序（动态，原位更新）
 
 1. R23结果及27失败已归档提交上传（8af8fac）。R24规范引用与完整模型身份修复通过143项测试（1项跳过），字段白名单收紧后driver17项通过，独立审核完成；已提交上传b53b250，远端SHA一致。新冻结及lock完成，固定131格全量simulator预测已启动；核对原104数值不变和原失败27格恢复，其它变化必须解释，不能回填R23。
-2. 已确认末层output-selection生产接线缺失：真实GGUF架构名qwen2/llama与resolver别名不一致，metadata嵌套位置与planner读取位置不一致。隔离R25候选已实现默认关闭绑定，补充physical-dispatch结构回归后34项通过，分支7c7e51e已上传并核对；待完成有效配置审查并单独冻结。静态探针确认attention保留M64、末层FFN重派生M1，down进入MMVQ，融合up/gate仍保留未覆盖标记；qwen2/llama最后FFN前选行与混合架构最终norm后选行分开，绑定实际GGUF结构和锁定源合同，检查真实算子shape。独立候选与消融；语义修正可能降低prefill成本，不能承诺改善当前偏低TTFT。
+2. 已确认末层output-selection生产接线缺失：真实GGUF架构名qwen2/llama与resolver别名不一致，metadata嵌套位置与planner读取位置不一致。隔离R25候选已实现默认关闭绑定，补充physical-dispatch结构回归后34项通过，分支7c7e51e已上传并核对；普通completion配置源码链已审查，隔离分支合入R24身份修复后联合回归114通过、1跳过；仍需单独冻结评估。静态探针确认attention保留M64、末层FFN重派生M1，down进入MMVQ，融合up/gate仍保留未覆盖标记；qwen2/llama最后FFN前选行与混合架构最终norm后选行分开，绑定实际GGUF结构和锁定源合同，检查真实算子shape。独立候选与消融；语义修正可能降低prefill成本，不能承诺改善当前偏低TTFT。
 3. 继续MMVQ访存微基准资格验证。R24私有wrapper仅证实源码阶段可分，不证明cubin/PTX/SASS或实际dispatch等价，当前0参数准入。允许源码构造解释语义，禁止冒充固定DLL测量；相同原始kernel身份、conversion/main分界、grid/block/stream及观测扰动合格后才测性能。warm与超过L2的rotation分开，不用CTA数直接换经验带宽。
 4. 用固定模型/部署内signed-error与完整匹配P/O/C组核对真实microbatch、nonflash物理KV增长、retained占用/高水位和slot时间线。外生到达可显式输入；native token完成时间只供诊断，不得驱动预测后称泛化；不按actual误差决定warm/cold。
 5. 精确补采样、输入更新、host建图/提交的已证实缺项。CPU cgraph按每context上一张图的生命周期；host总成本按节点计数和资源重叠变化，单次系数不能凭c折扣。submit/sync与kernel区间重叠和观测扰动未解决前不追加wall残差。
