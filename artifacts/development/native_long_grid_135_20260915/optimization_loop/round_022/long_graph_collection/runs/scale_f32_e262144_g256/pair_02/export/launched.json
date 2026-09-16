@@ -1,0 +1,13 @@
+{
+  "pid": 16272,
+  "argv": [
+    "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\nsys.exe",
+    "export",
+    "--type=sqlite",
+    "--force-overwrite=false",
+    "--output=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\export\\trace.sqlite",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\profile\\trace.nsys-rep"
+  ],
+  "utc": "2026-09-16T10:32:45.739788+00:00",
+  "freeze_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4"
+}

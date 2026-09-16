@@ -1,0 +1,269 @@
+{
+  "schema": "r22-long-graph-initial-failure/v1",
+  "created_utc": "2026-09-16T10:44:55.402156+00:00",
+  "freeze_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4",
+  "planned_stages": 18,
+  "completed_stages": 6,
+  "native_stage_failures": 12,
+  "export_stage_structural_success": 6,
+  "timing_admitted_stages": 0,
+  "coefficients": 0,
+  "reset_returncode": 0,
+  "failure": "ggml-backend.cpp:1854 scheduler backend list must end in CPU; original probe passed CUDA only",
+  "formal_timing_started": false,
+  "retry_policy": "No retry in original directory; r2 is a new frozen output and must preserve full denominator.",
+  "stage_errors": [
+    {
+      "ordinal": 0,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\direct",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\direct\\stderr.txt",
+        "sha256": "260ed3da0dbd40e4e876ddd4f637aeaec693e13a115fb6b254604f62b7d8b005",
+        "bytes": 383
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\direct\\stdout.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\direct\\complete.json",
+        "sha256": "46048c97722a443bd669f06e3279f04aa77b18a59baa165dbcdf6e017067d516",
+        "bytes": 5328
+      },
+      "scheduler_assertion_observed_in_text": true
+    },
+    {
+      "ordinal": 1,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\profile",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\profile\\stderr.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\profile\\stdout.txt",
+        "sha256": "c60fb5ad5d48bebd6f9bf7525b85dc5cc5fcc920ed319b1fcfbb4b5aaa8a1544",
+        "bytes": 1041
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_01\\profile\\complete.json",
+        "sha256": "cb65c8f41c881446b36dea47afc9df2a4acbc4c827bc2e3fde6f18f395d035ee",
+        "bytes": 6207
+      },
+      "scheduler_assertion_observed_in_text": false
+    },
+    {
+      "ordinal": 3,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\profile",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\profile\\stderr.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\profile\\stdout.txt",
+        "sha256": "d335a95f89fd95aec35face8bea53622125f926d1c0e61282910be770b02c48d",
+        "bytes": 1042
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\profile\\complete.json",
+        "sha256": "e34ce91834f531cd09e3d7c899f6b9bd565b02d7ec983e462b8a90a821ea2e07",
+        "bytes": 6227
+      },
+      "scheduler_assertion_observed_in_text": false
+    },
+    {
+      "ordinal": 4,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\direct",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\direct\\stderr.txt",
+        "sha256": "260ed3da0dbd40e4e876ddd4f637aeaec693e13a115fb6b254604f62b7d8b005",
+        "bytes": 383
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\direct\\stdout.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\direct\\complete.json",
+        "sha256": "387d73f2bce77ea36e1f6987a0742127ec4b1843f3e99a081663b3b0a624f706",
+        "bytes": 5347
+      },
+      "scheduler_assertion_observed_in_text": true
+    },
+    {
+      "ordinal": 6,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\direct",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\direct\\stderr.txt",
+        "sha256": "260ed3da0dbd40e4e876ddd4f637aeaec693e13a115fb6b254604f62b7d8b005",
+        "bytes": 383
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\direct\\stdout.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\direct\\complete.json",
+        "sha256": "b7ac4c78a3efe215abd0742415539545c8b8d43271491917f6e48e4100a4eedb",
+        "bytes": 5347
+      },
+      "scheduler_assertion_observed_in_text": true
+    },
+    {
+      "ordinal": 7,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\profile",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\profile\\stderr.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\profile\\stdout.txt",
+        "sha256": "6bcd3cd3ad3632b265b415e433c018580d3038298f97edebd4e38163a1cc8a38",
+        "bytes": 1042
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_02\\profile\\complete.json",
+        "sha256": "8e6da4f293384e66767ca652054372fe2edf6613d4987107bc51f3bc18280cd3",
+        "bytes": 6227
+      },
+      "scheduler_assertion_observed_in_text": false
+    },
+    {
+      "ordinal": 9,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\profile",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\profile\\stderr.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\profile\\stdout.txt",
+        "sha256": "2d8f7f1eff79b1870637ff516953ea2a5debe2b044a039f7d2a0135cbc9dfe10",
+        "bytes": 989
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\profile\\complete.json",
+        "sha256": "098f5b3550482555fa2c72c79fbf56469554ec3c5dcfec8adb3da16a14fca6d4",
+        "bytes": 6206
+      },
+      "scheduler_assertion_observed_in_text": false
+    },
+    {
+      "ordinal": 10,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\direct",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\direct\\stderr.txt",
+        "sha256": "260ed3da0dbd40e4e876ddd4f637aeaec693e13a115fb6b254604f62b7d8b005",
+        "bytes": 383
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\direct\\stdout.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\direct\\complete.json",
+        "sha256": "249893a7021309ba7c2b7e871adb3549dcd914c8b89a16693d319ae10baf8df1",
+        "bytes": 5330
+      },
+      "scheduler_assertion_observed_in_text": true
+    },
+    {
+      "ordinal": 12,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\stderr.txt",
+        "sha256": "260ed3da0dbd40e4e876ddd4f637aeaec693e13a115fb6b254604f62b7d8b005",
+        "bytes": 383
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\stdout.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\complete.json",
+        "sha256": "59c0ae0532a7e9d0fcf4ca80959fe5c638e8c8c872200f6c7cea5913708a6bcc",
+        "bytes": 5330
+      },
+      "scheduler_assertion_observed_in_text": true
+    },
+    {
+      "ordinal": 13,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\profile",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\profile\\stderr.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\profile\\stdout.txt",
+        "sha256": "6baf606312218a5513eacb8019925658723973099a095673a4bfcabdaa9abc19",
+        "bytes": 1041
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\profile\\complete.json",
+        "sha256": "4479395e00966e2cb2723ab45b2fff95573cdb617ceaf8ecfd39f2b85d912c1f",
+        "bytes": 6208
+      },
+      "scheduler_assertion_observed_in_text": false
+    },
+    {
+      "ordinal": 15,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\profile",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\profile\\stderr.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\profile\\stdout.txt",
+        "sha256": "71ef0aa03d9734b1a7fd3b7a89ba294853f1010b9f8d62da64ac1e403ba39d32",
+        "bytes": 990
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\profile\\complete.json",
+        "sha256": "cfe664912bb75243f0e771a0db8db2d21cf2eb214216f00ca29181420c5addd4",
+        "bytes": 6227
+      },
+      "scheduler_assertion_observed_in_text": false
+    },
+    {
+      "ordinal": 16,
+      "stage": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\direct",
+      "stderr_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\direct\\stderr.txt",
+        "sha256": "260ed3da0dbd40e4e876ddd4f637aeaec693e13a115fb6b254604f62b7d8b005",
+        "bytes": 383
+      },
+      "stdout_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\direct\\stdout.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "completion_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_03\\direct\\complete.json",
+        "sha256": "d5b54d7830f55e016618fb00f747e20ea6a2c396670e101f349e02f9d2f1e0bc",
+        "bytes": 5348
+      },
+      "scheduler_assertion_observed_in_text": true
+    }
+  ],
+  "source": "controller_result.json and per-stage stderr only; no latency used",
+  "report_correction": {
+    "kind": "posthoc_failure_reference_repair",
+    "created_utc": "2026-09-16T11:28:13.409304+00:00",
+    "original_raw_measurements_changed": false,
+    "reason": "Parse ordinal and strip controller error prefix before binding existing stdout/stderr/completion; profile wrapper stderr can be empty, so distinguish visible assertion evidence from reported process failure."
+  },
+  "controller_result_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\controller_result.json",
+    "sha256": "73d7abf0df55439620296239c27458daa094a9137dce0f707739657413ee288d",
+    "bytes": 8681
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "schema": "r22-long-graph-preparation/v1",
+  "created_utc": "2026-09-16T09:28:46.463403+00:00",
+  "status": "compiled_identity_checked_collector_mock_tested_no_measurement",
+  "executable": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\long-graph-probe.exe",
+    "sha256": "54a7b83ea757a9c8db1d9df485b8c8d132b41d12bba15444c227e771901aa3b3",
+    "bytes": 163328
+  },
+  "protocol": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\protocol.json",
+    "sha256": "ac2fdfc9704610ccf2c78a7257bad2605315b6ae9899d201907e4c8776eec3a8",
+    "bytes": 9528
+  },
+  "build_manifest": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\build_manifest.json",
+    "sha256": "14b162b9385cf2848b7b84555d6ce9bba00628f0ddffe3d3efcb3691dbe44931",
+    "bytes": 78854
+  },
+  "frozen_files": 330,
+  "compiler_header_count": 295,
+  "host_reference": {
+    "schema": "graph-gap-host-reference/v1",
+    "pass": true,
+    "checked_stage_elements": 83886080,
+    "mock_loader_pass": true,
+    "gpu_access": false
+  },
+  "python_reference_checked_stage_elements": 81600,
+  "identity_only_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\identity_only_result.json",
+    "sha256": "d3bb35b59926d3b4cce6337beec2d38095b31ea19363c84150d31dc66954aaab",
+    "bytes": 2338
+  },
+  "mock_tests": {
+    "passed": 30,
+    "duration_seconds": 0.73,
+    "file": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\test_long_graph.py",
+      "sha256": "23a6eef97c9767dcc75b434436d98c4d25308a4baaa4e341ed1e0c903a88fee2",
+      "bytes": 13360
+    }
+  },
+  "collector_code_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\collect.py",
+      "sha256": "7e6f2d7bf5cc60290224785c44c98c12af47b9f1e071575d610d01ee262c9a8f",
+      "bytes": 19084
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\contract.py",
+      "sha256": "d8c984fba56b640a148844f92b16049d4c55fed37a2a60d11ac9cc5004d49c34",
+      "bytes": 1873
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\strict_raw.py",
+      "sha256": "eb80c4ebf4c5422ac883a2c5f76f9fff60f485b466f2aced8312f76b6699b8d3",
+      "bytes": 8257
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\native_trace.py",
+      "sha256": "d85ac5e487f91dd86309d5090fe742e1bf4b38497c288cf876e786a3ad1d3cfb",
+      "bytes": 17442
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\quality_fixed.py",
+      "sha256": "ba1819256117b48a80f33d54606dbf5025bbd08cdf99b3084fdce60e1dc4a42f",
+      "bytes": 4535
+    }
+  ],
+  "plan_denominator": {
+    "native": 12,
+    "export": 6,
+    "total": 18,
+    "configs_nodes": [
+      64,
+      256
+    ],
+    "pairs_per_config": 3,
+    "recorded_per_native": 36,
+    "formal_per_native": 30
+  },
+  "review_checkpoint": "nonblocking at6 stages; explicit SHA-bound stop only at natural boundaries",
+  "coefficients_added": 0,
+  "measured_native_processes": 0,
+  "execution_freeze_created": false,
+  "failed_prechecks_retained": [
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\failed_build_01",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\failed_identity_01.json"
+  ],
+  "remaining": "Root may freeze/run only after R21 complete/committed and simulator idle. GPU numerical/scheduler behavior and real dispatch await that measured series."
+}

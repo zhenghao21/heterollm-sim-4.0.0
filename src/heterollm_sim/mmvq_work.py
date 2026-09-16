@@ -1,6 +1,7 @@
 """Source-derived CC1200 MMVQ geometry, with no latency or bandwidth model.
 
-Only ordinary contiguous Q5_0/Q8_0 MUL_MAT is described.  An explicit runtime
+Ordinary contiguous Q5_0/Q8_0 MUL_MAT is described by default. An explicit
+issue-bound treatment can also derive the locked Q4_K/Q6_K geometry.  An explicit runtime
 contract is required; this module never chooses MMVQ from a model name and
 never assumes that a CTA count is an HBM utilization percentage.
 """
@@ -160,10 +161,11 @@ class MMVQWork:
 
 
 def derive_mmvq_work(*, m: int, k: int, n: int, weight_format: str,
-                     contract: MMVQSourceContract) -> MMVQWork:
+                     contract: MMVQSourceContract, allow_k_formats: bool = False) -> MMVQWork:
     """Derive exact source launch geometry, not GPU performance.
 
-    Q5_0/Q8_0 dispatch on the generic CC1200 path accepts M<=8. M1 may
+    Default Q5_0/Q8_0 generic CC1200 dispatch accepts M<=8; explicit
+    K-format opt-in admits Q4_K M<=5 and Q6_K M<=7. M1 may
     increase rows/CTA to four when logical K-blocks fit the strict small-K
     predicate. M2..4 use four warps/two rows; M5..8 two warps/two rows.
     Odd/partial output tiles require independent weight-tail allocation proof
@@ -173,12 +175,18 @@ def derive_mmvq_work(*, m: int, k: int, n: int, weight_format: str,
         raise UnsupportedMMVQ('explicit source/runtime contract required')
     for value, name in ((m, 'M'), (k, 'K'), (n, 'N')):
         _positive(value, name)
-    if not isinstance(weight_format, str) or weight_format not in {'Q5_0', 'Q8_0'}:
-        raise UnsupportedMMVQ('format outside Q5_0/Q8_0 verified geometry scope')
-    if m > 8 or k % 32:
-        raise UnsupportedMMVQ('outside MMVQ batch or logical K block domain')
-    qi, block_bytes = (4, 22) if weight_format == 'Q5_0' else (8, 34)
-    vdr, qk, warp = 2, 32, 32
+    if type(allow_k_formats) is not bool:
+        raise UnsupportedMMVQ('K-format geometry requires explicit boolean opt-in')
+    parameters = {'Q5_0': (32, 4, 2, 22, 8), 'Q8_0': (32, 8, 2, 34, 8)}
+    if allow_k_formats:
+        # Generic CC1200 launch table, ggml-common QI/QR and vecdotq VDR.
+        parameters.update(Q4_K=(256, 32, 2, 144, 5), Q6_K=(256, 32, 1, 210, 7))
+    if not isinstance(weight_format, str) or weight_format not in parameters:
+        raise UnsupportedMMVQ('format outside explicitly enabled MMVQ geometry scope')
+    qk, qi, vdr, block_bytes, max_m = parameters[weight_format]
+    if m > max_m or k % qk:
+        raise UnsupportedMMVQ('outside source MMVQ batch or logical K block domain')
+    warp = 32
     warps = 4 if m <= 4 else 2
     qblocks = k // qk
     small = m == 1 and qblocks < warps * vdr * warp // qi

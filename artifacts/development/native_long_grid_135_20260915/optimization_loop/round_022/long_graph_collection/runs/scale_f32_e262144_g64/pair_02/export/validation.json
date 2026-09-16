@@ -1,0 +1,10 @@
+{
+  "stage_ordinal": 11,
+  "status": "structurally_validated",
+  "freeze_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4",
+  "sqlite_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_02\\export\\trace.sqlite",
+    "bytes": 258048,
+    "sha256": "101053eb89267e3b94a21690a60d39576b4b673112a90e0f16b51ac74da8e0a4"
+  }
+}

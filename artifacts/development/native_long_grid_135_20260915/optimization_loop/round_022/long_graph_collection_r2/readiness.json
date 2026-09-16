@@ -1,0 +1,66 @@
+{
+  "schema": "r22-long-graph-r2-collector-readiness/v1",
+  "collector": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\collect.py",
+    "sha256": "f5560f8811a669ec1b583ca0245a0e3e6c3f730291d3d88ff3cc0b32a3ab158a",
+    "bytes": 18841
+  },
+  "contract": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\contract.py",
+    "sha256": "7ae698b7cfbfb057297fb5e1003777f046dbb2f294a6d6a8695a2cb2e289c81f",
+    "bytes": 2051
+  },
+  "tests": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\test_long_graph.py",
+    "sha256": "572f969c4b7753ddef3a15ce6d53be65881c9d91a93f950b44e1a649764e8726",
+    "passed": 38,
+    "scope": "mock/read-only; includes recorded r2 smoke setup conversion plus seven independently mutated scheduler-contract rejection cases"
+  },
+  "probe_executable": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe_r2\\long-graph-probe.exe",
+    "sha256": "8cb92bfb4d7056d5636f81980b33ee9931b566b789e204af57b991596b9bd336",
+    "bytes": 165376
+  },
+  "protocol": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe_r2\\protocol.json",
+    "sha256": "d80e8e1fb16b5311560ad064227d8d50be7b8cc586f87d496e17c3f5ad3d57a1",
+    "bytes": 10073
+  },
+  "execution_plan": {
+    "native_processes": 12,
+    "exports": 6,
+    "total_stages": 18,
+    "review_timeout_seconds": null,
+    "hard_termination": "none; only explicit stop at natural boundary",
+    "failure_denominator_preserved": true
+  },
+  "execution_freeze_created": false,
+  "formal_stage_started": false,
+  "calibration_ready": false,
+  "raw_audit_contract": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\strict_raw.py",
+    "sha256": "53cda3322d1d099370d408cf67b4c275b2c1a4a914b13b5bbfb32730e115fe99",
+    "bytes": 8581
+  },
+  "collector_readme": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\README.md",
+    "sha256": "58234ecd046487c906d79e1c01d18fab54b01730b95d41c35f070be17c40418e",
+    "bytes": 3583
+  },
+  "r2_scheduler_audit": {
+    "status": "fixed_before_freeze",
+    "required": {
+      "scheduler_backends": 2,
+      "scheduler_backend_order": [
+        "CUDA",
+        "CPU"
+      ],
+      "all_graph_tensors_explicitly_pinned_cuda": true,
+      "cpu_backend_role": "scheduler_terminal_requirement_only",
+      "cpu_scheduler_buffer_bytes": 0,
+      "scheduler_parallel": false,
+      "scheduler_op_offload": false
+    },
+    "evidence": "Recorded r2 non-timed smoke setup is the fixture source; no formal timing artifact is used."
+  }
+}

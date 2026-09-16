@@ -95,6 +95,7 @@ from .control_plane_state import (
 )
 from .mtp import MTPRequestCursor, expected_prefix_tokens, round_accepted_prefix
 from .mmq_work import MMVQ_MAX_BATCH_SIZE, MMQWork, UnsupportedMMQ, derive_mmq_work
+from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
 from .mmvq_work import (
     MMVQSourceContract, MMVQWork, SOURCE_SHA256 as MMVQ_SOURCE_SHA256,
     UnsupportedMMVQ, derive_mmvq_work,
@@ -9302,6 +9303,7 @@ def _declared_mmvq_work(
         work = derive_mmvq_work(
             m=workload.m, k=workload.k, n=workload.n,
             weight_format=formats[0], contract=contract,
+            allow_k_formats=_mmvq_issue_bound_requested(scenario),
         )
     except (TypeError, UnsupportedMMVQ, ValueError) as error:
         return uncovered(str(error))
@@ -9315,6 +9317,34 @@ def _declared_mmvq_work(
         "formal_timing_eligible": False,
         "reason": "MMVQ source geometry is exact but no qualified resource rate exists",
     }
+
+
+def _mmvq_issue_bound_requested(scenario: ScenarioConfig) -> bool:
+    value = scenario.workload.metadata.get("llama_cpp_mmvq_vector_issue_bound", False)
+    if type(value) is not bool:
+        raise ValueError("llama_cpp_mmvq_vector_issue_bound must be an explicit boolean")
+    return value
+
+
+def _declared_mmvq_issue_contract(scenario, workload, target, gpu_profile):
+    if not _mmvq_issue_bound_requested(scenario):
+        return None, None
+    audit = {"requested": True, "status": "uncovered"}
+    if workload.mmvq_work is None:
+        return None, {**audit, "reason": "no_supported_source_MMVQ_work"}
+    competing = scenario.hardware.metadata.get("llama_cpp_mmvq_prmt_partial_contract", {})
+    if isinstance(competing, Mapping) and competing.get("enabled") is True:
+        return None, {**audit, "reason": "competing_PRMT_partial_cost_treatment"}
+    try:
+        contract = MMVQIssueContract.from_mapping(
+            target.metadata.get("llama_cpp_mmvq_vector_issue_contract"))
+        bound = derive_issue_bound(workload.mmvq_work, contract,
+            sm_count=gpu_profile.sm_count, frequency_ghz=gpu_profile.tensor_core.frequency_ghz)
+    except (TypeError, ValueError, UnsupportedMMVQ) as error:
+        return None, {**audit, "reason": str(error)}
+    return contract, {"requested": True, "status": "applied_conditional_lower_bound",
+        "capacity_kind": bound["capacity_kind"], "clock_condition": bound["clock_condition"],
+        "source_condition": bound["source_condition"], "native_instruction_mapping_proven": False}
 
 
 def _declared_mmvq_prmt_partial_work(
@@ -9943,7 +9973,13 @@ def _add_rank_gemm(
                 workload, activation_storage_bytes=mmq_work.consumer_unique_bytes,
                 mmq_work=mmq_work,
             )
-        if model_weight_read and not rhs_is_activation and mmq_work is None:
+        issue_contract, issue_audit = _declared_mmvq_issue_contract(
+            scenario, workload, target, gpu_profile)
+        if issue_audit is not None:
+            operation_metadata["mmvq_vector_issue_treatment"] = issue_audit
+        if issue_contract is not None:
+            workload = replace(workload, mmvq_issue_contract=issue_contract)
+        if model_weight_read and not rhs_is_activation and mmq_work is None and issue_contract is None:
             workload, mmvq_prmt_audit = _declared_mmvq_prmt_partial_work(
                 scenario,
                 workload,

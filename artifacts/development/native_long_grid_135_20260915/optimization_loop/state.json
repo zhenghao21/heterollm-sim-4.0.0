@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_021_complete_pending_commit_then_round_022",
+  "status": "round_022_code_validated_ready_to_commit_and_freeze_r2",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1321,11 +1321,57 @@
         "engine_e2e_ms": 30.001066233500573
       },
       "report": "round_021/closeout.json"
+    },
+    {
+      "round": 22,
+      "status": "code_and_adapter_validated_r2_ready_before_freeze",
+      "started_utc": "2026-09-16T10:32:07.941404+00:00",
+      "native_remeasured": false,
+      "target_llm_latency_fit": false,
+      "gpu_probe_freeze_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4",
+      "gpu_native_processes_planned": 12,
+      "gpu_exports_planned": 6,
+      "mmvq_isolated_commit": "728ca98d1fdcfef36965179ee009edb79d09ab99",
+      "mmvq_integrated": true,
+      "mmvq_review": "source/PTX conditional bound approved for opt-in experiment; actual DP4A throughput/SASS/HBM not validated",
+      "new_coefficients": 0,
+      "completed_stages": 6,
+      "attempted_stages": 18,
+      "native_crash_stages": 12,
+      "export_completed_stages": 6,
+      "quality_admitted_conditions": 0,
+      "coefficients": 0,
+      "clock_reset_returncode": 0,
+      "failure_reason": "ggml-backend.cpp:1854 requires CPU backend last; GPU-only scheduler list failed before measurement",
+      "execution_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4",
+      "updated_utc": "2026-09-16T11:36:29.964716+00:00",
+      "core_adapter_tests_passed": 277,
+      "real_static_conditional_cells": 131,
+      "real_static_uncovered_cells": 0,
+      "collector_r2_tests_passed": 38,
+      "new_llm_predictions": 0,
+      "r2": {
+        "probe_sha256": "8cb92bfb4d7056d5636f81980b33ee9931b566b789e204af57b991596b9bd336",
+        "readiness_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection_r2\\readiness.json",
+          "sha256": "8f07f3dd06608e52c83ecbd8e554bf7825dfabdef982351fea83952817b4683b",
+          "bytes": 3293
+        },
+        "execution_freeze_created": false,
+        "formal_started": false,
+        "strict_raw_r1_schema_residue_fixed_before_freeze": true
+      },
+      "ablation_arms": [
+        "pure",
+        "current_R21_physical",
+        "conversion_cta_only",
+        "conversion_cta_plus_mmvq_issue_bound"
+      ]
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Measure source-preserving long-graph CPU launch/sync envelopes after simulation idle; replace MMVQ tensor-core fallback only with independently justified vector instruction bounds. Do not fit LLM outcomes.",
+  "next_round_hypothesis": "After code push, run new r2 long-graph freeze and four-way MMVQ ablation; independently qualify retained warmup KV state. No target LLM timing fit.",
   "full_131_evaluations_started": 4,
   "full_131_evaluations_completed": 4,
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical",
@@ -1461,6 +1507,14 @@
       "commit": "2d4c6c69f6fe29d33f3da48db05cd67fa5532722",
       "pushed_to": "origin/main",
       "status": "remote_sha_verified"
+    },
+    {
+      "round": 21,
+      "commit": "c46a393093b726284907851a034b898b607fcfcf",
+      "upstream_sha": "c46a393093b726284907851a034b898b607fcfcf",
+      "verified_utc": "2026-09-16T10:32:07.941404+00:00",
+      "push_succeeded": true,
+      "artifact_git_blob_byte_checks": 337
     }
   ],
   "operator_microbenchmark": {

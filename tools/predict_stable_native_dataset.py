@@ -968,6 +968,322 @@ def apply_gpu_invocation_static_contract(scenario, inputs):
                                                enable_conversion_cta_costs=conversion_flag)
 
 
+MMVQ_HARDWARE_DOCUMENT_URL = "https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf"
+MMVQ_DOCUMENT_MAX_BYTES = 16 * 1024 * 1024
+
+
+def checked_mmvq_document_bytes(payload):
+    """Verify actual immutable PDF bytes, never a supplied digest declaration."""
+    import hashlib
+    from heterollm_sim.mmvq_issue_bound import HARDWARE_DOCUMENT_SHA256
+    if not payload.startswith(b"%PDF-") or len(payload) > MMVQ_DOCUMENT_MAX_BYTES:
+        raise ValueError("MMVQ hardware document is not a bounded PDF")
+    if hashlib.sha256(payload).hexdigest() != HARDWARE_DOCUMENT_SHA256:
+        raise ValueError("MMVQ hardware document content SHA256 mismatch")
+    return HARDWARE_DOCUMENT_SHA256
+
+
+def freeze_mmvq_hardware_document(output, document_path=None):
+    """Capture the actual official PDF; unavailable evidence disables treatment."""
+    import urllib.request
+    import urllib.error
+    try:
+        if document_path is None:
+            with urllib.request.urlopen(MMVQ_HARDWARE_DOCUMENT_URL, timeout=30) as response:
+                payload = response.read(MMVQ_DOCUMENT_MAX_BYTES + 1)
+        else:
+            with Path(document_path).open("rb") as source:
+                payload = source.read(MMVQ_DOCUMENT_MAX_BYTES + 1)
+    except (OSError, urllib.error.URLError) as exc:
+        return {"status": "unavailable", "reason": type(exc).__name__, "ref": None,
+            "source_url": MMVQ_HARDWARE_DOCUMENT_URL, "content_bytes_verified": False}
+    digest = checked_mmvq_document_bytes(payload)
+    target = Path(output) / "evidence/nvidia-rtx-blackwell-gpu-architecture.pdf"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("xb") as destination:
+        destination.write(payload)
+    ref = grid.file_ref(target)
+    if ref["sha256"] != digest:
+        raise ValueError("MMVQ hardware document changed while freezing")
+    return {"status": "verified", "ref": ref, "source_url": MMVQ_HARDWARE_DOCUMENT_URL,
+        "content_bytes_verified": True, "size_bytes": len(payload),
+        "revision": "RTX Blackwell v1.1", "figure": "Figure 5, printed page 11",
+        "interpretation": "four 32-thread dispatch partitions; not measured DP4A throughput"}
+
+
+def verify_mmvq_hardware_document(document):
+    if not isinstance(document, Mapping):
+        raise ValueError("MMVQ hardware document evidence must be a mapping")
+    if document.get("status") == "unavailable":
+        if document.get("ref") is not None or document.get("content_bytes_verified") is not False:
+            raise ValueError("MMVQ unavailable hardware document claims verification")
+        return
+    if (document.get("status") != "verified" or document.get("content_bytes_verified") is not True
+            or document.get("source_url") != MMVQ_HARDWARE_DOCUMENT_URL):
+        raise ValueError("MMVQ hardware document has no verified content")
+    ref = document["ref"]
+    with Path(ref["path"]).open("rb") as source:
+        payload = source.read(MMVQ_DOCUMENT_MAX_BYTES + 1)
+    if checked_mmvq_document_bytes(payload) != ref["sha256"] or len(payload) != document.get("size_bytes"):
+        raise ValueError("MMVQ frozen hardware document reference mismatch")
+
+
+def derive_mmvq_issue_source_binding(runtime_binding_ref, data_root):
+    """Bind the complete MMVQ source snapshot to the recorded module build chain.
+
+    The inherited object has a verified link identity. Headers were captured by
+    the later annotation receipt; their bytes at the original compile remain an
+    explicit condition, not a claim that a dependency/preprocessor trace exists.
+    """
+    from tools import llama_runtime_source_binding as source_api
+    from heterollm_sim.mmvq_work import SOURCE_SHA256
+    grid.read_document(runtime_binding_ref["path"], runtime_binding_ref["sha256"])
+    runtime = verified_host_offload_source_contract(runtime_binding_ref["path"], [], data_root)
+    if runtime["contract_ref"]["sha256"] != runtime_binding_ref["sha256"]:
+        raise ValueError("MMVQ runtime source binding changed during validation")
+    linkage = verify_gpu_invocation_source_links(runtime, data_root)
+    binding = runtime["contract"]
+    ev = source_api._Evidence(data_root)
+    audit = ev.document(runtime["runtime_build_audit_ref"])
+    stages = {stage["stage"]: stage for stage in audit["provenance_chain"]}
+    base_stage = stages["base_configuration_and_preprocessor_guards"]
+    annotation = ev.document(stages["native_to_annotation"]["annotation_build_receipt_ref"])
+    base_receipt = ev.document(runtime["base_build_receipt_ref"])
+    header_ref = base_stage["header_snapshot_ref"]
+    source_api._equal_digests(header_ref["sha256"], annotation["header_snapshot_sha256"])
+    headers = ev.document(header_ref)
+    root = Path(binding["source_paths"]["scheduler"]).parents[2]
+    module = binding["runtime_modules"]["ggml-cuda.dll"]
+    compilation = linkage["source_compilation"]["mmvq"]
+    if compilation["module"] != module:
+        raise ValueError("MMVQ object linkage does not reach the selected CUDA module")
+    refs = {ref["path"]: ref for ref in [runtime["contract_ref"], *runtime["evidence_refs"], *linkage["evidence_refs"]]}
+    result = {"status": "uncovered", "runtime_source_binding_ref": runtime["contract_ref"],
+        "data_root": str(Path(data_root).resolve()), "runtime_binding_sha256": binding["content_sha256"],
+        "runtime_module_ref": module, "source_compilation": compilation,
+        "header_snapshot_ref": header_ref, "source_refs": [],
+        "original_compile_header_bytes_proven": False, "native_instruction_mapping_proven": False,
+        "native_latency_used": False,
+        "conditions": ["captured_header_snapshot_matches_headers_consumed_by_original_mmvq_compilation"],
+        "header_scope": "digest_bound_annotation_header_snapshot; no original compiler dependency/preprocessor trace"}
+    source_refs, texts = [], {}
+    for relative, expected in SOURCE_SHA256.items():
+        path = root / "ggml/src" / relative
+        history = base_receipt["source_sha256_before"] if path.suffix == ".cu" else headers.get("files", {})
+        matches = [digest for filename, digest in history.items()
+            if source_api._identity(filename) == source_api._identity(path)]
+        if len(matches) != 1:
+            refs.update({ref["path"]: ref for ref in ev.refs.values()})
+            return {**result, "uncovered_reasons": ["historical_mmvq_source_snapshot_missing:" + relative],
+                "evidence_refs": list(refs.values())}
+        source_api._equal_digests(matches[0], expected)
+        if path.suffix == ".cu":
+            source_api._equal_digests(expected, source_api._digest_at(base_receipt["source_sha256_after"], path),
+                compilation["source_sha256"])
+            if source_api._identity(path) != source_api._identity(compilation["source"]):
+                raise ValueError("MMVQ compilation input differs from locked source path")
+        texts[relative] = ev.text({"path": str(path), "sha256": expected})
+        source_refs.append(ev.refs[source_api._identity(path)])
+    includes = (("ggml-cuda/mmvq.cu", '"mmvq.cuh"'),
+        ("ggml-cuda/mmvq.cu", '"vecdotq.cuh"'), ("ggml-cuda/mmvq.cuh", '"common.cuh"'),
+        ("ggml-cuda/vecdotq.cuh", '"common.cuh"'), ("ggml-cuda/common.cuh", '"ggml-common.h"'))
+    if any("#include " + target not in texts.get(relative, "") for relative, target in includes):
+        raise ValueError("MMVQ captured header include chain differs from locked source")
+    commands = ev.document(base_stage["compile_commands_ref"])
+    build = Path(annotation["base"]).resolve()
+    entry = source_api._compile_entry(commands, root / "ggml/src/ggml-cuda/mmvq.cu", build)
+    argv = source_api._tokens(entry.get("arguments", entry.get("command")))
+    include_dirs = [argument[2:] for argument in argv if argument.startswith("-I") and len(argument) > 2]
+    if not any(source_api._identity(path) == source_api._identity(root / "ggml/src") for path in include_dirs):
+        raise ValueError("MMVQ recorded include search does not reach the captured ggml-common header")
+    refs.update({ref["path"]: ref for ref in ev.refs.values()})
+    verify_refs(list(refs.values()))
+    return {**result, "status": "conditional", "uncovered_reasons": [], "source_refs": source_refs,
+        "evidence_refs": list(refs.values()), "snapshot_identity_verified": True}
+
+
+def merged_mmvq_source_refs(primary, supplement):
+    """Deduplicate identical paths but never conceal conflicting source hashes."""
+    refs = {}
+    for ref in [*primary, *supplement]:
+        key = str(Path(ref["path"]).resolve()).casefold()
+        if key in refs and refs[key]["sha256"] != ref["sha256"]:
+            raise ValueError("MMVQ conflicting source identity across invocation and supplemental binding")
+        refs[key] = ref
+    return list(refs.values())
+
+
+def mmvq_static_cell_evidence(gpu_binding, hardware, native_refs, document, *, checked_sources=None, source_binding=None):
+    """Recheck only static source/device facts and historical module identities."""
+    from heterollm_sim.mmvq_issue_bound import source_issue_contract, CLOCK_CONDITION
+    from heterollm_sim.mmvq_work import SOURCE_SHA256 as MMVQ_SOURCES
+    from heterollm_sim.conversion_work import SOURCE_SHA256 as CONVERSION_SOURCES
+    if (not isinstance(gpu_binding, Mapping) or gpu_binding.get("mmq_source_costs_requested") is not True
+            or gpu_binding.get("conversion_cta_costs_requested") is not True):
+        raise ValueError("MMVQ issue bound requires frozen GPU invocation, MMQ and conversion source costs")
+    evidence = {"requested": True, "status": "uncovered", "contract": None,
+        "gpu_invocation_sha256": grid.stable_hash(gpu_binding), "hardware_document": document,
+        "native_instruction_mapping_proven": False, "native_latency_used": False,
+        "calibration_applied": False, "formal_prediction_eligible": False,
+        "clock_condition": CLOCK_CONDITION,
+        "unpriced_work": ["unpack", "constant_dot_correction", "float_scale", "warp_reduction",
+            "barrier_latency", "register_pressure", "spill", "native_instruction_latency"],
+        "hbm_accounting": "unchanged_legacy_unverified", "evidence_refs": []}
+    if document["status"] != "verified":
+        return {**evidence, "uncovered_reasons": ["hardware_document_content_unavailable"]}
+    if source_binding is not None:
+        evidence["mmvq_source_binding"] = source_binding
+        evidence["evidence_refs"] = source_binding["evidence_refs"]
+        if source_binding["status"] != "conditional":
+            return {**evidence, "uncovered_reasons": source_binding["uncovered_reasons"]}
+    contract = gpu_binding.get("contract")
+    if contract is None:
+        return {**evidence, "uncovered_reasons": ["gpu_invocation_contract_unavailable"]}
+    device = contract.get("mmq_device_evidence", {})
+    if device.get("available") is not True:
+        return {**evidence, "uncovered_reasons": ["static_device_properties_unavailable"]}
+    refs = [document["ref"]]
+    probe_ref, hardware_ref = device["source_ref"], device["selected_hardware_ref"]
+    probe, actual_probe_ref = grid.read_document(probe_ref["path"], probe_ref["sha256"])
+    selected, actual_hardware_ref = grid.read_document(hardware_ref["path"], hardware_ref["sha256"])
+    refs.extend([actual_probe_ref, actual_hardware_ref])
+    attrs = probe.get("attributes", {})
+    sm = attrs.get("CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT")
+    major, minor = attrs.get("CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR"), attrs.get("CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR")
+    warp = attrs.get("CU_DEVICE_ATTRIBUTE_WARP_SIZE")
+    uuid = probe.get("gpu_uuid")
+    if (probe.get("schema") != "cuda-driver-static-device-properties/v1"
+            or probe.get("native_configuration_modified") is not False
+            or any(type(value) is not int for value in (sm, major, minor, warp)) or sm < 1
+            or (major, minor, warp) != (12, 0, 32)
+            or device.get("sm_count") != sm or device.get("warp_size") != warp
+            or device.get("cuda_compute_capability") != 1200
+            or contract.get("cuda_compute_capability") != 1200
+            or gpu_binding.get("cuda_compute_capability") != 1200
+            or not uuid or any(gpu.get("uuid") != uuid or gpu.get("compute_capability") != "12.0"
+                for gpu in (hardware.get("gpu", {}), selected.get("gpu", {})))
+            or device.get("gpu_uuid") != uuid
+            or gpu_binding.get("device_evidence", {}).get("gpu_uuid") != uuid):
+        raise ValueError("MMVQ static device SM/UUID/architecture binding mismatch")
+    module = contract.get("runtime_modules", {}).get("ggml-cuda.dll")
+    actual = [ref for ref in native_refs if Path(ref["path"]).name.lower() == "ggml-cuda.dll"]
+    if (not isinstance(module, Mapping) or len(actual) != 1
+            or module.get("sha256") != actual[0].get("sha256")
+            or Path(module["path"]).resolve() != Path(actual[0]["path"]).resolve()):
+        raise ValueError("MMVQ runtime CUDA module differs from selected runtime identity")
+    source_refs = contract.get("source_refs", [])
+    if source_binding is not None:
+        if (source_binding["runtime_binding_sha256"] != contract.get("runtime_binding_sha256")
+                or source_binding["runtime_module_ref"] != module):
+            raise ValueError("MMVQ supplemental source history differs from selected GPU invocation runtime")
+        source_refs = merged_mmvq_source_refs(source_refs, source_binding["source_refs"])
+        refs.extend(source_binding["evidence_refs"])
+    cache = set() if checked_sources is None else checked_sources
+    for relative, expected in {**CONVERSION_SOURCES, **MMVQ_SOURCES}.items():
+        matches = [ref for ref in source_refs if str(ref["path"]).replace(chr(92), "/").endswith("/" + relative)]
+        if len(matches) != 1 or matches[0].get("sha256") != expected:
+            raise ValueError("MMVQ immutable source proof missing or changed: " + relative)
+        ref = matches[0]
+        identity = (ref["path"], ref["sha256"])
+        if identity not in cache:
+            verify_refs([ref])
+            cache.add(identity)
+        refs.append(ref)
+    return {**evidence, "status": "conditional", "uncovered_reasons": [],
+        "contract": source_issue_contract(runtime_binary_sha256=module["sha256"], sm_count=sm),
+        "gpu_uuid": uuid, "runtime_module_ref": dict(actual[0]),
+        "device_evidence": device, "evidence_refs": refs,
+        "conditions": ["weight_dependent_source_dp4a_maps_to_native_integer_warp_issue",
+            CLOCK_CONDITION, "conditional_dot_issue_lower_bound_only",
+            *((source_binding or {}).get("conditions", []))]}
+
+
+def verified_mmvq_issue_binding(rows, gpu_invocation, output, *, document_path=None, data_root=None):
+    if (not isinstance(gpu_invocation, Mapping) or gpu_invocation.get("mmq_source_costs_requested") is not True
+            or gpu_invocation.get("conversion_cta_costs_requested") is not True):
+        raise ValueError("MMVQ issue bound requires GPU invocation, MMQ and conversion source costs")
+    document = freeze_mmvq_hardware_document(output, document_path)
+    verify_mmvq_hardware_document(document)
+    cells, cache, refs = {}, set(), {}
+    source_binding = None
+    if document["status"] == "verified" and gpu_invocation.get("runtime_source_binding_ref") is not None:
+        source_binding = derive_mmvq_issue_source_binding(gpu_invocation["runtime_source_binding_ref"], data_root or ROOT)
+    if document.get("ref") is not None:
+        refs[document["ref"]["path"]] = document["ref"]
+    for row in rows:
+        proof = mmvq_static_cell_evidence(gpu_invocation["cells"][row["cell_id"]],
+            row["static_hardware"]["frozen_hardware"], row["native_runtime_refs"], document, checked_sources=cache, source_binding=source_binding)
+        cells[row["cell_id"]] = proof
+        refs.update({ref["path"]: ref for ref in proof["evidence_refs"]})
+    return {"requested": True, "hardware_document": document, "cells": cells,
+        **({"mmvq_source_binding": source_binding} if source_binding is not None else {}),
+        "evidence_refs": list(refs.values()), "native_latency_used": False,
+        "conditional_cell_count": sum(cell["status"] == "conditional" for cell in cells.values()),
+        "uncovered_cell_count": sum(cell["status"] == "uncovered" for cell in cells.values())}
+
+
+def apply_mmvq_issue_static_contract(scenario, inputs):
+    flag = inputs.get("mmvq_vector_issue_bound", False)
+    proof = inputs.get("mmvq_issue_evidence")
+    if flag is False and proof is None and inputs.get("mmvq_issue_contract") is None:
+        return scenario
+    if type(flag) is not bool or flag is not True or not isinstance(proof, Mapping) or proof.get("requested") is not True:
+        raise ValueError("MMVQ issue switch differs from frozen evidence")
+    if inputs.get("gpu_mmq_source_costs") is not True or inputs.get("gpu_conversion_cta_costs") is not True:
+        raise ValueError("MMVQ issue bound requires MMQ and conversion source costs")
+    gpu_binding = inputs.get("gpu_invocation_evidence")
+    if not isinstance(gpu_binding, Mapping) or inputs.get("gpu_invocation_contract") != gpu_binding.get("contract"):
+        raise ValueError("MMVQ GPU invocation differs from frozen evidence")
+    verify_mmvq_hardware_document(proof.get("hardware_document"))
+    source_binding = proof.get("mmvq_source_binding")
+    if source_binding is not None:
+        rederived = derive_mmvq_issue_source_binding(source_binding["runtime_source_binding_ref"], source_binding["data_root"])
+        if rederived != source_binding:
+            raise ValueError("MMVQ supplemental source binding differs from recorded build/header history")
+    expected = mmvq_static_cell_evidence(gpu_binding, inputs["hardware_snapshot"],
+        inputs.get("runtime_module_refs", []), proof["hardware_document"], source_binding=source_binding)
+    if proof != expected or inputs.get("mmvq_issue_contract") != proof.get("contract"):
+        raise ValueError("MMVQ issue contract differs from re-derived frozen evidence")
+    qualification = {**proof, "declared_clock": gpu_clock(inputs)}
+    flags = {**scenario.workload.metadata, "llama_cpp_mmvq_vector_issue_qualification": qualification}
+    if proof["status"] != "conditional":
+        return replace(scenario, workload=replace(scenario.workload, metadata=flags))
+    from heterollm_sim.mmvq_issue_bound import MMVQIssueContract
+    from heterollm_sim.conversion_work import ConversionSourceContract
+    contract = MMVQIssueContract.from_mapping(proof["contract"])
+    gpus = [component for component in scenario.hardware.components if str(component.kind).lower() == "gpu"]
+    if len(gpus) != 1:
+        raise ValueError("MMVQ bound requires one selected GPU component")
+    gpu = gpus[0]
+    profile = scenario.resolve_component_profile(gpu)
+    invocation_audit = scenario.workload.metadata.get("llama_cpp_gpu_native_invocations", {})
+    if isinstance(invocation_audit, Mapping) and invocation_audit.get("applied") is False:
+        flags["llama_cpp_mmvq_vector_issue_qualification"] = {**qualification, "status": "uncovered",
+            "uncovered_reasons": ["scenario_gpu_invocation_not_qualified", *invocation_audit.get("reasons", [])]}
+        return replace(scenario, workload=replace(scenario.workload, metadata=flags))
+    conversion = gpu.metadata.get("llama_cpp_conversion_source_contract")
+    if not isinstance(conversion, Mapping):
+        raise ValueError("MMVQ issue bound requires installed conversion source contract")
+    conversion = ConversionSourceContract(**conversion)
+    if (conversion.runtime_binary_sha256 != contract.runtime_binary_sha256
+            or profile.tensor_core.sm_count != contract.sm_count
+            or gpu.metadata.get("cuda_compute_capability") != contract.compute_capability
+            or scenario.workload.metadata.get("llama_cpp_mmq_source_work") is not True
+            or scenario.workload.metadata.get("llama_cpp_conversion_cta_costs") is not True):
+        raise ValueError("MMVQ runtime/profile/installed source treatment mismatch")
+    if (gpu.metadata.get("llama_cpp_mmvq_prmt_partial_contract") or {}).get("enabled") is True:
+        raise ValueError("MMVQ issue bound conflicts with PRMT partial contract")
+    replacement = replace(gpu, metadata={**gpu.metadata, "llama_cpp_mmvq_vector_issue_contract": proof["contract"]})
+    if source_binding is not None:
+        flags["llama_cpp_gpu_native_invocations"] = {**invocation_audit,
+            "source_refs": merged_mmvq_source_refs(invocation_audit.get("source_refs", []), source_binding["source_refs"]),
+            "mmvq_source_binding": source_binding}
+    flags["llama_cpp_mmvq_vector_issue_bound"] = True
+    return replace(scenario, hardware=replace(scenario.hardware, components=tuple(
+        replacement if component.component_id == gpu.component_id else component for component in scenario.hardware.components)),
+        workload=replace(scenario.workload, metadata=flags))
+
+
 IQ_PANEL_SOURCE_SCHEMA = "llama.cpp.cpu.iq-panel-source-contract/v1"
 IQ_PANEL_VARIABLE = "GGML_NO_IQ_PANEL"
 
@@ -1098,7 +1414,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -1136,6 +1452,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
     config["compiled_cuda_graphs"] = graph_evidence["compiled_cuda_graphs"]
     host_binding = host_offload["cells"][row["cell_id"]] if host_offload else None
     gpu_binding = gpu_invocation["cells"][row["cell_id"]] if gpu_invocation else None
+    mmvq_binding = mmvq_issue["cells"][row["cell_id"]] if mmvq_issue else None
     if host_binding and host_binding["status"] == "verified":
         config["op_offload"] = host_binding["op_offload_enabled"]
     return {"cell_id": row["cell_id"], "model_key": row["model_key"],
@@ -1157,6 +1474,8 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "gpu_invocation_evidence": gpu_binding,
         "gpu_mmq_source_costs": gpu_invocation["mmq_source_costs_requested"] if gpu_invocation else False,
         "gpu_conversion_cta_costs": gpu_invocation.get("conversion_cta_costs_requested", False) if gpu_invocation else False,
+        **({"mmvq_vector_issue_bound": True, "mmvq_issue_contract": mmvq_binding["contract"],
+            "mmvq_issue_evidence": mmvq_binding} if mmvq_binding is not None else {}),
         "cpu_iq_panel_reuse": iq_panel["dispatch"] if iq_panel else None,
         "cpu_iq_panel_evidence": iq_panel,
         "hardware_ref": row["static_hardware"].get("frozen_hardware_ref"),
@@ -1218,6 +1537,14 @@ def unsupported_dimensions(inputs, model=None):
         {"dimension": "cpu_worker_binding", "status": "conditional", "native": {k: raw.get(k) for k in ("threads", "threads_batch", "worker_cpu_mask", "poll", "priority")}, "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."},
         {"dimension": "kv_shared_physical_pool", "status": "conditional", "native_total_context_tokens": 2048 * raw.get("parallel", 1), "simulator_slot_context_tokens": 2048, "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."},
         {"dimension": "runtime_op_offload_contract", "status": "unsupported", "runtime_ref": inputs["runtime_ref"], "op_offload": raw.get("op_offload", True), "reason": "Actual new runtime identity is retained and does not inherit the old semantic-runtime CUDA op-offload contract."}]
+    if inputs.get("mmvq_issue_evidence") is not None:
+        proof = inputs["mmvq_issue_evidence"]
+        rows.append({"dimension": "mmvq_vector_integer_issue_bound", "status": proof["status"],
+            "reason": "Conditional source/PTX dot issue lower bound; native instruction mapping and wall-time clock bound are unproven.",
+            "unpriced_work": proof["unpriced_work"], "calibration_applied": False,
+            "conditions": proof.get("conditions", []),
+            "original_compile_header_bytes_proven": (proof.get("mmvq_source_binding") or {}).get("original_compile_header_bytes_proven", False),
+            "formal_prediction_eligible": False, "hbm_accounting": "unchanged_legacy_unverified"})
     if inputs.get("nonflash_kv_view_contract") is not None:
         rows.append({"dimension": "nonflash_physical_kv_view", "status": "conditional",
             "reason": "Source-bound padded lower bound from the longest current retained prefix; full unified allocation/high-water, inactive and cached slots remain unknown."})
@@ -1705,6 +2032,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     scenario = replace(scenario, component_profiles=profiles,
         workload=replace(scenario.workload, metadata=metadata),
         hardware=replace(scenario.hardware, metadata={**scenario.hardware.metadata, "frozen_native_gpu_clock": clock}))
+    scenario = apply_mmvq_issue_static_contract(scenario, inputs)
     contract = inputs.get("recurrent_batching_contract")
     options = {"recurrent_batching_contract": contract} if contract is not None else {}
     if inputs.get("slot_order_contract") is not None:
@@ -1740,6 +2068,10 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
             "tensor_storage_binding": inputs.get("tensor_storage_evidence"),
             "gpu_invocation_contract": inputs.get("gpu_invocation_contract"),
             "gpu_invocation_binding": inputs.get("gpu_invocation_evidence"),
+            **({"mmvq_vector_issue_bound": inputs["mmvq_vector_issue_bound"],
+                "mmvq_issue_contract": inputs["mmvq_issue_contract"],
+                "mmvq_issue_evidence": inputs["mmvq_issue_evidence"]}
+                if "mmvq_issue_evidence" in inputs else {}),
             "gpu_mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
             "gpu_conversion_cta_costs_requested": inputs.get("gpu_conversion_cta_costs", False),
             "slot_order_treatment": {"requested": inputs.get("slot_order_contract") is not None,
@@ -1819,10 +2151,16 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None, mmvq_vector_issue_bound=False, mmvq_issue_hardware_document_path=None):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
+    if type(mmvq_vector_issue_bound) is not bool:
+        raise ValueError("MMVQ issue switch must be an explicit boolean")
+    if mmvq_vector_issue_bound and (gpu_invocation_contract_path is None or gpu_mmq_source_costs is not True or gpu_conversion_cta_costs is not True):
+        raise ValueError("MMVQ issue bound requires GPU invocation, MMQ and conversion source costs")
+    if mmvq_issue_hardware_document_path is not None and not mmvq_vector_issue_bound:
+        raise ValueError("MMVQ hardware document requires the explicit issue-bound switch")
     selection, selection_ref = grid.read_document(selection_path)
     data_root = Path(data_root or selection.get("data_root") or ROOT).resolve(strict=True)
     rows = selected_rows(selection)
@@ -1853,6 +2191,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         gpu_invocation["conversion_cta_costs_requested"] = gpu_conversion_cta_costs
         for evidence in gpu_invocation["cells"].values():
             evidence["conversion_cta_costs_requested"] = gpu_conversion_cta_costs
+    mmvq_issue = verified_mmvq_issue_binding(rows, gpu_invocation, output,
+        document_path=mmvq_issue_hardware_document_path, data_root=data_root) if mmvq_vector_issue_bound else None
     if iq_panel_assume_default_unset and iq_panel_source_contract_path is None:
         raise ValueError("IQ panel default-unset assumption requires an explicit source contract")
     iq_panel = verified_iq_panel_source_contract(iq_panel_source_contract_path, rows, data_root,
@@ -1870,7 +2210,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -1882,6 +2222,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "selected_denominator": len(entries), "native_grid_denominator": selection.get("native_grid_denominator", selection.get("planned_cells", 162)),
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
         "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation, "sampling": sampling, "nonflash_kv_view": nonflash_kv_view,
+        **({"mmvq_vector_issue_bound": True, "mmvq_issue_bound": mmvq_issue} if mmvq_issue is not None else {}),
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -1899,6 +2240,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(tensor_storage["evidence_refs"])
     if gpu_invocation:
         verify_refs(gpu_invocation["evidence_refs"])
+    if mmvq_issue:
+        verify_refs(mmvq_issue["evidence_refs"])
     if nonflash_kv_view:
         verify_refs(nonflash_kv_view["evidence_refs"])
     if sampling:
@@ -1937,6 +2280,32 @@ def verify_freeze_references(freeze):
     if sampling:
         refs += sampling["evidence_refs"]
     verify_refs(refs)
+    verify_mmvq_freeze_binding(freeze)
+
+
+def verify_mmvq_freeze_binding(freeze, entry=None):
+    binding = freeze.get("mmvq_issue_bound")
+    selected = [entry] if entry is not None else freeze["cells"]
+    if binding is None:
+        if freeze.get("mmvq_vector_issue_bound", False) is not False or any(
+                (cell.get("static_inputs") or {}).get("mmvq_issue_evidence") is not None
+                or (cell.get("static_inputs") or {}).get("mmvq_vector_issue_bound", False) is not False
+                for cell in selected):
+            raise ValueError("MMVQ frozen switch has no campaign evidence")
+        return
+    if freeze.get("mmvq_vector_issue_bound") is not True or binding.get("requested") is not True:
+        raise ValueError("MMVQ campaign switch differs from frozen evidence")
+    verify_mmvq_hardware_document(binding["hardware_document"])
+    verify_refs(binding["evidence_refs"])
+    for cell in selected:
+        inputs = cell.get("static_inputs")
+        if inputs is None and cell.get("preparation_error"):
+            continue
+        proof = binding["cells"][cell["cell_id"]]
+        if (inputs.get("mmvq_vector_issue_bound") is not True or inputs.get("mmvq_issue_evidence") != proof
+                or inputs.get("mmvq_issue_contract") != proof.get("contract")
+                or proof.get("hardware_document") != binding["hardware_document"]):
+            raise ValueError("MMVQ cell switch or proof differs from frozen campaign")
 
 
 def failure(entry, reason):
@@ -1962,6 +2331,7 @@ def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, d
         if entry.get("preparation_error"):
             raise ValueError(entry["preparation_error"])
         inputs = entry["static_inputs"]
+        verify_mmvq_freeze_binding(freeze, entry)
         verify_refs([inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])])
         prediction = predict_cell(inputs, diagnostic_events=diagnostic_events, diagnostic_event_limit=diagnostic_event_limit)
     except Exception as exc:
@@ -2283,6 +2653,10 @@ def main(argv=None):
         help="source/build-bound non-Flash physical KV view lower bound; initial freeze only; default off")
     parser.add_argument("--gpu-conversion-cta-costs", action=argparse.BooleanOptionalAction, default=None,
         help="source conversion grid compute-resource cap; initial freeze only; requires GPU MMQ source costs")
+    parser.add_argument("--mmvq-vector-issue-bound", action=argparse.BooleanOptionalAction, default=None,
+        help="conditional source/PTX integer issue lower bound; initial freeze only; requires MMQ and conversion source costs")
+    parser.add_argument("--mmvq-issue-hardware-document", type=Path,
+        help="local official NVIDIA PDF to verify and freeze; otherwise fetch official bytes; issue-bound switch required")
     parser.add_argument("--tensor-storage-f32-hidden", action=argparse.BooleanOptionalAction, default=None,
         help="separate full F32 hidden-storage ablation; requires tensor-storage contract; default false")
     parser.add_argument("--iq-panel-source-contract", type=Path, help="explicit frozen CPU IQ panel source/build/history contract; default off")
@@ -2307,8 +2681,12 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
+    if (args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
         parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
+    if args.mmvq_vector_issue_bound and (args.gpu_invocation_contract is None or args.gpu_mmq_source_costs is not True or args.gpu_conversion_cta_costs is not True):
+        parser.error("--mmvq-vector-issue-bound requires GPU invocation, MMQ and conversion source costs")
+    if args.mmvq_issue_hardware_document and not args.mmvq_vector_issue_bound:
+        parser.error("--mmvq-issue-hardware-document requires --mmvq-vector-issue-bound")
     if args.gpu_mmq_source_costs is not None and args.gpu_invocation_contract is None:
         parser.error("--gpu-mmq-source-costs requires --gpu-invocation-contract")
     if args.gpu_conversion_cta_costs and args.gpu_mmq_source_costs is not True:
@@ -2317,7 +2695,7 @@ def main(argv=None):
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract)
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document)
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

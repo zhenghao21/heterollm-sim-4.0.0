@@ -1,0 +1,276 @@
+{
+  "schema": "byte-preserving-evidence-packet/v2",
+  "created_utc": "2026-09-16T11:36:30.479913+00:00",
+  "packet_name": "readiness_evidence.tar.gz",
+  "packet_bytes": 910268,
+  "packet_sha256": "1c742c30a761fd733d2ccbffaf552a5e131f73d87cff9cf1f34b4b4608cb6ce6",
+  "members": [
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_01/direct/raw.jsonl",
+      "bytes": 869,
+      "sha256": "76a7b710aedefbf30b11e43ca7f550775fbf5d1529d6ced8ec9832256ac7ecfe",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_01/direct/telemetry.json",
+      "bytes": 475621,
+      "sha256": "077c1106a1ad89ec7ca15f7e68fd6d06493f9f54af7ddcadfd78327fa098eec4",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_01/export/trace.sqlite",
+      "bytes": 258048,
+      "sha256": "e052e449c1a5935e8f79643ce3c193a62e803baa008a97a7fbed00fbbc4b4aec",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_01/profile/raw.jsonl",
+      "bytes": 870,
+      "sha256": "628b6bdaf27f4a0b5e269243d093d5c9d7312c6a08cd853f4450112fc397adad",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_01/profile/telemetry.json",
+      "bytes": 780166,
+      "sha256": "4a85d73bbadfee0cd196d75f383a7584a879367c5b650e40bb27cb62ad58fa29",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_01/profile/trace.nsys-rep",
+      "bytes": 51647,
+      "sha256": "706597768ddfc33e3b372c11df6430ff2c142963fc01f1f8731ca9c0ac9daf01",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_02/direct/raw.jsonl",
+      "bytes": 869,
+      "sha256": "a1a3bb714852452d93b1478532dea8a29084a81b53bce470990852e64af6d47e",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_02/direct/telemetry.json",
+      "bytes": 467854,
+      "sha256": "e72cf56531e339acb911607d4c27a6100962bf23f97dfa86c466fdcbb4fd9f42",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_02/export/trace.sqlite",
+      "bytes": 258048,
+      "sha256": "c4d88ada2a93b14ccc7b65141a0106af43fd26816aa7b96d561d23ac2019aa85",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_02/profile/raw.jsonl",
+      "bytes": 870,
+      "sha256": "aa20cddd274547eff04c037286944cf4932583013049c00bc936a1bdac76f674",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_02/profile/telemetry.json",
+      "bytes": 782496,
+      "sha256": "191a282f6b2ced56b2f07578a983b2f5433f62f567735e8bab1aaee2628bf5f9",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_02/profile/trace.nsys-rep",
+      "bytes": 51630,
+      "sha256": "4b4940bf283a52184592dad1fcc57eaff43cf8876c2c10dd91b454a7a4abeebd",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_03/direct/raw.jsonl",
+      "bytes": 869,
+      "sha256": "2890bab952fd5efb75a99e6ad794b6fd81622b20a24100e8abfa6320bd736661",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_03/direct/telemetry.json",
+      "bytes": 501249,
+      "sha256": "3999fd57e3c48c4a23429079e60dfd87d8e242ae72cc7190c39f4d5cd37fd029",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_03/export/trace.sqlite",
+      "bytes": 258048,
+      "sha256": "537b136a49f6dd7b07cf034ace5bca171ae80ab296bc9511a25fba1b8f1d5fd9",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_03/profile/raw.jsonl",
+      "bytes": 870,
+      "sha256": "c8555a4970e5197e7a5b1bbf9aea6f863b7354aa2d2c511358c793f1be01ed04",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_03/profile/telemetry.json",
+      "bytes": 781736,
+      "sha256": "253a35c94952b8274ddf9ac4496f74dee47e526564e0e82963a544e74b4c9d0e",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g256/pair_03/profile/trace.nsys-rep",
+      "bytes": 51649,
+      "sha256": "22d01981571b898c8c39de4ee771a0a518d0c08dc91133530db64e0b5bf54290",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_01/direct/raw.jsonl",
+      "bytes": 865,
+      "sha256": "0c24773ecdc9fd3f2a206eacfb25bf4088941cc2678caecae9e100d7b8c02d60",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_01/direct/telemetry.json",
+      "bytes": 762310,
+      "sha256": "dc54f91ab9a9ed2c302e0943ee29a9da1855586805535e53f694941e4ef9f9e0",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_01/export/trace.sqlite",
+      "bytes": 258048,
+      "sha256": "abf0d524269a8f176e6a4354ea2721be1ef7560d0802430ed38cb0759568e4b7",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_01/profile/raw.jsonl",
+      "bytes": 867,
+      "sha256": "c9ac92b73120e8b51a53d4d27831d28ae1a8decfb15f0fc76f9146ffb403fd2e",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_01/profile/telemetry.json",
+      "bytes": 792621,
+      "sha256": "f1c4663e851bcdf3b5ce13ee2fa8258e2fe93d70fa40a88d62232c12ae5b6486",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_01/profile/trace.nsys-rep",
+      "bytes": 51617,
+      "sha256": "8e5e6788640eee57a570e376c3520de1585ac6ee18ac3b5c2c969794b6a8369a",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_02/direct/raw.jsonl",
+      "bytes": 866,
+      "sha256": "ef607f27f2560ee4c462102cf3ec7055ff14d888335e4ae9c2fa8fce9105e513",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_02/direct/telemetry.json",
+      "bytes": 483418,
+      "sha256": "6c9d979912c965c427bfa5c2cc15b59c666b3d8ba3d1dc135d1c229faf4b78b7",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_02/export/trace.sqlite",
+      "bytes": 258048,
+      "sha256": "101053eb89267e3b94a21690a60d39576b4b673112a90e0f16b51ac74da8e0a4",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_02/profile/raw.jsonl",
+      "bytes": 867,
+      "sha256": "5442c46d5a5c358024756f3d85f610f852ac626a2be10cb5b6f1654862cfaf87",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_02/profile/telemetry.json",
+      "bytes": 980118,
+      "sha256": "bfbb1331db89b8441abc5bd3175faf930c51f067a3d58c57f84dff07099fd3c5",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_02/profile/trace.nsys-rep",
+      "bytes": 51638,
+      "sha256": "9443716881e66c96debdc9db7e3e7f3d5c5c6a898a6c138383d3216cd001acd4",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_03/direct/raw.jsonl",
+      "bytes": 866,
+      "sha256": "4a99f89eb1057b0a4a4c8472ca1640c0d935ec9ec77a00aef478e1a73b461113",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_03/direct/telemetry.json",
+      "bytes": 472515,
+      "sha256": "2534ae4f0ff141b747e196c5d803eba4b7e72a5126a4c16696a327e9726a4383",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_03/export/trace.sqlite",
+      "bytes": 258048,
+      "sha256": "c2a9d379b842915bdf9f29a68870ecc098d7200895c92fa857f458e6e8a420dd",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_03/profile/raw.jsonl",
+      "bytes": 865,
+      "sha256": "05711980021cac0d03eb23650fa497cde9157495132a6b525a963801df21d63c",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_03/profile/telemetry.json",
+      "bytes": 773162,
+      "sha256": "1d8e7ba7cafbb1fc2613c9028587370173fc03483b1431ae4cfd42412764b8f6",
+      "selection_reason": "detailed_json_above_180_kib"
+    },
+    {
+      "relative_path": "long_graph_collection/runs/scale_f32_e262144_g64/pair_03/profile/trace.nsys-rep",
+      "bytes": 51614,
+      "sha256": "0015536e51d59b07f758e890ac1ac735b5e01ef1e78f740477db7404c8c242c6",
+      "selection_reason": "raw_trace_or_jsonl"
+    },
+    {
+      "relative_path": "long_graph_probe_r2/smoke_raw.jsonl",
+      "bytes": 24576,
+      "sha256": "44a95a75fe6900581f50cb6c9b4a4b8923993a5ff8437c0cadeea82c3469c089",
+      "selection_reason": "raw_trace_or_jsonl"
+    }
+  ],
+  "member_count": 37,
+  "originals_preserved_locally": true,
+  "member_bytes_compared_to_sources": true,
+  "selection_policy": {
+    "scope": "round_021 descendants only",
+    "large_json_threshold_bytes": 184320,
+    "large_json_comparison": ">",
+    "all_prediction_and_freeze_json": true,
+    "raw_extensions": [
+      ".jsonl",
+      ".nsys-rep",
+      ".sqlite",
+      ".sqlite-shm",
+      ".sqlite-wal"
+    ],
+    "excluded_directories": [
+      ".git",
+      "__pycache__",
+      "snapshot_source",
+      "source",
+      "source-snapshot",
+      "source-snapshots",
+      "source_snapshot",
+      "source_snapshots",
+      "sources"
+    ],
+    "excluded_directory_prefixes": [
+      "source_snapshot_",
+      "source-snapshot-"
+    ],
+    "excluded_extensions": [
+      ".a",
+      ".dll",
+      ".exe",
+      ".lib",
+      ".obj",
+      ".pdb",
+      ".pyc",
+      ".pyd",
+      ".so"
+    ],
+    "excluded_name_suffix": "_TASK.txt",
+    "copied_source_snapshots_included": false,
+    "evidence_payloads_parsed": false
+  }
+}

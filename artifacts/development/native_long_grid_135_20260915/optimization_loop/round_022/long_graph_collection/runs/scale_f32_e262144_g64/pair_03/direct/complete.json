@@ -1,0 +1,99 @@
+{
+  "stage": {
+    "ordinal": 12,
+    "condition": "scale_f32_e262144_g64",
+    "arm": "buffered",
+    "pair": 3,
+    "pair_id": "r22_long_graph.scale_f32_e262144_g64.pair3",
+    "mode": "direct",
+    "config": {
+      "id": "scale_f32_e262144_g64",
+      "nodes": 64,
+      "elements": 262144
+    },
+    "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct",
+    "raw": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\raw.jsonl",
+    "app_argv": [
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\long-graph-probe.exe",
+      "--run",
+      "--config",
+      "scale_f32_e262144_g64",
+      "--arm",
+      "buffered",
+      "--pair-id",
+      "r22_long_graph.scale_f32_e262144_g64.pair3",
+      "--output",
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\raw.jsonl"
+    ],
+    "argv": [
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\long-graph-probe.exe",
+      "--run",
+      "--config",
+      "scale_f32_e262144_g64",
+      "--arm",
+      "buffered",
+      "--pair-id",
+      "r22_long_graph.scale_f32_e262144_g64.pair3",
+      "--output",
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\raw.jsonl"
+    ]
+  },
+  "created_utc": "2026-09-16T10:32:59.471338+00:00",
+  "freeze_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4",
+  "clock_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\clock_session\\readback.json",
+    "bytes": 838,
+    "sha256": "9a3cbe0c2c58d5686d24e1f3da0d7735dd30daae385fc151bfe4682f85af6859"
+  },
+  "status": "failed",
+  "child_exited": true,
+  "actual_gpu_identity": {
+    "device_index": 0,
+    "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "name": "NVIDIA GeForce RTX 5080",
+    "driver_version": "616.64",
+    "nvml_library": {
+      "path": "C:\\Windows\\System32\\nvml.dll",
+      "bytes": 1499368,
+      "sha256": "5ee24ec769a7a7404a48fb0cc1e534dd2913477fb4abfcd830c8fc9093e6d26b"
+    },
+    "clock_writes_performed": false
+  },
+  "launched_pid": 32756,
+  "returncode": 3221226505,
+  "error": "ValueError: child failed; preserve all artifacts",
+  "telemetry_errors": [],
+  "finished_utc": "2026-09-16T10:33:03.036066+00:00",
+  "artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\launched.json",
+      "bytes": 758,
+      "sha256": "b71abb06696affea0a2add37500553f3bb04c5a28067aacbcfd024fef4cacdab"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\launch_intent.json",
+      "bytes": 2557,
+      "sha256": "bf97a6a8c03ca3a063e09590e9d95ce5b4e1c92265e4c9ae9015b659006e7d57"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\raw.jsonl",
+      "bytes": 866,
+      "sha256": "4a99f89eb1057b0a4a4c8472ca1640c0d935ec9ec77a00aef478e1a73b461113"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\stderr.txt",
+      "bytes": 383,
+      "sha256": "260ed3da0dbd40e4e876ddd4f637aeaec693e13a115fb6b254604f62b7d8b005"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g64\\pair_03\\direct\\telemetry.json",
+      "bytes": 472515,
+      "sha256": "2534ae4f0ff141b747e196c5d803eba4b7e72a5126a4c16696a327e9726a4383"
+    }
+  ]
+}

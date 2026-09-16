@@ -1,0 +1,76 @@
+{
+  "stage": {
+    "ordinal": 5,
+    "condition": "scale_f32_e262144_g256",
+    "arm": "buffered",
+    "pair": 1,
+    "pair_id": "r22_long_graph.scale_f32_e262144_g256.pair1",
+    "mode": "export",
+    "config": {
+      "id": "scale_f32_e262144_g256",
+      "nodes": 256,
+      "elements": 262144
+    },
+    "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export",
+    "raw": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\raw.jsonl",
+    "app_argv": [
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_probe\\long-graph-probe.exe",
+      "--run",
+      "--config",
+      "scale_f32_e262144_g256",
+      "--arm",
+      "buffered",
+      "--pair-id",
+      "r22_long_graph.scale_f32_e262144_g256.pair1",
+      "--output",
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\raw.jsonl"
+    ],
+    "argv": [
+      "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\nsys.exe",
+      "export",
+      "--type=sqlite",
+      "--force-overwrite=false",
+      "--output=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\trace.sqlite",
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\profile\\trace.nsys-rep"
+    ]
+  },
+  "created_utc": "2026-09-16T10:32:33.927171+00:00",
+  "freeze_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4",
+  "clock_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\clock_session\\readback.json",
+    "bytes": 838,
+    "sha256": "9a3cbe0c2c58d5686d24e1f3da0d7735dd30daae385fc151bfe4682f85af6859"
+  },
+  "status": "executed",
+  "child_exited": true,
+  "launched_pid": 49108,
+  "returncode": 0,
+  "finished_utc": "2026-09-16T10:32:34.487464+00:00",
+  "artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\launched.json",
+      "bytes": 793,
+      "sha256": "287f371c90a544cd93adbeacb2c9d37eabc6ded13996f7870558523c99717750"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\launch_intent.json",
+      "bytes": 2592,
+      "sha256": "a5449d7eba5987a1911945e66715ce68cb0b5ffd2b540a12d9ec6e89cee61e55"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\stderr.txt",
+      "bytes": 3890,
+      "sha256": "284aaf265ee8465b3ddea63ed8879395eaeeefc8132afa57def9e874f4b0a66c"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\stdout.txt",
+      "bytes": 24,
+      "sha256": "06848ff665cc35b152b9da9dc522ed21ca2609061268b23911ebcd7646f916fe"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\long_graph_collection\\runs\\scale_f32_e262144_g256\\pair_01\\export\\trace.sqlite",
+      "bytes": 258048,
+      "sha256": "e052e449c1a5935e8f79643ce3c193a62e803baa008a97a7fbed00fbbc4b4aec"
+    }
+  ]
+}

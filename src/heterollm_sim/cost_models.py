@@ -24,6 +24,7 @@ from .contracts import (
 )
 from .mmq_work import MMQWork
 from .mmvq_work import MMVQWork
+from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
 
 
 def _ceil_div(numerator: int, denominator: int) -> int:
@@ -195,6 +196,8 @@ class GemmWorkload:
     source_partial_service_ns: float = 0.0
     source_partial_work_units: int = 0
     source_partial_name: str = ""
+    # Appended to preserve the existing positional constructor interface.
+    mmvq_issue_contract: Optional[MMVQIssueContract] = None
 
     def __post_init__(self) -> None:
         for field_name in ("m", "k", "n"):
@@ -283,6 +286,14 @@ class GemmWorkload:
             _require_non_negative_int(
                 "output_storage_bytes", self.output_storage_bytes
             )
+        if self.mmvq_issue_contract is not None:
+            if not isinstance(self.mmvq_issue_contract, MMVQIssueContract) or self.mmvq_work is None:
+                raise ValueError("MMVQ issue bound requires typed contract and source work")
+            if (self.mmvq_issue_contract.runtime_binary_sha256 != self.mmvq_work.runtime_binary_sha256
+                    or self.epilogue_operations or self.epilogue_transcendental_operations
+                    or self.epilogue_output_elements or self.epilogue_name
+                    or self.source_partial_service_ns or self.source_partial_work_units):
+                raise ValueError("MMVQ issue bound excludes mismatched runtime, fused epilogue and other partial costs")
         if self.mmq_work is not None and self.mmvq_work is not None:
             raise ValueError("MMQ and MMVQ source work are mutually exclusive")
         if self.mmvq_work is not None:
@@ -2443,13 +2454,40 @@ def _gemm_tensor_dtype(workload: GemmWorkload) -> str:
 def estimate_gpu_gemm(
     gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload
 ) -> CostEstimate:
-    """Estimate a tiled tensor-core GEMM through GPU SRAM and HBM."""
+    """Estimate GEMM, or an explicitly contracted MMVQ dot issue lower bound."""
 
     if (
         workload.mmq_work is not None
         and workload.mmq_work.sm_count != gpu.tensor_core.sm_count
     ):
         raise ValueError("mmq_work SM count must match the GPU profile")
+    vector_bound = (
+        derive_issue_bound(workload.mmvq_work, workload.mmvq_issue_contract,
+            sm_count=gpu.sm_count, frequency_ghz=gpu.tensor_core.frequency_ghz)
+        if workload.mmvq_issue_contract is not None else None
+    )
+    issue_metadata = ({
+        "source_geometry_priced": True,
+        "source_geometry_priced_scope": "weight_dependent_dp4a_issue_lower_bound_only",
+        "source_compute_category": "integer_warp_issue_conditional_lower_bound",
+        "source_geometry_eligibility": "explicit_source_hardware_contract",
+        "source_geometry_unpriced_reason": "unpack_scale_reduction_occupancy_and_memory_remain_unverified",
+        "mmvq_vector_issue_bound": vector_bound,
+        "mma_compute_priced": False,
+        "execution_resource_kind": "shared_scalar_integer_warp_issue",
+        "overall_timing_completeness": "partial_with_legacy_HBM_fallback",
+        "quantized_format_coverage": "source_MMVQ_conditional_issue_bound",
+        "quantized_matmul_capability": None, "structural_peak_tops": None,
+        "utilization_kind": "modeled_compute_fraction_not_hardware_occupancy",
+        "mmvq_source_work": {**workload.mmvq_work.to_metadata(),
+            "cost_model_applied": True, "timing_completeness": "conditional_dot_issue_lower_bound_only"},
+        "ignored_legacy_packed_transform_operations": workload.packed_weight_transform_operations,
+        "unpack_cost_priced": False, "compute_energy_priced": False,
+        "work_units_semantics": "useful_arithmetic_operations_2MNK_not_instruction_slots",
+        "issued_operations": None, "mma_shape": None, "tile_count": None,
+        "tile_utilization": None, "attainable_tops": None,
+        "tensor_dtype": None, "internal_tensor_dtype": "source_integer_dp4a",
+    } if vector_bound is not None else {})
     mmvq_metadata = (
         {
             "mmvq_source_work": workload.mmvq_work.to_metadata(),
@@ -2525,7 +2563,7 @@ def estimate_gpu_gemm(
             kernel_family="cuda_mmq",
         )
     tensor_core = gpu.tensor_core
-    if dtype_name not in tensor_core.supported_dtypes:
+    if vector_bound is None and dtype_name not in tensor_core.supported_dtypes:
         raise ValueError(
             "GPU tensor core does not support GEMM dtype {}".format(dtype_name)
         )
@@ -2551,7 +2589,7 @@ def estimate_gpu_gemm(
     serial_k_tile_count = tile_wave["serial_k_tile_count"]
     tile_count = m_tile_count * n_tile_count * serial_k_tile_count
     issued_operations = tile_count * tensor_core.operations_per_mma
-    structural_peak_tops = tensor_core.peak_tops(dtype_name)
+    structural_peak_tops = tensor_core.peak_tops(dtype_name) if vector_bound is None else 0.0
     attainable_tops = (
         structural_peak_tops
         * gpu.attainable_efficiency
@@ -2591,7 +2629,8 @@ def estimate_gpu_gemm(
         if quantized_capability is not None
         else {}
     )
-    compute_ns = issued_operations / (attainable_tops * 1000.0)
+    compute_ns = (vector_bound["service_ns"] if vector_bound is not None
+                  else issued_operations / (attainable_tops * 1000.0))
     epilogue_scalar_ns = (
         workload.epilogue_operations / gpu.elementwise_gops
         if workload.epilogue_operations > 0
@@ -2605,7 +2644,8 @@ def estimate_gpu_gemm(
     )
     # Packed conversion and the scalar epilogue share an execution resource.
     # Account here so placement estimates and serving use the same cost.
-    transform_ns = workload.packed_weight_transform_operations / gpu.elementwise_gops
+    transform_ns = (workload.packed_weight_transform_operations / gpu.elementwise_gops
+                    if vector_bound is None else 0.0)
     scalar_ns = (
         epilogue_scalar_ns
         + transform_ns
@@ -2619,7 +2659,7 @@ def estimate_gpu_gemm(
             "fused_dequant_accounting": "shared_gemm_scalar_demand",
             "fused_dequant_service_merge": "scalar_sum",
         }
-        if workload.packed_weight_transform_operations else {}
+        if workload.packed_weight_transform_operations and vector_bound is None else {}
     )
     partial_metadata = (
         {
@@ -2724,13 +2764,15 @@ def estimate_gpu_gemm(
     )
     compute_demands = [
         ResourceDemand(
-            resource_id=tensor_core.resource_id,
+            resource_id=(gpu.scalar_resource_id if vector_bound is not None else tensor_core.resource_id),
             service_ns=compute_ns,
-            energy_pj=(issued_operations * gpu.tensor_energy_pj_per_op),
+            energy_pj=(0.0 if vector_bound is not None else issued_operations * gpu.tensor_energy_pj_per_op),
+            # Preserve the established useful-math unit; instruction slots have
+            # separate explicit metadata and are not added to FLOP/MAC totals.
             work_units=float(workload.operations),
         )
     ]
-    if (
+    if vector_bound is None and (
         workload.epilogue_operations > 0
         or workload.packed_weight_transform_operations > 0
         or workload.source_partial_service_ns > 0.0
@@ -2802,13 +2844,14 @@ def estimate_gpu_gemm(
                 ),
                 **mmq_metadata,
                 **mmvq_metadata,
+                **issue_metadata,
             },
         )
     )
 
     bound = max(
         (
-            (compute_ns, "tensor_core"),
+            (compute_ns, "vector_issue_bound" if vector_bound is not None else "tensor_core"),
             (scalar_ns, "scalar"),
             (epilogue_sfu_ns, "special_function"),
             (memory_ns, "memory"),
@@ -2817,7 +2860,7 @@ def estimate_gpu_gemm(
     )[1]
     tile_utilization = workload.operations / float(issued_operations)
     compute_utilization = (
-        tile_utilization * compute_ns / roofline_ns if roofline_ns else 0.0
+        (1.0 if vector_bound is not None else tile_utilization) * compute_ns / roofline_ns if roofline_ns else 0.0
     )
     return CostEstimate(
         phases=tuple(phases),
@@ -2870,6 +2913,7 @@ def estimate_gpu_gemm(
             ),
             "cache": cache_metadata,
             "hbm_bandwidth": hbm_bandwidth_metadata,
+            **issue_metadata,
         },
     )
 

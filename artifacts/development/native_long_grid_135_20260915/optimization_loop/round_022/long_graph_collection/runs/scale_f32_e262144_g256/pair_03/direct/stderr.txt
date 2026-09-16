@@ -1,0 +1,3 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 16275 MiB):
+  Device 0: NVIDIA GeForce RTX 5080, compute capability 12.0, VMM: yes, VRAM: 16275 MiB
+F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-semantic\ggml\src\ggml-backend.cpp:1854: GGML_ASSERT(ggml_backend_dev_type(ggml_backend_get_device(backends[n_backends - 1])) == GGML_BACKEND_DEVICE_TYPE_CPU) failed

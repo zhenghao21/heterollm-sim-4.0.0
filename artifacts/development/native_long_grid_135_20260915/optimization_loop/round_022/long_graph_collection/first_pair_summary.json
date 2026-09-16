@@ -1,0 +1,324 @@
+{
+  "schema": "r22-long-graph-summary/v1",
+  "freeze_sha256": "ab77a9778db1915ee8e11ad7823765574d5b320cd865999c57779c8bb596bbe4",
+  "expected_stages": 18,
+  "completed_receipts": 6,
+  "successfully_validated_stages": 2,
+  "configurations": [
+    {
+      "config": {
+        "id": "scale_f32_e262144_g64",
+        "nodes": 64,
+        "elements": 262144,
+        "arm": "buffered"
+      },
+      "status": "diagnostic_quality_rejected",
+      "issues": [
+        "missing_or_duplicate_process_pair",
+        "missing_profile_process_medians"
+      ],
+      "fixed_policy": {
+        "config_count": 2,
+        "arm_count": 1,
+        "process_pairs": 3,
+        "calls_per_process": 36,
+        "formal_calls_per_process": 30,
+        "pair_order_rule": "config_index_plus_pair_index_parity_direct_first_when_even",
+        "checkpoint_seconds": 180,
+        "terminate_on_checkpoint": false,
+        "kernel_formal_p90_div_p10_max": 1.5,
+        "profile_process_median_max_relative_deviation": 0.05,
+        "profile_direct_host_median_max_relative_difference": 0.2,
+        "direct_host_formal_p90_div_p10_max": 1.5,
+        "all_first_warmup_formal_numeric_rows_pass_required": true,
+        "all_profile_process_kernel_chain_and_source_path_required": true,
+        "clock_sampling_method": "high_resolution_waitable_timer_absolute_QPC_SM_read_windows",
+        "high_frequency_fields": [
+          "sm_mhz"
+        ],
+        "full_state_telemetry_in_formal": false,
+        "quantile_method": "linear interpolation at (n-1)*q",
+        "median_deviation_center": "median of three profiled process medians",
+        "host_ratio_denominator": "paired direct process host median",
+        "within_profile_dispersion": "each of three formal kernel-union distributions",
+        "target_sm_clock_mhz": 2400,
+        "sm_clock_tolerance_mhz": 30,
+        "telemetry_period_seconds": 0.005,
+        "maximum_formal_clock_bracket_gap_ms": 25,
+        "every_formal_interval_bracketed_required": true,
+        "diagnostic_labels_only": true,
+        "coefficients_emitted": false,
+        "validation_group_never_fitted": true
+      },
+      "pairs_observed": 0,
+      "pairs_required": 3,
+      "profile_direct_host_relative_differences": [],
+      "profile_process_median_max_relative_deviation": null,
+      "measurement_cost_eligible": false,
+      "calibration_eligible": false,
+      "fit_performed": false,
+      "holdout_not_for_fit": true,
+      "experiment_group": "long_graph_diagnostic",
+      "transfer_scope": "Empirical same-DLL captured kernel path only; source equivalence and LLM transfer remain conditional.",
+      "pairs": [],
+      "pair_failures_or_unrun": [
+        {
+          "pair": 1,
+          "reason": "FileNotFoundError: [Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_022\\\\long_graph_collection\\\\runs\\\\scale_f32_e262144_g64\\\\pair_01\\\\direct\\\\validation.json'",
+          "retained_in_required_three_pairs": true
+        },
+        {
+          "pair": 2,
+          "reason": "FileNotFoundError: [Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_022\\\\long_graph_collection\\\\runs\\\\scale_f32_e262144_g64\\\\pair_02\\\\direct\\\\validation.json'",
+          "retained_in_required_three_pairs": true
+        },
+        {
+          "pair": 3,
+          "reason": "FileNotFoundError: [Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_022\\\\long_graph_collection\\\\runs\\\\scale_f32_e262144_g64\\\\pair_03\\\\direct\\\\validation.json'",
+          "retained_in_required_three_pairs": true
+        }
+      ]
+    },
+    {
+      "config": {
+        "id": "scale_f32_e262144_g256",
+        "nodes": 256,
+        "elements": 262144,
+        "arm": "buffered"
+      },
+      "status": "diagnostic_quality_rejected",
+      "issues": [
+        "missing_or_duplicate_process_pair",
+        "missing_profile_process_medians"
+      ],
+      "fixed_policy": {
+        "config_count": 2,
+        "arm_count": 1,
+        "process_pairs": 3,
+        "calls_per_process": 36,
+        "formal_calls_per_process": 30,
+        "pair_order_rule": "config_index_plus_pair_index_parity_direct_first_when_even",
+        "checkpoint_seconds": 180,
+        "terminate_on_checkpoint": false,
+        "kernel_formal_p90_div_p10_max": 1.5,
+        "profile_process_median_max_relative_deviation": 0.05,
+        "profile_direct_host_median_max_relative_difference": 0.2,
+        "direct_host_formal_p90_div_p10_max": 1.5,
+        "all_first_warmup_formal_numeric_rows_pass_required": true,
+        "all_profile_process_kernel_chain_and_source_path_required": true,
+        "clock_sampling_method": "high_resolution_waitable_timer_absolute_QPC_SM_read_windows",
+        "high_frequency_fields": [
+          "sm_mhz"
+        ],
+        "full_state_telemetry_in_formal": false,
+        "quantile_method": "linear interpolation at (n-1)*q",
+        "median_deviation_center": "median of three profiled process medians",
+        "host_ratio_denominator": "paired direct process host median",
+        "within_profile_dispersion": "each of three formal kernel-union distributions",
+        "target_sm_clock_mhz": 2400,
+        "sm_clock_tolerance_mhz": 30,
+        "telemetry_period_seconds": 0.005,
+        "maximum_formal_clock_bracket_gap_ms": 25,
+        "every_formal_interval_bracketed_required": true,
+        "diagnostic_labels_only": true,
+        "coefficients_emitted": false,
+        "validation_group_never_fitted": true
+      },
+      "pairs_observed": 0,
+      "pairs_required": 3,
+      "profile_direct_host_relative_differences": [],
+      "profile_process_median_max_relative_deviation": null,
+      "measurement_cost_eligible": false,
+      "calibration_eligible": false,
+      "fit_performed": false,
+      "holdout_not_for_fit": true,
+      "experiment_group": "long_graph_diagnostic",
+      "transfer_scope": "Empirical same-DLL captured kernel path only; source equivalence and LLM transfer remain conditional.",
+      "pairs": [],
+      "pair_failures_or_unrun": [
+        {
+          "pair": 1,
+          "reason": "FileNotFoundError: [Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_022\\\\long_graph_collection\\\\runs\\\\scale_f32_e262144_g256\\\\pair_01\\\\direct\\\\validation.json'",
+          "retained_in_required_three_pairs": true
+        },
+        {
+          "pair": 2,
+          "reason": "FileNotFoundError: [Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_022\\\\long_graph_collection\\\\runs\\\\scale_f32_e262144_g256\\\\pair_02\\\\direct\\\\validation.json'",
+          "retained_in_required_three_pairs": true
+        },
+        {
+          "pair": 3,
+          "reason": "FileNotFoundError: [Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_022\\\\long_graph_collection\\\\runs\\\\scale_f32_e262144_g256\\\\pair_03\\\\direct\\\\validation.json'",
+          "retained_in_required_three_pairs": true
+        }
+      ]
+    }
+  ],
+  "stage_status": [
+    {
+      "ordinal": 0,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "direct",
+      "process_status": "failed",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 1,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "profile",
+      "process_status": "failed",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 2,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "export",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 3,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "profile",
+      "process_status": "failed",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 4,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "direct",
+      "process_status": "failed",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 5,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "export",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 6,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 7,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 8,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 9,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 10,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 11,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 12,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 13,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 14,
+      "condition": "scale_f32_e262144_g64",
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 15,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 16,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 17,
+      "condition": "scale_f32_e262144_g256",
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    }
+  ],
+  "calibration_fitted": false,
+  "coefficients_added": 0,
+  "partial": true
+}
