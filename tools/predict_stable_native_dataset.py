@@ -1703,7 +1703,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None, retained_warmup=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None, retained_warmup=None, final_output=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -1748,6 +1748,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "deployment": row.get("deployment", "explicit_gpu_layers_" + str(config.get("gpu_layers"))),
         "config": config, "hardware_snapshot": physical,
         "sampling_binding": sampling["cells"][row["cell_id"]] if sampling else None,
+        **({"final_output_selection": True, "final_output_selection_binding": final_output["cells"][row["cell_id"]]} if final_output is not None else {}),
         "nonflash_kv_view_contract": nonflash_kv_view["cells"][row["cell_id"]] if nonflash_kv_view else None,
         **({"retained_kv_warmup_state": True,
             "retained_kv_warmup_evidence": retained_warmup["cells"][row["cell_id"]],
@@ -1877,6 +1878,11 @@ def unsupported_dimensions(inputs, model=None):
             "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"})
     if raw.get("gpu_layers") == -1:
         rows.append({"dimension": "auto_gpu_layer_fit", "status": "conditional", "native": -1, "reason": "Native -ngl -1 is auto with fit; simulator treats it as all layers. Actual loaded layer count is not established for this cell."})
+    final_output = inputs.get("final_output_selection_binding")
+    if final_output is not None:
+        rows.append({"dimension": "final_output_selection", "status": final_output["status"],
+            "historical_include_content_proven": False, "native_dispatch_proven": False,
+            "reasons": final_output["reasons"], "limitations": final_output["limitations"]})
     sampling = inputs.get("sampling_binding")
     rows.append({"dimension": "cpu_sampling_chain", "status": "conditional" if sampling else "unmodeled",
         "policy_bound": sampling is not None,
@@ -2336,6 +2342,9 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     options = {"recurrent_batching_contract": contract} if contract is not None else {}
     if inputs.get("slot_order_contract") is not None:
         options["slot_order_contract"] = inputs["slot_order_contract"]
+    if inputs.get("final_output_selection", False) is not False or inputs.get("final_output_selection_binding") is not None:
+        from tools.native_final_output_binding import apply_binding
+        scenario = apply_binding(scenario, inputs, gguf=gguf)
     scenario, placement_refresh = replan_final_static_scenario(scenario, **options)
     slot_qualification = scenario.workload.metadata.get("llama_cpp_slot_order", {})
     slot_qualification = slot_qualification if isinstance(slot_qualification, dict) else {}
@@ -2355,7 +2364,10 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     prediction = {"status": "predicted" if complete else "incomplete", "reason": None if complete else "Missing request, token or timing boundary",
         "prediction_type": PREDICTION_TYPE, "native_answers_used": False, "calibration_applied": False, "formal_prediction_eligible": False,
         "unsupported_dimensions": unsupported_dimensions(inputs, model), "input_identity": {
-            "static_inputs_sha256": grid.stable_hash(inputs), "sampling_binding": sampling, "model": {"path": str(path), "sha256": gguf.sha256},
+            "static_inputs_sha256": grid.stable_hash(inputs), "sampling_binding": sampling,
+            **({"final_output_selection_binding": inputs["final_output_selection_binding"],
+                "final_output_selection_application": scenario.workload.metadata.get("llama_cpp_final_output_binding")}
+                if "final_output_selection_binding" in inputs else {}), "model": {"path": str(path), "sha256": gguf.sha256},
             "nonflash_kv_view_contract": inputs.get("nonflash_kv_view_contract"),
             **({"retained_kv_warmup_state": True, "retained_kv_warmup_contract": inputs["retained_kv_warmup_contract"],
                 "retained_kv_warmup_evidence": inputs["retained_kv_warmup_evidence"]} if "retained_kv_warmup_evidence" in inputs else {}),
@@ -2452,7 +2464,7 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None, mmvq_vector_issue_bound=False, mmvq_issue_hardware_document_path=None, retained_kv_warmup_state=False, retained_kv_warmup_extractor_path=None):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None, mmvq_vector_issue_bound=False, mmvq_issue_hardware_document_path=None, retained_kv_warmup_state=False, retained_kv_warmup_extractor_path=None, final_output_selection=False):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
@@ -2471,6 +2483,10 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     selection, selection_ref = grid.read_document(selection_path)
     data_root = Path(data_root or selection.get("data_root") or ROOT).resolve(strict=True)
     rows = selected_rows(selection)
+    if type(final_output_selection) is not bool:
+        raise ValueError("final output selection switch must be a boolean")
+    if final_output_selection and (host_offload_source_contract_path is None or sampling_contract_path is None or tensor_storage_contract_path is None or tensor_storage_f32_hidden is not True):
+        raise ValueError("final output selection requires verified runtime, sampling and F32 hidden-storage contracts")
     sampling = None
     if sampling_contract_path is not None:
         from tools.native_sampling_contract import verify_sampling_contract
@@ -2487,6 +2503,12 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     tensor_storage = verified_tensor_storage_contract(tensor_storage_contract_path, rows, data_root,
         f32_hidden_storage=tensor_storage_f32_hidden, runtime_binding=host_offload,
         runtime_source_contract_path=host_offload_source_contract_path) if tensor_storage_contract_path else None
+    final_output = None
+    if final_output_selection:
+        from tools.native_final_output_binding import freeze_binding
+        final_output = freeze_binding(rows, runtime_binding=host_offload, sampling_binding=sampling,
+            source_linkage=verify_gpu_invocation_source_links(host_offload, data_root, include_context=True),
+            model_scope_reader=read_retained_gguf_scope)
     if type(gpu_mmq_source_costs) is not bool or (gpu_mmq_source_costs and gpu_invocation_contract_path is None):
         raise ValueError("GPU MMQ source costs require a GPU invocation source contract and explicit boolean")
     gpu_invocation = verified_gpu_invocation_contract(gpu_invocation_contract_path, rows, data_root,
@@ -2531,7 +2553,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue, retained_warmup=retained_warmup)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue, retained_warmup=retained_warmup, final_output=final_output)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -2545,6 +2567,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation, "sampling": sampling, "nonflash_kv_view": nonflash_kv_view,
         **({"mmvq_vector_issue_bound": True, "mmvq_issue_bound": mmvq_issue} if mmvq_issue is not None else {}),
         **({"retained_kv_warmup_state": True, "retained_kv_warmup": retained_warmup} if retained_warmup is not None else {}),
+        **({"final_output_selection": True, "final_output_selection_binding": final_output} if final_output is not None else {}),
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -2570,6 +2593,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(nonflash_kv_view["evidence_refs"])
     if sampling:
         verify_refs(sampling["evidence_refs"])
+    if final_output:
+        verify_refs(final_output["evidence_refs"])
     return freeze
 
 
@@ -2606,6 +2631,8 @@ def verify_freeze_references(freeze):
     verify_refs(refs)
     verify_mmvq_freeze_binding(freeze)
     verify_retained_warmup_freeze(freeze)
+    from tools.native_final_output_binding import verify_freeze as verify_final_output_freeze
+    verify_final_output_freeze(freeze)
 
 
 def verify_retained_warmup_freeze(freeze, entry=None):
@@ -2700,6 +2727,8 @@ def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, d
         inputs = entry["static_inputs"]
         verify_mmvq_freeze_binding(freeze, entry)
         verify_retained_warmup_freeze(freeze, entry)
+        from tools.native_final_output_binding import verify_freeze as verify_final_output_freeze
+        verify_final_output_freeze(freeze, entry=entry)
         verify_refs([inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])])
         prediction = predict_cell(inputs, diagnostic_events=diagnostic_events, diagnostic_event_limit=diagnostic_event_limit)
     except Exception as exc:
@@ -3013,6 +3042,8 @@ def main(argv=None):
     parser.add_argument("--slot-order-contract", type=Path, help="source-bound stable slot traversal for a qualified fresh same-arrival cohort; default off")
     parser.add_argument("--host-offload-source-contract", type=Path, help="verified source/build/native-runtime binding for host MUL_MAT CUDA dispatch; initial freeze only, default off")
     parser.add_argument("--tensor-storage-contract", type=Path, help="source/build-bound indexed GET_ROWS storage traffic; initial freeze only, default off")
+    parser.add_argument("--final-output-selection", action=argparse.BooleanOptionalAction, default=None,
+        help="conditional source/runtime/completion-bound final output rows; new freeze only; default off")
     parser.add_argument("--sampling-contract", type=Path, help="source/config-bound native CPU sampling policy; initial freeze only, default off")
     parser.add_argument("--gpu-invocation-contract", type=Path, help="conditional source/build-bound physical GPU projection and fusion mapping; initial freeze only, default off")
     parser.add_argument("--gpu-mmq-source-costs", action=argparse.BooleanOptionalAction, default=None,
@@ -3053,8 +3084,10 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.retained_kv_warmup_state is not None or args.retained_kv_warmup_extractor or args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
+    if (args.final_output_selection is not None or args.retained_kv_warmup_state is not None or args.retained_kv_warmup_extractor or args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
         parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
+    if args.final_output_selection and (args.host_offload_source_contract is None or args.sampling_contract is None or args.tensor_storage_contract is None or args.tensor_storage_f32_hidden is not True):
+        parser.error("--final-output-selection requires runtime, sampling and F32 hidden-storage contracts")
     if args.retained_kv_warmup_state and args.nonflash_kv_view_source_contract is None:
         parser.error("--retained-kv-warmup-state requires --nonflash-kv-view-source-contract")
     if args.retained_kv_warmup_extractor and not args.retained_kv_warmup_state:
@@ -3071,7 +3104,7 @@ def main(argv=None):
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor)
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor, final_output_selection=bool(args.final_output_selection))
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

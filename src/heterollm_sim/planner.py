@@ -118,9 +118,9 @@ from .qwen35_attention_work import (
     resolve_source_work as _resolve_qwen35_source_work,
 )
 from .final_layer_output_selection import (
-    SOURCE_KEY as _FINAL_OUTPUT_SELECTION_KEY,
     FinalLayerOutputSelection as _FinalOutputSelection,
     resolve_declaration as _resolve_final_output_declaration,
+    model_declaration as _model_final_output_declaration,
 )
 from .serde import stable_hash
 from .llama_gpu_invocations import (
@@ -14086,7 +14086,7 @@ def _final_output_selection(
     scenario: ScenarioConfig, plan: ParallelPlan, token_rows: int,
     selected_indices: Tuple[int, ...],
 ) -> Optional[_FinalOutputSelection]:
-    declaration = scenario.model.metadata.get(_FINAL_OUTPUT_SELECTION_KEY)
+    declaration = _model_final_output_declaration(scenario.model)
     if declaration is None:
         return None
     policy = _resolve_final_output_declaration(
