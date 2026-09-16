@@ -1,0 +1,165 @@
+{
+  "config": {
+    "id": "validation_Q8_0_m2_n1792_k896",
+    "group": "validation",
+    "quant": "Q8_0",
+    "M": 2,
+    "N": 1792,
+    "K": 896,
+    "expected_source_path": "MMVQ_Q8_1_HALF"
+  },
+  "status": "diagnostic_quality_rejected",
+  "issues": [
+    "pair_0:SM_clock_domain_unvalidated",
+    "pair_0:numeric_or_identity_failure",
+    "pair_0:unsupported_or_incomplete_trace_chain",
+    "pair_0:source_path_dispatch_mismatch",
+    "pair_0:profiler_warning_or_diagnostic",
+    "pair_0:formal_sample_denominator",
+    "pair_0:kernel_p90_p10",
+    "pair_0:direct_host_p90_p10",
+    "pair_0:missing_host_median",
+    "pair_1:SM_clock_domain_unvalidated",
+    "pair_1:numeric_or_identity_failure",
+    "pair_1:unsupported_or_incomplete_trace_chain",
+    "pair_1:source_path_dispatch_mismatch",
+    "pair_1:profiler_warning_or_diagnostic",
+    "pair_1:formal_sample_denominator",
+    "pair_1:kernel_p90_p10",
+    "pair_1:direct_host_p90_p10",
+    "pair_1:missing_host_median",
+    "pair_2:SM_clock_domain_unvalidated",
+    "pair_2:numeric_or_identity_failure",
+    "pair_2:unsupported_or_incomplete_trace_chain",
+    "pair_2:source_path_dispatch_mismatch",
+    "pair_2:profiler_warning_or_diagnostic",
+    "pair_2:formal_sample_denominator",
+    "pair_2:kernel_p90_p10",
+    "pair_2:direct_host_p90_p10",
+    "pair_2:missing_host_median",
+    "missing_profile_process_medians"
+  ],
+  "fixed_policy": {
+    "config_count": 26,
+    "process_pairs": 3,
+    "calls_per_process": 36,
+    "formal_calls_per_process": 30,
+    "pair_orders": [
+      [
+        "profile",
+        "direct"
+      ],
+      [
+        "direct",
+        "profile"
+      ],
+      [
+        "profile",
+        "direct"
+      ]
+    ],
+    "checkpoint_seconds": 180,
+    "terminate_on_checkpoint": false,
+    "kernel_formal_p90_div_p10_max": 1.5,
+    "profile_process_median_max_relative_deviation": 0.05,
+    "profile_direct_host_median_max_relative_difference": 0.2,
+    "direct_host_formal_p90_div_p10_max": 1.5,
+    "all_first_warmup_formal_numeric_rows_pass_required": true,
+    "all_profile_process_kernel_chain_and_source_path_required": true,
+    "quantile_method": "linear interpolation at (n-1)*q",
+    "median_deviation_center": "median of three profiled process medians",
+    "host_ratio_denominator": "paired direct process host median",
+    "within_profile_dispersion": "each of three formal kernel-union distributions",
+    "target_sm_clock_mhz": 2400,
+    "sm_clock_tolerance_mhz": 30,
+    "telemetry_period_seconds": 0.005,
+    "maximum_formal_clock_bracket_gap_ms": 25,
+    "every_formal_interval_bracketed_required": true,
+    "diagnostic_labels_only": true,
+    "coefficients_emitted": false,
+    "validation_group_never_fitted": true
+  },
+  "pairs_observed": 3,
+  "pairs_required": 3,
+  "profile_direct_host_relative_differences": [],
+  "profile_process_median_max_relative_deviation": null,
+  "measurement_cost_eligible": false,
+  "calibration_eligible": false,
+  "fit_performed": false,
+  "holdout_not_for_fit": true,
+  "transfer_scope": "Empirical same-DLL captured kernel path only; source equivalence and LLM transfer remain conditional.",
+  "pairs": [
+    {
+      "pair": 0,
+      "numerics_all_rows": false,
+      "trace_chain_complete": false,
+      "source_path_matches_observed_family": false,
+      "trace_warning_free": false,
+      "issues": [
+        "ValueError: one or more stages failed or incomplete; all statuses retained"
+      ],
+      "stage_statuses": {
+        "profile": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_01\\\\profile\\\\complete.json'"
+        },
+        "direct": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_01\\\\direct\\\\complete.json'"
+        },
+        "export": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_01\\\\export\\\\complete.json'"
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "numerics_all_rows": false,
+      "trace_chain_complete": false,
+      "source_path_matches_observed_family": false,
+      "trace_warning_free": false,
+      "issues": [
+        "ValueError: one or more stages failed or incomplete; all statuses retained"
+      ],
+      "stage_statuses": {
+        "profile": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_02\\\\profile\\\\complete.json'"
+        },
+        "direct": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_02\\\\direct\\\\complete.json'"
+        },
+        "export": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_02\\\\export\\\\complete.json'"
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "numerics_all_rows": false,
+      "trace_chain_complete": false,
+      "source_path_matches_observed_family": false,
+      "trace_warning_free": false,
+      "issues": [
+        "ValueError: one or more stages failed or incomplete; all statuses retained"
+      ],
+      "stage_statuses": {
+        "profile": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_03\\\\profile\\\\complete.json'"
+        },
+        "direct": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_03\\\\direct\\\\complete.json'"
+        },
+        "export": {
+          "complete": false,
+          "reason": "[Errno 2] No such file or directory: 'F:\\\\codex_project\\\\37_LLMsim\\\\heterollm-sim-4.0.0\\\\artifacts\\\\development\\\\native_long_grid_135_20260915\\\\optimization_loop\\\\round_016\\\\collection_r3\\\\runs\\\\validation_Q8_0_m2_n1792_k896\\\\pair_03\\\\export\\\\complete.json'"
+        }
+      }
+    }
+  ]
+}

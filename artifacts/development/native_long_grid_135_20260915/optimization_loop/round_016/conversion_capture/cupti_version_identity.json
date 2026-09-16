@@ -1,0 +1,20 @@
+[
+  {
+    "path": "E:\\cuda\\extras\\CUPTI\\lib64\\cupti64_2025.1.1.dll",
+    "bytes": 4483664,
+    "sha256": "d026870a2c503d1b6e38a793170823ceca83d776f9b887f63fb0bb5c93d5c525",
+    "file_version": "2025.1.1.0",
+    "product_version": "2025.1.1.0 Build (0)",
+    "signature_status": "Valid",
+    "signer_subject": "CN=NVIDIA Corporation, OU=1-G, O=NVIDIA Corporation, L=Santa Clara, S=California, C=US"
+  },
+  {
+    "path": "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\cupti64_134.dll",
+    "bytes": 3310728,
+    "sha256": "f9281a2c73b0379a48b6afdab438665b176260cf3973fd7d59131bc989142337",
+    "file_version": "2026.3.1.0",
+    "product_version": "2026.3.1.0 Build (38830005)",
+    "signature_status": "Valid",
+    "signer_subject": "CN=NVIDIA Corporation, OU=1005bk6, O=NVIDIA Corporation, L=Santa Clara, S=California, C=US"
+  }
+]

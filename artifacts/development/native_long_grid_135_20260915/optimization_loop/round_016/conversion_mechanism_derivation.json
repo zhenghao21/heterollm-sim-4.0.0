@@ -1,0 +1,927 @@
+{
+  "schema": "conversion-source-derivation/v1",
+  "rows": [
+    {
+      "M": 1,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMVQ",
+      "grid": [
+        4,
+        1,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "CTA_count": 4,
+      "launched_threads": 1024,
+      "launched_warps": 32,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 4,
+      "original_scalar_proxy_operations": 11264,
+      "read_bytes_logical": 3584,
+      "write_bytes_physical": 1152,
+      "source_expression_counts": {
+        "abs": 1024,
+        "float_max": 5120,
+        "float_add": 5120,
+        "shuffle_lane_ops": 10240,
+        "normalization_divisions_nonzero_blocks_upper": 2048,
+        "roundf_nonzero_blocks_upper": 1024,
+        "int8_cast_nonzero_blocks_upper": 1024,
+        "fp16_conversion_metadata_values": 64
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 2,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMVQ",
+      "grid": [
+        4,
+        2,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "CTA_count": 8,
+      "launched_threads": 2048,
+      "launched_warps": 64,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 8,
+      "original_scalar_proxy_operations": 22528,
+      "read_bytes_logical": 7168,
+      "write_bytes_physical": 2304,
+      "source_expression_counts": {
+        "abs": 2048,
+        "float_max": 10240,
+        "float_add": 10240,
+        "shuffle_lane_ops": 20480,
+        "normalization_divisions_nonzero_blocks_upper": 4096,
+        "roundf_nonzero_blocks_upper": 2048,
+        "int8_cast_nonzero_blocks_upper": 2048,
+        "fp16_conversion_metadata_values": 128
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 4,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMVQ",
+      "grid": [
+        4,
+        4,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "CTA_count": 16,
+      "launched_threads": 4096,
+      "launched_warps": 128,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 16,
+      "original_scalar_proxy_operations": 45056,
+      "read_bytes_logical": 14336,
+      "write_bytes_physical": 4608,
+      "source_expression_counts": {
+        "abs": 4096,
+        "float_max": 20480,
+        "float_add": 20480,
+        "shuffle_lane_ops": 40960,
+        "normalization_divisions_nonzero_blocks_upper": 8192,
+        "roundf_nonzero_blocks_upper": 4096,
+        "int8_cast_nonzero_blocks_upper": 4096,
+        "fp16_conversion_metadata_values": 256
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 64,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMVQ",
+      "grid": [
+        4,
+        64,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "CTA_count": 256,
+      "launched_threads": 65536,
+      "launched_warps": 2048,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 84,
+      "original_scalar_proxy_operations": 720896,
+      "read_bytes_logical": 229376,
+      "write_bytes_physical": 73728,
+      "source_expression_counts": {
+        "abs": 65536,
+        "float_max": 327680,
+        "float_add": 327680,
+        "shuffle_lane_ops": 655360,
+        "normalization_divisions_nonzero_blocks_upper": 131072,
+        "roundf_nonzero_blocks_upper": 65536,
+        "int8_cast_nonzero_blocks_upper": 65536,
+        "fp16_conversion_metadata_values": 4096
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 64,
+      "Klogical": 1024,
+      "Kpadded": 1024,
+      "path": "MMVQ",
+      "grid": [
+        4,
+        64,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "CTA_count": 256,
+      "launched_threads": 65536,
+      "launched_warps": 2048,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 84,
+      "original_scalar_proxy_operations": 720896,
+      "read_bytes_logical": 262144,
+      "write_bytes_physical": 73728,
+      "source_expression_counts": {
+        "abs": 65536,
+        "float_max": 327680,
+        "float_add": 327680,
+        "shuffle_lane_ops": 655360,
+        "normalization_divisions_nonzero_blocks_upper": 131072,
+        "roundf_nonzero_blocks_upper": 65536,
+        "int8_cast_nonzero_blocks_upper": 65536,
+        "fp16_conversion_metadata_values": 4096
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 1,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_D4",
+      "grid": [
+        1,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 2,
+      "launched_threads": 256,
+      "launched_warps": 8,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 2,
+      "original_scalar_proxy_operations": 3584,
+      "read_bytes_logical": 3584,
+      "write_bytes_physical": 1152,
+      "source_expression_counts": {
+        "abs": 1024,
+        "float_max": 1536,
+        "float_add": 0,
+        "shuffle_lane_ops": 768,
+        "normalization_division_expressions": 512,
+        "multiply": 1024,
+        "roundf": 1024,
+        "int8_cast": 1024,
+        "fp16_conversion_metadata_values": 0,
+        "fp32_scale_metadata_stores": 32
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 2,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_D4",
+      "grid": [
+        2,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 4,
+      "launched_threads": 512,
+      "launched_warps": 16,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 4,
+      "original_scalar_proxy_operations": 7168,
+      "read_bytes_logical": 7168,
+      "write_bytes_physical": 2304,
+      "source_expression_counts": {
+        "abs": 2048,
+        "float_max": 3072,
+        "float_add": 0,
+        "shuffle_lane_ops": 1536,
+        "normalization_division_expressions": 1024,
+        "multiply": 2048,
+        "roundf": 2048,
+        "int8_cast": 2048,
+        "fp16_conversion_metadata_values": 0,
+        "fp32_scale_metadata_stores": 64
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 4,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_D4",
+      "grid": [
+        4,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 8,
+      "launched_threads": 1024,
+      "launched_warps": 32,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 8,
+      "original_scalar_proxy_operations": 14336,
+      "read_bytes_logical": 14336,
+      "write_bytes_physical": 4608,
+      "source_expression_counts": {
+        "abs": 4096,
+        "float_max": 6144,
+        "float_add": 0,
+        "shuffle_lane_ops": 3072,
+        "normalization_division_expressions": 2048,
+        "multiply": 4096,
+        "roundf": 4096,
+        "int8_cast": 4096,
+        "fp16_conversion_metadata_values": 0,
+        "fp32_scale_metadata_stores": 128
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 64,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_D4",
+      "grid": [
+        64,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 128,
+      "launched_threads": 16384,
+      "launched_warps": 512,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 84,
+      "original_scalar_proxy_operations": 229376,
+      "read_bytes_logical": 229376,
+      "write_bytes_physical": 73728,
+      "source_expression_counts": {
+        "abs": 65536,
+        "float_max": 98304,
+        "float_add": 0,
+        "shuffle_lane_ops": 49152,
+        "normalization_division_expressions": 32768,
+        "multiply": 65536,
+        "roundf": 65536,
+        "int8_cast": 65536,
+        "fp16_conversion_metadata_values": 0,
+        "fp32_scale_metadata_stores": 2048
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 64,
+      "Klogical": 1024,
+      "Kpadded": 1024,
+      "path": "MMQ_D4",
+      "grid": [
+        64,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 128,
+      "launched_threads": 16384,
+      "launched_warps": 512,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 84,
+      "original_scalar_proxy_operations": 229376,
+      "read_bytes_logical": 262144,
+      "write_bytes_physical": 73728,
+      "source_expression_counts": {
+        "abs": 65536,
+        "float_max": 98304,
+        "float_add": 0,
+        "shuffle_lane_ops": 49152,
+        "normalization_division_expressions": 32768,
+        "multiply": 65536,
+        "roundf": 65536,
+        "int8_cast": 65536,
+        "fp16_conversion_metadata_values": 0,
+        "fp32_scale_metadata_stores": 2048
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 1,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_DS4",
+      "grid": [
+        1,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 2,
+      "launched_threads": 256,
+      "launched_warps": 8,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 2,
+      "original_scalar_proxy_operations": 5120,
+      "read_bytes_logical": 3584,
+      "write_bytes_physical": 1152,
+      "source_expression_counts": {
+        "abs": 1024,
+        "float_max": 1536,
+        "float_add": 1536,
+        "shuffle_lane_ops": 1536,
+        "normalization_division_expressions": 512,
+        "multiply": 1024,
+        "roundf": 1024,
+        "int8_cast": 1024,
+        "fp16_conversion_metadata_values": 64,
+        "fp32_scale_metadata_stores": 0
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 2,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_DS4",
+      "grid": [
+        2,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 4,
+      "launched_threads": 512,
+      "launched_warps": 16,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 4,
+      "original_scalar_proxy_operations": 10240,
+      "read_bytes_logical": 7168,
+      "write_bytes_physical": 2304,
+      "source_expression_counts": {
+        "abs": 2048,
+        "float_max": 3072,
+        "float_add": 3072,
+        "shuffle_lane_ops": 3072,
+        "normalization_division_expressions": 1024,
+        "multiply": 2048,
+        "roundf": 2048,
+        "int8_cast": 2048,
+        "fp16_conversion_metadata_values": 128,
+        "fp32_scale_metadata_stores": 0
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 4,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_DS4",
+      "grid": [
+        4,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 8,
+      "launched_threads": 1024,
+      "launched_warps": 32,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 8,
+      "original_scalar_proxy_operations": 20480,
+      "read_bytes_logical": 14336,
+      "write_bytes_physical": 4608,
+      "source_expression_counts": {
+        "abs": 4096,
+        "float_max": 6144,
+        "float_add": 6144,
+        "shuffle_lane_ops": 6144,
+        "normalization_division_expressions": 2048,
+        "multiply": 4096,
+        "roundf": 4096,
+        "int8_cast": 4096,
+        "fp16_conversion_metadata_values": 256,
+        "fp32_scale_metadata_stores": 0
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 64,
+      "Klogical": 896,
+      "Kpadded": 1024,
+      "path": "MMQ_DS4",
+      "grid": [
+        64,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 128,
+      "launched_threads": 16384,
+      "launched_warps": 512,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 84,
+      "original_scalar_proxy_operations": 327680,
+      "read_bytes_logical": 229376,
+      "write_bytes_physical": 73728,
+      "source_expression_counts": {
+        "abs": 65536,
+        "float_max": 98304,
+        "float_add": 98304,
+        "shuffle_lane_ops": 98304,
+        "normalization_division_expressions": 32768,
+        "multiply": 65536,
+        "roundf": 65536,
+        "int8_cast": 65536,
+        "fp16_conversion_metadata_values": 4096,
+        "fp32_scale_metadata_stores": 0
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    },
+    {
+      "M": 64,
+      "Klogical": 1024,
+      "Kpadded": 1024,
+      "path": "MMQ_DS4",
+      "grid": [
+        64,
+        2,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "CTA_count": 128,
+      "launched_threads": 16384,
+      "launched_warps": 512,
+      "maximum_simultaneously_occupied_SM_upper_bound_for_84SM": 84,
+      "original_scalar_proxy_operations": 327680,
+      "read_bytes_logical": 262144,
+      "write_bytes_physical": 73728,
+      "source_expression_counts": {
+        "abs": 65536,
+        "float_max": 98304,
+        "float_add": 98304,
+        "shuffle_lane_ops": 98304,
+        "normalization_division_expressions": 32768,
+        "multiply": 65536,
+        "roundf": 65536,
+        "int8_cast": 65536,
+        "fp16_conversion_metadata_values": 4096,
+        "fp32_scale_metadata_stores": 0
+      },
+      "critical_path_notes": "shuffle-reduction dependency chains and division/round/pack latency have no independent cycle rates; expressions are not SASS instructions",
+      "no_fitted_duration": true
+    }
+  ],
+  "completed_trace_geometry_crosschecks": [
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n128_k896\\pair_01\\mapped_calls.json",
+        "bytes": 342732,
+        "sha256": "a190381a9e576008d008bac31a7f521531b1cfbe2e38a61a80c5caad56b4308b"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n128_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 128,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n128_k896\\pair_02\\mapped_calls.json",
+        "bytes": 342758,
+        "sha256": "4c02ce7341bb9e86c4bb68e639ebcbefdc68c0bd6511237db1e7daf1c8eac079"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n128_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 128,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n128_k896\\pair_03\\mapped_calls.json",
+        "bytes": 342749,
+        "sha256": "64d8a1f3a5055050ed3f4b07f3af4f272475e11506e4bae711217ef801b804e5"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n128_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 128,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n4864_k896\\pair_01\\mapped_calls.json",
+        "bytes": 342950,
+        "sha256": "96ed6adf8c29b234ba209e33cbf961e9ee944ab0ba58ef64e6c0179da9f1ebe1"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n4864_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 4864,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n4864_k896\\pair_02\\mapped_calls.json",
+        "bytes": 342904,
+        "sha256": "ac93e5ec534d51e1c763d0e052be127cd9c392573fccfa8565c3d16951ac5d31"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n4864_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 4864,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n896_k896\\pair_01\\mapped_calls.json",
+        "bytes": 342840,
+        "sha256": "72c06406561a78a72487fd4f0071ddcb305a5ab886d8836f9287d90837ab0af7"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n896_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 896,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n896_k896\\pair_02\\mapped_calls.json",
+        "bytes": 342798,
+        "sha256": "49e59a376342ac36a372086c7175600ecf7629f2d623bae0e1ccb5b6aecb55fc"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n896_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 896,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n896_k896\\pair_03\\mapped_calls.json",
+        "bytes": 342774,
+        "sha256": "13ca8bcde0c16759b5b59ea8116a6381b71db85caec726beb90449117db44e40"
+      },
+      "config": {
+        "id": "train_Q5_0_m1_n896_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 1,
+        "N": 896,
+        "K": 896,
+        "expected_source_path": "MMVQ_Q8_1_HALF"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          4,
+          1,
+          1,
+          256,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        4,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    },
+    {
+      "input": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\first_pair_analysis\\mapped_calls.json",
+        "bytes": 440216,
+        "sha256": "0773a1122a4e341761604b0aa61f35e7f3fe92ae0e2ae92d79e354838db85dfe"
+      },
+      "config": {
+        "id": "train_Q5_0_m64_n896_k896",
+        "group": "training",
+        "quant": "Q5_0",
+        "M": 64,
+        "N": 896,
+        "K": 896,
+        "expected_source_path": "MMQ_Q8_1_D4_F32"
+      },
+      "captured_calls": 36,
+      "observed_geometry": [
+        [
+          64,
+          2,
+          1,
+          128,
+          1,
+          1
+        ]
+      ],
+      "source_geometry": [
+        64,
+        2,
+        1,
+        128,
+        1,
+        1
+      ],
+      "geometry_match": true,
+      "timing_used": false
+    }
+  ],
+  "sources": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cu",
+      "bytes": 30628,
+      "sha256": "12ab0782e5e9cf273dcc584edc7413729b18609dc20b4bc6c7a53efd5656c48f"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cuh",
+      "bytes": 3536,
+      "sha256": "1f87649a70eee707623b54ccd63fbe49ad3f135bed4eb2a29c65c32296bcb387"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\common.cuh",
+      "bytes": 66691,
+      "sha256": "1cc3186a56426d5b929e9c29f9fae2d61d583f5f7abf0764d363c21cbbcbe932"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\mmq.cuh",
+      "bytes": 73456,
+      "sha256": "d4fac91062e5cbcb083ec4c4f16cb4bf5ca741db903b5e2cd413e2e8dcfa2fae"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\planner.py",
+      "bytes": 1030760,
+      "sha256": "5dec16d402f3b5771c0776bb1719a31939cafd394a61991bb53db1aa3c0337dc"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\mmq_work.py",
+      "bytes": 15884,
+      "sha256": "8cbe042675fb67d77ce4ca3d41daafcc617633591b38cf0a6a6b5f364324ecc9"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\cost_models.py",
+      "bytes": 202916,
+      "sha256": "59eb729a79b3ec50b5133c5f27b85a3257fbf7cfddf479c4655bdbdae6d255a7"
+    }
+  ],
+  "GPU_runs": 0,
+  "LLM_actuals_read": false,
+  "coefficients_fitted": false,
+  "timing_values_consumed": false,
+  "native_source_binary_equivalence_proven": false
+}

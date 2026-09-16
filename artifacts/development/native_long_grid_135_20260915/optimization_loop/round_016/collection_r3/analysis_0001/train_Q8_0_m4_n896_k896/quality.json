@@ -1,0 +1,2292 @@
+{
+  "config": {
+    "id": "train_Q8_0_m4_n896_k896",
+    "group": "training",
+    "quant": "Q8_0",
+    "M": 4,
+    "N": 896,
+    "K": 896,
+    "expected_source_path": "MMVQ_Q8_1_HALF"
+  },
+  "status": "diagnostic_quality_rejected",
+  "issues": [
+    "pair_0:direct_host_p90_p10",
+    "pair_0:profile_direct_perturbation",
+    "pair_1:direct_host_p90_p10",
+    "pair_1:profile_direct_perturbation",
+    "pair_2:direct_host_p90_p10",
+    "pair_2:profile_direct_perturbation"
+  ],
+  "fixed_policy": {
+    "config_count": 26,
+    "process_pairs": 3,
+    "calls_per_process": 36,
+    "formal_calls_per_process": 30,
+    "pair_orders": [
+      [
+        "profile",
+        "direct"
+      ],
+      [
+        "direct",
+        "profile"
+      ],
+      [
+        "profile",
+        "direct"
+      ]
+    ],
+    "checkpoint_seconds": 180,
+    "terminate_on_checkpoint": false,
+    "kernel_formal_p90_div_p10_max": 1.5,
+    "profile_process_median_max_relative_deviation": 0.05,
+    "profile_direct_host_median_max_relative_difference": 0.2,
+    "direct_host_formal_p90_div_p10_max": 1.5,
+    "all_first_warmup_formal_numeric_rows_pass_required": true,
+    "all_profile_process_kernel_chain_and_source_path_required": true,
+    "quantile_method": "linear interpolation at (n-1)*q",
+    "median_deviation_center": "median of three profiled process medians",
+    "host_ratio_denominator": "paired direct process host median",
+    "within_profile_dispersion": "each of three formal kernel-union distributions",
+    "target_sm_clock_mhz": 2400,
+    "sm_clock_tolerance_mhz": 30,
+    "telemetry_period_seconds": 0.005,
+    "maximum_formal_clock_bracket_gap_ms": 25,
+    "every_formal_interval_bracketed_required": true,
+    "diagnostic_labels_only": true,
+    "coefficients_emitted": false,
+    "validation_group_never_fitted": true
+  },
+  "pairs_observed": 3,
+  "pairs_required": 3,
+  "profile_direct_host_relative_differences": [
+    0.2724107919930374,
+    0.2836624775583483,
+    0.37030075187969924
+  ],
+  "profile_process_median_max_relative_deviation": 0.023465045592705167,
+  "measurement_cost_eligible": false,
+  "calibration_eligible": false,
+  "fit_performed": false,
+  "holdout_not_for_fit": false,
+  "transfer_scope": "Empirical same-DLL captured kernel path only; source equivalence and LLM transfer remain conditional.",
+  "pairs": [
+    {
+      "pair": 0,
+      "numerics_all_rows": true,
+      "trace_chain_complete": true,
+      "source_path_matches_observed_family": true,
+      "trace_warning_free": true,
+      "issues": [],
+      "stage_statuses": {
+        "profile": {
+          "complete": true
+        },
+        "direct": {
+          "complete": true
+        },
+        "export": {
+          "complete": true
+        }
+      },
+      "profile_raw": {
+        "source": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_01\\profile\\microbench.json",
+          "bytes": 40423469,
+          "sha256": "03403fdfa30e9a2c960a9851a6a0366b0bea25a877cce9f1eba73652798227b2"
+        },
+        "audit": {
+          "valid_raw": true,
+          "issues": [],
+          "sample_count": 36,
+          "calibration_eligible": false,
+          "reason": "Actual dispatch and profiling perturbation must be checked separately before cost calibration."
+        },
+        "formal_host": {
+          "count": 30,
+          "minimum_ns": 64100,
+          "maximum_ns": 183100,
+          "median_ns": 73100.0,
+          "p10_ns": 65260.0,
+          "p90_ns": 91540.0,
+          "p90_div_p10": 1.4026969046889366
+        },
+        "signature": {
+          "M": 4,
+          "N": 896,
+          "K": 896,
+          "quant": "Q8_0",
+          "input_sha256": "50ebccd77a72835fa23f8697ebdf6c547ce483ea011869aeb76c17cef8c5e405",
+          "packed_weight_sha256": "9838fa4f1efa54c4f500b1cab12c5ae57904c248c4c5b4218e0b6295c5d943f9",
+          "environment": {
+            "GGML_OP_OFFLOAD_MIN_BATCH": null,
+            "GGML_CUDA_DISABLE_GRAPHS": "1",
+            "GGML_CUDA_FORCE_MMQ": null,
+            "GGML_CUDA_FORCE_CUBLAS": null,
+            "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+            "GGML_SCHED_DEBUG": null,
+            "OMP_NUM_THREADS": "1",
+            "GGML_NO_IQ_PANEL": null,
+            "LLAMA_TRACE_ANNOTATIONS": "0",
+            "GGML_CPU_DISABLE_FUSION": null,
+            "GGML_CUDA_DISABLE_FUSION": null,
+            "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+          },
+          "modules": [
+            {
+              "name": "nvcuda64.dll",
+              "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+              "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+              "bytes": 11643112
+            },
+            {
+              "name": "nvcuda.dll",
+              "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+              "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+              "bytes": 4790504
+            },
+            {
+              "name": "cublas64_12.dll",
+              "path": "E:\\cuda\\bin\\cublas64_12.dll",
+              "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+              "bytes": 113716224
+            },
+            {
+              "name": "cublasLt64_12.dll",
+              "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+              "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+              "bytes": 674667520
+            },
+            {
+              "name": "cudart64_12.dll",
+              "path": "E:\\cuda\\bin\\cudart64_12.dll",
+              "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+              "bytes": 573952
+            },
+            {
+              "name": "operator-surface-probe.exe",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+              "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311",
+              "bytes": 143360
+            },
+            {
+              "name": "ggml-base.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+              "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+              "bytes": 673792
+            },
+            {
+              "name": "ggml-cpu.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+              "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+              "bytes": 958464
+            },
+            {
+              "name": "ggml-cuda.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+              "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+              "bytes": 26091520
+            },
+            {
+              "name": "ggml.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+              "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+              "bytes": 61440
+            }
+          ],
+          "expected_source_path": "MMVQ_Q8_1_HALF"
+        },
+        "unbound_observed_cuda_or_os_runtime_modules": [
+          {
+            "name": "cudart64_12.dll",
+            "path": "E:\\cuda\\bin\\cudart64_12.dll",
+            "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+            "bytes": 573952
+          },
+          {
+            "name": "nvcuda.dll",
+            "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+            "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+            "bytes": 4790504
+          },
+          {
+            "name": "cublas64_12.dll",
+            "path": "E:\\cuda\\bin\\cublas64_12.dll",
+            "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+            "bytes": 113716224
+          },
+          {
+            "name": "cublasLt64_12.dll",
+            "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+            "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+            "bytes": 674667520
+          },
+          {
+            "name": "nvcuda64.dll",
+            "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+            "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+            "bytes": 11643112
+          }
+        ],
+        "QPC_absolute_boundaries_preserved_in_source": true
+      },
+      "direct_raw": {
+        "source": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_01\\direct\\microbench.json",
+          "bytes": 40423490,
+          "sha256": "2f8a53ed8b8744eb536f0cf4e577bb99f8ed5e40b59a7ce18e2bc61292a9a4ae"
+        },
+        "audit": {
+          "valid_raw": true,
+          "issues": [],
+          "sample_count": 36,
+          "calibration_eligible": false,
+          "reason": "Actual dispatch and profiling perturbation must be checked separately before cost calibration."
+        },
+        "formal_host": {
+          "count": 30,
+          "minimum_ns": 45900,
+          "maximum_ns": 349000,
+          "median_ns": 57450.0,
+          "p10_ns": 47040.0,
+          "p90_ns": 189370.0,
+          "p90_div_p10": 4.025722789115647
+        },
+        "signature": {
+          "M": 4,
+          "N": 896,
+          "K": 896,
+          "quant": "Q8_0",
+          "input_sha256": "50ebccd77a72835fa23f8697ebdf6c547ce483ea011869aeb76c17cef8c5e405",
+          "packed_weight_sha256": "9838fa4f1efa54c4f500b1cab12c5ae57904c248c4c5b4218e0b6295c5d943f9",
+          "environment": {
+            "GGML_OP_OFFLOAD_MIN_BATCH": null,
+            "GGML_CUDA_DISABLE_GRAPHS": "1",
+            "GGML_CUDA_FORCE_MMQ": null,
+            "GGML_CUDA_FORCE_CUBLAS": null,
+            "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+            "GGML_SCHED_DEBUG": null,
+            "OMP_NUM_THREADS": "1",
+            "GGML_NO_IQ_PANEL": null,
+            "LLAMA_TRACE_ANNOTATIONS": "0",
+            "GGML_CPU_DISABLE_FUSION": null,
+            "GGML_CUDA_DISABLE_FUSION": null,
+            "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+          },
+          "modules": [
+            {
+              "name": "nvcuda64.dll",
+              "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+              "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+              "bytes": 11643112
+            },
+            {
+              "name": "nvcuda.dll",
+              "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+              "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+              "bytes": 4790504
+            },
+            {
+              "name": "cublas64_12.dll",
+              "path": "E:\\cuda\\bin\\cublas64_12.dll",
+              "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+              "bytes": 113716224
+            },
+            {
+              "name": "cublasLt64_12.dll",
+              "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+              "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+              "bytes": 674667520
+            },
+            {
+              "name": "cudart64_12.dll",
+              "path": "E:\\cuda\\bin\\cudart64_12.dll",
+              "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+              "bytes": 573952
+            },
+            {
+              "name": "operator-surface-probe.exe",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+              "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311",
+              "bytes": 143360
+            },
+            {
+              "name": "ggml-base.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+              "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+              "bytes": 673792
+            },
+            {
+              "name": "ggml-cpu.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+              "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+              "bytes": 958464
+            },
+            {
+              "name": "ggml-cuda.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+              "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+              "bytes": 26091520
+            },
+            {
+              "name": "ggml.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+              "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+              "bytes": 61440
+            }
+          ],
+          "expected_source_path": "MMVQ_Q8_1_HALF"
+        },
+        "unbound_observed_cuda_or_os_runtime_modules": [
+          {
+            "name": "cudart64_12.dll",
+            "path": "E:\\cuda\\bin\\cudart64_12.dll",
+            "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+            "bytes": 573952
+          },
+          {
+            "name": "cublas64_12.dll",
+            "path": "E:\\cuda\\bin\\cublas64_12.dll",
+            "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+            "bytes": 113716224
+          },
+          {
+            "name": "nvcuda.dll",
+            "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+            "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+            "bytes": 4790504
+          },
+          {
+            "name": "cublasLt64_12.dll",
+            "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+            "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+            "bytes": 674667520
+          },
+          {
+            "name": "nvcuda64.dll",
+            "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+            "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+            "bytes": 11643112
+          }
+        ],
+        "QPC_absolute_boundaries_preserved_in_source": true
+      },
+      "profile_host": {
+        "count": 30,
+        "minimum_ns": 64100,
+        "maximum_ns": 183100,
+        "median_ns": 73100.0,
+        "p10_ns": 65260.0,
+        "p90_ns": 91540.0,
+        "p90_div_p10": 1.4026969046889366
+      },
+      "direct_host": {
+        "count": 30,
+        "minimum_ns": 45900,
+        "maximum_ns": 349000,
+        "median_ns": 57450.0,
+        "p10_ns": 47040.0,
+        "p90_ns": 189370.0,
+        "p90_div_p10": 4.025722789115647
+      },
+      "clock_domain_gates": {
+        "profile": {
+          "passed": true,
+          "issues": [],
+          "target_sm_clock_mhz": 2400,
+          "tolerance_mhz": 30,
+          "formal_intervals": 30,
+          "bracketed_intervals": 30,
+          "used_readback_samples": 55,
+          "sm_clock_min_mhz": 2392,
+          "sm_clock_max_mhz": 2392,
+          "coverage": [
+            {
+              "index": 0,
+              "sample_before_qpc": 818295201207,
+              "sample_after_qpc": 818295358290,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 1,
+              "sample_before_qpc": 818295510971,
+              "sample_after_qpc": 818295710284,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 2,
+              "sample_before_qpc": 818295710284,
+              "sample_after_qpc": 818295867393,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 3,
+              "sample_before_qpc": 818296024010,
+              "sample_after_qpc": 818296202484,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 4,
+              "sample_before_qpc": 818296367233,
+              "sample_after_qpc": 818296533901,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 5,
+              "sample_before_qpc": 818296704045,
+              "sample_after_qpc": 818296859617,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 6,
+              "sample_before_qpc": 818297033591,
+              "sample_after_qpc": 818297200115,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 7,
+              "sample_before_qpc": 818297357482,
+              "sample_after_qpc": 818297509104,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 8,
+              "sample_before_qpc": 818297509104,
+              "sample_after_qpc": 818297700478,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 9,
+              "sample_before_qpc": 818297867591,
+              "sample_after_qpc": 818298030751,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 10,
+              "sample_before_qpc": 818298197491,
+              "sample_after_qpc": 818298368054,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 11,
+              "sample_before_qpc": 818298520443,
+              "sample_after_qpc": 818298672401,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 12,
+              "sample_before_qpc": 818298868926,
+              "sample_after_qpc": 818299030913,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 13,
+              "sample_before_qpc": 818299030913,
+              "sample_after_qpc": 818299204773,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 14,
+              "sample_before_qpc": 818299365971,
+              "sample_after_qpc": 818299533866,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 15,
+              "sample_before_qpc": 818299694593,
+              "sample_after_qpc": 818299846158,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 16,
+              "sample_before_qpc": 818300035294,
+              "sample_after_qpc": 818300193663,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 17,
+              "sample_before_qpc": 818300367259,
+              "sample_after_qpc": 818300534103,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 18,
+              "sample_before_qpc": 818300699004,
+              "sample_after_qpc": 818300868284,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 19,
+              "sample_before_qpc": 818300868284,
+              "sample_after_qpc": 818301027182,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 20,
+              "sample_before_qpc": 818301200292,
+              "sample_after_qpc": 818301367377,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 21,
+              "sample_before_qpc": 818301525579,
+              "sample_after_qpc": 818301701011,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 22,
+              "sample_before_qpc": 818301785946,
+              "sample_after_qpc": 818301947213,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 23,
+              "sample_before_qpc": 818302200587,
+              "sample_after_qpc": 818302367388,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 24,
+              "sample_before_qpc": 818302367388,
+              "sample_after_qpc": 818302533575,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 25,
+              "sample_before_qpc": 818302695017,
+              "sample_after_qpc": 818302867066,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 26,
+              "sample_before_qpc": 818303035336,
+              "sample_after_qpc": 818303188597,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 27,
+              "sample_before_qpc": 818303366819,
+              "sample_after_qpc": 818303528186,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 28,
+              "sample_before_qpc": 818303663385,
+              "sample_after_qpc": 818303821362,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 29,
+              "sample_before_qpc": 818303973615,
+              "sample_after_qpc": 818304200734,
+              "observed_samples_inside": 0
+            }
+          ],
+          "clock_locked_inferred": false,
+          "scope": "Sampled NVML readbacks bracket every formal host interval in absolute QPC. They do not prove a continuous per-kernel frequency waveform."
+        },
+        "direct": {
+          "passed": true,
+          "issues": [],
+          "target_sm_clock_mhz": 2400,
+          "tolerance_mhz": 30,
+          "formal_intervals": 30,
+          "bracketed_intervals": 30,
+          "used_readback_samples": 56,
+          "sm_clock_min_mhz": 2392,
+          "sm_clock_max_mhz": 2392,
+          "coverage": [
+            {
+              "index": 0,
+              "sample_before_qpc": 818402862743,
+              "sample_after_qpc": 818403026388,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 1,
+              "sample_before_qpc": 818403189286,
+              "sample_after_qpc": 818403350298,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 2,
+              "sample_before_qpc": 818403504462,
+              "sample_after_qpc": 818403697162,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 3,
+              "sample_before_qpc": 818403871575,
+              "sample_after_qpc": 818404028911,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 4,
+              "sample_before_qpc": 818404028911,
+              "sample_after_qpc": 818404198287,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 5,
+              "sample_before_qpc": 818404361094,
+              "sample_after_qpc": 818404530034,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 6,
+              "sample_before_qpc": 818404683768,
+              "sample_after_qpc": 818404842172,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 7,
+              "sample_before_qpc": 818405032068,
+              "sample_after_qpc": 818405190764,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 8,
+              "sample_before_qpc": 818405376519,
+              "sample_after_qpc": 818405527223,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 9,
+              "sample_before_qpc": 818405684107,
+              "sample_after_qpc": 818405863751,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 10,
+              "sample_before_qpc": 818405863751,
+              "sample_after_qpc": 818406190208,
+              "observed_samples_inside": 1
+            },
+            {
+              "index": 11,
+              "sample_before_qpc": 818406364446,
+              "sample_after_qpc": 818406530288,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 12,
+              "sample_before_qpc": 818406530288,
+              "sample_after_qpc": 818406682456,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 13,
+              "sample_before_qpc": 818406871837,
+              "sample_after_qpc": 818407030813,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 14,
+              "sample_before_qpc": 818407197388,
+              "sample_after_qpc": 818407401087,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 15,
+              "sample_before_qpc": 818407536913,
+              "sample_after_qpc": 818407683971,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 16,
+              "sample_before_qpc": 818407871687,
+              "sample_after_qpc": 818408027804,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 17,
+              "sample_before_qpc": 818408197271,
+              "sample_after_qpc": 818408361287,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 18,
+              "sample_before_qpc": 818408361287,
+              "sample_after_qpc": 818408544129,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 19,
+              "sample_before_qpc": 818408696860,
+              "sample_after_qpc": 818408871594,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 20,
+              "sample_before_qpc": 818409027928,
+              "sample_after_qpc": 818409192715,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 21,
+              "sample_before_qpc": 818409372046,
+              "sample_after_qpc": 818409529069,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 22,
+              "sample_before_qpc": 818409690704,
+              "sample_after_qpc": 818409842459,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 23,
+              "sample_before_qpc": 818409995444,
+              "sample_after_qpc": 818410193136,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 24,
+              "sample_before_qpc": 818410364087,
+              "sample_after_qpc": 818410528908,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 25,
+              "sample_before_qpc": 818410528908,
+              "sample_after_qpc": 818410858664,
+              "observed_samples_inside": 1
+            },
+            {
+              "index": 26,
+              "sample_before_qpc": 818410858664,
+              "sample_after_qpc": 818411027628,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 27,
+              "sample_before_qpc": 818411183764,
+              "sample_after_qpc": 818411371342,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 28,
+              "sample_before_qpc": 818411527883,
+              "sample_after_qpc": 818411689526,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 29,
+              "sample_before_qpc": 818411863818,
+              "sample_after_qpc": 818411979357,
+              "observed_samples_inside": 0
+            }
+          ],
+          "clock_locked_inferred": false,
+          "scope": "Sampled NVML readbacks bracket every formal host interval in absolute QPC. They do not prove a continuous per-kernel frequency waveform."
+        }
+      },
+      "clock_domain_validated": true,
+      "profile_kernel": {
+        "count": 30,
+        "minimum_ns": 3680,
+        "maximum_ns": 4448,
+        "median_ns": 4016.0,
+        "p10_ns": 3872.0,
+        "p90_ns": 4256.0,
+        "p90_div_p10": 1.0991735537190082
+      },
+      "tool_warning_lines": [],
+      "trace_sources": {
+        "raw": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\analysis_0001\\train_Q8_0_m4_n896_k896\\pair_01\\raw_events.json",
+          "bytes": 578336,
+          "sha256": "9af1f0eb8d8b68a0bd2ba8a1ae6e5942b8b0a22ccd14dfa46400414055285a4f"
+        },
+        "mapped": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\analysis_0001\\train_Q8_0_m4_n896_k896\\pair_01\\mapped_calls.json",
+          "bytes": 342796,
+          "sha256": "1cf4c52334a1bd90f2c418df50664e37d1518e498492e8b4d82945d45c326d52"
+        },
+        "sqlite": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_01\\export\\trace.sqlite",
+          "bytes": 364544,
+          "sha256": "925a20697801703452855c4664128965442102cd9ce4352ad0e0a43c4024d456"
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "numerics_all_rows": true,
+      "trace_chain_complete": true,
+      "source_path_matches_observed_family": true,
+      "trace_warning_free": true,
+      "issues": [],
+      "stage_statuses": {
+        "profile": {
+          "complete": true
+        },
+        "direct": {
+          "complete": true
+        },
+        "export": {
+          "complete": true
+        }
+      },
+      "profile_raw": {
+        "source": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_02\\profile\\microbench.json",
+          "bytes": 40423479,
+          "sha256": "f5245a72efdf07d70a1995202e3e4b05e09af256807f959ef995a696dc6f1077"
+        },
+        "audit": {
+          "valid_raw": true,
+          "issues": [],
+          "sample_count": 36,
+          "calibration_eligible": false,
+          "reason": "Actual dispatch and profiling perturbation must be checked separately before cost calibration."
+        },
+        "formal_host": {
+          "count": 30,
+          "minimum_ns": 62700,
+          "maximum_ns": 164800,
+          "median_ns": 71500.0,
+          "p10_ns": 65640.0,
+          "p90_ns": 87270.00000000004,
+          "p90_div_p10": 1.3295246800731269
+        },
+        "signature": {
+          "M": 4,
+          "N": 896,
+          "K": 896,
+          "quant": "Q8_0",
+          "input_sha256": "50ebccd77a72835fa23f8697ebdf6c547ce483ea011869aeb76c17cef8c5e405",
+          "packed_weight_sha256": "9838fa4f1efa54c4f500b1cab12c5ae57904c248c4c5b4218e0b6295c5d943f9",
+          "environment": {
+            "GGML_OP_OFFLOAD_MIN_BATCH": null,
+            "GGML_CUDA_DISABLE_GRAPHS": "1",
+            "GGML_CUDA_FORCE_MMQ": null,
+            "GGML_CUDA_FORCE_CUBLAS": null,
+            "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+            "GGML_SCHED_DEBUG": null,
+            "OMP_NUM_THREADS": "1",
+            "GGML_NO_IQ_PANEL": null,
+            "LLAMA_TRACE_ANNOTATIONS": "0",
+            "GGML_CPU_DISABLE_FUSION": null,
+            "GGML_CUDA_DISABLE_FUSION": null,
+            "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+          },
+          "modules": [
+            {
+              "name": "nvcuda64.dll",
+              "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+              "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+              "bytes": 11643112
+            },
+            {
+              "name": "nvcuda.dll",
+              "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+              "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+              "bytes": 4790504
+            },
+            {
+              "name": "cublas64_12.dll",
+              "path": "E:\\cuda\\bin\\cublas64_12.dll",
+              "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+              "bytes": 113716224
+            },
+            {
+              "name": "cublasLt64_12.dll",
+              "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+              "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+              "bytes": 674667520
+            },
+            {
+              "name": "cudart64_12.dll",
+              "path": "E:\\cuda\\bin\\cudart64_12.dll",
+              "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+              "bytes": 573952
+            },
+            {
+              "name": "operator-surface-probe.exe",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+              "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311",
+              "bytes": 143360
+            },
+            {
+              "name": "ggml-base.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+              "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+              "bytes": 673792
+            },
+            {
+              "name": "ggml-cpu.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+              "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+              "bytes": 958464
+            },
+            {
+              "name": "ggml-cuda.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+              "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+              "bytes": 26091520
+            },
+            {
+              "name": "ggml.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+              "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+              "bytes": 61440
+            }
+          ],
+          "expected_source_path": "MMVQ_Q8_1_HALF"
+        },
+        "unbound_observed_cuda_or_os_runtime_modules": [
+          {
+            "name": "cudart64_12.dll",
+            "path": "E:\\cuda\\bin\\cudart64_12.dll",
+            "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+            "bytes": 573952
+          },
+          {
+            "name": "nvcuda.dll",
+            "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+            "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+            "bytes": 4790504
+          },
+          {
+            "name": "cublas64_12.dll",
+            "path": "E:\\cuda\\bin\\cublas64_12.dll",
+            "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+            "bytes": 113716224
+          },
+          {
+            "name": "cublasLt64_12.dll",
+            "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+            "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+            "bytes": 674667520
+          },
+          {
+            "name": "nvcuda64.dll",
+            "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+            "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+            "bytes": 11643112
+          }
+        ],
+        "QPC_absolute_boundaries_preserved_in_source": true
+      },
+      "direct_raw": {
+        "source": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_02\\direct\\microbench.json",
+          "bytes": 40423487,
+          "sha256": "82317e68c570def378bd32635700daee4f6edaf9d2add7ab14e3429e396817b4"
+        },
+        "audit": {
+          "valid_raw": true,
+          "issues": [],
+          "sample_count": 36,
+          "calibration_eligible": false,
+          "reason": "Actual dispatch and profiling perturbation must be checked separately before cost calibration."
+        },
+        "formal_host": {
+          "count": 30,
+          "minimum_ns": 44700,
+          "maximum_ns": 190300,
+          "median_ns": 55700.0,
+          "p10_ns": 46380.0,
+          "p90_ns": 156320.00000000003,
+          "p90_div_p10": 3.3704182837429935
+        },
+        "signature": {
+          "M": 4,
+          "N": 896,
+          "K": 896,
+          "quant": "Q8_0",
+          "input_sha256": "50ebccd77a72835fa23f8697ebdf6c547ce483ea011869aeb76c17cef8c5e405",
+          "packed_weight_sha256": "9838fa4f1efa54c4f500b1cab12c5ae57904c248c4c5b4218e0b6295c5d943f9",
+          "environment": {
+            "GGML_OP_OFFLOAD_MIN_BATCH": null,
+            "GGML_CUDA_DISABLE_GRAPHS": "1",
+            "GGML_CUDA_FORCE_MMQ": null,
+            "GGML_CUDA_FORCE_CUBLAS": null,
+            "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+            "GGML_SCHED_DEBUG": null,
+            "OMP_NUM_THREADS": "1",
+            "GGML_NO_IQ_PANEL": null,
+            "LLAMA_TRACE_ANNOTATIONS": "0",
+            "GGML_CPU_DISABLE_FUSION": null,
+            "GGML_CUDA_DISABLE_FUSION": null,
+            "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+          },
+          "modules": [
+            {
+              "name": "nvcuda64.dll",
+              "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+              "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+              "bytes": 11643112
+            },
+            {
+              "name": "nvcuda.dll",
+              "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+              "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+              "bytes": 4790504
+            },
+            {
+              "name": "cublas64_12.dll",
+              "path": "E:\\cuda\\bin\\cublas64_12.dll",
+              "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+              "bytes": 113716224
+            },
+            {
+              "name": "cublasLt64_12.dll",
+              "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+              "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+              "bytes": 674667520
+            },
+            {
+              "name": "cudart64_12.dll",
+              "path": "E:\\cuda\\bin\\cudart64_12.dll",
+              "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+              "bytes": 573952
+            },
+            {
+              "name": "operator-surface-probe.exe",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+              "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311",
+              "bytes": 143360
+            },
+            {
+              "name": "ggml-base.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+              "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+              "bytes": 673792
+            },
+            {
+              "name": "ggml-cpu.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+              "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+              "bytes": 958464
+            },
+            {
+              "name": "ggml-cuda.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+              "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+              "bytes": 26091520
+            },
+            {
+              "name": "ggml.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+              "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+              "bytes": 61440
+            }
+          ],
+          "expected_source_path": "MMVQ_Q8_1_HALF"
+        },
+        "unbound_observed_cuda_or_os_runtime_modules": [
+          {
+            "name": "cudart64_12.dll",
+            "path": "E:\\cuda\\bin\\cudart64_12.dll",
+            "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+            "bytes": 573952
+          },
+          {
+            "name": "nvcuda.dll",
+            "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+            "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+            "bytes": 4790504
+          },
+          {
+            "name": "cublas64_12.dll",
+            "path": "E:\\cuda\\bin\\cublas64_12.dll",
+            "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+            "bytes": 113716224
+          },
+          {
+            "name": "cublasLt64_12.dll",
+            "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+            "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+            "bytes": 674667520
+          },
+          {
+            "name": "nvcuda64.dll",
+            "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+            "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+            "bytes": 11643112
+          }
+        ],
+        "QPC_absolute_boundaries_preserved_in_source": true
+      },
+      "profile_host": {
+        "count": 30,
+        "minimum_ns": 62700,
+        "maximum_ns": 164800,
+        "median_ns": 71500.0,
+        "p10_ns": 65640.0,
+        "p90_ns": 87270.00000000004,
+        "p90_div_p10": 1.3295246800731269
+      },
+      "direct_host": {
+        "count": 30,
+        "minimum_ns": 44700,
+        "maximum_ns": 190300,
+        "median_ns": 55700.0,
+        "p10_ns": 46380.0,
+        "p90_ns": 156320.00000000003,
+        "p90_div_p10": 3.3704182837429935
+      },
+      "clock_domain_gates": {
+        "profile": {
+          "passed": true,
+          "issues": [],
+          "target_sm_clock_mhz": 2400,
+          "tolerance_mhz": 30,
+          "formal_intervals": 30,
+          "bracketed_intervals": 30,
+          "used_readback_samples": 54,
+          "sm_clock_min_mhz": 2392,
+          "sm_clock_max_mhz": 2392,
+          "coverage": [
+            {
+              "index": 0,
+              "sample_before_qpc": 818636381619,
+              "sample_after_qpc": 818636540490,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 1,
+              "sample_before_qpc": 818636698589,
+              "sample_after_qpc": 818636876922,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 2,
+              "sample_before_qpc": 818636876922,
+              "sample_after_qpc": 818637048104,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 3,
+              "sample_before_qpc": 818637205784,
+              "sample_after_qpc": 818637377725,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 4,
+              "sample_before_qpc": 818637533695,
+              "sample_after_qpc": 818637686906,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 5,
+              "sample_before_qpc": 818637876989,
+              "sample_after_qpc": 818638041590,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 6,
+              "sample_before_qpc": 818638209288,
+              "sample_after_qpc": 818638378478,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 7,
+              "sample_before_qpc": 818638544092,
+              "sample_after_qpc": 818638714184,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 8,
+              "sample_before_qpc": 818638714184,
+              "sample_after_qpc": 818638871391,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 9,
+              "sample_before_qpc": 818639038293,
+              "sample_after_qpc": 818639215306,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 10,
+              "sample_before_qpc": 818639376728,
+              "sample_after_qpc": 818639543242,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 11,
+              "sample_before_qpc": 818639699728,
+              "sample_after_qpc": 818639851533,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 12,
+              "sample_before_qpc": 818640049129,
+              "sample_after_qpc": 818640210796,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 13,
+              "sample_before_qpc": 818640210796,
+              "sample_after_qpc": 818640382822,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 14,
+              "sample_before_qpc": 818640540356,
+              "sample_after_qpc": 818640709186,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 15,
+              "sample_before_qpc": 818640883452,
+              "sample_after_qpc": 818641041446,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 16,
+              "sample_before_qpc": 818641217242,
+              "sample_after_qpc": 818641370546,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 17,
+              "sample_before_qpc": 818641535904,
+              "sample_after_qpc": 818641715348,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 18,
+              "sample_before_qpc": 818641715348,
+              "sample_after_qpc": 818641889718,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 19,
+              "sample_before_qpc": 818642043714,
+              "sample_after_qpc": 818642208128,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 20,
+              "sample_before_qpc": 818642376043,
+              "sample_after_qpc": 818642544396,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 21,
+              "sample_before_qpc": 818642697235,
+              "sample_after_qpc": 818642857758,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 22,
+              "sample_before_qpc": 818643044332,
+              "sample_after_qpc": 818643209679,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 23,
+              "sample_before_qpc": 818643209679,
+              "sample_after_qpc": 818643377441,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 24,
+              "sample_before_qpc": 818643544439,
+              "sample_after_qpc": 818643715092,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 25,
+              "sample_before_qpc": 818643873044,
+              "sample_after_qpc": 818644043656,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 26,
+              "sample_before_qpc": 818644209631,
+              "sample_after_qpc": 818644382284,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 27,
+              "sample_before_qpc": 818644549452,
+              "sample_after_qpc": 818644707812,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 28,
+              "sample_before_qpc": 818644880530,
+              "sample_after_qpc": 818645042733,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 29,
+              "sample_before_qpc": 818645042733,
+              "sample_after_qpc": 818645209545,
+              "observed_samples_inside": 0
+            }
+          ],
+          "clock_locked_inferred": false,
+          "scope": "Sampled NVML readbacks bracket every formal host interval in absolute QPC. They do not prove a continuous per-kernel frequency waveform."
+        },
+        "direct": {
+          "passed": true,
+          "issues": [],
+          "target_sm_clock_mhz": 2400,
+          "tolerance_mhz": 30,
+          "formal_intervals": 30,
+          "bracketed_intervals": 30,
+          "used_readback_samples": 55,
+          "sm_clock_min_mhz": 2392,
+          "sm_clock_max_mhz": 2392,
+          "coverage": [
+            {
+              "index": 0,
+              "sample_before_qpc": 818522198945,
+              "sample_after_qpc": 818522374080,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 1,
+              "sample_before_qpc": 818522540148,
+              "sample_after_qpc": 818522704719,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 2,
+              "sample_before_qpc": 818522704719,
+              "sample_after_qpc": 818522873947,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 3,
+              "sample_before_qpc": 818523033528,
+              "sample_after_qpc": 818523208657,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 4,
+              "sample_before_qpc": 818523374055,
+              "sample_after_qpc": 818523540278,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 5,
+              "sample_before_qpc": 818523708965,
+              "sample_after_qpc": 818523873147,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 6,
+              "sample_before_qpc": 818524035895,
+              "sample_after_qpc": 818524206259,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 7,
+              "sample_before_qpc": 818524372861,
+              "sample_after_qpc": 818524555163,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 8,
+              "sample_before_qpc": 818524555163,
+              "sample_after_qpc": 818524706636,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 9,
+              "sample_before_qpc": 818524873955,
+              "sample_after_qpc": 818525046165,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 10,
+              "sample_before_qpc": 818525208275,
+              "sample_after_qpc": 818525373736,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 11,
+              "sample_before_qpc": 818525538312,
+              "sample_after_qpc": 818525690664,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 12,
+              "sample_before_qpc": 818525850876,
+              "sample_after_qpc": 818526012130,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 13,
+              "sample_before_qpc": 818526179268,
+              "sample_after_qpc": 818526367958,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 14,
+              "sample_before_qpc": 818526367958,
+              "sample_after_qpc": 818526540317,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 15,
+              "sample_before_qpc": 818526691454,
+              "sample_after_qpc": 818526888569,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 16,
+              "sample_before_qpc": 818527041490,
+              "sample_after_qpc": 818527220389,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 17,
+              "sample_before_qpc": 818527374355,
+              "sample_after_qpc": 818527540793,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 18,
+              "sample_before_qpc": 818527540793,
+              "sample_after_qpc": 818527745041,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 19,
+              "sample_before_qpc": 818527873616,
+              "sample_after_qpc": 818528039755,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 20,
+              "sample_before_qpc": 818528203970,
+              "sample_after_qpc": 818528375369,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 21,
+              "sample_before_qpc": 818528541044,
+              "sample_after_qpc": 818528707396,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 22,
+              "sample_before_qpc": 818528863276,
+              "sample_after_qpc": 818529015079,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 23,
+              "sample_before_qpc": 818529187642,
+              "sample_after_qpc": 818529374550,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 24,
+              "sample_before_qpc": 818529546604,
+              "sample_after_qpc": 818529708000,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 25,
+              "sample_before_qpc": 818529708000,
+              "sample_after_qpc": 818529873617,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 26,
+              "sample_before_qpc": 818530040207,
+              "sample_after_qpc": 818530194155,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 27,
+              "sample_before_qpc": 818530373454,
+              "sample_after_qpc": 818530530367,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 28,
+              "sample_before_qpc": 818530706779,
+              "sample_after_qpc": 818530877474,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 29,
+              "sample_before_qpc": 818531040299,
+              "sample_after_qpc": 818531194955,
+              "observed_samples_inside": 0
+            }
+          ],
+          "clock_locked_inferred": false,
+          "scope": "Sampled NVML readbacks bracket every formal host interval in absolute QPC. They do not prove a continuous per-kernel frequency waveform."
+        }
+      },
+      "clock_domain_validated": true,
+      "profile_kernel": {
+        "count": 30,
+        "minimum_ns": 3584,
+        "maximum_ns": 4480,
+        "median_ns": 4144.0,
+        "p10_ns": 4025.7,
+        "p90_ns": 4356.1,
+        "p90_div_p10": 1.0820726830116503
+      },
+      "tool_warning_lines": [],
+      "trace_sources": {
+        "raw": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\analysis_0001\\train_Q8_0_m4_n896_k896\\pair_02\\raw_events.json",
+          "bytes": 578321,
+          "sha256": "55c31b82cea1defd8789143e9c9932e591a73f3c0f018518a8e18063a6bfb779"
+        },
+        "mapped": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\analysis_0001\\train_Q8_0_m4_n896_k896\\pair_02\\mapped_calls.json",
+          "bytes": 342799,
+          "sha256": "acaeb5b8280e3cac20d8be5ab7e747f1a0f4ccd16f792bcde457d9e569b29311"
+        },
+        "sqlite": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_02\\export\\trace.sqlite",
+          "bytes": 364544,
+          "sha256": "0de8a2e38e7a918511f5a6f6a10b7a8ca26edd67474b4c2e74666d1d55174f2b"
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "numerics_all_rows": true,
+      "trace_chain_complete": true,
+      "source_path_matches_observed_family": true,
+      "trace_warning_free": true,
+      "issues": [],
+      "stage_statuses": {
+        "profile": {
+          "complete": true
+        },
+        "direct": {
+          "complete": true
+        },
+        "export": {
+          "complete": true
+        }
+      },
+      "profile_raw": {
+        "source": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_03\\profile\\microbench.json",
+          "bytes": 40423478,
+          "sha256": "a4843b99e4b0b7b8299e9b3bcf99fa74b4eec4cc5361d60bf2e05e21e0f3845e"
+        },
+        "audit": {
+          "valid_raw": true,
+          "issues": [],
+          "sample_count": 36,
+          "calibration_eligible": false,
+          "reason": "Actual dispatch and profiling perturbation must be checked separately before cost calibration."
+        },
+        "formal_host": {
+          "count": 30,
+          "minimum_ns": 61500,
+          "maximum_ns": 299700,
+          "median_ns": 72900.0,
+          "p10_ns": 63700.0,
+          "p90_ns": 144640.00000000006,
+          "p90_div_p10": 2.2706436420722143
+        },
+        "signature": {
+          "M": 4,
+          "N": 896,
+          "K": 896,
+          "quant": "Q8_0",
+          "input_sha256": "50ebccd77a72835fa23f8697ebdf6c547ce483ea011869aeb76c17cef8c5e405",
+          "packed_weight_sha256": "9838fa4f1efa54c4f500b1cab12c5ae57904c248c4c5b4218e0b6295c5d943f9",
+          "environment": {
+            "GGML_OP_OFFLOAD_MIN_BATCH": null,
+            "GGML_CUDA_DISABLE_GRAPHS": "1",
+            "GGML_CUDA_FORCE_MMQ": null,
+            "GGML_CUDA_FORCE_CUBLAS": null,
+            "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+            "GGML_SCHED_DEBUG": null,
+            "OMP_NUM_THREADS": "1",
+            "GGML_NO_IQ_PANEL": null,
+            "LLAMA_TRACE_ANNOTATIONS": "0",
+            "GGML_CPU_DISABLE_FUSION": null,
+            "GGML_CUDA_DISABLE_FUSION": null,
+            "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+          },
+          "modules": [
+            {
+              "name": "nvcuda64.dll",
+              "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+              "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+              "bytes": 11643112
+            },
+            {
+              "name": "nvcuda.dll",
+              "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+              "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+              "bytes": 4790504
+            },
+            {
+              "name": "cublas64_12.dll",
+              "path": "E:\\cuda\\bin\\cublas64_12.dll",
+              "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+              "bytes": 113716224
+            },
+            {
+              "name": "cublasLt64_12.dll",
+              "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+              "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+              "bytes": 674667520
+            },
+            {
+              "name": "cudart64_12.dll",
+              "path": "E:\\cuda\\bin\\cudart64_12.dll",
+              "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+              "bytes": 573952
+            },
+            {
+              "name": "operator-surface-probe.exe",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+              "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311",
+              "bytes": 143360
+            },
+            {
+              "name": "ggml-base.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+              "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+              "bytes": 673792
+            },
+            {
+              "name": "ggml-cpu.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+              "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+              "bytes": 958464
+            },
+            {
+              "name": "ggml-cuda.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+              "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+              "bytes": 26091520
+            },
+            {
+              "name": "ggml.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+              "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+              "bytes": 61440
+            }
+          ],
+          "expected_source_path": "MMVQ_Q8_1_HALF"
+        },
+        "unbound_observed_cuda_or_os_runtime_modules": [
+          {
+            "name": "cudart64_12.dll",
+            "path": "E:\\cuda\\bin\\cudart64_12.dll",
+            "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+            "bytes": 573952
+          },
+          {
+            "name": "nvcuda.dll",
+            "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+            "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+            "bytes": 4790504
+          },
+          {
+            "name": "cublas64_12.dll",
+            "path": "E:\\cuda\\bin\\cublas64_12.dll",
+            "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+            "bytes": 113716224
+          },
+          {
+            "name": "cublasLt64_12.dll",
+            "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+            "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+            "bytes": 674667520
+          },
+          {
+            "name": "nvcuda64.dll",
+            "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+            "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+            "bytes": 11643112
+          }
+        ],
+        "QPC_absolute_boundaries_preserved_in_source": true
+      },
+      "direct_raw": {
+        "source": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_03\\direct\\microbench.json",
+          "bytes": 40423469,
+          "sha256": "a39199b7c021ef04d612bebedf486a0c824c31721c2aa43ff2b7da1f92bec8be"
+        },
+        "audit": {
+          "valid_raw": true,
+          "issues": [],
+          "sample_count": 36,
+          "calibration_eligible": false,
+          "reason": "Actual dispatch and profiling perturbation must be checked separately before cost calibration."
+        },
+        "formal_host": {
+          "count": 30,
+          "minimum_ns": 45400,
+          "maximum_ns": 261700,
+          "median_ns": 53200.0,
+          "p10_ns": 47100.0,
+          "p90_ns": 94980.00000000003,
+          "p90_div_p10": 2.016560509554141
+        },
+        "signature": {
+          "M": 4,
+          "N": 896,
+          "K": 896,
+          "quant": "Q8_0",
+          "input_sha256": "50ebccd77a72835fa23f8697ebdf6c547ce483ea011869aeb76c17cef8c5e405",
+          "packed_weight_sha256": "9838fa4f1efa54c4f500b1cab12c5ae57904c248c4c5b4218e0b6295c5d943f9",
+          "environment": {
+            "GGML_OP_OFFLOAD_MIN_BATCH": null,
+            "GGML_CUDA_DISABLE_GRAPHS": "1",
+            "GGML_CUDA_FORCE_MMQ": null,
+            "GGML_CUDA_FORCE_CUBLAS": null,
+            "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+            "GGML_SCHED_DEBUG": null,
+            "OMP_NUM_THREADS": "1",
+            "GGML_NO_IQ_PANEL": null,
+            "LLAMA_TRACE_ANNOTATIONS": "0",
+            "GGML_CPU_DISABLE_FUSION": null,
+            "GGML_CUDA_DISABLE_FUSION": null,
+            "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+          },
+          "modules": [
+            {
+              "name": "nvcuda64.dll",
+              "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+              "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+              "bytes": 11643112
+            },
+            {
+              "name": "nvcuda.dll",
+              "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+              "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+              "bytes": 4790504
+            },
+            {
+              "name": "cublas64_12.dll",
+              "path": "E:\\cuda\\bin\\cublas64_12.dll",
+              "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+              "bytes": 113716224
+            },
+            {
+              "name": "cublasLt64_12.dll",
+              "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+              "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+              "bytes": 674667520
+            },
+            {
+              "name": "cudart64_12.dll",
+              "path": "E:\\cuda\\bin\\cudart64_12.dll",
+              "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+              "bytes": 573952
+            },
+            {
+              "name": "operator-surface-probe.exe",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+              "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311",
+              "bytes": 143360
+            },
+            {
+              "name": "ggml-base.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+              "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+              "bytes": 673792
+            },
+            {
+              "name": "ggml-cpu.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+              "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+              "bytes": 958464
+            },
+            {
+              "name": "ggml-cuda.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+              "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+              "bytes": 26091520
+            },
+            {
+              "name": "ggml.dll",
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+              "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+              "bytes": 61440
+            }
+          ],
+          "expected_source_path": "MMVQ_Q8_1_HALF"
+        },
+        "unbound_observed_cuda_or_os_runtime_modules": [
+          {
+            "name": "cudart64_12.dll",
+            "path": "E:\\cuda\\bin\\cudart64_12.dll",
+            "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+            "bytes": 573952
+          },
+          {
+            "name": "cublas64_12.dll",
+            "path": "E:\\cuda\\bin\\cublas64_12.dll",
+            "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+            "bytes": 113716224
+          },
+          {
+            "name": "nvcuda.dll",
+            "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+            "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+            "bytes": 4790504
+          },
+          {
+            "name": "cublasLt64_12.dll",
+            "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+            "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+            "bytes": 674667520
+          },
+          {
+            "name": "nvcuda64.dll",
+            "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+            "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+            "bytes": 11643112
+          }
+        ],
+        "QPC_absolute_boundaries_preserved_in_source": true
+      },
+      "profile_host": {
+        "count": 30,
+        "minimum_ns": 61500,
+        "maximum_ns": 299700,
+        "median_ns": 72900.0,
+        "p10_ns": 63700.0,
+        "p90_ns": 144640.00000000006,
+        "p90_div_p10": 2.2706436420722143
+      },
+      "direct_host": {
+        "count": 30,
+        "minimum_ns": 45400,
+        "maximum_ns": 261700,
+        "median_ns": 53200.0,
+        "p10_ns": 47100.0,
+        "p90_ns": 94980.00000000003,
+        "p90_div_p10": 2.016560509554141
+      },
+      "clock_domain_gates": {
+        "profile": {
+          "passed": true,
+          "issues": [],
+          "target_sm_clock_mhz": 2400,
+          "tolerance_mhz": 30,
+          "formal_intervals": 30,
+          "bracketed_intervals": 30,
+          "used_readback_samples": 55,
+          "sm_clock_min_mhz": 2392,
+          "sm_clock_max_mhz": 2392,
+          "coverage": [
+            {
+              "index": 0,
+              "sample_before_qpc": 818773718988,
+              "sample_after_qpc": 818773875906,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 1,
+              "sample_before_qpc": 818774029444,
+              "sample_after_qpc": 818774187804,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 2,
+              "sample_before_qpc": 818774396228,
+              "sample_after_qpc": 818774547432,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 3,
+              "sample_before_qpc": 818774547432,
+              "sample_after_qpc": 818774712729,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 4,
+              "sample_before_qpc": 818774880343,
+              "sample_after_qpc": 818775065221,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 5,
+              "sample_before_qpc": 818775218202,
+              "sample_after_qpc": 818775380834,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 6,
+              "sample_before_qpc": 818775546310,
+              "sample_after_qpc": 818775712910,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 7,
+              "sample_before_qpc": 818775881216,
+              "sample_after_qpc": 818776047057,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 8,
+              "sample_before_qpc": 818776213753,
+              "sample_after_qpc": 818776380088,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 9,
+              "sample_before_qpc": 818776545263,
+              "sample_after_qpc": 818776720526,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 10,
+              "sample_before_qpc": 818776720526,
+              "sample_after_qpc": 818776877875,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 11,
+              "sample_before_qpc": 818777051672,
+              "sample_after_qpc": 818777203643,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 12,
+              "sample_before_qpc": 818777358738,
+              "sample_after_qpc": 818777540045,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 13,
+              "sample_before_qpc": 818777718102,
+              "sample_after_qpc": 818777886487,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 14,
+              "sample_before_qpc": 818778040558,
+              "sample_after_qpc": 818778219349,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 15,
+              "sample_before_qpc": 818778219349,
+              "sample_after_qpc": 818778376904,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 16,
+              "sample_before_qpc": 818778548375,
+              "sample_after_qpc": 818778699409,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 17,
+              "sample_before_qpc": 818778858215,
+              "sample_after_qpc": 818779047852,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 18,
+              "sample_before_qpc": 818779215474,
+              "sample_after_qpc": 818779385361,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 19,
+              "sample_before_qpc": 818779551108,
+              "sample_after_qpc": 818779704397,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 20,
+              "sample_before_qpc": 818779881744,
+              "sample_after_qpc": 818780048076,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 21,
+              "sample_before_qpc": 818780048076,
+              "sample_after_qpc": 818780214560,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 22,
+              "sample_before_qpc": 818780381293,
+              "sample_after_qpc": 818780547631,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 23,
+              "sample_before_qpc": 818780714394,
+              "sample_after_qpc": 818780879210,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 24,
+              "sample_before_qpc": 818781051963,
+              "sample_after_qpc": 818781219620,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 25,
+              "sample_before_qpc": 818781372367,
+              "sample_after_qpc": 818781537804,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 26,
+              "sample_before_qpc": 818781695807,
+              "sample_after_qpc": 818781848320,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 27,
+              "sample_before_qpc": 818781848320,
+              "sample_after_qpc": 818782048043,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 28,
+              "sample_before_qpc": 818782205160,
+              "sample_after_qpc": 818782384602,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 29,
+              "sample_before_qpc": 818782548453,
+              "sample_after_qpc": 818782714324,
+              "observed_samples_inside": 0
+            }
+          ],
+          "clock_locked_inferred": false,
+          "scope": "Sampled NVML readbacks bracket every formal host interval in absolute QPC. They do not prove a continuous per-kernel frequency waveform."
+        },
+        "direct": {
+          "passed": true,
+          "issues": [],
+          "target_sm_clock_mhz": 2400,
+          "tolerance_mhz": 30,
+          "formal_intervals": 30,
+          "bracketed_intervals": 30,
+          "used_readback_samples": 55,
+          "sm_clock_min_mhz": 2392,
+          "sm_clock_max_mhz": 2392,
+          "coverage": [
+            {
+              "index": 0,
+              "sample_before_qpc": 818882415261,
+              "sample_after_qpc": 818882553646,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 1,
+              "sample_before_qpc": 818882724782,
+              "sample_after_qpc": 818882887530,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 2,
+              "sample_before_qpc": 818883032828,
+              "sample_after_qpc": 818883217944,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 3,
+              "sample_before_qpc": 818883383789,
+              "sample_after_qpc": 818883547105,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 4,
+              "sample_before_qpc": 818883719856,
+              "sample_after_qpc": 818883875422,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 5,
+              "sample_before_qpc": 818883875422,
+              "sample_after_qpc": 818884053706,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 6,
+              "sample_before_qpc": 818884223951,
+              "sample_after_qpc": 818884375910,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 7,
+              "sample_before_qpc": 818884550596,
+              "sample_after_qpc": 818884707263,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 8,
+              "sample_before_qpc": 818884884079,
+              "sample_after_qpc": 818885050215,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 9,
+              "sample_before_qpc": 818885215718,
+              "sample_after_qpc": 818885386900,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 10,
+              "sample_before_qpc": 818885543600,
+              "sample_after_qpc": 818885721487,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 11,
+              "sample_before_qpc": 818885721487,
+              "sample_after_qpc": 818885887506,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 12,
+              "sample_before_qpc": 818886057353,
+              "sample_after_qpc": 818886221139,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 13,
+              "sample_before_qpc": 818886376815,
+              "sample_after_qpc": 818886538074,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 14,
+              "sample_before_qpc": 818886713915,
+              "sample_after_qpc": 818886883686,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 15,
+              "sample_before_qpc": 818886883686,
+              "sample_after_qpc": 818887057474,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 16,
+              "sample_before_qpc": 818887217309,
+              "sample_after_qpc": 818887382932,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 17,
+              "sample_before_qpc": 818887549919,
+              "sample_after_qpc": 818887717518,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 18,
+              "sample_before_qpc": 818887888541,
+              "sample_after_qpc": 818888040746,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 19,
+              "sample_before_qpc": 818888217155,
+              "sample_after_qpc": 818888384246,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 20,
+              "sample_before_qpc": 818888550427,
+              "sample_after_qpc": 818888704587,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 21,
+              "sample_before_qpc": 818888704587,
+              "sample_after_qpc": 818888865164,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 22,
+              "sample_before_qpc": 818889064106,
+              "sample_after_qpc": 818889213600,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 23,
+              "sample_before_qpc": 818889386730,
+              "sample_after_qpc": 818889555056,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 24,
+              "sample_before_qpc": 818889702152,
+              "sample_after_qpc": 818889858487,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 25,
+              "sample_before_qpc": 818890049273,
+              "sample_after_qpc": 818890222063,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 26,
+              "sample_before_qpc": 818890222063,
+              "sample_after_qpc": 818890387814,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 27,
+              "sample_before_qpc": 818890544114,
+              "sample_after_qpc": 818890698264,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 28,
+              "sample_before_qpc": 818890848680,
+              "sample_after_qpc": 818891051994,
+              "observed_samples_inside": 0
+            },
+            {
+              "index": 29,
+              "sample_before_qpc": 818891216913,
+              "sample_after_qpc": 818891375257,
+              "observed_samples_inside": 0
+            }
+          ],
+          "clock_locked_inferred": false,
+          "scope": "Sampled NVML readbacks bracket every formal host interval in absolute QPC. They do not prove a continuous per-kernel frequency waveform."
+        }
+      },
+      "clock_domain_validated": true,
+      "profile_kernel": {
+        "count": 30,
+        "minimum_ns": 3616,
+        "maximum_ns": 4704,
+        "median_ns": 4112.5,
+        "p10_ns": 3840.0,
+        "p90_ns": 4294.4,
+        "p90_div_p10": 1.1183333333333332
+      },
+      "tool_warning_lines": [],
+      "trace_sources": {
+        "raw": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\analysis_0001\\train_Q8_0_m4_n896_k896\\pair_03\\raw_events.json",
+          "bytes": 578336,
+          "sha256": "a68cd5a6d3a5a9b4bcfcdf979f3642c2fdaff0f406ffc1e661ce9d1586815eca"
+        },
+        "mapped": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\analysis_0001\\train_Q8_0_m4_n896_k896\\pair_03\\mapped_calls.json",
+          "bytes": 342812,
+          "sha256": "59980644f77ad1daffcff2a096dc136c9c648289b5757751482f7d9a1997daca"
+        },
+        "sqlite": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r3\\runs\\train_Q8_0_m4_n896_k896\\pair_03\\export\\trace.sqlite",
+          "bytes": 364544,
+          "sha256": "c22b12e8034a342a8118449f7b793df1b1f56bf8929d38d49f62025d7f4b3d94"
+        }
+      }
+    }
+  ]
+}

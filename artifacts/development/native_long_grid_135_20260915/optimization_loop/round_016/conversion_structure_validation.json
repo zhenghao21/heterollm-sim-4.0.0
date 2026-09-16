@@ -1,0 +1,63 @@
+{
+  "schema": "conversion-structure-validation/v1",
+  "created_utc": "2026-09-16T04:18:25.756895+00:00",
+  "status": "source_structure_only_ready_for_root_cost_integration",
+  "gpu_runs": 0,
+  "llm_actuals_read": false,
+  "planner_or_cost_models_modified": false,
+  "timing_fitted": false,
+  "tests": {
+    "command": "E:\\anaconda\\python.exe -m pytest tests/test_conversion_work.py -q",
+    "passed": 110,
+    "seconds": 0.12
+  },
+  "scope": {
+    "CC": 1200,
+    "compiled_arch": 1200,
+    "warp": 32,
+    "MMVQ": [
+      "Q5_0",
+      "Q8_0"
+    ],
+    "MMQ_D4": [
+      "Q5_0",
+      "Q8_0"
+    ],
+    "MMQ_DS4": [
+      "Q4_0",
+      "Q4_1",
+      "Q5_1"
+    ],
+    "DS4_note": "source-described branch; no completed DS4 runtime proof claimed",
+    "layout": "ordinary contiguous F32 2D; single sample/channel; no ids/scatter/fp4"
+  },
+  "metadata": [
+    "source grid/block/CTA/warp",
+    "Klogical/Kpadded",
+    "logical reads and physical writes",
+    "existing partial scalar operations preserved",
+    "immutable unpriced source DAG",
+    "scalar activeSM upper bound only; no HBM multiplier"
+  ],
+  "fixed_semantic_detail": "MMVQ normalization/round/cast source counts have logical-element upper bounds; known zero padding skips that branch. d=amax/127 still source-evaluated for padded body threads.",
+  "trace_geometry_crosscheck": {
+    "completed_evidence_roots": [
+      "collection_r2/analysis_0001",
+      "collection_r3/first_pair_analysis"
+    ],
+    "files": 9,
+    "geometry_matches": 9,
+    "timing_fields_not_used": true
+  },
+  "integration_api": "derive_conversion_work(m=,k=,weight_format=,path=,contract=ConversionSourceContract(...)); properties partial_scalar_operations/read_bytes/write_bytes/cta_count/active_sm_upper_bound(sm_count); to_metadata() contains no fitted ns.",
+  "limits": [
+    "Source expressions are not SASS instructions/cycles",
+    "Binary/source equivalence and actual dispatch remain false until separately proven",
+    "CTA upper bound is not an HBM bandwidth or measured occupancy factor",
+    "Default output unchanged because no caller integration in this patch"
+  ],
+  "file_sha256": {
+    "src/heterollm_sim/conversion_work.py": "903d4271f0029c19469e1e79386a08c2330f5336c776ba41b41afa1d1ed4ef91",
+    "tests/test_conversion_work.py": "8191caceeaa535fb42653986a9a27e6ecce595a0a755267253d051a32f193c9a"
+  }
+}
