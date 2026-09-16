@@ -196,7 +196,7 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 - R24身份修复统一path/sha256/bytes，拒绝矛盾长度和非法类型，缓存命中复核header；补齐未映射模型的freeze/resume全文SHA。原R23 104个数值预测全部精确不变，证明本轮没有成本收益；恢复覆盖导致总体分布变化不能当作精度改善。
 - R25修复真实GGUF架构名及metadata owner错位，在最后replan之前绑定选行。qwen2/llama于最后FFN前选行，qwen35于全行final norm后选行；indices/GET_ROWS保留，不重复增加lm-head。M64/R1静态探针保留attention M64，FFN重新分派M1，down进入MMVQ，融合up/gate仍明确保留单矩阵资格未覆盖。新增成本系数0。
 - R25主区联合回归114通过/1跳过；独立语义复审61通过；两路冻结及运行器保护9通过，计数有重叠不相加。两路复制后的extractor与硬件资料仅在已核对字节、别名和派生摘要的明确字段位置归一化。首次硬件资料路径比较失败保留，有单独qualification凭据，未改变冻结内容。
-- MMVQ R6共享ABI已修正conversion的type/k/m/padded_k四个int声明，定义与caller共用头；旧少参数声明负向编译被C2733拒绝，2项检查通过。R6重新提取的主MMVQ和Q8_1 cubin分别5450408B、222816B，与目标DLL逐字节相同。旧R4证据不改；转换正确性、运行时分派/参数/线程布局/stream/cache及计时扰动仍未验证，0参数准入。
+- MMVQ R6共享ABI已修正conversion的type/k/m/padded_k四个int声明，定义与caller共用头；旧少参数声明负向编译被C2733拒绝，2项检查通过。R6重新提取的主MMVQ和Q8_1 cubin分别5450408B、222816B，与目标DLL逐字节相同。旧R4证据不改。R26 ExC记录器已通过固定合成shape的target运行时路径检查；wrapper转换/输出数值、wrapper动态等价、cache及计时扰动仍待验证，0参数准入。
 
 ## 12. 最新误差及主要缺口（动态，原位更新）
 
@@ -214,12 +214,12 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
-1. 保留R25启动失败，转入新冻结版本修复：原proof从raw rows读取flash_attn/op_offload为None，而实际static_inputs经显式alias及verified host合同得到False/True。已改为先规范化static_inputs再派生proof，未添默认值/未弱化比较；联合176通过、1跳过，真实131静态重导全部通过。新轮必须先对两路冻结进行实际worker门禁预检，再运行完整对照并评分；不改旧R25、不复用旧输出冒充新冻结。
-2. 依据选行源码与冻结开关评估结构修正；普通架构FFN缩行可能降低原本偏低的TTFT，混合架构补全final norm及gather可能增时。数值效果必须实测，结构正确不等于准确性验收通过。
-3. 推进R26合成MMVQ运行路径资格。R6共享ABI和设备二进制身份已完成；下一步用固定DLL合成MUL_MAT与同源探针对照conversion/main的完整模板symbol、参数、grid/block/shared、stream和pointer关联。固定Q5_0 M1 K4096 N3072参数记录器已编译，38项纯主机解码测试通过，0 GPU执行；wrapper正确性程序已编译、5项CPU参考/拒绝测试通过。执行门禁已独立复审，7项测试覆盖所有已知仿真/native/recorder入口、关闭凭据、环境隔离与异常终态；源和298头文件身份核验通过。run.0001已在R25退出后执行一次不计时合成图：固定DLL/GPU前后身份通过，2个预期kernel符号出现，无runtime memcpy/memset；实际使用cudaLaunchKernelExC，记录器未解码该API而拒收，失败终态完整保留，0参数准入。独立ExC版已补齐config/attrs深拷贝、ID6/PDL=1来源检查、未知属性拒收和未观测几何null输出，63项主机测试（保留原38）及7项执行保护通过；新构建及299头文件身份核验通过，准备新的不计时路径验证。规范化修复的新冻结R27入口正在并行准备，尚未预测。M4作为预先留出的形状。无需目标LLM权重和时延，不重复设备代码比较。
-4. 路径与转换数值资格合格后，串行采独立CUDA-event主kernel/转换耗时，warm复用与超过L2的旋转工作集分开。CUPTI重profiling只证明路径，不用于性能系数；不以CTA数直接换经验带宽，不用131格误差选择参数。
-5. 并行审计可继续针对真实microbatch、nonflash物理KV、retained高水位、slot及host图生命周期收集静态证据。现有成本owner逐项查重；native token时间戳只供诊断，不驱动预测后称泛化。对未知成本显式标未定价，不随p/c添加残差。
-6. 每轮原位更新任务书、提交、推送并核验远端。A固定131/131、393/393均严格<10%；不达标继续有证据的机制假设；通过A后另用独立B，当前B尚未验证。
+1. 启动修复后的R27末层选行对照。R25因raw config先于规范化派生proof而启动失败，已封存；修复仅将proof绑定移到最终static_inputs之后，不增加默认值或弱化身份比较。联合176通过、1跳过，真实131静态重导通过。R27须继承R25/off的冻结源码，仅替换已提交的两个修复文件；两路序列化freeze必须在任何预测前通过实际worker门禁，再冻结controls并串行执行262个终态后统一评分。旧R25不重试、不评分。
+2. 评估选行修正的实际影响。依据源码预先限定受影响算子：普通架构的末层FFN缩行可能降低原本偏低的TTFT；混合架构的final norm及gather补全可能增时。结构正确性、源码条件资格与精度收益分开报告；不承诺全模型或TPOT改善。
+3. 完成R26合成MMVQ的数值与动态对照。新的ExC采集已实际执行成功：固定Q5_0/M1/K4096/N3072，转换grid=(16,1,1)、block=(256,1,1)，主kernel grid=(3072,1,1)、block=(32,4,1)，两者PDL属性ID6值1，参数/指针衔接及DLL/GPU前后身份通过。63项主机解码测试和7项执行门禁已通过；旧记录器不支持ExC的失败保留。这只证明该固定合成shape的target路径；下一步运行已编译wrapper的转换字节及输出数值校验，再对照wrapper实际launch，不能以相同cubin替代host分派证明。M4保持预先留出，性能参数准入仍为0。
+4. 仅在路径、数值与测量资格通过后冻结合成性能实验。分别测CUDA-event主kernel/转换、warm复用和超过L2的旋转工作集；CUPTI采集只作路径证据。先规定development/holdout、样本量、波动门限和失败规则，再运行；不按131格误差选择系数，也不以CTA数直接换经验带宽。
+5. 下一机制优先定位MMVQ访存几何与host建图/提交重叠。真实microbatch、nonflash物理KV、retained高水位、slot生命周期作为源码约束；已有nonflash、logits、sampling、launch和sync成本先查重。固定三档prompt没有ubatch尾块，c不能替代kernel M，native token时间戳仅作诊断。未知成本标未定价，不追加p/c残差；连续工具完善须按第8节复盘，转入可改变预测的机制验证。
+6. 每轮原位更新任务书、提交、推送并核验远端。A固定131/131格、393/393项均严格<10%；不达标继续有证据的机制假设。通过A后另用独立B，当前B尚未验证。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
@@ -239,5 +239,6 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
 - optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、execution_closed.json：已拒绝批次的冻结、131配置错位重导和退出记录，未评分。
 - optimization_loop/round_024/mmvq_device_probe/r5_device_code_compare/、r6_shared_abi/：设备代码及共享ABI证据，均无性能系数。
+- optimization_loop/round_026/target_capture_run.0001/、target_capture_ex_run.0001/：旧API拒收及新ExC实际路径通过的完整原始记录；mmvq_wrapper_correctness/为待GPU验证的数值程序。
 - optimization_loop/round_023/optimization_direction_metric_audit.md、optimization_direction_source_audit.md、host_cost_ownership_audit.md、mmvq_memory_geometry_audit.md：已纳入任务书的参考方向审计。
 - optimization_loop/round_022/REPORT.md、round_023/REPORT.md及各轮归档索引：历史误差、退化和失败保留。

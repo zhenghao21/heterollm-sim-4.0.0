@@ -1,7 +1,7 @@
 # R26 ExC-aware original-DLL MMVQ recorder
 
-Status: **compiled; 63 host-only tests passed (all original 38 retained); this
-new GPU recorder has never been executed**. Current build is `build_manifest.json`;
+Status: **63 host-only tests passed (all original 38 retained); the new GPU
+recorder executed successfully in `../target_capture_ex_run.0001`**. Current build is `build_manifest.json`;
 current test receipt is `host_test.0001.json`. This directory is a new revision.
 The old recorder, its manifest0004, and `target_capture_run.0001` remain unchanged.
 
@@ -77,6 +77,18 @@ unknown attribute serialization, bounded truncation, mixed APIs, geometry errors
 failed or absent EXIT, unknown symbols, and unobserved-geometry JSON. Both the
 constructor proof and 64-bit SDK struct sizes/offsets are pinned and asserted.
 
-Actual target callback compatibility remains unverified. A new reviewed runner
-must select this new manifest and test receipt before any later GPU invocation;
-neither the old failed run nor these host tests authorize performance calibration.
+The reviewed `../run_target_capture_ex.py` executed once after the prior campaign
+closed. `../target_capture_ex_run.0001/finish.json` has SHA256
+`f991bcf6d7df48bbf2e48baee4135297251bd2e3abb7ac766c9a90c32460bfd8`,
+return code 0 and status `synthetic_runtime_pair_qualified`. Raw launch records
+qualify the target DLL synthetic Q5_0/M1/K4096/N3072 path only: conversion
+grid 16/1/1 and block 256/1/1; MMVQ grid 3072/1/1 and block 32/4/1; both
+ExC launches have exactly source-qualified PDL attribute 6=1. Arguments, pointer
+relationships, stream/context, API returns and before/after identities pass.
+`memory_api_count=0` describes captured runtime calls, not hidden driver activity
+or total memory traffic. Dynamic shared bytes 0 do not imply static shared 0.
+
+This run does not prove wrapper numerical correctness, wrapper dynamic dispatch
+equivalence, other shapes, cache behavior or observation-free timing. No LLM was
+executed, no timing was calibrated, and performance-parameter admission remains
+false. The previous rejected run remains unchanged.

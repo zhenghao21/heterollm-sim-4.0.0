@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_025_startup_rejected_preserved_normalized_binding_repair",
+  "status": "round_026_target_ExC_path_qualified_round_027_preparation",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1548,11 +1548,11 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Repair canonical model reference identity in new R24 freeze, preserve all R23 failures; verify final-layer output-row production binding and qualify source-identical MMVQ memory probe. No target latency fit or denominator changes.",
+  "next_round_hypothesis": "R27: inherit frozen R25/off inputs, repair normalized final-output proof binding, preflight both serialized freezes before any prediction, then score paired 131+131 final-output selection ablation; independently qualify MMVQ numerical/dynamic paths before any timing parameter admission.",
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 6,
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\retained",
-  "best_candidate_status": "R23 fails coverage:104 scored/27 proof representation failures,5/131 all3 pass;104 paired cells:117 metric improvements,3 regressions,192 unchanged. Not accepted as overall accuracy improvement.",
+  "best_candidate_status": "No new accuracy candidate admitted. Latest scored R24:130 predicted/1 failed,9/131 all-three pass; R25 startup rejection preserved, not scored. A fails and B remains unvalidated.",
   "version_control_policy": {
     "enabled": true,
     "effective_utc": "2026-09-15T15:14:39.539409+00:00",
@@ -1849,6 +1849,20 @@
     "expected_kernel_symbols_observed": 2,
     "runtime_identity_unchanged": true,
     "timed": false,
+    "performance_parameter_admitted": false
+  },
+  "round_026_target_capture_ex": {
+    "status": "synthetic_runtime_pair_qualified",
+    "finish_ref": {
+      "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_026/target_capture_ex_run.0001/finish.json",
+      "sha256": "f991bcf6d7df48bbf2e48baee4135297251bd2e3abb7ac766c9a90c32460bfd8",
+      "bytes": 1565
+    },
+    "scope": "synthetic Q5_0/M1/K4096/N3072 target DLL conversion and MMVQ path only",
+    "runtime_identity_unchanged": true,
+    "timed": false,
+    "wrapper_numerical_verified": false,
+    "wrapper_dynamic_equivalence_verified": false,
     "performance_parameter_admitted": false
   }
 }
