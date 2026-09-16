@@ -1798,7 +1798,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None, retained_warmup=None, final_output=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None, retained_warmup=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -1843,7 +1843,6 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "deployment": row.get("deployment", "explicit_gpu_layers_" + str(config.get("gpu_layers"))),
         "config": config, "hardware_snapshot": physical,
         "sampling_binding": sampling["cells"][row["cell_id"]] if sampling else None,
-        **({"final_output_selection": True, "final_output_selection_binding": final_output["cells"][row["cell_id"]]} if final_output is not None else {}),
         "nonflash_kv_view_contract": nonflash_kv_view["cells"][row["cell_id"]] if nonflash_kv_view else None,
         **({"retained_kv_warmup_state": True,
             "retained_kv_warmup_evidence": retained_warmup["cells"][row["cell_id"]],
@@ -2601,9 +2600,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     final_output = None
     if final_output_selection:
         from tools.native_final_output_binding import freeze_binding
-        final_output = freeze_binding(rows, runtime_binding=host_offload, sampling_binding=sampling,
-            source_linkage=verify_gpu_invocation_source_links(host_offload, data_root, include_context=True),
-            model_scope_reader=read_retained_gguf_scope)
+        final_output = freeze_binding(runtime_binding=host_offload, sampling_binding=sampling,
+            source_linkage=verify_gpu_invocation_source_links(host_offload, data_root, include_context=True))
     if type(gpu_mmq_source_costs) is not bool or (gpu_mmq_source_costs and gpu_invocation_contract_path is None):
         raise ValueError("GPU MMQ source costs require a GPU invocation source contract and explicit boolean")
     gpu_invocation = verified_gpu_invocation_contract(gpu_invocation_contract_path, rows, data_root,
@@ -2648,9 +2646,12 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue, retained_warmup=retained_warmup, final_output=final_output)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue, retained_warmup=retained_warmup)
             configuration(inputs)
             gpu_clock(inputs)
+            if final_output is not None:
+                from tools.native_final_output_binding import bind_static_inputs
+                inputs = bind_static_inputs(final_output, inputs, model_scope_reader=read_retained_gguf_scope)
         except Exception as exc:
             error = type(exc).__name__ + ": " + str(exc)
         entries.append({"cell_id": row.get("cell_id", row.get("id")), "model_key": (inputs or row).get("model_key"),

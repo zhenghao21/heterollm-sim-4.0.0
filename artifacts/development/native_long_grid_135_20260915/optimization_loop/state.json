@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_025_two_arm_prediction_running",
+  "status": "round_025_startup_rejected_preserved_normalized_binding_repair",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1832,5 +1832,14 @@
     "r23_104_exact": 104,
     "gate_A": "not_passed",
     "gate_B": "unvalidated"
+  },
+  "round_025_result": {
+    "off_predictions": 131,
+    "on_predictions": 0,
+    "scored": false,
+    "status": "candidate_startup_rejected",
+    "closure_sha256": "c42fd307580b4473c111010d7282e31a3c6130018bac3c43d187402730f3fa20",
+    "reason": "raw config proof before explicit normalization",
+    "repair_tests": "176 passed,1 skipped; real131 static all passed"
   }
 }

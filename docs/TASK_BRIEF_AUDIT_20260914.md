@@ -187,7 +187,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 固定native为131格、894请求，选择文件SHA为cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5。覆盖五个模型、六种部署：qwen25 17、smollm2 23、tinyllama 22、qwen35 22、qwen38 CPU 20、qwen38 GPU 27。原162格及31格既定稳定性排除保留，本阶段目标LLM重测0、专属时延拟合0。
 
-最新已评分版本为R24：131终态中130预测、1个完整GGUF SHA校验失败，9/131格三项Engine误差严格<10%。A未通过；B与跨硬件未验证。R25为同源末层选行开关对照，两路各131格已冻结并锁定，正在串行预测，未评分。其语义资格为conditional，不能升级为原生分派已验证。分组/配对报告入口已准备，4项测试验证严格阈值、失败分母、两路native一致和评分前拒收；尚未对R25运行报告。
+最新已评分版本为R24：131终态中130预测、1个完整GGUF SHA校验失败，9/131格三项Engine误差严格<10%。A未通过；B与跨硬件未验证。R25为同源末层选行开关对照，off131格全部预测成功，但on在启动校验时因配置证明错位被拒绝，0格预测、未评分；进程已自然退出，execution_closed.json已封存。其语义资格为conditional，不能升级为原生分派已验证。分组/配对报告入口已准备，4项测试验证严格阈值、失败分母、两路native一致和评分前拒收；尚未对R25运行报告。
 
 R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复为预测；另1格qwen38_gpu_p512_o128_c1完整SHA不匹配，未重试覆盖。预测前后全文校验正常不解释这次瞬时异常的根因，也不能追认该失败通过。
 
@@ -214,9 +214,9 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
-1. 完成R25两路各131预测，保存262终态屏障后统一评分。报告固定分母、每模型/部署三项误差、配对改善/退化/不变、失败及default-off与R24数值一致性。不依据部分误差改变本轮设置，不重试覆盖失败。
+1. 保留R25启动失败，转入新冻结版本修复：原proof从raw rows读取flash_attn/op_offload为None，而实际static_inputs经显式alias及verified host合同得到False/True。已改为先规范化static_inputs再派生proof，未添默认值/未弱化比较；联合176通过、1跳过，真实131静态重导全部通过。新轮必须先对两路冻结进行实际worker门禁预检，再运行完整对照并评分；不改旧R25、不复用旧输出冒充新冻结。
 2. 依据选行源码与冻结开关评估结构修正；普通架构FFN缩行可能降低原本偏低的TTFT，混合架构补全final norm及gather可能增时。数值效果必须实测，结构正确不等于准确性验收通过。
-3. 推进R26合成MMVQ运行路径资格。R6共享ABI和设备二进制身份已完成；下一步用固定DLL合成MUL_MAT与同源探针对照conversion/main的完整模板symbol、参数、grid/block/shared、stream和pointer关联。先开发固定Q5_0 M1 K4096 N3072参数记录器及不调用GPU的解码测试，M4作为预先留出的形状。无需目标LLM权重和时延，不重复设备代码比较。
+3. 推进R26合成MMVQ运行路径资格。R6共享ABI和设备二进制身份已完成；下一步用固定DLL合成MUL_MAT与同源探针对照conversion/main的完整模板symbol、参数、grid/block/shared、stream和pointer关联。固定Q5_0 M1 K4096 N3072参数记录器已编译，38项纯主机解码测试通过，0 GPU执行；wrapper正确性程序已编译、5项CPU参考/拒绝测试通过。执行门禁已独立复审，7项测试覆盖所有已知仿真/native/recorder入口、关闭凭据、环境隔离与异常终态；源和298头文件身份核验通过，尚未执行GPU。提交后先利用R25已退出的空闲窗口做一次不计时路径验证，再建修复版新冻结。M4作为预先留出的形状。无需目标LLM权重和时延，不重复设备代码比较。
 4. 路径与转换数值资格合格后，串行采独立CUDA-event主kernel/转换耗时，warm复用与超过L2的旋转工作集分开。CUPTI重profiling只证明路径，不用于性能系数；不以CTA数直接换经验带宽，不用131格误差选择参数。
 5. 并行审计可继续针对真实microbatch、nonflash物理KV、retained高水位、slot及host图生命周期收集静态证据。现有成本owner逐项查重；native token时间戳只供诊断，不驱动预测后称泛化。对未知成本显式标未定价，不随p/c添加残差。
 6. 每轮原位更新任务书、提交、推送并核验远端。A固定131/131、393/393均严格<10%；不达标继续有证据的机制假设；通过A后另用独立B，当前B尚未验证。
@@ -225,7 +225,7 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 
 - 固定native、历史冻结/预测/评分不可变；复用actual，只重跑simulator。完整文件SHA不能由payload摘要、header或stat代替。临时身份失败保留，不能悄悄重跑至成功。
 - R24来自R23冻结113个源码字节继承及1个已提交adapter替换，完整预测/评分已结束，139项详细证据逐字节归档并分3卷上传。
-- R25两路相同源码、相同成本开关和配置，仅末层选行处理不同；来源为R24冻结加已提交候选文件，不混主区历史WIP。protocol、freeze receipt、controls已保存；评分由262终态屏障约束。当前运行期间不得修改其driver/helper/冻结源码或采性能微基准。
+- R25两路相同源码、相同成本开关和配置，仅末层选行处理不同；来源为R24冻结加已提交候选文件，不混主区历史WIP。protocol、freeze receipt、controls已保存；评分由262终态屏障约束。R25现已因on启动校验失败封存，driver/helper/冻结源码继续不可变。采集合成证据必须核对关闭凭据及实际进程退出；存在任何新轮仿真或native/probe进程时仍禁止并行执行。
 - 第4阶段6轮/8小时为复盘点而非停止条件；出现连续无效优化按第8节换假设。新探针编译与静态审阅可并行，CPU/GPU性能采集与重仿真串行，子进程自然退出。
 - 提交相关源码、测试、任务书及小证据；大JSON/trace逐字节分卷。不上传GGUF/DLL/EXE/OBJ/cubin或整棵复制源码，构建脚本和身份凭据可复现。
 
@@ -237,7 +237,7 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 - optimization_loop/round_024/REPORT.md、identity_repair_report.json、repaired/errors.0001.json：最新完整评分、104格精确复现及失败。
 - optimization_loop/round_024/full_engine_error_heatmap.png/svg：最新131格热图；X为失败，短横线为固定集之外。
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
-- optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、run_candidate.py：运行中的两路选行对照及锁定入口。
+- optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、execution_closed.json：已拒绝批次的冻结、131配置错位重导和退出记录，未评分。
 - optimization_loop/round_024/mmvq_device_probe/r5_device_code_compare/、r6_shared_abi/：设备代码及共享ABI证据，均无性能系数。
 - optimization_loop/round_023/optimization_direction_metric_audit.md、optimization_direction_source_audit.md、host_cost_ownership_audit.md、mmvq_memory_geometry_audit.md：已纳入任务书的参考方向审计。
 - optimization_loop/round_022/REPORT.md、round_023/REPORT.md及各轮归档索引：历史误差、退化和失败保留。

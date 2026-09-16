@@ -194,18 +194,29 @@ def derive_cell(source, *, cell_id, model_ref, model_scope, config, native_refs,
         "limitations": list(LIMITATIONS)})
 
 
-def freeze_binding(rows, *, runtime_binding, sampling_binding, source_linkage, model_scope_reader):
+def freeze_binding(*, runtime_binding, sampling_binding, source_linkage):
+    """Freeze source facts first; cell proofs require normalized static inputs."""
     source = make_source_contract(runtime_binding, sampling_binding, source_linkage)
-    cache, cells = {}, {}
-    for row in rows:
-        mr = row["model_ref"]
-        if mr["sha256"] not in cache:
-            cache[mr["sha256"]] = model_scope_reader(mr)
-        cells[row["cell_id"]] = derive_cell(source, cell_id=row["cell_id"], model_ref=mr,
-            model_scope=cache[mr["sha256"]], config=row["config"], native_refs=row["native_runtime_refs"],
-            sampling=sampling_binding["cells"].get(row["cell_id"]))
-    return {"requested": True, "source_contract": source, "cells": cells,
+    return {"requested": True, "source_contract": source, "cells": {},
             "evidence_refs": source["evidence_refs"], "new_cost_coefficients": 0}
+
+
+def bind_static_inputs(campaign, inputs, *, model_scope_reader):
+    """Bind only the actual normalized worker inputs, never raw selection rows."""
+    require(campaign.get("requested") is True, "campaign binding not requested")
+    require(FLAG not in inputs and INPUT_KEY not in inputs, "static inputs already contain a final-output binding")
+    model_ref = inputs["prediction_model_ref"]
+    proof = derive_cell(campaign["source_contract"], cell_id=inputs["cell_id"], model_ref=model_ref,
+        model_scope=model_scope_reader(model_ref), config=inputs["config"],
+        native_refs=[inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])],
+        sampling=inputs.get("sampling_binding"))
+    bound = {**inputs, FLAG: True, INPUT_KEY: proof}
+    # Same exact check the worker will run. Failure remains a preparation error,
+    # not a guessed/default configuration or an unverified campaign cell.
+    verify_cell(bound, verify_files=False)
+    require(inputs["cell_id"] not in campaign["cells"], "duplicate campaign cell binding")
+    campaign["cells"][inputs["cell_id"]] = proof
+    return bound
 
 
 def verify_sampling_projection(source, inputs):
@@ -318,7 +329,9 @@ def verify_freeze(freeze, *, entry=None):
     require(rederive_source(source) == source, "campaign source contract no longer re-derives")
     for cell in selected:
         inputs = cell.get("static_inputs")
-        if inputs is None and cell.get("preparation_error"):
+        if cell.get("preparation_error"):
+            # Failed normalized-input/proof preparation is preserved verbatim.
+            # worker_cell rejects it before attempting a prediction.
             continue
         proof = verify_cell(inputs, verify_files=False)
         require(proof == campaign["cells"][cell["cell_id"]] and proof["source_contract"] == source,

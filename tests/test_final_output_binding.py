@@ -345,3 +345,124 @@ def test_output_rows_reenter_physical_dispatch_instead_of_scaling_old_m64_cost()
     fused = next(t for t in tails if t.metadata["projection_id"] == "mlp.up_gate")
     assert fused.metadata["mmq_source_work"]["status"] == "uncovered"
     assert fused.metadata["mmq_source_work"]["reason"] == "one_physical_projection_not_proven"
+
+
+@pytest.fixture
+def normalized_freeze_fixture(frozen, tmp_path, monkeypatch):
+    from tests.test_predict_stable_native_dataset import fixture, seal, document as save
+    from tools import native_sampling_contract
+    folder = tmp_path / "normalization"
+    folder.mkdir()
+    selection_path, selection, row, calls = fixture(folder, monkeypatch)
+    row["cell_id"] = "unit"
+    row["native_runtime_refs"] = frozen.module_refs
+    selection["selected_cell_ids"] = ["unit"]
+    # This is the production input shape: only flash_attention is present and
+    # op_offload is supplied by verified host evidence, not a raw default.
+    assert row["config"]["flash_attention"] is False
+    assert "flash_attn" not in row["config"] and "op_offload" not in row["config"]
+    save(selection_path, seal(selection))
+    host = {**frozen.runtime, "cells": {"unit": {"status": "verified", "op_offload_enabled": True,
+        "source_contract": frozen.runtime["contract"]}}, "evidence_refs": []}
+    storage = {"contract": {"fixture": True}, "f32_hidden_storage_requested": True, "evidence_refs": []}
+    monkeypatch.setattr(adapter, "verified_host_offload_source_contract", lambda *args, **kwargs: host)
+    monkeypatch.setattr(adapter, "verified_tensor_storage_contract", lambda *args, **kwargs: storage)
+    monkeypatch.setattr(adapter, "verify_gpu_invocation_source_links", lambda *args, **kwargs: frozen.linkage)
+    monkeypatch.setattr(native_sampling_contract, "verify_sampling_contract", lambda *args, **kwargs: {**frozen.sampling, "evidence_refs": [frozen.sampling["contract_ref"]]})
+    monkeypatch.setattr(adapter, "compiled_graph_evidence", lambda *args, **kwargs: {"compiled_cuda_graphs": False})
+    monkeypatch.setattr(adapter, "read_retained_gguf_scope", lambda ref: {"architecture": "qwen2"})
+    options = {"data_root": tmp_path, "host_offload_source_contract_path": tmp_path / "runtime.json",
+        "sampling_contract_path": tmp_path / "sampling.json", "tensor_storage_contract_path": tmp_path / "storage.json",
+        "tensor_storage_f32_hidden": True}
+    return SimpleNamespace(path=selection_path, selection=selection, row=row, host=host,
+        folder=folder, options=options, calls=calls)
+
+
+def test_freeze_cell_proof_uses_actual_normalized_alias_and_verified_host_inputs(normalized_freeze_fixture):
+    data = normalized_freeze_fixture
+    off = adapter.freeze_selection(data.path, data.folder / "off", **data.options)
+    on = adapter.freeze_selection(data.path, data.folder / "on", final_output_selection=True, **data.options)
+    old, entry = off["cells"][0], on["cells"][0]
+    assert old["preparation_error"] is None and entry["preparation_error"] is None
+    inputs = entry["static_inputs"]
+    proof = inputs[binding.INPUT_KEY]
+    assert proof["config"]["flash_attn"] is False and proof["config"]["op_offload"] is True
+    assert proof["config"] == {key: inputs["config"].get(key) for key in binding.CONFIG_KEYS}
+    assert {key: value for key, value in inputs.items() if key not in (binding.FLAG, binding.INPUT_KEY)} == old["static_inputs"]
+    assert binding.FLAG not in off and binding.INPUT_KEY not in off
+    assert binding.FLAG not in old["static_inputs"] and binding.INPUT_KEY not in old["static_inputs"]
+    assert "flash_attn" not in data.row["config"] and "op_offload" not in data.row["config"]
+    assert binding.verify_cell(inputs) == proof
+    binding.verify_freeze(on)
+    assert not any(data.calls.values())  # No model building or simulation.
+
+
+def test_normalized_binding_failure_remains_preparation_error(normalized_freeze_fixture, monkeypatch):
+    data = normalized_freeze_fixture
+    def failed_header(ref):
+        raise ValueError("fixture model scope unavailable")
+    monkeypatch.setattr(adapter, "read_retained_gguf_scope", failed_header)
+    frozen = adapter.freeze_selection(data.path, data.folder / "failed", final_output_selection=True, **data.options)
+    entry = frozen["cells"][0]
+    assert entry["preparation_error"] == "ValueError: fixture model scope unavailable"
+    assert entry["static_inputs"]["config"]["flash_attn"] is False
+    assert entry["static_inputs"]["config"]["op_offload"] is True
+    assert binding.INPUT_KEY not in entry["static_inputs"]
+    assert frozen[binding.INPUT_KEY]["cells"] == {}
+    binding.verify_freeze(frozen)  # Preserved failure, not campaign-wide abort.
+    assert not any(data.calls.values())
+
+
+def test_binding_does_not_guess_missing_normalized_flags(frozen):
+    campaign = binding.freeze_binding(runtime_binding=frozen.runtime, sampling_binding=frozen.sampling,
+        source_linkage=frozen.linkage)
+    inputs = {key: copy.deepcopy(value) for key, value in frozen.inputs.items() if key not in (binding.FLAG, binding.INPUT_KEY)}
+    inputs["config"].pop("flash_attn")
+    inputs["config"].pop("op_offload")
+    bound = binding.bind_static_inputs(campaign, inputs, model_scope_reader=lambda ref: {"architecture": "qwen2"})
+    assert bound[binding.INPUT_KEY]["config"]["flash_attn"] is None
+    assert bound[binding.INPUT_KEY]["config"]["op_offload"] is None
+    assert "flash_attn" not in bound["config"] and "op_offload" not in bound["config"]
+    changed = copy.deepcopy(bound)
+    changed["config"]["op_offload"] = True
+    with pytest.raises(ValueError, match="cell proof differs"):
+        binding.verify_cell(changed)
+
+
+def test_real131_normalized_static_inputs_and_final_output_qualification():
+    import os
+    if os.environ.get("FINAL_OUTPUT_REAL131_STATIC") != "1":
+        pytest.skip("explicit real131 static-only qualification opt-in")
+    main = Path(r"F:\codex_project\37_LLMsim\heterollm-sim-4.0.0")
+    path = main / "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_025/on/freeze.json"
+    frozen_campaign = json.loads(path.read_text(encoding="utf-8-sig"))
+    selection, _ = adapter.grid.read_document(frozen_campaign["selection_ref"]["path"], frozen_campaign["selection_sha256"])
+    source = frozen_campaign[binding.INPUT_KEY]["source_contract"]
+    assert binding.rederive_source(source) == source
+    campaign = {"requested": True, "source_contract": source, "cells": {},
+        "evidence_refs": source["evidence_refs"], "new_cost_coefficients": 0}
+    saved = {entry["cell_id"]: entry for entry in frozen_campaign["cells"]}
+    corrected = []
+    previous_mismatches = 0
+    for row in adapter.selected_rows(selection):
+        actual = adapter.static_inputs(row, selection, Path(frozen_campaign["data_root"]),
+            model_snapshot_map=frozen_campaign["model_snapshot_map"], runtime_build_audit=frozen_campaign["runtime_build_audit"],
+            recurrent_batching=frozen_campaign["recurrent_batching"], iq_panel=frozen_campaign["cpu_iq_panel_reuse"],
+            slot_order=frozen_campaign["slot_order"], host_offload=frozen_campaign["host_offload_source"],
+            tensor_storage=frozen_campaign["tensor_storage"], gpu_invocation=frozen_campaign["gpu_invocation"],
+            sampling=frozen_campaign["sampling"], nonflash_kv_view=frozen_campaign["nonflash_kv_view"],
+            mmvq_issue=frozen_campaign["mmvq_issue_bound"], retained_warmup=frozen_campaign["retained_kv_warmup"])
+        adapter.configuration(actual)
+        adapter.gpu_clock(actual)
+        old = saved[row["cell_id"]]["static_inputs"]
+        assert actual == {key: value for key, value in old.items() if key not in (binding.FLAG, binding.INPUT_KEY)}
+        previous_mismatches += old[binding.INPUT_KEY]["config"] != {key: actual["config"].get(key) for key in binding.CONFIG_KEYS}
+        bound = binding.bind_static_inputs(campaign, actual, model_scope_reader=adapter.read_retained_gguf_scope)
+        assert bound[binding.INPUT_KEY]["config"]["flash_attn"] is False
+        assert bound[binding.INPUT_KEY]["config"]["op_offload"] is True
+        assert binding.verify_cell(bound, verify_files=False) == bound[binding.INPUT_KEY]
+        corrected.append({"cell_id": row["cell_id"], "static_inputs": bound, "preparation_error": None})
+    assert len(corrected) == len(campaign["cells"]) == previous_mismatches == 131
+    assert all(entry["static_inputs"][binding.INPUT_KEY]["status"] == "conditional" for entry in corrected)
+    binding.verify_freeze({binding.FLAG: True, binding.INPUT_KEY: campaign, "cells": corrected})
+    print("real131:131 normalized inputs unchanged;131 old proof mismatches corrected;131 conditional proofs verified;no simulation/native/freeze writes")
