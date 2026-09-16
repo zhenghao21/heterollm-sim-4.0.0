@@ -8,7 +8,9 @@ from typing import Mapping, Optional, Tuple
 SOURCE_KEY = "llama_cpp_final_layer_output_selection"
 _BACKEND_COMMIT = "0f3a71be15af836d277c9f918adfafb45732677e"
 _ARCHITECTURES = {
+    "qwen2": ("qwen2", "before_last_ffn"),
     "qwen2_decoder": ("qwen2", "before_last_ffn"),
+    "llama": ("llama", "before_last_ffn"),
     "llama_decoder": ("llama", "before_last_ffn"),
     "qwen3_5_hybrid_transformer": ("qwen35", "after_final_norm"),
 }
@@ -31,6 +33,22 @@ def _architecture(graph_architecture: str) -> Tuple[str, str]:
     if not isinstance(graph_architecture, str) or graph_architecture not in _ARCHITECTURES:
         raise ValueError("final-layer selection requires a supported exact graph architecture")
     return _ARCHITECTURES[graph_architecture]
+
+
+def model_declaration(model):
+    """ModelSpec.metadata owns the declaration; reject hidden duplicate owners.
+
+    Graph builders nest author metadata differently from ModelSpec. Production
+    binding deliberately writes one top-level declaration, never an alias that
+    can silently stop working after graph rebuilding or serialization.
+    """
+    canonical = model.metadata.get(SOURCE_KEY)
+    for owner in (model.metadata.get("metadata", {}), model.graph.attributes,
+                  model.graph.attributes.get("metadata", {})):
+        if isinstance(owner, Mapping) and SOURCE_KEY in owner:
+            if canonical is None or owner[SOURCE_KEY] != canonical:
+                raise ValueError("final output selection declaration has a conflicting or noncanonical metadata owner")
+    return canonical
 
 
 @dataclass(frozen=True)
@@ -141,6 +159,6 @@ def resolve_declaration(
 
 
 __all__ = (
-    "SOURCE_KEY", "source_declaration", "resolve_declaration",
+    "SOURCE_KEY", "source_declaration", "resolve_declaration", "model_declaration",
     "FinalLayerOutputPolicy", "FinalLayerOutputSelection",
 )

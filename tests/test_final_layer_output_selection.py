@@ -32,14 +32,16 @@ class FinalLayerOutputSelectionTests(unittest.TestCase):
     def test_all_exact_graph_architectures_select_the_source_position(self):
         for architecture, position in (
             ("qwen2_decoder", "before_last_ffn"),
+            ("qwen2", "before_last_ffn"),
             ("llama_decoder", "before_last_ffn"),
+            ("llama", "before_last_ffn"),
             ("qwen3_5_hybrid_transformer", "after_final_norm"),
         ):
             with self.subTest(architecture=architecture):
                 self.assertEqual(self.policy(architecture).position, position)
 
     def test_display_names_formats_and_nearby_architectures_are_not_aliases(self):
-        for architecture in ("Qwen2.5", "SmolLM2", "Qwen3.8", "IQ4_XS", "qwen2", "llama",
+        for architecture in ("Qwen2.5", "SmolLM2", "Qwen3.8", "IQ4_XS",
                              "qwen35", "qwen2_decoder ", "QWEN2_DECODER", "unknown", None, 1):
             with self.subTest(architecture=architecture), self.assertRaises(ValueError):
                 self.policy(architecture)
