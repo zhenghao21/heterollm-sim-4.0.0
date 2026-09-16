@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_goal_audited_two_gates",
+  "status": "active_next_mechanism_diagnosis",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1081,11 +1081,20 @@
       "status": "long_window_diagnostic_passed_not_calibration",
       "decision": "round_012/decision.json",
       "full_evaluation": false
+    },
+    {
+      "round": 13,
+      "status": "strict_A_gate_implemented_accuracy_failed",
+      "evidence": "round_013/gate_r6_v2.json",
+      "passed_cells": 9,
+      "accuracy_failed_cells": 120,
+      "insufficient_evidence_cells": 2,
+      "full_evaluation": false
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Extend independent operator domain/cache/runtime proof before applying costs; preserve mathematical and path references; no LLM refit.",
+  "next_round_hypothesis": "Qwen2.5 worst prompt/concurrency cells: source-path coverage and scheduler cost; no target timing fit.",
   "full_131_evaluations_started": 3,
   "full_131_evaluations_completed": 3,
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_006\\physical_mapping_mmq_r2",
@@ -1242,7 +1251,7 @@
     "no_progress_review_after_rounds": 3,
     "completion_requires": "both_A_and_B_within_declared_scope"
   },
-  "goal_evaluator_status": "declarative_only_not_implemented",
+  "goal_evaluator_status": "A_implemented_B_unvalidated",
   "goal_audit": {
     "observed_batches_per_cell": 3,
     "formal_repeatability_accepted_cells": 0,
