@@ -19676,6 +19676,7 @@ _NONFLASH_KV_VIEW_SCHEMA = "heterollm.llama-nonflash-kv-view/v1"
 
 def _nonflash_kv_view_audit(
     scenario: ScenarioConfig, lanes: Sequence[_ServingInvocationLane],
+    *, occupied_rows: Optional[int] = None,
 ) -> Mapping[str, object]:
     """Bound rectangular K width without inventing the unified allocator state.
 
@@ -19739,13 +19740,19 @@ def _nonflash_kv_view_audit(
     occupied_lower_bound = max(l.context_tokens for l in lanes)
     if occupied_lower_bound > config.context:
         return uncovered("context_shift_or_slot_overflow_not_modeled")
+    if occupied_rows is not None:
+        if type(occupied_rows) is not int or not occupied_lower_bound <= occupied_rows <= capacity:
+            raise ValueError("retained KV occupied rows are outside the legal capacity/context bound")
+        occupied_lower_bound = occupied_rows
     physical = min(capacity, max(256, ((occupied_lower_bound + 255) // 256) * 256))
     return {**audit, "applied": True, "physical_k_tokens": physical,
         "occupied_cells_lower_bound": occupied_lower_bound,
         "native_cache_cells": capacity, "padding": 256,
         "logical_context_mean": int(math.ceil(sum(l.context_tokens for l in lanes) / len(lanes))),
-        "occupancy_basis": "largest_current_sequence_retained_context_only",
-        "uncovered_reasons": ("unified_allocator_extent_holes_inactive_slots_and_shared_prefix_union_unknown",),
+        "occupancy_basis": ("qualified_singleton_owner_retained_slot_rows" if occupied_rows is not None
+                            else "largest_current_sequence_retained_context_only"),
+        "uncovered_reasons": (("unified_allocator_extent_and_holes_unknown",) if occupied_rows is not None
+            else ("unified_allocator_extent_holes_inactive_slots_and_shared_prefix_union_unknown",)),
     }
 
 
@@ -20131,6 +20138,17 @@ def _serving_invocation_groups(
         and _serving_bool_capability(scenario, ("supports_equal_length_stateful_ubatches",))
     ):
         raise ValueError("stateful prefill KV scan requires explicit equal-length physical batches")
+    retained_bound = metadata.get("llama_cpp_retained_kv_bound")
+    retained_occupied_rows = None
+    if retained_bound is not None:
+        from .retained_kv_state import SCHEMA, ENABLED
+        if retained_bound != SCHEMA or scenario.workload.metadata.get(ENABLED) is not True:
+            raise ValueError("retained KV bound requires explicit source-qualified opt-in")
+        final_rows = metadata.get("llama_cpp_kv_occupied_rows")
+        append_rows = sum(lane.kv_append_tokens for lanes in lanes_by_item for lane in lanes)
+        if type(final_rows) is not int or final_rows < append_rows:
+            raise ValueError("retained KV requires valid final occupied rows")
+        retained_occupied_rows = final_rows - append_rows
     scan_occupied_rows = (
         int(metadata["llama_cpp_kv_occupied_rows"])
         - sum(lane.kv_append_tokens for lanes in lanes_by_item for lane in lanes)
@@ -20158,7 +20176,7 @@ def _serving_invocation_groups(
         predecessor_group_id: Optional[str],
         batching_semantics: str,
     ) -> _ServingInvocationGroup:
-        nonlocal scan_occupied_rows
+        nonlocal scan_occupied_rows, retained_occupied_rows
         lane_rows = tuple(lanes)
         if not lane_rows:
             raise ValueError("backend invocation group must contain rows")
@@ -20180,6 +20198,13 @@ def _serving_invocation_groups(
                 )
                 group_scan_tokens = physical_span if kv_scan_tokens else 0
                 group_q4_view_tokens = physical_span if q4_view_tokens else 0
+            if retained_occupied_rows is not None:
+                retained_occupied_rows += sum(lane.kv_append_tokens for lane in physical_lanes)
+            nonflash_view = _nonflash_kv_view_audit(
+                scenario, physical_lanes, occupied_rows=retained_occupied_rows,
+            )
+            if retained_occupied_rows is not None and nonflash_view.get("applied") is not True:
+                raise ValueError("retained KV source/view not covered: " + str(nonflash_view))
             group = _ServingInvocationGroup(
                 group_index=len(groups),
                 kind=kind,
@@ -20188,7 +20213,7 @@ def _serving_invocation_groups(
                 batching_semantics=batching_semantics,
                 kv_scan_tokens=group_scan_tokens,
                 q4_mma_view_tokens_lower_bound=group_q4_view_tokens,
-                nonflash_kv_view=_nonflash_kv_view_audit(scenario, physical_lanes),
+                nonflash_kv_view=nonflash_view,
             )
             groups.append(group)
             last_group = group
@@ -21727,6 +21752,8 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
         *((kv_scan_tokens,) if kv_scan_tokens else ()),
         *(("q4_mma_view_lower_bound", q4_view_tokens) if q4_view_tokens else ()),
         *scan_prefix_identity,
+        *(("retained_slot_rows", metadata.get("llama_cpp_kv_occupied_rows"))
+          if metadata.get("llama_cpp_retained_kv_bound") is not None else ()),
     )
 
 

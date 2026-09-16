@@ -1284,6 +1284,295 @@ def apply_mmvq_issue_static_contract(scenario, inputs):
         workload=replace(scenario.workload, metadata=flags))
 
 
+RETAINED_WARMUP_EXTRACTOR_SHA256 = "810e161d87140a34f62f5539bacb4f5f780419f945e76467468ccf3c665b9481"
+RETAINED_WARMUP_EXTRACTOR = ROOT / "tools/retained_warmup_extractor.py"
+
+
+def load_retained_warmup_extractor(ref):
+    import importlib.util
+    if ref.get("sha256") != RETAINED_WARMUP_EXTRACTOR_SHA256:
+        raise ValueError("retained warmup extractor differs from reviewed byte identity")
+    verify_refs([ref])
+    spec = importlib.util.spec_from_file_location("frozen_retained_warmup_extractor", ref["path"])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    # Share immutable document hashes within one derivation, then postverify the
+    # resulting reference closure. This does not alter extraction or qualification.
+    original, cache = module._actual_file_ref, {}
+    def cached(path, *, declared=None):
+        key = (str(path.resolve()), grid.stable_hash(declared))
+        if key not in cache:
+            cache[key] = original(path, declared=declared)
+        return cache[key]
+    module._actual_file_ref = cached
+    return module
+
+
+def read_retained_gguf_scope(model_ref):
+    """Read actual GGUF metadata only; the normal worker still verifies full SHA."""
+    import struct
+    import hashlib
+    from heterollm_sim.gguf_parity import _read_string, _read_value
+    path = Path(model_ref["path"])
+    with path.open("rb") as stream:
+        before = os.fstat(stream.fileno())
+        head = stream.read(24)
+        if len(head) != 24 or head[:4] != b"GGUF":
+            raise ValueError("retained KV requires an actual GGUF header")
+        version, tensors, count = struct.unpack("<IQQ", head[4:])
+        if version not in (2, 3) or count > 100000:
+            raise ValueError("retained KV GGUF metadata domain unsupported")
+        metadata = {}
+        for _ in range(count):
+            key = _read_string(stream)
+            if key in metadata:
+                raise ValueError("duplicate retained KV GGUF metadata key")
+            kind = stream.read(4)
+            if len(kind) != 4:
+                raise ValueError("truncated retained KV GGUF metadata")
+            metadata[key] = _read_value(stream, struct.unpack("<I", kind)[0])
+            if stream.tell() > 64 * 1024 * 1024:
+                raise ValueError("retained KV metadata exceeds bounded header size")
+        length = stream.tell()
+        stream.seek(0)
+        header_sha = hashlib.sha256(stream.read(length)).hexdigest()
+        after = os.fstat(stream.fileno())
+    identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    if identity(before) != identity(after) or identity(after) != identity(path.stat()):
+        raise ValueError("GGUF changed during retained KV header read")
+    arch = metadata.get("general.architecture")
+    relevant = {key: value for key, value in metadata.items() if key == "general.architecture"
+        or key.endswith(".block_count") or any(token in key for token in
+            (".attention.", "sliding_window", "full_attention_interval", ".ssm.", "recurrent", "nextn_predict", ".expert_"))}
+    reasons = []
+    if arch not in {"llama", "qwen2"}:
+        reasons.append("hybrid_or_nonordinary_GGUF_architecture:" + str(arch))
+    else:
+        for suffix in ("block_count", "attention.head_count", "attention.head_count_kv"):
+            value = metadata.get(str(arch) + "." + suffix)
+            if type(value) is not int or value < 1:
+                reasons.append("ordinary_GGUF_attention_field_unproven:" + suffix)
+        for key, value in relevant.items():
+            if any(token in key for token in ("sliding_window", "full_attention_interval", ".ssm.", "recurrent", "nextn_predict", ".expert_")) and value not in (None, 0, False):
+                reasons.append("nonordinary_GGUF_cache_field:" + key)
+    return {"status": "uncovered" if reasons else "conditional", "architecture": arch,
+        "metadata": relevant, "metadata_header_sha256": header_sha, "metadata_header_bytes": length,
+        "model_ref": dict(model_ref), "full_model_SHA_verification_required_in_worker": True,
+        "freeze_reads_weights": False, "uncovered_reasons": reasons}
+
+
+def retained_warmup_projection(cell):
+    """Exclude model-key family guesses, timing values and payload digests."""
+    refs = {key: value for key, value in cell["source_refs"].items() if key != "selection_payload_sha256"}
+    return {"cell_id": cell["cell_id"], "static_configuration": cell["static_configuration"],
+        "source_refs": refs, "server_block_and_process": cell["server_block_and_process"],
+        "warmup_batches": cell["warmup_batches"], "initial_retained_slot_template": cell["initial_retained_slot_template"],
+        "qualification": {key: cell["qualification"][key] for key in ("warmup_record_and_static_protocol", "missing_or_failed")},
+        "payload_contract": cell["payload_contract"], "server_command_contract": cell["server_command_contract"]}
+
+
+def retained_runtime_controls(warmup, native_refs):
+    raw_ref = warmup["source_refs"]["raw_record"]
+    raw, _ = grid.read_document(raw_ref["path"], raw_ref["sha256"])
+    modules = sorted(({"path": str(Path(ref["path"]).resolve()), "sha256": ref["sha256"]} for ref in native_refs
+        if Path(ref["path"]).suffix.lower() == ".dll" or Path(ref["path"]).name.lower() == "llama-server.exe"),
+        key=lambda ref: ref["path"].casefold())
+    inventory = {ref["path"].casefold(): ref for ref in modules}
+    servers = [ref for ref in modules if Path(ref["path"]).name.lower() == "llama-server.exe"]
+    if len(servers) != 1 or len(inventory) != len(modules):
+        raise ValueError("retained warmup selected server/module inventory is ambiguous")
+    loaded = []
+    for when in ("runtime_before", "runtime_after"):
+        captured = raw.get(when, {}).get("actual_modules", [])
+        selected = {}
+        for ref in captured:
+            path = Path(ref.get("path", "")).resolve()
+            key = str(path).casefold()
+            if path.parent == Path(servers[0]["path"]).parent:
+                if key in selected or key not in inventory or ref.get("sha256") != inventory[key]["sha256"]:
+                    raise ValueError("retained warmup loaded runtime differs from selected native modules")
+                selected[key] = inventory[key]
+        if servers[0]["path"].casefold() not in selected:
+            raise ValueError("retained warmup selected server was not captured as loaded")
+        loaded.append(selected)
+    if loaded[0] != loaded[1]:
+        raise ValueError("retained warmup loaded module set changed within process")
+    argv = raw.get("actual_argv", [])
+    def value(flag):
+        return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
+    checks = {"f16_k": value("-ctk") == "f16", "f16_v": value("-ctv") == "f16",
+        "no_cache_idle_override": "--cache-idle-slots" not in argv,
+        "no_restore_or_prefix_override": not any(flag in argv for flag in ("--slot-save-path", "--slot-restore-path", "--prompt-cache", "--prompt-cache-all"))}
+    return {"modules": modules, "checks": checks, "loaded_selected_modules": list(loaded[0].values()),
+        "selected_inventory_not_loaded": [ref for key, ref in inventory.items() if key not in loaded[0]],
+        "inventory_scope": "selected DLL inventory may contain unused bench libraries; all captured server-directory modules must match"}
+
+
+def derive_retained_cell_proof(warmup, *, selection_ref, extractor_ref, nonflash_contract,
+                              nonflash_ref, model_scope, native_refs, checked_nonflash=None):
+    from heterollm_sim.retained_kv_state import SCHEMA
+    if warmup["source_refs"]["selection"]["sha256"] != selection_ref["sha256"]:
+        raise ValueError("retained warmup requires selection byte SHA, not payload SHA")
+    if not isinstance(nonflash_contract, Mapping) or nonflash_contract.get("runtime_binding_status") != "verified":
+        raise ValueError("retained warmup requires verified nonflash source binding")
+    saved_view, _ = grid.read_document(nonflash_ref["path"], nonflash_ref["sha256"])
+    canonical_view = dict(nonflash_contract)
+    if "configuration" not in saved_view:
+        canonical_view.pop("configuration", None)
+        canonical_view.pop("runtime_binding_status", None)
+    if canonical_view != saved_view:
+        raise ValueError("retained warmup nonflash declaration differs from source contract file")
+    checked = set() if checked_nonflash is None else checked_nonflash
+    identity_key = (nonflash_ref["path"], nonflash_ref["sha256"])
+    if identity_key not in checked:
+        verify_refs(saved_view.get("evidence_refs", []))
+        checked.add(identity_key)
+    controls = retained_runtime_controls(warmup, native_refs)
+    evidence = {"requested": True, "status": "uncovered", "cell_id": warmup["cell_id"],
+        "selection_ref": selection_ref, "extractor_ref": extractor_ref,
+        "warmup": warmup, "model_scope": model_scope, "runtime_controls": controls,
+        "nonflash_contract": nonflash_contract, "nonflash_contract_ref": nonflash_ref,
+        "native_latency_used": False, "native_request_times_used": False,
+        "post_warmup_native_lifecycle_proven": False, "calibration_applied": False,
+        "formal_prediction_eligible": False, "contract": None,
+        "conditions": ["replay_initial_state_immediately_after_final_warmup",
+            "no_unobserved_clear_restore_shift_purge_or_external_state_operation",
+            "homogeneous_simultaneous_requests_use_symmetric_slot_assignment",
+            "conditional_warmup_state_replay_not_independent_cross_model_validation"]}
+    reasons = list(model_scope["uncovered_reasons"])
+    reasons += list(warmup["qualification"]["missing_or_failed"])
+    if warmup["qualification"]["warmup_record_and_static_protocol"] != "qualified":
+        reasons.append("warmup_structure_not_qualified")
+    reasons += ["runtime_control_unproven:" + key for key, passed in controls["checks"].items() if passed is not True]
+    cfg, binding = warmup["static_configuration"], nonflash_contract["configuration"]
+    for batch in warmup["warmup_batches"]:
+        for key, expected_count in (("actual_prompt_token_counts", cfg["prompt_tokens"]),
+                ("actual_output_token_counts", cfg["output_tokens"]), ("actual_cache_token_counts", 0)):
+            values = batch.get(key)
+            if not isinstance(values, list) or len(values) != 1 or type(values[0]) is not int or values[0] != expected_count:
+                reasons.append("warmup_integer_count_unproven:" + key)
+    expected = {"batch": cfg["batch"], "ubatch": cfg["ubatch"], "parallel": cfg["parallel"],
+        "simulator_slot_context_tokens": cfg["slot_context_tokens"], "native_context_tokens": cfg["unified_context_tokens"],
+        "flash_attn": False, "kv_unified": True, "kv_type_k": "f16", "kv_type_v": "f16"}
+    if binding != expected or any(type(binding[key]) is not type(value) for key, value in expected.items()):
+        raise ValueError("retained warmup/nonflash configuration mismatch")
+    if reasons:
+        return {**evidence, "uncovered_reasons": sorted(set(reasons))}
+    slots = warmup["warmup_batches"][-1]["slot_labels"]
+    if (len(slots) != cfg["parallel"] or len(set(slots)) != len(slots)
+            or any(type(slot) is not int or slot < 0 for slot in slots)):
+        raise ValueError("retained warmup requires explicit distinct integer slots")
+    ident = warmup["server_block_and_process"]
+    if type(ident.get("server_block")) is not int or ident["server_block"] < 0:
+        raise ValueError("retained warmup process block is unknown")
+    identity = {"process_id": ident["process_identity_digest"], "process_block": str(ident["server_block"]),
+        "runtime_build_id": ident["module_identity_sha256"]}
+    if any(not isinstance(value, str) or not value for value in identity.values()):
+        raise ValueError("retained warmup process/runtime identity is unknown")
+    scope = {"completion_count": 1, "singleton_owner": True, "ordinary_full_attention": True,
+        **{key: False for key in ("cache_prompt", "cache_idle_slots", "shared_prefix", "swa", "recurrent", "restore", "speculative",
+            "external_state_operations", "context_shift", "purge", "cancellation", "recompute")}, "cache_ram_mib": 0}
+    qualified = {**evidence, "status": "conditional", "uncovered_reasons": [],
+        "request_slot_mapping_basis": "symmetry_template_for_one_homogeneous_simulator_cohort_not_native_order"}
+    qualified.pop("contract")
+    raw = {"schema": SCHEMA, "identity": identity, "boundary": "after_final_qualified_warmup",
+        "token_count_semantics": "native_prompt_including_bos_and_predicted_output", "warmup_batches": 2,
+        "complete_distinct_slots": True, "evidence_sha256": grid.stable_hash(qualified),
+        "source_sha256": nonflash_contract["source_sha256"], "configuration": binding, "scope": scope,
+        "slots": [{"slot_id": slot, "state": "retained", "prompt_tokens": cfg["prompt_tokens"],
+            "output_tokens": cfg["output_tokens"], "identity": identity} for slot in sorted(slots)],
+        "request_slots": {"request-{:04d}".format(index): slot for index, slot in enumerate(sorted(slots))}}
+    return {**qualified, "contract": raw}
+
+
+def freeze_retained_warmup_binding(selection_path, rows, output, nonflash, *, model_snapshot_map=None, extractor_path=None):
+    if nonflash is None:
+        raise ValueError("retained warmup state requires a nonflash source contract")
+    original = grid.file_ref(extractor_path or RETAINED_WARMUP_EXTRACTOR)
+    if original["sha256"] != RETAINED_WARMUP_EXTRACTOR_SHA256:
+        raise ValueError("retained warmup extractor byte SHA differs")
+    target = Path(output) / "source/tools/retained_warmup_extractor.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        if not target.is_file() or grid.file_ref(target)["sha256"] != original["sha256"]:
+            raise ValueError("retained warmup copied extractor target has different bytes")
+    else:
+        with target.open("xb") as destination:
+            destination.write(Path(original["path"]).read_bytes())
+    extractor_ref = grid.file_ref(target)
+    if extractor_ref["sha256"] != original["sha256"]:
+        raise ValueError("retained warmup extractor changed while copying")
+    extractor = load_retained_warmup_extractor(extractor_ref)
+    extracted = extractor.derive_qualification(Path(selection_path), [row["cell_id"] for row in rows])
+    selection_ref = grid.file_ref(selection_path)
+    if extracted["source_contract"]["selection"]["sha256"] != selection_ref["sha256"]:
+        raise ValueError("retained extractor selection byte identity differs")
+    by_id = {cell["cell_id"]: retained_warmup_projection(cell) for cell in extracted["cells"]}
+    cells, models, checked_nonflash = {}, {}, set()
+    refs = {ref["path"]: ref for ref in [selection_ref, extractor_ref, nonflash["contract_ref"], *nonflash["evidence_refs"]]}
+    for row in rows:
+        native_path = str(Path(row["config"]["model"]).resolve())
+        model_ref = (model_snapshot_map or {}).get(native_path, row["model_ref"])
+        if model_ref["path"] not in models:
+            models[model_ref["path"]] = read_retained_gguf_scope(model_ref)
+        warmup = by_id[row["cell_id"]]
+        proof = derive_retained_cell_proof(warmup, selection_ref=selection_ref, extractor_ref=extractor_ref,
+            nonflash_contract=nonflash["cells"][row["cell_id"]], nonflash_ref=nonflash["contract_ref"],
+            model_scope=models[model_ref["path"]], native_refs=row["native_runtime_refs"], checked_nonflash=checked_nonflash)
+        cells[row["cell_id"]] = proof
+        refs.update({ref["path"]: ref for ref in warmup["source_refs"].values() if isinstance(ref, Mapping) and "path" in ref})
+    verify_refs(list(refs.values()))
+    return {"requested": True, "selection_ref": selection_ref, "extractor_ref": extractor_ref,
+        "cells": cells, "evidence_refs": list(refs.values()), "native_latency_used": False,
+        "conditional_cell_count": sum(cell["status"] == "conditional" for cell in cells.values()),
+        "uncovered_cell_count": sum(cell["status"] == "uncovered" for cell in cells.values())}
+
+
+def apply_retained_warmup_static_contract(scenario, inputs, *, gguf):
+    from heterollm_sim.retained_kv_state import ENABLED, KEY, IDENTITY
+    flag, proof = inputs.get("retained_kv_warmup_state", False), inputs.get("retained_kv_warmup_evidence")
+    if flag is False and proof is None and inputs.get("retained_kv_warmup_contract") is None:
+        return scenario
+    if type(flag) is not bool or flag is not True or not isinstance(proof, Mapping) or proof.get("requested") is not True:
+        raise ValueError("retained warmup switch differs from frozen evidence")
+    if inputs.get("nonflash_kv_view_contract") != proof["nonflash_contract"]:
+        raise ValueError("retained warmup nonflash source contract differs")
+    verify_refs([proof["selection_ref"], proof["extractor_ref"], proof["nonflash_contract_ref"]])
+    extractor = load_retained_warmup_extractor(proof["extractor_ref"])
+    extracted = extractor.derive_qualification(Path(proof["selection_ref"]["path"]), [inputs["cell_id"]])
+    warmup = retained_warmup_projection(extracted["cells"][0])
+    model_ref = inputs.get("prediction_model_ref", inputs["native_model_ref"])
+    model_scope = read_retained_gguf_scope(model_ref)
+    if gguf.sha256 != model_ref["sha256"] or gguf.architecture != model_scope["architecture"]:
+        raise ValueError("retained warmup GGUF worker identity differs")
+    derived = derive_retained_cell_proof(warmup, selection_ref=proof["selection_ref"], extractor_ref=proof["extractor_ref"],
+        nonflash_contract=proof["nonflash_contract"], nonflash_ref=proof["nonflash_contract_ref"],
+        model_scope=model_scope, native_refs=[inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])])
+    if derived != proof or inputs.get("retained_kv_warmup_contract") != proof.get("contract"):
+        raise ValueError("retained warmup proof differs from raw/source re-derivation")
+    refs = [ref for ref in warmup["source_refs"].values() if isinstance(ref, Mapping) and "path" in ref]
+    verify_refs(refs)
+    metadata = {**scenario.workload.metadata, "llama_cpp_retained_kv_warmup_qualification": proof}
+    if proof["status"] != "conditional":
+        return replace(scenario, workload=replace(scenario.workload, metadata=metadata))
+    from heterollm_sim import planner
+    allowed_architectures = {model_scope["architecture"], str(model_scope["architecture"]) + "_decoder"}
+    if scenario.model.architecture not in allowed_architectures or any(layer.is_linear_attention for layer in planner._execution_layers(scenario)):
+        raise ValueError("retained warmup actual model cache is not ordinary attention")
+    cfg = warmup["static_configuration"]
+    requests = scenario.workload.requests
+    expected_ids = set(proof["contract"]["request_slots"])
+    if (len(requests) != cfg["parallel"] or {request.request_id for request in requests} != expected_ids
+            or any(request.arrival_ns != 0 or request.prompt_tokens != cfg["prompt_tokens"] or request.output_tokens != cfg["output_tokens"] for request in requests)):
+        raise ValueError("retained warmup symmetry template requires one homogeneous simultaneous simulator cohort")
+    metadata.update({ENABLED: True, KEY: proof["contract"], IDENTITY: derived["contract"]["identity"]})
+    candidate = replace(scenario, workload=replace(scenario.workload, metadata=metadata))
+    from heterollm_sim.serving import compile_serving_plan
+    from heterollm_sim.retained_kv_state import RetainedKVState
+    RetainedKVState.from_plan(compile_serving_plan(candidate), tuple(planner._execution_layers(candidate)))
+    return candidate
+
+
 IQ_PANEL_SOURCE_SCHEMA = "llama.cpp.cpu.iq-panel-source-contract/v1"
 IQ_PANEL_VARIABLE = "GGML_NO_IQ_PANEL"
 
@@ -1414,7 +1703,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None, retained_warmup=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -1460,6 +1749,9 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "config": config, "hardware_snapshot": physical,
         "sampling_binding": sampling["cells"][row["cell_id"]] if sampling else None,
         "nonflash_kv_view_contract": nonflash_kv_view["cells"][row["cell_id"]] if nonflash_kv_view else None,
+        **({"retained_kv_warmup_state": True,
+            "retained_kv_warmup_evidence": retained_warmup["cells"][row["cell_id"]],
+            "retained_kv_warmup_contract": retained_warmup["cells"][row["cell_id"]]["contract"]} if retained_warmup is not None else {}),
         "native_model_ref": dict(model_ref), "prediction_model_ref": prediction_model_ref,
         "recurrent_batching_contract": recurrent_batching["contract"] if recurrent_batching else None,
         "recurrent_batching_evidence": recurrent_batching,
@@ -1537,6 +1829,12 @@ def unsupported_dimensions(inputs, model=None):
         {"dimension": "cpu_worker_binding", "status": "conditional", "native": {k: raw.get(k) for k in ("threads", "threads_batch", "worker_cpu_mask", "poll", "priority")}, "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."},
         {"dimension": "kv_shared_physical_pool", "status": "conditional", "native_total_context_tokens": 2048 * raw.get("parallel", 1), "simulator_slot_context_tokens": 2048, "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."},
         {"dimension": "runtime_op_offload_contract", "status": "unsupported", "runtime_ref": inputs["runtime_ref"], "op_offload": raw.get("op_offload", True), "reason": "Actual new runtime identity is retained and does not inherit the old semantic-runtime CUDA op-offload contract."}]
+    if inputs.get("retained_kv_warmup_evidence") is not None:
+        proof = inputs["retained_kv_warmup_evidence"]
+        rows.append({"dimension": "retained_kv_warmup_state", "status": proof["status"],
+            "conditions": proof["conditions"], "uncovered_reasons": proof["uncovered_reasons"],
+            "native_latency_used": False, "formal_prediction_eligible": False,
+            "reason": "Conditional final-warmup symmetric slot replay; hybrid/recurrent cache is uncovered, and unobserved post-warmup lifecycle is not proven."})
     if inputs.get("mmvq_issue_evidence") is not None:
         proof = inputs["mmvq_issue_evidence"]
         rows.append({"dimension": "mmvq_vector_integer_issue_bound", "status": proof["status"],
@@ -2014,6 +2312,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     scenario = apply_tensor_storage_static_contract(scenario, inputs)
     scenario = apply_gpu_invocation_static_contract(scenario, inputs)
     scenario = apply_nonflash_kv_view_static_contract(scenario, inputs, gguf=gguf)
+    scenario = apply_retained_warmup_static_contract(scenario, inputs, gguf=gguf)
     profiles = {kind: dict(values) for kind, values in scenario.component_profiles.items()}
     changed = []
     for ident, profile in profiles.get("gpu", {}).items():
@@ -2058,6 +2357,8 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         "unsupported_dimensions": unsupported_dimensions(inputs, model), "input_identity": {
             "static_inputs_sha256": grid.stable_hash(inputs), "sampling_binding": sampling, "model": {"path": str(path), "sha256": gguf.sha256},
             "nonflash_kv_view_contract": inputs.get("nonflash_kv_view_contract"),
+            **({"retained_kv_warmup_state": True, "retained_kv_warmup_contract": inputs["retained_kv_warmup_contract"],
+                "retained_kv_warmup_evidence": inputs["retained_kv_warmup_evidence"]} if "retained_kv_warmup_evidence" in inputs else {}),
             "native_model_ref": inputs.get("native_model_ref"), "prediction_model_ref": inputs.get("prediction_model_ref"),
             "control_plane_replan": placement_refresh, "cpu_iq_panel_reuse": inputs.get("cpu_iq_panel_reuse"),
             "slot_order_contract": inputs.get("slot_order_contract"),
@@ -2151,10 +2452,16 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None, mmvq_vector_issue_bound=False, mmvq_issue_hardware_document_path=None):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None, mmvq_vector_issue_bound=False, mmvq_issue_hardware_document_path=None, retained_kv_warmup_state=False, retained_kv_warmup_extractor_path=None):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
+    if type(retained_kv_warmup_state) is not bool:
+        raise ValueError("retained warmup switch must be an explicit boolean")
+    if retained_kv_warmup_state and nonflash_kv_view_source_contract_path is None:
+        raise ValueError("retained warmup state requires a nonflash source-bound contract")
+    if retained_kv_warmup_extractor_path is not None and not retained_kv_warmup_state:
+        raise ValueError("retained warmup extractor requires the explicit state switch")
     if type(mmvq_vector_issue_bound) is not bool:
         raise ValueError("MMVQ issue switch must be an explicit boolean")
     if mmvq_vector_issue_bound and (gpu_invocation_contract_path is None or gpu_mmq_source_costs is not True or gpu_conversion_cta_costs is not True):
@@ -2206,11 +2513,25 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
             compiled_graph_evidence(row["native_runtime_refs"], data_root, verified_audit=build_audit)
     output.mkdir(parents=True, exist_ok=True)
     source = source_freeze(output / "source")
+    retained_warmup = None
+    if retained_kv_warmup_state:
+        retained_warmup = freeze_retained_warmup_binding(selection_path, rows, output, nonflash_kv_view,
+            model_snapshot_map=snapshots, extractor_path=retained_kv_warmup_extractor_path)
+        unique_source_refs = {}
+        for ref in [*source["files"], retained_warmup["extractor_ref"]]:
+            key = str(Path(ref["path"]).resolve()).casefold()
+            previous = unique_source_refs.get(key)
+            if previous is not None and previous["sha256"] != ref["sha256"]:
+                raise ValueError("retained warmup source manifest contains conflicting SHA references")
+            if previous is None:
+                unique_source_refs[key] = ref
+        source["files"] = list(unique_source_refs.values())
+        source["sha256"] = grid.stable_hash(source["files"])
     entries = []
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue, retained_warmup=retained_warmup)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -2223,6 +2544,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
         "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation, "sampling": sampling, "nonflash_kv_view": nonflash_kv_view,
         **({"mmvq_vector_issue_bound": True, "mmvq_issue_bound": mmvq_issue} if mmvq_issue is not None else {}),
+        **({"retained_kv_warmup_state": True, "retained_kv_warmup": retained_warmup} if retained_warmup is not None else {}),
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -2240,6 +2562,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(tensor_storage["evidence_refs"])
     if gpu_invocation:
         verify_refs(gpu_invocation["evidence_refs"])
+    if retained_warmup:
+        verify_refs(retained_warmup["evidence_refs"])
     if mmvq_issue:
         verify_refs(mmvq_issue["evidence_refs"])
     if nonflash_kv_view:
@@ -2281,6 +2605,49 @@ def verify_freeze_references(freeze):
         refs += sampling["evidence_refs"]
     verify_refs(refs)
     verify_mmvq_freeze_binding(freeze)
+    verify_retained_warmup_freeze(freeze)
+
+
+def verify_retained_warmup_freeze(freeze, entry=None):
+    binding = freeze.get("retained_kv_warmup")
+    cells = [entry] if entry is not None else freeze["cells"]
+    if binding is None:
+        if freeze.get("retained_kv_warmup_state", False) is not False or any(
+                (cell.get("static_inputs") or {}).get("retained_kv_warmup_evidence") is not None
+                or (cell.get("static_inputs") or {}).get("retained_kv_warmup_state", False) is not False for cell in cells):
+            raise ValueError("retained warmup freeze lacks switch evidence")
+        return
+    if freeze.get("retained_kv_warmup_state") is not True or binding.get("requested") is not True:
+        raise ValueError("retained warmup campaign switch differs")
+    verify_refs(binding["evidence_refs"])
+    extractor = load_retained_warmup_extractor(binding["extractor_ref"])
+    rederived = None
+    if entry is None:
+        result = extractor.derive_qualification(Path(binding["selection_ref"]["path"]), [cell["cell_id"] for cell in cells])
+        rederived = {cell["cell_id"]: retained_warmup_projection(cell) for cell in result["cells"]}
+    models, checked_nonflash = {}, set()
+    for cell in cells:
+        inputs = cell.get("static_inputs")
+        if inputs is None and cell.get("preparation_error"):
+            continue
+        proof = binding["cells"][cell["cell_id"]]
+        if (inputs.get("retained_kv_warmup_state") is not True or inputs.get("retained_kv_warmup_evidence") != proof
+                or inputs.get("retained_kv_warmup_contract") != proof.get("contract")
+                or proof.get("extractor_ref") != binding["extractor_ref"]
+                or proof.get("selection_ref", {}).get("sha256") != freeze["selection_ref"]["sha256"]):
+            raise ValueError("retained warmup cell proof differs from frozen campaign")
+        if rederived is not None:
+            model_ref = inputs.get("prediction_model_ref", inputs["native_model_ref"])
+            if model_ref["path"] not in models:
+                models[model_ref["path"]] = read_retained_gguf_scope(model_ref)
+            actual = derive_retained_cell_proof(rederived[cell["cell_id"]], selection_ref=binding["selection_ref"],
+                extractor_ref=binding["extractor_ref"], nonflash_contract=inputs["nonflash_kv_view_contract"],
+                nonflash_ref=proof["nonflash_contract_ref"], model_scope=models[model_ref["path"]],
+                native_refs=[inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])], checked_nonflash=checked_nonflash)
+            if actual != proof:
+                raise ValueError("retained warmup resume proof differs from raw/source re-derivation")
+    if rederived is not None:
+        verify_refs(binding["evidence_refs"])
 
 
 def verify_mmvq_freeze_binding(freeze, entry=None):
@@ -2332,6 +2699,7 @@ def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, d
             raise ValueError(entry["preparation_error"])
         inputs = entry["static_inputs"]
         verify_mmvq_freeze_binding(freeze, entry)
+        verify_retained_warmup_freeze(freeze, entry)
         verify_refs([inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])])
         prediction = predict_cell(inputs, diagnostic_events=diagnostic_events, diagnostic_event_limit=diagnostic_event_limit)
     except Exception as exc:
@@ -2653,6 +3021,10 @@ def main(argv=None):
         help="source/build-bound non-Flash physical KV view lower bound; initial freeze only; default off")
     parser.add_argument("--gpu-conversion-cta-costs", action=argparse.BooleanOptionalAction, default=None,
         help="source conversion grid compute-resource cap; initial freeze only; requires GPU MMQ source costs")
+    parser.add_argument("--retained-kv-warmup-state", action=argparse.BooleanOptionalAction, default=None,
+        help="conditional final-warmup retained KV state replay; initial freeze only; nonflash contract required")
+    parser.add_argument("--retained-kv-warmup-extractor", type=Path,
+        help="reviewed static warmup extractor to copy into the freeze; requires retained state switch")
     parser.add_argument("--mmvq-vector-issue-bound", action=argparse.BooleanOptionalAction, default=None,
         help="conditional source/PTX integer issue lower bound; initial freeze only; requires MMQ and conversion source costs")
     parser.add_argument("--mmvq-issue-hardware-document", type=Path,
@@ -2681,8 +3053,12 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
+    if (args.retained_kv_warmup_state is not None or args.retained_kv_warmup_extractor or args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
         parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
+    if args.retained_kv_warmup_state and args.nonflash_kv_view_source_contract is None:
+        parser.error("--retained-kv-warmup-state requires --nonflash-kv-view-source-contract")
+    if args.retained_kv_warmup_extractor and not args.retained_kv_warmup_state:
+        parser.error("--retained-kv-warmup-extractor requires --retained-kv-warmup-state")
     if args.mmvq_vector_issue_bound and (args.gpu_invocation_contract is None or args.gpu_mmq_source_costs is not True or args.gpu_conversion_cta_costs is not True):
         parser.error("--mmvq-vector-issue-bound requires GPU invocation, MMQ and conversion source costs")
     if args.mmvq_issue_hardware_document and not args.mmvq_vector_issue_bound:
@@ -2695,7 +3071,7 @@ def main(argv=None):
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document)
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor)
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

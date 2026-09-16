@@ -55,6 +55,11 @@ from .event_kernel import (
     _validated_phase_sequence,
 )
 from .execution_control import ExecutionControl
+from .retained_kv_state import (
+    RetainedKVState,
+    BOUND as _RETAINED_KV_BOUND,
+    SCHEMA as _RETAINED_KV_SCHEMA,
+)
 from .control_plane_state import (
     control_plane_decision,
     is_control_plane_generated_tensor,
@@ -4659,6 +4664,12 @@ class _OnlineRuntime:
         self._prompt_cache_wave_requests: Set[str] = set()
         self._pending_prompt_cache_states: List[_MutableRequest] = []
         self._kv_scan_wave_requests: Set[str] = set()
+        self._retained_kv_state = RetainedKVState.from_plan(
+            plan, tuple(_execution_layers(plan.scenario))
+        )
+        if self._retained_kv_state is not None:
+            if self.prompt_cache.enabled or _parallel_plan(plan.scenario).world_size != 1:
+                raise ValueError("retained KV excludes prompt-cache restore and distributed pools")
         scan_requested = plan.scenario.workload.metadata.get(
             "llama_cpp_unified_kv_scan", False
         ) is True
@@ -8796,6 +8807,13 @@ class _OnlineRuntime:
     ) -> None:
         if state.status == status:
             return
+        if self._retained_kv_state is not None:
+            if status == RequestStatus.RUNNING:
+                self._retained_kv_state.admit(state.spec.request_id)
+            elif status == RequestStatus.SWAPPED or (
+                state.status == RequestStatus.RUNNING and status != RequestStatus.FINISHED
+            ):
+                self._retained_kv_state.invalidate(status.value)
         if status == RequestStatus.RUNNING:
             self._assign_residency_slot(state.spec.request_id)
         if state.status == RequestStatus.RUNNING:
@@ -10465,6 +10483,11 @@ class _OnlineRuntime:
         )
 
     def _record_llama_engine_start(self, state: _MutableRequest) -> None:
+        if self._retained_kv_state is not None:
+            # This is the first eligible prompt-preparation boundary, after
+            # admission and budget selection. Logical allocation may still
+            # fail afterwards; the native old prefix is already gone.
+            self._retained_kv_state.begin_prompt(state.spec.request_id)
         if not self._llama_engine_boundary_enabled or state.engine_start_ns is not None:
             return
         # llama.cpp STARTED -> PROCESSING_PROMPT starts its engine clock after
@@ -13467,6 +13490,23 @@ class _OnlineRuntime:
         )
 
     def _with_kv_scan_lower_bound(self, cohort: BatchCohort) -> BatchCohort:
+        if self._retained_kv_state is not None:
+            if cohort.kind not in {"prefill", "decode", "mixed"} or not cohort.items:
+                self._retained_kv_state.invalidate("nonordinary cohort")
+            if any(_batch_item_kv_append_tokens(item) != item.token_count
+                   or (item.kv_materialized_tokens is not None
+                       and item.kv_materialized_tokens != item.token_count)
+                   for item in cohort.items):
+                self._retained_kv_state.invalidate("temporary/nonordinary KV rows")
+            occupied = self._retained_kv_state.occupied_after(tuple(
+                (item.request_id, item.phase, item.context_tokens, item.token_count)
+                for item in cohort.items
+            ))
+            return replace(cohort, metadata={**cohort.metadata,
+                _RETAINED_KV_BOUND: _RETAINED_KV_SCHEMA,
+                "llama_cpp_kv_occupied_rows": occupied,
+                "llama_cpp_kv_scan_bound": "occupied_rows_lower_bound",
+            })
         prefill_scan = (
             self._kv_scan_enabled and cohort.kind in {"prefill", "mixed"}
             and (self._q4_mma_materialization_enabled
@@ -13506,6 +13546,20 @@ class _OnlineRuntime:
         })
 
     def _execute(self, cohort: BatchCohort) -> None:
+        retained = self._retained_kv_state
+        if retained is None:
+            self._execute_cohort(cohort)
+            return
+        try:
+            self._execute_cohort(cohort)
+        except BaseException as error:
+            # An execution or commit may have partially changed native state.
+            # Keep diagnostic rows, but never reuse them as a valid bound after
+            # failure/cancellation. This is fail-stop, not an error recovery model.
+            retained.mark_invalid("cohort execution or commit failed: " + type(error).__name__)
+            raise
+
+    def _execute_cohort(self, cohort: BatchCohort) -> None:
         cohort = self._with_kv_scan_lower_bound(cohort)
         cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
         cost = self._apply_resource_contention(cohort, cost)
@@ -13922,6 +13976,11 @@ class _OnlineRuntime:
                         and not state.kv_cache_range_error):
                     state.kv_cache_range_count = len(state.kv_cache_range_tokens)
             self._record_kv_traffic(item)
+            if self._retained_kv_state is not None:
+                self._retained_kv_state.commit(
+                    item.request_id, item.phase, item.context_tokens,
+                    _batch_item_kv_append_tokens(item),
+                )
             if item.phase == "prefill":
                 state.prefill_cursor += item.token_count
                 self.events.append(ServingEvent(item_end_ns, "prefill_chunk_complete", item.request_id, cohort.cohort_id, {"cursor": state.prefill_cursor, "chunk_tokens": item.token_count}))
@@ -14051,6 +14110,8 @@ class _OnlineRuntime:
     def _finish(self, state: _MutableRequest, timestamp_ns: float) -> None:
         if state.status == RequestStatus.FINISHED:
             return
+        if self._retained_kv_state is not None:
+            self._retained_kv_state.finish(state.spec.request_id)
         if self._prompt_cache_save_enabled() and self.prompt_cache.policy.recurrent_state_layout is not None:
             self._capture_prompt_cache_recurrent_identity(state)
         self.ledger.release_temporary(state)

@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_022_closeout_ready_next_retained_kv_integration",
+  "status": "round_023_integrated_review_fixed_ready_to_commit",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1485,7 +1485,25 @@
       "identity_failed_cells": 2,
       "full_common_previous_numeric_changed_cells": 0,
       "full_common_previous_cells": 129,
-      "closeout": "round_022/closeout.json"
+      "closeout": "round_022/closeout.json",
+      "result_commit": "93f01330df251f95fa414ad42b413180c7ed1ee2",
+      "result_remote_verified": true
+    },
+    {
+      "round": 23,
+      "started_utc": "2026-09-16T13:37:24.559995+00:00",
+      "status": "integrated_and_reviewed_before_freeze",
+      "native_remeasured": false,
+      "target_llm_latency_fit": false,
+      "coefficients_added": 0,
+      "core_tests_passed": 245,
+      "review_fix_adapter_tests_passed": 42,
+      "ablation_structure_tests_passed": 14,
+      "ordinary_conditional_cells_expected": 62,
+      "hybrid_fallback_cells_expected": 69,
+      "extractor_sha256": "810e161d87140a34f62f5539bacb4f5f780419f945e76467468ccf3c665b9481",
+      "all_prior_prediction_failures_preserved": true,
+      "next": "Commit/push then new current/retained same-source freeze and evaluation."
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",

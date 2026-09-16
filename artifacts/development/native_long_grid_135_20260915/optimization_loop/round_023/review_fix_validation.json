@@ -1,0 +1,33 @@
+{
+  "schema": "r23-prerelease-review-fix/v1",
+  "created_utc": "2026-09-16T13:37:24.559995+00:00",
+  "review_issue": "P2 numeric equality and set deduplication hid non-integer later request counts",
+  "fix": "Validate each prompt/output/cache count and slot id as exact int before deduplication; preserve old frozen helper and update reviewed new-source SHA.",
+  "reviewed_extractor_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\retained_warmup_extractor.py",
+    "sha256": "810e161d87140a34f62f5539bacb4f5f780419f945e76467468ccf3c665b9481",
+    "bytes": 23369
+  },
+  "source_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\predict_stable_native_dataset.py",
+      "sha256": "31cea6f0bd2ab8bcd3aba0fda2903ea4713e020f07d7fb307fd3c6b5425becb6",
+      "bytes": 221604
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tests\\test_retained_kv_state_adapter.py",
+      "sha256": "abb734203bbf7f53771fdefe6723034cfc1744d96205ddf16384324cc4beb054",
+      "bytes": 21798
+    }
+  ],
+  "validation": {
+    "command": "E:/anaconda/python.exe -m pytest tests/test_retained_kv_state_adapter.py tests/test_mmvq_issue_bound_adapter.py -q --disable-warnings --maxfail=2",
+    "real131_static_enabled": true,
+    "actual_pdf_verified": true,
+    "result": "42 passed in 18.66s",
+    "returncode": 0
+  },
+  "previous_integrated_validation": "245 passed; this follow-up covers changed extractor/adapter only",
+  "R22_unchanged": true,
+  "native_run": false
+}

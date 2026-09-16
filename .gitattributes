@@ -6,3 +6,5 @@ artifacts/development/native_long_grid_135_20260915/optimization_loop/round_019/
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_020/** -text -whitespace
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/** -text -whitespace
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_022/** -text -whitespace
+tools/retained_warmup_extractor.py -text -whitespace
+artifacts/development/native_long_grid_135_20260915/optimization_loop/round_023/** -text -whitespace

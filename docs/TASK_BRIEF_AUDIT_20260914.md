@@ -185,7 +185,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 10. 当前版本与证据状态（动态，原位更新）
 
-固定native仍为131格、894请求，选择文件SHA保持cab8f3a4…df9c5，目标LLM重测0、专属时延拟合0。R22主机制代码已提交并推送5e32f3f，远端SHA一致；本轮四路20锚点和主候选全131执行已完成，等待结果归档上传。131格都有终态，129格可评分，2格worker文件身份校验失败；9/131格三项Engine误差严格<10%，120格准确性失败。A失败，B和跨硬件未验证。
+固定native仍为131格、894请求，选择文件SHA保持cab8f3a4…df9c5，目标LLM重测0、专属时延拟合0。R22主机制代码已提交并推送5e32f3f，远端SHA一致；本轮四路20锚点和主候选全131已归档提交93f0133并上传，远端SHA一致。131格都有终态，129格可评分，2格worker文件身份校验失败；9/131格三项Engine误差严格<10%，120格准确性失败。A失败，B和跨硬件未验证。
 
 R22与R21 physical共同可评分的129格数值完全一致；20锚点CTA-only和CTA+issue三项均不变，不能宣称精度改善。两个失败格分别报告PDF与模型SHA不符；原始记录保留、不重试。后续.NET/OpenSSL/HACL复核一致，512次PDF双算法及一次整模型双算法检查无错，但历史失败原因未确定。
 
@@ -193,11 +193,11 @@ R22-r2独立合成长图自然完成18/18，数值、时钟、CUPTI链完整，G
 
 ## 11. 本轮修改与验证（动态，原位更新）
 
-MMVQ新开关默认关闭。对受支持的Q5_0、Q8_0及小M的Q4_K、Q6_K，使用来源明确的warp指令发射条件下界替换旧tensor-core dot需求，不同时收取MMA和issue费用；转换、主kernel次数与矩阵字节保持独立。unpack、scale、reduction、spill及实际DP4A吞吐仍未完整定价，HBM仍保留未验证回退。未证明的IQ格式继续旧路径。
+R23 retained-slot候选已合入主区，默认关闭。启用后旧warmup池只在实际prompt准备时清除，成功执行后提交新行，finish保留P+O−1；同一slot旧/新行互斥，两个warmup轮不累加。planner按真实microbatch顺序推进新行，缓存键包含占用下界；异常后账本失效并原样抛出，禁止错误后复用正下界。仍只表示物理KV span下界，不声称精确地址或high-water。
 
-补充源码证据重新核对runtime构建链、MMVQ编译对象与CUDA DLL链接，并绑定历史annotation头文件快照和五份MMVQ文件。缺少原始编译器头文件依赖记录，明确original_compile_header_bytes_proven=false；不能把当前SHA当历史编译消费证明。官方硬件PDF实际字节校验并进入新冻结，worker/resume重新验证全部合同。131格静态资格不等于131格数值改动；应用数量须由GPU任务账本统计。
+适配器从真实warmup记录提取完整计数、slot与进程/模块身份，通过实际GGUF架构限定普通attention。62格候选可启用，69格hybrid显式uncovered但继续原机制数值和评分，不删减131格。提取器作为共同tools源码进入off/on两个freeze，并在worker/resume重派生；不用目标时延或原生到达时间决定slot映射。
 
-主区277项联合回归覆盖MMVQ、适配器、非Flash物理KV、输出行选择、固定native准备与GPU invocation。此前默认关闭的288组几何、30个planner场景均无数值变化；独立审阅未发现P1/P2阻断。r2 collector从真实非计时smoke setup构造测试，并逐项破坏后端数量/顺序、CUDA pin、CPU角色/分配、parallel和offload检查拒收，共38项通过。首版closeout仅修复ordinal和已有stdout/stderr引用，不改原始测量。
+主区245项联合回归通过；独立审核发现逐请求浮点/布尔计数可能被set去重掩盖的P2，已在冻结前修复为逐请求精确整数校验，slot id亦检查整数。后续42项适配器回归（含真实131静态资格和PDF字节核验）通过，提取器SHA更新为810e161d87140a34f62f5539bacb4f5f780419f945e76467468ccf3c665b9481。R22原脚本/冻结/结果未改。新两路实验驱动14项结构测试通过。
 
 ## 12. 当前测量与预测差距（动态，原位更新）
 
@@ -213,11 +213,11 @@ MMVQ新开关默认关闭。对受支持的Q5_0、Q8_0及小M的Q4_K、Q6_K，�
 
 ## 13. 下一轮优化顺序（动态，原位更新）
 
-1. 完成本轮全131报告/热力图、微基准原始证据、两个SHA失败和静态校验诊断的归档，提交上传并核对远端。保留全部失败，原R22冻结/预测/分数不改。
-2. 合入隔离R23 retained-slot生命周期与适配器，通过主区联合回归后更新任务书、提交和上传。启用路径必须绑定可重派生warmup证据、实际GGUF架构与同源码提取器；62格ordinary候选应用，69格hybrid显式回退原机制且不删减预测覆盖。任何执行异常使retained账本失效，拒绝失败后复用。
-3. 新建同源码retained-off/retained-on冻结，先完成输入字节与独立哈希一致性校验；若再次出现身份异常则保留终态并调查，不成功导向重试。先保存预测后统一评分，比较同一固定131格三项Engine误差，未达A门继续下一机制。
-4. 继续审计MMVQ访存并发/有效带宽与slot实际清理/保留状态；优先修能证明的图、shape、字节、资源占用问题。submit/sync后验分解不作系数，逐节点launch只能用新预注册的独立底层测量标定；不从LLM时延反推。
-5. 每轮原位更新任务书、commit、push、远端核验并检查逐格三项严格<10%；没有达标自动进入下一轮。A门通过后仍需新的独立证据验收B门。
+1. R22已完整归档并上传93f0133，A失败和两格SHA失败保留。提交上传R23已审阅的retained核心、适配器、提取器整数门禁和结构测试，核对远端，再开始新冻结。
+2. 两路同源码current/retained只改变retained开关，固定131格；输入和文件字节先严格校验。先保存同一20锚点的40份终态预测后统一评分，再在同一冻结下补满主候选131，按每格TTFT/TPOT/E2E严格<10%验A。62格treatment和69格旧机制fallback分别报告，全部失败保留。
+3. 如果再次出现身份异常，记录实际摘要和完整错误，不重试为成功、不覆盖旧结论；当前独立复核一致并未证明历史故障已解决。普通机制工作在可验证的来源范围继续，B仍未验证。
+4. 并行审计MMVQ访存并发/有效带宽与实际slot生命周期；优先修有源码、shape、字节或资源证据的问题。host submit与sync必须独立建模，SCALE长图的失败wall质量不能被后验改口径追认；新的底层标定需重新预注册且不得用LLM时延拟合。
+5. 每轮原位更新任务书、commit、push、远端核验并检查目标；未达标自动进入下一轮，A通过后仍需新的独立B门。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
@@ -237,4 +237,5 @@ MMVQ新开关默认关闭。对受支持的Q5_0、Q8_0及小M的Q4_K、Q6_K，�
 - optimization_loop/round_022/long_graph_collection_r2/RESULT.md、result_summary.json：完整18阶段与host质量拒收；dispatch_build_scope.json、submit_sync_diagnostic.json、mmvq_application_diagnostic.json：编译路径、提交/同步和真实成本账审计。
 - optimization_loop/round_022/hash_integrity_protocol.json/result.json、closeout.json：当前字节复核与两格历史失败，不能追认原失败通过。
 - optimization_loop/round_022/qualify_retained_warmup.py、retained_warmup_rederived.json：可重派生静态warmup资格；原位保存的初版qualification已将payload与文件SHA分开。
+- optimization_loop/round_023/core_validation.json/log、review_fix_validation.json与两路evaluate_candidate.py/summarize_ablation.py：新候选主区回归、审核修复及待冻结实验入口。
 - optimization_loop/round_021/REPORT.md及detailed_evidence.parts.json：前次131完整结果与4个分卷恢复入口，历史不覆盖。
