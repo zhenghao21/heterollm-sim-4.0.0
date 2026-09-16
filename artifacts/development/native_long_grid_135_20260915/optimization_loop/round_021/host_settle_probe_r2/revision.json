@@ -1,0 +1,7 @@
+{
+  "reason": "initial build read a non-authoritative condition location and reported an empty domain; invoke used a different schema. Reject before any timing. New builder and launcher both use execution.pilot as sole condition/config source.",
+  "timing_before_revision": false,
+  "probe_algorithm_changed": false,
+  "quality_thresholds_changed": false,
+  "old_build_preserved": true
+}

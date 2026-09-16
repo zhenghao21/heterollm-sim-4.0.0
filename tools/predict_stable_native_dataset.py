@@ -696,7 +696,7 @@ def captured_kernel_environment(record, selected_environment=None):
     return values, evidence
 
 
-def verify_gpu_invocation_source_links(runtime_binding, data_root):
+def verify_gpu_invocation_source_links(runtime_binding, data_root, *, include_context=False):
     """Bind added GPU/graph source objects to the inherited annotation modules."""
     from tools import llama_runtime_source_binding as source_api
     ev = source_api._Evidence(data_root)
@@ -716,7 +716,9 @@ def verify_gpu_invocation_source_links(runtime_binding, data_root):
         ("kv_cache", "src/llama-kv-cache.cpp", "llama.dll"),
         ("mmvq", "ggml/src/ggml-cuda/mmvq.cu", "ggml-cuda.dll"),
         ("mmq", "ggml/src/ggml-cuda/mmq.cu", "ggml-cuda.dll"),
-        ("set_rows", "ggml/src/ggml-cuda/set-rows.cu", "ggml-cuda.dll")):
+        ("set_rows", "ggml/src/ggml-cuda/set-rows.cu", "ggml-cuda.dll"),
+        *((("context", "src/llama-context.cpp", "llama.dll"),
+           ("hybrid", "src/llama-memory-hybrid.cpp", "llama.dll")) if include_context else ())):
         source = root / relative
         sha = source_api._digest_at(base_receipt["source_sha256_before"], source)
         source_api._equal_digests(sha, source_api._digest_at(base_receipt["source_sha256_after"], source))
@@ -724,6 +726,26 @@ def verify_gpu_invocation_source_links(runtime_binding, data_root):
         entry = source_api._compile_entry(commands, source, build)
         obj = Path(entry["output"]).resolve()
         source_api._ninja_source_link(ninja, source, obj, build, module)
+        if name == "context":
+            # This unit is rebuilt by annotation-control, not inherited as the
+            # original object. Bind the compiled overlay and its linked output.
+            manifest_ref = stages["annotation_compile_and_link"]["source_manifest_ref"]
+            manifest = ev.document(manifest_ref)
+            source_api._equal_digests(manifest_ref["sha256"], annotation["source_manifest_sha256"])
+            modified = manifest["modified_translation_units"][relative]
+            source_api._equal_digests(sha, modified["before_sha256"])
+            source = Path(manifest["overlay_source"]) / relative
+            sha = modified["after_sha256"]
+            ev.read({"path": str(source), "sha256": sha})
+            source_api._equal_digests(sha, source_api._digest_at(annotation["input_sha256"], source))
+            step = source_api._step(annotation, "compile " + relative)
+            argv = step["argv"]
+            if "-c" not in argv or source_api._identity(argv[argv.index("-c") + 1]) != source_api._identity(source):
+                raise ValueError("nonflash context compile source differs from annotation overlay")
+            outputs = [arg[3:] for arg in argv if arg.startswith("/Fo")]
+            if len(outputs) != 1:
+                raise ValueError("nonflash context compile output is ambiguous")
+            obj = (Path(step["cwd"]) / outputs[0]).resolve()
         link = source_api._step(annotation, "link bin/" + module)
         responses = [arg[1:] for arg in link["argv"] if arg.startswith("@")]
         if len(responses) != 1:
@@ -732,7 +754,7 @@ def verify_gpu_invocation_source_links(runtime_binding, data_root):
         args = source_api._tokens(ev.text({"path": str(response), "sha256": source_api._digest_at(annotation["input_sha256"], response)}))
         if not any(source_api._identity(arg) == source_api._identity(obj) for arg in args):
             raise ValueError("GPU invocation original source object is not in the inherited module link")
-        object_sha = source_api._digest_at(annotation["input_sha256"], obj)
+        object_sha = source_api._digest_at(annotation["output_sha256"] if name == "context" else annotation["input_sha256"], obj)
         expected = Path(annotation["build"]) / "bin" / module
         outputs = [arg[5:] for arg in args if arg.lower().startswith("/out:")]
         if len(outputs) != 1 or source_api._identity(outputs[0]) != source_api._identity(expected):
@@ -743,6 +765,98 @@ def verify_gpu_invocation_source_links(runtime_binding, data_root):
     return {"source_compilation": result, "evidence_refs": list(ev.refs.values()),
         "architecture_specific_model_source_content": "conditional; historical unity include body hashes unavailable"}
 
+
+
+def derive_nonflash_kv_view_contract(runtime_binding, data_root):
+    """Derive a timing-free physical-view rule from linked native source objects."""
+    from tools import llama_runtime_source_binding as source_api
+    linkage = verify_gpu_invocation_source_links(runtime_binding, data_root, include_context=True)
+    roles = ("kv_cache", "graph", "model", "context", "hybrid")
+    texts = {role: Path(linkage["source_compilation"][role]["source"]).read_text(encoding="utf-8")
+             for role in roles}
+    compact = {role: re.sub(r"\s+", "", text) for role, text in texts.items()}
+    # These are source assertions, never coefficients fitted to measurements.
+    expected = {
+        "kv_cache": ("n_stream(unified?1:n_seq_max)", "v_cells[s].resize(kv_size);",
+            "constuint32_tn_pad_cur=std::max(n_pad,256u);",
+            "std::min(cells.size(),std::max(n_pad_cur,GGML_PAD(cells.used_max_p1(),n_pad_cur)))",
+            "kv->apply_ubatch(sinfos[i_cur],ubatches[i_cur]);n_kv=kv->get_n_kv(sinfos[i_cur]);"),
+        "context": ("cparams.n_ctx=GGML_PAD(cparams.n_ctx,256);",
+            "if(cparams.kv_unified){cparams.n_ctx_seq=cparams.n_ctx;"),
+        "graph": ("constauton_stream=cparams.kv_unified?1:ubatch.n_seqs_unq;",
+            "ggml_new_tensor_4d(ctx,type,n_kv,n_tokens/n_stream,1,n_stream)",
+            "ggml_tensor*kq=ggml_mul_mat(ctx0,k,q);",
+            "kq=ggml_soft_max_ext(ctx0,kq,kq_mask,kq_scale,hparams.f_max_alibi_bias);",
+            "ggml_tensor*kqv=ggml_mul_mat(ctx0,v,kq);"),
+        "hybrid": ("mem_attn(newllama_kv_cache(model,model.hparams,type_k,type_v,v_trans,offload,unified,kv_size,n_seq_max,n_pad,n_swa,swa_type,",),
+        "model": ("res=newllama_kv_cache(*this,hparams,params.type_k,params.type_v,!cparams.flash_attn,cparams.offload_kqv,cparams.kv_unified,cparams.n_ctx_seq,cparams.n_seq_max,1,",),
+    }
+    for role, rules in expected.items():
+        if any(rule not in compact[role] for rule in rules):
+            raise ValueError("nonflash KV source rule differs: " + role)
+    hybrid = re.sub(r"/\*.*?\*/|//[^\n]*", "", texts["model"], flags=re.S)
+    if "res=newllama_memory_hybrid(*this,params.type_k,params.type_v,!cparams.flash_attn,cparams.n_ctx_seq,1,hparams.n_swa,hparams.swa_type," not in re.sub(r"\s+", "", hybrid):
+        raise ValueError("hybrid attention cache n_pad=1 source rule missing")
+    return {"schema": "heterollm.llama-nonflash-kv-view/v1", "n_pad": 1, "n_kv_padding": 256,
+        "context_allocation_alignment": 256,
+        "source_sha256": {linkage["source_compilation"][role]["source"]:
+            linkage["source_compilation"][role]["source_sha256"] for role in roles},
+        "source_compilation": {role: linkage["source_compilation"][role] for role in roles},
+        "runtime_llama_module": runtime_binding["contract"]["runtime_modules"]["llama.dll"],
+        "runtime_binding_sha256": runtime_binding["contract"].get("content_sha256"),
+        "rules": {"extent": "min(cache_cells,max(256,pad(used_max_p1,256)))",
+            "occupied_lower_bound": "largest_current_sequence_retained_context_only",
+            "mask": "F32[n_kv,ubatch.n_tokens,1,1]", "nonflash": "KQ -> masked_softmax -> PV",
+            "padding_source": "get_n_kv max(n_pad,256); cache constructor n_pad=1; no get_padding function in locked source"},
+        "native_latency_used": False,
+        "evidence_refs": linkage["evidence_refs"],
+        "uncovered_reasons": ["unified_allocator_extent_holes_inactive_slots_and_shared_prefix_union_unknown"]}
+
+
+def verified_nonflash_kv_view_contract(path, rows, data_root, *, runtime_binding=None, runtime_source_contract_path=None):
+    saved, contract_ref = grid.read_document(path)
+    if runtime_binding is None:
+        if runtime_source_contract_path is None:
+            raise ValueError("nonflash KV view requires --host-offload-source-contract for runtime binding")
+        runtime_binding = verified_host_offload_source_contract(runtime_source_contract_path, rows, data_root)
+    canonical = derive_nonflash_kv_view_contract(runtime_binding, data_root)
+    if json.loads(json.dumps(canonical)) != saved:
+        raise ValueError("nonflash KV view differs from re-derived source/build rules")
+    cells = {}
+    for row in rows:
+        host = runtime_binding["cells"][row["cell_id"]]
+        if host.get("status") != "verified":
+            raise ValueError("nonflash KV view requires verified selected native runtime identity")
+        raw = row["config"]
+        slot, parallel = raw.get("kv_unified_per_slot", 2048), raw["parallel"]
+        cfg = {"batch": raw.get("batch", 64), "ubatch": raw.get("ubatch", 64),
+            "parallel": parallel, "simulator_slot_context_tokens": slot,
+            "native_context_tokens": raw.get("context", raw.get("ctx", slot * parallel)),
+            "flash_attn": raw.get("flash_attn", raw.get("flash_attention", False)),
+            "kv_unified": raw.get("kv_unified", True), "kv_type_k": raw.get("kv_type_k", "f16"),
+            "kv_type_v": raw.get("kv_type_v", "f16")}
+        if (cfg["native_context_tokens"] != slot * parallel or cfg["native_context_tokens"] % 256
+                or cfg["flash_attn"] is not False or cfg["kv_unified"] is not True
+                or cfg["kv_type_k"] != "f16" or cfg["kv_type_v"] != "f16"):
+            raise ValueError("nonflash KV view frozen native cache configuration unsupported")
+        cells[row["cell_id"]] = {**canonical, "runtime_binding_status": "verified", "configuration": cfg}
+    refs = {ref["path"]: ref for ref in [contract_ref, *runtime_binding["evidence_refs"], *canonical["evidence_refs"]]}
+    return {"contract": canonical, "contract_ref": contract_ref, "cells": cells,
+        "evidence_refs": list(refs.values()), "native_latency_used": False}
+
+
+def apply_nonflash_kv_view_static_contract(scenario, inputs, *, gguf=None):
+    contract = inputs.get("nonflash_kv_view_contract")
+    if contract is None:
+        return scenario
+    if gguf is not None:
+        sliding = {key: value for key, value in gguf.metadata.items()
+                   if "sliding_window" in key and value not in (None, 0, False)}
+        contract = {**contract, "model_cache_scope": {
+            "ordinary_retained_prefix": gguf.architecture in {"llama", "qwen2", "qwen35"} and not sliding,
+            "gguf_sha256": gguf.sha256, "sliding_window_metadata": sliding}}
+    return replace(scenario, workload=replace(scenario.workload,
+        metadata={**scenario.workload.metadata, "llama_cpp_nonflash_kv_view": contract}))
 
 def verified_gpu_invocation_contract(path, rows, data_root, *, enable_mmq_source_costs=False,
                                      runtime_binding=None, runtime_source_contract_path=None):
@@ -984,7 +1098,7 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None):
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -1028,6 +1142,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "deployment": row.get("deployment", "explicit_gpu_layers_" + str(config.get("gpu_layers"))),
         "config": config, "hardware_snapshot": physical,
         "sampling_binding": sampling["cells"][row["cell_id"]] if sampling else None,
+        "nonflash_kv_view_contract": nonflash_kv_view["cells"][row["cell_id"]] if nonflash_kv_view else None,
         "native_model_ref": dict(model_ref), "prediction_model_ref": prediction_model_ref,
         "recurrent_batching_contract": recurrent_batching["contract"] if recurrent_batching else None,
         "recurrent_batching_evidence": recurrent_batching,
@@ -1103,6 +1218,9 @@ def unsupported_dimensions(inputs, model=None):
         {"dimension": "cpu_worker_binding", "status": "conditional", "native": {k: raw.get(k) for k in ("threads", "threads_batch", "worker_cpu_mask", "poll", "priority")}, "reason": "16 cores are modeled; physical worker mask, strict binding, polling and scheduling are not."},
         {"dimension": "kv_shared_physical_pool", "status": "conditional", "native_total_context_tokens": 2048 * raw.get("parallel", 1), "simulator_slot_context_tokens": 2048, "reason": "Logical slot capacity matches; native unified physical KV pool allocation/contention parity remains unproven."},
         {"dimension": "runtime_op_offload_contract", "status": "unsupported", "runtime_ref": inputs["runtime_ref"], "op_offload": raw.get("op_offload", True), "reason": "Actual new runtime identity is retained and does not inherit the old semantic-runtime CUDA op-offload contract."}]
+    if inputs.get("nonflash_kv_view_contract") is not None:
+        rows.append({"dimension": "nonflash_physical_kv_view", "status": "conditional",
+            "reason": "Source-bound padded lower bound from the longest current retained prefix; full unified allocation/high-water, inactive and cached slots remain unknown."})
     host_binding = inputs.get("host_offload_evidence")
     if isinstance(host_binding, Mapping):
         rows[2] = {"dimension": "runtime_op_offload_contract",
@@ -1568,6 +1686,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     scenario = apply_host_offload_static_contract(scenario, inputs)
     scenario = apply_tensor_storage_static_contract(scenario, inputs)
     scenario = apply_gpu_invocation_static_contract(scenario, inputs)
+    scenario = apply_nonflash_kv_view_static_contract(scenario, inputs, gguf=gguf)
     profiles = {kind: dict(values) for kind, values in scenario.component_profiles.items()}
     changed = []
     for ident, profile in profiles.get("gpu", {}).items():
@@ -1610,6 +1729,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         "prediction_type": PREDICTION_TYPE, "native_answers_used": False, "calibration_applied": False, "formal_prediction_eligible": False,
         "unsupported_dimensions": unsupported_dimensions(inputs, model), "input_identity": {
             "static_inputs_sha256": grid.stable_hash(inputs), "sampling_binding": sampling, "model": {"path": str(path), "sha256": gguf.sha256},
+            "nonflash_kv_view_contract": inputs.get("nonflash_kv_view_contract"),
             "native_model_ref": inputs.get("native_model_ref"), "prediction_model_ref": inputs.get("prediction_model_ref"),
             "control_plane_replan": placement_refresh, "cpu_iq_panel_reuse": inputs.get("cpu_iq_panel_reuse"),
             "slot_order_contract": inputs.get("slot_order_contract"),
@@ -1699,7 +1819,7 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
@@ -1715,6 +1835,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     recurrent = verified_recurrent_batching_contract(recurrent_batching_contract_path, rows, data_root) if recurrent_batching_contract_path else None
     slot_order = verified_slot_order_contract(slot_order_contract_path, rows, data_root, source_chain_contract_path=recurrent_batching_contract_path) if slot_order_contract_path else None
     host_offload = verified_host_offload_source_contract(host_offload_source_contract_path, rows, data_root) if host_offload_source_contract_path else None
+    nonflash_kv_view = verified_nonflash_kv_view_contract(nonflash_kv_view_source_contract_path, rows, data_root,
+        runtime_binding=host_offload, runtime_source_contract_path=host_offload_source_contract_path) if nonflash_kv_view_source_contract_path else None
     if type(tensor_storage_f32_hidden) is not bool or (tensor_storage_f32_hidden and tensor_storage_contract_path is None):
         raise ValueError("tensor-storage F32 hidden treatment requires its explicit source contract and boolean flag")
     tensor_storage = verified_tensor_storage_contract(tensor_storage_contract_path, rows, data_root,
@@ -1748,7 +1870,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view)
             configuration(inputs)
             gpu_clock(inputs)
         except Exception as exc:
@@ -1759,7 +1881,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "selection_sha256": selection_ref["sha256"], "selection_created_utc": selection.get("created_utc"),
         "selected_denominator": len(entries), "native_grid_denominator": selection.get("native_grid_denominator", selection.get("planned_cells", 162)),
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
-        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation, "sampling": sampling,
+        "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation, "sampling": sampling, "nonflash_kv_view": nonflash_kv_view,
         "coverage": selection["coverage"], "cells": entries}
     grid.write_new(output / "freeze.json", freeze)
     verify_refs([selection_ref, *source["files"]])
@@ -1777,6 +1899,8 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         verify_refs(tensor_storage["evidence_refs"])
     if gpu_invocation:
         verify_refs(gpu_invocation["evidence_refs"])
+    if nonflash_kv_view:
+        verify_refs(nonflash_kv_view["evidence_refs"])
     if sampling:
         verify_refs(sampling["evidence_refs"])
     return freeze
@@ -1806,6 +1930,9 @@ def verify_freeze_references(freeze):
     gpu_invocation = freeze.get("gpu_invocation")
     if gpu_invocation:
         refs += gpu_invocation["evidence_refs"]
+    nonflash_kv_view = freeze.get("nonflash_kv_view")
+    if nonflash_kv_view:
+        refs += nonflash_kv_view["evidence_refs"]
     sampling = freeze.get("sampling")
     if sampling:
         refs += sampling["evidence_refs"]
@@ -2152,6 +2279,8 @@ def main(argv=None):
     parser.add_argument("--gpu-invocation-contract", type=Path, help="conditional source/build-bound physical GPU projection and fusion mapping; initial freeze only, default off")
     parser.add_argument("--gpu-mmq-source-costs", action=argparse.BooleanOptionalAction, default=None,
         help="separate source MMQ/MMVQ cost treatment; requires GPU invocation contract; default false")
+    parser.add_argument("--nonflash-kv-view-source-contract", type=Path,
+        help="source/build-bound non-Flash physical KV view lower bound; initial freeze only; default off")
     parser.add_argument("--gpu-conversion-cta-costs", action=argparse.BooleanOptionalAction, default=None,
         help="source conversion grid compute-resource cap; initial freeze only; requires GPU MMQ source costs")
     parser.add_argument("--tensor-storage-f32-hidden", action=argparse.BooleanOptionalAction, default=None,
@@ -2178,7 +2307,7 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
+    if (args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
         parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
     if args.gpu_mmq_source_costs is not None and args.gpu_invocation_contract is None:
         parser.error("--gpu-mmq-source-costs requires --gpu-invocation-contract")
@@ -2188,7 +2317,7 @@ def main(argv=None):
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract)
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract)
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

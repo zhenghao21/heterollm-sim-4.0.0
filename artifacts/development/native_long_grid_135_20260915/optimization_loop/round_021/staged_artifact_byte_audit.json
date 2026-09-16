@@ -1,0 +1,1693 @@
+{
+  "schema": "git-frozen-artifact-byte-audit/v1",
+  "all_equal": true,
+  "artifact_files": 337,
+  "files": [
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/REPORT.md",
+      "bytes": 4503,
+      "sha256": "2749e4509148e9c6b8df0ca8c8c9bc9dded14dc86344381c9d668278a2183382"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/anchor_continuation_review.json",
+      "bytes": 666,
+      "sha256": "9ef00d203711d40b8a951cab60ff482818de53c1ad1f43ccb981f18fa875a4f9"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/baseline_reproduction.json",
+      "bytes": 1916,
+      "sha256": "874fbbf46955594c3481cd53d91a44c1d84b04e91081b17cf50e174be47fe31b"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/closeout.json",
+      "bytes": 15484,
+      "sha256": "920d153473e7dcb72321864a71f4635739c690cd87e92f5745ca95c8ae3481bd"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/core_validation.json",
+      "bytes": 1861,
+      "sha256": "17affaba99fbea9b807f5b65f1329a35cc1875e080680a78bd0ec028ac3f1675"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/manifest.0001.json",
+      "bytes": 37465,
+      "sha256": "6034113c4384ea4bc6144db3d0610bda4f4c1032508bdad84f0e7e4078d09566"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p128_o128_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p128_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p128_o32_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p1536_o128_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p1536_o128_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p1536_o256_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p1536_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p1536_o256_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p1536_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p1536_o32_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p512_o128_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p512_o256_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p512_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p512_o256_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p512_o32_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen25_p512_o32_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/qwen35_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/smollm2_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/predictions/tinyllama_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/runs/run.0001.finish.json",
+      "bytes": 10696,
+      "sha256": "c3f480d3cc3b1426b413250ffe12d1bd4f16733022f9469fe5859fe139383fa6"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/current/runs/run.0001.start.json",
+      "bytes": 2922,
+      "sha256": "a3f764c2e7f4a8256c16d67312f39c79c46ec19ab38877e3173671b72aa91417"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/detailed_evidence.parts.json",
+      "bytes": 1558,
+      "sha256": "04692a264b00c8eb8ac621af358d2086546546ccd7aab006740e5ffb9befe178"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/detailed_evidence.tar.gz.part001of004",
+      "bytes": 41943040,
+      "sha256": "df941157a70b85f52a6e0d70390e8670bb29714f7a28af64d15c70e117308ad7"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/detailed_evidence.tar.gz.part002of004",
+      "bytes": 41943040,
+      "sha256": "6379c3f4f30a8a877f8baa5306cff20629b012a1377cdd0d7862f74b6c4cb827"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/detailed_evidence.tar.gz.part003of004",
+      "bytes": 41943040,
+      "sha256": "98f783bf6cead5755a183fb187660b80f717680a812669d309b6b425faa18060"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/detailed_evidence.tar.gz.part004of004",
+      "bytes": 23068573,
+      "sha256": "4bce14976946123ce86012cfc47c77fa97b253195a88ff8774a90586a00b1626"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/detailed_evidence_index.json",
+      "bytes": 52689,
+      "sha256": "cee15c92cd45622b62dcf26ef4a28af14ef5d5eec9a5b6000e25d5f87585593f"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/evaluate_candidate.py",
+      "bytes": 6107,
+      "sha256": "43390fbf0ee2ff5dfb83e11021c88bfa969700fc6a1dff9a521a81554f65bd3c"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/evaluation_controls.json",
+      "bytes": 2281,
+      "sha256": "1e176ba23433c5310d819eb9ef382b504d26ced6af6c072e2c026f622800b332"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/evaluation_protocol.json",
+      "bytes": 2247,
+      "sha256": "abf5fe33a3484e6be58d0143007a4f64b1995a905e351e95a58cc53a81f1b1f9"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/RESULT.md",
+      "bytes": 4159,
+      "sha256": "d69d5e5bd1b3e9a61c381bdbd4b36bb6a2091e285e443e8800a2dc6cd58b77a6"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/before.json",
+      "bytes": 839,
+      "sha256": "31361b48c4130803d01a879d0ee3bb18bde025ef836a96ab97b12241643d1924"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/before.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/before.stdout.txt",
+      "bytes": 71,
+      "sha256": "50ef7e5aa4b07485c0d1cc38ce34f92b8887491581573571e74d1a542406df8f"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/lock.json",
+      "bytes": 775,
+      "sha256": "2d610a323c18f8e2616083ce708a46bb55b03997208ad2f8209c5e2064281586"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/lock.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/lock.stdout.txt",
+      "bytes": 90,
+      "sha256": "68883ce038ee91bc2eaed841d86c46f3eb0c6c80a158d15f3c634b1264f8fbf4"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/readback.json",
+      "bytes": 840,
+      "sha256": "513fe36ca159ee57f025a33233f5a43f2af64815910a4bd75aaeccdc2272f5bd"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/readback.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/readback.stdout.txt",
+      "bytes": 56,
+      "sha256": "7c1f6fdd1497e7bc8e06e47f0309afcbe7e6bd74c9b7df9ac48a392f06f9efbe"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/reset.json",
+      "bytes": 759,
+      "sha256": "2c8e7f1690a3e78d397511f8e53aae84c407efaf69ad840c5f8658ab0e9291f7"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/reset.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/clock_session/reset.stdout.txt",
+      "bytes": 11,
+      "sha256": "d9f5c3e617bb9414146d18461a3a761b020028fd725e6aa9234cf155cea2b4c6"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/collect.py",
+      "bytes": 18000,
+      "sha256": "9cccc0826971ffcb4e8a13de63c06d572cf87d0c82091d49519d793fcd64a58d"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/continue.json",
+      "bytes": 1374,
+      "sha256": "aef8e7a3ae80ec60002af3df4a6d83cadf1cb66e1cf2d651124164b5a19be463"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/contract.py",
+      "bytes": 2242,
+      "sha256": "24acfa2cbc5c5850d1d9cc43a0cd7ffb2ec832da8173409127df24491e8ce636"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/controller_result.json",
+      "bytes": 32676,
+      "sha256": "0ef861af6994a39c8628cf70b5b3298514215a21c48f368ad8f0d99436499742"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/execution_freeze.json",
+      "bytes": 126421,
+      "sha256": "4c4946db15968602476fb967b772e8f748eb9c64f27253a9afcf2c29aff6c2fc"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/first_pair_ready.json",
+      "bytes": 479,
+      "sha256": "59fb55c289dc7533b0be68e558ba70ba8d3e2745f11eb26ad432e3ca9d746fd6"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/first_pair_summary.json",
+      "bytes": 56264,
+      "sha256": "2b1095a7c53bfa355907d74169c438666aefeb625afc493ee5b297304dc79e69"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/integration_mock_test_result.json",
+      "bytes": 3034,
+      "sha256": "5587490ff190d826c3972cbafdb67b2afe5248e9eccf1e87e1e19dd1f835305c"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/native_trace.py",
+      "bytes": 18655,
+      "sha256": "24ca183bc2cf8ca22036099ada0487ffa61d1a0c49d28781d243f3f8c2371922"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/quality_fixed.py",
+      "bytes": 4556,
+      "sha256": "b827dde1479cd1262037a7dd17d715367eef08105426147b210468a77e470603"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/result_summary.json",
+      "bytes": 27319,
+      "sha256": "b128e4f8d11fcc0aeceedd4460a5cf587429b5f19a9da5421d2eae1f62665c2b"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/complete.json",
+      "bytes": 5535,
+      "sha256": "134c5c7a25d01b2670a6cde84b9d50b289ee3a5368be917c81164ff5614bc3af"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/launch_intent.json",
+      "bytes": 2556,
+      "sha256": "0134ed4326ccd3b709c293a68b165c551574150bed0b7d7597c98fca45ef5fb7"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/launched.json",
+      "bytes": 769,
+      "sha256": "034e510a3f4c79e8730cd4a486639bc1d10516f3bdfa1ae54910518de8fa586e"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/raw.jsonl.receipt.json",
+      "bytes": 586,
+      "sha256": "0c0988472931d76cedff390799e54ec2f696e216c8443eda9d00ac4d5cc332ad"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/raw_audit.json",
+      "bytes": 67858,
+      "sha256": "896b6ede7d993bdd4c6b51d2a2ffc2a2f249e82e9f1744b0695339f35a98efe6"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/stderr.txt",
+      "bytes": 152,
+      "sha256": "0a1f54c8af943984b80ca466c262543df27591eba9b0c398777426645aa4aaea"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/direct/validation.json",
+      "bytes": 509,
+      "sha256": "a0e8f5e47f153d9b574973538d83d67e0159e9896d8b99d05575edeae63c697e"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/export/complete.json",
+      "bytes": 4383,
+      "sha256": "be00116a28daf211e18f274094c962618efd7cba68cc0646a3302c498d0b1710"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/export/launch_intent.json",
+      "bytes": 2540,
+      "sha256": "415e695727307b25a686530544f11e2e39589454c50b583c228edf212c9471c7"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/export/launched.json",
+      "bytes": 764,
+      "sha256": "fb4e6a454edd6354e4e0275f66bcfe53f09bfddbbbb7243108aaabe7e98d7af6"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/export/stderr.txt",
+      "bytes": 8102,
+      "sha256": "adc54dc09a25799aa3abebb480fca595a964daca42a5c9e061d0f55c32d2311b"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/export/stdout.txt",
+      "bytes": 28,
+      "sha256": "28aad6aec28d10aa4950e03234aceed9a71ae906bd677fef12c54cae05710f16"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/export/validation.json",
+      "bytes": 507,
+      "sha256": "ada3f66d48a271442caeb0898966c13d4414d8f87d64bf5e34aed8ddbec0d116"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/complete.json",
+      "bytes": 6390,
+      "sha256": "d3045d40947aa800e1372f5783951813cb409b6410864ad98a907210100f65d0"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/launch_intent.json",
+      "bytes": 3052,
+      "sha256": "79a31c275e7972cdfa059aa23fa2987519ebb9dd35f8fdbd30f6809bfff2c2e5"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/launched.json",
+      "bytes": 1243,
+      "sha256": "126a4e8a21e4bf4257f7ebbaba90a38f700d400514a1abe9d1509086a160916c"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/raw.jsonl.receipt.json",
+      "bytes": 587,
+      "sha256": "b3dae0d920e205dfb97befb23f60d86f284f7d1aafccd609556139c74c357d29"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/raw_audit.json",
+      "bytes": 67857,
+      "sha256": "9309dc01bf564c72cea147465f83724201c399539eee48a93a5e593a85a4ff18"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/stdout.txt",
+      "bytes": 1548,
+      "sha256": "a7b26e8eaed5e2ddbef4925c7be43edf688dd4d95d27b9519d92712753c7076e"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/settled/pair_01/profile/validation.json",
+      "bytes": 510,
+      "sha256": "72e0e0b746246e8327afa826ab5589e2e470b68898162cb613c5b6089268e61e"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/complete.json",
+      "bytes": 5496,
+      "sha256": "11920f02869a5701f328cf6359178c7ce7be98700d8098ad1613ae6c3fb12df9"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/launch_intent.json",
+      "bytes": 2531,
+      "sha256": "48a24493ce51d2ea2ad36e4a42e8739be3e98d82d55df1192d1a06e66e59b463"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/launched.json",
+      "bytes": 762,
+      "sha256": "c3cbc81192eb869e3c14e294118122e5e373b81c7f7c5c0581d8d70049f985ea"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/raw.jsonl.receipt.json",
+      "bytes": 582,
+      "sha256": "74bdb1be38bf0656de42507992cb9881a5558d50229a0af62ee75a913b63bba8"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/raw_audit.json",
+      "bytes": 67791,
+      "sha256": "755b5104bfef61109e28d9db438ef20971b1740638642a28812bf23d0eaeb644"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/stderr.txt",
+      "bytes": 152,
+      "sha256": "0a1f54c8af943984b80ca466c262543df27591eba9b0c398777426645aa4aaea"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/direct/validation.json",
+      "bytes": 507,
+      "sha256": "502b09bcda1cc3038704582a9d6f2ef9064960e6a3ffb2181a225d33cd5fd144"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/export/complete.json",
+      "bytes": 4350,
+      "sha256": "3884d78989d5c67e7acb0d4734f793f1a83f03d84fae30bf1b4b9a1dc142696f"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/export/launch_intent.json",
+      "bytes": 2518,
+      "sha256": "b0d097ad3919026879d46a2a8182183ad1f1ab9f3750a7353d3a91b9734d75a0"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/export/launched.json",
+      "bytes": 761,
+      "sha256": "22e3b5e469479b892295a53bd5aa4c3dbcb41f3fc71521503d671eb94bce2732"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/export/stderr.txt",
+      "bytes": 8102,
+      "sha256": "adc54dc09a25799aa3abebb480fca595a964daca42a5c9e061d0f55c32d2311b"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/export/stdout.txt",
+      "bytes": 25,
+      "sha256": "09ace589f87af2a4384903737bc554ddfaf3dc49a80c14b5c85ae196de3782e9"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/export/validation.json",
+      "bytes": 503,
+      "sha256": "38d10eb659c7b01c1885e001ce796917dd5e68b34280418cf0571f504fd359d0"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/complete.json",
+      "bytes": 6343,
+      "sha256": "492ec8f237af0cff0147df405fdf5678b85f30a22d0cfc04987b61a0f5618ec4"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/launch_intent.json",
+      "bytes": 3025,
+      "sha256": "05a026015063af24d327d9b18d25303bc18e1dcf6c6f3b259ae77f5544a97d82"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/launched.json",
+      "bytes": 1233,
+      "sha256": "84db1fd6e544a3982ee3701e076bdc1306f08c36bfa7b2983ff1d3d68602ee97"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/raw.jsonl.receipt.json",
+      "bytes": 583,
+      "sha256": "4b482f7be9cc008bd13a03eb243080c5cd3ba3a0480aa1b96a2bf1e085f6dabb"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/raw_audit.json",
+      "bytes": 67783,
+      "sha256": "7a6c2b0e74976b29bdda67a0846c7fd0357dfb4cd399c8271d74cf7110a03de3"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/stdout.txt",
+      "bytes": 974,
+      "sha256": "d3c326a9972e5e3925fcec3b56e681335121bcaba8c79d64d33ba590cafc0ce0"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/runs/short/pair_01/profile/validation.json",
+      "bytes": 508,
+      "sha256": "b01c4b280d824549c1f762155c88ffd3d4242933ded41195e080559f24de918a"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/strict_raw.py",
+      "bytes": 8979,
+      "sha256": "77f276b3659a85f4fb77db68d22bb565be9c4e6ed09cacf3c07547a5e67b9740"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/telemetry/__init__.py",
+      "bytes": 66,
+      "sha256": "54e0cc02e09666f154414dddcd19140f707b67592361e63ba1e2a819abf6b96c"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/telemetry/assess.py",
+      "bytes": 5883,
+      "sha256": "dda04d24134cf1bd9028528372fa1bf9a38f0f31930d1e27d26dcd43bfff6285"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/telemetry/protocol.json",
+      "bytes": 2049,
+      "sha256": "82fa4c2331f8dfb98863350c13de0d663af84277fffb5769c1fd18267e51c56d"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/telemetry/sampler.py",
+      "bytes": 17329,
+      "sha256": "9f0cf7a3d417e8dbd59d0af0ead4af4341cc22b195d5e733577ba9a3676143cd"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/test_controller.py",
+      "bytes": 10449,
+      "sha256": "279c19655b4afb3c2319d19e5aad5e8cec72db3f3ba71ef7a944edb893717bc4"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/test_native_trace.py",
+      "bytes": 1582,
+      "sha256": "07cd464cc2985f036b7975171c5287d39a84eaa49fd5d2565e2b54947fbe75e1"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/test_settle_trace.py",
+      "bytes": 3516,
+      "sha256": "5998163b892c8bad9020b5b1c36545ae40ce93c4a19d85a2600b9d759fbf6eb8"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/test_strict_raw.py",
+      "bytes": 8010,
+      "sha256": "6a5f6c977c3ecca82481090493117fd9c0dc82ef78aea14693a98420656c72cc"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_collection/trace_reuse_provenance.json",
+      "bytes": 2076,
+      "sha256": "7a49c3cc9f25aa90b7ca77521c75ec7db514003bbd7a134bc9d286f82362a9f8"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/README.md",
+      "bytes": 638,
+      "sha256": "b3acf36ddab7007f1edd60367a6cd116afc51e6733a4d015635cd114f5107975"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/build_manifest.json",
+      "bytes": 78823,
+      "sha256": "abde1461ea5626ad66c6e406adf456f7db3b07e5fd4829b79641bce39c339a41"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/build_probe.py",
+      "bytes": 11434,
+      "sha256": "195ac43c0460654b0b0fb7059b13f235e344ca0aaa55de88700c3035f7ad5901"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/compile.cmd",
+      "bytes": 2010,
+      "sha256": "03fc28b658adb1426b0a782770fb27bd2df5c6e0f5f2efa0b84fc49ab0a4660d"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/compile.log",
+      "bytes": 56180,
+      "sha256": "95d592970ca3d557acc92e657cedca85544728f983225dc3cbbe35c9ff892361"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/frozen_module_guard.h",
+      "bytes": 1631,
+      "sha256": "02f886ebc8a2d9ab2b376ed876bd53ca3700dc87fc76e30ea4826014b57f55a1"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/host_reference_validation.json",
+      "bytes": 151,
+      "sha256": "ef486c7625399b031501de19c5b91e4ee3eee4dd84639a33990958ef8476e8fd"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/host_settle_main.cpp",
+      "bytes": 28134,
+      "sha256": "52351cf04084fa456071532dda28127fb282108acfc6884d54a7d4c0be011d8c"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/host_settle_probe.cpp",
+      "bytes": 20658,
+      "sha256": "f58ff0fa367a750e27d6a457ee4730d95433776e7554e5a8d6ec5640df9cbca2"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/invoke.ps1",
+      "bytes": 6875,
+      "sha256": "251f989753ce49765f7f116832bd7c89ffbff1f56b893058ddd85914f01ecdea"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/math_reference.h",
+      "bytes": 595,
+      "sha256": "2137dde9c1ad547496fe37ab8df8cb77fafa3a6dca06dbfd40a573442b36c555"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/prepared_identity.h",
+      "bytes": 10523,
+      "sha256": "2ed6d3ee687ffd7d808c6489af869499e65d7ea03a943683a7479d8a9c5f2304"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/protocol.json",
+      "bytes": 11799,
+      "sha256": "87d0d5b26a2fd691d6639e31a8985cc7a46b2e62585bd3df717b9e4a1d306110"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/reference_check.py",
+      "bytes": 2937,
+      "sha256": "fb0922cfb242aa8558c8089984479f512d1d436b9a95e430291dd981568e430b"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/reference_host.cpp",
+      "bytes": 2202,
+      "sha256": "1fad864fd5d9321a94333ca21495026ade4539b5ddcf662acd69d04010b88e86"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe/source_provenance.json",
+      "bytes": 7962,
+      "sha256": "0ac6928c24eb0a4ac78a4ec8675d00f6622a78976f527cd309cd9f1430e044d2"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/README.md",
+      "bytes": 638,
+      "sha256": "b3acf36ddab7007f1edd60367a6cd116afc51e6733a4d015635cd114f5107975"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/build_manifest.json",
+      "bytes": 78997,
+      "sha256": "f787b796e543530c58fafbdb7d7689991c728029953579132f3611309c36a985"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/build_probe.py",
+      "bytes": 11872,
+      "sha256": "86f79258b95ddae8c5df3b5cd2cafdfe4a64afc9b5ca115f400c7b271e3cf7df"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/compile.cmd",
+      "bytes": 2028,
+      "sha256": "699169af540056f1ecb84606bedf84bdd62c050360b070158635073a4cc99bd2"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/compile.log",
+      "bytes": 56198,
+      "sha256": "e66262ef791ceae75fae9b32bb6c74e800c0036c31fcbef9bbb5d328cd4bf8df"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/frozen_module_guard.h",
+      "bytes": 1631,
+      "sha256": "02f886ebc8a2d9ab2b376ed876bd53ca3700dc87fc76e30ea4826014b57f55a1"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/host_reference_validation.json",
+      "bytes": 151,
+      "sha256": "ef486c7625399b031501de19c5b91e4ee3eee4dd84639a33990958ef8476e8fd"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/host_settle_main.cpp",
+      "bytes": 28134,
+      "sha256": "52351cf04084fa456071532dda28127fb282108acfc6884d54a7d4c0be011d8c"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/host_settle_probe.cpp",
+      "bytes": 20658,
+      "sha256": "f58ff0fa367a750e27d6a457ee4730d95433776e7554e5a8d6ec5640df9cbca2"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/invoke.ps1",
+      "bytes": 6989,
+      "sha256": "04d028a2b7e513298831f60a7993cac11455be150648d42187d57a0f2e42ab31"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/math_reference.h",
+      "bytes": 595,
+      "sha256": "2137dde9c1ad547496fe37ab8df8cb77fafa3a6dca06dbfd40a573442b36c555"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/prepared_identity.h",
+      "bytes": 10559,
+      "sha256": "a4052157b53c558d423ce7e5d6445196ad9a4ad931ddaffc793755449448b19b"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/protocol.json",
+      "bytes": 11799,
+      "sha256": "87d0d5b26a2fd691d6639e31a8985cc7a46b2e62585bd3df717b9e4a1d306110"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/reference_check.py",
+      "bytes": 2937,
+      "sha256": "fb0922cfb242aa8558c8089984479f512d1d436b9a95e430291dd981568e430b"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/reference_host.cpp",
+      "bytes": 2202,
+      "sha256": "1fad864fd5d9321a94333ca21495026ade4539b5ddcf662acd69d04010b88e86"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/revision.json",
+      "bytes": 395,
+      "sha256": "46da5c71feafdc43d182d49e7ef7f93aa172c45fd972c1a80789282299c9ad0e"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/host_settle_probe_r2/source_provenance.json",
+      "bytes": 8361,
+      "sha256": "a69a4f78364424275139c0af2237a616fe60244d5e37673827d3ea9b9e5d243f"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/launch_sync_next_mechanism.md",
+      "bytes": 14837,
+      "sha256": "bea2735a30880de83295b55c082047e1cc0125296dda6add57a403e5111b9081"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/native_launch_audit.json",
+      "bytes": 8809,
+      "sha256": "eef151cb56f8fa447ac58f21ece42c6c5b5e95cafe5403cc10e70174ebf37c9f"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/native_launch_audit.md",
+      "bytes": 12044,
+      "sha256": "c18a69545c29a95d8997c69b9cba18944c46edcc7fcc85394fccc2569c1836ea"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/nonflash_kv_fix_report.md",
+      "bytes": 7459,
+      "sha256": "f0a6b77c9593cc58279d7b7e0b587ce9f628577bed2ddfb50a786ac2d84c20d9"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/nonflash_kv_view_source_contract.json",
+      "bytes": 10141,
+      "sha256": "5b1ef1e995ee9b6e7c88ca55050d5b017cf6c495972259a99f4b6de3b0798b3e"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/package_evidence.py",
+      "bytes": 8247,
+      "sha256": "c05ba5682e8f0313d750e2833d6ead46ebc25516d685e780a96b74f60970107e"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/manifest.0001.json",
+      "bytes": 37486,
+      "sha256": "a82ca8ade713c91602993a37963466b0c0a65b53d7e7bed6f29f185751f65731"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/manifest.0002.json",
+      "bytes": 76782,
+      "sha256": "4009c1733b43f61549678655d432e57037c0aa8619a72101edf97d0f7961cb7f"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p128_o128_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p128_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p128_o32_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p1536_o128_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p1536_o128_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p1536_o256_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p1536_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p1536_o256_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p1536_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p1536_o32_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p512_o128_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p512_o256_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p512_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p512_o256_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p512_o32_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen25_p512_o32_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p128_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p1536_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p1536_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p1536_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p1536_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p1536_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p1536_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen35_p512_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p128_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p1536_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_gpu_p512_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p128_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p1536_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p1536_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p1536_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p1536_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p1536_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p512_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p512_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p512_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p512_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p512_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p512_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/qwen38_p512_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p128_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p128_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p128_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p128_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p128_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p1536_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/smollm2_p512_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p128_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p128_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p128_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p128_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p128_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p128_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p128_o32_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p1536_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p1536_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p1536_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p1536_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p1536_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p1536_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o128_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o128_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o128_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o256_c1__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o256_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o256_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o32_c2__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/predictions/tinyllama_p512_o32_c4__fixed_runtime.run.0002.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/runs/run.0001.finish.json",
+      "bytes": 10718,
+      "sha256": "a2d9cba7b2e948885e2b3e5a69b227b3b730f18bd5e2eaa23ff051fa78141457"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/runs/run.0001.start.json",
+      "bytes": 2923,
+      "sha256": "380743420a876f2b7351b629b57d205c3afee5fa6cfa7312a279d293b40d9966"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/runs/run.0002.finish.json",
+      "bytes": 54448,
+      "sha256": "d09d9978299ac9c08acf6a97682441d2ce644dc3edb6878ceb5b95be690d1694"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/physical/runs/run.0002.start.json",
+      "bytes": 13144,
+      "sha256": "6a91da2bcfe18729a498faf193019cb05947bef238ca054dd8a75ca51941b95d"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/manifest.0001.json",
+      "bytes": 37402,
+      "sha256": "5be05e823eb615e3ffeb7a5a84f87d2dce3f28bec0f9af0ee0901fcf2054f7f8"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p128_o128_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p128_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p128_o32_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p1536_o128_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p1536_o128_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p1536_o256_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p1536_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p1536_o256_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p1536_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p1536_o32_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p512_o128_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p512_o256_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p512_o256_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p512_o256_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p512_o32_c2__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen25_p512_o32_c4__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/qwen35_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/smollm2_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/predictions/tinyllama_p512_o32_c1__fixed_runtime.run.0001.worker.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/runs/run.0001.finish.json",
+      "bytes": 10630,
+      "sha256": "3e0837e73c82dc24d680ec1233ce2280e835db20163ddea0577903ef05e7bc30"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/pure/runs/run.0001.start.json",
+      "bytes": 2919,
+      "sha256": "c361853543ed49984e108ea614feec5ff8c3c4304975a7ade29a89fcd6cc1509"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/render_heatmap.py",
+      "bytes": 4100,
+      "sha256": "7aa088ec3a2e4a22cdb878616608eacdea871945730c9061f3918cbbbcabaf03"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/report_schema_failure.json",
+      "bytes": 574,
+      "sha256": "d2f65f842e2b6d1d59a4dc69d46a7dd96f74cb9390cb35f0526588ab70367efc"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_full/ablation_full.md",
+      "bytes": 1452,
+      "sha256": "97165aa8d0a52433b3a193e0faa5d2cc39b87183697f098405601463d5172416"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_full/ablation_full_heatmap.svg",
+      "bytes": 18767,
+      "sha256": "66d3bf94c0a7919f11eb1f4b7c51e19ec5a32e7770ccb01a6b26353c7ba605cd"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_full/reporting_controls.json",
+      "bytes": 76980,
+      "sha256": "f53a94b6bfec397ac41d76632fa7f8474b08851c839c0a840af9af4022fd0378"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_full/summarize_ablation.py",
+      "bytes": 35413,
+      "sha256": "4455c1bb7f10ffb1630868032a0ded13db4a706016d0ee533b442ddbc72379a3"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/ablation_anchors.md",
+      "bytes": 1407,
+      "sha256": "39098457eb147516897b44aa43f35e6012f8b268a462f336be7b6b4520e6e927"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/ablation_anchors_heatmap.svg",
+      "bytes": 18767,
+      "sha256": "66d3bf94c0a7919f11eb1f4b7c51e19ec5a32e7770ccb01a6b26353c7ba605cd"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/full_engine_error_heatmap.png",
+      "bytes": 857406,
+      "sha256": "309af0fc9153116476b73cda122a0e32c9ab94f12bc1716b6d72fe9d0dbb05e1"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/full_engine_error_heatmap.provenance.json",
+      "bytes": 859,
+      "sha256": "aee0e9922eaca6d1ec2e331c409f70dfb530b7551ab03de5ad631bd0ac2ec0b4"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/full_engine_error_heatmap.svg",
+      "bytes": 583305,
+      "sha256": "31a9f50b2b69d621cf1c2687e9ff8af31c26b8ef67aa56d3409c7920f950f817"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/full_engine_error_heatmap_v2.png",
+      "bytes": 854984,
+      "sha256": "cb34e14d11affe9ec409aa7b6cb7c65ae453628ef2f2ed3c315d413ef1048628"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/full_engine_error_heatmap_v2.provenance.json",
+      "bytes": 763,
+      "sha256": "2099284481f09588f12770932d3c0b4997f9ded52b9aaaa180347fe2a4870fb7"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/full_engine_error_heatmap_v2.svg",
+      "bytes": 582277,
+      "sha256": "f3453af760666aad2019fe47fa0067e352ad27833755937e15d2862df50d3421"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/reporting_controls.json",
+      "bytes": 29396,
+      "sha256": "a29a6bb72abb732243f74ed283d83f5e71f59570a88c538a11b263d67e79b9d0"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/summarize_ablation.py",
+      "bytes": 35413,
+      "sha256": "4455c1bb7f10ffb1630868032a0ded13db4a706016d0ee533b442ddbc72379a3"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/reporting_v2/test_summarize_ablation_v2.py",
+      "bytes": 3333,
+      "sha256": "f189381aaac60fb970103a3d897963965d3503968f09f6be46cd27a68467deec"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/restore_evidence.py",
+      "bytes": 15569,
+      "sha256": "1ea1418b89c18ec0a04efdb0f6853de854af6258b07f42c8c8af7fda871dd6c1"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/runtime_batch_audit.json",
+      "bytes": 4949,
+      "sha256": "b2a588b5c248512c002a3ec41abb800af0052a28dd70b408e95b52033dcfc139"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/runtime_batch_audit.md",
+      "bytes": 17241,
+      "sha256": "3d8d74eee2160a4bf63fc48596445a0b1db3edeae62d8351d93651cea2d8a559"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/split_evidence_packet.py",
+      "bytes": 8537,
+      "sha256": "9dfe936d2c1ef925b62dc735042a426c024108a17441b84cd4bb930c4c2636b7"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/summarize_ablation.py",
+      "bytes": 30644,
+      "sha256": "d211dfb9ddd3591955abf92cbe676637ba92c5150eb2d0c9af6ba45257d09c91"
+    },
+    {
+      "path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_021/test_summarize_ablation_r21.py",
+      "bytes": 13364,
+      "sha256": "da57fdf32210629310eb7d5854da9d12ea636f7e9b930704019133564e28bb78"
+    }
+  ],
+  "scope": "R21 artifacts only; Python working-tree CRLF is handled by the repository normal text policy."
+}

@@ -1,0 +1,54 @@
+{
+  "schema": "nonflash-physical-kv-ablation/v1",
+  "created_utc": "2026-09-16T09:08:29.683784+00:00",
+  "native_lock": {
+    "native_locked": true,
+    "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "selected_cells": 131,
+    "raw_files": 131,
+    "formal_requests": 894
+  },
+  "variants": [
+    "pure",
+    "current",
+    "physical"
+  ],
+  "anchor_ids": [
+    "qwen25_p128_o128_c4__fixed_runtime",
+    "qwen25_p128_o256_c2__fixed_runtime",
+    "qwen25_p128_o32_c4__fixed_runtime",
+    "qwen25_p1536_o128_c1__fixed_runtime",
+    "qwen25_p1536_o128_c4__fixed_runtime",
+    "qwen25_p1536_o256_c1__fixed_runtime",
+    "qwen25_p1536_o256_c2__fixed_runtime",
+    "qwen25_p1536_o256_c4__fixed_runtime",
+    "qwen25_p1536_o32_c1__fixed_runtime",
+    "qwen25_p1536_o32_c2__fixed_runtime",
+    "qwen25_p512_o128_c1__fixed_runtime",
+    "qwen25_p512_o256_c1__fixed_runtime",
+    "qwen25_p512_o256_c2__fixed_runtime",
+    "qwen25_p512_o256_c4__fixed_runtime",
+    "qwen25_p512_o32_c1__fixed_runtime",
+    "qwen25_p512_o32_c2__fixed_runtime",
+    "qwen25_p512_o32_c4__fixed_runtime",
+    "qwen35_p512_o32_c1__fixed_runtime",
+    "smollm2_p512_o32_c1__fixed_runtime",
+    "tinyllama_p512_o32_c1__fixed_runtime"
+  ],
+  "full_denominator": 131,
+  "threshold_pct_strict": 10,
+  "metrics": [
+    "engine_ttft_ms",
+    "engine_tpot_ms",
+    "engine_e2e_ms"
+  ],
+  "pure": "Existing analytical cost baseline, no MMQ source cost, no sampling contract, no physical KV rule",
+  "current": "R18 sampling semantics and MMQ source costs, physical KV rule off",
+  "physical": "current plus source-bound non-Flash KV lower-bound width; retained pool state unknown",
+  "is_blind": false,
+  "formal_acceptance": false,
+  "native_remeasurement": false,
+  "calibration_added": false,
+  "workflow": "Save and validate all three anchor prediction sets before scoring any; preserve failures and 131 denominator. Continue physical to all131 after anchored review without modifying its freeze.",
+  "continuation_criterion": "Mechanism/identity regressions pass and source correction retained. Mixed accuracy outcomes are reported, never censored. Full131 outcome needed for gate A."
+}

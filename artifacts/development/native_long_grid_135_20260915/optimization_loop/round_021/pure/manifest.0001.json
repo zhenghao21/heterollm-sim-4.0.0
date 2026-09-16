@@ -1,0 +1,1111 @@
+{
+  "schema": "stable-native-prediction-manifest/v1",
+  "created_utc": "2026-09-16T09:16:32.735278+00:00",
+  "freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\freeze.json",
+    "sha256": "609e2baa3b8e92853e563b12e9d0bee2c9f1305db05e139277db2b68e1bf1cff",
+    "size_bytes": 25382388
+  },
+  "selected_denominator": 131,
+  "successful_cells": 20,
+  "failed_or_incomplete_cells": 0,
+  "pending_cells": 111,
+  "coverage": [
+    {
+      "model_key": "qwen25",
+      "placement_group": "qwen25",
+      "planned_cells": 27,
+      "complete_cells": 27,
+      "verified_cells": 27,
+      "selected_cells": 17,
+      "excluded_cells": 10,
+      "exclusion_reason_counts": {
+        "ttft_rank_worst_abs_pct_not_strictly_below_5": 10,
+        "ttft_batch_worst_abs_pct_not_strictly_below_5": 6,
+        "tpot_batch_worst_abs_pct_not_strictly_below_5": 3,
+        "tpot_rank_worst_abs_pct_not_strictly_below_5": 3,
+        "e2e_batch_worst_abs_pct_not_strictly_below_5": 3,
+        "e2e_rank_worst_abs_pct_not_strictly_below_5": 3
+      }
+    },
+    {
+      "model_key": "qwen35",
+      "placement_group": "qwen35",
+      "planned_cells": 27,
+      "complete_cells": 27,
+      "verified_cells": 27,
+      "selected_cells": 22,
+      "excluded_cells": 5,
+      "exclusion_reason_counts": {
+        "ttft_batch_worst_abs_pct_not_strictly_below_5": 4,
+        "ttft_rank_worst_abs_pct_not_strictly_below_5": 5,
+        "tpot_batch_worst_abs_pct_not_strictly_below_5": 1,
+        "tpot_rank_worst_abs_pct_not_strictly_below_5": 2,
+        "e2e_batch_worst_abs_pct_not_strictly_below_5": 1,
+        "e2e_rank_worst_abs_pct_not_strictly_below_5": 1
+      }
+    },
+    {
+      "model_key": "qwen38",
+      "placement_group": "qwen38",
+      "planned_cells": 27,
+      "complete_cells": 27,
+      "verified_cells": 27,
+      "selected_cells": 20,
+      "excluded_cells": 7,
+      "exclusion_reason_counts": {
+        "ttft_rank_worst_abs_pct_not_strictly_below_5": 7,
+        "tpot_rank_worst_abs_pct_not_strictly_below_5": 5,
+        "ttft_batch_worst_abs_pct_not_strictly_below_5": 5,
+        "tpot_batch_worst_abs_pct_not_strictly_below_5": 3,
+        "e2e_batch_worst_abs_pct_not_strictly_below_5": 3,
+        "e2e_rank_worst_abs_pct_not_strictly_below_5": 4
+      }
+    },
+    {
+      "model_key": "smollm2",
+      "placement_group": "smollm2",
+      "planned_cells": 27,
+      "complete_cells": 27,
+      "verified_cells": 27,
+      "selected_cells": 23,
+      "excluded_cells": 4,
+      "exclusion_reason_counts": {
+        "ttft_rank_worst_abs_pct_not_strictly_below_5": 4,
+        "ttft_batch_worst_abs_pct_not_strictly_below_5": 2
+      }
+    },
+    {
+      "model_key": "tinyllama",
+      "placement_group": "tinyllama",
+      "planned_cells": 27,
+      "complete_cells": 27,
+      "verified_cells": 27,
+      "selected_cells": 22,
+      "excluded_cells": 5,
+      "exclusion_reason_counts": {
+        "ttft_batch_worst_abs_pct_not_strictly_below_5": 4,
+        "ttft_rank_worst_abs_pct_not_strictly_below_5": 4,
+        "tpot_rank_worst_abs_pct_not_strictly_below_5": 2,
+        "e2e_batch_worst_abs_pct_not_strictly_below_5": 2,
+        "e2e_rank_worst_abs_pct_not_strictly_below_5": 2,
+        "tpot_batch_worst_abs_pct_not_strictly_below_5": 1
+      }
+    },
+    {
+      "model_key": "qwen38_gpu",
+      "placement_group": "qwen38_gpu",
+      "planned_cells": 27,
+      "complete_cells": 27,
+      "verified_cells": 27,
+      "selected_cells": 27,
+      "excluded_cells": 0,
+      "exclusion_reason_counts": {}
+    }
+  ],
+  "cells": [
+    {
+      "cell_id": "qwen25_p1536_o256_c4__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p1536_o256_c4__fixed_runtime.prediction.json",
+        "sha256": "33aa47301db9d86948bb6617b3684f7f8f397be445ea718caa39b2b80c5d4bdd",
+        "size_bytes": 12915489
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c1__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p512_o256_c1__fixed_runtime.prediction.json",
+        "sha256": "605ba1277d9b94396b7df62c323c510584bd09b0e90e7d88ffd9c9efe88241e3",
+        "size_bytes": 9179858
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o128_c1__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p1536_o128_c1__fixed_runtime.prediction.json",
+        "sha256": "daa343d63665abdcd035aaad5494b7734c6a09982e1f0720a050586ad67a6bac",
+        "size_bytes": 5344169
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o256_c2__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p1536_o256_c2__fixed_runtime.prediction.json",
+        "sha256": "e5856fa0b5ce67420f99638c8cbc174a5a8ce21ea59e774cf0679b20444f3d28",
+        "size_bytes": 10959339
+      }
+    },
+    {
+      "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p128_o128_c4__fixed_runtime.prediction.json",
+        "sha256": "da2ea2f35984ebff45f77a39c67ff9c67a987a3b7c4005fdc6187e766e7d93b6",
+        "size_bytes": 5117057
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c2__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p512_o256_c2__fixed_runtime.prediction.json",
+        "sha256": "56b7a8fcb2f08db6f04c36a08992748bf68997083d5f906359efffc74943b95c",
+        "size_bytes": 9855629
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o256_c4__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p512_o256_c4__fixed_runtime.prediction.json",
+        "sha256": "8475c50383c0e71e61388f55312f9f8360c380c08c16f4d0286f651d5768cafc",
+        "size_bytes": 10609273
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o32_c2__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p1536_o32_c2__fixed_runtime.prediction.json",
+        "sha256": "0a70eacfe3c3958ed1e7d3207905d2409d121f5f70401dc95a10b714e9991632",
+        "size_bytes": 2966195
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o256_c1__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p1536_o256_c1__fixed_runtime.prediction.json",
+        "sha256": "6509facf2a05b0fc40e385f0ddf5f9a475492d66b55f40c643ddd31c09612827",
+        "size_bytes": 9734421
+      }
+    },
+    {
+      "cell_id": "qwen25_p128_o32_c4__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p128_o32_c4__fixed_runtime.prediction.json",
+        "sha256": "a66224fb6e5082395f2a9713ff64aae15b0cd52c139ac84d30aa88189653d0ec",
+        "size_bytes": 1627717
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c4__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p512_o32_c4__fixed_runtime.prediction.json",
+        "sha256": "48bd112348a7852969988bd935d3777764b038fde2048475f0a0869ae1ea25c3",
+        "size_bytes": 2465693
+      }
+    },
+    {
+      "cell_id": "qwen25_p128_o256_c2__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p128_o256_c2__fixed_runtime.prediction.json",
+        "sha256": "6ec3ba2f4a6db23a20a0127bff4dbb4fef6a52b530a88c050dda28f50084d6c9",
+        "size_bytes": 9440952
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c1__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "87656b29853ce9942df6e26fd9d8da1025cabf45f2ab34548f625b9e7ca6acdd",
+        "size_bytes": 1498386
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p512_o128_c1__fixed_runtime.prediction.json",
+        "sha256": "f8db0232b5f44827a935f2de00bc21163a7d624b96b33dfb26d9817a0b800b12",
+        "size_bytes": 4790499
+      }
+    },
+    {
+      "cell_id": "qwen25_p512_o32_c2__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p512_o32_c2__fixed_runtime.prediction.json",
+        "sha256": "e9d4026963983ca00117ab2cab49fdfb34515bd75468050ecb7856775c5b1034",
+        "size_bytes": 1863034
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o128_c4__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p1536_o128_c4__fixed_runtime.prediction.json",
+        "sha256": "070f17f5f0be0ea22f2711af49be314ab8b879bbab8c53610d7c1ab57bfffd3b",
+        "size_bytes": 8261026
+      }
+    },
+    {
+      "cell_id": "qwen25_p1536_o32_c1__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen25_p1536_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "f929f81f4ed891c10f29beea13dfbfc90e1b0a7d6b54d75a443aa1981c6e97af",
+        "size_bytes": 2051525
+      }
+    },
+    {
+      "cell_id": "smollm2_p1536_o256_c4__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p128_o32_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o128_c4__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p128_o128_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o256_c4__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p128_o256_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o256_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o32_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o256_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o128_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o32_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p128_o256_c4__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o128_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\smollm2_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "b312bbc24a90e0c4f3e86fb5834b10119a3dd4224a3141873fdab1841429647b",
+        "size_bytes": 1488806
+      }
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o128_c4__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p128_o256_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o256_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o32_c4__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o32_c4__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p512_o128_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o256_c2__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "smollm2_p1536_o128_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p1536_o128_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c4__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o256_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p128_o256_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p1536_o256_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o256_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o128_c4__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p1536_o128_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o128_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o128_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c4__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p1536_o256_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p128_o32_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p128_o256_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o256_c4__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p128_o256_c4__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p512_o32_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\tinyllama_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "416c5fff0537de34f6336ea10cc39e029363129cf6a170577dae96e37538e1fc",
+        "size_bytes": 1476729
+      }
+    },
+    {
+      "cell_id": "tinyllama_p1536_o32_c4__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p128_o128_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "tinyllama_p1536_o32_c2__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p1536_o256_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o256_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o32_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o32_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p1536_o32_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o256_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o256_c2__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p1536_o128_c2__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o256_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p1536_o256_c2__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o256_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o128_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p1536_o128_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o128_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o32_c2__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o32_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o128_c2__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p1536_o128_c4__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o32_c2__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p128_o128_c2__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen35_p512_o32_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": "explicit_gpu_layers_-1",
+      "status": "predicted",
+      "prediction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\pure\\predictions\\qwen35_p512_o32_c1__fixed_runtime.prediction.json",
+        "sha256": "13ccad51457039f1c98132001bdc2c8de07ffb41bc31789c7a59ec4f30359bd6",
+        "size_bytes": 1755887
+      }
+    },
+    {
+      "cell_id": "qwen38_p1536_o128_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p512_o256_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c2__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o256_c2__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p1536_o32_c2__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c4__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p512_o32_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o32_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p1536_o32_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o256_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o32_c4__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o32_c2__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o256_c4__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p512_o256_c4__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p512_o32_c2__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p1536_o256_c2__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o128_c2__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p128_o128_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_p1536_o32_c4__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": "explicit_gpu_layers_0",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o256_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o128_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o128_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o256_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o128_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o256_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o256_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o32_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o128_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o128_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o32_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o32_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o32_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o256_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o256_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o32_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o32_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o256_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o256_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o32_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o256_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c2__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o32_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p128_o128_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    },
+    {
+      "cell_id": "qwen38_gpu_p1536_o32_c4__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": "explicit_gpu_layers_66",
+      "status": "pending",
+      "prediction_ref": null
+    }
+  ],
+  "evaluation_type": "development_post_selection",
+  "blind_evaluation": false,
+  "formal_prediction_eligible": false,
+  "native_answers_used_for_prediction": false,
+  "verification": "selection and frozen execution source verified after predictions",
+  "content_sha256": "17df7a962b2e114a6e86be73d850ec21516b16f458369109513982c0fac68b40"
+}

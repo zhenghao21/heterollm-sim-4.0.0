@@ -12247,6 +12247,27 @@ def _task_segment_dynamic_task_overrides(
                     default=0.0,
                 ),
             }
+            if (payload.operator_class == OperatorClass.GEMM
+                    and scenario.workload.metadata.get("llama_cpp_nonflash_kv_view") is not None):
+                # Physical K can cross a padding boundary while the invocation
+                # template is reused. Refresh the operation envelope as well as
+                # its already-dynamic estimator workload (including launches).
+                dynamic_metadata.update({
+                    "gemm_m": workload.m, "gemm_k": workload.k, "gemm_n": workload.n,
+                    "kernel_main_consumer_storage_bytes": workload.activation_bytes,
+                    "kernel_query_geometry": {
+                        "m": workload.m, "n": workload.n, "k_logical": workload.k,
+                        "weight_formats": tuple(workload.packed_weight_formats),
+                        "activation_storage_bytes": workload.activation_bytes,
+                        "output_storage_bytes": workload.output_bytes,
+                        "accumulator_bits": workload.accumulator_bits,
+                        "model_weight_read": False, "rhs_is_activation": True,
+                    },
+                })
+                phase_metadata = dynamic_metadata["phase_metadata"]
+                if ("token_shape" not in phase_metadata
+                        and scenario.placement.metadata.get("native_calibration_shape_policy") != "phase"):
+                    phase_metadata["token_shape"] = f"{workload.n}x{workload.m}x1x1"
             if payload.operator_class == OperatorClass.GEMM and phase.name == "cpu_gemm":
                 # Attention replay always has an activation RHS; refresh shape audit
                 # while retaining the historical generic cost key and estimator.
@@ -14240,6 +14261,7 @@ def _compile_parallel_iteration(
     *,
     token_batch: int,
     context_tokens: int,
+    physical_attention_context_tokens: int = 0,
     kv_read_tokens: Optional[int] = None,
     kv_append_tokens: Optional[int] = None,
     kv_materialized_tokens: Optional[int] = None,
@@ -14283,7 +14305,9 @@ def _compile_parallel_iteration(
                 router,
                 layer,
                 token_batch=token_batch,
-                context_tokens=context_tokens,
+                context_tokens=(physical_attention_context_tokens
+                    if physical_attention_context_tokens and not layer.is_linear_attention
+                    else context_tokens),
                 kv_read_tokens=(
                     context_tokens if kv_read_tokens is None else kv_read_tokens
                 ),
@@ -19610,6 +19634,85 @@ class _ServingInvocationLane:
         return identity
 
 
+_NONFLASH_KV_VIEW_KEY = "llama_cpp_nonflash_kv_view"
+_NONFLASH_KV_VIEW_SCHEMA = "heterollm.llama-nonflash-kv-view/v1"
+
+
+def _nonflash_kv_view_audit(
+    scenario: ScenarioConfig, lanes: Sequence[_ServingInvocationLane],
+) -> Mapping[str, object]:
+    """Bound rectangular K width without inventing the unified allocator state.
+
+    A live ordinary sequence proves at least its own retained context worth of
+    distinct cells. Different sequences may share prefix cells, so their logical
+    contexts MUST NOT be summed. Holes, inactive slots and cached prompts can
+    increase used_max_p1; this remains a lower bound, even for a fresh cohort.
+    """
+    raw = scenario.workload.metadata.get(_NONFLASH_KV_VIEW_KEY)
+    if raw is None:
+        return {}
+    audit: Dict[str, object] = {"applied": False, "extent_completeness": "lower_bound"}
+    def uncovered(reason: str) -> Mapping[str, object]:
+        return {**audit, "uncovered_reasons": (reason,)}
+    if not isinstance(raw, Mapping) or raw.get("schema") != _NONFLASH_KV_VIEW_SCHEMA:
+        return uncovered("missing_or_invalid_source_contract")
+    if raw.get("runtime_binding_status") != "verified" or not raw.get("source_sha256"):
+        return uncovered("source_runtime_build_link_not_verified")
+    scope = raw.get("model_cache_scope", {})
+    if isinstance(scope, Mapping) and scope.get("ordinary_retained_prefix") is False:
+        return uncovered("sliding_or_nonordinary_retained_prefix_not_proven")
+    config = scenario.llama_cpp_config
+    if config is None:
+        return uncovered("llama_cpp_runtime_config_required")
+    if config.flash_attn or scenario.fusion_policy.flash_attention or not config.kv_unified:
+        return uncovered("requires_nonflash_unified_kv")
+    if (config.kv_type_k, config.kv_type_v) != ("f16", "f16"):
+        return uncovered("only_bound_f16_cache_types_covered")
+    if (scenario.workload.mtp is not None or not lanes or
+            any(l.phase not in {"decode", "prefill"} or l.kv_append_tokens != 1
+                or l.kv_materialized_tokens != 1 for l in lanes)):
+        return uncovered("only_ordinary_materialized_prefill_decode_covered")
+    if scenario.model.architecture not in {
+        "llama", "qwen2", "llama_decoder", "qwen2_decoder", "qwen3_5_hybrid_transformer",
+    }:
+        return uncovered("ordinary_full_attention_cache_architecture_unverified")
+    binding = raw.get("configuration", {})
+    if not isinstance(binding, Mapping) or any(binding.get(k) != v for k, v in {
+        "batch": config.batch, "ubatch": config.ubatch, "parallel": config.parallel,
+        "simulator_slot_context_tokens": config.context,
+        "flash_attn": False, "kv_unified": True, "kv_type_k": "f16", "kv_type_v": "f16",
+    }.items()):
+        return uncovered("frozen_native_configuration_mismatch")
+    capacity = binding.get("native_context_tokens")
+    if (type(capacity) is not int or capacity != config.context * config.parallel
+            or capacity <= 0 or capacity % 256):
+        return uncovered("aligned_native_unified_capacity_not_proven")
+    scheduler = scenario.workload.scheduler
+    if scheduler is not None and (
+        scheduler.max_num_seqs != config.parallel
+        or scheduler.max_num_batched_tokens != config.batch
+        or scheduler.max_num_ubatch_tokens != config.ubatch
+    ):
+        return uncovered("scheduler_native_batch_limits_mismatch")
+    if len({l.request_id for l in lanes}) > config.parallel:
+        return uncovered("active_sequence_count_exceeds_native_parallel")
+    if raw.get("n_pad") != 1 or raw.get("n_kv_padding") != 256:
+        return uncovered("source_padding_rule_mismatch")
+    # The simulator keeps logical per-slot context; native -kvu allocates the
+    # single total pool. Never replace the former with that total capacity.
+    occupied_lower_bound = max(l.context_tokens for l in lanes)
+    if occupied_lower_bound > config.context:
+        return uncovered("context_shift_or_slot_overflow_not_modeled")
+    physical = min(capacity, max(256, ((occupied_lower_bound + 255) // 256) * 256))
+    return {**audit, "applied": True, "physical_k_tokens": physical,
+        "occupied_cells_lower_bound": occupied_lower_bound,
+        "native_cache_cells": capacity, "padding": 256,
+        "logical_context_mean": int(math.ceil(sum(l.context_tokens for l in lanes) / len(lanes))),
+        "occupancy_basis": "largest_current_sequence_retained_context_only",
+        "uncovered_reasons": ("unified_allocator_extent_holes_inactive_slots_and_shared_prefix_union_unknown",),
+    }
+
+
 @dataclass(frozen=True)
 class _ServingInvocationGroup:
     """A backend operator invocation without erased request/state axes."""
@@ -19621,6 +19724,7 @@ class _ServingInvocationGroup:
     batching_semantics: str
     kv_scan_tokens: int = 0
     q4_mma_view_tokens_lower_bound: int = 0
+    nonflash_kv_view: Mapping[str, object] = field(default_factory=dict)
 
     @property
     def group_id(self) -> str:
@@ -19765,6 +19869,7 @@ class _ServingInvocationGroup:
             "token_batch": self.token_batch,
             "physical_ubatch_index": self.group_index,
             "physical_ubatch_rows": self.token_batch,
+            **({_NONFLASH_KV_VIEW_KEY: dict(self.nonflash_kv_view)} if self.nonflash_kv_view else {}),
             "context_tokens": self.context_tokens,
             "kv_read_tokens": self.kv_read_tokens,
             "kv_append_tokens": self.kv_append_tokens,
@@ -20047,6 +20152,7 @@ def _serving_invocation_groups(
                 batching_semantics=batching_semantics,
                 kv_scan_tokens=group_scan_tokens,
                 q4_mma_view_tokens_lower_bound=group_q4_view_tokens,
+                nonflash_kv_view=_nonflash_kv_view_audit(scenario, physical_lanes),
             )
             groups.append(group)
             last_group = group
@@ -20241,6 +20347,9 @@ def _serving_invocation_group_task_metadata(
         ),
     }
     runtime = group.linear_state_runtime()
+    if group.nonflash_kv_view:
+        metadata[_NONFLASH_KV_VIEW_KEY] = dict(group.nonflash_kv_view)
+        metadata["context_tokens_observed"] = group.context_tokens
     if group.kv_scan_tokens:
         metadata.update({
             "context_tokens_observed": group.context_tokens,
@@ -20362,8 +20471,10 @@ def _compile_or_replay_serving_invocation(
 ) -> str:
     """Compile one group once, then emit its exact dynamic slots on replay."""
 
-    attention_context_tokens = group.kv_scan_tokens or group.context_tokens
-    attention_kv_read_tokens = max(group.kv_read_tokens, group.kv_scan_tokens)
+    physical_k = (int(group.nonflash_kv_view["physical_k_tokens"])
+                  if group.nonflash_kv_view.get("applied") is True else 0)
+    attention_context_tokens = physical_k or group.kv_scan_tokens or group.context_tokens
+    attention_kv_read_tokens = physical_k or max(group.kv_read_tokens, group.kv_scan_tokens)
     binding = _serving_invocation_segment_binding(
         builder,
         scenario,
@@ -20408,7 +20519,8 @@ def _compile_or_replay_serving_invocation(
         plan,
         router,
         token_batch=group.token_batch,
-        context_tokens=attention_context_tokens,
+        context_tokens=group.context_tokens if physical_k else attention_context_tokens,
+        physical_attention_context_tokens=physical_k,
         kv_read_tokens=attention_kv_read_tokens,
         kv_append_tokens=group.kv_append_tokens,
         kv_materialized_tokens=group.kv_materialized_tokens,

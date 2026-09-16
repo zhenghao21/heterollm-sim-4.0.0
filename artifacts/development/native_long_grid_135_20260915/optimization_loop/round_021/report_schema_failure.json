@@ -1,0 +1,10 @@
+{
+  "schema": "report-schema-failure/v1",
+  "observed_utc": "2026-09-16T09:26:29.476159+00:00",
+  "command": "E:/anaconda/python.exe round_021/summarize_ablation.py anchors --heatmap",
+  "exit_code": 1,
+  "error": "EvidenceError: missing reference byte size",
+  "origin": "evidence_closure -> normalized_ref on source/build reference schema; forecasts/scores untouched",
+  "original_script_sha256": "d211dfb9ddd3591955abf92cbe676637ba92c5150eb2d0c9af6ba45257d09c91",
+  "remedy": "Separate reporting_v2. No original frozen code/inputs/predictions/scores modified."
+}

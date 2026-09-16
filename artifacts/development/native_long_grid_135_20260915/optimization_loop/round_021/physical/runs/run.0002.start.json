@@ -1,0 +1,247 @@
+{
+  "schema": "stable-native-prediction-run/v1",
+  "phase": "start",
+  "created_utc": "2026-09-16T09:26:35.268176+00:00",
+  "run_id": "run.0002",
+  "freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\freeze.json",
+    "sha256": "51cc65d7308d0c25ddaa00b70669a1fa0831eb64b796f6b25077d7b54e807750",
+    "size_bytes": 30389249
+  },
+  "source_sha256": "ed580f4948acf7d9ac1dd092e3f7b7af68c5ca0c032ce708b7c492df30fdf591",
+  "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+  "execution_budget": {
+    "workers": 4,
+    "maximum_workers": 8,
+    "per_cell_timeout_seconds": 600,
+    "max_cells": null,
+    "scheduled_cells": 111,
+    "nominal_timeout_rounds_seconds": 16800
+  },
+  "resume": true,
+  "cell_id_filter": null,
+  "diagnostics": {
+    "events": false,
+    "event_limit": 2000,
+    "event_max_bytes": 2097152
+  },
+  "retained_prediction_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p1536_o256_c4__fixed_runtime.prediction.json",
+      "sha256": "1b922dbfc89133f38c95ba6c5dd5f5fe95e85c9a6531fadb44306ccea1e0b566",
+      "size_bytes": 13074888
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p512_o256_c1__fixed_runtime.prediction.json",
+      "sha256": "1f70b160c949974b2c14c511457b1b45daa5e4480456daac1bbdb65e42655110",
+      "size_bytes": 9321614
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p1536_o128_c1__fixed_runtime.prediction.json",
+      "sha256": "55a45f9655eeaca05b413ed97369e3623e71c855e24df5dbc632ddfaa8ab3321",
+      "size_bytes": 5427654
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p1536_o256_c2__fixed_runtime.prediction.json",
+      "sha256": "250170d90a1c5f55112e1bf026c912d2db7a5cfa5e11914e317446ab5d313ee8",
+      "size_bytes": 11097599
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p128_o128_c4__fixed_runtime.prediction.json",
+      "sha256": "da513d17c4e5e0b2eae2db1744710650f292882dd532a6d4c9cf8ef03df7fb89",
+      "size_bytes": 5193999
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p512_o256_c2__fixed_runtime.prediction.json",
+      "sha256": "b3e5818785d7f81999cb97b120fd45813e0fc8e6b1ee8cb03c01861772d4fd99",
+      "size_bytes": 9986299
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p512_o256_c4__fixed_runtime.prediction.json",
+      "sha256": "fa65c20552f00fec9024932af0387757f7ad6aab9e0f2f1baf67553caffa3f43",
+      "size_bytes": 10748028
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p1536_o32_c2__fixed_runtime.prediction.json",
+      "sha256": "1d8dfea3e539f04aa2d664991aed0f3f75c87c072684de9b4f36e99067f0afb0",
+      "size_bytes": 3013404
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p1536_o256_c1__fixed_runtime.prediction.json",
+      "sha256": "3d12ca2758b8f61d6d0f2598dd5918805d0ea9cd116e3e0c9acfad7549fd9f70",
+      "size_bytes": 9878373
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p128_o32_c4__fixed_runtime.prediction.json",
+      "sha256": "9a37811208894fcd76377ef96a363d8fd0f3a6efc2df79ff94f9d882e241c6c3",
+      "size_bytes": 1663232
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p512_o32_c4__fixed_runtime.prediction.json",
+      "sha256": "f84eba3d778222f3bf9cca34e59b97c0b6e1f8ea73d5c27f2ccba23c769d4711",
+      "size_bytes": 2509217
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p128_o256_c2__fixed_runtime.prediction.json",
+      "sha256": "25eb096e05a23027636275e9e3f547355766e5254cb74a2fc6cbaf223148896d",
+      "size_bytes": 9567506
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p512_o32_c1__fixed_runtime.prediction.json",
+      "sha256": "70c326a7a64d9553bf5bec957f1227598c90f68afeebce06869aa55e3595a19c",
+      "size_bytes": 1533671
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p512_o128_c1__fixed_runtime.prediction.json",
+      "sha256": "fdcff541b3eb4018e30242f3f2dae00ea213b0a3bcbbe97bd7216853db833272",
+      "size_bytes": 4871505
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p512_o32_c2__fixed_runtime.prediction.json",
+      "sha256": "260a01469e97a370f0573d98530198a917b30c2c1d0495483fe33358661720f8",
+      "size_bytes": 1900581
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p1536_o128_c4__fixed_runtime.prediction.json",
+      "sha256": "661d0602f6129fc0a9a640b558c24435ef584bbc8b10f5bb67137562f30d1f70",
+      "size_bytes": 8367073
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen25_p1536_o32_c1__fixed_runtime.prediction.json",
+      "sha256": "2c3d0ae971583b49997b58a58afde8e641e41f517fb9bed15cdfd56346c51348",
+      "size_bytes": 2089805
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\smollm2_p512_o32_c1__fixed_runtime.prediction.json",
+      "sha256": "c55694697dae5d9f040e445fda057770c6cfbe174eb68e94a817579329095cb1",
+      "size_bytes": 1523516
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\tinyllama_p512_o32_c1__fixed_runtime.prediction.json",
+      "sha256": "4acdbba269c557f268db4c37ccddb5d6bc8d2bc525b26696804b64c98701b030",
+      "size_bytes": 1510600
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\physical\\predictions\\qwen35_p512_o32_c1__fixed_runtime.prediction.json",
+      "sha256": "13fdccabde6978506b20da40703bec329c915c5c2ada689d48c9f4e0919e55c0",
+      "size_bytes": 1791476
+    }
+  ],
+  "scheduled_cell_ids": [
+    "smollm2_p1536_o256_c4__fixed_runtime",
+    "smollm2_p128_o32_c1__fixed_runtime",
+    "smollm2_p1536_o128_c4__fixed_runtime",
+    "smollm2_p128_o128_c2__fixed_runtime",
+    "smollm2_p512_o256_c4__fixed_runtime",
+    "smollm2_p128_o256_c1__fixed_runtime",
+    "smollm2_p1536_o256_c1__fixed_runtime",
+    "smollm2_p1536_o32_c2__fixed_runtime",
+    "smollm2_p512_o256_c1__fixed_runtime",
+    "smollm2_p1536_o128_c2__fixed_runtime",
+    "smollm2_p1536_o32_c1__fixed_runtime",
+    "smollm2_p128_o256_c4__fixed_runtime",
+    "smollm2_p512_o128_c2__fixed_runtime",
+    "smollm2_p512_o32_c2__fixed_runtime",
+    "smollm2_p512_o128_c4__fixed_runtime",
+    "smollm2_p128_o256_c2__fixed_runtime",
+    "smollm2_p512_o256_c2__fixed_runtime",
+    "smollm2_p512_o32_c4__fixed_runtime",
+    "smollm2_p1536_o32_c4__fixed_runtime",
+    "smollm2_p512_o128_c1__fixed_runtime",
+    "smollm2_p1536_o256_c2__fixed_runtime",
+    "smollm2_p1536_o128_c1__fixed_runtime",
+    "tinyllama_p1536_o128_c2__fixed_runtime",
+    "tinyllama_p128_o128_c4__fixed_runtime",
+    "tinyllama_p512_o256_c2__fixed_runtime",
+    "tinyllama_p128_o256_c1__fixed_runtime",
+    "tinyllama_p1536_o256_c2__fixed_runtime",
+    "tinyllama_p512_o256_c1__fixed_runtime",
+    "tinyllama_p128_o128_c1__fixed_runtime",
+    "tinyllama_p512_o128_c4__fixed_runtime",
+    "tinyllama_p1536_o128_c1__fixed_runtime",
+    "tinyllama_p512_o128_c2__fixed_runtime",
+    "tinyllama_p512_o128_c1__fixed_runtime",
+    "tinyllama_p512_o32_c2__fixed_runtime",
+    "tinyllama_p512_o32_c4__fixed_runtime",
+    "tinyllama_p1536_o256_c1__fixed_runtime",
+    "tinyllama_p128_o32_c1__fixed_runtime",
+    "tinyllama_p128_o256_c2__fixed_runtime",
+    "tinyllama_p512_o256_c4__fixed_runtime",
+    "tinyllama_p128_o256_c4__fixed_runtime",
+    "tinyllama_p1536_o32_c4__fixed_runtime",
+    "tinyllama_p128_o128_c2__fixed_runtime",
+    "tinyllama_p1536_o32_c2__fixed_runtime",
+    "qwen35_p1536_o256_c4__fixed_runtime",
+    "qwen35_p512_o128_c1__fixed_runtime",
+    "qwen35_p128_o256_c1__fixed_runtime",
+    "qwen35_p128_o32_c4__fixed_runtime",
+    "qwen35_p128_o32_c1__fixed_runtime",
+    "qwen35_p1536_o32_c4__fixed_runtime",
+    "qwen35_p512_o256_c1__fixed_runtime",
+    "qwen35_p512_o256_c2__fixed_runtime",
+    "qwen35_p1536_o128_c2__fixed_runtime",
+    "qwen35_p512_o256_c4__fixed_runtime",
+    "qwen35_p1536_o256_c2__fixed_runtime",
+    "qwen35_p128_o256_c4__fixed_runtime",
+    "qwen35_p128_o128_c1__fixed_runtime",
+    "qwen35_p1536_o128_c1__fixed_runtime",
+    "qwen35_p128_o128_c4__fixed_runtime",
+    "qwen35_p512_o32_c2__fixed_runtime",
+    "qwen35_p512_o32_c4__fixed_runtime",
+    "qwen35_p512_o128_c2__fixed_runtime",
+    "qwen35_p1536_o128_c4__fixed_runtime",
+    "qwen35_p128_o32_c2__fixed_runtime",
+    "qwen35_p128_o128_c2__fixed_runtime",
+    "qwen38_p1536_o128_c1__fixed_runtime",
+    "qwen38_p512_o256_c1__fixed_runtime",
+    "qwen38_p512_o128_c2__fixed_runtime",
+    "qwen38_p128_o256_c2__fixed_runtime",
+    "qwen38_p1536_o32_c2__fixed_runtime",
+    "qwen38_p512_o128_c4__fixed_runtime",
+    "qwen38_p512_o32_c1__fixed_runtime",
+    "qwen38_p128_o32_c1__fixed_runtime",
+    "qwen38_p1536_o32_c1__fixed_runtime",
+    "qwen38_p128_o256_c1__fixed_runtime",
+    "qwen38_p128_o32_c4__fixed_runtime",
+    "qwen38_p128_o32_c2__fixed_runtime",
+    "qwen38_p128_o256_c4__fixed_runtime",
+    "qwen38_p512_o256_c4__fixed_runtime",
+    "qwen38_p512_o128_c1__fixed_runtime",
+    "qwen38_p512_o32_c2__fixed_runtime",
+    "qwen38_p1536_o256_c2__fixed_runtime",
+    "qwen38_p128_o128_c2__fixed_runtime",
+    "qwen38_p128_o128_c1__fixed_runtime",
+    "qwen38_p1536_o32_c4__fixed_runtime",
+    "qwen38_gpu_p1536_o256_c4__fixed_runtime",
+    "qwen38_gpu_p1536_o128_c2__fixed_runtime",
+    "qwen38_gpu_p1536_o128_c1__fixed_runtime",
+    "qwen38_gpu_p512_o256_c1__fixed_runtime",
+    "qwen38_gpu_p512_o128_c2__fixed_runtime",
+    "qwen38_gpu_p1536_o256_c1__fixed_runtime",
+    "qwen38_gpu_p128_o256_c2__fixed_runtime",
+    "qwen38_gpu_p1536_o32_c2__fixed_runtime",
+    "qwen38_gpu_p512_o128_c4__fixed_runtime",
+    "qwen38_gpu_p1536_o128_c4__fixed_runtime",
+    "qwen38_gpu_p512_o32_c1__fixed_runtime",
+    "qwen38_gpu_p128_o128_c4__fixed_runtime",
+    "qwen38_gpu_p128_o32_c1__fixed_runtime",
+    "qwen38_gpu_p1536_o32_c1__fixed_runtime",
+    "qwen38_gpu_p512_o256_c2__fixed_runtime",
+    "qwen38_gpu_p128_o256_c1__fixed_runtime",
+    "qwen38_gpu_p128_o32_c4__fixed_runtime",
+    "qwen38_gpu_p128_o32_c2__fixed_runtime",
+    "qwen38_gpu_p128_o256_c4__fixed_runtime",
+    "qwen38_gpu_p512_o256_c4__fixed_runtime",
+    "qwen38_gpu_p512_o128_c1__fixed_runtime",
+    "qwen38_gpu_p512_o32_c2__fixed_runtime",
+    "qwen38_gpu_p1536_o256_c2__fixed_runtime",
+    "qwen38_gpu_p128_o128_c2__fixed_runtime",
+    "qwen38_gpu_p512_o32_c4__fixed_runtime",
+    "qwen38_gpu_p128_o128_c1__fixed_runtime",
+    "qwen38_gpu_p1536_o32_c4__fixed_runtime"
+  ],
+  "selected_denominator": 131,
+  "python_executable": "E:\\anaconda\\python.exe",
+  "coordinator_pid": 17320,
+  "content_sha256": "9dc3fb0fb18748ece9cd441affff7dae85835c73a79ce707695c15db352cdcfc"
+}

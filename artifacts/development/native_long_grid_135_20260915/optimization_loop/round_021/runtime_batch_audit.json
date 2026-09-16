@@ -1,0 +1,112 @@
+{
+  "schema": "runtime-batch-audit/v2",
+  "date": "2026-09-16",
+  "scope": "static protocol/source review plus pure in-process fixture; no native actuals, target latency arrays, native runs, GPU runs, target LLM runs, or core edits",
+  "verdict": "verified_native_nonflash_unified_kv_padded_attention_width_gap",
+  "static_runtime": {
+    "batch": 64,
+    "ubatch": 64,
+    "flash_attention": false,
+    "kv_unified": true,
+    "kv_unified_per_slot": 2048,
+    "parallel_values": [
+      1,
+      2,
+      4
+    ]
+  },
+  "fixture": {
+    "kind": "pure_in_process_synthetic_dense_scenario",
+    "stable_admission": true,
+    "items": [
+      [
+        "A",
+        "decode",
+        1,
+        128,
+        1
+      ],
+      [
+        "B",
+        "prefill",
+        63,
+        0,
+        0
+      ]
+    ],
+    "planner_group_context_tokens": 34,
+    "planner_group_kv_read_tokens": 128,
+    "planner_group_kv_scan_tokens": 0,
+    "planner_group_q4_view_tokens": 0,
+    "planner_flash_attention": false
+  },
+  "native_source_semantics": {
+    "unified_stream_count": 1,
+    "physical_batch_rows": 64,
+    "n_kv_minimum_padding": 256,
+    "nonflash_attention": "ggml_mul_mat(k,q) -> masked softmax -> ggml_mul_mat(v,kq)",
+    "physical_score_matrix_lower_bound": "heads x 64 x 256"
+  },
+  "planner_semantics": {
+    "lane_contexts": "[129, 1..63]",
+    "group_reduction": "ceil(mean(lane_contexts)) = 34",
+    "attention_input": "group.kv_scan_tokens or group.context_tokens = 34",
+    "why_scan_does_not_apply": "_kv_scan_enabled requires flash_attention=true; fixed protocol is false"
+  },
+  "finding": {
+    "id": "nonflash_unified_kv_padded_n_kv_not_forwarded_to_attention_workload",
+    "severity": "high",
+    "affected_parallel": [
+      1,
+      2,
+      4
+    ],
+    "claim": "execution-shape semantic gap only; no numerical-error attribution is made",
+    "minimal_fix": "Model source-bound padded n_kv as a separate physical attention K dimension for -fa off + unified KV, rather than using lane-context mean or kv_read_tokens.",
+    "regression": "Pure unit cohort must preserve physical K width >=256 when scan metadata is zero."
+  },
+  "source_refs": [
+    "source/llama.cpp-semantic/tools/server/server-context.cpp:2996-3017,3232-3245,3662-3739",
+    "source/llama.cpp-semantic/src/llama-graph.cpp:29-45,2604-2710,2818-2825",
+    "source/llama.cpp-semantic/src/llama-kv-cache.cpp:1250-1264,2725-2758",
+    "src/heterollm_sim/serving.py:4662-4703,13469-13506",
+    "src/heterollm_sim/planner.py:19629-19643,19806-19884,20085-20094,20365-20421,15341-15416"
+  ],
+  "kv_high_water_scope": {
+    "exact_formula": "min(cells.size(), max(max(n_pad,256), PAD(cells.used_max_p1(),max(n_pad,256))))",
+    "guaranteed_lower_bound": 256,
+    "unified_stream_count": 1,
+    "fresh_first_batch": "Exact high-water needs allocator head and occupied-cell state; 256 lower bound is safe.",
+    "repeated_warmup": "Same server process executes warmup then measured batches. cache_prompt=false clears only an assigned slot when it next enters STARTED; idle other-slot KV can remain.",
+    "prohibited_inference": [
+      "sum_current_lane_contexts",
+      "max_logical_context",
+      "full_pool_capacity_as_exact_high_water"
+    ],
+    "source_hashes": {
+      "llama_context_cpp": "6a9d17f10caa586c1bf299e8bb217bcd14c1d1f62485020cd41e78c3b70b022b",
+      "llama_kv_cache_cpp": "e4d2aa977c8aa048ddd79c878683e94909f5f24ac109b0fcd1c0b59ef70f3899",
+      "llama_graph_cpp": "a6a8241c2d149961801d0fdeaa68f1bb176297b4d5156b6138db0b3d169abb04",
+      "server_context_cpp": "1c8d964ce27af8e3d32964c75234e1d4c11b7e3e8d49fdee4febe044b5f36b8d"
+    }
+  },
+  "wip_review": {
+    "target": "nonflash_kv_view_fix WIP",
+    "reviewed": "planner.py, predict_stable_native_dataset.py, test_nonflash_kv_view.py, test_nonflash_kv_view_adapter.py",
+    "passed": [
+      "lower_bound_and_unknown_highwater_labeling",
+      "unified_only_config_gate",
+      "physical_QK_PV_softmax_width_propagation",
+      "K_and_V_single_operand_accounting_with_local_demand_suppression",
+      "conditional_coverage_and_fail_closed_scope"
+    ],
+    "blocker": {
+      "id": "dynamic_replay_padding_boundary_regression",
+      "test": "tests/test_nonflash_kv_view.py::test_dynamic_replay_recomputes_physical_width_and_reads_at_padding_boundary",
+      "command": "E:\\\\anaconda\\\\python.exe -m pytest -q tests/test_nonflash_kv_view.py tests/test_nonflash_kv_view_adapter.py",
+      "result": "28 passed, 1 failed",
+      "evidence": "cold physical_k=256 then warm physical_k=512; _compile_parallel_iteration call count became 2 instead of expected cached dynamic replay count 1",
+      "required_resolution": "Either repair dynamic replay for physical K transitions or explicitly narrow cache/replay semantics and update its proof/test; do not hide the failure."
+    }
+  }
+}

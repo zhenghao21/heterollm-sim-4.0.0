@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "C:\\Windows\\System32\\nvidia-smi.exe",
+    "-rgc"
+  ],
+  "returncode": 0,
+  "stdout": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\clock_session\\reset.stdout.txt",
+    "bytes": 11,
+    "sha256": "d9f5c3e617bb9414146d18461a3a761b020028fd725e6aa9234cf155cea2b4c6"
+  },
+  "stderr": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\clock_session\\reset.stderr.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

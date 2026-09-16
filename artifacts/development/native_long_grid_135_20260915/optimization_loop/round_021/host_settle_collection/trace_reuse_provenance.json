@@ -1,0 +1,45 @@
+{
+  "source_files": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\extract.py",
+      "sha256": "46c7248b296ac0bfe842f5e0294baed71dc56ef1b6ce69559c8e53a6891909f3"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\common.py",
+      "sha256": "99e14b1de7fb16506a47ab4e2f97bbd8821df46056f44b17fb8aba3cd1aa3988"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\probe_adapter.py",
+      "sha256": "a4f544ebc74e80f3fb2be371abc685e2b2da02d9cd1d95589a3ab3e9989e4cf2"
+    }
+  ],
+  "copied_functions": [
+    "REQUIRED",
+    "read_trace",
+    "api_base",
+    "mutually_exclusive_partition",
+    "correlate",
+    "ref",
+    "quantile",
+    "distribution",
+    "union_ns",
+    "expected_calls",
+    "kernel_role",
+    "validate_kernel_chain"
+  ],
+  "adaptations": [
+    "replace probe_adapter expected label mapping with validated R20 calls",
+    "bind role and validate_chain directly to verbatim kernel functions",
+    "raw list adapter; no external time subtraction"
+  ],
+  "root_supersedes_simplified_adapter": true,
+  "r21_parent_adapter": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\native_trace.py",
+    "sha256": "1d77759daca4a8e1206b939ad0521172692c9a3fc69ccdae5f48f6874f2ba93b"
+  },
+  "r21_adaptations": [
+    "Preserve strict R20 recorded-call PID/TID/kernel attribution, geometry, and diagnostics",
+    "Preserve all unmapped kernels verbatim separately",
+    "Require matching settle NVTX placement in Nsight domain, retain settle APIs and kernels separately, and exclude all settle work from36/formal30 estimators"
+  ]
+}

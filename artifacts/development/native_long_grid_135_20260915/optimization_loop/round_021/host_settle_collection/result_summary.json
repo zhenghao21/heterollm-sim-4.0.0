@@ -1,0 +1,677 @@
+{
+  "schema": "r21-host-settle-readonly-result/v1",
+  "created_utc": "2026-09-16T09:01:06.408272+00:00",
+  "outcome": "incomplete_and_both_conditions_quality_rejected",
+  "freeze_sha256": "4c4946db15968602476fb967b772e8f748eb9c64f27253a9afcf2c29aff6c2fc",
+  "controller": {
+    "status": "failed_or_incomplete",
+    "error": "ValueError: first pair root review window expired; no children terminated",
+    "started_utc": "2026-09-16T08:43:52.435818+00:00",
+    "finished_utc": "2026-09-16T08:49:34.789273+00:00",
+    "completed_stages": 6,
+    "expected_stages": 18,
+    "completion_fraction": 0.3333333333333333,
+    "native_completed": 4,
+    "native_expected": 12,
+    "exports_completed": 2,
+    "exports_expected": 6,
+    "reset_returncode": 0,
+    "children_forcibly_terminated": false,
+    "remaining_stages_not_run": 12,
+    "continue_file_mtime_utc": "2026-09-16T08:51:22.054677+00:00",
+    "continue_arrived_seconds_after_controller_finished": 107.265404,
+    "continue_consumed": false,
+    "restart_or_resume_performed_by_this_audit": false
+  },
+  "conditions": [
+    {
+      "condition": "short",
+      "settle_ms": 0,
+      "status": "diagnostic_quality_rejected",
+      "quality_issues": [
+        "missing_or_duplicate_process_pair",
+        "pair_0:direct_host_p90_p10",
+        "missing_profile_process_medians"
+      ],
+      "pairs_observed": 1,
+      "pairs_required": 3,
+      "measurement_cost_eligible": false,
+      "calibration_eligible": false,
+      "profile_direct_host_relative_difference": 0.10392609699769054,
+      "profile_process_median_max_relative_deviation": null,
+      "profile_kernel_union_ns": {
+        "count": 30,
+        "minimum_ns": 15457,
+        "maximum_ns": 15776,
+        "median_ns": 15632.5,
+        "p10_ns": 15548.8,
+        "p90_ns": 15712.1,
+        "p90_div_p10": 1.010502418193044
+      },
+      "trace_quality": {
+        "trace_chain_complete": true,
+        "source_path_matches_observed_family": true,
+        "trace_warning_free": true,
+        "numerics_all_rows": true
+      },
+      "actual_kernels_mapped": 288,
+      "separately_recorded_settle_kernels": 0,
+      "formal_trace_denominator": 30,
+      "trace_ref_as_recorded": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\export\\strict_trace.json",
+        "bytes": 867733,
+        "sha256": "e894ed4ea21a8929f3933438969da24d43fc03590688df566f4e0e918075ce9a"
+      },
+      "native_runs": [
+        {
+          "mode": "direct",
+          "raw_audit_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\direct\\raw_audit.json",
+            "bytes": 67791,
+            "sha256": "755b5104bfef61109e28d9db438ef20971b1740638642a28812bf23d0eaeb644"
+          },
+          "raw_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\direct\\raw.jsonl",
+            "bytes": 40020,
+            "sha256": "912cbb818f4ca6e28b2cb524e58c88032a9c5334f0520c5f2ff1432a8072956a"
+          },
+          "formal_host_ns": {
+            "count": 30,
+            "minimum_ns": 56700.0,
+            "maximum_ns": 720600.0,
+            "median_ns": 64950.0,
+            "p10_ns": 58800.0,
+            "p90_ns": 99820.00000000001,
+            "p90_div_p10": 1.6976190476190478
+          },
+          "clock_passed": true,
+          "clock_issues": [],
+          "formal_bracketing_clock_values_mhz": [
+            2392
+          ],
+          "formal_intervals_bracketed": 30,
+          "maximum_clock_bracket_gap_ms": 4.7083,
+          "settle_requested_ms": 0,
+          "settle_measured_qpc_ms": 0.0004,
+          "settle_iterations": 0,
+          "settle_outside_recorded_calls": true,
+          "settle_estimator_time_used": false,
+          "recorded_calls": 36,
+          "formal_calls": 30,
+          "numeric_blocks": 3,
+          "checked_values": 6291456,
+          "mismatches": 0,
+          "nonfinite": 0,
+          "modules_stable": true,
+          "telemetry_lifecycle": {
+            "thread_alive": false,
+            "thread_exited": true,
+            "NVML_shutdown_after_reads": true,
+            "timer_handles_closed_after_join": true,
+            "errors": [],
+            "forced_termination": false
+          }
+        },
+        {
+          "mode": "profile",
+          "raw_audit_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\profile\\raw_audit.json",
+            "bytes": 67783,
+            "sha256": "7a6c2b0e74976b29bdda67a0846c7fd0357dfb4cd399c8271d74cf7110a03de3"
+          },
+          "raw_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\profile\\raw.jsonl",
+            "bytes": 40022,
+            "sha256": "ec28633c7cd11f7daa9e2b120bb08bcc41323e6337f17dfca41270a3dbc128f3"
+          },
+          "formal_host_ns": {
+            "count": 30,
+            "minimum_ns": 69700.0,
+            "maximum_ns": 251600.0,
+            "median_ns": 71700.0,
+            "p10_ns": 70700.0,
+            "p90_ns": 81680.0,
+            "p90_div_p10": 1.1553041018387553
+          },
+          "clock_passed": true,
+          "clock_issues": [],
+          "formal_bracketing_clock_values_mhz": [
+            2392
+          ],
+          "formal_intervals_bracketed": 30,
+          "maximum_clock_bracket_gap_ms": 4.9966,
+          "settle_requested_ms": 0,
+          "settle_measured_qpc_ms": 0.0001,
+          "settle_iterations": 0,
+          "settle_outside_recorded_calls": true,
+          "settle_estimator_time_used": false,
+          "recorded_calls": 36,
+          "formal_calls": 30,
+          "numeric_blocks": 3,
+          "checked_values": 6291456,
+          "mismatches": 0,
+          "nonfinite": 0,
+          "modules_stable": true,
+          "telemetry_lifecycle": {
+            "thread_alive": false,
+            "thread_exited": true,
+            "NVML_shutdown_after_reads": true,
+            "timer_handles_closed_after_join": true,
+            "errors": [],
+            "forced_termination": false
+          }
+        }
+      ]
+    },
+    {
+      "condition": "settled",
+      "settle_ms": 1000,
+      "status": "diagnostic_quality_rejected",
+      "quality_issues": [
+        "missing_or_duplicate_process_pair",
+        "pair_0:SM_clock_domain_unvalidated",
+        "pair_0:profile_direct_perturbation",
+        "missing_profile_process_medians"
+      ],
+      "pairs_observed": 1,
+      "pairs_required": 3,
+      "measurement_cost_eligible": false,
+      "calibration_eligible": false,
+      "profile_direct_host_relative_difference": 0.2015625,
+      "profile_process_median_max_relative_deviation": null,
+      "profile_kernel_union_ns": {
+        "count": 30,
+        "minimum_ns": 15457,
+        "maximum_ns": 15777,
+        "median_ns": 15552.0,
+        "p10_ns": 15488.9,
+        "p90_ns": 15649.0,
+        "p90_div_p10": 1.010336434478885
+      },
+      "trace_quality": {
+        "trace_chain_complete": true,
+        "source_path_matches_observed_family": true,
+        "trace_warning_free": true,
+        "numerics_all_rows": true
+      },
+      "actual_kernels_mapped": 288,
+      "separately_recorded_settle_kernels": 95736,
+      "formal_trace_denominator": 30,
+      "trace_ref_as_recorded": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\export\\strict_trace.json",
+        "bytes": 306968135,
+        "sha256": "e951eac57bbf62e9e9e1e1f4c62d59af07c45cd5af2036eec7daa50108de26d7"
+      },
+      "native_runs": [
+        {
+          "mode": "direct",
+          "raw_audit_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\direct\\raw_audit.json",
+            "bytes": 67858,
+            "sha256": "896b6ede7d993bdd4c6b51d2a2ffc2a2f249e82e9f1744b0695339f35a98efe6"
+          },
+          "raw_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\direct\\raw.jsonl",
+            "bytes": 40049,
+            "sha256": "30e4f77217bfa5a0494dcd43475465fbbedb25ed4bbb4f971764f6177c7d6b04"
+          },
+          "formal_host_ns": {
+            "count": 30,
+            "minimum_ns": 63100.0,
+            "maximum_ns": 147500.0,
+            "median_ns": 64000.0,
+            "p10_ns": 63500.0,
+            "p90_ns": 66380.0,
+            "p90_div_p10": 1.0453543307086615
+          },
+          "clock_passed": false,
+          "clock_issues": [
+            "SM_clock_outside_target_domain"
+          ],
+          "formal_bracketing_clock_values_mhz": [
+            2340
+          ],
+          "formal_intervals_bracketed": 30,
+          "maximum_clock_bracket_gap_ms": 4.4054,
+          "settle_requested_ms": 1000,
+          "settle_measured_qpc_ms": 1000.2171,
+          "settle_iterations": 14492,
+          "settle_outside_recorded_calls": true,
+          "settle_estimator_time_used": false,
+          "recorded_calls": 36,
+          "formal_calls": 30,
+          "numeric_blocks": 3,
+          "checked_values": 6291456,
+          "mismatches": 0,
+          "nonfinite": 0,
+          "modules_stable": true,
+          "telemetry_lifecycle": {
+            "thread_alive": false,
+            "thread_exited": true,
+            "NVML_shutdown_after_reads": true,
+            "timer_handles_closed_after_join": true,
+            "errors": [],
+            "forced_termination": false
+          }
+        },
+        {
+          "mode": "profile",
+          "raw_audit_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\profile\\raw_audit.json",
+            "bytes": 67857,
+            "sha256": "9309dc01bf564c72cea147465f83724201c399539eee48a93a5e593a85a4ff18"
+          },
+          "raw_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\profile\\raw.jsonl",
+            "bytes": 40051,
+            "sha256": "072f0d1f95ed815f22c2e17fbb656a6cbe9af784a06f09452c93d9540e38612a"
+          },
+          "formal_host_ns": {
+            "count": 30,
+            "minimum_ns": 73100.0,
+            "maximum_ns": 204900.0,
+            "median_ns": 76900.0,
+            "p10_ns": 75140.0,
+            "p90_ns": 82330.0,
+            "p90_div_p10": 1.0956880489752463
+          },
+          "clock_passed": false,
+          "clock_issues": [
+            "SM_clock_outside_target_domain"
+          ],
+          "formal_bracketing_clock_values_mhz": [
+            2355
+          ],
+          "formal_intervals_bracketed": 30,
+          "maximum_clock_bracket_gap_ms": 5.0909,
+          "settle_requested_ms": 1000,
+          "settle_measured_qpc_ms": 1000.0429,
+          "settle_iterations": 11967,
+          "settle_outside_recorded_calls": true,
+          "settle_estimator_time_used": false,
+          "recorded_calls": 36,
+          "formal_calls": 30,
+          "numeric_blocks": 3,
+          "checked_values": 6291456,
+          "mismatches": 0,
+          "nonfinite": 0,
+          "modules_stable": true,
+          "telemetry_lifecycle": {
+            "thread_alive": false,
+            "thread_exited": true,
+            "NVML_shutdown_after_reads": true,
+            "timer_handles_closed_after_join": true,
+            "errors": [],
+            "forced_termination": false
+          }
+        }
+      ]
+    }
+  ],
+  "stage_receipts": [
+    {
+      "ordinal": 0,
+      "condition": "short",
+      "mode": "direct",
+      "status": "executed",
+      "returncode": 0,
+      "child_exited": true,
+      "validation_status": "structurally_validated",
+      "complete_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\direct\\complete.json",
+        "bytes": 5496,
+        "sha256": "11920f02869a5701f328cf6359178c7ce7be98700d8098ad1613ae6c3fb12df9"
+      },
+      "validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\direct\\validation.json",
+        "bytes": 507,
+        "sha256": "502b09bcda1cc3038704582a9d6f2ef9064960e6a3ffb2181a225d33cd5fd144"
+      }
+    },
+    {
+      "ordinal": 1,
+      "condition": "short",
+      "mode": "profile",
+      "status": "executed",
+      "returncode": 0,
+      "child_exited": true,
+      "validation_status": "structurally_validated",
+      "complete_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\profile\\complete.json",
+        "bytes": 6343,
+        "sha256": "492ec8f237af0cff0147df405fdf5678b85f30a22d0cfc04987b61a0f5618ec4"
+      },
+      "validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\profile\\validation.json",
+        "bytes": 508,
+        "sha256": "b01c4b280d824549c1f762155c88ffd3d4242933ded41195e080559f24de918a"
+      }
+    },
+    {
+      "ordinal": 2,
+      "condition": "short",
+      "mode": "export",
+      "status": "executed",
+      "returncode": 0,
+      "child_exited": true,
+      "validation_status": "structurally_validated",
+      "complete_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\export\\complete.json",
+        "bytes": 4350,
+        "sha256": "3884d78989d5c67e7acb0d4734f793f1a83f03d84fae30bf1b4b9a1dc142696f"
+      },
+      "validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\short\\pair_01\\export\\validation.json",
+        "bytes": 503,
+        "sha256": "38d10eb659c7b01c1885e001ce796917dd5e68b34280418cf0571f504fd359d0"
+      }
+    },
+    {
+      "ordinal": 3,
+      "condition": "settled",
+      "mode": "profile",
+      "status": "executed",
+      "returncode": 0,
+      "child_exited": true,
+      "validation_status": "structurally_validated",
+      "complete_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\profile\\complete.json",
+        "bytes": 6390,
+        "sha256": "d3045d40947aa800e1372f5783951813cb409b6410864ad98a907210100f65d0"
+      },
+      "validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\profile\\validation.json",
+        "bytes": 510,
+        "sha256": "72e0e0b746246e8327afa826ab5589e2e470b68898162cb613c5b6089268e61e"
+      }
+    },
+    {
+      "ordinal": 4,
+      "condition": "settled",
+      "mode": "direct",
+      "status": "executed",
+      "returncode": 0,
+      "child_exited": true,
+      "validation_status": "structurally_validated",
+      "complete_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\direct\\complete.json",
+        "bytes": 5535,
+        "sha256": "134c5c7a25d01b2670a6cde84b9d50b289ee3a5368be917c81164ff5614bc3af"
+      },
+      "validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\direct\\validation.json",
+        "bytes": 509,
+        "sha256": "a0e8f5e47f153d9b574973538d83d67e0159e9896d8b99d05575edeae63c697e"
+      }
+    },
+    {
+      "ordinal": 5,
+      "condition": "settled",
+      "mode": "export",
+      "status": "executed",
+      "returncode": 0,
+      "child_exited": true,
+      "validation_status": "structurally_validated",
+      "complete_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\export\\complete.json",
+        "bytes": 4383,
+        "sha256": "be00116a28daf211e18f274094c962618efd7cba68cc0646a3302c498d0b1710"
+      },
+      "validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\runs\\settled\\pair_01\\export\\validation.json",
+        "bytes": 507,
+        "sha256": "ada3f66d48a271442caeb0898966c13d4414d8f87d64bf5e34aed8ddbec0d116"
+      }
+    }
+  ],
+  "full_stage_status": [
+    {
+      "ordinal": 0,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "direct",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 1,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "profile",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 2,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "export",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 3,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "profile",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 4,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "direct",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 5,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 1,
+      "mode": "export",
+      "process_status": "executed",
+      "validation_status": "structurally_validated"
+    },
+    {
+      "ordinal": 6,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 7,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 8,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 9,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 10,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 11,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 2,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 12,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 13,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 14,
+      "condition": "short",
+      "settle_ms": 0,
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 15,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "profile",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 16,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "direct",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    },
+    {
+      "ordinal": 17,
+      "condition": "settled",
+      "settle_ms": 1000,
+      "arm": "buffered",
+      "pair": 3,
+      "mode": "export",
+      "process_status": "not_run",
+      "validation_status": "not_validated"
+    }
+  ],
+  "frozen_thresholds": {
+    "direct_host_p90_p10_max": 1.5,
+    "profile_kernel_p90_p10_max": 1.5,
+    "profile_direct_host_relative_difference_max": 0.2,
+    "profile_process_median_relative_deviation_max": 0.05,
+    "sm_clock_target_mhz": 2400,
+    "sm_clock_tolerance_mhz": 30,
+    "max_formal_clock_bracket_ms": 25
+  },
+  "coefficients_fitted_or_added_this_round": 0,
+  "calibration_fitted": false,
+  "settle_effectiveness_supported": false,
+  "cpu_only_causal_attribution_supported": false,
+  "conclusion_reasons": [
+    "Only one of three independent direct/profile pairs per condition completed; across-process repeatability is unassessed.",
+    "Short direct formal P90/P10 exceeds 1.5.",
+    "Settled direct/profile formal clock brackets read2340/2355MHz, outside2370..2430MHz.",
+    "Settled profile/direct host median perturbation is20.15625%, exceeding20%.",
+    "Improved observed direct dispersion is confounded by clock-domain failure, incomplete replication, process order, and combined host/device/cache/runtime work."
+  ],
+  "audit_scope": {
+    "controller_and_6_stage_receipts_reconciled_with_freeze": true,
+    "freeze_and_11_collector_input_hashes_rechecked": true,
+    "4_raw_and_audit_sidecar_hashes_rechecked": true,
+    "raw36_formal30_QPC_settle_placement_and_host_medians_rechecked": true,
+    "formal_bracketing_clock_samples_rechecked": true,
+    "large_trace_recorrelation_or_full_hash_recheck_performed": false,
+    "trace_check_method": "Read existing strict trace bounded prefix/tail fields and recorded first-pair quality summary; did not reload306MB JSON or rerun SQLite attribution.",
+    "no_native_profile_clock_write_or_heavy_analysis": true
+  },
+  "source_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\controller_result.json",
+      "bytes": 32676,
+      "sha256": "0ef861af6994a39c8628cf70b5b3298514215a21c48f368ad8f0d99436499742"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\execution_freeze.json",
+      "bytes": 126421,
+      "sha256": "4c4946db15968602476fb967b772e8f748eb9c64f27253a9afcf2c29aff6c2fc"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\first_pair_summary.json",
+      "bytes": 56264,
+      "sha256": "2b1095a7c53bfa355907d74169c438666aefeb625afc493ee5b297304dc79e69"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\first_pair_ready.json",
+      "bytes": 479,
+      "sha256": "59fb55c289dc7533b0be68e558ba70ba8d3e2745f11eb26ad432e3ca9d746fd6"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\continue.json",
+      "bytes": 1374,
+      "sha256": "aef8e7a3ae80ec60002af3df4a6d83cadf1cb66e1cf2d651124164b5a19be463"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\clock_session\\reset.json",
+      "bytes": 759,
+      "sha256": "2c8e7f1690a3e78d397511f8e53aae84c407efaf69ad840c5f8658ab0e9291f7"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_021\\host_settle_collection\\clock_session\\readback.json",
+      "bytes": 840,
+      "sha256": "513fe36ca159ee57f025a33233f5a43f2af64815910a4bd75aaeccdc2272f5bd"
+    }
+  ],
+  "suggested_next_step_not_executed": "Archive this incomplete denominator. Review existing clock/power evidence at low cost before considering a separately preregistered follow-up with independent repetitions and unchanged quality gates; do not restart this ended controller."
+}

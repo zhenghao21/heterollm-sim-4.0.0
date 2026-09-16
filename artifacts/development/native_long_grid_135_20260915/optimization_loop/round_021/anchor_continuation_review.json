@@ -1,0 +1,15 @@
+{
+  "schema": "source-candidate-anchor-review/v1",
+  "created_utc": "2026-09-16T09:26:29.487061+00:00",
+  "basis": "Saved immutable error records; report schema repair pending separately",
+  "source_regressions_passed": 168,
+  "fixed_denominator": 131,
+  "scored_anchors_each": 20,
+  "current_to_physical_metric_counts": {
+    "improved": 28,
+    "regressed": 32,
+    "unchanged": 0
+  },
+  "full131_continuation_authorized": true,
+  "decision": "Retain source-correct physical lower bound, continue existing physical freeze to all131. No coefficient, threshold or prediction change; final evidence report requires separate schema-corrected verifier."
+}

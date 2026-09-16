@@ -185,44 +185,40 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 10. 当前版本与证据状态（动态，原位更新）
 
-第20轮已完成，自动进入第21轮。固定native为131格、894正式请求，本轮全部原始文件SHA核验一致。第20轮只增加源码几何/可信度标注并改善独立微基准观测，没有新成本系数、没有重测目标LLM，也没有新的推理误差结果。A开发门失败，B独立门与跨硬件仍未验证。
+第21轮同源码pure/current/physical三路20锚点及physical全131格评估已完成。固定native仍为131格894请求，全部原始SHA一致；目标LLM重测0、专属时延拟合0、新系数0。A门9/131格三项Engine误差严格<10%，122格失败、证据缺失0，单项通过75/393；B门及跨硬件均未验证。
 
-最新同版本误差仍是第18轮pure/current/sampling三路20锚点：60项改善，0/20格三项同时<10%，111格未在该冻结内运行。最近完整对照为第六轮129/131评分、9/131三项达标、2身份失败。不同冻结不可拼接；第19轮提交b5a4e1a已推送且远端SHA一致。
-
-第20轮CPU reset两臂6进程完成，31/36 stage通过波动门；control16/18、source-loop15/18，整组拒收。GPU最终两臂12进程、6导出、432图调用全部完成，1728个真实kernel与全部数值/时钟/身份匹配。buffered改善了direct波动，但仍有一对profiling扰动超限，0/2组准入，GPU时钟恢复成功。
+当前完整误差来自round_021/physical/errors.0002.json和strict_gate.json，不能拼接旧R6或R18结果。第20轮提交2d4c6c6已确认本地/远端一致；第21轮正在提交收尾，完成后继续第22轮。
 
 ## 11. 本轮修改与验证（动态，原位更新）
 
-MMVQWork已在锁定源码/运行时/连续布局条件下接入planner和cost元数据，分类为vector DP4A而非MMA，并保留CTA、warp、K-loop和packed bytes。没有独立服务率时标记source_geometry_priced=false；旧MMA数值仅为分析回退，不能声称已完成MMVQ成本建模。根代理132项相关回归通过；隔离旧提交与新源码的10个合成输入（Q5_0/Q8_0×M1/2/4/8/64）共702任务非metadata字段完全一致，包含依赖和资源服务时间。因此本轮不重复数值相同的LLM预测，不宣称精度改善。
+非Flash物理KV合同为显式opt-in。source/build/runtime/config合格的普通F16 unified路径，QK/PV/softmax使用最长当前保留前缀向256补齐并受原生池容量约束的物理下界；逻辑lane/seq/position/mask/输出行保留，KV生命周期节点不重复收费。first64逻辑33/物理256、mixed64逻辑34/物理256、长前缀1025物理1280；256→257动态回放与独立编译严格相等。完整warmup/idle/holes/shared-prefix union仍未知，不称exact。168项核心回归通过。
 
-CPU reset A/B：6个唯一PID、36stage、2304steady样本，12个跨进程中位数组均通过±5%，但31/36单stage波动门通过；两arm均在大词表随机排列失败，source reset没有改善证据，不能拟合系数。
+锚点current→physical为28项改善、32项退化、0/20格三项通过；两路旧行为120项模拟指标复现R18。原冻结汇总器的source refs bytes兼容错误被保留，以独立reporting_v2修复：SHA强制一致，缺失的expected bytes不补造，实际大小明确observed。22项原报告结构测试及4项schema修复测试通过；报告修复不算准确性优化或独立盲测。
 
-GPU图间隙A/B：control的3对direct P90/P10为2.055/2.141/2.324，buffered为1.303/1.114/1.313；profile/direct扰动超20%的对数分别2/3与1/3。两组均拒收，不能把wall-kernel差额作为启动常数。控制臂逐call核验、buffered仅三个阶段边界核验，覆盖声明保持区别。最终采集器18项回归通过，真实Nsight schema/correlation/geometry/同步/外部GPU活动检查复用R18严格实现；12原生进程、6导出、432调用、1728真实kernel的数值、时钟和身份均核验通过，finally时钟恢复返回0。
-
-首次collector在一条direct结束后因遗漏绑定CUDA/驱动库而拒收，旧冻结35c8ea85…保留。五个补充模块均与R18实际记录及当前文件SHA一致，新r2冻结d428de7f…重新执行全18阶段，不混合旧批次。第20轮没有目标LLM实测或专属时延拟合。
+R21主机稳态对照完成首组6/18阶段后复核超时，迟到continue未消费；4/12原生、2/6导出均自然退出，时钟恢复返回0。short波动门失败，settled时钟及profile扰动门失败，计时准入0、系数0、其余12阶段未运行均保留。
 
 ## 12. 当前测量与预测差距（动态，原位更新）
 
-第六轮完整批次条件统计；各指标为APE“中位/P90/最坏”，单位%。两格身份失败不补零，覆盖与误差分开报告。
+第21轮同一个physical冻结的完整131格；以下为APE中位/P90/最坏，单位%。
 
-| 模型/部署 | 已评分/固定 | TTFT | TPOT | E2E |
-|---|---:|---:|---:|---:|
-| qwen25 | 17/17 | 75.66 / 79.18 / 81.88 | 48.87 / 65.84 / 66.66 | 54.68 / 70.09 / 72.77 |
-| qwen35 | 22/22 | 31.72 / 59.79 / 60.15 | 47.91 / 54.12 / 55.35 | 45.25 / 54.92 / 55.49 |
-| qwen38 | 20/20 | 8.18 / 38.25 / 43.13 | 20.26 / 26.64 / 32.18 | 11.87 / 20.54 / 28.89 |
-| smollm2 | 23/23 | 49.12 / 68.04 / 73.67 | 8.85 / 34.80 / 65.79 | 14.89 / 46.29 / 69.44 |
-| tinyllama | 22/22 | 55.09 / 65.68 / 73.63 | 35.00 / 50.29 / 71.54 | 36.40 / 57.84 / 73.08 |
-| qwen38_gpu | 25/27 | 19.79 / 36.65 / 37.36 | 11.07 / 17.91 / 23.52 | 12.08 / 21.11 / 29.82 |
+| 模型/部署 | 可评分 | 三项<10% | TTFT APE 中位/P90/最坏 | TPOT | E2E |
+|---|---:|---:|---:|---:|---:|
+| qwen25 | 17/17 | 0/17 | 68.474 / 72.723 / 76.170 | 48.546 / 61.761 / 65.332 | 51.262 / 66.277 / 68.147 |
+| qwen35 | 22/22 | 0/22 | 31.244 / 59.536 / 59.881 | 46.749 / 53.146 / 54.311 | 44.227 / 54.125 / 54.511 |
+| qwen38 | 20/20 | 5/20 | 8.092 / 38.156 / 43.049 | 20.150 / 26.528 / 32.073 | 11.773 / 20.485 / 28.811 |
+| qwen38_gpu | 27/27 | 4/27 | 19.705 / 36.623 / 37.498 | 11.182 / 18.148 / 23.686 | 12.531 / 21.250 / 30.001 |
+| smollm2 | 23/23 | 0/23 | 51.944 / 71.211 / 77.568 | 21.624 / 53.835 / 70.694 | 29.157 / 58.513 / 72.829 |
+| tinyllama | 22/22 | 0/22 | 55.981 / 65.036 / 72.665 | 37.222 / 50.143 / 70.847 | 39.652 / 57.424 / 72.499 |
 
-三项同时<10%为9/131。与第五轮共同有效格的指标相比，改善312、退化67、不变8。GPU27B TPOT中位有所退化，不能用TTFT改善抵消。完整逐格、有符号、毫秒和逐run统计见round_006/physical_mapping_mmq_r2/report.html及errors.0001.json。
+全131三项APE中位数：42.476 / 26.099 / 30.001%；P90：68.193 / 53.545 / 56.263%；最坏：77.568 / 70.847 / 72.829%。绝对毫秒误差中位数：99.321 / 2.628 / 382.285ms；最坏：2667.094 / 125.907 / 25473.633ms。三项通过9/131，仅是开发筛查结果；逐请求与分组证据见本轮完整报告。
 
 ## 13. 下一轮优化顺序（动态，原位更新）
 
-1. 第20轮代码、两路失败/改善证据、任务书提交并推送，核对远端SHA。目标仍失败，自动进入第21轮；不对R20重复采样直至过线。
-2. 新冻结检验主机稳态假设：5次微图warmup的时间远短于完整native推理warmup。仅buffered路径比较额外工作预热0ms与1000ms，两条件各3对direct/profile，共12原生进程/6导出；两条件先保留first调用，再预热，再5warmup+30formal。记录真实预热迭代、时间窗与状态，不把预热时间拟合进成本；质量门限保持不变。
-3. 两个独立源码审计并行进行：核对实际request admission、prefill microbatch、n_batch/n_ubatch/n_parallel、输出行和Engine边界；核对CUDA内核启动次数、转换/融合/同步及CPU提交与GPU执行重叠。只依据锁定源码与静态配置，不能按目标LLM误差加倍率。
-4. 优先实施有反例证明的结构缺陷；取得合格独立服务率后才替代未定价回退。新数值机制必须执行纯分析/当前/候选消融，有足够收益再全131复评。未定价、失败与低可信样本继续进入分母。
-5. 每轮原位更新、commit、push和远端核验，再逐格检查三项<10%。未达标自动续轮；连续3轮无精度进展且无必要证据缺口关闭则切换路线。A通过后进行独立B门，已揭示的开发数据不能充作独立验收。
+1. 全131已完成，先完成报告/证据归档、本地提交、push与远端SHA核验；A仍失败，然后进入下一轮。20锚点结果：60项中28改善、32退化，0格全三项<10%；不能宣称精度改善。pure/current两个对照的120项模拟指标完整复现R18；原生数据不变。全量已覆盖模型/部署/shape分组，所有失败与131分母保留。
+2. 汇总器的来源引用schema缺少bytes兼容已在独立reporting_v2修复，原冻结/预测/分数保留不改；SHA仍强制验证，observed size不冒充原声明。完成独立完整报告控制清单、已通过证据核验的逐请求严格A门及热力图交付，B继续未验证。任何报告格式修复都不算精度改善或独立盲测。
+3. 本轮提交并推送、全部仿真空闲后，运行已经准备的R22 64/256-node长合成图对照。每图一次scheduler async compute及末尾同步，保留CPU launch/API、实际kernel/stream与同步边；门槛不变，12原生+6导出，checkpoint不再因等待复核超时而中断预注册计划。原R21首组质量失败与12个未运行阶段保留，0系数，不重启同批追求通过。
+4. 并行在独立工作树准备MMVQ数值机制。现有profile没有独立验证的DP4A吞吐，不能把通用scalar GOPS/128 lanes/经验效率当作其性能。仅在原始来源足以支持时，以条件化vector指令下界替换原MMVQ的MMA计算需求；不叠加重复费用，显式保留未验证的执行吞吐、占用率及访存回退。优先覆盖固定模型实际量化格式，不把只换metadata算作一轮改进。
+5. 源码确认CPU graph construction、split/alloc准备与长图built-once探针之间的覆盖边界；这些engine内部成本不能混入client服务开销，也不能用目标TTFT/E2E反推。每轮更新、commit、push与远端核验后检查逐格三项<10%；未达到则继续下一轮，A通过后才进入独立B门。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
@@ -235,31 +231,11 @@ GPU图间隙A/B：control的3对direct P90/P10为2.055/2.141/2.324，buffered为
 
 以下路径根为artifacts/development/native_long_grid_135_20260915/。
 
-- stable_native_dataset.json、report_162/、tools/verify_fixed_native.py：固定选择、稳定性与排除历史。
-- optimization_loop/round_020/REPORT.md、closeout.json：本轮完整结论、0系数与续轮选择；cpu_reset_probe/RESULT.md和result_summary.json为6进程CPU结果。
-- optimization_loop/round_020/graph_gap_collection_r2/summary.json、controller_result.json、execution_freeze.json、runs/：最终GPU18阶段与完整clock/trace/数值证据；原graph_gap_collection/保留首次依赖清单失败，graph_gap_runtime_identity.json绑定补充CUDA/驱动库。
-- optimization_loop/round_020/detailed_evidence.tar.gz、detailed_evidence_index.json、restore_evidence.py：33份原始/详细证据的可核验压缩包，包含全部6份SQLite与6份Nsight报告；恢复时不覆盖已有文件。
-- optimization_loop/round_020/numeric_invariance/summary.json：10个合成输入、702任务数值与依赖未改变；实际source语义更正由tests/test_mmvq_mechanism.py验证。
-- optimization_loop/round_021/host_settle_probe/、runtime_batch_audit.md、native_launch_audit.md：当前在途预热与执行语义审计，未完成前不作验收结论。
-- optimization_loop/round_018/ablation.md/json、ablation_heatmap.svg/png、freeze_prediction_index.json、strict_gate.0002.json：最新20锚点三路误差，0格达标；第六轮全量历史不得与其拼接。
-
-## 16. 历史实验索引（稳定格式，短表）
-
-| 版本/文件 | 用途 | 结果状态 | 当前用途 |
-|---|---|---|---|
-| `blind_generalization_freeze_v3.json` | 5 模型完整 135-cell 初筛 | 结构有效记录 402/405；存在身份异常与 TPOT 缺失 | 历史诊断 |
-| `blind_generalization_freeze_v4.json` | Qwen3.8-27B 9 组合开发筛查 | 27/27 有效；TTFT/TPOT/E2E 目标均失败 | 开发证据 |
-| `blind_generalization_freeze_v4_l9.json` | 五模型统一 9 组合首版 | 四模型 GPU layers 身份错误 | invalid 历史证据 |
-| `blind_generalization_freeze_v4_l9_r2.json` | 修复 GPU layers 后重测 | 135/135 有效；误差目标仍失败 | 开发/验证对照 |
-| `blind_generalization_freeze_v4_l9_r3.json` | prefill fix 后新批次 | 67/135 后停止 | 未完成实验，不纳入统计 |
-| `simulator_replay_prefill_fix_v1.json` | 复用旧 native evidence，只重跑 simulator | 135/135 replay；误差改善但仍失败 | 开发机制对照 |
-| `b06_qwen25_kernel_operator_coverage_v1.json` | semantic direct kernel owner/correlation train/holdout 开发证据 | 4122/4122、4384/4384 matched；shape 联合键 22.56%，通用成本面阻断 | B-07 shape 梯度补采输入 |
-| `b07_qwen25_operator_coverage_v2.json` | M/T shape 梯度联合覆盖审计 | 21/91 exact key 相交；holdout event 加权覆盖 78.40%；候选 profile 阻断 | B-08 exact-key 适用域门禁输入 |
-| `b08_qwen25_layout_evidence_v1.json` | 显式 layout marker/extractor 小模型验证 | layout 缺失 0；contiguous 100%；跨 shape exact key 21.33%，全局 profile 阻断 | B-09 exact-key 门禁输入 |
-
-## 17. 任务书维护规则（稳定）
-
-- 稳定章节只在规则本身改变时修改；不得把每轮实验记录追加到稳定章节。
-- 动态章节（第 10–15 节）每轮**原位替换**为当前事实：版本、差距、下一轮顺序、冻结/replay 状态和最近验证结果必须反映最新代码与证据。
-- 历史实验只新增或修正第 16 节短表中的一行，不复制完整报告内容；详细原始数据仍放在 `artifacts/`，分析报告放在独立文档。
-- 每次代码、profile、冻结清单、微基准、extractor 或测试口径修改后，先更新动态章节，再运行验证并回填结果；未达标必须明确写“失败”或“未验证”。
+- stable_native_dataset.json与optimization_loop/state.json：固定131格选择、不可变原始引用与自动循环状态。
+- optimization_loop/round_021/REPORT.md、closeout.json、strict_gate.json：最新完整131格结果、逐请求门禁、失败及未验证范围。
+- optimization_loop/round_021/physical/errors.0002.json、三路freeze及predictions：先保存的原始预测、固定actual评分与全部身份。
+- optimization_loop/round_021/reporting_v2/：独立schema修复、anchors对照、最终full_engine_error_heatmap_v2.png/svg；reporting_full/保存同字节汇总器及全131的独立控制清单和报告。旧汇总器失败保留在report_schema_failure.json。
+- optimization_loop/round_021/core_validation.json、baseline_reproduction.json、runtime_batch_audit.md：168项核心回归、120项控制复现和物理KV来源审计。
+- optimization_loop/round_021/host_settle_collection/RESULT.md、result_summary.json、controller_result.json：6/18完成、质量拒收、自然退出与时钟恢复。
+- optimization_loop/round_021/detailed_evidence.parts.json、4个≤40MiB分卷、detailed_evidence_index.json和restore_evidence.py：195成员原始证据的逐字节归档与不覆盖恢复；完整149MB包及原始文件仍保留本地。
+- optimization_loop/round_022/long_graph_probe/、long_graph_collection/：长图测量准备，尚未实测；mmvq_analytic_cost_audit.md、graph_build_scope_audit.md为下一机制依据。

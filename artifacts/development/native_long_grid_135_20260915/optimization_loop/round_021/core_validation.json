@@ -1,0 +1,31 @@
+{
+  "schema": "core-validation-terminal-record/v1",
+  "recorded_utc": "2026-09-16T09:15:28.750413+00:00",
+  "command": "E:/anaconda/python.exe -m pytest tests/test_nonflash_kv_view.py tests/test_nonflash_kv_view_adapter.py tests/test_final_layer_output_selection_planner.py tests/test_predict_stable_native_dataset.py -q --disable-warnings --maxfail=2",
+  "test_files": [
+    "tests/test_nonflash_kv_view.py",
+    "tests/test_nonflash_kv_view_adapter.py",
+    "tests/test_final_layer_output_selection_planner.py",
+    "tests/test_predict_stable_native_dataset.py"
+  ],
+  "working_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0",
+  "exit_code": 0,
+  "result": "168 passed in 44.17s",
+  "passed": 168,
+  "duration_seconds": 44.17,
+  "ended_utc": null,
+  "end_time_precision": "Terminal tool did not preserve an exact wall timestamp; the contemporaneous final report mtime is a completion upper bound, not the exact test end.",
+  "completion_upper_bound_utc": "2026-09-16T09:04:26.086646+00:00",
+  "completion_upper_bound_source": "round_021/nonflash_kv_fix_report.md filesystem mtime observed when preparing this record",
+  "result_source": "Original successful functions.exec_command/write_stdin terminal result, session_id 50530; no repeat execution",
+  "validated_core_sha256": {
+    "src/heterollm_sim/planner.py": "15ecc454075febf632fd4cbd9303ee6f7fa0293aa2e8b413670b0aba03b8b2f6",
+    "tools/predict_stable_native_dataset.py": "cb7e0fd3db2b1f3b3d6e8244a143734a3fefd5fd7d6cfd5f1e335929e4bb40f0"
+  },
+  "currently_observed_core_sha256": {
+    "src/heterollm_sim/planner.py": "15ecc454075febf632fd4cbd9303ee6f7fa0293aa2e8b413670b0aba03b8b2f6",
+    "tools/predict_stable_native_dataset.py": "cb7e0fd3db2b1f3b3d6e8244a143734a3fefd5fd7d6cfd5f1e335929e4bb40f0"
+  },
+  "validated_core_still_unchanged": true,
+  "rerun_performed_for_record": false
+}
