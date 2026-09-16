@@ -1,0 +1,25 @@
+
+Dump of file F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\artifacts\development\native_long_grid_135_20260915\optimization_loop\round_026\mmvq_target_capture\mmvq-host-decode-tests.0003.exe
+
+File Type: EXECUTABLE IMAGE
+
+  Image has the following dependencies:
+
+    MSVCP140.dll
+    KERNEL32.dll
+    VCRUNTIME140.dll
+    VCRUNTIME140_1.dll
+    api-ms-win-crt-runtime-l1-1-0.dll
+    api-ms-win-crt-string-l1-1-0.dll
+    api-ms-win-crt-heap-l1-1-0.dll
+    api-ms-win-crt-math-l1-1-0.dll
+    api-ms-win-crt-stdio-l1-1-0.dll
+    api-ms-win-crt-locale-l1-1-0.dll
+
+  Summary
+
+        2000 .data
+        1000 .pdata
+        4000 .rdata
+        1000 .reloc
+        6000 .text

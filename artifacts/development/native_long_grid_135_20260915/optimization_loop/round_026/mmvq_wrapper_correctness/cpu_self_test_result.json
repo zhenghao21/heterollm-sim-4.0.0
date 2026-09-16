@@ -1,0 +1,97 @@
+{
+  "schema": "heterollm.mmvq-wrapper-correctness/v1",
+  "status": "cpu_reference_self_test_passed_gpu_unverified",
+  "started_at_utc": "2026-09-16T17:30:26.715Z",
+  "stage": "identity_check",
+  "cpu_only": true,
+  "gpu_execution_performed": false,
+  "cuda_api_calls_started": false,
+  "timed_runs": 0,
+  "target_llm_latency_used": false,
+  "performance_parameters_admitted": 0,
+  "fixture": {
+    "weight_type": "Q5_0",
+    "ggml_type_id": 6,
+    "K": 4096,
+    "N": 3072,
+    "M": 1,
+    "padded_K": 4096,
+    "q8_1_stride_blocks": 128,
+    "seed": 1362447665
+  },
+  "cpu_self_test_cuda_modules_absent": true,
+  "identity": {
+    "build_inputs": {
+      "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_026/mmvq_wrapper_correctness/build_inputs.json",
+      "sha256": "66f3923e9280c9d552aa5df76e6bc9b75ab81bf904558b8eabed5a9fdef1420d",
+      "bytes": 10749
+    },
+    "executable": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_wrapper_correctness\\mmvq_cpu_self_test.exe",
+      "sha256": "e9851672d8960aed1395f6d111c79da82e955595773ed1c15f69dc518d33660d",
+      "bytes": 230400
+    },
+    "process_id": 44692,
+    "loaded_modules": [
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+        "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+        "bytes": 673792
+      }
+    ],
+    "ggml_quantize_chunk_provider": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    "target_cuda_dll_is_not_this_wrapper": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+      "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+      "bytes": 26091520
+    }
+  },
+  "cpu_self_test": {
+    "status": "passed",
+    "all_input_elements_nonzero": true,
+    "all_weight_elements_nonzero": true,
+    "packed_weight_bytes": 8650752,
+    "expected_q8_1_bytes": 4608,
+    "locked_quantizer_deterministic": true,
+    "output_bound_positive_fixture": {
+      "tested": 3072,
+      "failed": 0,
+      "max_absolute_error": 3.814697265625e-06,
+      "max_bound_ratio": 0.00013963431537461049,
+      "worst_index": 2354
+    },
+    "negative_checks": [
+      "output_exceeds_derived_bound",
+      "nan_output",
+      "q8_scale_byte",
+      "q8_sum_byte",
+      "q8_quant_byte"
+    ],
+    "reference_scope": "Q5_0 M1 K4096 N3072 exact dyadic inputs; no rounding ties or padded columns"
+  },
+  "tolerance": {
+    "rule": "gamma(2*(K/32)+3,2^-24)*unsigned_amplitude/(1-gamma64) + gamma64*sum_abs_products/(1-gamma64); rounded upward",
+    "gamma64_rule": "gamma(4*K+64,2^-53)",
+    "fp32_rounding_steps": 259,
+    "gamma32": 1.5437841320091598e-05,
+    "gamma64": 1.826094830906792e-12,
+    "min_bound": 0.02672208311548355,
+    "max_bound": 0.029421077320942075,
+    "selected_before_observing_gpu_output": true,
+    "quantization_error_against_original_float_weights_not_an_acceptance_metric": true
+  },
+  "fixture_hashes": {
+    "weights_f32": "58b20ced5813b635617b96630abb59723097b2278ddf7194dc5f51763136bc17",
+    "input_f32": "b2bdf5731a3b764f8300a45f5dc0a9e653916e19a77c4f2a4f064e3bb723a7cb",
+    "packed_q5_0": "15396580a0e773ccb026961062e558753ca1557c13739d063ecb46db2b2ad394",
+    "expected_q8_1": "84cb63bd9f5656390733a9b1b43ff7be765a7305273f03e84946b76208eb9fd0",
+    "reference_f64": "9723460184ddc993a6830d4cddca0672a65e16e310a9e55e776941e9f6dbbf88",
+    "bounds_f64": "4fc533f558284827cb2ec8c5eda0737c7e26dd44af34f0e90e7953fe9be91975"
+  },
+  "runtime_equivalence_verified": false,
+  "finished_at_utc": "2026-09-16T17:30:27.176Z"
+}

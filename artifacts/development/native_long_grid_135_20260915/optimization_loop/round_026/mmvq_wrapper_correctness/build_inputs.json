@@ -1,0 +1,208 @@
+{
+  "schema": "heterollm.mmvq-correctness-build-inputs/v1",
+  "created_at_utc": "2026-09-16T17:27:38.477250+00:00",
+  "input_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_wrapper_correctness\\correctness_driver.cpp",
+      "sha256": "0710274ce32045b77b89ec7f89a760e80220649d223ea425a4d1663720cdc794",
+      "bytes": 20374
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_wrapper_correctness\\cpu_reference.h",
+      "sha256": "ef786f57906d8b6bf1a18266d021329deac5411b61f28b8ac18b449588ef1f37",
+      "bytes": 8881
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_wrapper_correctness\\build_driver.py",
+      "sha256": "bd6bbb51eb6edd7e0e850a9a32f455cd448c409d28512fb7e40c838e5704d1a8",
+      "bytes": 7852
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\mmvq_probe_abi.h",
+      "sha256": "34a6585c084a642cfe2580e675018d700cc7e0d45ef7b13f14a69b99ea84c993",
+      "bytes": 498
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\mmvq_source_slice.cu",
+      "sha256": "86573347956398dbd2607deec182a0fc5d76fb1800a18a72627f46f854a47743",
+      "bytes": 68320
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\mmvq_runtime_support.cu",
+      "sha256": "91e8960dcec2f85ea971395fbd2f4548b5ac8c4a20360fd485819b5f80122dda",
+      "bytes": 2457
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\source_slice_receipt.json",
+      "sha256": "ff7b6ad98c5cb3f1ed5ed8e8fb34b8d3c694a249ac351b5ca4cf92557a89ffd4",
+      "bytes": 15068
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\device_identity.json",
+      "sha256": "cd643119ce5c2af01f191ab03ea6a4d21ce58cc98bb386a5b188b5afabb86caa",
+      "bytes": 1673
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\include\\ggml.h",
+      "sha256": "d22dd1518f96a3388043a5beec2aaaf73004d34b083ff3878bad6229139aac91",
+      "bytes": 118670
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-common.h",
+      "sha256": "3ac6eed12695ceea1acd18f556845023a45f92f6ce0530c18c70bb10450207ea",
+      "bytes": 137072
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-quants.c",
+      "sha256": "c5829ed1b4ced3970964464eaf2c985af38008fa76c91af15f4f63ef4447ab1f",
+      "bytes": 233917
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\mmvq.cu",
+      "sha256": "14026871030393662628abdbd4937d5cab72031e20ddf582c9de1d7b424bb368",
+      "bytes": 74464
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cu",
+      "sha256": "12ab0782e5e9cf273dcc584edc7413729b18609dc20b4bc6c7a53efd5656c48f",
+      "bytes": 30628
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\vecdotq.cuh",
+      "sha256": "9d165e8e36db9bdfb69bfc2301e550a58c4a3057907bbf4d075b5f3eb72347a2",
+      "bytes": 51105
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\vendor\\nlohmann\\json.hpp",
+      "sha256": "5f09d1eebe9b3557f21df155869af13bcde79b74a0748f82ca946e8cc088aaa0",
+      "bytes": 978962
+    },
+    {
+      "path": "E:\\cuda\\include\\cuda_runtime_api.h",
+      "sha256": "6c60f63697575ff18156d397ec506ab286b147f33a5ce9e72f95bfec162fd3ea",
+      "bytes": 670876
+    },
+    {
+      "path": "E:\\cuda\\include\\cuda_fp16.h",
+      "sha256": "2dba9ce73e70be5343d186f6306d846c8eecd58c2de694ebc9f9bd888c0021c3",
+      "bytes": 212214
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\compile_commands.json",
+      "sha256": "224073b5254c9ac9d5e6e1027ad6c1d7e4cb97ca4f1c6507335434d0ec6b5155",
+      "bytes": 867669
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\ggml\\src\\ggml-base.lib",
+      "sha256": "dfd00638e260045c0f5aae60900d40c395cb77da4a43533ab19b10948372509a",
+      "bytes": 153756
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\ggml\\src\\ggml-cpu.lib",
+      "sha256": "d8ceadc5305e7b358f123771dd90e4d72d31f4e2c103d40a5960ebcbab208dce",
+      "bytes": 15744
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\ggml\\src\\ggml.lib",
+      "sha256": "d01ad33b1d8ba55313887eb125b66db7448fe0fd542ab9d720c9263ca94a89b6",
+      "bytes": 5288
+    },
+    {
+      "path": "E:\\cuda\\lib\\x64\\cudart.lib",
+      "sha256": "0fc74e7cd9e3d68d1dbec554dab94c17d17bc15e489e851fb8b876586bac02b2",
+      "bytes": 117462
+    },
+    {
+      "path": "E:\\cuda\\lib\\x64\\cuda.lib",
+      "sha256": "1f2fd7eb50512a5d12d1c1ff8803cc6499a9dbbaa8bb9a8320d4ff771ab7f0b3",
+      "bytes": 160840
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+      "sha256": "88c8344236a27a6e727e0a8edc49aaa2690bdc7a9464b9d18cc7abe70a9f1c0d",
+      "bytes": 677736
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe",
+      "sha256": "ca11e6c45debd34bf652dfe984c5360a531a005ed78bf72852330c9c2590cf0d",
+      "bytes": 3252576
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\evidence\\build_receipt.json",
+      "sha256": "c807d0b2cd1bdd8f7758b6078b57517da348ad0d95322284619a1b3fd0a41035",
+      "bytes": 140839
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\mmvq_source_slice.obj",
+      "sha256": "9cb1e28e65cd3e1ed7a6a26194a65a38688bfdb907fe5b1591cc4895b8377b80",
+      "bytes": 3321201
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\quantize_same_source.obj",
+      "sha256": "af7ebc39417b33ff8c8f36a8d16b7b373566e167b2c52cba9abbb9825616c538",
+      "bytes": 319321
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\mmvq_runtime_support.obj",
+      "sha256": "3ed2342866056e17c1a5f15807b1572dd47bbc237dd253bf17d9c97dea5ffad1",
+      "bytes": 67077
+    }
+  ],
+  "expected_runtime_dlls": {
+    "ggml-base.dll": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    "ggml-cpu.dll": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+      "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+      "bytes": 958464
+    },
+    "ggml.dll": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+      "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+      "bytes": 61440
+    },
+    "cudart64_12.dll": {
+      "path": "E:\\cuda\\bin\\cudart64_12.dll",
+      "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+      "bytes": 573952
+    }
+  },
+  "locked_target_cuda": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+    "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+    "bytes": 26091520
+  },
+  "cpu_quantizer_provider_proof": {
+    "native_build_receipt": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\evidence\\build_receipt.json",
+      "sha256": "c807d0b2cd1bdd8f7758b6078b57517da348ad0d95322284619a1b3fd0a41035",
+      "bytes": 140839
+    },
+    "semantic_ggml_base": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-base.dll",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    "native_ggml_base": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    "bytes_equal": true,
+    "source_tree_owner": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic"
+  },
+  "fixture": {
+    "weight_type": "Q5_0",
+    "M": 1,
+    "K": 4096,
+    "N": 3072,
+    "padded_K": 4096
+  },
+  "original_r6_objects_recompiled": false,
+  "gpu_execution_performed": false,
+  "timed_runs": 0,
+  "target_llm_latency_used": false
+}

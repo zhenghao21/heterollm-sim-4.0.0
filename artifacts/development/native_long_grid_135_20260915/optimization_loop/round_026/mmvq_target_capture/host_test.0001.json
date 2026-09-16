@@ -1,0 +1,71 @@
+{
+  "schema": "heterollm.mmvq-target-host-test-receipt/v1",
+  "argv": [
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_target_capture\\mmvq-host-decode-tests.0003.exe"
+  ],
+  "returncode": 0,
+  "stdout_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_target_capture\\host_test.0001.stdout.json",
+    "bytes": 1317,
+    "sha256": "dbcddfdfe3bb6e6f9e8b7926e8f3fe59d42a8c10aaab0c5a12771169440968be"
+  },
+  "stderr_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_target_capture\\host_test.0001.stderr.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "build_manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_target_capture\\build_manifest.json",
+    "bytes": 84462,
+    "sha256": "c47f6b90167d650176fde838339f9abffd32f9b76394697b935efb0f837ec39a"
+  },
+  "target_executable_executed": false,
+  "gpu_execution_performed": false,
+  "result": {
+    "schema": "heterollm.mmvq-target-host-tests/v1",
+    "status": "passed",
+    "test_count": 34,
+    "GPU_context_created": false,
+    "CUPTI_subscription_created": false,
+    "CUDA_API_called": false,
+    "DLL_loaded_by_test": false,
+    "actual_GPU_callback_compatibility_validated": false,
+    "tests": [
+      "valid_pair_and_all_pointer_links",
+      "payload_copied_before_callback_return",
+      "conversion_9_fields_distinct_and_64bit",
+      "main_19_fields_distinct_and_fusion_layout",
+      "reject_wrong_conversion_shape",
+      "reject_wrong_conversion_ne2_fastdiv",
+      "reject_wrong_main_stride",
+      "reject_wrong_main_channel_fastdiv",
+      "reject_wrong_main_geometry",
+      "reject_dynamic_shared_change",
+      "reject_conversion_geometry_change",
+      "reject_ids_path",
+      "reject_fusion_path",
+      "reject_producer_consumer_pointer_mismatch",
+      "reject_graph_input_mismatch",
+      "reject_graph_weight_mismatch",
+      "reject_graph_output_mismatch",
+      "reject_pointer_aliasing",
+      "reject_different_stream",
+      "reject_different_context",
+      "reject_duplicate_correlation",
+      "reject_missing_return",
+      "reject_failed_return",
+      "reject_missing_launch",
+      "reject_extra_launch",
+      "reject_overflow",
+      "reject_reversed_order",
+      "reject_legacy_mmq_unknown_and_missing_symbol_without_dereference",
+      "reject_null_argument_array",
+      "reject_null_parameter_slots",
+      "reject_unsupported_launch_api_without_cast",
+      "ignore_nonlaunch_callback",
+      "reject_entry_without_exit",
+      "reject_orphan_exit"
+    ]
+  },
+  "inputs_unchanged": true
+}
