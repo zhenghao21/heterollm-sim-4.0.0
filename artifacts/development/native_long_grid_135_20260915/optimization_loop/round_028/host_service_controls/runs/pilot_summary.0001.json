@@ -1,0 +1,224 @@
+{
+  "schema": "host-service-pilot-summary/v1",
+  "raw_sample_count": 195,
+  "zero_counter_samples": 165,
+  "observed_minimum_positive_tick_delta": 156250,
+  "minimum_step_is_error_bound": false,
+  "counter_precision_validated": false,
+  "cycles_converted_to_ns": false,
+  "controlled_windows": [
+    {
+      "kind": "Sleep",
+      "nominal_amount": 1,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 14413600,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "Sleep",
+      "nominal_amount": 4,
+      "samples": 15,
+      "nonzero_accounting_samples": 1,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 15957100,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "Sleep",
+      "nominal_amount": 16,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 17572300,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "Sleep",
+      "nominal_amount": 64,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 66797700,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "busy",
+      "nominal_amount": 0.25,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 250300,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "busy",
+      "nominal_amount": 1,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 1000100,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "busy",
+      "nominal_amount": 4,
+      "samples": 15,
+      "nonzero_accounting_samples": 1,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 4000100,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "busy",
+      "nominal_amount": 16,
+      "samples": 15,
+      "nonzero_accounting_samples": 13,
+      "median_reported_accounting_ns": 15625000,
+      "median_wall_ns": 16000100,
+      "median_accounting_to_wall_ratio": 0.9765563965225217,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "busy",
+      "nominal_amount": 64,
+      "samples": 15,
+      "nonzero_accounting_samples": 15,
+      "median_reported_accounting_ns": 62500000,
+      "median_wall_ns": 64000100,
+      "median_accounting_to_wall_ratio": 0.976560974123478,
+      "accounting_cv_pct": 6.564378552893926
+    },
+    {
+      "kind": "empty_loop",
+      "nominal_amount": 0,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 100,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "empty_loop",
+      "nominal_amount": 128,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 200,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "empty_loop",
+      "nominal_amount": 512,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 300,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    },
+    {
+      "kind": "empty_loop",
+      "nominal_amount": 2048,
+      "samples": 15,
+      "nonzero_accounting_samples": 0,
+      "median_reported_accounting_ns": 0,
+      "median_wall_ns": 700,
+      "median_accounting_to_wall_ratio": 0.0,
+      "accounting_cv_pct": null
+    }
+  ],
+  "long_busy_window_ratio_difference_pct": 0.0004687481689619384,
+  "conditional_development_use": true,
+  "absolute_service_accuracy_guarantee": false,
+  "assumptions": [
+    "GetThreadTimes is OS user+kernel accounting, not wall time",
+    "busy-window accounting/wall ratio is interpretable only with limited descheduling/interrupt work; this pilot does not independently verify that assumption",
+    "Sleep controls expose wait-versus-accounting behavior but do not prove service-time precision",
+    "minimum nonzero increment is observed visibility, not guaranteed timer resolution"
+  ],
+  "allowed_followup": "use visible stable windows for conditional development diagnostics/cost candidates with explicit scope; formal service precision requires independent validation; no automatic simulator import",
+  "execution_refs": [
+    {
+      "finish_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0001\\finish.json",
+        "bytes": 37066,
+        "sha256": "4b934a1e9301eaef1fe52652d53bf7615f939d4f8842fe64a11416c010077495"
+      },
+      "start_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0001\\start.json",
+        "bytes": 22141,
+        "sha256": "7e7e1b62fd58d4a75a96613a8803948ec3fc154b8c291f8a64b6c7201d156197"
+      },
+      "child_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0001\\child.json",
+        "bytes": 74,
+        "sha256": "75ce6f4c87e1b8ea952843507020d6c3b7f694d7d7d2ef67120419232a114414"
+      },
+      "build_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\build_manifest.0004.json",
+        "bytes": 91961,
+        "sha256": "978a6d6bdbb9a850e2cbd232ee34d1fc1b6a3c345f70d2d2e33caf3839674e95"
+      }
+    },
+    {
+      "finish_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0002\\finish.json",
+        "bytes": 37066,
+        "sha256": "1b9ff46b2eae809dc4ec45a9b612d618562864a11b96dd4cf8683d3022048db5"
+      },
+      "start_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0002\\start.json",
+        "bytes": 22141,
+        "sha256": "e0b08246a5319c99dfa989a6f34458ecaa5428ea3ab75fe54600fbe9d3701a00"
+      },
+      "child_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0002\\child.json",
+        "bytes": 74,
+        "sha256": "c1db7d70a767ed2f333045341ffd12c90b34380d0df131d74bdd29b2ffbfd6ab"
+      },
+      "build_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\build_manifest.0004.json",
+        "bytes": 91961,
+        "sha256": "978a6d6bdbb9a850e2cbd232ee34d1fc1b6a3c345f70d2d2e33caf3839674e95"
+      }
+    },
+    {
+      "finish_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0003\\finish.json",
+        "bytes": 37066,
+        "sha256": "35b1a7a4126617d57eb0e2ae91a38bf37de9763a85ef4ba0902d2bbf7d820d38"
+      },
+      "start_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0003\\start.json",
+        "bytes": 22141,
+        "sha256": "8081330d0456f78d557fcc3522c1bb2cb8a203a4a30e4c95396e6d09ec7080ab"
+      },
+      "child_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\runs\\pilot_chain.0003\\child.json",
+        "bytes": 74,
+        "sha256": "069e58bd5b0fb7e347d460ba64b9a3f917ff3f214a15c2cda7e35bb58dd972e4"
+      },
+      "build_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\build_manifest.0004.json",
+        "bytes": 91961,
+        "sha256": "978a6d6bdbb9a850e2cbd232ee34d1fc1b6a3c345f70d2d2e33caf3839674e95"
+      }
+    }
+  ],
+  "input_protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\protocol.json",
+    "bytes": 12770,
+    "sha256": "053fcbc067bd47bcfd513ac3dcd32023b3de828e3e3f9e6c9603b1e1a7bb42e7"
+  }
+}

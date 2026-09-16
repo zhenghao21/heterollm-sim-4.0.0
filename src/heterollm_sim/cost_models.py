@@ -23,8 +23,22 @@ from .contracts import (
     TaskCategory,
 )
 from .mmq_work import MMQWork
-from .mmvq_work import MMVQWork
+from .mmvq_work import (
+    MMVQWork, MMVQSourceContract, SOURCE_SHA256 as MMVQ_SOURCE_SHA256,
+    UnsupportedMMVQ, derive_mmvq_work,
+)
 from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
+
+
+MMVQ_HBM_MODE_LEGACY = "legacy_mma_output_wave"
+MMVQ_HBM_MODE_NOMINAL = "nominal_bandwidth_analytical_fallback"
+MMVQ_HBM_MODES = (MMVQ_HBM_MODE_LEGACY, MMVQ_HBM_MODE_NOMINAL)
+
+
+def validate_mmvq_hbm_mode(value: object) -> str:
+    if type(value) is not str or value not in MMVQ_HBM_MODES:
+        raise ValueError("unsupported mmvq_hbm_mode")
+    return value
 
 
 def _ceil_div(numerator: int, denominator: int) -> int:
@@ -1934,9 +1948,10 @@ class GPUProfile:
         return self.scalar_energy_pj_per_op
 
     def estimate_gemm(
-        self, hbm: HBMProfile, workload: GemmWorkload
+        self, hbm: HBMProfile, workload: GemmWorkload, *,
+        mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
     ) -> CostEstimate:
-        return estimate_gpu_gemm(self, hbm, workload)
+        return estimate_gpu_gemm(self, hbm, workload, mmvq_hbm_mode=mmvq_hbm_mode)
 
     def estimate_tensor_kernel(
         self, hbm: HBMProfile, workload: TensorKernelWorkload
@@ -2451,10 +2466,54 @@ def _gemm_tensor_dtype(workload: GemmWorkload) -> str:
     return "fp32"
 
 
+def _mmvq_nominal_hbm_eligibility(workload: GemmWorkload) -> Tuple[bool, str]:
+    """Check canonical source geometry, not measured memory efficiency or occupancy."""
+    work = workload.mmvq_work
+    if work is None:
+        return False, "missing_typed_mmvq_source_work"
+    if (workload.epilogue_operations or workload.epilogue_transcendental_operations
+            or workload.epilogue_output_elements or workload.epilogue_name):
+        return False, "fused_epilogue_outside_unfused_source_contract"
+    try:
+        contract = MMVQSourceContract(
+            1200, 1200, 32, dict(MMVQ_SOURCE_SHA256), work.runtime_binary_sha256,
+            True, False, True,
+        )
+        canonical = derive_mmvq_work(
+            m=work.m, k=work.k, n=work.n, weight_format=work.weight_format,
+            contract=contract, allow_k_formats=True,
+        )
+    except (AttributeError, TypeError, ValueError, UnsupportedMMVQ):
+        return False, "unsupported_mmvq_source_geometry"
+    # Dataclass numeric equality alone accepts 4.0 == 4 and 0 == False.
+    # Every source geometry scalar and tuple item must retain its exact type.
+    for name in MMVQWork.__dataclass_fields__:
+        actual, expected = getattr(work, name), getattr(canonical, name)
+        if type(actual) is not type(expected):
+            return False, "noncanonical_mmvq_source_geometry"
+        if isinstance(expected, tuple) and (
+            len(actual) != len(expected)
+            or any(type(a) is not type(b) for a, b in zip(actual, expected))
+        ):
+            return False, "noncanonical_mmvq_source_geometry"
+    if canonical != work:
+        return False, "noncanonical_mmvq_source_geometry"
+    if workload.weight_bytes != work.logical_weight_bytes:
+        return False, "physical_weight_bytes_differ_from_source_blocks"
+    return True, "canonical_unfused_mmvq_source_geometry_only"
+
+
 def estimate_gpu_gemm(
-    gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload
+    gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload, *,
+    mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
 ) -> CostEstimate:
-    """Estimate GEMM, or an explicitly contracted MMVQ dot issue lower bound."""
+    """Estimate resource demand with an optional, unvalidated MMVQ HBM fallback.
+
+    The default preserves historical costs. The nominal mode removes only the
+    MMA output-wave discount for canonical MMVQ work; source geometry does not
+    establish that the nominal bandwidth is attained, even with many CTAs.
+    """
+    validate_mmvq_hbm_mode(mmvq_hbm_mode)
 
     if (
         workload.mmq_work is not None
@@ -2712,6 +2771,57 @@ def estimate_gpu_gemm(
             "independent MxN output tiles; K tiles are serial reduction"
         ),
     }
+    if mmvq_hbm_mode == "nominal_bandwidth_analytical_fallback":
+        eligible, reason = _mmvq_nominal_hbm_eligibility(workload)
+        hbm_bandwidth_metadata.update(
+            requested_mmvq_hbm_mode=mmvq_hbm_mode,
+            mmvq_nominal_mode_applied=eligible,
+            mmvq_nominal_mode_reason=reason,
+        )
+        if eligible:
+            # Keep the exact byte/cache/resource graph. Source CTA geometry
+            # rejects an MMA interpretation; it does not supply an HBM rate.
+            shape_effective_hbm_bandwidth_gb_s = peak_effective_hbm_bandwidth_gb_s
+            if vector_bound is not None:
+                issue_metadata["overall_timing_completeness"] = (
+                    "partial_with_nominal_HBM_analytical_fallback"
+                )
+            hbm_bandwidth_metadata = {
+                "model": "nominal_bandwidth_analytical_fallback",
+                "requested_mmvq_hbm_mode": mmvq_hbm_mode,
+                "mmvq_nominal_mode_applied": True,
+                "mmvq_nominal_mode_reason": reason,
+                "evidence": EvidenceStatus.ANALYTICAL.value,
+                "validation_status": "unvalidated_nominal_bandwidth_assumption",
+                "validated_kernel_families": (),
+                "validated_hardware": (),
+                "fallback_to_fixed_bandwidth": True,
+                "physical_applicability": "conditional_source_qualified_mmvq_only",
+                "peak_effective_hbm_bandwidth_gb_s": peak_effective_hbm_bandwidth_gb_s,
+                "shape_effective_hbm_bandwidth_gb_s": shape_effective_hbm_bandwidth_gb_s,
+                "applied_hbm_shape_factor": 1.0,
+                "tile_utilization_applied_to_hbm": False,
+                "output_wave_utilization_applied_to_hbm": False,
+                "source_geometry_hbm_concurrency_applied": False,
+                "source_geometry_hbm_concurrency_reason":
+                    "source CTA/warp/K geometry is not a bandwidth utilization measurement",
+                "parallelism_basis": "nominal_profile_bandwidth_no_geometric_discount",
+                "source_cta_count": workload.mmvq_work.cta_count,
+                "profile_sm_count": gpu.sm_count,
+                "source_ctas_below_sm_count": workload.mmvq_work.cta_count < gpu.sm_count,
+                "bandwidth_saturation_proven": False,
+                "native_dispatch_proven": False,
+                "measured_bandwidth_or_occupancy": False,
+                "legacy_mma_output_wave_diagnostic": dict(tile_wave),
+                "legacy_mma_diagnostic_applied_to_hbm": False,
+                "assumptions": (
+                    "the planner's explicit source/runtime MMVQ contract applies",
+                    "profile effective HBM bandwidth is a nominal analytical rate, not measured for this kernel",
+                    "small grids, latency, cache state and register pressure may prevent that rate",
+                    "CTA count at or above SM count does not prove memory saturation",
+                    "this is not a guaranteed service-time bound or an accuracy/coverage claim",
+                ),
+            }
     memory_demands, cache_metadata = _cache_memory_demands(
         hierarchy=gpu.cache_hierarchy,
         read_bytes=workload.activation_bytes + workload.weight_bytes + mmq_tail_read_bytes,

@@ -55,6 +55,9 @@ from .cost_models import (
     GemmWorkload,
     GPUProfile,
     HBMProfile,
+    MMVQ_HBM_MODE_LEGACY,
+    MMVQ_HBM_MODE_NOMINAL,
+    validate_mmvq_hbm_mode,
     HostMemoryProfile,
     MemoryWorkload,
     ReductionWorkload,
@@ -5136,6 +5139,7 @@ def compile_scenario(scenario: ScenarioConfig) -> ScheduleIR:
 def compile_streaming_scenario(scenario: ScenarioConfig) -> StreamingScheduleIR:
     """Validate a static scenario without materializing its complete graph."""
 
+    _mmvq_hbm_mode(scenario)
     with _compilation_scope(scenario):
         validation = validate_scenario(scenario)
         validation.raise_for_errors()
@@ -5167,6 +5171,9 @@ def compile_streaming_scenario(scenario: ScenarioConfig) -> StreamingScheduleIR:
                 "scenario_name": scenario.name,
                 "execution_kernel": "unified_event_kernel",
                 "schedule_materialization": "incremental",
+                **({"mmvq_hbm_mode": {"requested_mode": _mmvq_hbm_mode(scenario),
+                    "applied_tasks": None, "scope": "declared mode; streaming tasks not yet lowered"}}
+                   if "llama_cpp_mmvq_hbm_mode" in scenario.workload.metadata else {}),
             },
         )
         return StreamingScheduleIR(
@@ -5179,6 +5186,7 @@ def compile_streaming_scenario(scenario: ScenarioConfig) -> StreamingScheduleIR:
 
 
 def _compile_scenario_in_context(scenario: ScenarioConfig) -> ScheduleIR:
+    _mmvq_hbm_mode(scenario)  # Validate the explicit simulator mode even for CPU-only graphs.
     validation = validate_scenario(scenario)
     validation.raise_for_errors()
     manifest_assumptions = (
@@ -5214,6 +5222,10 @@ def _compile_scenario_in_context(scenario: ScenarioConfig) -> ScheduleIR:
     if isinstance(iq_panel_contract, Mapping) and iq_panel_contract.get("enabled") is True:
         manifest = replace(manifest, metadata={
             **manifest.metadata, "cpu_iq_panel_reuse": summarize_cpu_iq_panel_reuse(tasks),
+        })
+    if "llama_cpp_mmvq_hbm_mode" in scenario.workload.metadata:
+        manifest = replace(manifest, metadata={
+            **manifest.metadata, "mmvq_hbm_mode": summarize_mmvq_hbm_mode(tasks, _mmvq_hbm_mode(scenario)),
         })
     return ScheduleIR(
         manifest=manifest,
@@ -8996,6 +9008,50 @@ def _coverage_task_id(task: TaskSpec) -> str:
     return ident
 
 
+def summarize_mmvq_hbm_mode(tasks: Sequence[TaskSpec], mode: str) -> Mapping[str, object]:
+    """Count actual lowered decisions, never infer applicability from model names."""
+    validate_mmvq_hbm_mode(mode)
+    total = applied = fallback = legacy = missing = 0
+    reasons: Dict[str, int] = {}
+    seen = set()
+    for task in tasks:
+        if task.metadata.get("phase") != "gpu_gemm":
+            continue
+        identity = _coverage_task_id(task)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        total += 1
+        cost = task.metadata.get("cost_model", {})
+        bandwidth = cost.get("hbm_bandwidth") if isinstance(cost, Mapping) else None
+        if not isinstance(bandwidth, Mapping):
+            missing += 1
+            continue
+        if bandwidth.get("requested_mmvq_hbm_mode") != MMVQ_HBM_MODE_NOMINAL:
+            legacy += 1
+        elif bandwidth.get("mmvq_nominal_mode_applied") is True:
+            applied += 1
+        elif bandwidth.get("mmvq_nominal_mode_applied") is False:
+            fallback += 1
+            reason = str(bandwidth.get("mmvq_nominal_mode_reason") or "unreported_fallback_reason")
+            reasons[reason] = reasons.get(reason, 0) + 1
+        else:
+            missing += 1
+    requested = total if mode == MMVQ_HBM_MODE_NOMINAL else 0
+    return {
+        "schema": "heterollm.mmvq-hbm-mode-coverage/v1", "requested_mode": mode,
+        "count_scope": "deduplicated lowered simulator gpu_gemm tasks",
+        "gpu_gemm_tasks": total, "requested_tasks": requested,
+        "applied_tasks": applied, "fallback_tasks": fallback, "legacy_tasks": legacy,
+        "unobserved_tasks": missing,
+        "requested_unaccounted_tasks": requested - applied - fallback,
+        "fallback_reason_counts": dict(sorted(reasons.items())),
+        "accuracy_validated_tasks": 0, "native_dispatch_proven_tasks": 0,
+        "native_timing_used": False, "bandwidth_saturation_proven": False,
+        "scope": "mode applicability only; neither accuracy nor measured bandwidth coverage",
+    }
+
+
 def summarize_gpu_invocations(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
     """Count qualified physical calls, retaining uncovered group diagnostics."""
     total = audited = applied = matrices = 0
@@ -9317,6 +9373,12 @@ def _declared_mmvq_work(
         "formal_timing_eligible": False,
         "reason": "MMVQ source geometry is exact but no qualified resource rate exists",
     }
+
+
+def _mmvq_hbm_mode(scenario: ScenarioConfig) -> str:
+    return validate_mmvq_hbm_mode(
+        scenario.workload.metadata.get("llama_cpp_mmvq_hbm_mode", MMVQ_HBM_MODE_LEGACY)
+    )
 
 
 def _mmvq_issue_bound_requested(scenario: ScenarioConfig) -> bool:
@@ -9989,6 +10051,7 @@ def _add_rank_gemm(
             )
             if mmvq_prmt_audit is not None:
                 operation_metadata["mmvq_prmt_partial_work"] = mmvq_prmt_audit
+        mmvq_hbm_mode = _mmvq_hbm_mode(scenario)
         estimate = _memoized_cost_estimate(
             scenario,
             (
@@ -9996,8 +10059,11 @@ def _add_rank_gemm(
                 target_component_id,
                 rank.memory_component_id,
                 workload,
+                mmvq_hbm_mode,
             ),
-            lambda: estimate_gpu_gemm(gpu_profile, hbm_profile, workload),
+            lambda: estimate_gpu_gemm(
+                gpu_profile, hbm_profile, workload, mmvq_hbm_mode=mmvq_hbm_mode,
+            ),
         )
     elif _kind(target) == "cpu":
         cpu_profile, host_memory_profile = _cpu_profiles(
@@ -12174,6 +12240,7 @@ def _task_segment_dynamic_task_overrides(
                 return None
             estimate_key: Hashable = (
                 "dynamic_attention_cost",
+                _mmvq_hbm_mode(scenario),
                 payload.operator_class,
                 payload.target_component_id,
                 payload.rank.memory_component_id,
@@ -12212,11 +12279,13 @@ def _task_segment_dynamic_task_overrides(
                                 payload.target_component_id,
                                 payload.rank.memory_component_id,
                                 workload,
+                                _mmvq_hbm_mode(scenario),
                             ),
                             lambda: estimate_gpu_gemm(
                                 gpu_profile,
                                 hbm_profile,
                                 workload,
+                                mmvq_hbm_mode=_mmvq_hbm_mode(scenario),
                             ),
                         )
                     else:
@@ -24440,6 +24509,10 @@ def _serving_lowering_from_builder(
             **manifest.metadata, "gpu_invocations": gpu_invocations,
             "mmq_source_work": mmq_source_work,
         })
+    if "llama_cpp_mmvq_hbm_mode" in scenario.workload.metadata:
+        mode_coverage = summarize_mmvq_hbm_mode(tasks, _mmvq_hbm_mode(scenario))
+        enriched_extra_metadata["mmvq_hbm_mode"] = mode_coverage
+        manifest = replace(manifest, metadata={**manifest.metadata, "mmvq_hbm_mode": mode_coverage})
     offload_coverage = summarize_host_gemm_offload(tasks)
     enriched_extra_metadata["host_gemm_offload"] = offload_coverage
     manifest = replace(manifest, metadata={

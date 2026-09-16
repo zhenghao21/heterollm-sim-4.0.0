@@ -1,0 +1,100 @@
+{
+  "schema": "dual-hash-preparation-validation/v2",
+  "created_utc": "2026-09-16T21:27:22.309145+00:00",
+  "revision": "0004",
+  "status": "host_tests_and_metadata_budget_precheck_passed",
+  "tests_passed": 54,
+  "host_test_returncode": 0,
+  "manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\preparation_manifest.0004.json",
+    "bytes": 6359,
+    "sha256": "833d92a5af4c89bd0951397cf79c9f93462ba83e2d1edbe07f6c00329b3e6a9f"
+  },
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\protocol.0004.json",
+    "bytes": 133825,
+    "sha256": "20f4a7b47aa42048f3018c285e3d4c33fc26e81037040ae4f4af9a4b9d90eb81"
+  },
+  "test_log_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\host_tests.0004.log",
+    "bytes": 101,
+    "sha256": "847351e12717a1187654b8bb8d80fb161207c957207062358ff2267c6e7505c1"
+  },
+  "metadata_budget_plan": {
+    "schema": "dual-hash-metadata-read-budget/v1",
+    "terminal_check_count": 3,
+    "verify_prepared_count": 3,
+    "prediction_reference_count": 262,
+    "per_terminal_bytes": 1947710281,
+    "per_verify_upper_bound_bytes": 12208250,
+    "exact_frozen_length_totals": {
+      "campaign": 100959901,
+      "predictions": 1846642198,
+      "sources": 79699,
+      "runtime": 6364720,
+      "history": 3535607
+    },
+    "barrier_bytes": 108182,
+    "chunk_log_bound": {
+      "chunks_per_pass": 14177,
+      "maximum_chunk_line_bytes": 242,
+      "maximum_log_bytes_per_pass": 3430834
+    },
+    "self_reference_caps": {
+      "manifest_bytes": 65536,
+      "protocol_bytes": 1048576
+    },
+    "new_receipt_caps": {
+      "pass_finish_bytes": 1048576,
+      "memory_control_bytes": 65536
+    },
+    "terms": {
+      "three_full262_terminal_checks": 5843130843,
+      "three_program_runtime_protocol_manifest_checks": 36624750,
+      "one_budget_precheck_manifest_read": 65536,
+      "five_new_chunk_logs": 17154170,
+      "five_pass_receipts": 5242880,
+      "five_memory_controls": 327680
+    },
+    "required_metadata_read_upper_bound_bytes": 5902545859,
+    "declared_metadata_read_limit_bytes": 5903482880,
+    "rounding_bytes": 1048576,
+    "all_required_full_content_checks_retained": true,
+    "length_precheck_is_identity_evidence": false,
+    "stat_substituted_for_full_hash": false
+  },
+  "source_and_runtime_ref_verified_before_after": true,
+  "legacy0003_archive_checked": [
+    {
+      "archive_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\prepared_revision.0003\\dual_hash.py",
+      "sha256": "1e971b4d9af973ec25d3524075d066b691aa21c1c8d50f17bb30884142e5396c"
+    },
+    {
+      "archive_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\prepared_revision.0003\\diagnostic.py",
+      "sha256": "62666446b996b9b1311852881cdc210ac1560e9a61bade811d4f6f07fd5803a9"
+    },
+    {
+      "archive_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\prepared_revision.0003\\prepare.py",
+      "sha256": "9b5ea1ab8b14d667e8227b583bd139c217439c389c7b1e278b6806a2a132e765"
+    },
+    {
+      "archive_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\prepared_revision.0003\\test_identity_diagnostic.py",
+      "sha256": "948f2d0ecc79698e894b26ba88e345ea00221fbaeb6cc5d9858d5c73c81321b6"
+    },
+    {
+      "archive_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\prepared_revision.0003\\README.md",
+      "sha256": "03d10bc21abf8fce445f14fe32f81e8a4a52f12339f3de7df762eeb18cb6fbbe"
+    },
+    {
+      "archive_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\identity_diagnostic\\prepared_revision.0003\\protocol.json",
+      "sha256": "5f5de68db9e64156339e7b18cbfaeb92e65f5cf82976d5a2805f7963b7c1ba9f"
+    }
+  ],
+  "old_protocol_manifest_and_run_not_modified": true,
+  "old_attempt_status": "rejected",
+  "prior_serial_reused": false,
+  "new_model_read_bytes": 0,
+  "new_prediction_content_read_bytes": 0,
+  "GPU_executed": false,
+  "ready_for_review_and_commit": true
+}

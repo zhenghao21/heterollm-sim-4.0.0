@@ -2164,7 +2164,10 @@
     "serial_algorithms_and_expected_match": true,
     "parallel_workers_started": 0,
     "old_failures_modified": false,
-    "next": "new version computes auxiliary budget from true262 evidence sizes and check counts"
+    "next": "prepared0004 budget derived from real evidence lengths; not executed",
+    "manifest0004_sha256": "833d92a5af4c89bd0951397cf79c9f93462ba83e2d1edbe07f6c00329b3e6a9f",
+    "host_tests0004": 54,
+    "auxiliary_read_budget0004": 5903482880
   },
   "round_028_static_coverage": {
     "reference_shape_tasks": 0,
@@ -2180,10 +2183,38 @@
     "performance_parameters_admitted": 0
   },
   "round_028_host_controls": {
-    "status": "prepared0004_not_executed",
+    "status": "three_pilots_completed_counter_precision_unvalidated",
     "host_python_tests": 33,
     "Cpp_host_tests_passed": true,
     "manifest_sha256": "978a6d6bdbb9a850e2cbd232ee34d1fc1b6a3c345f70d2d2e33caf3839674e95",
-    "parameter_admission": false
+    "parameter_admission": false,
+    "pilot": {
+      "samples": 195,
+      "zero_counter_samples": 165,
+      "minimum_positive_100ns_ticks": 156250,
+      "minimum_positive_ns": 15625000,
+      "busy64ms_accounting_cv_pct": 6.564378552893926,
+      "no_service_parameter_admitted": true
+    }
+  },
+  "round_030_preparation": {
+    "status": "candidate_implemented_reviewed_not_frozen",
+    "source_base": "round_027/on",
+    "source_replacements": [
+      "src/heterollm_sim/cost_models.py",
+      "src/heterollm_sim/kernel_query_ledger.py",
+      "src/heterollm_sim/planner.py",
+      "tools/predict_stable_native_dataset.py"
+    ],
+    "inherited_sources": 111,
+    "mode_default": "legacy_mma_output_wave",
+    "candidate_mode": "nominal_bandwidth_analytical_fallback",
+    "new_empirical_coefficients": 0,
+    "measured_bandwidth_claim": false,
+    "tests": {
+      "related_pass": 289,
+      "optional_skip": 1,
+      "final_specific_pass": 113
+    }
   }
 }

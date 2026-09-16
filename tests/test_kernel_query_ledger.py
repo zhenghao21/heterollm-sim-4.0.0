@@ -50,3 +50,62 @@ def test_incomplete_storage_is_not_complete_and_logical_consumer_are_distinct():
     key=result["signatures"][0]["key"]
     assert key["logical_input_storage_bytes"]==3584
     assert key["main_consumer_storage_bytes"]==1008
+
+
+def qualified_task(ident="qualified"):
+    from heterollm_sim.mmvq_work import MMVQSourceContract, SOURCE_SHA256, derive_mmvq_work
+    value=task(ident,k=2048)
+    work=derive_mmvq_work(m=1,k=2048,n=2048,weight_format="Q4_K",allow_k_formats=True,
+        contract=MMVQSourceContract(1200,1200,32,dict(SOURCE_SHA256),"a"*64,True,False,True))
+    value.metadata["kernel_query_geometry"].update(n=2048,weight_formats=["Q4_K"],output_storage_bytes=8192)
+    value.metadata["mmvq_source_work"]={**work.to_metadata(),"status":"source_geometry_unpriced","stage":"matrix","execution_component":"gpu0"}
+    return value
+
+
+def test_source_derived_mmvq_k_is_logical_and_never_upgrades_native_qualification():
+    import json
+    value=qualified_task()
+    for audit in [value.metadata["mmvq_source_work"],json.loads(json.dumps(value.metadata["mmvq_source_work"]))]:
+        value.metadata["mmvq_source_work"]=audit
+        result=summarize_kernel_queries([value]);key=result["signatures"][0]["key"]
+        assert key["k_executed"]==key["k_logical"]==2048
+        assert key["k_execution_source"]=="source_derived_mmvq_logical_K"
+        assert not key["k_execution_native_proven"] and not key["native_dispatch_proven"] and not key["layout_proven"] and not key["calibration_eligible"]
+        assert key["cache_state"]=="unknown" and result["represented_tasks"]==1
+
+
+def test_incomplete_and_tampered_mmvq_proof_retain_null_k_without_dropping_tasks():
+    import copy
+    changes=[lambda a:a.pop("runtime_binary_sha256"),lambda a:a.pop("source_hashes"),lambda a:a.update(grid=(1,1,1)),
+        lambda a:a.update(k=4096),lambda a:a.update(halve_iters=True),lambda a:a.update(native_dispatch_proven=True),
+        lambda a:a.update(status="uncovered")]
+    for change in changes:
+        value=qualified_task();change(value.metadata["mmvq_source_work"])
+        result=summarize_kernel_queries([value]);key=result["signatures"][0]["key"]
+        assert key["k_executed"] is None and key["k_execution_source"]=="unknown"
+        assert key["mmvq_k_execution_reason"] and result["represented_tasks"]==1 and result["complete_geometry"]
+    value=qualified_task();value.metadata["kernel_main_consumer_storage_bytes"]+=36
+    key=summarize_kernel_queries([value])["signatures"][0]["key"]
+    assert key["k_executed"] is None and key["mmvq_k_execution_reason"]=="mmvq_source_storage_mismatch"
+
+
+def test_source_proof_is_part_of_deduplication_and_mmq_k_is_unchanged():
+    import copy,pytest
+    one=qualified_task();two=copy.deepcopy(one);two.metadata["mmvq_source_work"]["k"]=4096
+    with pytest.raises(ValueError,match="conflicting geometry"):summarize_kernel_queries([one,two])
+    value=task();value.metadata["mmq_source_work"]={"status":"applied","k_execution":1024}
+    key=summarize_kernel_queries([value])["signatures"][0]["key"]
+    assert key["k_executed"]==1024 and key["predicted_family"]=="MMQ"
+
+
+def test_mmvq_numeric_types_and_extra_layout_contradictions_fall_back():
+    for key,invalid in [("warps_per_cta",4.0),("small_k",0),("grid",[2048.0,1,1]),
+            ("has_ids",True),("channels",2),("samples",2),("layout","strided"),
+            ("ordinary_contiguous_2d",False),("execution_component","cpu0")]:
+        value=qualified_task();value.metadata["mmvq_source_work"][key]=invalid
+        result=summarize_kernel_queries([value]);record=result["signatures"][0]["key"]
+        assert record["k_executed"] is None and result["represented_tasks"]==1,(key,invalid)
+    for key,invalid in [("activation_storage_bytes",4096),("accumulator_bits",16)]:
+        value=qualified_task();value.metadata["kernel_query_geometry"][key]=invalid
+        result=summarize_kernel_queries([value]);record=result["signatures"][0]["key"]
+        assert record["k_executed"] is None and result["represented_tasks"]==1,(key,invalid)

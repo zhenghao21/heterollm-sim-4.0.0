@@ -15,3 +15,4 @@ artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/
 tools/verify_fixed_native.py -text -whitespace
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_028/** -text -whitespace
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_029/** -text -whitespace
+artifacts/development/native_long_grid_135_20260915/optimization_loop/round_030/** -text -whitespace

@@ -36,6 +36,10 @@ for import_root in (ROOT, ROOT / "src"):
 from tools import native_grid_predict as grid
 from tools import native_162_dataset as selector
 from heterollm_sim.config import SamplingPolicy
+from heterollm_sim.cost_models import (
+    MMVQ_HBM_MODE_LEGACY, MMVQ_HBM_MODE_NOMINAL, MMVQ_HBM_MODES,
+    validate_mmvq_hbm_mode,
+)
 
 METRICS = grid.METRICS
 ALIASES = dict(zip(("ttft", "tpot", "e2e"), METRICS))
@@ -1222,6 +1226,32 @@ def verified_mmvq_issue_binding(rows, gpu_invocation, output, *, document_path=N
         "uncovered_cell_count": sum(cell["status"] == "uncovered" for cell in cells.values())}
 
 
+def apply_mmvq_hbm_static_contract(scenario, inputs):
+    """Apply a frozen simulator-only choice; source eligibility remains per kernel."""
+    mode = validate_mmvq_hbm_mode(inputs.get("mmvq_hbm_mode", MMVQ_HBM_MODE_LEGACY))
+    previous = getattr(getattr(scenario, "workload", None), "metadata", {}).get(
+        "llama_cpp_mmvq_hbm_mode", MMVQ_HBM_MODE_LEGACY)
+    validate_mmvq_hbm_mode(previous)
+    if mode == MMVQ_HBM_MODE_LEGACY:
+        if previous != MMVQ_HBM_MODE_LEGACY:
+            raise ValueError("scenario MMVQ HBM mode conflicts with frozen legacy mode")
+        return scenario
+    flags = {**scenario.workload.metadata, "llama_cpp_mmvq_hbm_mode": mode}
+    return replace(scenario, workload=replace(scenario.workload, metadata=flags))
+
+
+def verify_mmvq_hbm_freeze_binding(freeze, entry=None):
+    mode = validate_mmvq_hbm_mode(freeze.get("mmvq_hbm_mode", MMVQ_HBM_MODE_LEGACY))
+    for cell in ([entry] if entry is not None else freeze["cells"]):
+        inputs = cell.get("static_inputs")
+        if inputs is None and cell.get("preparation_error"):
+            continue  # Preserve failed cells in the fixed denominator.
+        if not isinstance(inputs, Mapping):
+            raise ValueError("MMVQ HBM mode requires frozen cell inputs or a retained preparation failure")
+        if validate_mmvq_hbm_mode(inputs.get("mmvq_hbm_mode", MMVQ_HBM_MODE_LEGACY)) != mode:
+            raise ValueError("MMVQ HBM cell mode differs from frozen campaign")
+
+
 def apply_mmvq_issue_static_contract(scenario, inputs):
     flag = inputs.get("mmvq_vector_issue_bound", False)
     proof = inputs.get("mmvq_issue_evidence")
@@ -1798,7 +1828,8 @@ def verified_iq_panel_source_contract(path, rows, data_root, *, assume_default_u
         "evaluation_scope": dispatch["evaluation_scope"]}
 
 
-def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None, retained_warmup=None):
+def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime_build_audit=None, recurrent_batching=None, iq_panel=None, slot_order=None, host_offload=None, tensor_storage=None, gpu_invocation=None, sampling=None, nonflash_kv_view=None, mmvq_issue=None, retained_warmup=None, mmvq_hbm_mode=MMVQ_HBM_MODE_LEGACY):
+    validate_mmvq_hbm_mode(mmvq_hbm_mode)
     """Static allowlist only: measured timing/profile fields are discarded."""
     raw = row["config"]
     config = {k: raw[k] for k in STATIC_KEYS if k in raw}
@@ -1863,6 +1894,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "gpu_conversion_cta_costs": gpu_invocation.get("conversion_cta_costs_requested", False) if gpu_invocation else False,
         **({"mmvq_vector_issue_bound": True, "mmvq_issue_contract": mmvq_binding["contract"],
             "mmvq_issue_evidence": mmvq_binding} if mmvq_binding is not None else {}),
+        **({"mmvq_hbm_mode": mmvq_hbm_mode} if mmvq_hbm_mode != MMVQ_HBM_MODE_LEGACY else {}),
         "cpu_iq_panel_reuse": iq_panel["dispatch"] if iq_panel else None,
         "cpu_iq_panel_evidence": iq_panel,
         "hardware_ref": row["static_hardware"].get("frozen_hardware_ref"),
@@ -2179,9 +2211,11 @@ def engine_cohort_span(requests):
 def compact_dispatch_evidence(metadata):
     """Read named core ledgers before general metadata truncation can hide them."""
     metadata = metadata if isinstance(metadata, Mapping) else {}
+    keys = ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage", "gpu_invocations", "mmq_source_work")
+    if "mmvq_hbm_mode" in metadata:
+        keys += ("mmvq_hbm_mode",)
     return {key: bounded_value(dict(value)) if isinstance(value, Mapping) else None
-        for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage", "gpu_invocations", "mmq_source_work")
-        for value in (metadata.get(key),)}
+        for key in keys for value in (metadata.get(key),)}
 
 
 def dispatch_qualification(scenario, inputs=None):
@@ -2219,6 +2253,11 @@ def dispatch_qualification(scenario, inputs=None):
             "f32_hidden_storage_requested": inputs.get("tensor_storage_f32_hidden", False),
             "native_dispatch_proven": False if inputs.get("tensor_storage_contract") is not None else None,
             **{key: bounded_value(storage.get(key)) for key in ("qualified", "status", "reasons", "previous_f32_hidden_storage", "timing_completeness", "scope")}},
+        **({"mmvq_hbm_mode": {"requested_mode": inputs["mmvq_hbm_mode"],
+            "scenario_mode": metadata.get("llama_cpp_mmvq_hbm_mode", MMVQ_HBM_MODE_LEGACY),
+            "native_configuration_changed": False, "accuracy_validated": False,
+            "eligibility": "per-kernel source contract and canonical physical bytes"}}
+            if "mmvq_hbm_mode" in inputs else {}),
         "gpu_invocations": {"requested": inputs.get("gpu_invocation_evidence") is not None,
             "mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
         "conversion_cta_costs_requested": inputs.get("gpu_conversion_cta_costs", False),
@@ -2245,7 +2284,11 @@ def retained_dispatch_summary(result):
         "count_scope": "simulator physical tasks in retained serving batch ledgers",
         "retained_batch_count": len(batches), "total_batches": total,
         "history_complete": complete, "native_timing_used": False}
-    for key in ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage", "gpu_invocations", "mmq_source_work"):
+    keys = ("cpu_iq_panel_reuse", "host_gemm_offload", "tensor_storage", "gpu_invocations", "mmq_source_work")
+    if any(isinstance(getattr(getattr(batch, "cost", None), "metadata", None), Mapping)
+            and "mmvq_hbm_mode" in batch.cost.metadata for batch in batches):
+        keys += ("mmvq_hbm_mode",)
+    for key in keys:
         ledgers = []
         for batch in batches:
             metadata = getattr(getattr(batch, "cost", None), "metadata", {})
@@ -2276,6 +2319,10 @@ def retained_dispatch_summary(result):
                     if type(value) is int and value >= 0:
                         counts[str(label)] += value
             summary[name] = dict(sorted(counts.items()))
+        if key == "mmvq_hbm_mode":
+            summary["requested_modes"] = sorted({ledger.get("requested_mode", "unknown") for ledger in ledgers})
+            summary["accuracy_validated"] = False
+            summary["native_timing_used"] = False
         if key == "gpu_invocations":
             query_counts = Counter()
             query_missing_reasons = Counter()
@@ -2432,6 +2479,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         workload=replace(scenario.workload, metadata=metadata),
         hardware=replace(scenario.hardware, metadata={**scenario.hardware.metadata, "frozen_native_gpu_clock": clock}))
     scenario = apply_mmvq_issue_static_contract(scenario, inputs)
+    scenario = apply_mmvq_hbm_static_contract(scenario, inputs)
     contract = inputs.get("recurrent_batching_contract")
     options = {"recurrent_batching_contract": contract} if contract is not None else {}
     if inputs.get("slot_order_contract") is not None:
@@ -2479,6 +2527,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
                 "mmvq_issue_contract": inputs["mmvq_issue_contract"],
                 "mmvq_issue_evidence": inputs["mmvq_issue_evidence"]}
                 if "mmvq_issue_evidence" in inputs else {}),
+            **({"mmvq_hbm_mode": inputs["mmvq_hbm_mode"]} if "mmvq_hbm_mode" in inputs else {}),
             "gpu_mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
             "gpu_conversion_cta_costs_requested": inputs.get("gpu_conversion_cta_costs", False),
             "slot_order_treatment": {"requested": inputs.get("slot_order_contract") is not None,
@@ -2558,7 +2607,8 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None, mmvq_vector_issue_bound=False, mmvq_issue_hardware_document_path=None, retained_kv_warmup_state=False, retained_kv_warmup_extractor_path=None, final_output_selection=False):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False, sampling_contract_path=None, nonflash_kv_view_source_contract_path=None, mmvq_vector_issue_bound=False, mmvq_issue_hardware_document_path=None, retained_kv_warmup_state=False, retained_kv_warmup_extractor_path=None, final_output_selection=False, mmvq_hbm_mode=MMVQ_HBM_MODE_LEGACY):
+    validate_mmvq_hbm_mode(mmvq_hbm_mode)
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
@@ -2646,7 +2696,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     for row in rows:
         error, inputs = None, None
         try:
-            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue, retained_warmup=retained_warmup)
+            inputs = static_inputs(row, selection, data_root, model_snapshot_map=snapshots, runtime_build_audit=build_audit, recurrent_batching=recurrent, iq_panel=iq_panel, slot_order=slot_order, host_offload=host_offload, tensor_storage=tensor_storage, gpu_invocation=gpu_invocation, sampling=sampling, nonflash_kv_view=nonflash_kv_view, mmvq_issue=mmvq_issue, retained_warmup=retained_warmup, mmvq_hbm_mode=mmvq_hbm_mode)
             configuration(inputs)
             gpu_clock(inputs)
             if final_output is not None:
@@ -2662,6 +2712,7 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "calibration_applied": False,
         "source": source, "data_root": str(data_root), "model_snapshot_map": snapshots, "runtime_build_audit": build_audit, "recurrent_batching": recurrent, "cpu_iq_panel_reuse": iq_panel, "slot_order": slot_order, "host_offload_source": host_offload, "tensor_storage": tensor_storage, "gpu_invocation": gpu_invocation, "sampling": sampling, "nonflash_kv_view": nonflash_kv_view,
         **({"mmvq_vector_issue_bound": True, "mmvq_issue_bound": mmvq_issue} if mmvq_issue is not None else {}),
+        **({"mmvq_hbm_mode": mmvq_hbm_mode} if mmvq_hbm_mode != MMVQ_HBM_MODE_LEGACY else {}),
         **({"retained_kv_warmup_state": True, "retained_kv_warmup": retained_warmup} if retained_warmup is not None else {}),
         **({"final_output_selection": True, "final_output_selection_binding": final_output} if final_output is not None else {}),
         "coverage": selection["coverage"], "cells": entries}
@@ -2784,6 +2835,7 @@ def verify_retained_warmup_freeze(freeze, entry=None):
 
 
 def verify_mmvq_freeze_binding(freeze, entry=None):
+    verify_mmvq_hbm_freeze_binding(freeze, entry)
     binding = freeze.get("mmvq_issue_bound")
     selected = [entry] if entry is not None else freeze["cells"]
     if binding is None:
@@ -3162,6 +3214,8 @@ def main(argv=None):
         help="conditional final-warmup retained KV state replay; initial freeze only; nonflash contract required")
     parser.add_argument("--retained-kv-warmup-extractor", type=Path,
         help="reviewed static warmup extractor to copy into the freeze; requires retained state switch")
+    parser.add_argument("--mmvq-hbm-mode", choices=MMVQ_HBM_MODES, default=None,
+        help="initial freeze only: legacy by default, or unvalidated source-qualified nominal HBM analysis")
     parser.add_argument("--mmvq-vector-issue-bound", action=argparse.BooleanOptionalAction, default=None,
         help="conditional source/PTX integer issue lower bound; initial freeze only; requires MMQ and conversion source costs")
     parser.add_argument("--mmvq-issue-hardware-document", type=Path,
@@ -3185,12 +3239,14 @@ def main(argv=None):
     parser.add_argument("--worker-cell")
     parser.add_argument("--worker-result", type=Path)
     args = parser.parse_args(argv)
+    if args.worker_freeze and args.mmvq_hbm_mode is not None:
+        parser.error("--mmvq-hbm-mode cannot override a frozen worker")
     if args.worker_freeze:
         worker_cell(args.worker_freeze, args.worker_cell, args.worker_result, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit)
         return
     if not args.output:
         parser.error("--output required")
-    if (args.final_output_selection is not None or args.retained_kv_warmup_state is not None or args.retained_kv_warmup_extractor or args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
+    if (args.mmvq_hbm_mode is not None or args.final_output_selection is not None or args.retained_kv_warmup_state is not None or args.retained_kv_warmup_extractor or args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
         parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
     if args.final_output_selection and (args.host_offload_source_contract is None or args.sampling_contract is None or args.tensor_storage_contract is None or args.tensor_storage_f32_hidden is not True):
         parser.error("--final-output-selection requires runtime, sampling and F32 hidden-storage contracts")
@@ -3210,7 +3266,7 @@ def main(argv=None):
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor, final_output_selection=bool(args.final_output_selection))
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor, final_output_selection=bool(args.final_output_selection), mmvq_hbm_mode=args.mmvq_hbm_mode if args.mmvq_hbm_mode is not None else MMVQ_HBM_MODE_LEGACY)
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:
