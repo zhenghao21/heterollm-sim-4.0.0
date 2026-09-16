@@ -1,0 +1,27 @@
+{
+  "status": "current_driver_trace_structure_verified_not_calibration",
+  "compatibility_gate_passed": true,
+  "counts": {
+    "nvtx": 24,
+    "kernels_total": 96,
+    "kernels_in_gemm": 72,
+    "eviction_kernels_outside_gemm": 24,
+    "runtime_api_events": 224
+  },
+  "kernel_union_median_ns": 15648.5,
+  "profile_host_median_ns": 56500.0,
+  "control_host_median_ns": 48600.0,
+  "profiling_comparison": {
+    "median_relative_change_percent": 16.25514403292181,
+    "interpretation": "one unlocked ordered pair only; timing difference is confounded by drift and profiling. Negative difference is not proof of negative profiler overhead. Neither run is calibration truth."
+  },
+  "calibration_eligible": false,
+  "native_llm_executed": false,
+  "limitations": [
+    "No frequency lock, thermal control, randomized order, or repeated process-level profiling comparison.",
+    "Existing executable lacks absolute raw per-call QPC ticks; relative nanosecond values retained exactly.",
+    "Original transitive header dependency closure is incomplete; supplemental hashes cannot prove original includes.",
+    "Only 256 uniform output samples checked at first and last call, plus all-output finite checks; no full numeric comparison for every call.",
+    "Cache eviction is an explicit sweep, not measured HBM traffic; kernel view is nested in the host wall."
+  ]
+}

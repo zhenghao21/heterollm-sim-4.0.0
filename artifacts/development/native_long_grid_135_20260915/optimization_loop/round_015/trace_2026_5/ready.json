@@ -1,0 +1,38 @@
+{
+  "schema": "nsys-2026.5-preparation-ready/v1",
+  "status": "prepared_frozen_not_executed",
+  "frozen_before_gpu_execution": true,
+  "gpu_workload_executed": false,
+  "native_llm_executed": false,
+  "nsys_version": "NVIDIA Nsight Systems version 2026.5.1.161-265138896106v0",
+  "protocol_sha256": "93101b58d54ba5ccc8cc802509ffbbec02c296104d37d4de4f61bb7b6f8fceed",
+  "freeze_manifest_sha256": "5f487c6635925c7298cf9d22cb3e2ce087c5d513f12f908404f888eb7ea8b1ff",
+  "executable_sha256": "69ee24125f4d7bc7347c159f1ced0a39ad66df4c7900a03ba15d20fb525061db",
+  "same_synthetic_argv_as_original": true,
+  "same_synthetic_environment_as_original": true,
+  "critical_signatures_valid": true,
+  "bundled_pe_signature_status_counts": {
+    "Valid": 35,
+    "NotSigned": 23
+  },
+  "offline_tests_passed": 7,
+  "full_freeze_verification": {
+    "passed": true,
+    "utc": "2026-09-16T01:31:10.593079+00:00",
+    "local_external_file_count": 1290,
+    "tool_files": 1273,
+    "manifest_item_count": 38
+  },
+  "calibration_eligible": false,
+  "readiness_limit": "Collection, current runtime driver compatibility, observed CUDA module identities and actual SQLite columns are unverified until root explicitly runs the frozen protocol.",
+  "timeout_policy": "180s bounded host wait; record PID/still_running; leave owned process alive and do not launch later stages. Nsight --kill=false prevents duration stop terminating application.",
+  "runtime_entry": [
+    "E:\\anaconda\\python.exe",
+    "pilot.py",
+    "run"
+  ],
+  "extractor_entry": [
+    "E:\\anaconda\\python.exe",
+    "analyze.py"
+  ]
+}
