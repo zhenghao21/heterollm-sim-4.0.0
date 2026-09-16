@@ -1,0 +1,106 @@
+{
+  "schema": "retained-two-way-ablation/v1",
+  "created_utc": "2026-09-16T13:37:47.896496+00:00",
+  "native_lock": {
+    "native_locked": true,
+    "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "selected_cells": 131,
+    "raw_files": 131,
+    "formal_requests": 894
+  },
+  "variants": [
+    "current",
+    "retained"
+  ],
+  "candidate": "retained",
+  "treatments": {
+    "current": {
+      "mmq": true,
+      "sampling": true,
+      "nonflash": true,
+      "cta": true,
+      "issue": true,
+      "retained": false
+    },
+    "retained": {
+      "mmq": true,
+      "sampling": true,
+      "nonflash": true,
+      "cta": true,
+      "issue": true,
+      "retained": true
+    }
+  },
+  "declared_variants": {
+    "current": "R22 CTA+issue mechanisms; retained state off",
+    "retained": "same mechanisms plus conditional retained warmup state; hybrid retains original fallback"
+  },
+  "anchor_ids": [
+    "qwen25_p128_o128_c4__fixed_runtime",
+    "qwen25_p128_o256_c2__fixed_runtime",
+    "qwen25_p128_o32_c4__fixed_runtime",
+    "qwen25_p1536_o128_c1__fixed_runtime",
+    "qwen25_p1536_o128_c4__fixed_runtime",
+    "qwen25_p1536_o256_c1__fixed_runtime",
+    "qwen25_p1536_o256_c2__fixed_runtime",
+    "qwen25_p1536_o256_c4__fixed_runtime",
+    "qwen25_p1536_o32_c1__fixed_runtime",
+    "qwen25_p1536_o32_c2__fixed_runtime",
+    "qwen25_p512_o128_c1__fixed_runtime",
+    "qwen25_p512_o256_c1__fixed_runtime",
+    "qwen25_p512_o256_c2__fixed_runtime",
+    "qwen25_p512_o256_c4__fixed_runtime",
+    "qwen25_p512_o32_c1__fixed_runtime",
+    "qwen25_p512_o32_c2__fixed_runtime",
+    "qwen25_p512_o32_c4__fixed_runtime",
+    "qwen35_p512_o32_c1__fixed_runtime",
+    "smollm2_p512_o32_c1__fixed_runtime",
+    "tinyllama_p512_o32_c1__fixed_runtime"
+  ],
+  "anchor_denominator": 20,
+  "full_denominator": 131,
+  "threshold_pct_strict": 10.0,
+  "metrics": [
+    "engine_ttft_ms",
+    "engine_tpot_ms",
+    "engine_e2e_ms"
+  ],
+  "gate_B": "unvalidated",
+  "is_blind": false,
+  "formal_acceptance": false,
+  "native_remeasurement": false,
+  "calibration_added": false,
+  "accuracy_selected_subset": false,
+  "baseline_freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_022\\cta_issue\\freeze.json",
+    "sha256": "1a65fc2b6de86a15edf65f7a0a187b2fb7ae6958ee5391f15babb709d0ad58df",
+    "bytes": 38826496
+  },
+  "driver_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\evaluate_candidate.py",
+    "sha256": "526378e3b8c8e110f3205138ff09c35b8a63ab3cace58e235da9f5cafa047d2f",
+    "bytes": 14406
+  },
+  "summarizer_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\summarize_ablation.py",
+    "sha256": "fa2ce1fe89439f434ff67ccea7d079fe826509ebd7908b070af08143048379a0",
+    "bytes": 46563
+  },
+  "existing_static_freezes_adopted": [],
+  "registered_before_predictions": true,
+  "workflow": "Freeze both full131 variants, lock controls, save all40 terminal anchor predictions, then score both; continue retained to fixed131 while retaining failures.",
+  "continuation_criterion": "Mechanism/source identity checks; never select cells or censor failures based on errors.",
+  "retained_scope": "Actual GGUF cache qualification: 62 ordinary conditional declarations; 69 hybrid fallback. No timing fit or model-key eligibility.",
+  "retained_scope_counts": {
+    "retained_covered": 62,
+    "fallback": 69
+  },
+  "prior_round_results_unchanged": true,
+  "terminal_prediction_count_includes_failures": true,
+  "comparisons": [
+    {
+      "before": "current",
+      "after": "retained"
+    }
+  ]
+}
