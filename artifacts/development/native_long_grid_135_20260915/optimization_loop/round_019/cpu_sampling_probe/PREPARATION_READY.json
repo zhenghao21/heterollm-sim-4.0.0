@@ -1,0 +1,111 @@
+{
+  "schema": "cpu-sampling-probe-preparation-readiness/v1",
+  "status": "source_protocol_readonly_checked_not_compiled_not_run",
+  "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe",
+  "prepared_files": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\cpu_sampling_probe.cpp",
+      "bytes": 19879,
+      "sha256": "339cf15af0c78bb5c6080f8bc08ccc4b5ef454140666f1bd02c2b53c0a758a6f"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\entry.py",
+      "bytes": 13130,
+      "sha256": "88651a45f1be03df35972c065de5006fde90ee952cd066359c63fb6f3582ee49"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\protocol.json",
+      "bytes": 6339,
+      "sha256": "49c37a671b9a968a1ce42d18a2e5e9f361c676db0bd21733c9adaa1be787cca1"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\source_identity.json",
+      "bytes": 12015,
+      "sha256": "2033534dc527b6f716888a942bfeeb028727d95919d4af3bbc130b158e3b6f17"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\readonly_inspection.json",
+      "bytes": 6756,
+      "sha256": "67e1b1bb0734d0fe1b5e8806b22b5d2cc783c1821ddb39c56b79abff886b19ed"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\README.md",
+      "bytes": 5828,
+      "sha256": "934d3ff001d1e09361f7e461df599f728e959c096be42ec2a93b148de99de67a"
+    }
+  ],
+  "read_only_export_and_source_validation": {
+    "machine": "x86_64",
+    "required_sampler_exports": {
+      "llama_sampler_apply": {
+        "function_rva": 1913568,
+        "forwarded": false
+      },
+      "llama_sampler_free": {
+        "function_rva": 1914336,
+        "forwarded": false
+      },
+      "llama_sampler_init_top_k": {
+        "function_rva": 1920048,
+        "forwarded": false
+      }
+    },
+    "imports": [
+      "ggml.dll",
+      "ggml-base.dll",
+      "KERNEL32.dll",
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-environment-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll"
+    ],
+    "read_only_PE_inspection": true,
+    "DLL_loaded": false
+  },
+  "source_loop_checked_against_locked_statements": true,
+  "domain": {
+    "vocabulary_sizes": [
+      32768,
+      131072,
+      262144
+    ],
+    "patterns": [
+      "monotone_ascending",
+      "deterministic_random_permutation"
+    ],
+    "independent_processes": 3,
+    "warmup_per_stage_case_process": 16,
+    "steady_repeats_per_stage_case_process": 64,
+    "heldout_vocabulary_size": 131072
+  },
+  "unpriced_scope": [
+    "bias/suppress",
+    "RNG and other samplers",
+    "accept/history/commit",
+    "logits transfer/sync",
+    "whole-engine sampling"
+  ],
+  "pending_gates": [
+    "Root compile approval and idle window",
+    "Actual compile, static asserts and assembly/header provenance",
+    "Root measurement decision, selected CPU and run freeze",
+    "Exact numeric gates and 3-process completeness",
+    "Frequency stability classification and later source-bound interpretation"
+  ],
+  "compiled": false,
+  "native_DLL_loaded": false,
+  "probe_executed": false,
+  "model_loaded": false,
+  "GPU_executed": false,
+  "timing_values_produced": false,
+  "native_DLL_rebuilt": false,
+  "core_tools_or_R18_freezes_modified": false,
+  "candidate_binary_equivalence_claimed": false
+}

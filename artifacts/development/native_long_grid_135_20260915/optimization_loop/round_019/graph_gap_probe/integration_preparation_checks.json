@@ -1,0 +1,31 @@
+{
+  "schema": "graph-gap-preparation-check/v2",
+  "pass": true,
+  "gpu_access": false,
+  "native_libraries_loaded": false,
+  "numerator_stage_checks": 8160,
+  "protocol_sha256": "97e3195a1b09afbfaad22549ea80a59cc2e5a4034256277a65d26566d10d8627",
+  "helper_cpp_sha256": "a8d6ac8733ce0e33f3b98d008e85b08af0ac9f98583314b63fb0aa7c4dfc3ba1",
+  "entry_cpp_sha256": "0abbc235354a2d31a389ac9ed53ddcd595974429b82c058232fbfa80871cb54b",
+  "provenance_sha256": "89697124f459f092b3d6682b9819e5a4e32e17f9f4e40f697135cd213ccdd525",
+  "python_sources_sha256": {
+    "build_probe.py": "7824b257f843002957b7a1f7b517f5af5c92836cf0c022a17b1a0481fcf0baca",
+    "reference_check.py": "749b33907ad79f157848a6f8b498099eca95f24a567d6df58f43bd3bb4158743"
+  },
+  "checks": [
+    "six fixed configurations",
+    "one preregistered E262144/G8 pilot with two arms, three pairs, direct/profile",
+    "exact F32 closed-form SCALE reference",
+    "native CUDA Graph default retained",
+    "focused A/B helper and delayed buffered output structure",
+    "review-gated standalone entrypoint and sidecar raw hash contract",
+    "identity-only invocation path and pilot-only launcher scope",
+    "Python AST"
+  ],
+  "not_checked": [
+    "C++ compilation, dynamic linking, or DLL identity execution",
+    "GPU numerical results, timing, cache state, kernel count, graph replay, or overlap",
+    "hardware telemetry, idle-window conditions, profiler export parsing",
+    "any LLM-time fitting, cost coefficient, calibration, or inference"
+  ]
+}

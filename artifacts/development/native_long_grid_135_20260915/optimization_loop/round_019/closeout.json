@@ -1,0 +1,112 @@
+{
+  "schema": "mechanism-round-closeout/v1",
+  "round": 19,
+  "closed_utc": "2026-09-16T07:17:54.581905+00:00",
+  "status": "completed_evidence_repair_timing_rejected_goal_failed",
+  "native_remeasured": false,
+  "native_selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+  "native_verified_cells": 131,
+  "native_verified_formal_requests": 894,
+  "core_cost_model_changed": false,
+  "new_prediction_runs": 0,
+  "latest_accuracy_round": 18,
+  "A_goal": "failed",
+  "B_goal": "unvalidated",
+  "root_pytest_passed": 27,
+  "cpu_variants": [
+    {
+      "revision": "r5",
+      "quality": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe_r5\\sampling_series_0001\\quality.json",
+        "sha256": "6512261621d458bcc5aa8c57dfacc0edeff88de70f518750aac9bf9fe5950bc6",
+        "bytes": 7162
+      },
+      "counts": {
+        "exact_numeric_and_structure_pass": true,
+        "process_count": 3,
+        "case_process_records_total": 18,
+        "stage_records_total": 36,
+        "steady_samples": 2304,
+        "identity_consistent": true,
+        "frequency_stable_stages": 36,
+        "frequency_changed_stages": 0,
+        "steady_dispersion_pass_stages": 35,
+        "observer_overhead_pass_stages": 36,
+        "cross_process_case_stage_groups_total": 12,
+        "cross_process_case_stage_groups_pass": 12,
+        "accepted_for_timing_evidence": false
+      },
+      "decision": "diagnostic_only_no_coefficients"
+    },
+    {
+      "revision": "r6",
+      "quality": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe_r6\\sampling_series_0001\\quality.json",
+        "sha256": "515e4ec1fa767b78012b5a5767f686970056ddd759e5238d946d3a86dc012107",
+        "bytes": 7126
+      },
+      "counts": {
+        "exact_numeric_and_structure_pass": true,
+        "process_count": 3,
+        "case_process_records_total": 18,
+        "stage_records_total": 36,
+        "steady_samples": 2304,
+        "identity_consistent": true,
+        "frequency_stable_stages": 36,
+        "frequency_changed_stages": 0,
+        "steady_dispersion_pass_stages": 34,
+        "observer_overhead_pass_stages": 36,
+        "cross_process_case_stage_groups_total": 12,
+        "cross_process_case_stage_groups_pass": 12,
+        "accepted_for_timing_evidence": false
+      },
+      "decision": "diagnostic_only_no_coefficients"
+    }
+  ],
+  "earlier_failures": [
+    {
+      "revision": "original",
+      "phase": "loader",
+      "completed_cases": 0,
+      "cause": "indirect CUDA dependencies absent from restricted DLL search"
+    },
+    {
+      "revision": "r4",
+      "phase": "extractor",
+      "cause": "stage affinity mask string 0x1 inconsistent with integer schema"
+    },
+    {
+      "revision": "r5",
+      "phase": "fixture_preflight",
+      "cause": "root fixture wrapper failed before series; actual compiled fixture verified only afterward; not a preflight pass"
+    }
+  ],
+  "r6_changes": [
+    "compiled integer observation schema fixture enforced before creating a series",
+    "measurement timeout-kill removed",
+    "one series per revision; no success-seeking retry"
+  ],
+  "gpu_diagnosis": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\gpu_cost_diagnosis\\diagnosis.json",
+    "sha256": "a2279f068f95bcf3ebb41d0ef3fda47bfc3fe4de55eeae05c550fdfb814a67f2",
+    "bytes": 2418
+  },
+  "graph_gap_preparation": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\integration_preparation_checks_latest.json",
+    "sha256": "098a245f3c51e817d3abdeb58956b7b81df5e5c8399ec0d1fb1efbb16183de9d",
+    "bytes": 1538
+  },
+  "limits": [
+    "source-equivalent candidate loop is external-compiled, not identical common.dll machine code",
+    "stable reported CPU frequency is not proof of constant effective turbo",
+    "middle vocabulary size used for quality diagnosis is not an independent final holdout",
+    "no accepted CPU or GPU service-rate coefficients",
+    "graph gap package has not compiled or run"
+  ],
+  "next_round": 20,
+  "next_hypotheses": [
+    "memcpy reset versus source candidate-loop reset A/B",
+    "per-call D2H/validation/JSON versus buffered observation A/B",
+    "source-derived MMVQ resource category audit without numeric fitting"
+  ]
+}

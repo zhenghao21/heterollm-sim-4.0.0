@@ -1,0 +1,70 @@
+{
+  "schema": "cpu-sampling-probe-r4-timing-quality-readiness/v1",
+  "status": "source_and_review_tests_ready_not_compiled_not_measured",
+  "changed_probe_sources": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\cpu_sampling_probe.cpp",
+      "sha256": "7cc070b606e47d63a79cf6df1c20a8124827c8f844c56cc7ade7bdc26def89fe",
+      "bytes": 22070
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\entry.py",
+      "sha256": "9f4b8fec0b04e10603ce23779ee9d3fb3d9e14ebb2f2a48a16d02d04256e8ee1",
+      "bytes": 28794
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\protocol.json",
+      "sha256": "c04f6abcc8652da83d86944830d6c53306983ac14927014680569be753d3b443",
+      "bytes": 9238
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\source_identity_r2.json",
+      "sha256": "14f5b32a7d276185c9f12706439ca4f39727f949270b7931fed63251d193f6d0",
+      "bytes": 12578
+    }
+  ],
+  "preserved_r1_evidence": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\PREPARATION_READY.json",
+      "sha256": "30663353c7282ee7b7e7d5ef0d2109225e0be2970dd8749352207bf067760e01",
+      "bytes": 4462
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\source_identity.json",
+      "sha256": "2033534dc527b6f716888a942bfeeb028727d95919d4af3bbc130b158e3b6f17",
+      "bytes": 12015
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe\\readonly_inspection.json",
+      "sha256": "67e1b1bb0734d0fe1b5e8806b22b5d2cc783c1821ddb39c56b79abff886b19ed",
+      "bytes": 6756
+    }
+  ],
+  "acceptance_gates": {
+    "actual_cpu_identity": "compiled --identity-only freezes an explicitly pinned, probe-derived CPU identity and all three process records must exact-match it",
+    "frequency": "every before/after max/current/limit MHz field must be positive and unchanged; any drift makes the series diagnostic-only",
+    "steady_dispersion": "each of 36 stage records has 64 steady ticks with linear-interpolated P90/P10 <= 1.5",
+    "cross_process": "each of 12 (case, stage) groups has three process steady medians with maximum absolute deviation from their median <= 5%",
+    "observer": "each stage has 64 recorded empty-QPC-bracket ticks with observer median / steady median <= 1%, no subtraction",
+    "denominators": "18 case-process records, 36 stage records, 12 cross-process case/stage groups, 2304 steady samples"
+  },
+  "verification": {
+    "python_syntax": "E:/anaconda/python.exe -m py_compile entry.py",
+    "review_regressions": "11 passed",
+    "static_source_validation_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_review\\STATIC_SOURCE_VALIDATION_R4.json",
+      "sha256": "f6a2fc4eb8a1ef8cc86be9e7ff761098674e83c08d1084e8f5d387217a504f4e",
+      "bytes": 3235
+    },
+    "compiled": false,
+    "probe_executed": false,
+    "native_DLL_loaded": false,
+    "GPU_executed": false,
+    "timing_values_produced": false
+  },
+  "root_next_commands": {
+    "compile": "& E:/anaconda/python.exe entry.py compile --root-idle-confirmed --root-compile-authorized",
+    "capture_identity": "& E:/anaconda/python.exe entry.py capture-identity --root-idle-confirmed --root-identity-authorized --cpu-index 0 --identity-freeze cpu_identity_r2_cpu0",
+    "measure": "& E:/anaconda/python.exe entry.py measure --root-idle-confirmed --root-measure-authorized --cpu-index 0 --cpu-identity-freeze <absolute path to cpu_identity_r2_cpu0/actual_cpu_identity_freeze.json> --series sampling_series_0001"
+  }
+}

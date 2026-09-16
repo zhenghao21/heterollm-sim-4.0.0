@@ -1,0 +1,135 @@
+{
+  "schema": "cpu-sampling-probe-run-freeze/v4",
+  "build_manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe_r5\\build_manifest.json",
+    "sha256": "00bb1aabc94e8916e64cfe9670d7853910cdab039999cb886e2631839e674dc6",
+    "bytes": 69840
+  },
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe_r5\\protocol.json",
+    "sha256": "fa13494fc346185afb5a9ad4c22366834e56a1101c21edbd8ef873acfcfa6d8d",
+    "bytes": 11134
+  },
+  "actual_cpu_identity_freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\cpu_sampling_probe_r5\\cpu_identity_r5_cpu0\\actual_cpu_identity_freeze.json",
+    "sha256": "f50b45b9b18b7368dbac25d50fffe44e97adf1d6473632a05dbcfa9e37ff6de0",
+    "bytes": 1705
+  },
+  "actual_cpu_identity": {
+    "cpu_brand": "AMD Ryzen 9 9950X3D 16-Core Processor          ",
+    "cpuid_signature": 11800384,
+    "active_processor_group_count": 1,
+    "active_processor_count_group0": 32,
+    "group": 0,
+    "logical_cpu": 0,
+    "thread_affinity_mask": 1
+  },
+  "local_os_correlation_is_not_expected_hardware_identity": true,
+  "cpu_index": 0,
+  "process_indices": [
+    0,
+    1,
+    2
+  ],
+  "case_order": "case_id=(process_index*2+offset)%6, offset0..5; V indexed by case_id/2, pattern by case_id%2",
+  "holdout_vocabulary_sizes": [
+    131072
+  ],
+  "allocation_and_reset_semantics": [
+    {
+      "id": "candidate_loop",
+      "implementation": "source-equivalent externally compiled C++ wrapper",
+      "timed_scope": "vector resize, exact copied id/logit/p loop and array descriptor assignment",
+      "allocation": "first invocation begins with empty vector; first resize includes allocator and first touch; steady invocations reuse same size/data/capacity and allocate nothing",
+      "quality": "Full every-element exact id/logit bits/p=+0 and view fields checked after every timed call; checks are outside timer and warm candidate output.",
+      "input_reset": "same immutable logits, no reset needed; wrapper overwrites every candidate field and view"
+    },
+    {
+      "id": "original_dll_topk_apply",
+      "implementation": "GetProcAddress-resolved original llama.dll llama_sampler_apply with llama_sampler_init_top_k(1)",
+      "timed_scope": "one original exported apply call only; input has sorted=false, selected=-1,size=V",
+      "allocation": "DLL load and sampler init occur once per process outside all stage windows. Work/baseline buffers allocate before stage; top-k sampler reused as source-proven stateless filter.",
+      "input_reset": "memcpy baseline V*12 bytes and reset view fields before EVERY invocation; reset excluded from timer, intentionally warms work buffer",
+      "quality": "Exact unique argmax id and float bits, p=0,size=1,sorted=true,selected=-1,unchanged backing pointer checked outside clock. Filter output is not a committed sampled token."
+    }
+  ],
+  "clock_policy": {
+    "method": "QueryPerformanceCounter raw ticks plus QueryPerformanceFrequency",
+    "counter_only": "not CPU cycle counts",
+    "observer_empty_bracket_repeats_per_process": 64,
+    "observer_adjustment": "record independently; do not subtract noisy observer samples or add stage walls",
+    "timed_windows": "sequential, disjoint, non-nested; no combined candidate+topk stage is reported"
+  },
+  "loops": {
+    "warmup": 16,
+    "steady": 64
+  },
+  "loader_binding": {
+    "runtime_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin",
+    "cuda_directory": "E:\\cuda\\bin",
+    "runtime_modules": [
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama.dll",
+        "sha256": "bd03c8dd9e5944f4b89ccd535f57f108f098c44814c2af64efe8f5f0ee32168f",
+        "bytes": 2634240
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+        "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+        "bytes": 61440
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+        "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+        "bytes": 673792
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+        "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+        "bytes": 958464
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+        "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+        "bytes": 26091520
+      }
+    ],
+    "cuda_dependency_modules": [
+      {
+        "path": "E:\\cuda\\bin\\cudart64_12.dll",
+        "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+        "bytes": 573952
+      },
+      {
+        "path": "E:\\cuda\\bin\\cublas64_12.dll",
+        "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+        "bytes": 113716224
+      },
+      {
+        "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+        "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+        "bytes": 674667520
+      }
+    ],
+    "dependency_load_order": [
+      "cudart64_12.dll",
+      "cublasLt64_12.dll",
+      "cublas64_12.dll",
+      "ggml-base.dll",
+      "ggml-cpu.dll",
+      "ggml-cuda.dll",
+      "ggml.dll",
+      "llama.dll"
+    ],
+    "r18_setup_proof_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\runs\\scale_f32_e1024_g1\\pair_01\\direct\\microbench.json",
+      "sha256": "b7c1e236975a99fc67b0d144aa7d3c0b844043e45336bc96174ae0207f8ce3f2",
+      "bytes": 43149
+    }
+  },
+  "runtime_environment": {
+    "LLAMA_TRACE_ANNOTATIONS": "0"
+  },
+  "root_authorized": true,
+  "no_auto_retry": true
+}

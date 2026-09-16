@@ -1,0 +1,13 @@
+{
+  "schema": "cpu-r6-prerequisite-repair/v1",
+  "previous_r5_valid_numeric_stage_records": 36,
+  "previous_r5_steady_dispersion_pass_stages": 35,
+  "previous_r5_cross_process_groups_pass": 12,
+  "previous_r5_rejected": true,
+  "previous_r5_prerequisite_executed_after_series": true,
+  "repair": "before-series compiled emitter schema gate enforced in program; measurement subprocess has no timeout kill",
+  "time_loop_cpp_changed_from_r5": false,
+  "series_budget": 1,
+  "thresholds_unchanged": true,
+  "holdout_costs_not_used_for_fitting": true
+}
