@@ -1,0 +1,38 @@
+{
+  "schema": "resolver-actual-parser-check/v1",
+  "status": "actual_api_diagnostics_compatible_quality_still_rejected",
+  "formal_main_samples": 30,
+  "formal_union_samples": 30,
+  "diagnostic_rows_retained": 14,
+  "observed_device": {
+    "device_id": 0,
+    "stream_id": 14,
+    "hardware": {
+      "gpu_uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+      "sm_count": 84,
+      "l2_bytes": 67108864,
+      "compute_capability": 1200
+    }
+  },
+  "quality_accepted": false,
+  "quality_issues": [
+    "pair_0:direct_host_p90_p10",
+    "pair_1:direct_host_p90_p10",
+    "pair_1:profile_direct_perturbation",
+    "pair_2:direct_host_p90_p10",
+    "across_profile_process_medians"
+  ],
+  "profile_emitted": false,
+  "gpu_runs": 0,
+  "inputs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\runs\\train_Q5_0_m1_n128_k896\\pair_01\\profile\\microbench.json",
+      "sha256": "a24d0b1b023d5666655b2a6ef042556c54bbc03b9e53f126bfe4a6b3773e5d9c"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\analysis_0001\\train_Q5_0_m1_n128_k896\\pair_01\\raw_events.json",
+      "sha256": "76a7766da7bc3ec0c80c345f922b4b3303a9241cc2ab61b7b7fc6ef5f1901db9"
+    }
+  ],
+  "limits": "Read-only parser compatibility only, not accepted calibration; no raw event table modified."
+}

@@ -1118,13 +1118,29 @@
       "probe_manifest_sha256": "3ba824ac8617394a826c4938fe5cf3756e4776cdf9b112f7c8f141b6ba4c44a0",
       "native_remeasured": false,
       "llm_accuracy_changed": false,
-      "updated_utc": "2026-09-16T03:06:30.744508+00:00",
-      "collection_freeze_sha256": "d78e2713ef56fd5e73b344452b27a0b5af4601ac2a1b6bf05d38ae41fce55529",
-      "collection_revision": "round_016/collection_r2",
+      "updated_utc": "2026-09-16T03:40:10.159923+00:00",
+      "collection_freeze_sha256": "a79996cdc181000b24fa3373ff9675b510ec00ebed9ed59cac79f16d3f4f9a76",
+      "collection_revision": "round_016/collection_r3",
       "analytical_prediction_sha256": "66da88e6b8d24a1728945ddb17454ba42d028ec524f7b118fb3b175f1acb3c20",
       "first_pair_numeric_dispatch_clock_pass": true,
       "first_pair_calibration_pass": false,
-      "first_pair_rejection": "direct_host_p90_p10_above_1.5"
+      "first_pair_rejection": "direct_host_p90_p10_above_1.5",
+      "prior_collection_status": {
+        "revision": "collection_r2",
+        "completed_stages": 25,
+        "planned_stages": 234,
+        "complete_pairs": 8,
+        "planned_pairs": 78,
+        "accepted_configs": 0,
+        "all_children_exited": true,
+        "clocks_restored": true
+      },
+      "resolver_tests": {
+        "full": 141,
+        "subsequent_actual_schema_targeted": 13
+      },
+      "first_mmq_pair_numeric_dispatch_clock_pass": true,
+      "first_mmq_pair_cost_eligible": false
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",

@@ -1,0 +1,1568 @@
+{
+  "schema": "operator-matrix-collection-protocol/v2",
+  "probe_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3",
+  "created_utc": "2026-09-16T03:31:17.126027+00:00",
+  "probe_protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\protocol.json",
+    "bytes": 7709,
+    "sha256": "182e1ec67768f75acd15bd38eb271f8a0cf175fcea1289a12adbee92952a4da2"
+  },
+  "probe_manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\build_manifest.json",
+    "bytes": 92531,
+    "sha256": "3ba824ac8617394a826c4938fe5cf3756e4776cdf9b112f7c8f141b6ba4c44a0"
+  },
+  "probe_ready_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\READY.json",
+    "bytes": 3038,
+    "sha256": "7693d892431bacedd7cba65ac87ab96f94d3fa84674f20fca40356e047accf2f"
+  },
+  "configs": [
+    {
+      "id": "train_Q5_0_m1_n128_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 1,
+      "N": 128,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q5_0_m1_n896_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 1,
+      "N": 896,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q5_0_m1_n4864_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 1,
+      "N": 4864,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q5_0_m4_n128_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 4,
+      "N": 128,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q5_0_m4_n896_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 4,
+      "N": 896,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q5_0_m4_n4864_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 4,
+      "N": 4864,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q5_0_m64_n128_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 64,
+      "N": 128,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "train_Q5_0_m64_n896_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 64,
+      "N": 896,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "train_Q5_0_m64_n4864_k896",
+      "group": "training",
+      "quant": "Q5_0",
+      "M": 64,
+      "N": 4864,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "train_Q8_0_m1_n128_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 1,
+      "N": 128,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q8_0_m1_n896_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 1,
+      "N": 896,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q8_0_m1_n4864_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 1,
+      "N": 4864,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q8_0_m4_n128_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 4,
+      "N": 128,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q8_0_m4_n896_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 4,
+      "N": 896,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q8_0_m4_n4864_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 4,
+      "N": 4864,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "train_Q8_0_m64_n128_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 64,
+      "N": 128,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "train_Q8_0_m64_n896_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 64,
+      "N": 896,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "train_Q8_0_m64_n4864_k896",
+      "group": "training",
+      "quant": "Q8_0",
+      "M": 64,
+      "N": 4864,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "validation_Q5_0_m2_n1792_k896",
+      "group": "validation",
+      "quant": "Q5_0",
+      "M": 2,
+      "N": 1792,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "validation_Q5_0_m32_n1792_k896",
+      "group": "validation",
+      "quant": "Q5_0",
+      "M": 32,
+      "N": 1792,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "validation_Q8_0_m2_n1792_k896",
+      "group": "validation",
+      "quant": "Q8_0",
+      "M": 2,
+      "N": 1792,
+      "K": 896,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "validation_Q8_0_m32_n1792_k896",
+      "group": "validation",
+      "quant": "Q8_0",
+      "M": 32,
+      "N": 1792,
+      "K": 896,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "aligned_Q5_0_m4_n896_k1024",
+      "group": "aligned_control",
+      "quant": "Q5_0",
+      "M": 4,
+      "N": 896,
+      "K": 1024,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "aligned_Q5_0_m64_n896_k1024",
+      "group": "aligned_control",
+      "quant": "Q5_0",
+      "M": 64,
+      "N": 896,
+      "K": 1024,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    },
+    {
+      "id": "aligned_Q8_0_m4_n896_k1024",
+      "group": "aligned_control",
+      "quant": "Q8_0",
+      "M": 4,
+      "N": 896,
+      "K": 1024,
+      "expected_source_path": "MMVQ_Q8_1_HALF"
+    },
+    {
+      "id": "aligned_Q8_0_m64_n896_k1024",
+      "group": "aligned_control",
+      "quant": "Q8_0",
+      "M": 64,
+      "N": 896,
+      "K": 1024,
+      "expected_source_path": "MMQ_Q8_1_D4_F32"
+    }
+  ],
+  "quality_policy": {
+    "config_count": 26,
+    "process_pairs": 3,
+    "calls_per_process": 36,
+    "formal_calls_per_process": 30,
+    "pair_orders": [
+      [
+        "profile",
+        "direct"
+      ],
+      [
+        "direct",
+        "profile"
+      ],
+      [
+        "profile",
+        "direct"
+      ]
+    ],
+    "checkpoint_seconds": 180,
+    "terminate_on_checkpoint": false,
+    "kernel_formal_p90_div_p10_max": 1.5,
+    "profile_process_median_max_relative_deviation": 0.05,
+    "profile_direct_host_median_max_relative_difference": 0.2,
+    "direct_host_formal_p90_div_p10_max": 1.5,
+    "all_first_warmup_formal_numeric_rows_pass_required": true,
+    "all_profile_process_kernel_chain_and_source_path_required": true,
+    "quantile_method": "linear interpolation at (n-1)*q",
+    "median_deviation_center": "median of three profiled process medians",
+    "host_ratio_denominator": "paired direct process host median",
+    "within_profile_dispersion": "each of three formal kernel-union distributions",
+    "target_sm_clock_mhz": 2400,
+    "sm_clock_tolerance_mhz": 30,
+    "telemetry_period_seconds": 0.005,
+    "maximum_formal_clock_bracket_gap_ms": 25,
+    "every_formal_interval_bracketed_required": true,
+    "diagnostic_labels_only": true,
+    "coefficients_emitted": false,
+    "validation_group_never_fitted": true
+  },
+  "execution_plan": [
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n896_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q5_0_m32_n1792_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q8_0_m64_n896_k1024",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n128_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n896_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m1_n4864_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n128_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n896_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m4_n4864_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n128_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q5_0_m64_n4864_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n128_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n896_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m1_n4864_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n128_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n896_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m4_n4864_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n128_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n896_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "train_Q8_0_m64_n4864_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q5_0_m2_n1792_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q8_0_m2_n1792_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "validation_Q8_0_m32_n1792_k896",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q5_0_m4_n896_k1024",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q5_0_m64_n896_k1024",
+      "pair": 2,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 0,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 0,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 0,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 1,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 1,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 1,
+      "mode": "export"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 2,
+      "mode": "profile"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 2,
+      "mode": "direct"
+    },
+    {
+      "config_id": "aligned_Q8_0_m4_n896_k1024",
+      "pair": 2,
+      "mode": "export"
+    }
+  ],
+  "executable": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+    "bytes": 143360,
+    "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311"
+  },
+  "native_bin": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin",
+  "nsys": {
+    "executable": {
+      "path": "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\nsys.exe",
+      "bytes": 69242496,
+      "sha256": "e597347ef6cb45456612c0c9593401bb6d1b85497bb18534968f309955831291"
+    },
+    "information": {
+      "version": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_015\\trace_2026_5\\nsys_version.txt",
+        "bytes": 59,
+        "sha256": "385508f033db65f74b6604911887f6feb756a8356f1ac83be463b4c48a39b21d"
+      },
+      "profile_help": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_015\\trace_2026_5\\nsys_profile_help.txt",
+        "bytes": 27916,
+        "sha256": "3dd4f4057251a3b4a80ae8dd521aa6f22e1825475c935eb8e172d8016c1b6392"
+      },
+      "export_help": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_015\\trace_2026_5\\nsys_export_help.txt",
+        "bytes": 12208,
+        "sha256": "43640298031188814864497f2f26f8ad76ec701b882579a3fe35292f044a9de7"
+      }
+    },
+    "profile_options": [
+      "--trace=cuda,nvtx",
+      "--sample=none",
+      "--cpuctxsw=none",
+      "--backtrace=none",
+      "--cuda-graph-trace=node",
+      "--kill=false",
+      "--duration=60",
+      "--wait=primary",
+      "--stop-on-exit=true",
+      "--stats=false",
+      "--export=none",
+      "--force-overwrite=false"
+    ]
+  },
+  "nsys_profile_options": [
+    "--trace=cuda,nvtx",
+    "--sample=none",
+    "--cpuctxsw=none",
+    "--backtrace=none",
+    "--cuda-graph-trace=node",
+    "--kill=false",
+    "--wait=primary",
+    "--stop-on-exit=true",
+    "--stats=false",
+    "--export=none",
+    "--force-overwrite=false"
+  ],
+  "gpu_identity": {
+    "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "name": "NVIDIA GeForce RTX 5080",
+    "driver_version": "616.64",
+    "nvml_library": {
+      "path": "C:\\Windows\\System32\\nvml.dll",
+      "bytes": 1499368,
+      "sha256": "5ee24ec769a7a7404a48fb0cc1e534dd2913477fb4abfcd830c8fc9093e6d26b"
+    }
+  },
+  "environment_explicit": {
+    "GGML_OP_OFFLOAD_MIN_BATCH": null,
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_CUDA_FORCE_MMQ": null,
+    "GGML_CUDA_FORCE_CUBLAS": null,
+    "CUDA_VISIBLE_DEVICES": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "GGML_SCHED_DEBUG": null,
+    "OMP_NUM_THREADS": "1",
+    "GGML_NO_IQ_PANEL": null,
+    "LLAMA_TRACE_ANNOTATIONS": "0",
+    "GGML_CPU_DISABLE_FUSION": null,
+    "GGML_CUDA_DISABLE_FUSION": null,
+    "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+    "CUDA_LAUNCH_BLOCKING": null,
+    "CUDA_MODULE_LOADING": null,
+    "CUDA_CACHE_DISABLE": null,
+    "CUDA_INJECTION64_PATH": null,
+    "NVTX_INJECTION64_PATH": null
+  },
+  "clock_domain": {
+    "target_sm_clock_mhz": 2400,
+    "sm_clock_tolerance_mhz": 30,
+    "external_receipt_required": true,
+    "actual_readback_each_stage_required": true,
+    "collector_sets_clocks": false
+  },
+  "mode_contract": "Profile and direct both use event mode; identical application argv except fresh output paths. This matrix does not collect the separate --control event-free arm.",
+  "event_free_control_scope": "No claim of event-instrumentation perturbation closure; source-path raw audit and profile/direct perturbation only.",
+  "root_review_required_before_gpu": true,
+  "prepared_only": true,
+  "native_llm_executed": false,
+  "calibration_eligible": false,
+  "source_runtime_dispatch_proof": "Native DLL observation is empirical; incomplete original build/source closure is retained as conditional transfer, never promoted to source equivalence."
+}
