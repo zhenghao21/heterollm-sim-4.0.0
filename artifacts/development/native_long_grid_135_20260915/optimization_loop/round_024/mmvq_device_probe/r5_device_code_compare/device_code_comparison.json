@@ -1,0 +1,465 @@
+{
+  "schema": "heterollm.r4-sm120a-device-code-compare/v1",
+  "static_only": true,
+  "gpu_execution_performed": false,
+  "native_execution_performed": false,
+  "target_llm_latency_used": false,
+  "toolchain": {
+    "cuobjdump": "E:\\cuda\\bin\\cuobjdump.exe",
+    "nvdisasm": "E:\\cuda\\bin\\nvdisasm.exe"
+  },
+  "target_dll": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+    "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+    "bytes": 26091520
+  },
+  "wrapper_executable": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r4_source_slice\\mmvq-source-slice-link-probe.exe",
+    "sha256": "64f1b6d924496c42fb5a6d0138f63219c6100e56f7c10fa3291776b73ebd0f80",
+    "bytes": 1348096
+  },
+  "architecture": "sm_120a",
+  "launch_bounds_source": {
+    "source_sha256": "14026871030393662628abdbd4937d5cab72031e20ddf582c9de1d7b424bb368",
+    "template_line": 584,
+    "template_declaration_line": 583,
+    "template_declaration": "template <ggml_type type, int ncols_dst, bool has_fusion, bool small_k = false, bool halve_iters = false>",
+    "launch_bounds_expression": "__launch_bounds__(calc_nwarps(type, ncols_dst, get_device_table_id(), small_k, halve_iters)*ggml_cuda_get_physical_warp_size(), 1)",
+    "interpretation": "The bound is a source expression over type, ncols_dst, runtime device table and specialization booleans. This static comparison proves its compiled cubin metadata is identical, but does not convert it into a target runtime launch configuration."
+  },
+  "pairs": {
+    "mmvq_main": {
+      "target_cubin": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r5_device_code_compare\\extract_all\\ggml-cuda.38.sm_120a.cubin",
+        "sha256": "6de26730d421e0987837773bcbacd2fb247f47a9bf6f327bbdc16d3f94a79bb0",
+        "bytes": 5450408
+      },
+      "wrapper_cubin": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r5_device_code_compare\\extract_all\\mmvq-source-slice-link-probe.1.sm_120a.cubin",
+        "sha256": "6de26730d421e0987837773bcbacd2fb247f47a9bf6f327bbdc16d3f94a79bb0",
+        "bytes": 5450408
+      },
+      "cubin_bytes_equal": true,
+      "nvdisasm_json_bytes_equal": true,
+      "target_function_count": 317,
+      "wrapper_function_count": 317,
+      "common_function_count": 317,
+      "functions": {
+        "Q5_0": {
+          "type_id": 6,
+          "ncols_dst": 1,
+          "template_count_target": 6,
+          "template_count_wrapper": 6,
+          "all_present_and_normalized_equal": true,
+          "variants": [
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type6ELi1ELb0ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 3072,
+              "wrapper_length": 3072,
+              "instruction_count": 192,
+              "normalized_sass_sha256_target": "27ddfc78a08730e99d51590b2ea0f20bec8d0d500437c24fcaa918ae438f5fad",
+              "normalized_sass_sha256_wrapper": "27ddfc78a08730e99d51590b2ea0f20bec8d0d500437c24fcaa918ae438f5fad",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:36 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:36 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type6ELi1ELb0ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 3072,
+              "wrapper_length": 3072,
+              "instruction_count": 192,
+              "normalized_sass_sha256_target": "3d187e4180bd013c25949f7c77d4afa03cb9487b9ed25fe7593c43deca06df3e",
+              "normalized_sass_sha256_wrapper": "3d187e4180bd013c25949f7c77d4afa03cb9487b9ed25fe7593c43deca06df3e",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:36 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:36 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type6ELi1ELb0ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 7168,
+              "wrapper_length": 7168,
+              "instruction_count": 448,
+              "normalized_sass_sha256_target": "97fdeeeefbbf0d05642339e0e305827f309a4320c37274484f665cc07359e75e",
+              "normalized_sass_sha256_wrapper": "97fdeeeefbbf0d05642339e0e305827f309a4320c37274484f665cc07359e75e",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:70 STACK:0 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:70 STACK:0 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type6ELi1ELb1ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6400,
+              "wrapper_length": 6400,
+              "instruction_count": 400,
+              "normalized_sass_sha256_target": "47e1cf2a4335139f3388973bbbf23802ed4a777d4cfd7153fae090cc23dae8fa",
+              "normalized_sass_sha256_wrapper": "47e1cf2a4335139f3388973bbbf23802ed4a777d4cfd7153fae090cc23dae8fa",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type6ELi1ELb1ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6400,
+              "wrapper_length": 6400,
+              "instruction_count": 400,
+              "normalized_sass_sha256_target": "befda60d1d87164feb0af9cfe1fb1e6dbb469ac164af6e32f542bbc7e8c8dd2b",
+              "normalized_sass_sha256_wrapper": "befda60d1d87164feb0af9cfe1fb1e6dbb469ac164af6e32f542bbc7e8c8dd2b",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type6ELi1ELb1ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 18688,
+              "wrapper_length": 18688,
+              "instruction_count": 1168,
+              "normalized_sass_sha256_target": "a98dc89b771106bec138a3164487db4a3e913f64622ac8d9a4f64abf4730e94f",
+              "normalized_sass_sha256_wrapper": "a98dc89b771106bec138a3164487db4a3e913f64622ac8d9a4f64abf4730e94f",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:80 STACK:0 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:80 STACK:0 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            }
+          ]
+        },
+        "Q8_0": {
+          "type_id": 8,
+          "ncols_dst": 1,
+          "template_count_target": 6,
+          "template_count_wrapper": 6,
+          "all_present_and_normalized_equal": true,
+          "variants": [
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type8ELi1ELb0ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 3968,
+              "wrapper_length": 3968,
+              "instruction_count": 248,
+              "normalized_sass_sha256_target": "05b8bf100eaaad70af7270f79313acd0153d3b3ebba9ceaa438cb6883920bd53",
+              "normalized_sass_sha256_wrapper": "05b8bf100eaaad70af7270f79313acd0153d3b3ebba9ceaa438cb6883920bd53",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:48 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:48 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type8ELi1ELb0ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 3968,
+              "wrapper_length": 3968,
+              "instruction_count": 248,
+              "normalized_sass_sha256_target": "d6aa246abd90be73ec406ae7719a6c044ce8ea9b065a9a743e8b8aa350954163",
+              "normalized_sass_sha256_wrapper": "d6aa246abd90be73ec406ae7719a6c044ce8ea9b065a9a743e8b8aa350954163",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:48 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:48 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type8ELi1ELb0ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 4096,
+              "wrapper_length": 4096,
+              "instruction_count": 256,
+              "normalized_sass_sha256_target": "5ea774f5ae7fd3dc6c81fdabca77b03629ecc82d933942ef6eade34f66ca5942",
+              "normalized_sass_sha256_wrapper": "5ea774f5ae7fd3dc6c81fdabca77b03629ecc82d933942ef6eade34f66ca5942",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:56 STACK:0 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:56 STACK:0 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type8ELi1ELb1ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6656,
+              "wrapper_length": 6656,
+              "instruction_count": 416,
+              "normalized_sass_sha256_target": "fe411d9151101dba3c0a63dd4a910c2c37257468e25ce453ab2423f250c1844c",
+              "normalized_sass_sha256_wrapper": "fe411d9151101dba3c0a63dd4a910c2c37257468e25ce453ab2423f250c1844c",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type8ELi1ELb1ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6656,
+              "wrapper_length": 6656,
+              "instruction_count": 416,
+              "normalized_sass_sha256_target": "a0c13aeba742db053dc1db79b6a67141d7df94fa480f12c247aa724273db81dc",
+              "normalized_sass_sha256_wrapper": "a0c13aeba742db053dc1db79b6a67141d7df94fa480f12c247aa724273db81dc",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:40 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type8ELi1ELb1ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 12800,
+              "wrapper_length": 12800,
+              "instruction_count": 800,
+              "normalized_sass_sha256_target": "62262fe8c2b5d5254c2a1a9a1c6a94a36737fe0b9e98258af8cb08e9e5c1b564",
+              "normalized_sass_sha256_wrapper": "62262fe8c2b5d5254c2a1a9a1c6a94a36737fe0b9e98258af8cb08e9e5c1b564",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:72 STACK:0 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:72 STACK:0 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            }
+          ]
+        },
+        "Q4_K": {
+          "type_id": 12,
+          "ncols_dst": 1,
+          "template_count_target": 6,
+          "template_count_wrapper": 6,
+          "all_present_and_normalized_equal": true,
+          "variants": [
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type12ELi1ELb0ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6016,
+              "wrapper_length": 6016,
+              "instruction_count": 376,
+              "normalized_sass_sha256_target": "5fe2d2a20bd771146e04b00c318fe1d8d0c23a68a285bbe3609c09e645bddc34",
+              "normalized_sass_sha256_wrapper": "5fe2d2a20bd771146e04b00c318fe1d8d0c23a68a285bbe3609c09e645bddc34",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:53 STACK:16 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:53 STACK:16 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type12ELi1ELb0ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6016,
+              "wrapper_length": 6016,
+              "instruction_count": 376,
+              "normalized_sass_sha256_target": "237697cb2494f8670b893c7ad5d53fbd3704021b9a8b81eeb4cbc406c4d2a753",
+              "normalized_sass_sha256_wrapper": "237697cb2494f8670b893c7ad5d53fbd3704021b9a8b81eeb4cbc406c4d2a753",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:53 STACK:16 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:53 STACK:16 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type12ELi1ELb0ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 7168,
+              "wrapper_length": 7168,
+              "instruction_count": 448,
+              "normalized_sass_sha256_target": "68753869aa17081119e1005941b710fa86c15667da9196249612020e5acc7c4c",
+              "normalized_sass_sha256_wrapper": "68753869aa17081119e1005941b710fa86c15667da9196249612020e5acc7c4c",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:70 STACK:16 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:70 STACK:16 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type12ELi1ELb1ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6656,
+              "wrapper_length": 6656,
+              "instruction_count": 416,
+              "normalized_sass_sha256_target": "f519bcc55ac7e6c6d1a885ba4865fd67b07a0cf49c7d47c474df1511989450a0",
+              "normalized_sass_sha256_wrapper": "f519bcc55ac7e6c6d1a885ba4865fd67b07a0cf49c7d47c474df1511989450a0",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:46 STACK:8 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:46 STACK:8 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type12ELi1ELb1ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6656,
+              "wrapper_length": 6656,
+              "instruction_count": 416,
+              "normalized_sass_sha256_target": "ed4beef746ef6191d083f45d576e066e4dc00e23af50cc859e2da184c6be876c",
+              "normalized_sass_sha256_wrapper": "ed4beef746ef6191d083f45d576e066e4dc00e23af50cc859e2da184c6be876c",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:46 STACK:8 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:46 STACK:8 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type12ELi1ELb1ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 19840,
+              "wrapper_length": 19840,
+              "instruction_count": 1240,
+              "normalized_sass_sha256_target": "c3a75994c3c982f9f6c8c338e0326bd4f806b9091a2d911de04ba5844335a986",
+              "normalized_sass_sha256_wrapper": "c3a75994c3c982f9f6c8c338e0326bd4f806b9091a2d911de04ba5844335a986",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:120 STACK:32 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:120 STACK:32 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            }
+          ]
+        },
+        "Q6_K": {
+          "type_id": 14,
+          "ncols_dst": 1,
+          "template_count_target": 6,
+          "template_count_wrapper": 6,
+          "all_present_and_normalized_equal": true,
+          "variants": [
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type14ELi1ELb0ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 5376,
+              "wrapper_length": 5376,
+              "instruction_count": 336,
+              "normalized_sass_sha256_target": "c61cc340f20f8707363bdad159ddf9338e128db9ae8286f7dafc6c7638a417ee",
+              "normalized_sass_sha256_wrapper": "c61cc340f20f8707363bdad159ddf9338e128db9ae8286f7dafc6c7638a417ee",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:56 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:56 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type14ELi1ELb0ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 5376,
+              "wrapper_length": 5376,
+              "instruction_count": 336,
+              "normalized_sass_sha256_target": "f0686c8331e857f5fef4f5b175af54f628e74243c5aa79e32022929bfce7e94d",
+              "normalized_sass_sha256_wrapper": "f0686c8331e857f5fef4f5b175af54f628e74243c5aa79e32022929bfce7e94d",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:56 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:56 STACK:0 SHARED:1408 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type14ELi1ELb0ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6400,
+              "wrapper_length": 6400,
+              "instruction_count": 400,
+              "normalized_sass_sha256_target": "d9c968e7d8fc01a4d9b9c9aed74017641431a660a792757c26f4a2948cabc14b",
+              "normalized_sass_sha256_wrapper": "d9c968e7d8fc01a4d9b9c9aed74017641431a660a792757c26f4a2948cabc14b",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:64 STACK:0 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:64 STACK:0 SHARED:2560 LOCAL:0 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type14ELi1ELb1ELb0ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6144,
+              "wrapper_length": 6144,
+              "instruction_count": 384,
+              "normalized_sass_sha256_target": "3f1cabc0a42bceda025c04dd4e8e3a65bb021ed5d0ef59a2b1defd336c169c32",
+              "normalized_sass_sha256_wrapper": "3f1cabc0a42bceda025c04dd4e8e3a65bb021ed5d0ef59a2b1defd336c169c32",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:48 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:48 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type14ELi1ELb1ELb0ELb1EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 6144,
+              "wrapper_length": 6144,
+              "instruction_count": 384,
+              "normalized_sass_sha256_target": "ca5336bc493b522d3fac9af6068b4a956878a95a054f12faf8ea5db0d7fe66c4",
+              "normalized_sass_sha256_wrapper": "ca5336bc493b522d3fac9af6068b4a956878a95a054f12faf8ea5db0d7fe66c4",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:48 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:48 STACK:0 SHARED:1792 LOCAL:0 CONSTANT[2]:32 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            },
+            {
+              "symbol": "_Z13mul_mat_vec_qIL9ggml_type14ELi1ELb1ELb1ELb0EEvPKvS2_PKi31ggml_cuda_mm_fusion_args_devicePfj5uint3jjjS7_jjjS7_jjjj",
+              "target_present": true,
+              "wrapper_present": true,
+              "target_length": 17024,
+              "wrapper_length": 17024,
+              "instruction_count": 1064,
+              "normalized_sass_sha256_target": "bde791881fde0938b90fcab67f3c899452f718644e5ad2a0a4b03e8569b5dfce",
+              "normalized_sass_sha256_wrapper": "bde791881fde0938b90fcab67f3c899452f718644e5ad2a0a4b03e8569b5dfce",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:90 STACK:0 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:90 STACK:0 SHARED:4096 LOCAL:0 CONSTANT[2]:48 CONSTANT[0]:1056 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            }
+          ]
+        }
+      }
+    },
+    "q8_1_conversion": {
+      "target_cubin": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r5_device_code_compare\\extract_all\\ggml-cuda.48.sm_120a.cubin",
+        "sha256": "1000c076b15dab0dbf817985fd8741b30c557dda9f46ac6251e536d3ffc98140",
+        "bytes": 222816
+      },
+      "wrapper_cubin": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r5_device_code_compare\\extract_all\\mmvq-source-slice-link-probe.2.sm_120a.cubin",
+        "sha256": "1000c076b15dab0dbf817985fd8741b30c557dda9f46ac6251e536d3ffc98140",
+        "bytes": 222816
+      },
+      "cubin_bytes_equal": true,
+      "nvdisasm_json_bytes_equal": true,
+      "target_function_count": 21,
+      "wrapper_function_count": 21,
+      "common_function_count": 21,
+      "functions": {
+        "Q8_1_conversion": {
+          "symbols": [
+            {
+              "symbol": "_Z13quantize_q8_1PKfPvxxxxxj5uint3",
+              "target_length": 1664,
+              "wrapper_length": 1664,
+              "instruction_count": 104,
+              "normalized_sass_sha256_target": "2278b7025f0243ecae60adb7c2355add67e0a924f5c3544efdbbc1c231162f2e",
+              "normalized_sass_sha256_wrapper": "2278b7025f0243ecae60adb7c2355add67e0a924f5c3544efdbbc1c231162f2e",
+              "normalized_sass_equal": true,
+              "resource_target": "REG:24 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:968 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_wrapper": "REG:24 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:968 TEXTURE:0 SURFACE:0 SAMPLER:0",
+              "resource_equal": true
+            }
+          ],
+          "all_present_and_normalized_equal": true
+        }
+      }
+    }
+  },
+  "limitations": [
+    "This is device-code qualification only. It does not prove target host dispatch, runtime arguments, grid/block, stream, cache residency, launch/synchronization timing, or deployment equivalence.",
+    "No performance coefficient, calibration value or timing conclusion is authorized by a byte-identical cubin.",
+    "A shape is not encoded in these function symbols beyond type and ncols_dst specialization. Target-binary CUPTI remains necessary to connect an observed shape to a selected device function.",
+    "The Q4_K K=896 diagnostic remains source-ineligible for source-qualified MMVQ timing; byte equality of a generic Q4_K M=1 template does not override that eligibility gate."
+  ]
+}
