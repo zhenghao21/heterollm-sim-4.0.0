@@ -1959,5 +1959,23 @@
     "scope": "synthetic target-DLL multi-node host submission lifecycle",
     "native_LLM_latency_fitting": false,
     "gpu_execution_performed": false
+  },
+  "round_027_postprocess": {
+    "status": "prepared_before_scoring",
+    "host_tests": 8,
+    "refs": {
+      "postprocess.py": {
+        "bytes": 18427,
+        "sha256": "de408e452b61435f0dd96479cd98cadcaf52790bd7c371bcf5933bc939f93fce"
+      },
+      "test_postprocess.py": {
+        "bytes": 7538,
+        "sha256": "dfc5b73ea2f4faedbb0df48ed7d2cf900b1323f65a9fc7566eea125d84262b8c"
+      }
+    },
+    "gate": "full262 barrier and both immutable scores/group report required",
+    "output": "off/on/delta PNG+SVG; exact evidence archive and 40MiB parts",
+    "new_scoring": false,
+    "excluded_failed_cells": 0
   }
 }
