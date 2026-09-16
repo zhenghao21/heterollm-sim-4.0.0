@@ -313,3 +313,183 @@ def test_raw_per_request_integer_types_checked_before_dedup(data, tmp_path, fiel
     proof = result["cells"][data["row"]["cell_id"]]
     assert proof["status"] == "uncovered" and proof["contract"] is None
     assert any("warmup_1_qualification_failed" in reason for reason in proof["uncovered_reasons"])
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_shared_cpu_snapshot_gpu_model_ref_rederives_in_independent_workers(data, tmp_path, reverse):
+    import subprocess
+    import sys
+    shared = Path(data["row"]["config"]["model"])
+    cpu_path = tmp_path / "cpu_original.gguf"
+    cpu_path.write_bytes(shared.read_bytes())
+    cpu, gpu = copy.deepcopy(data["row"]), copy.deepcopy(data["row"])
+    cpu.update(cell_id="cpu_shared_model", model_key="qwen38")
+    gpu.update(cell_id="gpu_shared_model", model_key="qwen38_gpu")
+    cpu["config"]["model"] = str(cpu_path)
+    cpu["model_ref"] = a.grid.file_ref(cpu_path)
+    shared_ref = a.grid.file_ref(shared)
+    gpu["model_ref"] = {"path": shared_ref["path"], "sha256": shared_ref["sha256"], "bytes": shared_ref["size_bytes"]}
+    rows = [gpu, cpu] if reverse else [cpu, gpu]
+    selection = copy.deepcopy(data["selection"])
+    selection["selected_cells"] = rows
+    selection["selected_cell_ids"] = [row["cell_id"] for row in rows]
+    document(data["selection_path"], seal(selection))
+    nonflash = copy.deepcopy(data["nonflash"])
+    view = next(iter(nonflash["cells"].values()))
+    nonflash["cells"] = {row["cell_id"]: view for row in rows}
+    snapshots = {str(cpu_path.resolve()): shared_ref}
+    binding = a.freeze_retained_warmup_binding(data["selection_path"], rows, tmp_path / "shared-proof",
+        nonflash, model_snapshot_map=snapshots)
+    proofs = []
+    for row in rows:
+        inputs = a.static_inputs(row, selection, tmp_path, model_snapshot_map=snapshots,
+            nonflash_kv_view=nonflash, retained_warmup=binding)
+        # Each worker is a fresh interpreter: no coordinator model/header cache.
+        input_path = tmp_path / (row["cell_id"] + ".json")
+        document(input_path, inputs)
+        code = """
+import json,sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1]);sys.path.insert(0,str(Path(sys.argv[1])/'src'))
+from tools import predict_stable_native_dataset as a
+i=json.loads(Path(sys.argv[2]).read_text());p=i['retained_kv_warmup_evidence']
+x=a.load_retained_warmup_extractor(p['extractor_ref'])
+w=a.retained_warmup_projection(x.derive_qualification(Path(p['selection_ref']['path']),[i['cell_id']])['cells'][0])
+s=a.read_retained_gguf_scope(i['prediction_model_ref'])
+d=a.derive_retained_cell_proof(w,selection_ref=p['selection_ref'],extractor_ref=p['extractor_ref'],nonflash_contract=p['nonflash_contract'],nonflash_ref=p['nonflash_contract_ref'],model_scope=s,native_refs=[i['runtime_ref'],*i.get('runtime_module_refs',[])])
+assert d == p
+print('independent-proof-match')
+"""
+        worker = subprocess.run([sys.executable, "-c", code, str(a.ROOT), str(input_path)],
+            check=True, capture_output=True, text=True)
+        assert worker.stdout.strip() == "independent-proof-match"
+        result = a.apply_retained_warmup_static_contract(data["scene"], inputs, gguf=data["gguf"])
+        assert result.workload.metadata[ENABLED] is True
+        proofs.append(inputs["retained_kv_warmup_evidence"]["model_scope"])
+    assert proofs[0] == proofs[1]
+    assert proofs[0]["model_ref"] == {"path": str(shared.resolve()), "sha256": shared_ref["sha256"], "bytes": shared.stat().st_size}
+
+
+@pytest.mark.parametrize("patch", [
+    {"bytes": True}, {"bytes": 1.0}, {"bytes": "1"}, {"bytes": 0}, {"bytes": -1}, {"bytes": None},
+    {"size_bytes": False}, {"size_bytes": None}, {"size_bytes": 1.0}, {"bytes": 1},
+    {"sha256": None}, {"sha256": "A" * 64}, {"sha256": "g" * 64}, {"sha256": "a" * 63},
+    {"path": None}, {"path": ""}, {"path": "relative.gguf"}, {"path": True},
+])
+def test_retained_model_ref_rejects_malformed_aliases_and_identity(tmp_path, patch):
+    ref = gguf(tmp_path / "model.gguf")
+    with pytest.raises(ValueError, match="retained KV model"):
+        a.read_retained_gguf_scope({**ref, **patch})
+
+
+def test_retained_model_ref_requires_size_and_accepts_only_equal_aliases(tmp_path):
+    ref = gguf(tmp_path / "model.gguf")
+    with pytest.raises(ValueError, match="byte length"):
+        a.read_retained_gguf_scope({key: value for key, value in ref.items() if key != "size_bytes"})
+    with pytest.raises(ValueError, match="differs from file"):
+        a.read_retained_gguf_scope({**ref, "size_bytes": ref["size_bytes"] + 1})
+    expected = a.read_retained_gguf_scope(ref)
+    assert a.read_retained_gguf_scope({**ref, "bytes": ref["size_bytes"]}) == expected
+    assert a.read_retained_gguf_scope({"path": ref["path"], "sha256": ref["sha256"], "bytes": ref["size_bytes"]}) == expected
+
+
+def test_retained_scope_cache_rechecks_header_content_and_sha_identity(tmp_path):
+    path = tmp_path / "model.gguf"
+    ref = gguf(path)
+    cache = {}
+    first = a.cached_retained_gguf_scope(ref, cache)
+    alias = {"path": ref["path"], "sha256": ref["sha256"], "bytes": ref["size_bytes"]}
+    assert a.cached_retained_gguf_scope(alias, cache) == first and len(cache) == 1
+    # Header reads intentionally do not attest a full model digest, but digest
+    # declarations must not collide in the cache before the worker full hash.
+    different_sha = {**alias, "sha256": "0" * 64}
+    second = a.cached_retained_gguf_scope(different_sha, cache)
+    assert second["model_ref"]["sha256"] == "0" * 64 and len(cache) == 2
+    stat = path.stat()
+    payload = path.read_bytes()
+    assert b"llama" in payload
+    path.write_bytes(payload.replace(b"llama", b"qwen2"))
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    with pytest.raises(ValueError, match="cached header read"):
+        a.cached_retained_gguf_scope(ref, cache)
+
+
+def test_full_model_gate_rejects_same_header_same_size_body_change(tmp_path):
+    path = tmp_path / "weights.gguf"
+    gguf(path)
+    with path.open("ab") as stream:
+        stream.write(b"opaque-weight-payload")
+    ref = a.grid.file_ref(path)
+    scope = a.read_retained_gguf_scope(ref)
+    assert a.verify_retained_model_identities([ref])[0]["sha256"] == ref["sha256"]
+    stamp = path.stat()
+    payload = path.read_bytes()
+    path.write_bytes(payload[:-1] + bytes([payload[-1] ^ 1]))
+    os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    assert a.read_retained_gguf_scope(ref) == scope  # Header cannot attest weights.
+    with pytest.raises(ValueError, match="full model SHA256/identity mismatch"):
+        a.verify_retained_model_identities([ref])
+
+
+def test_full_model_gate_hashes_each_canonical_identity_once(tmp_path, monkeypatch):
+    ref = gguf(tmp_path / "model.gguf")
+    alias = {"path": ref["path"], "sha256": ref["sha256"], "bytes": ref["size_bytes"]}
+    opened = []
+    original = Path.open
+    def counted(path, *args, **kwargs):
+        if path == Path(ref["path"]) and args == ("rb",):
+            opened.append(str(path))
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "open", counted)
+    assert a.verify_retained_model_identities([ref, alias, ref]) == [alias]
+    assert len(opened) == 1
+    with pytest.raises(ValueError, match="conflicting model identity"):
+        a.verify_retained_model_identities([ref, {**alias, "sha256": "0" * 64}])
+    assert len(opened) == 1  # Reject contradictory declarations before reading.
+
+
+def test_freeze_rejects_false_declared_full_model_sha(data, tmp_path):
+    row = copy.deepcopy(data["row"])
+    row["model_ref"]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="full model SHA256/identity mismatch"):
+        a.freeze_retained_warmup_binding(data["selection_path"], [row], tmp_path / "false-sha", data["nonflash"])
+
+
+def test_resume_full_model_identity_gate_catches_weight_body_mutation(data, tmp_path):
+    path = Path(data["row"]["config"]["model"])
+    with path.open("ab") as stream:
+        stream.write(b"opaque-weight-payload")
+    data["row"]["model_ref"] = a.grid.file_ref(path)
+    document(data["selection_path"], seal(data["selection"]))
+    binding = a.freeze_retained_warmup_binding(data["selection_path"], [data["row"]], tmp_path / "weight-body", data["nonflash"])
+    inputs = a.static_inputs(data["row"], data["selection"], tmp_path, nonflash_kv_view=data["nonflash"], retained_warmup=binding)
+    frozen = {"retained_kv_warmup_state": True, "retained_kv_warmup": binding,
+        "selection_ref": binding["selection_ref"], "cells": [{"cell_id": inputs["cell_id"], "static_inputs": inputs}]}
+    assert binding["model_identity_refs"] == [a.canonical_retained_model_ref(data["row"]["model_ref"])]
+    assert all(ref["path"] != str(path.resolve()) for ref in binding["evidence_refs"])
+    a.verify_retained_warmup_freeze(frozen)
+    stamp = path.stat()
+    payload = path.read_bytes()
+    path.write_bytes(payload[:-1] + bytes([payload[-1] ^ 1]))
+    os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    with pytest.raises(ValueError, match="full model SHA256/identity mismatch"):
+        a.verify_retained_warmup_freeze(frozen)
+
+
+def test_retained_freeze_rejects_missing_model_identity_closure(data):
+    binding = copy.deepcopy(data["binding"])
+    binding.pop("model_identity_refs")
+    frozen = {"retained_kv_warmup_state": True, "retained_kv_warmup": binding, "cells": []}
+    with pytest.raises(ValueError, match="full model identity references"):
+        a.verify_retained_warmup_freeze(frozen)
+
+
+def test_worker_entry_verification_does_not_hash_campaign_models_again(data, monkeypatch):
+    inputs = data["inputs"]
+    entry = {"cell_id": inputs["cell_id"], "static_inputs": inputs}
+    frozen = {"retained_kv_warmup_state": True, "retained_kv_warmup": data["binding"],
+        "selection_ref": data["binding"]["selection_ref"], "cells": [entry]}
+    def forbidden(refs):
+        raise AssertionError("worker must use its existing read_gguf_metadata full hash")
+    monkeypatch.setattr(a, "verify_retained_model_identities", forbidden)
+    a.verify_retained_warmup_freeze(frozen, entry)

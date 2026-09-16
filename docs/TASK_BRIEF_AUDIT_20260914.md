@@ -8,7 +8,7 @@
 
 ## 1. 总目标与优化优先级（稳定）
 
-根据模型结构、权重格式、输入输出长度、硬件、运行时和调度配置，生成可解释的算子图与执行时间预测。仿真对象的一级范围是 engine 内部的 GPU、HBM/HBF 与其他内存访问、kernel、KV cache、CPU/GPU 协作、同步、采样和调度执行；这些部分共同决定研究对象的 engine wall。HTTP、JSON、tokenizer、admission、队列、SSE、socket 和操作系统线程调度属于 server/client 服务边界，只能作为分解后的二级诊断。对同一请求，服务侧只可在边界证据证明不存在重叠时写成 `T_server = T_frontend + T_queue + T_engine + T_response`，再将请求/接收传输单独计入 `T_client`；存在并发或包含关系时必须保留时间线，不能把各段简单相加。HBF 参数扫描只能改变 engine 内受其影响的内存、KV、kernel 和调度成本，不能把不受 HBF 影响的 frontend/response 固定开销吸收到 engine 成本。预测不得读取或拟合待预测场景的原生端到端时延。
+根据模型结构、权重格式、输入输出长度、硬件、运行时和调度配置，生成可解释的算子图与执行时间预测。仿真对象的一级范围是 engine 内部的 GPU、HBM/HBF 与其他内存访问、kernel、KV cache、CPU/GPU 协作、同步、采样和调度执行；这些部分共同决定研究对象的 engine wall。发生在 engine 计时边界之外的 HTTP、JSON、tokenizer、admission、队列、SSE、socket 及其线程调度属于 server/client 服务边界，作为分解后的二级诊断。边界内的 host 建图、CPU 采样、驱动提交、同步及其调度等待仍属于 engine wall；按源码计时点、实际资源和重叠关系确定归属，不能因其发生在 CPU/OS 就一概移出 engine，也不能把所有宿主等待加成 GPU kernel 常数。对同一请求，服务侧只可在边界证据证明不存在重叠时写成 `T_server = T_frontend + T_queue + T_engine + T_response`，再将请求/接收传输单独计入 `T_client`；存在并发或包含关系时必须保留时间线，不能把各段简单相加。HBF 参数扫描只能改变 engine 内受其影响的内存、KV、kernel 和调度成本，不能把不受 HBF 影响的 frontend/response 固定开销吸收到 engine 成本。预测不得读取或拟合待预测场景的原生端到端时延。
 
 优化顺序固定为：
 
@@ -215,8 +215,8 @@ R22/R23共同104格312项：117改善、3退化、192不变；62普通attention�
 
 ## 13. 下一轮优化顺序（动态，原位更新）
 
-1. 归档并提交R23完整结果及27失败，完成R24规范引用修复的独立审核。新冻结固定131场景，只重跑simulator；核对原104数值不变和原失败27格恢复，其它变化必须解释，不能回填R23。
-2. 优先确认末层output-selection生产接线：qwen2/llama最后FFN前选行与混合架构最终norm后选行分开，绑定实际GGUF结构和锁定源合同，检查真实算子shape。独立候选与消融；语义修正可能降低prefill成本，不能承诺改善当前偏低TTFT。
+1. R23结果及27失败已归档提交上传（8af8fac）。R24规范引用与完整模型身份修复在工作区通过143项测试（1项跳过），提交冻结前收紧证明比较的字段白名单并独立审核。新冻结固定131场景，只重跑simulator；核对原104数值不变和原失败27格恢复，其它变化必须解释，不能回填R23。
+2. 已确认末层output-selection生产接线缺失：真实GGUF架构名qwen2/llama与resolver别名不一致，metadata嵌套位置与planner读取位置不一致。隔离R25候选f45d311已实现默认关闭绑定，待独立审核并单独冻结；qwen2/llama最后FFN前选行与混合架构最终norm后选行分开，绑定实际GGUF结构和锁定源合同，检查真实算子shape。独立候选与消融；语义修正可能降低prefill成本，不能承诺改善当前偏低TTFT。
 3. 继续MMVQ访存微基准资格验证。R24私有wrapper仅证实源码阶段可分，不证明cubin/PTX/SASS或实际dispatch等价，当前0参数准入。允许源码构造解释语义，禁止冒充固定DLL测量；相同原始kernel身份、conversion/main分界、grid/block/stream及观测扰动合格后才测性能。warm与超过L2的rotation分开，不用CTA数直接换经验带宽。
 4. 用固定模型/部署内signed-error与完整匹配P/O/C组核对真实microbatch、nonflash物理KV增长、retained占用/高水位和slot时间线。外生到达可显式输入；native token完成时间只供诊断，不得驱动预测后称泛化；不按actual误差决定warm/cold。
 5. 精确补采样、输入更新、host建图/提交的已证实缺项。CPU cgraph按每context上一张图的生命周期；host总成本按节点计数和资源重叠变化，单次系数不能凭c折扣。submit/sync与kernel区间重叠和观测扰动未解决前不追加wall残差。
@@ -225,7 +225,7 @@ R22/R23共同104格312项：117改善、3退化、192不变；62普通attention�
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
 - native及已有冻结/预测/评分不可变。只重跑simulator，允许独立合成证据；不重测目标LLM或拟合其时延。payload内部hash不替代原始文件SHA。
-- R23两路各131输入、114个共同源码，执行前/恢复/结束校验完成；40锚点及主候选131均先保存终态凭据后评分。R24新冻结，不合并两轮为一个版本。
+- R23两路各131输入、114个共同源码，执行前/恢复/结束校验完成；40锚点及主候选131均先保存终态凭据后评分。R24新冻结继承113个R23源码文件，仅替换已提交的身份适配器，driver及测试绑定明确commit；不纳入主区历史WIP。全模型身份校验覆盖未映射模型，header校验不能替代正文SHA。当前保守门禁在多个边界重复读取，不能声称每阶段仅一次。R24尚未冻结，不合并两轮为一个版本。
 - 第4阶段6轮/8小时为复盘点而非停止条件。微基准CPU/GPU计时与重仿真串行，native子进程自然退出，build身份合格后才运行。
 - 每轮提交相关源码、测试、任务书及证据；大JSON/trace逐字节归档分卷。不上传模型、DLL、EXE、OBJ或整棵复制源码，不混历史WIP。
 

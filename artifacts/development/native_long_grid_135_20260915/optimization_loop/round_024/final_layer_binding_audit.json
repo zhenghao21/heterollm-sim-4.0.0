@@ -1,0 +1,638 @@
+{
+  "schema": "final-layer-binding-readonly-audit/v1",
+  "date": "2026-09-16",
+  "scope": {
+    "native_executed": false,
+    "llm_prediction_executed": false,
+    "target_latency_read": false,
+    "static_cohort_plans_only": true
+  },
+  "production_builder_probes": [
+    {
+      "synthetic": true,
+      "gguf_architecture": "qwen2",
+      "actual_model_architecture": "qwen2",
+      "metadata_top_keys": [
+        "authoritative",
+        "derivation",
+        "architecture",
+        "symbols",
+        "max_sequence_length",
+        "metadata",
+        "ui"
+      ],
+      "declaration_top": null,
+      "declaration_nested": null,
+      "injected_declaration_error": "final-layer selection requires a supported exact graph architecture"
+    },
+    {
+      "synthetic": true,
+      "gguf_architecture": "llama",
+      "actual_model_architecture": "llama",
+      "metadata_top_keys": [
+        "authoritative",
+        "derivation",
+        "architecture",
+        "symbols",
+        "max_sequence_length",
+        "metadata",
+        "ui"
+      ],
+      "declaration_top": null,
+      "declaration_nested": null,
+      "injected_declaration_error": "final-layer selection requires a supported exact graph architecture"
+    },
+    {
+      "synthetic": true,
+      "gguf_architecture": "qwen35",
+      "actual_model_architecture": "qwen3_5_hybrid_transformer",
+      "metadata_top_keys": [
+        "authoritative",
+        "derivation",
+        "architecture",
+        "symbols",
+        "max_sequence_length",
+        "metadata",
+        "ui"
+      ],
+      "declaration_top": null,
+      "declaration_nested": null,
+      "injected_declaration_resolves": "after_final_norm"
+    }
+  ],
+  "cohort_shape_probes": [
+    {
+      "fixture_architecture": "qwen2_decoder",
+      "token_rows": 64,
+      "logit_rows": 0,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [],
+          "lm_head_rows": [],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 67
+        },
+        "declared": {
+          "last_ffn": [],
+          "final_norm_rows": [],
+          "lm_head_rows": [],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 1,
+          "task_count": 59
+        }
+      }
+    },
+    {
+      "fixture_architecture": "qwen2_decoder",
+      "token_rows": 64,
+      "logit_rows": 1,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [
+            1
+          ],
+          "lm_head_rows": [
+            1
+          ],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 80
+        },
+        "declared": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            }
+          ],
+          "final_norm_rows": [
+            1
+          ],
+          "lm_head_rows": [
+            1
+          ],
+          "gather_kernel_count": 2,
+          "host_index_tasks": 1,
+          "task_count": 88
+        }
+      }
+    },
+    {
+      "fixture_architecture": "qwen2_decoder",
+      "token_rows": 4,
+      "logit_rows": 4,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 4
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 4
+            }
+          ],
+          "final_norm_rows": [
+            4
+          ],
+          "lm_head_rows": [
+            4
+          ],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 80
+        },
+        "declared": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 4
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 4
+            }
+          ],
+          "final_norm_rows": [
+            4
+          ],
+          "lm_head_rows": [
+            4
+          ],
+          "gather_kernel_count": 2,
+          "host_index_tasks": 1,
+          "task_count": 88
+        }
+      }
+    },
+    {
+      "fixture_architecture": "llama_decoder",
+      "token_rows": 64,
+      "logit_rows": 0,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [],
+          "lm_head_rows": [],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 67
+        },
+        "declared": {
+          "last_ffn": [],
+          "final_norm_rows": [],
+          "lm_head_rows": [],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 1,
+          "task_count": 59
+        }
+      }
+    },
+    {
+      "fixture_architecture": "llama_decoder",
+      "token_rows": 64,
+      "logit_rows": 1,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [
+            1
+          ],
+          "lm_head_rows": [
+            1
+          ],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 80
+        },
+        "declared": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            }
+          ],
+          "final_norm_rows": [
+            1
+          ],
+          "lm_head_rows": [
+            1
+          ],
+          "gather_kernel_count": 2,
+          "host_index_tasks": 1,
+          "task_count": 88
+        }
+      }
+    },
+    {
+      "fixture_architecture": "llama_decoder",
+      "token_rows": 4,
+      "logit_rows": 4,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 4
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 4
+            }
+          ],
+          "final_norm_rows": [
+            4
+          ],
+          "lm_head_rows": [
+            4
+          ],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 80
+        },
+        "declared": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 4
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 4
+            }
+          ],
+          "final_norm_rows": [
+            4
+          ],
+          "lm_head_rows": [
+            4
+          ],
+          "gather_kernel_count": 2,
+          "host_index_tasks": 1,
+          "task_count": 88
+        }
+      }
+    },
+    {
+      "fixture_architecture": "qwen3_5_hybrid_transformer",
+      "token_rows": 64,
+      "logit_rows": 0,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [],
+          "lm_head_rows": [],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 77
+        },
+        "declared": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [
+            64
+          ],
+          "lm_head_rows": [],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 1,
+          "task_count": 84
+        }
+      }
+    },
+    {
+      "fixture_architecture": "qwen3_5_hybrid_transformer",
+      "token_rows": 64,
+      "logit_rows": 1,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [
+            1
+          ],
+          "lm_head_rows": [
+            1
+          ],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 90
+        },
+        "declared": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 64
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 64
+            }
+          ],
+          "final_norm_rows": [
+            64
+          ],
+          "lm_head_rows": [
+            1
+          ],
+          "gather_kernel_count": 1,
+          "host_index_tasks": 1,
+          "task_count": 96
+        }
+      }
+    },
+    {
+      "fixture_architecture": "qwen3_5_hybrid_transformer",
+      "token_rows": 4,
+      "logit_rows": 4,
+      "plans": {
+        "legacy": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            }
+          ],
+          "final_norm_rows": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "lm_head_rows": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "gather_kernel_count": 0,
+          "host_index_tasks": 0,
+          "task_count": 318
+        },
+        "declared": {
+          "last_ffn": [
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.up_gate",
+              "rows": 1
+            },
+            {
+              "projection": "mlp.down",
+              "rows": 1
+            }
+          ],
+          "final_norm_rows": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "lm_head_rows": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "gather_kernel_count": 4,
+          "host_index_tasks": 4,
+          "task_count": 342
+        }
+      }
+    }
+  ],
+  "gguf_header_architecture": [
+    {
+      "model_key": "qwen25",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "frozen_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+      "header_architecture": "qwen2",
+      "bytes_read_prefix": 69,
+      "full_model_rehashed": false
+    },
+    {
+      "model_key": "smollm2",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\smollm2-1.7b-instruct-q4_k_m.gguf",
+      "frozen_sha256": "decd2598bc2c8ed08c19adc3c8fdd461ee19ed5708679d1c54ef54a5a30d4f33",
+      "header_architecture": "llama",
+      "bytes_read_prefix": 69,
+      "full_model_rehashed": false
+    },
+    {
+      "model_key": "tinyllama",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+      "frozen_sha256": "9fecc3b3cd76bba89d504f29b616eedf7da85b96540e490ca5824d3f7d2776a0",
+      "header_architecture": "llama",
+      "bytes_read_prefix": 69,
+      "full_model_rehashed": false
+    },
+    {
+      "model_key": "qwen35",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.5-0.8B-Q4_K_M.gguf",
+      "frozen_sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+      "header_architecture": "qwen35",
+      "bytes_read_prefix": 70,
+      "full_model_rehashed": false
+    },
+    {
+      "model_key": "qwen38",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf",
+      "frozen_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+      "header_architecture": "qwen35",
+      "bytes_read_prefix": 70,
+      "full_model_rehashed": false
+    },
+    {
+      "model_key": "qwen38_gpu",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf",
+      "frozen_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+      "header_architecture": "qwen35",
+      "bytes_read_prefix": 70,
+      "full_model_rehashed": false
+    }
+  ],
+  "read_source_refs": [
+    {
+      "path": "src/heterollm_sim/final_layer_output_selection.py",
+      "sha256": "e40ea6150727fb0e0c74abab4dad0a67c89fc75516fade9f08c3fef590c2aaf2"
+    },
+    {
+      "path": "src/heterollm_sim/gguf_parity.py",
+      "sha256": "0e7087e29e07db38b0c879f81b6efbf9521386cf0da4f9db1f2d1c6d61b09dfb"
+    },
+    {
+      "path": "src/heterollm_sim/ir.py",
+      "sha256": "90bcc803f37db1a3a15de6b49983a7a3987aaf1d1efdfdfdb135d96011bd2373"
+    },
+    {
+      "path": "src/heterollm_sim/planner.py",
+      "sha256": "1cede3929d3193365b856adae150e90f9f76a56a5cda47e7017a8d6eb164a89e"
+    },
+    {
+      "path": "src/heterollm_sim/llama_gpu_invocations.py",
+      "sha256": "cf703b50109540789f59d09958903fc0894a8dcfde9c1eca90c5f27bc62fc2b4"
+    },
+    {
+      "path": "source/llama.cpp-semantic/src/models/qwen2.cpp",
+      "sha256": "1a9583580e9d753d60cfa45e5697a243d225aeaa0bf2d834946723aef0516287"
+    },
+    {
+      "path": "source/llama.cpp-semantic/src/models/llama.cpp",
+      "sha256": "b005c4aaf126b4dd86c65ccbd39a978deb44a962d4539577376092aee1442503"
+    },
+    {
+      "path": "source/llama.cpp-semantic/src/models/qwen35.cpp",
+      "sha256": "c277c0fbef003f268f4ebd539e08afbf3bbd539aa713f29c33319960d98abf4c"
+    },
+    {
+      "path": "source/llama.cpp-semantic/src/llama-graph.cpp",
+      "sha256": "a6a8241c2d149961801d0fdeaa68f1bb176297b4d5156b6138db0b3d169abb04"
+    },
+    {
+      "path": "source/llama.cpp-semantic/src/llama-model.cpp",
+      "sha256": "94ede4e7ac8119c5a4d2fad97e3432008ec7d30b42ab37395db6e2a8047d1984"
+    },
+    {
+      "path": "source/llama.cpp-semantic/build-semantic-direct/src/CMakeFiles/llama.dir/Unity/unity_4_cxx.cxx",
+      "sha256": "b6f254ec4e6384af38cbfd9022d73d9669e87430bc9ef7566ba242f81c56125f"
+    },
+    {
+      "path": "source/llama.cpp-semantic/build-semantic-direct/src/CMakeFiles/llama.dir/Unity/unity_7_cxx.cxx",
+      "sha256": "1e9e81aa7579f4cf3741566d17306165582ddf9e11a720eb9734bd7e8c0003c7"
+    }
+  ],
+  "source_declaration": {
+    "schema_version": "heterollm.llama-final-layer-output-selection/v1",
+    "backend_commit": "0f3a71be15af836d277c9f918adfafb45732677e",
+    "request_kind": "completion",
+    "explicit_logits": true,
+    "embeddings": false,
+    "embeddings_nextn_masked": false,
+    "speculative_type": "none"
+  },
+  "source_declaration_canonical_sha256": "531fc6328c9076ebd614cac2516d51c03f78411b08ee1abaeb5d7fa797fbab74",
+  "source_declaration_contains_source_hashes": false,
+  "historical_architecture_include_source_provenance": "conditional: inherited unity object identities are recorded, but base/annotation receipts do not record hashes of included models/qwen2.cpp, models/llama.cpp or models/qwen35.cpp"
+}
