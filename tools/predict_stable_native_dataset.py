@@ -29,6 +29,8 @@ import shutil
 import statistics
 import subprocess
 import sys
+import threading
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 for import_root in (ROOT, ROOT / "src"):
@@ -2901,15 +2903,92 @@ def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, d
     grid.write_new(result_path, prediction_document(entry, prediction, freeze, freeze_ref, started))
 
 
+def _worker_result_valid(record, entry, freeze, freeze_ref):
+    if (record.get("schema") != "stable-native-cell-prediction/v1"
+            or record.get("cell_id") != entry["cell_id"]
+            or record.get("freeze_ref") != freeze_ref
+            or record.get("source_sha256") != freeze["source"]["sha256"]
+            or record.get("selection_sha256") != freeze["selection_sha256"]
+            or record.get("status") not in ("predicted", "failed", "incomplete")
+            or record.get("model_key") != entry.get("model_key")
+            or record.get("deployment") != entry.get("deployment")):
+        raise ValueError("worker prediction identity/status differs")
+    if any(record.get(k) is not False for k in ("native_answers_used", "calibration_applied", "formal_prediction_eligible")):
+        raise ValueError("worker prediction provenance differs")
+    identity = record.get("input_identity")
+    if not (identity == entry["static_inputs"] or isinstance(identity, Mapping)
+            and identity.get("static_inputs_sha256") == grid.stable_hash(entry["static_inputs"])):
+        raise ValueError("worker static input identity differs")
+    if record["status"] == "predicted":
+        for metric in METRICS:
+            positive(record.get("aggregate", {}).get(metric, {}).get("median_ms"), metric)
+    elif not isinstance(record.get("reason"), str) or not record["reason"]:
+        raise ValueError("failed/incomplete worker result requires a reason")
+
+
+def verify_worker_execution(record, result_path):
+    """Verify a new natural-exit terminal; historical records without refs stay readable."""
+    evidence = record.get("worker_execution_ref")
+    if evidence is None:
+        return None
+    verify_refs([evidence])
+    execution, execution_ref = grid.read_document(evidence["path"])
+    if execution_ref != evidence or execution.get("schema") != "stable-native-worker-execution/v1":
+        raise ValueError("worker execution receipt differs")
+    if (execution.get("freeze_ref") != record.get("freeze_ref")
+            or execution.get("cell_id") != record.get("cell_id")
+            or Path(execution["official_result_path"]).resolve() != Path(result_path).resolve()
+            or execution.get("published_status") != record.get("status")
+            or execution.get("wait_policy") != "natural_exit_soft_observation"
+            or execution.get("hard_time_limit_enforced") is not False):
+        raise ValueError("worker execution/terminal binding differs")
+    if execution.get("spawned") is True:
+        if execution.get("natural_exit_observed") is not True or type(execution.get("returncode")) is not int:
+            raise ValueError("worker exit unresolved")
+    elif execution.get("spawned") is not False or record.get("status") != "failed":
+        raise ValueError("unspawned attempt cannot be a successful result")
+    if record.get("status") == "predicted" and (execution.get("returncode") != 0 or execution.get("result_identity_valid") is not True):
+        raise ValueError("nonzero/invalid worker cannot be scored")
+    for key in ("attempt_ref", "child_ref", "raw_result_ref", "soft_deadline_ref"):
+        if execution.get(key) is not None:
+            verify_refs([execution[key]])
+    if record.get("status") == "predicted":
+        if execution.get("raw_result_ref") is None or execution.get("child_ref") is None:
+            raise ValueError("successful result lacks raw/child evidence")
+        raw, _ = grid.read_document(execution["raw_result_ref"]["path"])
+        if {k:v for k,v in record.items() if k not in ("worker_execution_ref", "content_sha256")} != {k:v for k,v in raw.items() if k != "content_sha256"}:
+            raise ValueError("published prediction differs from retained raw result")
+    seal_path = Path(evidence["path"]).with_name("sealed.json")
+    seal, _ = grid.read_document(seal_path)
+    if seal.get("execution_ref") != evidence or seal.get("prediction_ref") != grid.file_ref(result_path):
+        raise ValueError("worker terminal not sealed or changed")
+    return execution
+
+
+def _verify_attempts(run_dir, result_dir):
+    # An unresolved launch remains a blocker even if someone removes a stale lock.
+    for attempt in (run_dir / "attempts").glob("*"):
+        if not attempt.is_dir():
+            raise ValueError("unexpected worker attempt path")
+        start, _ = grid.read_document(attempt / "start.json")
+        result_path = result_dir / (start["cell_id"] + ".prediction.json")
+        if not (attempt / "sealed.json").is_file() or not result_path.is_file():
+            raise ValueError("live/unresolved worker attempt blocks resume: " + start["cell_id"])
+        record, _ = grid.read_document(result_path)
+        execution = verify_worker_execution(record, result_path)
+        if execution is None or execution.get("attempt_ref") != grid.file_ref(attempt / "start.json"):
+            raise ValueError("attempt seal has no matching execution")
+
+
 def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None, workers=4, cell_ids=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT):
-    """One coordinator owns a bounded queue of independent, disposable workers."""
+    """Bound concurrent workers; elapsed time is observation only, never termination."""
     workers = integer(workers, "workers")
     integer(diagnostic_event_limit, "diagnostic event limit")
     if diagnostic_event_limit > 20000:
         raise ValueError("diagnostic event limit must not exceed 20000")
     if workers > 8:
         raise ValueError("workers must not exceed 8")
-    timeout_seconds = positive(timeout_seconds, "per-cell timeout")
+    observation_seconds = positive(timeout_seconds, "soft observation deadline")
     if max_cells is not None:
         integer(max_cells, "max_cells")
     output = Path(output).resolve(strict=True)
@@ -2921,19 +3000,17 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
         if not isinstance(cell_ids, (list, tuple)) or any(not isinstance(cell, str) for cell in cell_ids):
             raise ValueError("cell_ids must be a list of frozen cell IDs")
         requested_ids = list(dict.fromkeys(cell_ids))
-        unknown = set(requested_ids) - {entry["cell_id"] for entry in freeze["cells"]}
-        if unknown:
-            raise ValueError("cell-id is outside frozen selection: " + ", ".join(sorted(unknown)))
+        if set(requested_ids) - {entry["cell_id"] for entry in freeze["cells"]}:
+            raise ValueError("cell-id is outside frozen selection")
     result_dir, run_dir = output / "predictions", output / "runs"
-    result_dir.mkdir(exist_ok=True)
-    run_dir.mkdir(exist_ok=True)
+    result_dir.mkdir(exist_ok=True); run_dir.mkdir(exist_ok=True)
+    _verify_attempts(run_dir, result_dir)
     executable = Path(freeze["source"]["root"]) / "tools/predict_stable_native_dataset.py"
     lock_path = run_dir / "coordinator.lock"
-    # This transient coordination lock is separate from immutable inputs/results.
-    # It is intentionally never stolen: an interrupted parent must first stop
-    # its child processes before the stale lock can be removed explicitly.
     with lock_path.open("x", encoding="utf-8") as lock:
-        lock.write(str(os.getpid()))
+        json.dump({"pid": os.getpid(), "created_utc": now(), "freeze_ref": freeze_ref}, lock)
+    drained_and_sealed = False
+    stop_launch = threading.Event()
     try:
         pending, retained = [], []
         for entry in freeze["cells"]:
@@ -2942,86 +3019,143 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
                 if not resume:
                     raise FileExistsError("existing cell output requires --resume")
                 document, reference = grid.read_document(path)
-                if document.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]:
-                    raise ValueError("existing prediction belongs to another freeze")
+                _worker_result_valid(document, entry, freeze, freeze_ref)
+                verify_worker_execution(document, path)
                 retained.append(reference)
             elif requested_ids is None or entry["cell_id"] in requested_ids:
                 pending.append(entry)
         scheduled = pending if max_cells is None else pending[:max_cells]
-        run_number = len(list(run_dir.glob("run.*.start.json"))) + 1
-        run_id = f"run.{run_number:04d}"
-        receipt = {"schema": "stable-native-prediction-run/v1", "phase": "start",
-            "created_utc": now(), "run_id": run_id, "freeze_ref": freeze_ref,
-            "source_sha256": freeze["source"]["sha256"], "selection_sha256": freeze["selection_sha256"],
-            "execution_budget": {"workers": workers, "maximum_workers": 8,
-                "per_cell_timeout_seconds": timeout_seconds, "max_cells": max_cells,
-                "scheduled_cells": len(scheduled),
-                "nominal_timeout_rounds_seconds": math.ceil(len(scheduled) / workers) * timeout_seconds},
+        run_id = "run.%04d" % (len(list(run_dir.glob("run.*.start.json"))) + 1)
+        budget = {"workers": workers, "maximum_workers": 8,
+            "per_cell_soft_observation_seconds": observation_seconds,
+            "hard_time_limit_enforced": False, "wait_policy": "natural_exit_soft_observation",
+            "late_results": "scoreable_only_after_natural_exit0_and_complete_identity",
+            "max_cells": max_cells, "scheduled_cells": len(scheduled)}
+        receipt = {"schema": "stable-native-prediction-run/v1", "phase": "start", "created_utc": now(),
+            "run_id": run_id, "freeze_ref": freeze_ref, "source_sha256": freeze["source"]["sha256"],
+            "selection_sha256": freeze["selection_sha256"], "execution_budget": budget,
             "resume": resume, "cell_id_filter": requested_ids,
-            "diagnostics": {"events": diagnostic_events, "event_limit": diagnostic_event_limit, "event_max_bytes": DIAGNOSTIC_EVENT_MAX_BYTES}, "retained_prediction_refs": retained,
-            "scheduled_cell_ids": [entry["cell_id"] for entry in scheduled],
-            "selected_denominator": freeze["selected_denominator"],
-            "python_executable": sys.executable, "coordinator_pid": os.getpid()}
+            "diagnostics": {"events": diagnostic_events, "event_limit": diagnostic_event_limit, "event_max_bytes": DIAGNOSTIC_EVENT_MAX_BYTES},
+            "retained_prediction_refs": retained, "scheduled_cell_ids": [e["cell_id"] for e in scheduled],
+            "selected_denominator": freeze["selected_denominator"], "python_executable": sys.executable, "coordinator_pid": os.getpid()}
         start_ref = grid.write_new(run_dir / (run_id + ".start.json"), receipt)
 
         def execute(entry):
             result_path = result_dir / (entry["cell_id"] + ".prediction.json")
-            started = now()
-            log_path = result_dir / (entry["cell_id"] + "." + run_id + ".worker.log")
+            attempt = run_dir / "attempts" / grid.stable_hash({"cell_id": entry["cell_id"]})
+            attempt.mkdir(parents=True, exist_ok=False)
+            raw_path = attempt / "worker-result.json"
+            command = [sys.executable, str(executable), "--worker-freeze", str(freeze_path),
+                "--worker-cell", entry["cell_id"], "--worker-result", str(raw_path)]
+            if diagnostic_events:
+                command += ["--diagnostic-events", "--diagnostic-event-limit", str(diagnostic_event_limit)]
+            started = now(); clock = time.monotonic()
+            attempt_ref = grid.write_new(attempt / "start.json", {"schema": "stable-native-worker-attempt/v1",
+                "cell_id": entry["cell_id"], "run_id": run_id, "created_utc": started,
+                "freeze_ref": freeze_ref, "command": command, "raw_result_path": str(raw_path),
+                "official_result_path": str(result_path), "execution_budget": budget})
+            child = None; child_ref = None; deadline_ref = None; code = None; interruptions = 0; error = None
             try:
-                with log_path.open("x", encoding="utf-8") as log:
-                    command = [sys.executable, str(executable), "--worker-freeze", str(freeze_path),
-                        "--worker-cell", entry["cell_id"], "--worker-result", str(result_path)]
-                    if diagnostic_events:
-                        command += ["--diagnostic-events", "--diagnostic-event-limit", str(diagnostic_event_limit)]
-                    completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=timeout_seconds, check=False)
-                if completed.returncode or not result_path.exists():
-                    raise RuntimeError(f"worker exited {completed.returncode}; see {log_path.name}")
+                with (attempt / "worker.log").open("x", encoding="utf-8") as log:
+                    child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+                    child_ref = grid.write_new(attempt / "child.json", {"pid": child.pid, "created_utc": now(),
+                        "attempt_ref": attempt_ref, "command": command})
+                    remaining = observation_seconds
+                    while True:
+                        try:
+                            code = child.wait(timeout=remaining)
+                            break
+                        except subprocess.TimeoutExpired:
+                            deadline_ref = grid.write_new(attempt / "soft-deadline.json", {"schema":"stable-native-soft-deadline/v1",
+                                "created_utc":now(), "attempt_ref":attempt_ref, "pid":child.pid,
+                                "elapsed_seconds":time.monotonic()-clock, "observation_seconds":observation_seconds,
+                                "hard_time_limit_enforced":False, "action":"continue_waiting_for_natural_exit"})
+                            remaining = None
+                        except KeyboardInterrupt:
+                            stop_launch.set(); interruptions += 1
+                            grid.write_new(attempt / ("observation-interrupted.%04d.json" % interruptions),
+                                {"created_utc":now(),"pid":child.pid,"action":"stop_new_launches_wait_for_natural_exit"})
+                            remaining = None if deadline_ref is not None else max(0, observation_seconds-(time.monotonic()-clock))
+            except BaseException as exc:
+                stop_launch.set()
+                if child is not None and child.poll() is None:
+                    grid.write_new(attempt / "unresolved.json", {"created_utc":now(),"pid":child.pid,
+                        "reason":type(exc).__name__+": "+str(exc),"action":"retain_lock_and_attempt_no_retry_no_termination"})
+                    raise
+                code = child.returncode if child is not None else None
+                error = type(exc).__name__ + ": " + str(exc)
+            raw_ref = grid.file_ref(raw_path) if raw_path.exists() else None
+            valid = False; record = None
+            try:
+                if error is not None:raise RuntimeError(error)
+                if code != 0:raise RuntimeError("worker naturally exited nonzero: " + str(code))
+                if raw_ref is None:raise RuntimeError("worker naturally exited without a result")
+                record, _ = grid.read_document(raw_path)
+                _worker_result_valid(record, entry, freeze, freeze_ref)
+                valid = True
             except Exception as exc:
-                if not result_path.exists():
-                    grid.write_new(result_path, prediction_document(entry,
-                        failure(entry, type(exc).__name__ + ": " + str(exc)), freeze, freeze_ref, started))
-            record, reference = grid.read_document(result_path)
-            if record.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]:
-                raise ValueError("worker prediction belongs to another freeze")
-            return {"cell_id": entry["cell_id"], "status": record["status"], "prediction_ref": reference}
+                record = prediction_document(entry, failure(entry, type(exc).__name__ + ": " + str(exc)), freeze, freeze_ref, started)
+            elapsed = time.monotonic() - clock
+            execution_ref = grid.write_new(attempt / "execution.json", {"schema":"stable-native-worker-execution/v1",
+                "created_utc":now(),"cell_id":entry["cell_id"],"freeze_ref":freeze_ref,
+                "attempt_ref":attempt_ref,"child_ref":child_ref,"raw_result_ref":raw_ref,"soft_deadline_ref":deadline_ref,
+                "official_result_path":str(result_path),"spawned":child is not None,"returncode":code,
+                "natural_exit_observed":child is not None and child.poll() is not None,
+                "result_identity_valid":valid,"published_status":record["status"],
+                "wait_policy":"natural_exit_soft_observation","hard_time_limit_enforced":False,
+                "observation_seconds":observation_seconds,"elapsed_seconds":elapsed,
+                "late":deadline_ref is not None or elapsed>observation_seconds,"observation_interruptions":interruptions})
+            record = {**{k:v for k,v in record.items() if k != "content_sha256"},"worker_execution_ref":execution_ref}
+            reference = grid.write_new(result_path, record)
+            grid.write_new(attempt / "sealed.json", {"execution_ref":execution_ref,"prediction_ref":reference,"created_utc":now()})
+            return {"cell_id":entry["cell_id"],"status":record["status"],"prediction_ref":reference,
+                "late":deadline_ref is not None or elapsed>observation_seconds,"elapsed_seconds":elapsed}
 
-        completed_by_id = {}
-        iterator = iter(scheduled)
+        completed_by_id = {}; iterator = iter(scheduled); observation_interruptions = 0
         with ThreadPoolExecutor(max_workers=workers) as pool:
             in_flight = {}
             for _ in range(min(workers, len(scheduled))):
-                entry = next(iterator)
-                in_flight[pool.submit(execute, entry)] = entry["cell_id"]
+                entry = next(iterator); in_flight[pool.submit(execute, entry)] = entry["cell_id"]
             while in_flight:
-                ready, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+                try:
+                    ready, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+                except KeyboardInterrupt:
+                    stop_launch.set(); observation_interruptions += 1
+                    grid.write_new(run_dir / (run_id+".observation-interrupted.%04d.json"%observation_interruptions),
+                        {"created_utc":now(),"action":"stop_new_launches_wait_for_started_workers","active_cells":list(in_flight.values())})
+                    continue
                 for future in ready:
                     cell_id = in_flight.pop(future)
-                    record = future.result()
+                    try:record = future.result()
+                    except BaseException:
+                        stop_launch.set()
+                        raise
                     completed_by_id[cell_id] = record
                     print(f"[{len(completed_by_id)}/{len(scheduled)}] {cell_id}: {record['status']}", flush=True)
-                    entry = next(iterator, None)
-                    if entry is not None:
-                        in_flight[pool.submit(execute, entry)] = entry["cell_id"]
-        # Receipts/manifests use selection order, independent of completion order.
-        ordered = [completed_by_id[entry["cell_id"]] for entry in scheduled]
+                    entry = None if stop_launch.is_set() else next(iterator, None)
+                    if entry is not None:in_flight[pool.submit(execute, entry)] = entry["cell_id"]
+        _verify_attempts(run_dir, result_dir)
+        for ref in retained:verify_refs([ref])
+        ordered = [completed_by_id[e["cell_id"]] for e in scheduled if e["cell_id"] in completed_by_id]
         manifest = finish_manifest(output)
-        grid.write_new(run_dir / (run_id + ".finish.json"), {
-            "schema": "stable-native-prediction-run/v1", "phase": "finish", "created_utc": now(),
-            "run_id": run_id, "start_ref": start_ref, "freeze_ref": freeze_ref,
-            "execution_budget": receipt["execution_budget"], "cells": ordered,
-            "successful_cells": sum(r["status"] == "predicted" for r in ordered),
-            "failed_or_incomplete_cells": sum(r["status"] != "predicted" for r in ordered),
-            "pending_cells": manifest["pending_cells"], "selected_denominator": freeze["selected_denominator"]})
+        grid.write_new(run_dir / (run_id + ".finish.json"), {"schema":"stable-native-prediction-run/v1","phase":"finish",
+            "created_utc":now(),"run_id":run_id,"start_ref":start_ref,"freeze_ref":freeze_ref,"execution_budget":budget,"cells":ordered,
+            "successful_cells":sum(r["status"]=="predicted" for r in ordered),
+            "failed_or_incomplete_cells":sum(r["status"]!="predicted" for r in ordered),
+            "late_cells":sum(r["late"] for r in ordered),"maximum_observed_wait_seconds":max((r["elapsed_seconds"] for r in ordered),default=0),
+            "launches_stopped_after_observation_interrupt":stop_launch.is_set(),"pending_cells":manifest["pending_cells"],
+            "selected_denominator":freeze["selected_denominator"],"all_started_workers_exited_and_sealed":True})
+        drained_and_sealed = True
         return manifest
     finally:
-        lock_path.unlink(missing_ok=True)
+        if drained_and_sealed:lock_path.unlink()
 
 
 def finish_manifest(output):
     output = Path(output)
     freeze, freeze_ref = grid.read_document(output / "freeze.json")
     verify_freeze_references(freeze)
+    _verify_attempts(output / "runs", output / "predictions")
     entries = []
     for entry in freeze["cells"]:
         path = output / "predictions" / (entry["cell_id"] + ".prediction.json")
@@ -3133,6 +3267,9 @@ def score_predictions(output, *, native_report=None):
     """Independent actual comparison; never invokes or alters predictions."""
     output = Path(output).resolve(strict=True)
     freeze, freeze_ref = grid.read_document(output / "freeze.json")
+    if (output / "runs/coordinator.lock").exists():
+        raise ValueError("active/unresolved coordinator blocks scoring")
+    _verify_attempts(output / "runs", output / "predictions")
     # A second file is permitted only when it is byte-identical to the frozen
     # selection; matching cell IDs never authorize replacement ground truth.
     native_report = native_report or freeze["selection_ref"]["path"]
@@ -3146,7 +3283,11 @@ def score_predictions(output, *, native_report=None):
         prediction, prediction_ref = grid.read_document(path) if path.exists() else ({}, None)
         if prediction and prediction.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]:
             raise ValueError("prediction freeze mismatch at scoring")
+        execution = verify_worker_execution(prediction, path) if prediction else None
         scored = {"cell_id": ident, "model_key": entry.get("model_key"), "deployment": entry.get("deployment"), "prediction_ref": prediction_ref, "metrics": {}}
+        if execution is not None:
+            scored["execution_observation"] = {key: execution[key] for key in (
+                "wait_policy", "hard_time_limit_enforced", "late", "elapsed_seconds", "returncode", "natural_exit_observed")}
         for metric in METRICS:
             try:
                 if prediction.get("status") != "predicted":
@@ -3227,7 +3368,7 @@ def main(argv=None):
     parser.add_argument("--model-snapshot-map", type=Path, help="JSON object mapping native model paths to byte-identical prediction copy paths; initial freeze only")
     parser.add_argument("--freeze-only", action="store_true")
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--timeout-seconds", type=float, default=600)
+    parser.add_argument("--timeout-seconds", type=float, default=600, help="soft observation deadline; workers always exit naturally")
     parser.add_argument("--max-cells", type=int)
     parser.add_argument("--cell-id", action="append", help="run only these frozen IDs this time; repeat for multiple cells")
     parser.add_argument("--workers", type=int, default=4, help="independent cell processes; 1..8, default 4")

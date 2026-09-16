@@ -2209,10 +2209,26 @@
       "chain": "validated_1_4_16",
       "fanout": "validated_1_4_16",
       "timing_coefficients": 0
+    },
+    "service": {
+      "completed": 1,
+      "planned": 10,
+      "first_process_validated": true,
+      "CPU_precision": "unvalidated",
+      "timing_parameters": 0,
+      "short_submit_wall_per_kernel_ns_range": [
+        1713.96484375,
+        1796.875
+      ],
+      "long_submit_wall_per_kernel_ns_range": [
+        3867.7978515625,
+        4354.693603515625
+      ],
+      "notes": "single process diagnostic only; enqueue wall is not calling-thread service; no parameter fitting"
     }
   },
   "round_030_preparation": {
-    "status": "candidate_implemented_reviewed_not_frozen",
+    "status": "source_and_natural_exit_reviewed_ready_for_freeze",
     "source_base": "round_027/on",
     "source_replacements": [
       "src/heterollm_sim/cost_models.py",
@@ -2229,6 +2245,14 @@
       "related_pass": 289,
       "optional_skip": 1,
       "final_specific_pass": 113
+    },
+    "lifecycle": {
+      "tests_passed": 180,
+      "independent_fake_tests_passed": 9,
+      "soft_observation_seconds": 600,
+      "hard_kill_policy": false,
+      "existing_terminal_retry": false,
+      "unresolved_attempt_blocks_resume": true
     }
   },
   "round_029_preparation": {
@@ -2238,5 +2262,29 @@
     "Cpp_host_tests": 66,
     "static_matching_cells": 45,
     "cost_parameters": 0
+  },
+  "round_029_result": {
+    "status": "fixed_shape_target_path_and_numeric_qualified_cost_unmeasured",
+    "finish_ref": {
+      "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_029/q4k_operator_probe/runs/capture.0001/finish.json",
+      "sha256": "799c31c656d3d2616466900a17900fff244860298dd8e020091104ef3ccc1fd4",
+      "bytes": 35900
+    },
+    "numeric": {
+      "Q8_byte_mismatches": 0,
+      "outputs": 2048,
+      "failed": 0,
+      "max_absolute_error": 4.76837158203125e-7,
+      "max_error_bound_fraction": 0.000008530026957980784
+    },
+    "path_verified": true,
+    "cache_layout_in_native_LLM": "unvalidated",
+    "cost_parameters": 0
+  },
+  "graph_lifecycle_audit": {
+    "fixed_native_cuda_graphs": false,
+    "cuda_graph_direct_launch_semantics": "already_covered",
+    "llama_cpu_graph_reuse_rebuild": "not separately priced",
+    "scope": "source audit only; no target LLM latency fit"
   }
 }

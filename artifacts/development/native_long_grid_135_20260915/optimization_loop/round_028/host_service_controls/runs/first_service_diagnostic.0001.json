@@ -1,0 +1,164 @@
+{
+  "schema": "r28-first-service-diagnostic/v1",
+  "created_utc": "2026-09-16T22:30:35.607Z",
+  "processes_completed": 1,
+  "processes_planned": 10,
+  "raw_ref": {
+    "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_028/host_service_controls/runs/service_direct_chain.0001/record.json",
+    "sha256": "d0db4ace5f2fc816f07db7dfc65e2cad3c094da4dd1f85bda3ace79fc57be9ca",
+    "bytes": 959121
+  },
+  "cases": [
+    {
+      "nodes": 1,
+      "groups": 32,
+      "kernels": 32,
+      "submit_ms": 0.0575,
+      "submit_wall_per_kernel_ns": 1796.875,
+      "submit_wall_CV_pct": 6.039212764998076,
+      "busy_sync_ms": 0.0783,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 0,
+      "samples": 31
+    },
+    {
+      "nodes": 1,
+      "groups": 128,
+      "kernels": 128,
+      "submit_ms": 0.2266,
+      "submit_wall_per_kernel_ns": 1770.3125,
+      "submit_wall_CV_pct": 11.876478796031599,
+      "busy_sync_ms": 0.264,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 0,
+      "samples": 31
+    },
+    {
+      "nodes": 1,
+      "groups": 512,
+      "kernels": 512,
+      "submit_ms": 0.887,
+      "submit_wall_per_kernel_ns": 1732.421875,
+      "submit_wall_CV_pct": 5.7242509254927025,
+      "busy_sync_ms": 1.052,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 0,
+      "samples": 31
+    },
+    {
+      "nodes": 1,
+      "groups": 2048,
+      "kernels": 2048,
+      "submit_ms": 3.5102,
+      "submit_wall_per_kernel_ns": 1713.96484375,
+      "submit_wall_CV_pct": 4.225221080736366,
+      "busy_sync_ms": 4.7558,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 6,
+      "samples": 31
+    },
+    {
+      "nodes": 4,
+      "groups": 32,
+      "kernels": 128,
+      "submit_ms": 0.2249,
+      "submit_wall_per_kernel_ns": 1757.03125,
+      "submit_wall_CV_pct": 5.775220340473948,
+      "busy_sync_ms": 0.2658,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 0,
+      "samples": 31
+    },
+    {
+      "nodes": 4,
+      "groups": 128,
+      "kernels": 512,
+      "submit_ms": 0.8807,
+      "submit_wall_per_kernel_ns": 1720.1171875,
+      "submit_wall_CV_pct": 8.873212696609686,
+      "busy_sync_ms": 1.0288,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 2,
+      "samples": 31
+    },
+    {
+      "nodes": 4,
+      "groups": 512,
+      "kernels": 2048,
+      "submit_ms": 3.5907,
+      "submit_wall_per_kernel_ns": 1753.271484375,
+      "submit_wall_CV_pct": 6.721763857051181,
+      "busy_sync_ms": 4.8172,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 7,
+      "samples": 31
+    },
+    {
+      "nodes": 4,
+      "groups": 2048,
+      "kernels": 8192,
+      "submit_ms": 31.685,
+      "submit_wall_per_kernel_ns": 3867.7978515625,
+      "submit_wall_CV_pct": 13.381667660112809,
+      "busy_sync_ms": 4.1017,
+      "accounting_median_ms": 15.625,
+      "nonzero_CPU_accounting_samples": 19,
+      "samples": 31
+    },
+    {
+      "nodes": 16,
+      "groups": 32,
+      "kernels": 512,
+      "submit_ms": 0.8978,
+      "submit_wall_per_kernel_ns": 1753.515625,
+      "submit_wall_CV_pct": 3.7602053197588985,
+      "busy_sync_ms": 1.0611,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 0,
+      "samples": 31
+    },
+    {
+      "nodes": 16,
+      "groups": 128,
+      "kernels": 2048,
+      "submit_ms": 3.6048,
+      "submit_wall_per_kernel_ns": 1760.15625,
+      "submit_wall_CV_pct": 6.566441865721338,
+      "busy_sync_ms": 4.6789,
+      "accounting_median_ms": 0,
+      "nonzero_CPU_accounting_samples": 4,
+      "samples": 31
+    },
+    {
+      "nodes": 16,
+      "groups": 512,
+      "kernels": 8192,
+      "submit_ms": 31.7852,
+      "submit_wall_per_kernel_ns": 3880.029296875,
+      "submit_wall_CV_pct": 12.09873324341165,
+      "busy_sync_ms": 5.7694,
+      "accounting_median_ms": 15.625,
+      "nonzero_CPU_accounting_samples": 19,
+      "samples": 31
+    },
+    {
+      "nodes": 16,
+      "groups": 2048,
+      "kernels": 32768,
+      "submit_ms": 142.6946,
+      "submit_wall_per_kernel_ns": 4354.693603515625,
+      "submit_wall_CV_pct": 3.401808114745182,
+      "busy_sync_ms": 4.1158,
+      "accounting_median_ms": 62.5,
+      "nonzero_CPU_accounting_samples": 27,
+      "samples": 31
+    }
+  ],
+  "cost_parameters_admitted": 0,
+  "limitations": [
+    "one process; no held-out topology timing",
+    "QPC submit wall may include waiting and backpressure",
+    "thread CPU accounting is coarse and not a microsecond service meter",
+    "no discarded samples and no LLM latency fitted"
+  ]
+}
