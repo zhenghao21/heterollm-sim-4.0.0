@@ -1,0 +1,56 @@
+{
+  "created_utc": "2026-09-16T16:24:50.513911+00:00",
+  "refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\run_candidate.py",
+      "sha256": "e412ff5a404a1f7adf0c34ba43a565e0843199a17dbc2bbdf9741ff4138a2d02",
+      "bytes": 7126
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\freeze_candidate.py",
+      "sha256": "179e2a362fe1566eca8e5ed15cedb96d7ab1102a532291c991a24c99245cd0b3",
+      "bytes": 6461
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\protocol.json",
+      "sha256": "2d30f12444ea75fd62afc91f870b8d23ebf9c90ed65d8e64fa40a2c6e1b34912",
+      "bytes": 53716
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\freeze_receipt.json",
+      "sha256": "ebbc346505451e643c1e637f152168d7c564aa8e7aac41f006ea15ebd6b4feed",
+      "bytes": 1420
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\summarize_ablation.py",
+      "sha256": "fa2ce1fe89439f434ff67ccea7d079fe826509ebd7908b070af08143048379a0",
+      "bytes": 46563
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\evaluate_candidate.py",
+      "sha256": "526378e3b8c8e110f3205138ff09c35b8a63ab3cace58e235da9f5cafa047d2f",
+      "bytes": 14406
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\verify_fixed_native.py",
+      "sha256": "ed8580608ec9d6269ed6ded0ef3657d8ad672bfe1c2c8ab9c5cc107b2c9aa66d",
+      "bytes": 3676
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\off\\freeze.json",
+      "sha256": "88f08e04f3d26c59aec0e5b71abfe6bfb5ae2561b765213e56d873fbd4bf0051",
+      "bytes": 47875629
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\on\\freeze.json",
+      "sha256": "3e7891d49eb62de4cd4296870ecd2d0b50c1efacfe6ca713ee5209216841ed0f",
+      "bytes": 53021061
+    }
+  ],
+  "denominator": 131,
+  "arms": [
+    "off",
+    "on"
+  ],
+  "strict_threshold_pct": 10
+}
