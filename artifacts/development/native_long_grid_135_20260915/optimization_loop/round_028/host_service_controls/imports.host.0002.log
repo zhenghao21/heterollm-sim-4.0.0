@@ -1,0 +1,146 @@
+
+Dump of file F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\artifacts\development\native_long_grid_135_20260915\optimization_loop\round_028\host_service_controls\host-service-logic-tests.0002.exe
+
+File Type: EXECUTABLE IMAGE
+
+  Section contains the following imports:
+
+    MSVCP140.dll
+             140003070 Import Address Table
+             140003DA8 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                         4C5 ?setstate@?$basic_ios@DU?$char_traits@D@std@@@std@@QEAAXH_N@Z
+                         2B4 ?cout@std@@3V?$basic_ostream@DU?$char_traits@D@std@@@1@A
+                         368 ?flush@?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAAAEAV12@XZ
+                         244 ?_Osfx@?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAAXXZ
+                         361 ?fill@?$basic_ios@DU?$char_traits@D@std@@@std@@QEBADXZ
+                         487 ?rdbuf@?$basic_ios@DU?$char_traits@D@std@@@std@@QEBAPEAV?$basic_streambuf@DU?$char_traits@D@std@@@2@XZ
+                         50A ?tie@?$basic_ios@DU?$char_traits@D@std@@@std@@QEBAPEAV?$basic_ostream@DU?$char_traits@D@std@@@2@XZ
+                         51E ?uncaught_exception@std@@YA_NXZ
+                         4E1 ?sputn@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QEAA_JPEBD_J@Z
+                         4DE ?sputc@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QEAAHD@Z
+                         53D ?width@ios_base@std@@QEAA_J_J@Z
+                         53E ?width@ios_base@std@@QEBA_JXZ
+                         367 ?flags@ios_base@std@@QEBAHXZ
+                         3C5 ?good@ios_base@std@@QEBA_NXZ
+
+    KERNEL32.dll
+             140003000 Import Address Table
+             140003D38 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                         452 QueryPerformanceCounter
+                         281 GetModuleHandleW
+                         38C IsProcessorFeaturePresent
+                         580 SetUnhandledExceptionFilter
+                         5C1 UnhandledExceptionFilter
+                         385 IsDebuggerPresent
+                         4E4 RtlVirtualUnwind
+                         4DD RtlLookupFunctionEntry
+                         4D6 RtlCaptureContext
+                         36F InitializeSListHead
+                         2F3 GetSystemTimeAsFileTime
+                         225 GetCurrentThreadId
+                         221 GetCurrentProcessId
+
+    VCRUNTIME140.dll
+             1400030E8 Import Address Table
+             140003E20 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          23 __std_terminate
+                          21 __std_exception_copy
+                          22 __std_exception_destroy
+                           1 _CxxThrowException
+                          3E memset
+                           8 __C_specific_handler
+                          1B __current_exception
+                          1C __current_exception_context
+                          3C memcpy
+
+    VCRUNTIME140_1.dll
+             140003138 Import Address Table
+             140003E70 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                           0 __CxxFrameHandler4
+
+    api-ms-win-crt-string-l1-1-0.dll
+             140003230 Import Address Table
+             140003F68 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          8B strlen
+
+    api-ms-win-crt-runtime-l1-1-0.dll
+             140003180 Import Address Table
+             140003EB8 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          37 _initterm_e
+                          55 exit
+                          23 _exit
+                          36 _initterm
+                           4 __p___argc
+                           5 __p___argv
+                          28 _get_initial_narrow_environment
+                          15 _c_exit
+                          33 _initialize_narrow_environment
+                          3D _register_thread_local_exe_atexit_callback
+                          18 _configure_narrow_argv
+                          42 _set_app_type
+                          40 _seh_filter_exe
+                          34 _initialize_onexit_table
+                          3C _register_onexit_function
+                          1E _crt_atexit
+                          67 terminate
+                          16 _cexit
+
+    api-ms-win-crt-math-l1-1-0.dll
+             140003170 Import Address Table
+             140003EA8 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                           9 __setusermatherr
+
+    api-ms-win-crt-stdio-l1-1-0.dll
+             140003218 Import Address Table
+             140003F50 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                           1 __p__commode
+                          54 _set_fmode
+
+    api-ms-win-crt-locale-l1-1-0.dll
+             140003160 Import Address Table
+             140003E98 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                           8 _configthreadlocale
+
+    api-ms-win-crt-heap-l1-1-0.dll
+             140003148 Import Address Table
+             140003E80 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          18 free
+                          16 _set_new_mode
+
+  Summary
+
+        1000 .data
+        1000 .pdata
+        2000 .rdata
+        1000 .reloc
+        2000 .text

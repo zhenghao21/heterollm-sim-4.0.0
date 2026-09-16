@@ -1,0 +1,79 @@
+{
+  "schema": "r27-reference-selected-archive/v1",
+  "status": "verified",
+  "created_utc": "2026-09-16T21:17:56.261106+00:00",
+  "old_archive_status": "not_for_publication",
+  "old_archive_modified": false,
+  "originals_modified": false,
+  "selection": "explicit full262 closure; no recursive reference or directory walk",
+  "large_model_hashed": false,
+  "scoring_executed": false,
+  "packet_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.tar.gz",
+    "bytes": 213786631,
+    "sha256": "2cb9746c9da94481cff4ac4e6cadfc90fd855900da69a53ccec030fa4d4d3f57"
+  },
+  "index_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence_index.json",
+    "bytes": 151866,
+    "sha256": "de956f2778c74d95ead609bed483cd53fb52615fdbff59045a4025795c5d35b5"
+  },
+  "parts_index_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.parts.json",
+    "bytes": 1996,
+    "sha256": "9b5cb6d519fddd789d4975c18a64db67f0018e4b2063d68b38bf4bed8294ca08"
+  },
+  "part_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.tar.gz.part001of006",
+      "bytes": 41943040,
+      "sha256": "92ea727eb3821c3627d5514c96fd6714d42c2bef05050d2c27e8e3b2c66007bb"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.tar.gz.part002of006",
+      "bytes": 41943040,
+      "sha256": "23ee7b8a45b6984b6c3d42d3556879b9f7f0a77e6d6b5a031776e03c284d2561"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.tar.gz.part003of006",
+      "bytes": 41943040,
+      "sha256": "d6cde98e2da573b99fcf8587bf4decdf335efe950ab9433887cf98b5a8800cce"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.tar.gz.part004of006",
+      "bytes": 41943040,
+      "sha256": "fe368815dab16d7b56d9a0f7b3fd8807e8c10358868e4e59b9ad8ead50c6f308"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.tar.gz.part005of006",
+      "bytes": 41943040,
+      "sha256": "68463211c925b0795dce859ff47434288bec16cf79c0561c568bbc2784bc5211"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\postprocess\\archive_verified.0001\\detailed_evidence.tar.gz.part006of006",
+      "bytes": 4071431,
+      "sha256": "44aa3cd90e6524d7f8942268484fdc3653f0cb82754e07da947b6f06466eb9f9"
+    }
+  ],
+  "restore": {
+    "verified_members": 553,
+    "restored": 553,
+    "already_verified": 0,
+    "verify_only": false,
+    "packet_source": "assembled_from_parts"
+  },
+  "member_count": 553,
+  "parts_reassembled_verified": true,
+  "restored_bytes_compared": true,
+  "publication_files": [
+    "detailed_evidence_index.json",
+    "detailed_evidence.parts.json",
+    "finish.json",
+    "detailed_evidence.tar.gz.part001of006",
+    "detailed_evidence.tar.gz.part002of006",
+    "detailed_evidence.tar.gz.part003of006",
+    "detailed_evidence.tar.gz.part004of006",
+    "detailed_evidence.tar.gz.part005of006",
+    "detailed_evidence.tar.gz.part006of006"
+  ]
+}

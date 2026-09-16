@@ -1,0 +1,85 @@
+{
+  "schema": "host-service-controls-preparation-validation/v1",
+  "created_utc": "2026-09-16T20:48:31.718366+00:00",
+  "revision": "0004",
+  "build_manifest": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\build_manifest.0004.json",
+    "bytes": 91961,
+    "sha256": "978a6d6bdbb9a850e2cbd232ee34d1fc1b6a3c345f70d2d2e33caf3839674e95"
+  },
+  "host_logic_receipt": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_028\\host_service_controls\\host_test.0003.json",
+    "bytes": 697,
+    "sha256": "afe6e10b5222202c7dedb89bca8265ef6dc8bdb8129cc6ed46f54984efa16578"
+  },
+  "python_tests": {
+    "passed": 33,
+    "failed": 0,
+    "scope": "synthetic host fixtures; no timing/GPU"
+  },
+  "pure_logic_CPP_passed": true,
+  "compiler_headers": 298,
+  "previous_source_snapshot": [
+    {
+      "name": "logic.h",
+      "matches": true
+    },
+    {
+      "name": "counters.h",
+      "matches": true
+    },
+    {
+      "name": "counter_pilot.cpp",
+      "matches": true
+    },
+    {
+      "name": "service_probe.cpp",
+      "matches": true
+    },
+    {
+      "name": "host_tests.cpp",
+      "matches": true
+    },
+    {
+      "name": "build.py",
+      "matches": true
+    },
+    {
+      "name": "analyze.py",
+      "matches": true
+    },
+    {
+      "name": "run_controls.py",
+      "matches": true
+    },
+    {
+      "name": "strict_gate.py",
+      "matches": true
+    },
+    {
+      "name": "test_controls.py",
+      "matches": true
+    },
+    {
+      "name": "protocol.json",
+      "matches": true
+    },
+    {
+      "name": "README.md",
+      "matches": true
+    }
+  ],
+  "fixes": [
+    "parent-aware failclosed project process gate including GPU timing and relative runners",
+    "pinned predecessor analyzer verified before/after exact-source import and validation",
+    "final reference exceptions produce rejected finish; all recorded errors prohibit validated"
+  ],
+  "any_counter_pilot_executed": false,
+  "any_service_or_path_probe_executed": false,
+  "any_GPU_executed": false,
+  "any_experiment_timing_executed": false,
+  "large_GGUF_content_read_bytes": 0,
+  "R27_gate_executed": false,
+  "runs_directory_exists": false,
+  "cost_model_modified": false
+}

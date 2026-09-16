@@ -1993,7 +1993,7 @@
     "next_controls": "GPU lightweight HES U/A/B/AB observer-effect controls; host clock and K/G identifiability controls; preparation only while R27 runs"
   },
   "round_027_postprocess": {
-    "status": "prepared_before_scoring",
+    "status": "heatmaps_reviewed_campaign_only_archive_verified",
     "host_tests": 8,
     "refs": {
       "postprocess.py": {
@@ -2008,10 +2008,13 @@
     "gate": "full262 barrier and both immutable scores/group report required",
     "output": "off/on/delta PNG+SVG; exact evidence archive and 40MiB parts",
     "new_scoring": false,
-    "excluded_failed_cells": 0
+    "excluded_failed_cells": 0,
+    "members": 553,
+    "parts": 6,
+    "old_recursive_archive_not_for_publication": true
   },
   "round_026_wrapper_launch_match": {
-    "status": "compiled_and_host_checked_not_executed",
+    "status": "fixed_shape_effective_launch_and_numerical_match",
     "pins": {
       "build_manifest.json": "ed3e558c51cb4aba2665d9703d32cc9c7bebf869bfc50d5b23d74ec0d7c3edd4",
       "host_test_receipt.json": "9ea07061d7846964aca51b6fab1df86eb87039d413143706d3c21c6741467c4a",
@@ -2029,10 +2032,18 @@
     "source_QI5_0": 4,
     "blocks_per_iteration": 64,
     "requires_R27_terminal_count": 262,
-    "GPU_executed": false,
+    "GPU_executed": true,
     "runtime_match_verified": false,
     "new_shim_numerical_qualification": false,
-    "performance_parameter_admitted": false
+    "performance_parameter_admitted": false,
+    "new_shim_numerically_qualified": true,
+    "timing_equivalence_verified": false,
+    "performance_parameters_admitted": 0,
+    "finish_ref": {
+      "path": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_026/mmvq_wrapper_launch_match/wrapper_capture_run.0001/finish.json",
+      "sha256": "6a130dc0f36aa4163c290e299c56fdb367103b27e40b281e4204442f67cf286c",
+      "bytes": 3968
+    }
   },
   "round_027_execution": {
     "off": {
@@ -2134,13 +2145,26 @@
     },
     "gate_A": "not_passed",
     "gate_B": "unvalidated",
-    "formal_success": false
+    "formal_success": false,
+    "strict_goal": {
+      "verdict": "accuracy_failed",
+      "passed_cells": 9,
+      "passing_metrics": 74,
+      "required_cells": 131,
+      "required_metrics": 393,
+      "insufficient_evidence_cells": 0,
+      "gate_B": "unvalidated"
+    }
   },
   "round_027_identity_diagnostic": {
-    "status": "prepared0003_not_executed",
+    "status": "0003_attempt_rejected_auxiliary_budget_exhausted_after_serial_agreement",
     "manifest_sha256": "f5f433e54fc536d7fcffc20c9179756f903446e71b2753cdfaa5c61dd395eef8",
     "host_tests": 41,
-    "model_bytes_read": 0
+    "model_bytes_read": 14865116128,
+    "serial_algorithms_and_expected_match": true,
+    "parallel_workers_started": 0,
+    "old_failures_modified": false,
+    "next": "new version computes auxiliary budget from true262 evidence sizes and check counts"
   },
   "round_028_static_coverage": {
     "reference_shape_tasks": 0,
@@ -2154,5 +2178,12 @@
     "host_tests": 47,
     "manifest_sha256": "09e1532c980a37b3cb7c53b6acb39f9ff79564d21f74269866d0f3cd41363a41",
     "performance_parameters_admitted": 0
+  },
+  "round_028_host_controls": {
+    "status": "prepared0004_not_executed",
+    "host_python_tests": 33,
+    "Cpp_host_tests_passed": true,
+    "manifest_sha256": "978a6d6bdbb9a850e2cbd232ee34d1fc1b6a3c345f70d2d2e33caf3839674e95",
+    "parameter_admission": false
   }
 }
