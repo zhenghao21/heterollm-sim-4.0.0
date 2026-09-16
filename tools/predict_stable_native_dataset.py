@@ -1308,14 +1308,103 @@ def load_retained_warmup_extractor(ref):
     return module
 
 
+def canonical_retained_model_ref(model_ref):
+    """Normalize equivalent byte-length aliases before proof/cache identity."""
+    if not isinstance(model_ref, Mapping):
+        raise ValueError("retained KV model reference must be a mapping")
+    raw_path = model_ref.get("path")
+    digest = model_ref.get("sha256")
+    if (not isinstance(raw_path, str) or not raw_path.strip() or "\x00" in raw_path
+            or not Path(raw_path).is_absolute()):
+        raise ValueError("retained KV model path must be a nonempty absolute path")
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ValueError("retained KV model SHA256 must be 64 lowercase hexadecimal digits")
+    sizes = [model_ref[key] for key in ("bytes", "size_bytes") if key in model_ref]
+    if not sizes or any(type(value) is not int or value <= 0 for value in sizes):
+        raise ValueError("retained KV model byte length must be a positive exact integer")
+    if any(value != sizes[0] for value in sizes):
+        raise ValueError("retained KV model byte-length aliases conflict")
+    path = Path(raw_path).resolve(strict=True)
+    if not path.is_file() or path.stat().st_size != sizes[0]:
+        raise ValueError("retained KV model byte length differs from file")
+    return {"path": str(path), "sha256": digest, "bytes": sizes[0]}
+
+
+def retained_model_identity_refs(model_refs):
+    """Deduplicate canonical identities, rejecting one path with conflicting SHA."""
+    refs = {}
+    for model_ref in model_refs:
+        ref = canonical_retained_model_ref(model_ref)
+        key = os.path.normcase(ref["path"])
+        if key in refs and refs[key] != ref:
+            raise ValueError("retained KV conflicting model identity for one path")
+        refs[key] = ref
+    return [refs[key] for key in sorted(refs)]
+
+
+def verify_retained_model_identities(model_refs):
+    """Whole-file identity gate, once per unique model per coordinator phase.
+
+    Kept separate from evidence_refs: individual workers already hash their own
+    model in read_gguf_metadata and must not hash every campaign model again.
+    """
+    import hashlib
+    refs = retained_model_identity_refs(model_refs)
+    fingerprint = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    for ref in refs:
+        print("retained model identity: full SHA256 " + ref["path"], file=sys.stderr, flush=True)
+        path = Path(ref["path"])
+        digest, length = hashlib.sha256(), 0
+        with path.open("rb") as stream:
+            before = os.fstat(stream.fileno())
+            for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+                digest.update(chunk)
+                length += len(chunk)
+            after = os.fstat(stream.fileno())
+        if (length != ref["bytes"] or not fingerprint(before) == fingerprint(after) == fingerprint(path.stat())
+                or digest.hexdigest() != ref["sha256"]):
+            raise ValueError("retained KV full model SHA256/identity mismatch: " + ref["path"])
+    return refs
+
+
+def cached_retained_gguf_scope(model_ref, cache):
+    """Cache by canonical identity and recheck header content on every hit.
+
+    Full weight hashing remains the normal worker's responsibility. A cache hit
+    must not preserve another caller's reference spelling or stale header bytes.
+    """
+    import hashlib
+    model_ref = canonical_retained_model_ref(model_ref)
+    path = Path(model_ref["path"])
+    fingerprint = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    before = path.stat()
+    key = (model_ref["path"], model_ref["sha256"], model_ref["bytes"], fingerprint(before))
+    if key not in cache:
+        cache[key] = read_retained_gguf_scope(model_ref)
+    else:
+        scope = cache[key]
+        with path.open("rb") as stream:
+            opened = os.fstat(stream.fileno())
+            payload = stream.read(scope["metadata_header_bytes"])
+            finished = os.fstat(stream.fileno())
+        if (len(payload) != scope["metadata_header_bytes"]
+                or hashlib.sha256(payload).hexdigest() != scope["metadata_header_sha256"]
+                or not fingerprint(before) == fingerprint(opened) == fingerprint(finished) == fingerprint(path.stat())):
+            raise ValueError("GGUF changed during retained KV cached header read")
+    return cache[key]
+
+
 def read_retained_gguf_scope(model_ref):
     """Read actual GGUF metadata only; the normal worker still verifies full SHA."""
     import struct
     import hashlib
     from heterollm_sim.gguf_parity import _read_string, _read_value
+    model_ref = canonical_retained_model_ref(model_ref)
     path = Path(model_ref["path"])
     with path.open("rb") as stream:
         before = os.fstat(stream.fileno())
+        if before.st_size != model_ref["bytes"]:
+            raise ValueError("retained KV model byte length differs from opened file")
         head = stream.read(24)
         if len(head) != 24 or head[:4] != b"GGUF":
             raise ValueError("retained KV requires an actual GGUF header")
@@ -1335,7 +1424,10 @@ def read_retained_gguf_scope(model_ref):
                 raise ValueError("retained KV metadata exceeds bounded header size")
         length = stream.tell()
         stream.seek(0)
-        header_sha = hashlib.sha256(stream.read(length)).hexdigest()
+        header = stream.read(length)
+        if len(header) != length:
+            raise ValueError("truncated retained KV GGUF header reread")
+        header_sha = hashlib.sha256(header).hexdigest()
         after = os.fstat(stream.fileno())
     identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
     if identity(before) != identity(after) or identity(after) != identity(path.stat()):
@@ -1508,22 +1600,25 @@ def freeze_retained_warmup_binding(selection_path, rows, output, nonflash, *, mo
     if extracted["source_contract"]["selection"]["sha256"] != selection_ref["sha256"]:
         raise ValueError("retained extractor selection byte identity differs")
     by_id = {cell["cell_id"]: retained_warmup_projection(cell) for cell in extracted["cells"]}
+    model_identity_refs = verify_retained_model_identities([
+        (model_snapshot_map or {}).get(str(Path(row["config"]["model"]).resolve()), row["model_ref"])
+        for row in rows
+    ])
     cells, models, checked_nonflash = {}, {}, set()
     refs = {ref["path"]: ref for ref in [selection_ref, extractor_ref, nonflash["contract_ref"], *nonflash["evidence_refs"]]}
     for row in rows:
         native_path = str(Path(row["config"]["model"]).resolve())
         model_ref = (model_snapshot_map or {}).get(native_path, row["model_ref"])
-        if model_ref["path"] not in models:
-            models[model_ref["path"]] = read_retained_gguf_scope(model_ref)
+        model_scope = cached_retained_gguf_scope(model_ref, models)
         warmup = by_id[row["cell_id"]]
         proof = derive_retained_cell_proof(warmup, selection_ref=selection_ref, extractor_ref=extractor_ref,
             nonflash_contract=nonflash["cells"][row["cell_id"]], nonflash_ref=nonflash["contract_ref"],
-            model_scope=models[model_ref["path"]], native_refs=row["native_runtime_refs"], checked_nonflash=checked_nonflash)
+            model_scope=model_scope, native_refs=row["native_runtime_refs"], checked_nonflash=checked_nonflash)
         cells[row["cell_id"]] = proof
         refs.update({ref["path"]: ref for ref in warmup["source_refs"].values() if isinstance(ref, Mapping) and "path" in ref})
     verify_refs(list(refs.values()))
     return {"requested": True, "selection_ref": selection_ref, "extractor_ref": extractor_ref,
-        "cells": cells, "evidence_refs": list(refs.values()), "native_latency_used": False,
+        "cells": cells, "evidence_refs": list(refs.values()), "model_identity_refs": model_identity_refs, "native_latency_used": False,
         "conditional_cell_count": sum(cell["status"] == "conditional" for cell in cells.values()),
         "uncovered_cell_count": sum(cell["status"] == "uncovered" for cell in cells.values())}
 
@@ -2646,6 +2741,17 @@ def verify_retained_warmup_freeze(freeze, entry=None):
         return
     if freeze.get("retained_kv_warmup_state") is not True or binding.get("requested") is not True:
         raise ValueError("retained warmup campaign switch differs")
+    declared_models = binding.get("model_identity_refs")
+    if not isinstance(declared_models, list) or not declared_models:
+        raise ValueError("retained warmup requires full model identity references")
+    normalized_models = retained_model_identity_refs(declared_models)
+    expected_models = retained_model_identity_refs([
+        proof["model_scope"]["model_ref"] for proof in binding["cells"].values()
+    ])
+    if declared_models != normalized_models or normalized_models != expected_models:
+        raise ValueError("retained warmup model identity coverage differs")
+    if entry is None:
+        verify_retained_model_identities(normalized_models)
     verify_refs(binding["evidence_refs"])
     extractor = load_retained_warmup_extractor(binding["extractor_ref"])
     rederived = None
@@ -2665,11 +2771,10 @@ def verify_retained_warmup_freeze(freeze, entry=None):
             raise ValueError("retained warmup cell proof differs from frozen campaign")
         if rederived is not None:
             model_ref = inputs.get("prediction_model_ref", inputs["native_model_ref"])
-            if model_ref["path"] not in models:
-                models[model_ref["path"]] = read_retained_gguf_scope(model_ref)
+            model_scope = cached_retained_gguf_scope(model_ref, models)
             actual = derive_retained_cell_proof(rederived[cell["cell_id"]], selection_ref=binding["selection_ref"],
                 extractor_ref=binding["extractor_ref"], nonflash_contract=inputs["nonflash_kv_view_contract"],
-                nonflash_ref=proof["nonflash_contract_ref"], model_scope=models[model_ref["path"]],
+                nonflash_ref=proof["nonflash_contract_ref"], model_scope=model_scope,
                 native_refs=[inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])], checked_nonflash=checked_nonflash)
             if actual != proof:
                 raise ValueError("retained warmup resume proof differs from raw/source re-derivation")
