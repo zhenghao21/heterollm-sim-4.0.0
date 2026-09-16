@@ -81,7 +81,9 @@ def _historical_sources(binding, refs):
         texts[role]=_checked_text(path,before,refs)
     for role,relative in (("mmvq_header","ggml/src/ggml-cuda/mmvq.cuh"),("cuda_common","ggml/src/ggml-cuda/common.cuh"),
                           ("mmq_header","ggml/src/ggml-cuda/mmq.cuh"),
-                          ("mmq_load_tiles","ggml/src/ggml-cuda/mmq-load-tiles.cuh")):
+                          ("mmq_load_tiles","ggml/src/ggml-cuda/mmq-load-tiles.cuh"),
+                          ("quantize_header","ggml/src/ggml-cuda/quantize.cuh"),
+                          ("ggml_common","ggml/src/ggml-common.h")):
         path=root/relative
         texts[role]=_checked_text(path,_unique_digest(header["files"],path),refs)
     return texts
@@ -349,6 +351,7 @@ def _layer_qualification(layer, contract):
 def apply_llama_gpu_invocation_contract(
     scenario, contract: Mapping[str,Any]|None=None, *,
     enabled: bool=False, enable_mmq_source_costs: bool=False,
+    enable_conversion_cta_costs: bool=False,
 ):
     """Return an explicitly qualified scenario; default/no-contract is identity.
 
@@ -357,8 +360,10 @@ def apply_llama_gpu_invocation_contract(
     Existing scenarios are not undone by calling this function with disabled.
     The caller must run its standard final placement replan after composition.
     """
-    if type(enabled) is not bool or type(enable_mmq_source_costs) is not bool:
+    if any(type(flag) is not bool for flag in (enabled, enable_mmq_source_costs, enable_conversion_cta_costs)):
         raise ValueError("GPU invocation treatment switches must be explicit booleans")
+    if enable_conversion_cta_costs and not enable_mmq_source_costs:
+        raise ValueError("conversion CTA costs require source-qualified MMQ/MMVQ dispatch")
     if not enabled or contract is None:return scenario
     if not isinstance(contract,Mapping):raise ValueError("GPU invocation contract must be a mapping")
     payload=dict(contract);claimed=payload.pop("content_sha256",None)
@@ -438,6 +443,26 @@ def apply_llama_gpu_invocation_contract(
             flags.update(llama_cpp_mmq_source_work=True,llama_cpp_f32_q8_1_mmvq=True)
             audit["mmq_source_costs"].update(applied=True,reason=None)
         else:audit["mmq_source_costs"].update(reason="source_mmq_device_properties_missing_or_profile_mismatch")
+    if enable_conversion_cta_costs:
+        from .conversion_work import SOURCE_SHA256, ConversionSourceContract
+        matched = {}
+        for relative, expected in SOURCE_SHA256.items():
+            found = [ref for ref in payload["source_refs"]
+                     if str(ref["path"]).replace("\\", "/").endswith("/" + relative)]
+            if len(found) != 1 or found[0]["sha256"] != expected:
+                raise ValueError("conversion CTA source proof missing: " + relative)
+            matched[relative] = expected
+        if audit["mmq_source_costs"].get("applied") is not True:
+            raise ValueError("conversion CTA requires qualified device source contract")
+        binding = {"compute_capability": cc, "highest_compiled_arch": cc,
+                   "warp_size": 32, "source_hashes": matched,
+                   "runtime_binary_sha256": payload["runtime_modules"]["ggml-cuda.dll"]["sha256"],
+                   "ordinary_contiguous_2d": True}
+        ConversionSourceContract(**binding)
+        component_metadata["llama_cpp_conversion_source_contract"] = binding
+        flags["llama_cpp_conversion_cta_costs"] = True
+        audit["conversion_cta_costs"] = {"applied": True, "timing_calibrated": False,
+            "semantics": "source grid compute-resource upper bound; memory unchanged"}
     hardware=replace(scenario.hardware,components=tuple(
         replace(c,metadata=component_metadata) if c.component_id==gpu[0].component_id else c
         for c in scenario.hardware.components))

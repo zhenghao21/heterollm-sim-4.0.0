@@ -1,0 +1,23 @@
+{
+  "schema": "precise-sm-telemetry-protocol/v1",
+  "duration_seconds": 2,
+  "requested_period_ns": 5000000,
+  "clock_target_mhz": 2400,
+  "clock_tolerance_mhz": 30,
+  "formal_max_bracket_ms": 25,
+  "timer": "CREATE_WAITABLE_TIMER_HIGH_RESOLUTION unnamed one-shot",
+  "schedule": "absolute QPC target, relative100ns waitable timer due time recomputed each iteration",
+  "missed_deadline_policy": "record skipped indexes; no catchup burst and no synthetic samples",
+  "readback_scope": "SM clock only at high frequency; identity once before sampling",
+  "timestamp_scope": "wait begin/end, timer arm/wake, sample begin/end and independent SM read begin/end",
+  "global_timer_resolution_modified": false,
+  "GPU_clock_write": false,
+  "inference_launch": false,
+  "native_matrix_authorized": false,
+  "existing_records_modified": false,
+  "first_real_test_is_cadence_only": true,
+  "timer_unsupported_policy": "explicit failure; no implicit fallback",
+  "thread_exit_policy": "non-daemon; worker alone shuts down NVML; handles close only after confirmed join",
+  "measurement_status": "diagnostic; never kernel or LLM calibration",
+  "comparison_limit": "Previous5ms Event.wait sampler read several GPU fields, this helper reads SM only. Improvement cannot be attributed solely to timer change."
+}

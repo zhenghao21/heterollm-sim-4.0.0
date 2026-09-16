@@ -846,7 +846,11 @@ def apply_gpu_invocation_static_contract(scenario, inputs):
     if not isinstance(proof, Mapping) or contract != proof.get("contract") or type(flag) is not bool or flag is not proof.get("mmq_source_costs_requested"):
         raise ValueError("GPU invocation static contract or source-cost switch differs from frozen evidence")
     from heterollm_sim.llama_gpu_invocations import apply_llama_gpu_invocation_contract
-    return apply_llama_gpu_invocation_contract(scenario, contract, enabled=True, enable_mmq_source_costs=flag)
+    conversion_flag = inputs.get("gpu_conversion_cta_costs", False)
+    if type(conversion_flag) is not bool or conversion_flag is not proof.get("conversion_cta_costs_requested", False):
+        raise ValueError("conversion CTA source switch differs from frozen evidence")
+    return apply_llama_gpu_invocation_contract(scenario, contract, enabled=True, enable_mmq_source_costs=flag,
+                                               enable_conversion_cta_costs=conversion_flag)
 
 
 IQ_PANEL_SOURCE_SCHEMA = "llama.cpp.cpu.iq-panel-source-contract/v1"
@@ -1035,6 +1039,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         "gpu_invocation_contract": gpu_binding["contract"] if gpu_binding else None,
         "gpu_invocation_evidence": gpu_binding,
         "gpu_mmq_source_costs": gpu_invocation["mmq_source_costs_requested"] if gpu_invocation else False,
+        "gpu_conversion_cta_costs": gpu_invocation.get("conversion_cta_costs_requested", False) if gpu_invocation else False,
         "cpu_iq_panel_reuse": iq_panel["dispatch"] if iq_panel else None,
         "cpu_iq_panel_evidence": iq_panel,
         "hardware_ref": row["static_hardware"].get("frozen_hardware_ref"),
@@ -1121,6 +1126,7 @@ def unsupported_dimensions(inputs, model=None):
         rows.append({"dimension": "gpu_physical_invocation_and_source_costs", "status": "conditional",
             "binding_status": invocation.get("status"), "native_dispatch_proven": False,
             "mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
+        "conversion_cta_costs_requested": inputs.get("gpu_conversion_cta_costs", False),
             "conditional_reasons": invocation.get("conditional_reasons", []),
             "uncovered_reasons": invocation.get("uncovered_reasons", []), "unpriced_terms": invocation.get("unpriced_terms", []),
             "reason": "Physical GGUF tensor checks qualify simulation geometry; historical model-specific graph bodies and native per-operator dispatch remain unproven"})
@@ -1365,6 +1371,7 @@ def dispatch_qualification(scenario, inputs=None):
             **{key: bounded_value(storage.get(key)) for key in ("qualified", "status", "reasons", "previous_f32_hidden_storage", "timing_completeness", "scope")}},
         "gpu_invocations": {"requested": inputs.get("gpu_invocation_evidence") is not None,
             "mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
+        "conversion_cta_costs_requested": inputs.get("gpu_conversion_cta_costs", False),
             "kernel_environment": bounded_value((inputs.get("gpu_invocation_evidence") or {}).get("kernel_environment")),
             "binding_uncovered_reasons": (inputs.get("gpu_invocation_evidence") or {}).get("uncovered_reasons"),
             **{key: bounded_value(invocation.get(key)) for key in ("applied", "status", "conditional", "native_dispatch_proven",
@@ -1419,6 +1426,28 @@ def retained_dispatch_summary(result):
                     if type(value) is int and value >= 0:
                         counts[str(label)] += value
             summary[name] = dict(sorted(counts.items()))
+        if key == "gpu_invocations":
+            query_counts = Counter()
+            query_missing_reasons = Counter()
+            query_ledgers = [ledger.get("kernel_query_ledger") for ledger in ledgers]
+            valid_ledgers = [value for value in query_ledgers if isinstance(value, Mapping)]
+            for value in valid_ledgers:
+                query_missing_reasons.update(value.get("missing_reason_counts", {}))
+                for row in value.get("signatures", ()):
+                    if isinstance(row, Mapping) and type(row.get("task_count")) is int and row["task_count"] > 0:
+                        query_counts[json.dumps(row["key"], sort_keys=True, separators=(",", ":"), allow_nan=False)] += row["task_count"]
+            summary["kernel_query_ledger"] = {
+                "schema": "stable-native-kernel-query-ledger/v1",
+                "signatures": [{"key": json.loads(ident), "task_count": count} for ident, count in sorted(query_counts.items())],
+                "summarized_batches": len(valid_ledgers),
+                "complete": summary["all_batches_summarized"] and len(valid_ledgers) == len(ledgers)
+                    and all(v.get("complete_geometry") is True for v in valid_ledgers),
+                "represented_tasks": sum(query_counts.values()),
+                "unrepresented_tasks": sum(value.get("unrepresented_tasks", 0) for value in valid_ledgers),
+                "missing_reason_counts": dict(sorted(query_missing_reasons.items())),
+                "missing_batch_ledgers": len(batches) - len(valid_ledgers),
+                "native_dispatch_proven": False, "calibration_eligible": False,
+                "scope": "simulated main physical geometry only; cache and native dispatch unknown"}
         if key == "tensor_storage":
             capacity_keys = {name for ledger in ledgers for name, value in ledger.items()
                 if type(value) is int and "capacity" in name and name.endswith("_bytes")}
@@ -1581,6 +1610,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
             "gpu_invocation_contract": inputs.get("gpu_invocation_contract"),
             "gpu_invocation_binding": inputs.get("gpu_invocation_evidence"),
             "gpu_mmq_source_costs_requested": inputs.get("gpu_mmq_source_costs", False),
+            "gpu_conversion_cta_costs_requested": inputs.get("gpu_conversion_cta_costs", False),
             "slot_order_treatment": {"requested": inputs.get("slot_order_contract") is not None,
                 "qualified": slot_qualification.get("qualified", False), "applied": slot_qualification.get("applied", False),
                 "status": slot_qualification.get("status", "qualification_not_reported"),
@@ -1658,7 +1688,7 @@ def verified_model_snapshot_map(rows, requested_map, data_root):
     return result
 
 
-def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False):
+def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_map=None, runtime_build_audit_path=None, recurrent_batching_contract_path=None, iq_panel_source_contract_path=None, iq_panel_assume_default_unset=False, slot_order_contract_path=None, host_offload_source_contract_path=None, tensor_storage_contract_path=None, tensor_storage_f32_hidden=False, gpu_invocation_contract_path=None, gpu_mmq_source_costs=False, gpu_conversion_cta_costs=False):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("refusing to overwrite/mix prediction campaign")
@@ -1680,6 +1710,12 @@ def freeze_selection(selection_path, output, *, data_root=None, model_snapshot_m
     gpu_invocation = verified_gpu_invocation_contract(gpu_invocation_contract_path, rows, data_root,
         enable_mmq_source_costs=gpu_mmq_source_costs, runtime_binding=host_offload,
         runtime_source_contract_path=host_offload_source_contract_path) if gpu_invocation_contract_path else None
+    if type(gpu_conversion_cta_costs) is not bool or (gpu_conversion_cta_costs and not gpu_mmq_source_costs):
+        raise ValueError("conversion CTA source costs require source MMQ/MMVQ dispatch")
+    if gpu_invocation is not None:
+        gpu_invocation["conversion_cta_costs_requested"] = gpu_conversion_cta_costs
+        for evidence in gpu_invocation["cells"].values():
+            evidence["conversion_cta_costs_requested"] = gpu_conversion_cta_costs
     if iq_panel_assume_default_unset and iq_panel_source_contract_path is None:
         raise ValueError("IQ panel default-unset assumption requires an explicit source contract")
     iq_panel = verified_iq_panel_source_contract(iq_panel_source_contract_path, rows, data_root,
@@ -2095,6 +2131,8 @@ def main(argv=None):
     parser.add_argument("--gpu-invocation-contract", type=Path, help="conditional source/build-bound physical GPU projection and fusion mapping; initial freeze only, default off")
     parser.add_argument("--gpu-mmq-source-costs", action=argparse.BooleanOptionalAction, default=None,
         help="separate source MMQ/MMVQ cost treatment; requires GPU invocation contract; default false")
+    parser.add_argument("--gpu-conversion-cta-costs", action=argparse.BooleanOptionalAction, default=None,
+        help="source conversion grid compute-resource cap; initial freeze only; requires GPU MMQ source costs")
     parser.add_argument("--tensor-storage-f32-hidden", action=argparse.BooleanOptionalAction, default=None,
         help="separate full F32 hidden-storage ablation; requires tensor-storage contract; default false")
     parser.add_argument("--iq-panel-source-contract", type=Path, help="explicit frozen CPU IQ panel source/build/history contract; default off")
@@ -2119,15 +2157,17 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None) and (not args.selection or args.resume):
+    if (args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
         parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
     if args.gpu_mmq_source_costs is not None and args.gpu_invocation_contract is None:
         parser.error("--gpu-mmq-source-costs requires --gpu-invocation-contract")
+    if args.gpu_conversion_cta_costs and args.gpu_mmq_source_costs is not True:
+        parser.error("--gpu-conversion-cta-costs requires --gpu-mmq-source-costs")
     if args.tensor_storage_f32_hidden is not None and args.tensor_storage_contract is None:
         parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
     if args.selection and not args.resume:
         snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs))
+        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs))
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:

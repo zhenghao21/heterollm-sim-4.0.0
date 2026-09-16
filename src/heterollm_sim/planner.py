@@ -21,6 +21,7 @@ from graphlib import CycleError, TopologicalSorter
 from typing import Callable, Dict, FrozenSet, Hashable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from . import __version__
+from .kernel_query_ledger import summarize_kernel_queries
 from .config import ScenarioConfig
 from .calibration import (
     calibrate_cost_phase,
@@ -8664,6 +8665,33 @@ def _mmvq_activation_conversion_workload(
 
 
 
+def _source_conversion_parallelism(scenario, target, workload, conversion, path):
+    """Apply only source-qualified compute-resource bounds, never measured rates."""
+    enabled = scenario.workload.metadata.get("llama_cpp_conversion_cta_costs", False)
+    if type(enabled) is not bool:
+        raise ValueError("conversion CTA cost switch must be boolean")
+    if not enabled:
+        return conversion, None
+    from .conversion_work import ConversionSourceContract, derive_conversion_work, UnsupportedConversion
+    raw = target.metadata.get("llama_cpp_conversion_source_contract")
+    if not isinstance(raw, Mapping):
+        return conversion, {"applied": False, "reason": "missing_conversion_source_contract"}
+    formats = tuple(workload.packed_weight_formats)
+    if len(formats) != 1:
+        return conversion, {"applied": False, "reason": "not_one_physical_weight_format"}
+    try:
+        work = derive_conversion_work(m=workload.m, k=workload.k,
+            weight_format=formats[0], path=path, contract=ConversionSourceContract(**dict(raw)))
+    except UnsupportedConversion as error:
+        return conversion, {"applied": False, "reason": str(error)}
+    if (work.partial_scalar_operations, work.read_bytes, work.write_bytes) != (
+            conversion.operations, conversion.read_bytes, conversion.write_bytes):
+        raise ValueError("conversion source work differs from lowered physical work")
+    return replace(conversion, source_grid_ctas=work.cta_count), {
+        **work.to_metadata(), "applied": True, "cost_model_applied": True,
+        "scope": "scalar/SFU compute parallelism upper bound only; no HBM fraction or measured timing"}
+
+
 def _cpu_gemm_cost_key(
     target_component_id: str,
     workload: GemmWorkload,
@@ -9000,6 +9028,7 @@ def summarize_gpu_invocations(tasks: Sequence[TaskSpec]) -> Mapping[str, object]
         "uncovered_tasks": total - applied, "group_counts": dict(sorted(group_counts.items())),
         "uncovered_reason_counts": dict(sorted(reasons.items())),
         "observed_domain": "simulation contract labels; not native trace counts",
+        "kernel_query_ledger": summarize_kernel_queries(tasks),
     }
 
 
@@ -9372,6 +9401,15 @@ def _add_rank_gemm(
         **quantization_metadata,
         **operation_metadata,
     }
+    # Immutable workload facts for compact query coverage; never native proof.
+    operation_metadata["kernel_query_geometry"] = {
+        "m": workload.m, "n": workload.n, "k_logical": workload.k,
+        "weight_formats": tuple(workload.packed_weight_formats),
+        "activation_storage_bytes": workload.activation_bytes,
+        "output_storage_bytes": workload.output_bytes,
+        "accumulator_bits": workload.accumulator_bits,
+        "model_weight_read": model_weight_read, "rhs_is_activation": rhs_is_activation,
+    }
     # Preserve the physical GEMM invocation geometry for native calibration.
     # Regular planner call sites do not carry ``gemm_m/gemm_n`` in their
     # hand-authored metadata, even though the typed workload already has the
@@ -9381,6 +9419,7 @@ def _add_rank_gemm(
     # average.  Explicit metadata remains authoritative for specialized
     # dynamic attention paths.
     operation_metadata.setdefault("gemm_m", workload.m)
+    operation_metadata.setdefault("gemm_k", workload.k)
     operation_metadata.setdefault("gemm_n", workload.n)
     operation_metadata.setdefault("token_batch", workload.m)
     operation_metadata.setdefault("prompt_tokens", builder.request.prompt_tokens)
@@ -9725,6 +9764,8 @@ def _add_rank_gemm(
             else None
         )
         if conversion is not None:
+            conversion, conversion_source_audit = _source_conversion_parallelism(
+                scenario, target, workload, conversion, "MMVQ_Q8_1")
             consumer_bytes = 36 * workload.m * workload.k // 32
             conversion_audit = {
                 "activation_conversion_applied": True,
@@ -9748,6 +9789,7 @@ def _add_rank_gemm(
                     "layer_id": operation_metadata.get("layer_id"),
                     "projection_id": operation_metadata.get("projection_id"),
                     **conversion_audit,
+                    **({"conversion_source_work": conversion_source_audit} if conversion_source_audit is not None else {}),
                 },
             ),)
             # Replace the consumer's input bytes; retaining the old activation
@@ -9762,6 +9804,8 @@ def _add_rank_gemm(
                 streaming_fraction=1.0,
                 name="llama_cpp_mmq_f32_input_repacking",
             )
+            conversion, conversion_source_audit = _source_conversion_parallelism(
+                scenario, target, workload, conversion, "MMQ_" + mmq_work.conversion_layout)
             prior = (_add_rank_tensor_kernel(
                 builder, scenario, router, plan, rank, conversion,
                 name + ".activation_mmq", prior,
@@ -9772,6 +9816,7 @@ def _add_rank_gemm(
                     "layer_id": operation_metadata.get("layer_id"),
                     "projection_id": operation_metadata.get("projection_id"),
                     "mmq_source_work": {**dict(mmq_audit or {}), "stage": "conversion"},
+                    **({"conversion_source_work": conversion_source_audit} if conversion_source_audit is not None else {}),
                 },
             ),)
             workload = replace(
@@ -9885,6 +9930,7 @@ def _add_rank_gemm(
         prior = (dispatch,)
 
     last = ""
+    operation_metadata["kernel_main_consumer_storage_bytes"] = workload.activation_bytes
     phase_metadata = {
         "rank": rank.rank,
         "tp_rank": rank.tp_rank,

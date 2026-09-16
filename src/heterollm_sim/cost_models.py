@@ -362,6 +362,8 @@ class TensorKernelWorkload:
     streaming_fraction: float = 0.0
     name: str = "tensor_kernel"
     launch_only: bool = False
+    # Explicit source launch-grid bound; not an occupancy or bandwidth fit.
+    source_grid_ctas: Optional[int] = None
 
     def __post_init__(self) -> None:
         _require_non_negative_int("operations", self.operations)
@@ -377,6 +379,8 @@ class TensorKernelWorkload:
             raise ValueError("streaming_fraction must be in [0, 1]")
         if not self.name:
             raise ValueError("name must not be empty")
+        if self.source_grid_ctas is not None:
+            _require_positive_int("source_grid_ctas", self.source_grid_ctas)
         if not isinstance(self.launch_only, bool):
             raise ValueError("launch_only must be boolean")
         if self.launch_only and (self.operations or self.transcendental_operations or self.minimum_io_bytes):
@@ -2837,7 +2841,12 @@ def estimate_gpu_tensor_kernel(
                 ),), metadata=audit,
             ),), useful_ops=0, utilization=0.0, metadata=audit,
         )
-    return _estimate_typed_roofline(
+    active_sm_upper_bound = min(gpu.sm_count, workload.source_grid_ctas) if workload.source_grid_ctas is not None else gpu.sm_count
+    scalar_peak_cap = active_sm_upper_bound * gpu.scalar_lanes_per_sm * gpu.scalar_ops_per_cycle * gpu.tensor_core.frequency_ghz
+    sfu_peak_cap = active_sm_upper_bound * gpu.special_function_units_per_sm * gpu.special_function_ops_per_cycle * gpu.tensor_core.frequency_ghz
+    scalar_gops = min(float(gpu.elementwise_gops), scalar_peak_cap)
+    sfu_gops = min(float(gpu.special_function_gops), sfu_peak_cap)
+    estimate = _estimate_typed_roofline(
         device_kind="gpu",
         profile_name=gpu.name,
         operator_class=OperatorClass.ELEMENTWISE,
@@ -2846,7 +2855,7 @@ def estimate_gpu_tensor_kernel(
         read_bytes=workload.read_bytes,
         write_bytes=workload.write_bytes,
         compute_throughput_gops=(
-            float(gpu.elementwise_gops)
+            scalar_gops
             if workload.operations > 0
             else None
         ),
@@ -2864,7 +2873,7 @@ def estimate_gpu_tensor_kernel(
         reuse_factor=workload.reuse_factor,
         streaming_fraction=workload.streaming_fraction,
         special_function_operations=workload.transcendental_operations,
-        special_function_throughput_gops=gpu.special_function_gops,
+        special_function_throughput_gops=sfu_gops,
         special_function_energy_pj_per_op=(
             gpu.special_function_energy_pj_per_op
         ),
@@ -2872,6 +2881,26 @@ def estimate_gpu_tensor_kernel(
         dependency_depth=workload.dependency_depth,
         frequency_ghz=gpu.tensor_core.frequency_ghz,
     )
+
+    if workload.source_grid_ctas is None:
+        return estimate
+    audit = {
+        "source_grid_ctas": workload.source_grid_ctas,
+        "gpu_sm_count": gpu.sm_count,
+        "simultaneously_active_sm_upper_bound": active_sm_upper_bound,
+        "scalar_throughput_fraction": scalar_gops / float(gpu.elementwise_gops),
+        "sfu_throughput_fraction": sfu_gops / float(gpu.special_function_gops),
+        "scalar_physical_peak_cap_gops": scalar_peak_cap,
+        "sfu_physical_peak_cap_gops": sfu_peak_cap,
+        "cap_policy": "min(existing_effective_throughput, active_SM_physical_peak)",
+        "occupancy_efficiency_applied_twice": False,
+        "memory_bandwidth_fraction": 1.0,
+        "scope": "source grid limits parallel compute resources; resident warps and issue latency remain analytical",
+        "occupancy_measured": False, "timing_calibrated": False,
+    }
+    return replace(estimate, metadata={**estimate.metadata, "source_grid_parallelism": audit},
+        phases=tuple(replace(phase, metadata={**phase.metadata, "source_grid_parallelism": audit})
+                     if phase.name != "kernel_launch" else phase for phase in estimate.phases))
 
 
 def _estimate_gpu_q4_mma_materialized_attention(
