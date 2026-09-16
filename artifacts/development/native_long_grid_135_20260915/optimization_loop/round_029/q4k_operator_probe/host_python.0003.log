@@ -1,0 +1,24 @@
+..................F..........................                            [100%]
+================================== FAILURES ===================================
+____________ test_source_has_no_timing_or_LLama_measurement_entry _____________
+
+    def test_source_has_no_timing_or_LLama_measurement_entry():
+        source=(build.HERE/'run_probe.py').read_text()
+>       assert 'process.kill(' not in source and 'cudaEvent' not in source
+E       assert ('process.kill(' not in '"""One unti...anifest)))\n'
+E         'process.kill(' is contained here:
+E           anifest))) and 'cudaEvent' not in '"""One unti...anifest)))\n'
+E         'cudaEvent' is contained here:
+E           hronize','cudaEventSynchronize'}
+E         ?           +++++++++
+E               for api in auxiliary:
+E                   need(api['classification']=='synchronization' and api['api_name'] in sync_names,
+E                        'captured allocation/free/copy/set or unknown auxiliary API')
+E                   need(api['after_launch_pair'] is True and api['exit_seen'] is True and api['return_code']==0,...
+E         
+E         ...Full output truncated (99 lines hidden), use '-vv' to show)
+
+test_probe.py:124: AssertionError
+=========================== short test summary info ===========================
+FAILED test_probe.py::test_source_has_no_timing_or_LLama_measurement_entry - ...
+1 failed, 44 passed in 0.99s

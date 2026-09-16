@@ -2157,17 +2157,26 @@
     }
   },
   "round_027_identity_diagnostic": {
-    "status": "0003_attempt_rejected_auxiliary_budget_exhausted_after_serial_agreement",
+    "status": "five_pass_agreement_diagnostic_only",
     "manifest_sha256": "f5f433e54fc536d7fcffc20c9179756f903446e71b2753cdfaa5c61dd395eef8",
     "host_tests": 41,
     "model_bytes_read": 14865116128,
     "serial_algorithms_and_expected_match": true,
     "parallel_workers_started": 0,
     "old_failures_modified": false,
-    "next": "prepared0004 budget derived from real evidence lengths; not executed",
+    "next": "no further hash stress scheduled; preserve evidence and proceed mechanisms",
     "manifest0004_sha256": "833d92a5af4c89bd0951397cf79c9f93462ba83e2d1edbe07f6c00329b3e6a9f",
     "host_tests0004": 54,
-    "auxiliary_read_budget0004": 5903482880
+    "auxiliary_read_budget0004": 5903482880,
+    "completed_attempt": "read_comparison_0002",
+    "pass_count": 5,
+    "chunks_per_pass": 14177,
+    "algorithm_mismatches": 0,
+    "cross_pass_mismatches": 0,
+    "model_bytes_new": 74325580640,
+    "model_bytes_cumulative": 89190696768,
+    "metadata_read_bytes": 5890978883,
+    "old_failures_preserved": true
   },
   "round_028_static_coverage": {
     "reference_shape_tasks": 0,
@@ -2195,6 +2204,11 @@
       "minimum_positive_ns": 15625000,
       "busy64ms_accounting_cv_pct": 6.564378552893926,
       "no_service_parameter_admitted": true
+    },
+    "path_qualification": {
+      "chain": "validated_1_4_16",
+      "fanout": "validated_1_4_16",
+      "timing_coefficients": 0
     }
   },
   "round_030_preparation": {
@@ -2216,5 +2230,13 @@
       "optional_skip": 1,
       "final_specific_pass": 113
     }
+  },
+  "round_029_preparation": {
+    "status": "q4k_probe0003_host_validated_not_GPU_executed",
+    "manifest_sha256": "11b2c6a2cd3802a94abf77c92813458fe8cd94127e2d284d7503099b7b26513e",
+    "Python_host_tests": 45,
+    "Cpp_host_tests": 66,
+    "static_matching_cells": 45,
+    "cost_parameters": 0
   }
 }
