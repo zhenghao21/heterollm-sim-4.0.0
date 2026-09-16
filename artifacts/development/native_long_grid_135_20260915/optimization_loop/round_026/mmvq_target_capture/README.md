@@ -1,6 +1,6 @@
 # R26 original-DLL MMVQ launch recorder — host preparation
 
-Status: compiled, 38 host-only checks passed, **GPU recorder never executed**.
+Build status: compiled, 38 host-only checks passed. Runtime attempt 0001 has now executed and was rejected; see the current result below.
 Current build: `build_manifest.0004.json`; current test: `host_test.0003.json`.
 The older unnumbered manifest describes development revision 0003, whose source
 snapshot is retained in `development_revision.0003.zip`. Do not use it for current execution.
@@ -61,7 +61,7 @@ Its success is not evidence of live CUPTI/header compatibility. Build.py provide
 no GPU-run action. The target recorder requires explicit runtime authorization and
 an exclusive new output file; root must provide an independently reviewed runner
 that verifies this manifest, isolates DLL resolution/environment, reserves the
-GPU and preserves pre/post receipts. No such runtime action was taken here.
+GPU and preserves pre/post receipts. The root runner subsequently executed attempt 0001 under an explicit closed-campaign and idle-process gate.
 
 ## Preserved development failures
 
@@ -79,3 +79,7 @@ passed 38 tests, preserves all failure states, and is the current candidate.
 - Pointer equality is checked inside one process; compare relationships, not raw addresses,
   across a later target-vs-wrapper experiment.
 - Runtime memory API detection is not a claim that driver-domain internal operations are absent.
+
+## Runtime attempt 0001 (preserved rejection)
+
+The locked DLL produced exactly the expected Q8_1 and Q5_0 MMVQ symbols via cudaLaunchKernelExC (API ID 430). This version deliberately supports only the legacy launch ABI and rejected the pair as unsupported_launch_api. Module and hardware identities remained unchanged; no performance coefficient is admitted. See ../target_capture_run.0001/start.json, launches.json and finish.json. Fields such as grid/block/stream in records with supported_api=false were default placeholders, not observed geometry, and must not be used for calibration. A separate ExC decoder version is required; this attempt is not overwritten.

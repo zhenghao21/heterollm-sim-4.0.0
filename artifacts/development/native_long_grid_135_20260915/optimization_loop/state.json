@@ -1841,5 +1841,14 @@
     "closure_sha256": "c42fd307580b4473c111010d7282e31a3c6130018bac3c43d187402730f3fa20",
     "reason": "raw config proof before explicit normalization",
     "repair_tests": "176 passed,1 skipped; real131 static all passed"
+  },
+  "round_026_target_capture": {
+    "status": "rejected",
+    "attempt": 1,
+    "reason": "unsupported_launch_api_cudaLaunchKernelExC",
+    "expected_kernel_symbols_observed": 2,
+    "runtime_identity_unchanged": true,
+    "timed": false,
+    "performance_parameter_admitted": false
   }
 }

@@ -1,0 +1,29 @@
+{
+  "schema": "r26-synthetic-target-capture-finish/v1",
+  "created_utc": "2026-09-16T17:48:35.371149+00:00",
+  "returncode": 4,
+  "status": "rejected",
+  "start_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\target_capture_run.0001\\start.json",
+    "bytes": 2203,
+    "sha256": "2f4619bfdec1fea89959f1117f979836c646b66e7d4cc1ffaca7937da7f87449"
+  },
+  "performance_parameter_admitted": false,
+  "execution_error": "ValueError: recorder exit failure: 4",
+  "identity_unchanged": true,
+  "stdout_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\target_capture_run.0001\\stdout.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "stderr_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\target_capture_run.0001\\stderr.log",
+    "bytes": 152,
+    "sha256": "0a1f54c8af943984b80ca466c262543df27591eba9b0c398777426645aa4aaea"
+  },
+  "launches_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\target_capture_run.0001\\launches.json",
+    "bytes": 2942,
+    "sha256": "f46eb6a587f13b02087f630e49fc6678140214676f7308d85fa280d41245bae5"
+  }
+}

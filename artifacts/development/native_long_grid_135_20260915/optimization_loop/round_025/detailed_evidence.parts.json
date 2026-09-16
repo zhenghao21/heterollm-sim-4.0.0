@@ -1,0 +1,39 @@
+{
+  "schema": "byte-preserving-evidence-parts/v1",
+  "created_utc": "2026-09-16T17:54:47.103330+00:00",
+  "packet": {
+    "filename": "detailed_evidence.tar.gz",
+    "bytes": 112785204,
+    "sha256": "4289add29610ec7843cc64deca06646bf51bdeb6211d8e87b743d2884d0e7ae8"
+  },
+  "part_size_limit_bytes": 41943040,
+  "part_size_bytes": 41943040,
+  "part_count": 3,
+  "parts": [
+    {
+      "sequence": 1,
+      "filename": "detailed_evidence.tar.gz.part001of003",
+      "bytes": 41943040,
+      "sha256": "aa7e8a02111d37b14aa62aaa30296305ad143d54ed7260d5dd46cbb32a000eef"
+    },
+    {
+      "sequence": 2,
+      "filename": "detailed_evidence.tar.gz.part002of003",
+      "bytes": 41943040,
+      "sha256": "9d763ac6dcaea6610fe164f7fecd812c0a9e76f52d81a946918e62ab77b2fb24"
+    },
+    {
+      "sequence": 3,
+      "filename": "detailed_evidence.tar.gz.part003of003",
+      "bytes": 28899124,
+      "sha256": "4f3a1c4d5b4fd383329e4164d55ee7a5938b4288f005b3b595b121ce21b8ff51"
+    }
+  ],
+  "evidence_index_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\detailed_evidence_index.json",
+    "sha256": "b8fdcea5bb79eed27a60620ac7530b315682c259514f95c236114fc92648dc6b",
+    "bytes": 36069
+  },
+  "member_count": 133,
+  "source_packet_present_at_split": true
+}
