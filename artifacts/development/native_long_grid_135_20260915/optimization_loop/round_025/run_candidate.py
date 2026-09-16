@@ -1,6 +1,7 @@
 """R25 fixed full131 off/on prediction barrier and scoring; never run native."""
 from pathlib import Path
 import argparse, importlib.util, subprocess, sys
+from copy import deepcopy
 from datetime import datetime,timezone
 P=Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('r25_freezer',P/'freeze_candidate.py');f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
@@ -11,6 +12,33 @@ def command(arm,*args):
     subprocess.run([sys.executable,str(P/arm/'source/tools/predict_stable_native_dataset.py'),'--output',str(P/arm),*args],check=True)
 def no_scores():
     s.require(not any(list((P/a).glob('errors.*.json')) for a in ARMS),'scores exist; cannot predict again')
+def compare_arm_inputs(off,on):
+    off,on=deepcopy(off),deepcopy(on)
+    for document in (off,on):
+        for row in document['cells']:
+            issue=row['static_inputs']['mmvq_issue_evidence']
+            ref=issue['hardware_document']['ref'];actual=s.verify_reference(ref)
+            matches=[r for r in issue['evidence_refs'] if r['path']==ref['path']]
+            s.require(len(matches)==1 and s.normalized_ref(matches[0])==actual,'hardware document alias differs')
+            ref['path']='verified_hardware_document_copy';matches[0]['path']='verified_hardware_document_copy'
+    return f.compare_inputs(off,on)
+
+def qualify():
+    # Preserve the original failed freeze attempt and its unmodified driver.
+    s.require(not (P/'controls.json').exists(),'qualification must precede lock')
+    no_scores()
+    s.require(not any(list((P/a/'predictions').glob('*.prediction.json')) for a in ARMS),'qualification must precede predictions')
+    protocol,pr=s.read_json(P/'protocol.json')
+    for key in ('driver_ref','recipe_ref','helper_ref'):s.verify_reference(protocol[key])
+    for row in protocol['source_refs']:s.verify_reference(row['ref'])
+    a,ar=s.read_json(P/'off/freeze.json');b,br=s.read_json(P/'on/freeze.json')
+    count=compare_arm_inputs(a,b)
+    verifier=f.load('r25_qualification_native',f.ROOT/'tools/verify_fixed_native.py')
+    s.require(verifier.verify_lock(f.LOOP/'state.json')==protocol['native_lock'],'native changed')
+    f.write_new(P/'freeze_receipt.json',{'protocol_ref':pr,'off':ar,'on':br,'compared_cells':count,
+        'qualification_ref':s.reference(__file__),'initial_freeze_comparison':'failed: copied hardware-document paths differ; preserved',
+        'scope':'exact known MMVQ hardware document refs verified before path normalization; no source or cost change'})
+
 def guard():
     c,cr=s.read_json(P/'controls.json')
     for ref in c['refs']:s.verify_reference(ref)
@@ -24,7 +52,7 @@ def guard():
         s.source_content(freezes[arm])
         for evidence in s.evidence_closure(freezes[arm]):s.verify_source_evidence_reference(evidence)
         for evidence in freezes[arm]['final_output_selection_binding']['evidence_refs'] if arm=='on' else []:s.verify_source_evidence_reference(evidence)
-    f.compare_inputs(freezes['off'],freezes['on'])
+    compare_arm_inputs(freezes['off'],freezes['on'])
     verifier=f.load('r25_native_verifier',f.ROOT/'tools/verify_fixed_native.py')
     s.require(verifier.verify_lock(f.LOOP/'state.json')==protocol['native_lock'],'native lock changed')
     return cr
@@ -74,8 +102,9 @@ def score():
     barrier()
     f.write_new(P/'report.json',{'created_utc':now(),'barrier_ref':bref,'arms':results,'denominator_per_arm':131,'gate_B':'unvalidated','blind':False,'formal_success':False})
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('phase',choices=['lock','full','score']);parser.add_argument('--workers',type=int,default=4);parser.add_argument('--timeout-seconds',type=int,default=600);a=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('phase',choices=['qualify','lock','full','score']);parser.add_argument('--workers',type=int,default=4);parser.add_argument('--timeout-seconds',type=int,default=600);a=parser.parse_args()
     s.require(1<=a.workers<=8 and a.timeout_seconds>0,'invalid budget')
-    if a.phase=='lock':lock()
+    if a.phase=='qualify':qualify()
+    elif a.phase=='lock':lock()
     elif a.phase=='full':full(a.workers,a.timeout_seconds)
     else:score()
