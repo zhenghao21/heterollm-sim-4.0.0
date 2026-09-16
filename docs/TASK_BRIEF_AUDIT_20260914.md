@@ -196,7 +196,7 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 - R24身份修复统一path/sha256/bytes，拒绝矛盾长度和非法类型，缓存命中复核header；补齐未映射模型的freeze/resume全文SHA。原R23 104个数值预测全部精确不变，证明本轮没有成本收益；恢复覆盖导致总体分布变化不能当作精度改善。
 - R25修复真实GGUF架构名及metadata owner错位，在最后replan之前绑定选行。qwen2/llama于最后FFN前选行，qwen35于全行final norm后选行；indices/GET_ROWS保留，不重复增加lm-head。M64/R1静态探针保留attention M64，FFN重新分派M1，down进入MMVQ，融合up/gate仍明确保留单矩阵资格未覆盖。新增成本系数0。
 - R25主区联合回归114通过/1跳过；独立语义复审61通过；两路冻结及运行器保护9通过，计数有重叠不相加。两路复制后的extractor与硬件资料仅在已核对字节、别名和派生摘要的明确字段位置归一化。首次硬件资料路径比较失败保留，有单独qualification凭据，未改变冻结内容。
-- MMVQ R6共享ABI已修正conversion的type/k/m/padded_k四个int声明，定义与caller共用头；旧少参数声明负向编译被C2733拒绝，2项检查通过。R6重新提取的主MMVQ和Q8_1 cubin分别5450408B、222816B，与目标DLL逐字节相同。旧R4证据不改。R26 ExC记录器已通过固定合成shape的target运行时路径检查；wrapper转换/输出数值、wrapper动态等价、cache及计时扰动仍待验证，0参数准入。
+- MMVQ R6共享ABI已修正conversion的type/k/m/padded_k四个int声明，定义与caller共用头；旧少参数声明负向编译被C2733拒绝，2项检查通过。R6重新提取的主MMVQ和Q8_1 cubin分别5450408B、222816B，与目标DLL逐字节相同。旧R4证据不改。R26 ExC记录器已通过固定合成shape的target运行时路径检查；wrapper数值V2实际通过，4608B转换精确一致，3072行输出零失败，最大绝对差9.059906e−6、最大误差界占比0.000318811。wrapper与target动态等价、其他shape、cache及计时扰动仍待验证，0参数准入。
 
 ## 12. 最新误差及主要缺口（动态，原位更新）
 
@@ -216,7 +216,7 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 
 1. 完成R27锁定并运行末层选行对照。两路freeze已创建，分别通过冻结源码的真实131格worker预检，off/on及R25/off基线静态输入逐项对照通过；115个源码中仅替换两个已提交的规范化修复文件，32项结构测试和独立复审通过。下一步在lock阶段重复双路预检，再串行运行262个终态并统一评分。R25启动失败与R27创建前Git换行拒收均保留，不修改旧结果、不放宽身份校验。
 2. 评估选行修正的实际影响。依据源码预先限定受影响算子：普通架构的末层FFN缩行可能降低原本偏低的TTFT；混合架构的final norm及gather补全可能增时。结构正确性、源码条件资格与精度收益分开报告；不承诺全模型或TPOT改善。
-3. 完成R26合成MMVQ的数值与动态对照。新的ExC采集已实际执行成功：固定Q5_0/M1/K4096/N3072，转换grid=(16,1,1)、block=(256,1,1)，主kernel grid=(3072,1,1)、block=(32,4,1)，两者PDL属性ID6值1，参数/指针衔接及DLL/GPU前后身份通过。63项主机解码测试和7项执行门禁已通过；旧记录器不支持ExC的失败保留。这只证明该固定合成shape的target路径；wrapper首次数值尝试在GPU启动前因环境条件过宽而拒收，旧结果保留。新V2数值执行器已通过23项主机测试，完整保留后台进程观测，明确不授予性能静默资格；冻结身份、项目测试互斥和数值容差保持。接下来运行转换字节及输出数值校验，再对照wrapper实际launch，不能以相同cubin替代host分派证明。M4保持预先留出，性能参数准入仍为0。
+3. 完成R26 wrapper与target的动态对照。固定Q5_0/M1/K4096/N3072的target ExC路径及原wrapper数值资格已分别通过；数值V2保留后台活动，明确不用于性能标定，原启动前拒收保持。下一步在新shim按连续布局补齐六个channel/sample stride，并采相邻conversion→main的完整参数与指针关系，中间不插同步或D2H；新shim数值重新验证，不能自动继承旧结果。已发现旧说明性geometry字段的QI/blocks_per_iter写错，锁定源码为4/64；固定shape分支不变，原件保留并另附勘误。M4仍留出，0性能参数准入。
 4. 仅在路径、数值与测量资格通过后冻结合成性能实验。分别测CUDA-event主kernel/转换、warm复用和超过L2的旋转工作集；CUPTI采集只作路径证据。先规定development/holdout、样本量、波动门限和失败规则，再运行；不按131格误差选择系数，也不以CTA数直接换经验带宽。
 5. 下一机制优先定位MMVQ访存几何与host建图/提交重叠。真实microbatch、nonflash物理KV、retained高水位、slot生命周期作为源码约束；已有nonflash、logits、sampling、launch和sync成本先查重。固定三档prompt没有ubatch尾块，c不能替代kernel M，native token时间戳仅作诊断。未知成本标未定价，不追加p/c残差；连续工具完善须按第8节复盘，转入可改变预测的机制验证。
 6. 每轮原位更新任务书、提交、推送并核验远端。A固定131/131格、393/393项均严格<10%；不达标继续有证据的机制假设。通过A后另用独立B，当前B尚未验证。

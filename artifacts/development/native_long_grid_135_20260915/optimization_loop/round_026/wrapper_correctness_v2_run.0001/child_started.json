@@ -1,0 +1,10 @@
+{
+  "created_utc": "2026-09-16T18:44:46.995752+00:00",
+  "pid": 41324,
+  "argv": [
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\mmvq_wrapper_correctness\\mmvq_gpu_correctness.exe",
+    "--run-correctness",
+    "--output",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json"
+  ]
+}

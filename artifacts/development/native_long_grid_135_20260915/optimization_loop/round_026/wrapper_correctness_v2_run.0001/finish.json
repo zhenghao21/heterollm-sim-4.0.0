@@ -1,0 +1,154 @@
+{
+  "schema": "r26-wrapper-correctness-finish/v2",
+  "status": "synthetic_wrapper_numerically_qualified",
+  "returncode": 0,
+  "numerical_qualification": true,
+  "runtime_equivalence_qualified": false,
+  "performance_qualified": false,
+  "timed_runs": 0,
+  "performance_parameters_admitted": 0,
+  "background_GPU_isolation_verified": false,
+  "timing_not_qualified": true,
+  "raw_numerical_checks": {
+    "conversion_bytes_compared": 4608,
+    "output_rows_checked": 3072,
+    "max_absolute_error": 9.059906005859375e-06,
+    "max_bound_ratio": 0.00031881050850333644,
+    "worst_row": 2332,
+    "numerical_qualification": true,
+    "runtime_equivalence_qualified": false,
+    "performance_qualified": false,
+    "performance_parameters_admitted": 0,
+    "background_GPU_isolation_verified": false,
+    "timing_not_qualified": true
+  },
+  "hardware_verification": {
+    "same_device_and_driver_before_after": true,
+    "raw_CUDA_matches_frozen_static_properties": true,
+    "performance_stability_qualified": false,
+    "background_GPU_isolation_verified": false,
+    "timing_not_qualified": true,
+    "reported_gpu_process_count_before": 22,
+    "reported_gpu_process_count_after": 22
+  },
+  "hardware_identity_verified": true,
+  "identity_unchanged": true,
+  "finished_utc": "2026-09-16T18:45:06.627650+00:00",
+  "retained_files": {
+    "child_exited.json": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\child_exited.json",
+      "sha256": "f0fec4c0ed806755307d2294dd7d0d3e4a01ca110f9b904e9bc749310aad5a1a",
+      "bytes": 134
+    },
+    "child_started.json": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\child_started.json",
+      "sha256": "9085fb4f4a79aeb9aac2e9c90400049900a2d579ce6a8a0ec96ea7c7e5c5e9b1",
+      "bytes": 526
+    },
+    "correctness.json": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json",
+      "sha256": "0ed1594cf36a4863c5b219d72b954d79fe535932acac4805e93558163760dd30",
+      "bytes": 8057
+    },
+    "correctness.json.actual.output.f32.bin": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json.actual.output.f32.bin",
+      "sha256": "17a59cd8bdf008936818f1fb5595dd0bc4da7c19778e678dab0f0f8f347c7762",
+      "bytes": 12288
+    },
+    "correctness.json.actual.q8_1.bin": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json.actual.q8_1.bin",
+      "sha256": "84cb63bd9f5656390733a9b1b43ff7be765a7305273f03e84946b76208eb9fd0",
+      "bytes": 4608
+    },
+    "correctness.json.bounds.f64.bin": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json.bounds.f64.bin",
+      "sha256": "4fc533f558284827cb2ec8c5eda0737c7e26dd44af34f0e90e7953fe9be91975",
+      "bytes": 24576
+    },
+    "correctness.json.expected.q8_1.bin": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json.expected.q8_1.bin",
+      "sha256": "84cb63bd9f5656390733a9b1b43ff7be765a7305273f03e84946b76208eb9fd0",
+      "bytes": 4608
+    },
+    "correctness.json.input.f32.bin": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json.input.f32.bin",
+      "sha256": "b2bdf5731a3b764f8300a45f5dc0a9e653916e19a77c4f2a4f064e3bb723a7cb",
+      "bytes": 16384
+    },
+    "correctness.json.reference.f64.bin": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json.reference.f64.bin",
+      "sha256": "9723460184ddc993a6830d4cddca0672a65e16e310a9e55e776941e9f6dbbf88",
+      "bytes": 24576
+    },
+    "correctness.json.weights.q5_0.bin": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\correctness.json.weights.q5_0.bin",
+      "sha256": "15396580a0e773ccb026961062e558753ca1557c13739d063ecb46db2b2ad394",
+      "bytes": 8650752
+    },
+    "hardware_after.compute.stderr.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_after.compute.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "hardware_after.compute.stdout.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_after.compute.stdout.log",
+      "sha256": "5da3925ed9c59d0d6181cda1f0e74812f959f7c9db44df3d62f7b9ade9de4b8f",
+      "bytes": 2102
+    },
+    "hardware_after.gpu.stderr.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_after.gpu.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "hardware_after.gpu.stdout.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_after.gpu.stdout.log",
+      "sha256": "4160b04cbc9fae9f8f2a71d093fc81806d2000b52bb213347f6a6527a7c67249",
+      "bytes": 133
+    },
+    "hardware_after.json": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_after.json",
+      "sha256": "0aabafbb167b7929d9c85b006873929dea548ffcd61f88f5eb8db79643309e50",
+      "bytes": 6153
+    },
+    "hardware_before.compute.stderr.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_before.compute.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "hardware_before.compute.stdout.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_before.compute.stdout.log",
+      "sha256": "5da3925ed9c59d0d6181cda1f0e74812f959f7c9db44df3d62f7b9ade9de4b8f",
+      "bytes": 2102
+    },
+    "hardware_before.gpu.stderr.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_before.gpu.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "hardware_before.gpu.stdout.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_before.gpu.stdout.log",
+      "sha256": "7b337aa42c0f2fc7352e2e9335d2d2df4ae55a194e983bf97338564634801bec",
+      "bytes": 133
+    },
+    "hardware_before.json": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\hardware_before.json",
+      "sha256": "58aa37a785aa51c16f77f3df2b9c708da9ac7ea19e9fa00e3d0729ee8613fe47",
+      "bytes": 6157
+    },
+    "start.json": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\start.json",
+      "sha256": "9be1ba57cb7f11e5c35ee0ce06fb268d8ff28f327e468c2132eed936aa066ac6",
+      "bytes": 6007
+    },
+    "stderr.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stdout.log": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_026\\wrapper_correctness_v2_run.0001\\stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

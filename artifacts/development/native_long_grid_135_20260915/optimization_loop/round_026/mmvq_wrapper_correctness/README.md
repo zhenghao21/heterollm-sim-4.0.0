@@ -1,4 +1,4 @@
-# R26 synthetic MMVQ correctness driver — compiled, GPU unverified
+# R26 synthetic MMVQ correctness driver — fixed GPU fixture passed, performance unqualified
 
 Scope is exactly `Q5_0`, M=1, K=4096, N=3072, padded K=4096, one explicit
 nonblocking stream, no fusion and no timing loop. This is a standalone wrapper
@@ -12,7 +12,8 @@ or admit a cost-model coefficient.
   the convert `type/k/m/padded_k` four-integer signature.
 - `build_driver.py` links the three unchanged R6 objects by absolute path. It does
   not recompile them, copy a source tree, touch R6 or invoke an executable.
-- `mmvq_gpu_correctness.exe` is built/linked **but has not been run**.
+- `mmvq_gpu_correctness.exe` executed once in `../wrapper_correctness_v2_run.0001`;
+  the fixed GPU fixture passed. The predecessor runner was rejected before GPU startup.
 - `mmvq_cpu_self_test.exe` is separately compiled with the GPU path excluded and
   links only the CPU base library and Windows libraries. Its import table contains
   no cudart, nvcuda or ggml-cuda. It also rejects any such module being loaded.
@@ -104,14 +105,14 @@ source/llama.cpp-semantic/ggml/src/ggml-common.h:115-116, 229-269
 source/llama.cpp-semantic/ggml/src/ggml-quants.c:187-229, 500-524
 ```
 
-## Runtime behavior (implemented, not executed)
+## Runtime behavior and observed numerical result
 
 The GPU executable requires explicit `--run-correctness --output ABSOLUTE_NEW_JSON`.
 The JSON is opened with Windows `CREATE_NEW`; existing files are never replaced.
 An initial non-passing journal is flushed before CUDA calls, and failures remain
 recorded. All raw artifacts also use exclusive creation.
 
-The future run will record actual device UUID/name/PCI address, compute capability,
+The completed run records actual device UUID/name/PCI address, compute capability,
 SM count, memory/L2 properties, driver/runtime versions and stream handle. It uses
 one H2D input upload, the shared conversion shim, D2H conversion validation, the
 shared main shim and D2H output validation. Buffers have checked 256-byte leading
