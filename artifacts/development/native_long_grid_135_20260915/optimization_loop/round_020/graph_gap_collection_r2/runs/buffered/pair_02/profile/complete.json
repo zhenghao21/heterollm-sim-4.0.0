@@ -1,0 +1,116 @@
+{
+  "stage": {
+    "ordinal": 7,
+    "arm": "buffered",
+    "pair": 2,
+    "pair_id": "r19_graph_gap_pilot_e262144_g8.buffered.pair2",
+    "mode": "profile",
+    "config": {
+      "id": "scale_f32_e262144_g8",
+      "nodes": 8,
+      "elements": 262144
+    },
+    "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile",
+    "raw": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\raw.jsonl",
+    "app_argv": [
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+      "--run",
+      "--config",
+      "scale_f32_e262144_g8",
+      "--arm",
+      "buffered",
+      "--pair-id",
+      "r19_graph_gap_pilot_e262144_g8.buffered.pair2",
+      "--output",
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\raw.jsonl"
+    ],
+    "argv": [
+      "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\nsys.exe",
+      "profile",
+      "--kill=false",
+      "--trace=cuda,nvtx",
+      "--cuda-graph-trace=node",
+      "--sample=none",
+      "--cpuctxsw=none",
+      "--force-overwrite=false",
+      "--output=F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\trace",
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+      "--run",
+      "--config",
+      "scale_f32_e262144_g8",
+      "--arm",
+      "buffered",
+      "--pair-id",
+      "r19_graph_gap_pilot_e262144_g8.buffered.pair2",
+      "--output",
+      "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\raw.jsonl"
+    ]
+  },
+  "created_utc": "2026-09-16T07:54:53.742873+00:00",
+  "freeze_sha256": "d428de7fc77d75474a88485839d94654a715b93348c9a97e7870c2445cef240b",
+  "clock_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\clock_session\\readback.json",
+    "bytes": 842,
+    "sha256": "8ac62eb3e9fc89d0491d5f1f50498222f8c174fc0854a40e9f3a1541d6d081e5"
+  },
+  "status": "executed",
+  "child_exited": true,
+  "actual_gpu_identity": {
+    "device_index": 0,
+    "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "name": "NVIDIA GeForce RTX 5080",
+    "driver_version": "616.64",
+    "nvml_library": {
+      "path": "C:\\Windows\\System32\\nvml.dll",
+      "bytes": 1499368,
+      "sha256": "5ee24ec769a7a7404a48fb0cc1e534dd2913477fb4abfcd830c8fc9093e6d26b"
+    },
+    "clock_writes_performed": false
+  },
+  "launched_pid": 31032,
+  "returncode": 0,
+  "telemetry_errors": [],
+  "finished_utc": "2026-09-16T07:54:57.806161+00:00",
+  "artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\launched.json",
+      "bytes": 1223,
+      "sha256": "60f0578bbb58f51e6989f469ce70093b4d9cfe9616caa1fd8889710ec3f610be"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\launch_intent.json",
+      "bytes": 2970,
+      "sha256": "0ed7e993129b72c8a7ef1e3c20465192081cee307cf8ef7df61ab4d5a67bd6fb"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\raw.jsonl",
+      "bytes": 40383,
+      "sha256": "756094db7f19b7a08a433aa8c3ad6f5df275e2f90af0b9fe3449e57a3c05f801"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\raw.jsonl.receipt.json",
+      "bytes": 605,
+      "sha256": "139b931465638c99363d1340f0bb469fd42d3276c182cfdf37c5e158f910f24e"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\stdout.txt",
+      "bytes": 978,
+      "sha256": "8ced6176086f049575a3f012f62d461f46d3aa0fcf6e58c71d864a9b87f9c569"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\telemetry.json",
+      "bytes": 547023,
+      "sha256": "7e61361f6de1ec4c25af54d4e89a802df2bfd4c1879bdf82e852c49ffc49da43"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\trace.nsys-rep",
+      "bytes": 69530,
+      "sha256": "6eaa2963cda68d953efdf619cb75698d45036978e44e477faf795b2f5dd05cb0"
+    }
+  ]
+}

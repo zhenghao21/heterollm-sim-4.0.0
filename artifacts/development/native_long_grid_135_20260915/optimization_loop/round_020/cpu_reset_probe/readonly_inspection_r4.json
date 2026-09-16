@@ -1,0 +1,240 @@
+{
+  "schema": "cpu-reset-probe-readonly-inspection/v4",
+  "source_equivalent_loop_statements_checked": true,
+  "native_PE": {
+    "machine": "x86_64",
+    "required_sampler_exports": {
+      "llama_sampler_apply": {
+        "function_rva": 1913568,
+        "forwarded": false
+      },
+      "llama_sampler_free": {
+        "function_rva": 1914336,
+        "forwarded": false
+      },
+      "llama_sampler_init_top_k": {
+        "function_rva": 1920048,
+        "forwarded": false
+      }
+    },
+    "imports": [
+      "ggml.dll",
+      "ggml-base.dll",
+      "KERNEL32.dll",
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-environment-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll"
+    ],
+    "read_only_PE_inspection": true,
+    "DLL_loaded": false
+  },
+  "input_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling_parity\\static_sampling_contract.json",
+      "sha256": "d309cc5503a2e716fa3a611527920c77df052f4bbf3968fa1e7175b1d5546d37",
+      "bytes": 316362
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\common\\sampling.cpp",
+      "sha256": "a38a6624109ce01d317d6c89f5d1ff27c1427fd5934bddcf71c77d922fcf15b2",
+      "bytes": 35691
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\src\\llama-sampler.cpp",
+      "sha256": "a2637a34869a95008c847461e6b10e5edb71ba4c6d19f99a3dbd1875d66dada8",
+      "bytes": 156124
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\include\\llama.h",
+      "sha256": "bace72539125f3a2bcf7f71392cf7cc4ae1bd3988535fca16c04a97e531a27ed",
+      "bytes": 86467
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\common\\common.h",
+      "sha256": "6e678df90075831853a3b509a7a3fe01e5aa4cbeb1b3ae4364c0ac51442b36c3",
+      "bytes": 52301
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-common.dll",
+      "sha256": "f40c793d6b6fd708bbbdc55ceb277b64748f77317ed4940bdfa34f95668cc417",
+      "bytes": 8220160
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-server-impl.dll",
+      "sha256": "1b51ed569e9579543ca6977672352c537a9803a8b1062737c50e16e0be37fd05",
+      "bytes": 6343168
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-server.exe",
+      "sha256": "9882ee2a07ff0649d9dfd22e5fd4ed2a796c92eae46c53acde8017bf0ed79dae",
+      "bytes": 10752
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama.dll",
+      "sha256": "bd03c8dd9e5944f4b89ccd535f57f108f098c44814c2af64efe8f5f0ee32168f",
+      "bytes": 2634240
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+      "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+      "bytes": 61440
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\evidence\\source_manifest.json",
+      "sha256": "2f15c253406bfab3b21630d7c55f4ea8da2df73e0b085ba950cb29abf18f1cf0",
+      "bytes": 13883
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\evidence\\build_receipt.json",
+      "sha256": "cce702b121119a155e4633399fc954e7a7dee8bfa977c8ba1c72737a28bd1533",
+      "bytes": 88117
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\evidence\\source_manifest.json",
+      "sha256": "e2dcec08a60c258c8ec886a1be1048bd500c10f2e60aca710f445bb61fab8696",
+      "bytes": 75353
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\evidence\\build_receipt.json",
+      "sha256": "c807d0b2cd1bdd8f7758b6078b57517da348ad0d95322284619a1b3fd0a41035",
+      "bytes": 140839
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\evidence\\header_snapshot.json",
+      "sha256": "9400f25f32d530685c0b5cc5c5bb104aef6dff96bdce2f8ae348f74406019686",
+      "bytes": 85981
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+      "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+      "bytes": 958464
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+      "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+      "bytes": 26091520
+    },
+    {
+      "path": "E:\\cuda\\bin\\cudart64_12.dll",
+      "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+      "bytes": 573952
+    },
+    {
+      "path": "E:\\cuda\\bin\\cublas64_12.dll",
+      "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+      "bytes": 113716224
+    },
+    {
+      "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+      "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+      "bytes": 674667520
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\runs\\scale_f32_e1024_g1\\pair_01\\direct\\microbench.json",
+      "sha256": "b7c1e236975a99fc67b0d144aa7d3c0b844043e45336bc96174ae0207f8ce3f2",
+      "bytes": 43149
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\cpu_reset_probe.cpp",
+      "sha256": "0dd13c745c9c6a01b5bc9393a0829a856541ab6baad164c83e938790252ed601",
+      "bytes": 25815
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\entry.py",
+      "sha256": "09cf8ff3ff820523a29ef485bb7c286ea59639fa50623c017954654ec3957cfe",
+      "bytes": 36651
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\protocol.json",
+      "sha256": "3d0f2fe96fd3bf21c9fbb7b5998ec17c98f77820b97ae780767a6832e57d4a44",
+      "bytes": 12413
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\source_identity_reset_r1.json",
+      "sha256": "0c9b75422d909e820a9b3cc8a1c34deb4cbf800df98f84a9b018a8ae0023eb13",
+      "bytes": 17484
+    }
+  ],
+  "identity_freeze_required_before_measure": true,
+  "all_frequency_fields_gate_timing_use": true,
+  "loader_binding": {
+    "runtime_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin",
+    "cuda_directory": "E:\\cuda\\bin",
+    "runtime_modules": [
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama.dll",
+        "sha256": "bd03c8dd9e5944f4b89ccd535f57f108f098c44814c2af64efe8f5f0ee32168f",
+        "bytes": 2634240
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+        "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+        "bytes": 61440
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+        "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+        "bytes": 673792
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+        "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+        "bytes": 958464
+      },
+      {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+        "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297",
+        "bytes": 26091520
+      }
+    ],
+    "cuda_dependency_modules": [
+      {
+        "path": "E:\\cuda\\bin\\cudart64_12.dll",
+        "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+        "bytes": 573952
+      },
+      {
+        "path": "E:\\cuda\\bin\\cublas64_12.dll",
+        "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+        "bytes": 113716224
+      },
+      {
+        "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+        "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+        "bytes": 674667520
+      }
+    ],
+    "dependency_load_order": [
+      "cudart64_12.dll",
+      "cublasLt64_12.dll",
+      "cublas64_12.dll",
+      "ggml-base.dll",
+      "ggml-cpu.dll",
+      "ggml-cuda.dll",
+      "ggml.dll",
+      "llama.dll"
+    ],
+    "r18_setup_proof_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\collection\\runs\\scale_f32_e1024_g1\\pair_01\\direct\\microbench.json",
+      "sha256": "b7c1e236975a99fc67b0d144aa7d3c0b844043e45336bc96174ae0207f8ce3f2",
+      "bytes": 43149
+    }
+  },
+  "GPU_executed": false,
+  "DLL_loaded": false,
+  "compiled": false,
+  "probe_executed": false
+}

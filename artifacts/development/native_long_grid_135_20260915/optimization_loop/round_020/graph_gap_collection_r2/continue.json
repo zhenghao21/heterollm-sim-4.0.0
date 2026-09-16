@@ -1,0 +1,32 @@
+{
+  "freeze_sha256": "d428de7fc77d75474a88485839d94654a715b93348c9a97e7870c2445cef240b",
+  "first_pair_reviewed": true,
+  "clock_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\clock_session\\readback.json",
+    "bytes": 842,
+    "sha256": "8ac62eb3e9fc89d0491d5f1f50498222f8c174fc0854a40e9f3a1541d6d081e5"
+  },
+  "review_scope": "both arms first pair structural/numeric/clock/trace identity only; full three pairs remain preregistered, quality failures not waived",
+  "arms": [
+    {
+      "arm": "control",
+      "clock_math_trace_pass": true,
+      "quality_issues_retained": [
+        "missing_or_duplicate_process_pair",
+        "pair_0:direct_host_p90_p10",
+        "pair_0:profile_direct_perturbation",
+        "missing_profile_process_medians"
+      ]
+    },
+    {
+      "arm": "buffered",
+      "clock_math_trace_pass": true,
+      "quality_issues_retained": [
+        "missing_or_duplicate_process_pair",
+        "pair_0:profile_direct_perturbation",
+        "missing_profile_process_medians"
+      ]
+    }
+  ],
+  "thresholds_changed": false
+}

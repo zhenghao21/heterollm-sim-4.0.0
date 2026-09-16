@@ -1,0 +1,10 @@
+{
+  "stage_ordinal": 10,
+  "status": "structurally_validated",
+  "freeze_sha256": "d428de7fc77d75474a88485839d94654a715b93348c9a97e7870c2445cef240b",
+  "raw_audit_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_02\\direct\\raw_audit.json",
+    "bytes": 82219,
+    "sha256": "518f583bfbab78b5334ae54e673377bcf6f8ecc94451d8ff51972f0242165a86"
+  }
+}

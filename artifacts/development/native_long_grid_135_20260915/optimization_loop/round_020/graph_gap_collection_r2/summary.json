@@ -1,0 +1,1619 @@
+{
+  "schema": "r20-graph-gap-ab-summary/v1",
+  "freeze_sha256": "d428de7fc77d75474a88485839d94654a715b93348c9a97e7870c2445cef240b",
+  "expected_stages": 18,
+  "completed_stages": 18,
+  "unrun_stages": [],
+  "arms": [
+    {
+      "config": {
+        "id": "scale_f32_e262144_g8",
+        "nodes": 8,
+        "elements": 262144,
+        "arm": "control"
+      },
+      "status": "diagnostic_quality_rejected",
+      "issues": [
+        "pair_0:direct_host_p90_p10",
+        "pair_0:profile_direct_perturbation",
+        "pair_1:direct_host_p90_p10",
+        "pair_2:direct_host_p90_p10",
+        "pair_2:profile_direct_perturbation"
+      ],
+      "fixed_policy": {
+        "config_count": 1,
+        "arm_count": 2,
+        "process_pairs": 3,
+        "calls_per_process": 36,
+        "formal_calls_per_process": 30,
+        "pair_order_rule": "config_index_plus_pair_index_parity_direct_first_when_even",
+        "checkpoint_seconds": 180,
+        "terminate_on_checkpoint": false,
+        "kernel_formal_p90_div_p10_max": 1.5,
+        "profile_process_median_max_relative_deviation": 0.05,
+        "profile_direct_host_median_max_relative_difference": 0.2,
+        "direct_host_formal_p90_div_p10_max": 1.5,
+        "all_first_warmup_formal_numeric_rows_pass_required": true,
+        "all_profile_process_kernel_chain_and_source_path_required": true,
+        "clock_sampling_method": "high_resolution_waitable_timer_absolute_QPC_SM_read_windows",
+        "high_frequency_fields": [
+          "sm_mhz"
+        ],
+        "full_state_telemetry_in_formal": false,
+        "quantile_method": "linear interpolation at (n-1)*q",
+        "median_deviation_center": "median of three profiled process medians",
+        "host_ratio_denominator": "paired direct process host median",
+        "within_profile_dispersion": "each of three formal kernel-union distributions",
+        "target_sm_clock_mhz": 2400,
+        "sm_clock_tolerance_mhz": 30,
+        "telemetry_period_seconds": 0.005,
+        "maximum_formal_clock_bracket_gap_ms": 25,
+        "every_formal_interval_bracketed_required": true,
+        "diagnostic_labels_only": true,
+        "coefficients_emitted": false,
+        "validation_group_never_fitted": true
+      },
+      "pairs_observed": 3,
+      "pairs_required": 3,
+      "profile_direct_host_relative_differences": [
+        0.40764790764790765,
+        0.04706601466992665,
+        0.20913770913770913
+      ],
+      "profile_process_median_max_relative_deviation": 0.0,
+      "measurement_cost_eligible": false,
+      "calibration_eligible": false,
+      "fit_performed": false,
+      "holdout_not_for_fit": true,
+      "experiment_group": "graph_gap_ab_diagnostic",
+      "transfer_scope": "Empirical same-DLL captured kernel path only; source equivalence and LLM transfer remain conditional.",
+      "pairs": [
+        {
+          "pair": 0,
+          "clock_domain_validated": true,
+          "numerics_all_rows": true,
+          "trace_chain_complete": true,
+          "source_path_matches_observed_family": true,
+          "trace_warning_free": true,
+          "profile_kernel": {
+            "count": 30,
+            "minimum_ns": 15456,
+            "maximum_ns": 15808,
+            "median_ns": 15553.0,
+            "p10_ns": 15484.9,
+            "p90_ns": 15715.2,
+            "p90_div_p10": 1.0148725532615646
+          },
+          "direct_host": {
+            "count": 30,
+            "minimum_ns": 57800.0,
+            "maximum_ns": 147100.0,
+            "median_ns": 69300.0,
+            "p10_ns": 60150.0,
+            "p90_ns": 123630.00000000001,
+            "p90_div_p10": 2.055361596009975
+          },
+          "profile_host": {
+            "count": 30,
+            "minimum_ns": 77400.0,
+            "maximum_ns": 194900.0,
+            "median_ns": 97550.0,
+            "p10_ns": 78650.0,
+            "p90_ns": 168260.00000000003,
+            "p90_div_p10": 2.139351557533376
+          },
+          "profile_raw": {
+            "signature": {
+              "environment": {
+                "GGML_OP_OFFLOAD_MIN_BATCH": null,
+                "LLAMA_ENGINE_TOKEN_TIMES": "1",
+                "CUDA_VISIBLE_DEVICES": null,
+                "CUDA_MODULE_LOADING": null,
+                "OMP_NUM_THREADS": null,
+                "GGML_CUDA_DISABLE_GRAPHS": null,
+                "LLAMA_TRACE_ANNOTATIONS": "0",
+                "LLAMA_GRAPH_REUSE_DISABLE": null,
+                "GGML_CPU_OPERATOR_TRACE": null,
+                "GGML_CPU_DISABLE_FUSION": null,
+                "GGML_CUDA_DISABLE_FUSION": null,
+                "GGML_CUDA_GRAPH_OPT": null,
+                "GGML_CUDA_NO_PINNED": null,
+                "GGML_CUDA_REGISTER_HOST": null,
+                "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+                "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+                "GGML_CUDA_FORCE_MMQ": null,
+                "GGML_CUDA_FORCE_CUBLAS": null,
+                "GGML_SCHED_DEBUG": null,
+                "GGML_NO_IQ_PANEL": null,
+                "CUDA_LAUNCH_BLOCKING": null
+              },
+              "modules": [
+                {
+                  "name": "cublas64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublas64_12.dll",
+                  "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99"
+                },
+                {
+                  "name": "cublasLt64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+                  "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7"
+                },
+                {
+                  "name": "cudart64_12.dll",
+                  "path": "E:\\cuda\\bin\\cudart64_12.dll",
+                  "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344"
+                },
+                {
+                  "name": "ggml-base.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+                  "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca"
+                },
+                {
+                  "name": "ggml-cpu.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+                  "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232"
+                },
+                {
+                  "name": "ggml-cuda.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+                  "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297"
+                },
+                {
+                  "name": "ggml.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+                  "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc"
+                },
+                {
+                  "name": "graph-gap-probe.exe",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+                  "sha256": "cb8796c08c0749f58b63f23a2f75a8f12f95317bf42dd10ba1312e983831aa19"
+                },
+                {
+                  "name": "nvcuda.dll",
+                  "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+                  "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad"
+                },
+                {
+                  "name": "nvcuda64.dll",
+                  "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+                  "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954"
+                }
+              ],
+              "graph_nodes": [
+                {
+                  "index": 0,
+                  "name": "scale_1",
+                  "src0": "graph_input",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 1,
+                  "name": "scale_2",
+                  "src0": "scale_1",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 2,
+                  "name": "scale_3",
+                  "src0": "scale_2",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 3,
+                  "name": "scale_4",
+                  "src0": "scale_3",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 4,
+                  "name": "scale_5",
+                  "src0": "scale_4",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 5,
+                  "name": "scale_6",
+                  "src0": "scale_5",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 6,
+                  "name": "scale_7",
+                  "src0": "scale_6",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 7,
+                  "name": "scale_8",
+                  "src0": "scale_7",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "arm": "control"
+            }
+          },
+          "raw_refs": [
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_01\\direct\\raw.jsonl",
+              "bytes": 47869,
+              "sha256": "d8ab793c63780321e83b34e17f5fa7422444ee9ce61016d2329e76696617ba60"
+            },
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_01\\profile\\raw.jsonl",
+              "bytes": 47872,
+              "sha256": "7bf52c3fb240a0c9abfa1df2167169f54d8a23de2ed3e16435ffd4b923b4e7a3"
+            }
+          ],
+          "per_call_final_validated": true,
+          "trace_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_01\\export\\strict_trace.json",
+            "bytes": 867770,
+            "sha256": "ddaed87a82da1735733619a7aee832f2223e7f7154907916dedc629dd7a7f672"
+          }
+        },
+        {
+          "pair": 1,
+          "clock_domain_validated": true,
+          "numerics_all_rows": true,
+          "trace_chain_complete": true,
+          "source_path_matches_observed_family": true,
+          "trace_warning_free": true,
+          "profile_kernel": {
+            "count": 30,
+            "minimum_ns": 15393,
+            "maximum_ns": 15712,
+            "median_ns": 15553.0,
+            "p10_ns": 15452.9,
+            "p90_ns": 15649.0,
+            "p90_div_p10": 1.0126901746597725
+          },
+          "direct_host": {
+            "count": 30,
+            "minimum_ns": 60700.0,
+            "maximum_ns": 156700.0,
+            "median_ns": 81800.0,
+            "p10_ns": 65260.0,
+            "p90_ns": 139700.0,
+            "p90_div_p10": 2.1406680968433958
+          },
+          "profile_host": {
+            "count": 30,
+            "minimum_ns": 76100.0,
+            "maximum_ns": 177000.0,
+            "median_ns": 85650.0,
+            "p10_ns": 77680.0,
+            "p90_ns": 168360.0,
+            "p90_div_p10": 2.16735324407827
+          },
+          "profile_raw": {
+            "signature": {
+              "environment": {
+                "GGML_OP_OFFLOAD_MIN_BATCH": null,
+                "LLAMA_ENGINE_TOKEN_TIMES": "1",
+                "CUDA_VISIBLE_DEVICES": null,
+                "CUDA_MODULE_LOADING": null,
+                "OMP_NUM_THREADS": null,
+                "GGML_CUDA_DISABLE_GRAPHS": null,
+                "LLAMA_TRACE_ANNOTATIONS": "0",
+                "LLAMA_GRAPH_REUSE_DISABLE": null,
+                "GGML_CPU_OPERATOR_TRACE": null,
+                "GGML_CPU_DISABLE_FUSION": null,
+                "GGML_CUDA_DISABLE_FUSION": null,
+                "GGML_CUDA_GRAPH_OPT": null,
+                "GGML_CUDA_NO_PINNED": null,
+                "GGML_CUDA_REGISTER_HOST": null,
+                "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+                "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+                "GGML_CUDA_FORCE_MMQ": null,
+                "GGML_CUDA_FORCE_CUBLAS": null,
+                "GGML_SCHED_DEBUG": null,
+                "GGML_NO_IQ_PANEL": null,
+                "CUDA_LAUNCH_BLOCKING": null
+              },
+              "modules": [
+                {
+                  "name": "cublas64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublas64_12.dll",
+                  "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99"
+                },
+                {
+                  "name": "cublasLt64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+                  "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7"
+                },
+                {
+                  "name": "cudart64_12.dll",
+                  "path": "E:\\cuda\\bin\\cudart64_12.dll",
+                  "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344"
+                },
+                {
+                  "name": "ggml-base.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+                  "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca"
+                },
+                {
+                  "name": "ggml-cpu.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+                  "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232"
+                },
+                {
+                  "name": "ggml-cuda.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+                  "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297"
+                },
+                {
+                  "name": "ggml.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+                  "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc"
+                },
+                {
+                  "name": "graph-gap-probe.exe",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+                  "sha256": "cb8796c08c0749f58b63f23a2f75a8f12f95317bf42dd10ba1312e983831aa19"
+                },
+                {
+                  "name": "nvcuda.dll",
+                  "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+                  "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad"
+                },
+                {
+                  "name": "nvcuda64.dll",
+                  "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+                  "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954"
+                }
+              ],
+              "graph_nodes": [
+                {
+                  "index": 0,
+                  "name": "scale_1",
+                  "src0": "graph_input",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 1,
+                  "name": "scale_2",
+                  "src0": "scale_1",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 2,
+                  "name": "scale_3",
+                  "src0": "scale_2",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 3,
+                  "name": "scale_4",
+                  "src0": "scale_3",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 4,
+                  "name": "scale_5",
+                  "src0": "scale_4",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 5,
+                  "name": "scale_6",
+                  "src0": "scale_5",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 6,
+                  "name": "scale_7",
+                  "src0": "scale_6",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 7,
+                  "name": "scale_8",
+                  "src0": "scale_7",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "arm": "control"
+            }
+          },
+          "raw_refs": [
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_02\\direct\\raw.jsonl",
+              "bytes": 47870,
+              "sha256": "c1518071e080754614f919c506859fe1ccc3324d78f75422ba043a9b3618735c"
+            },
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_02\\profile\\raw.jsonl",
+              "bytes": 47872,
+              "sha256": "917065804ca11db6dfa6ca3935d3be92f40b7aa56fa1989e3359b2eba02fbd83"
+            }
+          ],
+          "per_call_final_validated": true,
+          "trace_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_02\\export\\strict_trace.json",
+            "bytes": 867764,
+            "sha256": "d1c8a33b5825fe4aa43b6d2bbe1b954c0b04b9db92e6c4696d283ca94a3ae32a"
+          }
+        },
+        {
+          "pair": 2,
+          "clock_domain_validated": true,
+          "numerics_all_rows": true,
+          "trace_chain_complete": true,
+          "source_path_matches_observed_family": true,
+          "trace_warning_free": true,
+          "profile_kernel": {
+            "count": 30,
+            "minimum_ns": 15457,
+            "maximum_ns": 15745,
+            "median_ns": 15553.0,
+            "p10_ns": 15488.9,
+            "p90_ns": 15684.2,
+            "p90_div_p10": 1.0126090296922312
+          },
+          "direct_host": {
+            "count": 30,
+            "minimum_ns": 58400.0,
+            "maximum_ns": 155900.0,
+            "median_ns": 77700.0,
+            "p10_ns": 59930.0,
+            "p90_ns": 139290.0,
+            "p90_div_p10": 2.3242115801768732
+          },
+          "profile_host": {
+            "count": 30,
+            "minimum_ns": 75500.0,
+            "maximum_ns": 283200.0,
+            "median_ns": 93950.0,
+            "p10_ns": 78040.0,
+            "p90_ns": 170730.0,
+            "p90_div_p10": 2.1877242439774474
+          },
+          "profile_raw": {
+            "signature": {
+              "environment": {
+                "GGML_OP_OFFLOAD_MIN_BATCH": null,
+                "LLAMA_ENGINE_TOKEN_TIMES": "1",
+                "CUDA_VISIBLE_DEVICES": null,
+                "CUDA_MODULE_LOADING": null,
+                "OMP_NUM_THREADS": null,
+                "GGML_CUDA_DISABLE_GRAPHS": null,
+                "LLAMA_TRACE_ANNOTATIONS": "0",
+                "LLAMA_GRAPH_REUSE_DISABLE": null,
+                "GGML_CPU_OPERATOR_TRACE": null,
+                "GGML_CPU_DISABLE_FUSION": null,
+                "GGML_CUDA_DISABLE_FUSION": null,
+                "GGML_CUDA_GRAPH_OPT": null,
+                "GGML_CUDA_NO_PINNED": null,
+                "GGML_CUDA_REGISTER_HOST": null,
+                "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+                "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+                "GGML_CUDA_FORCE_MMQ": null,
+                "GGML_CUDA_FORCE_CUBLAS": null,
+                "GGML_SCHED_DEBUG": null,
+                "GGML_NO_IQ_PANEL": null,
+                "CUDA_LAUNCH_BLOCKING": null
+              },
+              "modules": [
+                {
+                  "name": "cublas64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublas64_12.dll",
+                  "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99"
+                },
+                {
+                  "name": "cublasLt64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+                  "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7"
+                },
+                {
+                  "name": "cudart64_12.dll",
+                  "path": "E:\\cuda\\bin\\cudart64_12.dll",
+                  "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344"
+                },
+                {
+                  "name": "ggml-base.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+                  "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca"
+                },
+                {
+                  "name": "ggml-cpu.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+                  "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232"
+                },
+                {
+                  "name": "ggml-cuda.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+                  "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297"
+                },
+                {
+                  "name": "ggml.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+                  "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc"
+                },
+                {
+                  "name": "graph-gap-probe.exe",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+                  "sha256": "cb8796c08c0749f58b63f23a2f75a8f12f95317bf42dd10ba1312e983831aa19"
+                },
+                {
+                  "name": "nvcuda.dll",
+                  "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+                  "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad"
+                },
+                {
+                  "name": "nvcuda64.dll",
+                  "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+                  "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954"
+                }
+              ],
+              "graph_nodes": [
+                {
+                  "index": 0,
+                  "name": "scale_1",
+                  "src0": "graph_input",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 1,
+                  "name": "scale_2",
+                  "src0": "scale_1",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 2,
+                  "name": "scale_3",
+                  "src0": "scale_2",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 3,
+                  "name": "scale_4",
+                  "src0": "scale_3",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 4,
+                  "name": "scale_5",
+                  "src0": "scale_4",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 5,
+                  "name": "scale_6",
+                  "src0": "scale_5",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 6,
+                  "name": "scale_7",
+                  "src0": "scale_6",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 7,
+                  "name": "scale_8",
+                  "src0": "scale_7",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "arm": "control"
+            }
+          },
+          "raw_refs": [
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_03\\direct\\raw.jsonl",
+              "bytes": 47869,
+              "sha256": "d2bb5e6437efafac23efcde2151ae4c724b2f99053ef09e0f3a738bbf3ca9793"
+            },
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_03\\profile\\raw.jsonl",
+              "bytes": 47872,
+              "sha256": "80bf2aabc9b3c9a6b686318717bbb1ad9e01317b3134098cd2c3a44a9f89e57b"
+            }
+          ],
+          "per_call_final_validated": true,
+          "trace_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\control\\pair_03\\export\\strict_trace.json",
+            "bytes": 867774,
+            "sha256": "46bcfc58c8bc80ea27b6830e49fb928e77f9295f6d7c93b0d7b89c18414a0aa9"
+          }
+        }
+      ]
+    },
+    {
+      "config": {
+        "id": "scale_f32_e262144_g8",
+        "nodes": 8,
+        "elements": 262144,
+        "arm": "buffered"
+      },
+      "status": "diagnostic_quality_rejected",
+      "issues": [
+        "pair_0:profile_direct_perturbation"
+      ],
+      "fixed_policy": {
+        "config_count": 1,
+        "arm_count": 2,
+        "process_pairs": 3,
+        "calls_per_process": 36,
+        "formal_calls_per_process": 30,
+        "pair_order_rule": "config_index_plus_pair_index_parity_direct_first_when_even",
+        "checkpoint_seconds": 180,
+        "terminate_on_checkpoint": false,
+        "kernel_formal_p90_div_p10_max": 1.5,
+        "profile_process_median_max_relative_deviation": 0.05,
+        "profile_direct_host_median_max_relative_difference": 0.2,
+        "direct_host_formal_p90_div_p10_max": 1.5,
+        "all_first_warmup_formal_numeric_rows_pass_required": true,
+        "all_profile_process_kernel_chain_and_source_path_required": true,
+        "clock_sampling_method": "high_resolution_waitable_timer_absolute_QPC_SM_read_windows",
+        "high_frequency_fields": [
+          "sm_mhz"
+        ],
+        "full_state_telemetry_in_formal": false,
+        "quantile_method": "linear interpolation at (n-1)*q",
+        "median_deviation_center": "median of three profiled process medians",
+        "host_ratio_denominator": "paired direct process host median",
+        "within_profile_dispersion": "each of three formal kernel-union distributions",
+        "target_sm_clock_mhz": 2400,
+        "sm_clock_tolerance_mhz": 30,
+        "telemetry_period_seconds": 0.005,
+        "maximum_formal_clock_bracket_gap_ms": 25,
+        "every_formal_interval_bracketed_required": true,
+        "diagnostic_labels_only": true,
+        "coefficients_emitted": false,
+        "validation_group_never_fitted": true
+      },
+      "pairs_observed": 3,
+      "pairs_required": 3,
+      "profile_direct_host_relative_differences": [
+        0.23626852659110723,
+        0.04981684981684982,
+        0.04041146216017634
+      ],
+      "profile_process_median_max_relative_deviation": 0.0009644441586832123,
+      "measurement_cost_eligible": false,
+      "calibration_eligible": false,
+      "fit_performed": false,
+      "holdout_not_for_fit": true,
+      "experiment_group": "graph_gap_ab_diagnostic",
+      "transfer_scope": "Empirical same-DLL captured kernel path only; source equivalence and LLM transfer remain conditional.",
+      "pairs": [
+        {
+          "pair": 0,
+          "clock_domain_validated": true,
+          "numerics_all_rows": true,
+          "trace_chain_complete": true,
+          "source_path_matches_observed_family": true,
+          "trace_warning_free": true,
+          "profile_kernel": {
+            "count": 30,
+            "minimum_ns": 15425,
+            "maximum_ns": 15777,
+            "median_ns": 15553.0,
+            "p10_ns": 15484.9,
+            "p90_ns": 15716.1,
+            "p90_div_p10": 1.0149306743989306
+          },
+          "direct_host": {
+            "count": 30,
+            "minimum_ns": 54900.0,
+            "maximum_ns": 222500.0,
+            "median_ns": 57350.0,
+            "p10_ns": 55900.0,
+            "p90_ns": 72810.00000000012,
+            "p90_div_p10": 1.3025044722719161
+          },
+          "profile_host": {
+            "count": 30,
+            "minimum_ns": 69300.0,
+            "maximum_ns": 223100.0,
+            "median_ns": 70900.0,
+            "p10_ns": 70380.0,
+            "p90_ns": 77020.0,
+            "p90_div_p10": 1.0943449843705597
+          },
+          "profile_raw": {
+            "signature": {
+              "environment": {
+                "GGML_OP_OFFLOAD_MIN_BATCH": null,
+                "LLAMA_ENGINE_TOKEN_TIMES": "1",
+                "CUDA_VISIBLE_DEVICES": null,
+                "CUDA_MODULE_LOADING": null,
+                "OMP_NUM_THREADS": null,
+                "GGML_CUDA_DISABLE_GRAPHS": null,
+                "LLAMA_TRACE_ANNOTATIONS": "0",
+                "LLAMA_GRAPH_REUSE_DISABLE": null,
+                "GGML_CPU_OPERATOR_TRACE": null,
+                "GGML_CPU_DISABLE_FUSION": null,
+                "GGML_CUDA_DISABLE_FUSION": null,
+                "GGML_CUDA_GRAPH_OPT": null,
+                "GGML_CUDA_NO_PINNED": null,
+                "GGML_CUDA_REGISTER_HOST": null,
+                "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+                "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+                "GGML_CUDA_FORCE_MMQ": null,
+                "GGML_CUDA_FORCE_CUBLAS": null,
+                "GGML_SCHED_DEBUG": null,
+                "GGML_NO_IQ_PANEL": null,
+                "CUDA_LAUNCH_BLOCKING": null
+              },
+              "modules": [
+                {
+                  "name": "cublas64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublas64_12.dll",
+                  "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99"
+                },
+                {
+                  "name": "cublasLt64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+                  "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7"
+                },
+                {
+                  "name": "cudart64_12.dll",
+                  "path": "E:\\cuda\\bin\\cudart64_12.dll",
+                  "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344"
+                },
+                {
+                  "name": "ggml-base.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+                  "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca"
+                },
+                {
+                  "name": "ggml-cpu.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+                  "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232"
+                },
+                {
+                  "name": "ggml-cuda.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+                  "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297"
+                },
+                {
+                  "name": "ggml.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+                  "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc"
+                },
+                {
+                  "name": "graph-gap-probe.exe",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+                  "sha256": "cb8796c08c0749f58b63f23a2f75a8f12f95317bf42dd10ba1312e983831aa19"
+                },
+                {
+                  "name": "nvcuda.dll",
+                  "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+                  "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad"
+                },
+                {
+                  "name": "nvcuda64.dll",
+                  "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+                  "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954"
+                }
+              ],
+              "graph_nodes": [
+                {
+                  "index": 0,
+                  "name": "scale_1",
+                  "src0": "graph_input",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 1,
+                  "name": "scale_2",
+                  "src0": "scale_1",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 2,
+                  "name": "scale_3",
+                  "src0": "scale_2",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 3,
+                  "name": "scale_4",
+                  "src0": "scale_3",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 4,
+                  "name": "scale_5",
+                  "src0": "scale_4",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 5,
+                  "name": "scale_6",
+                  "src0": "scale_5",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 6,
+                  "name": "scale_7",
+                  "src0": "scale_6",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 7,
+                  "name": "scale_8",
+                  "src0": "scale_7",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "arm": "buffered"
+            }
+          },
+          "raw_refs": [
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_01\\direct\\raw.jsonl",
+              "bytes": 40381,
+              "sha256": "c42f003462805a67112a26f77803286171f84d9f65339022cc5feb43a3712bac"
+            },
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_01\\profile\\raw.jsonl",
+              "bytes": 40383,
+              "sha256": "be15dfca8add655130ad36d715b1b1ee7e4d4cada840263f87c48206b8ae481f"
+            }
+          ],
+          "per_call_final_validated": false,
+          "trace_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_01\\export\\strict_trace.json",
+            "bytes": 866202,
+            "sha256": "18437e498d702c1c040604649f1527ddd76005250487acf1fbd964220ca5fc97"
+          }
+        },
+        {
+          "pair": 1,
+          "clock_domain_validated": true,
+          "numerics_all_rows": true,
+          "trace_chain_complete": true,
+          "source_path_matches_observed_family": true,
+          "trace_warning_free": true,
+          "profile_kernel": {
+            "count": 30,
+            "minimum_ns": 15456,
+            "maximum_ns": 15648,
+            "median_ns": 15553.0,
+            "p10_ns": 15488.0,
+            "p90_ns": 15617.0,
+            "p90_div_p10": 1.00832902892562
+          },
+          "direct_host": {
+            "count": 30,
+            "minimum_ns": 64600.0,
+            "maximum_ns": 158300.0,
+            "median_ns": 68250.0,
+            "p10_ns": 65190.0,
+            "p90_ns": 72590.0,
+            "p90_div_p10": 1.1135143426905967
+          },
+          "profile_host": {
+            "count": 30,
+            "minimum_ns": 70200.0,
+            "maximum_ns": 218900.0,
+            "median_ns": 71650.0,
+            "p10_ns": 70590.0,
+            "p90_ns": 90010.00000000015,
+            "p90_div_p10": 1.2751097889219456
+          },
+          "profile_raw": {
+            "signature": {
+              "environment": {
+                "GGML_OP_OFFLOAD_MIN_BATCH": null,
+                "LLAMA_ENGINE_TOKEN_TIMES": "1",
+                "CUDA_VISIBLE_DEVICES": null,
+                "CUDA_MODULE_LOADING": null,
+                "OMP_NUM_THREADS": null,
+                "GGML_CUDA_DISABLE_GRAPHS": null,
+                "LLAMA_TRACE_ANNOTATIONS": "0",
+                "LLAMA_GRAPH_REUSE_DISABLE": null,
+                "GGML_CPU_OPERATOR_TRACE": null,
+                "GGML_CPU_DISABLE_FUSION": null,
+                "GGML_CUDA_DISABLE_FUSION": null,
+                "GGML_CUDA_GRAPH_OPT": null,
+                "GGML_CUDA_NO_PINNED": null,
+                "GGML_CUDA_REGISTER_HOST": null,
+                "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+                "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+                "GGML_CUDA_FORCE_MMQ": null,
+                "GGML_CUDA_FORCE_CUBLAS": null,
+                "GGML_SCHED_DEBUG": null,
+                "GGML_NO_IQ_PANEL": null,
+                "CUDA_LAUNCH_BLOCKING": null
+              },
+              "modules": [
+                {
+                  "name": "cublas64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublas64_12.dll",
+                  "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99"
+                },
+                {
+                  "name": "cublasLt64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+                  "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7"
+                },
+                {
+                  "name": "cudart64_12.dll",
+                  "path": "E:\\cuda\\bin\\cudart64_12.dll",
+                  "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344"
+                },
+                {
+                  "name": "ggml-base.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+                  "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca"
+                },
+                {
+                  "name": "ggml-cpu.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+                  "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232"
+                },
+                {
+                  "name": "ggml-cuda.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+                  "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297"
+                },
+                {
+                  "name": "ggml.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+                  "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc"
+                },
+                {
+                  "name": "graph-gap-probe.exe",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+                  "sha256": "cb8796c08c0749f58b63f23a2f75a8f12f95317bf42dd10ba1312e983831aa19"
+                },
+                {
+                  "name": "nvcuda.dll",
+                  "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+                  "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad"
+                },
+                {
+                  "name": "nvcuda64.dll",
+                  "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+                  "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954"
+                }
+              ],
+              "graph_nodes": [
+                {
+                  "index": 0,
+                  "name": "scale_1",
+                  "src0": "graph_input",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 1,
+                  "name": "scale_2",
+                  "src0": "scale_1",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 2,
+                  "name": "scale_3",
+                  "src0": "scale_2",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 3,
+                  "name": "scale_4",
+                  "src0": "scale_3",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 4,
+                  "name": "scale_5",
+                  "src0": "scale_4",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 5,
+                  "name": "scale_6",
+                  "src0": "scale_5",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 6,
+                  "name": "scale_7",
+                  "src0": "scale_6",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 7,
+                  "name": "scale_8",
+                  "src0": "scale_7",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "arm": "buffered"
+            }
+          },
+          "raw_refs": [
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\direct\\raw.jsonl",
+              "bytes": 40380,
+              "sha256": "fde8918b16e656845c57c3d226cfba88bd06ff4cc46b81f6517843012d2652fc"
+            },
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\profile\\raw.jsonl",
+              "bytes": 40383,
+              "sha256": "756094db7f19b7a08a433aa8c3ad6f5df275e2f90af0b9fe3449e57a3c05f801"
+            }
+          ],
+          "per_call_final_validated": false,
+          "trace_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_02\\export\\strict_trace.json",
+            "bytes": 866207,
+            "sha256": "e624fee758898e802d792f391d24e2d561dc2afa6ae0d31f35e0e5764ae92d1f"
+          }
+        },
+        {
+          "pair": 2,
+          "clock_domain_validated": true,
+          "numerics_all_rows": true,
+          "trace_chain_complete": true,
+          "source_path_matches_observed_family": true,
+          "trace_warning_free": true,
+          "profile_kernel": {
+            "count": 30,
+            "minimum_ns": 15424,
+            "maximum_ns": 15776,
+            "median_ns": 15568.0,
+            "p10_ns": 15456.9,
+            "p90_ns": 15684.2,
+            "p90_div_p10": 1.0147054066468697
+          },
+          "direct_host": {
+            "count": 30,
+            "minimum_ns": 64600.0,
+            "maximum_ns": 166800.0,
+            "median_ns": 68050.0,
+            "p10_ns": 66170.0,
+            "p90_ns": 86880.00000000001,
+            "p90_div_p10": 1.3129817137675686
+          },
+          "profile_host": {
+            "count": 30,
+            "minimum_ns": 69400.0,
+            "maximum_ns": 188500.0,
+            "median_ns": 70800.0,
+            "p10_ns": 69600.0,
+            "p90_ns": 73200.0,
+            "p90_div_p10": 1.0517241379310345
+          },
+          "profile_raw": {
+            "signature": {
+              "environment": {
+                "GGML_OP_OFFLOAD_MIN_BATCH": null,
+                "LLAMA_ENGINE_TOKEN_TIMES": "1",
+                "CUDA_VISIBLE_DEVICES": null,
+                "CUDA_MODULE_LOADING": null,
+                "OMP_NUM_THREADS": null,
+                "GGML_CUDA_DISABLE_GRAPHS": null,
+                "LLAMA_TRACE_ANNOTATIONS": "0",
+                "LLAMA_GRAPH_REUSE_DISABLE": null,
+                "GGML_CPU_OPERATOR_TRACE": null,
+                "GGML_CPU_DISABLE_FUSION": null,
+                "GGML_CUDA_DISABLE_FUSION": null,
+                "GGML_CUDA_GRAPH_OPT": null,
+                "GGML_CUDA_NO_PINNED": null,
+                "GGML_CUDA_REGISTER_HOST": null,
+                "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+                "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null,
+                "GGML_CUDA_FORCE_MMQ": null,
+                "GGML_CUDA_FORCE_CUBLAS": null,
+                "GGML_SCHED_DEBUG": null,
+                "GGML_NO_IQ_PANEL": null,
+                "CUDA_LAUNCH_BLOCKING": null
+              },
+              "modules": [
+                {
+                  "name": "cublas64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublas64_12.dll",
+                  "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99"
+                },
+                {
+                  "name": "cublasLt64_12.dll",
+                  "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+                  "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7"
+                },
+                {
+                  "name": "cudart64_12.dll",
+                  "path": "E:\\cuda\\bin\\cudart64_12.dll",
+                  "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344"
+                },
+                {
+                  "name": "ggml-base.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-base.dll",
+                  "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca"
+                },
+                {
+                  "name": "ggml-cpu.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+                  "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232"
+                },
+                {
+                  "name": "ggml-cuda.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cuda.dll",
+                  "sha256": "8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297"
+                },
+                {
+                  "name": "ggml.dll",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml.dll",
+                  "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc"
+                },
+                {
+                  "name": "graph-gap-probe.exe",
+                  "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph-gap-probe.exe",
+                  "sha256": "cb8796c08c0749f58b63f23a2f75a8f12f95317bf42dd10ba1312e983831aa19"
+                },
+                {
+                  "name": "nvcuda.dll",
+                  "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+                  "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad"
+                },
+                {
+                  "name": "nvcuda64.dll",
+                  "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+                  "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954"
+                }
+              ],
+              "graph_nodes": [
+                {
+                  "index": 0,
+                  "name": "scale_1",
+                  "src0": "graph_input",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 1,
+                  "name": "scale_2",
+                  "src0": "scale_1",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 2,
+                  "name": "scale_3",
+                  "src0": "scale_2",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 3,
+                  "name": "scale_4",
+                  "src0": "scale_3",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 4,
+                  "name": "scale_5",
+                  "src0": "scale_4",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 5,
+                  "name": "scale_6",
+                  "src0": "scale_5",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 6,
+                  "name": "scale_7",
+                  "src0": "scale_6",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "index": 7,
+                  "name": "scale_8",
+                  "src0": "scale_7",
+                  "operator": "SCALE",
+                  "dtype": "F32",
+                  "scale": 0.5,
+                  "ne": [
+                    262144,
+                    1,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "arm": "buffered"
+            }
+          },
+          "raw_refs": [
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_03\\direct\\raw.jsonl",
+              "bytes": 40381,
+              "sha256": "857cd6047aaf02efa57cad940436e0364efab1a169fbdceef99eac9a840ccead"
+            },
+            {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_03\\profile\\raw.jsonl",
+              "bytes": 40383,
+              "sha256": "044145eec0269cbd53aa5a4b4cb245872839c657d7ca861dab9eb01aafeb3dfb"
+            }
+          ],
+          "per_call_final_validated": false,
+          "trace_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_collection_r2\\runs\\buffered\\pair_03\\export\\strict_trace.json",
+            "bytes": 866202,
+            "sha256": "fea7250dc218cc9be47650950ba9376963b8263253536e540555aa29f052e353"
+          }
+        }
+      ]
+    }
+  ],
+  "calibration_fitted": false,
+  "partial": false
+}

@@ -1,0 +1,145 @@
+{
+  "schema": "graph-gap-r20-copy-provenance/v1",
+  "created_utc": "2026-09-16T07:16:55.7112188Z",
+  "source_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe",
+  "source_provenance": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\source_provenance.json",
+    "sha256": "89697124f459f092b3d6682b9819e5a4e32e17f9f4e40f697135cd213ccdd525",
+    "bytes": 7801
+  },
+  "copied_files": [
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\build_probe.py",
+        "sha256": "494fd5d3d717e81f92cedbea18f25b748782301c70347f8359139729fed1ac2d",
+        "bytes": 11388
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\build_probe.py",
+        "sha256": "494fd5d3d717e81f92cedbea18f25b748782301c70347f8359139729fed1ac2d",
+        "bytes": 11388
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\frozen_module_guard.h",
+        "sha256": "02f886ebc8a2d9ab2b376ed876bd53ca3700dc87fc76e30ea4826014b57f55a1",
+        "bytes": 1631
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\frozen_module_guard.h",
+        "sha256": "02f886ebc8a2d9ab2b376ed876bd53ca3700dc87fc76e30ea4826014b57f55a1",
+        "bytes": 1631
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\graph_gap_main.cpp",
+        "sha256": "f2b085ef29044f3de60ddf1b92edfe0f66381de5b10a18fb116a8b590029f06f",
+        "bytes": 27406
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph_gap_main.cpp",
+        "sha256": "f2b085ef29044f3de60ddf1b92edfe0f66381de5b10a18fb116a8b590029f06f",
+        "bytes": 27406
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\graph_gap_probe.cpp",
+        "sha256": "bc98a378ecb4f44b420f1b304beccc69db650162d1ea5c544eff4f61c04a0e85",
+        "bytes": 16528
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\graph_gap_probe.cpp",
+        "sha256": "bc98a378ecb4f44b420f1b304beccc69db650162d1ea5c544eff4f61c04a0e85",
+        "bytes": 16528
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\invoke.ps1",
+        "sha256": "53e249fb4480cc596ce4c75b3fd02893c6f19fb9fea20224ff12d4327a46f56f",
+        "bytes": 6303
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\invoke.ps1",
+        "sha256": "53e249fb4480cc596ce4c75b3fd02893c6f19fb9fea20224ff12d4327a46f56f",
+        "bytes": 6303
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\math_reference.h",
+        "sha256": "2137dde9c1ad547496fe37ab8df8cb77fafa3a6dca06dbfd40a573442b36c555",
+        "bytes": 595
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\math_reference.h",
+        "sha256": "2137dde9c1ad547496fe37ab8df8cb77fafa3a6dca06dbfd40a573442b36c555",
+        "bytes": 595
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\protocol.json",
+        "sha256": "97e3195a1b09afbfaad22549ea80a59cc2e5a4034256277a65d26566d10d8627",
+        "bytes": 11777
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\protocol.json",
+        "sha256": "97e3195a1b09afbfaad22549ea80a59cc2e5a4034256277a65d26566d10d8627",
+        "bytes": 11777
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\README.md",
+        "sha256": "6d8995b0af45bf062082762fc0e8d88b74dff9ffcbc4908e3a9605dbf129d8be",
+        "bytes": 5162
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\README.md",
+        "sha256": "6d8995b0af45bf062082762fc0e8d88b74dff9ffcbc4908e3a9605dbf129d8be",
+        "bytes": 5162
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\reference_check.py",
+        "sha256": "749b33907ad79f157848a6f8b498099eca95f24a567d6df58f43bd3bb4158743",
+        "bytes": 8257
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\reference_check.py",
+        "sha256": "749b33907ad79f157848a6f8b498099eca95f24a567d6df58f43bd3bb4158743",
+        "bytes": 8257
+      }
+    },
+    {
+      "from": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_019\\graph_gap_probe\\reference_host.cpp",
+        "sha256": "1fad864fd5d9321a94333ca21495026ade4539b5ddcf662acd69d04010b88e86",
+        "bytes": 2202
+      },
+      "to": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\graph_gap_probe\\reference_host.cpp",
+        "sha256": "1fad864fd5d9321a94333ca21495026ade4539b5ddcf662acd69d04010b88e86",
+        "bytes": 2202
+      }
+    }
+  ],
+  "excluded": [
+    "prepared_identity.h",
+    "compile.cmd",
+    "compile.log",
+    "build_manifest.json",
+    "*.exe",
+    "*.obj",
+    "*.jsonl",
+    "*.nsys-rep",
+    "preparation_checks*.json",
+    "integration_preparation_checks*.json"
+  ],
+  "reason": "Only source preparation was carried forward; all R19 generated, compiled, run and check output remains upstream."
+}

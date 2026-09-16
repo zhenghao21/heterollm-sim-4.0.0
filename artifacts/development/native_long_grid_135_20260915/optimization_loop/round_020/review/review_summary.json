@@ -1,0 +1,44 @@
+{
+  "schema": "r20-independent-review/v1",
+  "high_impact_findings": [
+    {
+      "priority": "P1",
+      "finding": "Buffered graph arm defers all durable arm/call records until postformal; hard termination cannot satisfy the protocol-level full failure-retention claim.",
+      "action": "Add prelaunch receipt and pre-timing buffered_started record; restrict hard-failure retention claim without adding timed writes.",
+      "numeric_fit_required": false
+    },
+    {
+      "priority": "P1",
+      "finding": "R6 quality has 34/36 steady-dispersion stages passing and explicitly rejects timing evidence.",
+      "action": "Keep the series diagnostic-only; do not derive sampling costs or coefficients.",
+      "numeric_fit_required": false
+    },
+    {
+      "priority": "P2",
+      "finding": "Source-qualified MMVQ uses vector DP4A/float-scale/reduction while generic cost retains MMA-wave semantics.",
+      "action": "Add source_geometry_unpriced/MMVQ metadata and formal-eligibility guard without changing numerical rates.",
+      "numeric_fit_required": false
+    }
+  ],
+  "date": "2026-09-16",
+  "static_test": {
+    "path": "round_020/review/test_evidence_contracts.py",
+    "sha256": "0b8c6140736375f9e14570fe52c3b8f6edcb44d27368ae1f00f3dd1c4f552203",
+    "command": ".\\.venv\\Scripts\\python.exe -m pytest -q artifacts/development/native_long_grid_135_20260915/optimization_loop/round_020/review/test_evidence_contracts.py",
+    "result": "4 passed in 0.10s"
+  },
+  "status": "actionable_findings_no_core_edits",
+  "cpu_r6_quality": {
+    "stage_records_total": 36,
+    "steady_dispersion_pass_stages": 34,
+    "timing_usable": false,
+    "diagnostic_only": true,
+    "accepted_for_timing_evidence": false
+  },
+  "scope": {
+    "core_code_changed": false,
+    "native_or_timing_run": false,
+    "gpu_run": false,
+    "target_llm_timings_read": false
+  }
+}

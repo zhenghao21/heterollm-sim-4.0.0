@@ -1,0 +1,6 @@
+{
+  "stage_ordinal": 0,
+  "status": "failed",
+  "freeze_sha256": "35c8ea85d25f167548e62c987fbb18a656c322c2a5b247425409fa648d9c59be",
+  "error": "actual module not frozen"
+}

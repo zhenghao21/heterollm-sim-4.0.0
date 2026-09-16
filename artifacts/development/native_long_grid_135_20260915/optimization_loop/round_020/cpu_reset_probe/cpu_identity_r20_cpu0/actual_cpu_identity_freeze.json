@@ -1,0 +1,38 @@
+{
+  "schema": "cpu-reset-probe-actual-cpu-freeze/v1",
+  "build_manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\build_manifest.json",
+    "sha256": "d2624b1b20f09dbbde314541d6f0a916af949c9c33eccfe09ac2fd160d269ec6",
+    "bytes": 69747
+  },
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\protocol.json",
+    "sha256": "57be7dfdefeb747660c1bc30b8ba13f45811c2bd1cd682e7421a9ffc6429a160",
+    "bytes": 12449
+  },
+  "identity_result_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\cpu_identity_r20_cpu0\\identity.json",
+    "sha256": "db46e229cffc4d42c4575df75fef7fa64dff384bd1dd9cafd801a9c94ced27a1",
+    "bytes": 383
+  },
+  "cpu_index": 0,
+  "actual_cpu_identity": {
+    "cpu_brand": "AMD Ryzen 9 9950X3D 16-Core Processor          ",
+    "cpuid_signature": 11800384,
+    "active_processor_group_count": 1,
+    "active_processor_count_group0": 32,
+    "group": 0,
+    "logical_cpu": 0,
+    "thread_affinity_mask": 1
+  },
+  "local_os_correlation": {
+    "os_name": "nt",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_os_cpu_count": 32,
+    "used_as_expected_hardware_identity": false
+  },
+  "local_os_correlation_is_not_expected_hardware_identity": true,
+  "GPU_executed": false,
+  "model_loaded": false,
+  "timing_values_produced": false
+}

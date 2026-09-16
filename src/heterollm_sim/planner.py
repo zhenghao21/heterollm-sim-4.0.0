@@ -95,6 +95,10 @@ from .control_plane_state import (
 )
 from .mtp import MTPRequestCursor, expected_prefix_tokens, round_accepted_prefix
 from .mmq_work import MMVQ_MAX_BATCH_SIZE, MMQWork, UnsupportedMMQ, derive_mmq_work
+from .mmvq_work import (
+    MMVQSourceContract, MMVQWork, SOURCE_SHA256 as MMVQ_SOURCE_SHA256,
+    UnsupportedMMVQ, derive_mmvq_work,
+)
 from .parallel import LogicalRank, ParallelPlan, build_parallel_plan, shard_extent
 from .precision import canonical_dtype, dtype_bits, layer_precision_bits
 from .projection_descriptors import (
@@ -9211,6 +9215,108 @@ def _declared_mmq_work(
     return work, {**audit, **work.to_metadata(), "status": "applied"}, 0
 
 
+def _declared_mmvq_work(
+    scenario: ScenarioConfig,
+    workload: GemmWorkload,
+    target: ComponentSpec,
+    operation_metadata: Mapping[str, object],
+    *,
+    model_weight_read: bool,
+    rhs_is_activation: bool,
+) -> Tuple[Optional[MMVQWork], Optional[Mapping[str, object]]]:
+    """Bind source-exact MMVQ geometry without inventing a performance rate.
+
+    The conversion contract supplies the locked CUDA binary identity and the
+    captured invocation audit supplies the fixed source-file identities.  A
+    missing piece leaves the historical analytical cost available only as an
+    explicitly unqualified fallback.
+    """
+    audit = {
+        "schema": "heterollm.cuda-mmvq-source-work/v1",
+        "status": "uncovered",
+        "m": workload.m,
+        "k": workload.k,
+        "n": workload.n,
+        "execution_component": target.component_id,
+    }
+
+    def uncovered(reason: str) -> Tuple[None, Mapping[str, object]]:
+        return None, {**audit, "reason": reason}
+
+    if not model_weight_read or rhs_is_activation:
+        return uncovered("runtime_rhs_is_not_a_physical_model_weight")
+    if (
+        "expert_index" in operation_metadata
+        or operation_metadata.get("coverage_component") in {"routed_expert", "shared_expert"}
+        or operation_metadata.get("ffn_path") in {"routed", "shared"}
+    ):
+        return uncovered("expert_or_scatter_layout")
+    if (
+        workload.epilogue_operations
+        or workload.epilogue_transcendental_operations
+        or workload.epilogue_output_elements
+        or workload.epilogue_name
+    ):
+        return uncovered("fused_epilogue_has_no_native_mmvq_contract")
+    formats = tuple(value.upper() for value in workload.packed_weight_formats)
+    if len(formats) != 1:
+        return uncovered("unsupported_or_mixed_physical_weight_format")
+    conversion = target.metadata.get("llama_cpp_conversion_source_contract")
+    if not isinstance(conversion, Mapping):
+        return uncovered("missing_mmvq_runtime_source_contract")
+    mmq = target.metadata.get("llama_cpp_mmq_contract")
+    if not isinstance(mmq, Mapping) or mmq.get("force_cublas") is not False:
+        return uncovered("missing_or_incompatible_mmq_dispatch_contract")
+    captured = scenario.workload.metadata.get("llama_cpp_gpu_native_invocations")
+    if not isinstance(captured, Mapping):
+        return uncovered("missing_mmvq_source_capture")
+    refs = captured.get("source_refs")
+    if not isinstance(refs, (tuple, list)):
+        return uncovered("missing_mmvq_source_refs")
+    matched = {}
+    for relative, expected in MMVQ_SOURCE_SHA256.items():
+        candidates = [
+            item for item in refs
+            if isinstance(item, Mapping)
+            and str(item.get("path", "")).replace("\\", "/").endswith("/" + relative)
+        ]
+        if len(candidates) != 1 or candidates[0].get("sha256") != expected:
+            return uncovered("mmvq_source_identity_mismatch:" + relative)
+        matched[relative] = expected
+    binding = {
+        "compute_capability": conversion.get("compute_capability"),
+        "highest_compiled_arch": conversion.get("highest_compiled_arch"),
+        "warp_size": conversion.get("warp_size"),
+        "source_hashes": matched,
+        "runtime_binary_sha256": conversion.get("runtime_binary_sha256"),
+        "ordinary_contiguous_2d": conversion.get("ordinary_contiguous_2d"),
+        "force_cublas": mmq.get("force_cublas"),
+        "mmvq_dispatch_enabled": scenario.workload.metadata.get("llama_cpp_f32_q8_1_mmvq"),
+        "has_ids": False,
+        "has_fusion": False,
+        "channels": 1,
+        "samples": 1,
+    }
+    try:
+        contract = MMVQSourceContract(**binding)
+        work = derive_mmvq_work(
+            m=workload.m, k=workload.k, n=workload.n,
+            weight_format=formats[0], contract=contract,
+        )
+    except (TypeError, UnsupportedMMVQ, ValueError) as error:
+        return uncovered(str(error))
+    return work, {
+        **audit,
+        **work.to_metadata(),
+        "status": "source_geometry_unpriced",
+        "source_compute_category": (
+            "integer_vector_dp4a_with_float_scale_and_warp_reduction_unpriced"
+        ),
+        "formal_timing_eligible": False,
+        "reason": "MMVQ source geometry is exact but no qualified resource rate exists",
+    }
+
+
 def _declared_mmvq_prmt_partial_work(
     scenario: ScenarioConfig,
     workload: GemmWorkload,
@@ -9753,6 +9859,14 @@ def _add_rank_gemm(
         )
         if mmq_audit is not None:
             operation_metadata["mmq_source_work"] = {**mmq_audit, "stage": "matrix"}
+        mmvq_work, mmvq_audit = (
+            _declared_mmvq_work(
+                scenario, workload, target, operation_metadata,
+                model_weight_read=model_weight_read, rhs_is_activation=rhs_is_activation,
+            ) if mmvq_limit else (None, None)
+        )
+        if mmvq_audit is not None:
+            operation_metadata["mmvq_source_work"] = {**mmvq_audit, "stage": "matrix"}
         conversion = (
             _mmvq_activation_conversion_workload(scenario, workload, max_m=mmvq_limit or 4)
             if model_weight_read and not rhs_is_activation
@@ -9796,6 +9910,12 @@ def _add_rank_gemm(
             # read here would count both source and temporary input in GEMM.
             workload = replace(workload, activation_storage_bytes=consumer_bytes)
             operation_metadata.update(conversion_audit)
+        if mmvq_work is not None:
+            workload = replace(
+                workload,
+                activation_storage_bytes=mmvq_work.consumer_q8_1_unique_bytes,
+                mmvq_work=mmvq_work,
+            )
         if mmq_work is not None:
             conversion = TensorKernelWorkload(
                 operations=mmq_work.conversion_operations,

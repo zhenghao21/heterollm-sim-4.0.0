@@ -1,0 +1,132 @@
+{
+  "schema": "cpu-reset-ab-result-audit/v1",
+  "series_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\reset_ab_series_0001\\run_freeze.json",
+    "sha256": "4c7475d4d3bf4e5994984a6a7bf5f115db10df6afcdabccd3f955cdfb15105ac",
+    "bytes": 7588
+  },
+  "quality_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\reset_ab_series_0001\\quality.json",
+    "sha256": "7d18ab9f9f07487192b49f37cba11156a4ee335c1c627a184802815b919ec1ca",
+    "bytes": 8639
+  },
+  "sha_pid_arm_validation_passed": true,
+  "validation_errors": [],
+  "process_order": [
+    {
+      "process_index": 0,
+      "reset_policy": "memcpy_baseline"
+    },
+    {
+      "process_index": 3,
+      "reset_policy": "source_candidate_loop"
+    },
+    {
+      "process_index": 1,
+      "reset_policy": "memcpy_baseline"
+    },
+    {
+      "process_index": 4,
+      "reset_policy": "source_candidate_loop"
+    },
+    {
+      "process_index": 2,
+      "reset_policy": "memcpy_baseline"
+    },
+    {
+      "process_index": 5,
+      "reset_policy": "source_candidate_loop"
+    }
+  ],
+  "distinct_pid_count": 6,
+  "stage_count": 36,
+  "arm_stage_counts": {
+    "memcpy_baseline": 18,
+    "source_candidate_loop": 18
+  },
+  "cross_process_group_count": 12,
+  "quality_reported_steady_dispersion_pass_stages": 31,
+  "recomputed_steady_dispersion_pass_stages": 31,
+  "quality_reported_cross_groups_pass": 12,
+  "failed_stages": [
+    {
+      "process_index": 3,
+      "pid": 2476,
+      "arm": "source_candidate_loop",
+      "vocabulary_size": 262144,
+      "pattern": "deterministic_random_permutation",
+      "stage": "original_dll_topk_apply",
+      "p10_ticks": 540.0,
+      "p90_ticks": 931.8000000000006,
+      "p90_p10_ratio": 1.7255555555555568,
+      "steady_dispersion_pass": false
+    },
+    {
+      "process_index": 1,
+      "pid": 41220,
+      "arm": "memcpy_baseline",
+      "vocabulary_size": 262144,
+      "pattern": "deterministic_random_permutation",
+      "stage": "original_dll_topk_apply",
+      "p10_ticks": 562.3,
+      "p90_ticks": 976.4,
+      "p90_p10_ratio": 1.7364396229770587,
+      "steady_dispersion_pass": false
+    },
+    {
+      "process_index": 4,
+      "pid": 38888,
+      "arm": "source_candidate_loop",
+      "vocabulary_size": 262144,
+      "pattern": "deterministic_random_permutation",
+      "stage": "original_dll_topk_apply",
+      "p10_ticks": 538.3,
+      "p90_ticks": 987.7,
+      "p90_p10_ratio": 1.8348504551365412,
+      "steady_dispersion_pass": false
+    },
+    {
+      "process_index": 2,
+      "pid": 6216,
+      "arm": "memcpy_baseline",
+      "vocabulary_size": 262144,
+      "pattern": "deterministic_random_permutation",
+      "stage": "original_dll_topk_apply",
+      "p10_ticks": 559.3,
+      "p90_ticks": 969.7,
+      "p90_p10_ratio": 1.7337743608081533,
+      "steady_dispersion_pass": false
+    },
+    {
+      "process_index": 5,
+      "pid": 41596,
+      "arm": "source_candidate_loop",
+      "vocabulary_size": 262144,
+      "pattern": "deterministic_random_permutation",
+      "stage": "original_dll_topk_apply",
+      "p10_ticks": 539.0,
+      "p90_ticks": 948.0000000000005,
+      "p90_p10_ratio": 1.758812615955474,
+      "steady_dispersion_pass": false
+    }
+  ],
+  "arm_dispersion": {
+    "memcpy_baseline": {
+      "passed": 16,
+      "total": 18,
+      "median_ratio": 1.0361940298507464
+    },
+    "source_candidate_loop": {
+      "passed": 15,
+      "total": 18,
+      "median_ratio": 1.0542092403771783
+    }
+  },
+  "source_reset_evidence": "Treatment has 15/18 within-stage dispersion passes versus control 16/18. All five failures are 262144 deterministic_random_permutation across both arms; the treatment arm has one additional failed stage. This provides no evidence that source reset lowers fluctuation; the whole series remains rejected and does not establish a causal cache/reset effect.",
+  "overall_acceptance": {
+    "timing_usable": false,
+    "accepted_for_timing_evidence": false,
+    "fit_performed": false,
+    "llm_actual_used": false
+  }
+}

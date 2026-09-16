@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_round_020_preregistered_cpu_reset_and_graph_gap_ab",
+  "status": "active_round_021_host_steady_state_and_semantics_audit",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1221,15 +1221,47 @@
     },
     {
       "round": 20,
-      "status": "preparing_preregistered_cpu_reset_and_graph_gap_ab",
+      "status": "completed_measurement_mechanism_improved_accuracy_goal_failed",
       "started_utc": "2026-09-16T07:17:54.581905+00:00",
+      "native_remeasured": false,
+      "timing_started": true,
+      "cpu_native_processes_completed": 6,
+      "cpu_stage_dispersion_pass": 31,
+      "cpu_stage_denominator": 36,
+      "cpu_reset_hypothesis_supported": false,
+      "cpu_timing_accepted": false,
+      "cpu_coefficients_emitted": 0,
+      "gpu_controller_pid": 13812,
+      "gpu_freeze_sha256": "d428de7fc77d75474a88485839d94654a715b93348c9a97e7870c2445cef240b",
+      "gpu_native_processes_planned": 12,
+      "gpu_exports_planned": 6,
+      "mmvq_source_category_integrated": true,
+      "mmvq_numeric_rate_added": false,
+      "updated_utc": "2026-09-16T07:50:07.073717+00:00",
+      "closed_utc": "2026-09-16T08:08:41.607980+00:00",
+      "report": "round_020/closeout.json",
+      "gpu_stages_complete": 18,
+      "gpu_calls_complete": 432,
+      "gpu_actual_trace_kernels": 1728,
+      "gpu_quality_eligible_arms": 0,
+      "gpu_clock_reset_returncode": 0,
+      "source_geometry_only_no_new_rate": true,
+      "numeric_invariance_cases": 10,
+      "new_llm_predictions": 0,
+      "root_tests_core": 132,
+      "root_tests_collector": 18
+    },
+    {
+      "round": 21,
+      "status": "host_settle_source_preparation_and_independent_semantics_audits",
+      "started_utc": "2026-09-16T08:08:41.607980+00:00",
       "native_remeasured": false,
       "timing_started": false
     }
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Predeclared reset-path and out-of-window observation A/B; source-derived MMVQ category review; no LLM actual fit.",
+  "next_round_hypothesis": "Short synthetic graph warmup may leave host/runtime outside steady state; in parallel audit static native microbatch/admission and kernel-launch overlap before adding any rates.",
   "full_131_evaluations_started": 3,
   "full_131_evaluations_completed": 3,
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling",
@@ -1353,6 +1385,12 @@
       "status": "pushed_remote_SHA_verified",
       "pushed_to": "origin/main",
       "verified_utc": "2026-09-16T06:27:04.973008+00:00"
+    },
+    {
+      "kind": "round_019",
+      "commit": "b5a4e1abc77f0f54ab7d431bad0200229198acc9",
+      "pushed_to": "origin/main",
+      "status": "remote_sha_verified"
     }
   ],
   "operator_microbenchmark": {

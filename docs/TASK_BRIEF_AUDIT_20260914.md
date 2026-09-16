@@ -185,21 +185,21 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 10. 当前版本与证据状态（动态，原位更新）
 
-第19轮已完成并自动进入第20轮。固定native为131格、894个正式请求，本轮选择SHA及131份原始文件核验一致。第19轮没有修改核心成本、没有重测目标LLM、没有新误差预测；A开发门失败，B独立正式门和跨硬件仍未验证。
+第20轮已完成，自动进入第21轮。固定native为131格、894正式请求，本轮全部原始文件SHA核验一致。第20轮只增加源码几何/可信度标注并改善独立微基准观测，没有新成本系数、没有重测目标LLM，也没有新的推理误差结果。A开发门失败，B独立门与跨硬件仍未验证。
 
-最新同版本消融仍是已推送bf227ea的第18轮pure/current/sampling三路20锚点：采样候选60项误差全部改善，但0/20格三项同时<10%；其余111格未在该冻结内运行。最近完整对照为第六轮129/131评分、9/131三项达标、2身份失败，不能拼接成新冻结的全量结果。
+最新同版本误差仍是第18轮pure/current/sampling三路20锚点：60项改善，0/20格三项同时<10%，111格未在该冻结内运行。最近完整对照为第六轮129/131评分、9/131三项达标、2身份失败。不同冻结不可拼接；第19轮提交b5a4e1a已推送且远端SHA一致。
 
-第19轮CPU微基准r5/r6各完成3进程、2304个steady样本，但单stage波动门分别35/36、34/36通过，均整组拒收；数值、身份和跨进程中位数一致不能代替全部质量门。没有新增成本系数。图间隙A/B源码已准备，尚未编译/实测；第20轮复制到新目录后独立冻结。
+第20轮CPU reset两臂6进程完成，31/36 stage通过波动门；control16/18、source-loop15/18，整组拒收。GPU最终两臂12进程、6导出、432图调用全部完成，1728个真实kernel与全部数值/时钟/身份匹配。buffered改善了direct波动，但仍有一对profiling扰动超限，0/2组准入，GPU时钟恢复成功。
 
 ## 11. 本轮修改与验证（动态，原位更新）
 
-第19轮修复合成CPU探针的间接CUDA DLL受限搜索、stage affinity类型和编译schema预检查，全部原DLL按冻结绝对路径加载并保持生命周期。原版在加载阶段失败、0个case计时；r4计算后因schema不一致拒收；r5 fixture在series之后验证的事实保留；r6将真实编译fixture强制放到series创建之前，并删除测量子进程隐性超时终止。
+MMVQWork已在锁定源码/运行时/连续布局条件下接入planner和cost元数据，分类为vector DP4A而非MMA，并保留CTA、warp、K-loop和packed bytes。没有独立服务率时标记source_geometry_priced=false；旧MMA数值仅为分析回退，不能声称已完成MMVQ成本建模。根代理132项相关回归通过；隔离旧提交与新源码的10个合成输入（Q5_0/Q8_0×M1/2/4/8/64）共702任务非metadata字段完全一致，包含依赖和资源服务时间。因此本轮不重复数值相同的LLM预测，不宣称精度改善。
 
-r5/r6各有18个case-process、36个stage。两版数值/结构/身份全部通过，频率观察36/36、observer门36/36、跨进程中位数组12/12通过；stage P90/P10仅35/36、34/36通过，因此均diagnostic-only。中间词表尺寸已用于质量诊断，不能再包装成最终独立留出。源码等价candidate loop为外编译实现，不等于原common.dll机器码。根代理本轮CPU身份/质量/loader回归27项通过，固定native SHA核验通过。
+CPU reset A/B：6个唯一PID、36stage、2304steady样本，12个跨进程中位数组均通过±5%，但31/36单stage波动门通过；两arm均在大词表随机排列失败，source reset没有改善证据，不能拟合系数。
 
-GPU只读复核确认MMVQ实际是DP4A、量化解包和归约，现有成本却沿用MMA tile-wave限制HBM；MMQ的int8 MMA分类正确，实际驻留、shared-memory与stream-K仍缺服务率证据。不使用被拒收的算子时间拟合倍率。图间隙A/B准备保留每图一次最终同步，对照臂逐call核验/输出，buffered臂只在三个阶段边界核验全部节点，不宣称逐call数值验证；8160项主机数学检查通过，尚未编译或采样。
+GPU图间隙A/B：control的3对direct P90/P10为2.055/2.141/2.324，buffered为1.303/1.114/1.313；profile/direct扰动超20%的对数分别2/3与1/3。两组均拒收，不能把wall-kernel差额作为启动常数。控制臂逐call核验、buffered仅三个阶段边界核验，覆盖声明保持区别。最终采集器18项回归通过，真实Nsight schema/correlation/geometry/同步/外部GPU活动检查复用R18严格实现；12原生进程、6导出、432调用、1728真实kernel的数值、时钟和身份均核验通过，finally时钟恢复返回0。
 
-第18轮误差结果未改变：TTFT/TPOT/E2E中位APE为66.716/46.544/48.357%，P90为72.506/61.139/64.857%，最坏为76.477/62.772/67.298%。严格A门为0通过、20精度失败、111证据不足；B未验证。第18轮GPU54阶段、18对、6配置全部完成但0/6计时准入，时钟已恢复。真实构建compiled_cuda_graphs=false，trace为普通cudaLaunchKernelExC；不得称为已启用CUDA Graph。
+首次collector在一条direct结束后因遗漏绑定CUDA/驱动库而拒收，旧冻结35c8ea85…保留。五个补充模块均与R18实际记录及当前文件SHA一致，新r2冻结d428de7f…重新执行全18阶段，不混合旧批次。第20轮没有目标LLM实测或专属时延拟合。
 
 ## 12. 当前测量与预测差距（动态，原位更新）
 
@@ -218,29 +218,30 @@ GPU只读复核确认MMVQ实际是DP4A、量化解包和归约，现有成本却
 
 ## 13. 下一轮优化顺序（动态，原位更新）
 
-1. 第19轮失败证据归档并提交/推送。第20轮只开展两个预定义测量机制对照，禁止对r6重复采样直至过线。固定native不重测，预测目标和质量阈值不变。
-2. CPU reset A/B：同一预分配候选缓冲，memcpy对照与源码candidate-loop reset交替6进程；只计时原DLL top-k apply，reset与bitwise核验在窗外。编译fixture、CPU真实身份、冻结和全部质量门先通过，才进入测量。该实验验证波动假设，不以选择最小耗时的arm拟合成本。
-3. GPU图间隙A/B：复制已审查入口到新冻结，仅scale_f32_e262144_g8、两arm各3对direct/profile，共12原生进程与6导出。适配两臂不同数值覆盖，核验arm/pair/PID/QPC/trace、完整分母、同一锁频会话及退出后恢复；与CPU计时和重仿真串行。
-4. 并行审核MMVQ的源码资源类别与几何接线，优先完成不依赖时延拟合的结构修正。数值服务率仅从合格通用算子证据获得；不得用MMA峰值、目标LLM耗时或拒收包络填补。若两项A/B仍拒收，保留失败并切换预先审查的其他机制，不能无限追加探针修订代替预测改进。
-5. 合格机制/参数后，新冻结执行纯分析、现有、候选消融；足够收益后全131格复评。每轮原位更新任务书、commit、push并核对远端SHA，然后检查逐格三项目标；未达标自动续轮。A通过后进入独立B门，开发和已揭示算子组不得充作最终盲测。
+1. 第20轮代码、两路失败/改善证据、任务书提交并推送，核对远端SHA。目标仍失败，自动进入第21轮；不对R20重复采样直至过线。
+2. 新冻结检验主机稳态假设：5次微图warmup的时间远短于完整native推理warmup。仅buffered路径比较额外工作预热0ms与1000ms，两条件各3对direct/profile，共12原生进程/6导出；两条件先保留first调用，再预热，再5warmup+30formal。记录真实预热迭代、时间窗与状态，不把预热时间拟合进成本；质量门限保持不变。
+3. 两个独立源码审计并行进行：核对实际request admission、prefill microbatch、n_batch/n_ubatch/n_parallel、输出行和Engine边界；核对CUDA内核启动次数、转换/融合/同步及CPU提交与GPU执行重叠。只依据锁定源码与静态配置，不能按目标LLM误差加倍率。
+4. 优先实施有反例证明的结构缺陷；取得合格独立服务率后才替代未定价回退。新数值机制必须执行纯分析/当前/候选消融，有足够收益再全131复评。未定价、失败与低可信样本继续进入分母。
+5. 每轮原位更新、commit、push和远端核验，再逐格检查三项<10%。未达标自动续轮；连续3轮无精度进展且无必要证据缺口关闭则切换路线。A通过后进行独立B门，已揭示的开发数据不能充作独立验收。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
-- native选择SHA固定cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5；131格及31格排除历史保留。第19轮无LLM重测，第20轮仅允许独立合成对照。
-- 第17/18轮冻结预测不覆盖。第19轮原版、r4/r5/r6的build、identity、raw、quality和失败全部不可变；r5/r6各一组测量均拒收，不跨revision挑选数据。没有合格新参数，因此不浪费运行完全相同的simulator来声称新比较。
-- 第18轮54阶段18对0/6准入保留；实际编译禁用CUDA Graph。第20轮新目录重新编译冻结，完整记录direct/profile扰动；CPU/GPU计时和重仿真串行，测量进程自然完成，任何失败计入分母。
-- 第19轮起处于第4阶段，6轮/8小时为复盘边界而非停止条件。连续3轮无精度进展且无必要证据缺口关闭则切换路线。每轮仅提交相关源码、测试、任务书与精简可复现证据；不上传模型、DLL、EXE、OBJ或海量trace，不混入历史WIP。
+- native选择SHA固定cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5；131格与全部排除历史保留。后续只在独立合成测试采集新数据，不重测目标LLM。
+- 第17/18轮预测、R19所有CPU失败版本、R20 CPU及两个GPU采集器冻结均不可覆盖。R20 CPU一组测量已拒收；GPU首版依赖清单缺陷保留，新r2另立冻结d428de7fc77d75474a88485839d94654a715b93348c9a97e7870c2445cef240b，完整18阶段后恢复时钟，0组计时准入。
+- R21使用新源码/运行合同，0ms/1000ms比较及固定顺序必须在测量前冻结；它是新稳态假设，不能追认R20旧数据通过。CPU/GPU计时和重仿真串行；原生子进程自然退出，完整分母与失败均保存。
+- 第4阶段从第19轮开始，6轮/8小时为复盘边界，不是停止条件。每轮只提交相关源码、测试、任务书和精简证据；原始trace保留本地并以逐字节核验的压缩证据包提交，不上传模型、DLL、EXE、OBJ或未压缩的大型包，不混历史WIP。
 
 ## 15. 最近结果与交付位置（动态，原位更新）
 
 以下路径根为artifacts/development/native_long_grid_135_20260915/。
 
-- stable_native_dataset.json、report_162/及tools/verify_fixed_native.py：固定131格选择、原始162格稳定性与排除历史。
-- optimization_loop/round_019/REPORT.md、closeout.json：本轮失败原因、27项回归与续轮决定；cpu_sampling_probe*保留全部编译/身份/原始样本/quality版本，cpu_sampling_review/保留反例及修复测试。
-- optimization_loop/round_019/gpu_cost_diagnosis/：MMVQ/MMQ源码类别与未定价资源；graph_gap_probe/：未编译的A/B准备及来源证明，不能称为实测准入。
-- optimization_loop/round_020/cpu_reset_probe/、graph_gap_probe/、graph_gap_collection/、review/：当前在途源码与独立审查，实际执行前另建冻结。
-- optimization_loop/round_018/ablation.md/json、ablation_heatmap.svg/png、freeze_prediction_index.json、strict_gate.0002.json：最新完整三路20锚点，60项改善、0格达标。strict_gate.json为首次评分入口错误的保留记录。
-- optimization_loop/round_018/sampling_parity/、collection/、graph_analysis/：131格采样合同与54阶段GPU采集/拒收分析；optimization_loop/round_006/physical_mapping_mmq_r2/为最近全量历史，不可与新锚点拼接验收。
+- stable_native_dataset.json、report_162/、tools/verify_fixed_native.py：固定选择、稳定性与排除历史。
+- optimization_loop/round_020/REPORT.md、closeout.json：本轮完整结论、0系数与续轮选择；cpu_reset_probe/RESULT.md和result_summary.json为6进程CPU结果。
+- optimization_loop/round_020/graph_gap_collection_r2/summary.json、controller_result.json、execution_freeze.json、runs/：最终GPU18阶段与完整clock/trace/数值证据；原graph_gap_collection/保留首次依赖清单失败，graph_gap_runtime_identity.json绑定补充CUDA/驱动库。
+- optimization_loop/round_020/detailed_evidence.tar.gz、detailed_evidence_index.json、restore_evidence.py：33份原始/详细证据的可核验压缩包，包含全部6份SQLite与6份Nsight报告；恢复时不覆盖已有文件。
+- optimization_loop/round_020/numeric_invariance/summary.json：10个合成输入、702任务数值与依赖未改变；实际source语义更正由tests/test_mmvq_mechanism.py验证。
+- optimization_loop/round_021/host_settle_probe/、runtime_batch_audit.md、native_launch_audit.md：当前在途预热与执行语义审计，未完成前不作验收结论。
+- optimization_loop/round_018/ablation.md/json、ablation_heatmap.svg/png、freeze_prediction_index.json、strict_gate.0002.json：最新20锚点三路误差，0格达标；第六轮全量历史不得与其拼接。
 
 ## 16. 历史实验索引（稳定格式，短表）
 

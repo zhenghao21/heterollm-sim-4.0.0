@@ -23,6 +23,7 @@ from .contracts import (
     TaskCategory,
 )
 from .mmq_work import MMQWork
+from .mmvq_work import MMVQWork
 
 
 def _ceil_div(numerator: int, denominator: int) -> int:
@@ -184,6 +185,10 @@ class GemmWorkload:
     activation_storage_bytes: Optional[int] = None
     output_storage_bytes: Optional[int] = None
     mmq_work: Optional[MMQWork] = None
+    # Exact source geometry for the narrow MMVQ vector-DP4A path.  It carries
+    # no throughput or bandwidth rate: the generic roofline remains explicitly
+    # unqualified until an independent MMVQ resource model exists.
+    mmvq_work: Optional[MMVQWork] = None
     # Source-qualified partial primitive work which shares the scalar GPU
     # resource with fused unpack/epilogue work.  The field is intentionally
     # optional: unknown mixed-port MMVQ service remains unpriced.
@@ -278,6 +283,28 @@ class GemmWorkload:
             _require_non_negative_int(
                 "output_storage_bytes", self.output_storage_bytes
             )
+        if self.mmq_work is not None and self.mmvq_work is not None:
+            raise ValueError("MMQ and MMVQ source work are mutually exclusive")
+        if self.mmvq_work is not None:
+            if not isinstance(self.mmvq_work, MMVQWork):
+                raise ValueError("mmvq_work must be an MMVQWork or None")
+            if (self.m, self.k, self.n) != (
+                self.mmvq_work.m,
+                self.mmvq_work.k,
+                self.mmvq_work.n,
+            ):
+                raise ValueError("mmvq_work shape must match GEMM shape")
+            if tuple(normalized_formats) != (
+                self.mmvq_work.weight_format.casefold(),
+            ):
+                raise ValueError("mmvq_work requires one matching physical weight format")
+            if self.activation_storage_bytes != self.mmvq_work.consumer_q8_1_unique_bytes:
+                raise ValueError("mmvq_work requires the derived Q8_1 consumer input bytes")
+            if (
+                self.output_bits != 32
+                or self.output_bytes != self.mmvq_work.output_f32_bytes
+            ):
+                raise ValueError("mmvq_work requires a native F32 output of 4MN bytes")
         if self.mmq_work is not None:
             if not isinstance(self.mmq_work, MMQWork):
                 raise ValueError("mmq_work must be an MMQWork or None")
@@ -2423,6 +2450,23 @@ def estimate_gpu_gemm(
         and workload.mmq_work.sm_count != gpu.tensor_core.sm_count
     ):
         raise ValueError("mmq_work SM count must match the GPU profile")
+    mmvq_metadata = (
+        {
+            "mmvq_source_work": workload.mmvq_work.to_metadata(),
+            "kernel_family": "cuda_mmvq_vector_dp4a",
+            "source_compute_category": (
+                "integer_vector_dp4a_with_float_scale_and_warp_reduction_unpriced"
+            ),
+            "source_geometry_priced": False,
+            "source_geometry_eligibility": "unpriced_no_mma_wave_claim",
+            "source_geometry_unpriced_reason": (
+                "source CTA/warp/K-loop geometry has no independently qualified "
+                "bandwidth, occupancy, integer-dot, scalar-scale, or reduction rate"
+            ),
+        }
+        if workload.mmvq_work is not None
+        else {}
+    )
     mmq_metadata = (
         {
             "mmq_source_work": workload.mmq_work.to_metadata(),
@@ -2459,6 +2503,8 @@ def estimate_gpu_gemm(
     if workload.packed_weight_formats:
         if workload.mmq_work is not None:
             format_coverage = "source_qualified_mmq"
+        elif workload.mmvq_work is not None:
+            format_coverage = "source_geometry_unpriced_mmvq"
         elif quantized_capability is not None:
             format_coverage = "declared_quantized_capability"
         else:
@@ -2605,6 +2651,17 @@ def estimate_gpu_gemm(
         **mma_output_tile_wave_contract(),
         **tile_wave,
         "fallback_to_fixed_bandwidth": False,
+        **(
+            {
+                "source_geometry_hbm_concurrency_applied": False,
+                "source_geometry_hbm_concurrency_reason": (
+                    "MMVQ vector CTA/warp geometry is retained as unpriced metadata; "
+                    "MMA output-tile utilization is a legacy analytical fallback only"
+                ),
+            }
+            if workload.mmvq_work is not None
+            else {}
+        ),
         "profile_occupancy": gpu.occupancy,
         "peak_effective_hbm_bandwidth_gb_s": peak_effective_hbm_bandwidth_gb_s,
         "shape_effective_hbm_bandwidth_gb_s": shape_effective_hbm_bandwidth_gb_s,
@@ -2744,6 +2801,7 @@ def estimate_gpu_gemm(
                     if workload.mmq_work is not None else "compulsory_minimum_io"
                 ),
                 **mmq_metadata,
+                **mmvq_metadata,
             },
         )
     )
@@ -2784,6 +2842,7 @@ def estimate_gpu_gemm(
             "attainable_tops": attainable_tops,
             "tensor_dtype": dtype_name,
             **quantized_path_metadata,
+            **mmvq_metadata,
             "mma_shape": (
                 tensor_core.mma_m,
                 tensor_core.mma_n,

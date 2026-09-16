@@ -1,0 +1,23 @@
+{
+  "fixture": {
+    "schema": "cpu-observation-schema-fixture/v1",
+    "synthetic": true,
+    "DLL_loaded": false,
+    "GPU_calls": false,
+    "cpu_observation": {
+      "group": 0,
+      "logical_processor": 0,
+      "thread_affinity_mask": 1,
+      "os_reported_current_mhz": 4300,
+      "os_max_mhz": 4300,
+      "os_limit_mhz": 4300
+    }
+  },
+  "exe_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_020\\cpu_reset_probe\\cpu-reset-probe.0001.exe",
+    "sha256": "d611172a83cbbf8feeee8c6d3b26d20bd589c9a58f25a46471f0fbd7b8a27884",
+    "bytes": 105984
+  },
+  "verified_before_series": true,
+  "synthetic_not_hardware_evidence": true
+}

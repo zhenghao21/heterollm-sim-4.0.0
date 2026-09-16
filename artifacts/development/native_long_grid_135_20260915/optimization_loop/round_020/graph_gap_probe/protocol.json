@@ -1,0 +1,216 @@
+{
+  "schema": "graph-gap-probe-protocol/v1",
+  "status": "source_prepared_not_compiled_not_measured",
+  "round": "R19",
+  "objective": "Falsify or retain the R18 hypothesis that per-call tensor_get, full numeric validation, and JSONL output alter the preceding host/driver gap or cache context enough to contribute to direct jitter.",
+  "evidence_basis": {
+    "r18_probe": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\graph_submit_probe\\graph_submit_probe.cpp",
+      "sha256": "e84ebed12fc23a03fa8334cf47a5e51dbb905ed78091431f470b0721832fa675"
+    },
+    "r18_analysis": {
+      "report_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\graph_analysis\\REPORT.md",
+      "summary_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\graph_analysis\\summary.json",
+      "finding": "R18 diagnostic-quality-rejected runs recorded large outside-graph validation/gap medians, especially around E262144; this is a hypothesis source, not an attribution or a fitted coefficient."
+    }
+  },
+  "controlled_invariants": {
+    "original_native_dll": "Both arms load the same original frozen native DLL set; copied probe source and rebuilt probe binary are not claimed source/binary equivalent to the original native application.",
+    "graph_math": "same non-inplace SCALE graph, six fixed shapes, constant deterministic input, same graph reuse and buffer allocation policy, unchanged GGML backend/nodes/input.",
+    "timing": "absolute QPC boundaries and the R18 NVTX grammar stay unchanged; each whole-graph call retains exactly one final ggml_backend_synchronize.",
+    "runtime_hardware": "Same inherited environment, native CUDA graph default (GGML_CUDA_DISABLE_GRAPHS=null), exact fixed native runtime and external hardware/clock policy; no graph-disabled arm, CUDA event arm, or changed CPU pinning policy.",
+    "profiling": "Direct runs have no CUPTI. Profile runs use NVTX + CUPTI/Nsight node graph trace for actual graph work/submit/overlap accounting. QPC deltas never become GPU time.",
+    "analysis": "Arms are analyzed only as independent native-condition observations. No global LLM-time fit, cost coefficient, or calibration update is permitted."
+  },
+  "arms": {
+    "control": {
+      "id": "control",
+      "semantics": "R18-like: after every timed call write graph-call JSONL, D2H-read and exactly validate final tensor; after first and postformal also D2H-read and exactly validate all intermediate/final tensors.",
+      "write_cadence": "per_call_validate_and_write",
+      "numeric_coverage": "all 36 final outputs; all stages at first and postformal",
+      "allowed_difference": "raw arm identity guard only; use same original NVTX label grammar and same timed compute/sync code."
+    },
+    "buffered": {
+      "id": "buffered",
+      "semantics": "Pre-reserve records for all 36 calls. During each phase only perform the timed graph call and its final sync. Do no JSON output or D2H validation inside the 1-call first, 5-call warmup, or 30-call formal phase. Run three exact all-stage numeric blocks after first, after warmup, and after formal; retain FNV-1a raw-byte hashes plus mismatch detail for every stage.",
+      "write_cadence": "buffered_after_postformal",
+      "numeric_coverage": "all stages in exactly three phase-boundary blocks; this deliberately does not prove every call numerical.",
+      "interpretation_limit": "Timing context differs from control because phase-boundary D2H and output are deferred. A jitter change may be due to this changed context and is not evidence that QPC itself changed or that every call is numerically proven."
+    }
+  },
+  "configs": [
+    {
+      "id": "scale_f32_e1024_g1",
+      "elements": 1024,
+      "nodes": 1,
+      "operation": "non-inplace ggml_scale chain",
+      "input": "(((i*73+19)%255)-127)/256 uploaded once; each node multiplies 0.5",
+      "graph_payload_bytes": 8192
+    },
+    {
+      "id": "scale_f32_e1024_g8",
+      "elements": 1024,
+      "nodes": 8,
+      "operation": "non-inplace ggml_scale chain",
+      "input": "(((i*73+19)%255)-127)/256 uploaded once; each node multiplies 0.5",
+      "graph_payload_bytes": 36864
+    },
+    {
+      "id": "scale_f32_e1024_g32",
+      "elements": 1024,
+      "nodes": 32,
+      "operation": "non-inplace ggml_scale chain",
+      "input": "(((i*73+19)%255)-127)/256 uploaded once; each node multiplies 0.5",
+      "graph_payload_bytes": 135168
+    },
+    {
+      "id": "scale_f32_e262144_g1",
+      "elements": 262144,
+      "nodes": 1,
+      "operation": "non-inplace ggml_scale chain",
+      "input": "(((i*73+19)%255)-127)/256 uploaded once; each node multiplies 0.5",
+      "graph_payload_bytes": 2097152
+    },
+    {
+      "id": "scale_f32_e262144_g8",
+      "elements": 262144,
+      "nodes": 8,
+      "operation": "non-inplace ggml_scale chain",
+      "input": "(((i*73+19)%255)-127)/256 uploaded once; each node multiplies 0.5",
+      "graph_payload_bytes": 9437184
+    },
+    {
+      "id": "scale_f32_e262144_g32",
+      "elements": 262144,
+      "nodes": 32,
+      "operation": "non-inplace ggml_scale chain",
+      "input": "(((i*73+19)%255)-127)/256 uploaded once; each node multiplies 0.5",
+      "graph_payload_bytes": 34603008
+    }
+  ],
+  "execution": {
+    "first": 1,
+    "warmup": 5,
+    "formal": 30,
+    "calls_per_process": 36,
+    "pair_repetitions": 3,
+    "maximum_preregistered_arm_config_pairs": 36,
+    "full_matrix": "After a parent-reviewed decision based on the fixed pilot, a separate amendment may authorize the remaining 6-configuration domain. This revision predeclares but does not launch that expansion.",
+    "root_pilot": "The only launchable pilot is scale_f32_e262144_g8, both arms, pairs 1..3, direct+profile: 12 native processes and 6 profile exports. It must not silently expand coverage.",
+    "sequencing": "One GPU-consuming process at a time; alternate arm order within an approved pair; retain all raw output, partial buffers flushed after caught errors, stdout/stderr, launch receipts, trace artifacts, missing/failed/timed-out records and quality rejections.",
+    "cache_allocation_reset": "Launcher records actual argv and freeze receipt plus graph reuse, buffer allocation, input upload, and reset/no-reset semantics for every arm. No cache sweep or new reset is introduced unless parent records an explicit frozen amendment.",
+    "pilot": {
+      "id": "r19_graph_gap_pilot_e262144_g8",
+      "config": "scale_f32_e262144_g8",
+      "arms": [
+        "control",
+        "buffered"
+      ],
+      "pairs_per_arm": 3,
+      "modes": [
+        "direct",
+        "profile"
+      ],
+      "native_processes": 12,
+      "expected_exports": 6,
+      "sequence": "Three sequential pairs; for each arm/pair run direct and profile as independently retained executions. No other configuration is launchable by invoke.ps1 in this revision."
+    }
+  },
+  "raw_schema": {
+    "required_records": [
+      "arm_metadata",
+      "graph_call",
+      "numeric_block"
+    ],
+    "arm_metadata": [
+      "actual_argv",
+      "freeze",
+      "cache_allocation_reset_semantics",
+      "write_cadence"
+    ],
+    "unknown_dispatch_fields": [
+      "observed_device_kernel_count=null until profiler analysis",
+      "observed_cuda_graph_launch_count=null until profiler analysis"
+    ],
+    "hash": "FNV-1a 64-bit of the exact host D2H byte buffer; retained for every checked stage and not presented as cryptographic evidence."
+  },
+  "runtime": {
+    "native_protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\native_protocol.json",
+      "sha256": "1e41472b9ad0186336b6a4d456543f718d4b03cbdb74993ec013d15af729e31b",
+      "bytes": 1497139
+    },
+    "environment": {
+      "GGML_OP_OFFLOAD_MIN_BATCH": null,
+      "LLAMA_ENGINE_TOKEN_TIMES": "1",
+      "CUDA_VISIBLE_DEVICES": null,
+      "CUDA_MODULE_LOADING": null,
+      "OMP_NUM_THREADS": null,
+      "GGML_CUDA_DISABLE_GRAPHS": null,
+      "LLAMA_TRACE_ANNOTATIONS": "0",
+      "LLAMA_GRAPH_REUSE_DISABLE": null,
+      "GGML_CPU_OPERATOR_TRACE": null,
+      "GGML_CPU_DISABLE_FUSION": null,
+      "GGML_CUDA_DISABLE_FUSION": null,
+      "GGML_CUDA_GRAPH_OPT": null,
+      "GGML_CUDA_NO_PINNED": null,
+      "GGML_CUDA_REGISTER_HOST": null,
+      "GGML_CUDA_ENABLE_UNIFIED_MEMORY": null,
+      "GGML_CUDA_CUBLAS_COMPUTE_TYPE": null
+    },
+    "extra_clear_environment": [
+      "GGML_CUDA_FORCE_MMQ",
+      "GGML_CUDA_FORCE_CUBLAS",
+      "GGML_SCHED_DEBUG",
+      "GGML_NO_IQ_PANEL",
+      "CUDA_LAUNCH_BLOCKING"
+    ],
+    "native_cpu_pool": {
+      "threads": 16,
+      "threads_batch": 16,
+      "worker_cpu_mask": "0x55555555",
+      "applicability": "native CPU pool only; synthetic CUDA-only graph creates no CPU worker pool. A single host submitter does not establish 16-thread CPU scheduler equivalence."
+    },
+    "host_scheduling": "normal process/thread priority; inherited process affinity captured from runtime. No new CPU pinning policy. Native --cpu-mask applies to CPU worker pool, not a synthetic one-thread backend caller.",
+    "gpu_expected": {
+      "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+      "name": "NVIDIA GeForce RTX 5080",
+      "driver": "616.64",
+      "compute_capability": "12.0"
+    },
+    "native_expected_sm_clock_mhz": 2400,
+    "native_sm_clock_tolerance_mhz": 30,
+    "hardware_fingerprint": "actual CUDA properties + loaded driver module + external GPU telemetry before/after; expected values are not copied into actual fields"
+  },
+  "profiler": {
+    "path": "F:\\codex_project\\37_LLMsim\\tools\\nsys_cli\\target-windows-x64\\nsys.exe",
+    "profile_options": [
+      "profile",
+      "--kill=false",
+      "--trace=cuda,nvtx",
+      "--cuda-graph-trace=node",
+      "--sample=none",
+      "--cpuctxsw=none",
+      "--force-overwrite=false"
+    ],
+    "direct": "No Nsight/CUPTI process. Preserve QPC/NVTX only.",
+    "profile": "Nsight/CUPTI process, with node-granularity CUDA graph trace; use exact NVTX labels to count actual work, graph launch/capture/update, runtime/driver APIs and overlap.",
+    "required_evidence": [
+      "formal labels each match exactly once",
+      "actual child kernel count and actual graph launch/capture/update count from CUPTI",
+      "kernel names/grid/block plus explicit dependency validation",
+      "host submit, final-sync and GPU/API/idle partitions use Nsight clock only",
+      "no substitution of planned GGML nodes for observed dispatch count"
+    ]
+  },
+  "quality": {
+    "clock_policy": "Expected SM clock 2400 MHz, retain actual telemetry; tolerance ±30 MHz. Do not change clock, driver, affinity, process priority, or runtime environment.",
+    "direct_profile_relative_median_wall_limit": 0.2,
+    "formal_p90_p10_max": 1.5,
+    "three_process_median_relative_spread_max": 0.05,
+    "failure_policy": "Retain every failed/partial/missing/unstable artifact and mark it non-eligible. Never delete outliers or emit fitted coefficients.",
+    "decision": "A/B is a falsification diagnostic. Neither arm may change global LLM timing, native calibration, or cost coefficients."
+  },
+  "execution_gate": "Parent must review this source/protocol and freeze/launcher integration before any compilation, GPU access, benchmark, inference, or profiler run.",
+  "hard_termination_evidence": "For buffered hard termination, only prelaunch receipt, frozen identity, and any completed trace artifact are promised. Buffered_started is durably written before timed ordinal 0; unflushed in-memory call records are not recoverable evidence."
+}

@@ -71,15 +71,20 @@ def test_shape_format_tail_uncovered_is_not_silently_derived(kwargs):
     with pytest.raises(UnsupportedMMVQ):work(**kwargs)
 
 
-def test_no_model_or_scenario_latency_keys_and_no_cost_integration():
+def test_source_geometry_contract_has_no_empirical_rate_or_model_keys():
     metadata=work().to_metadata()
     assert metadata['cost_model_applied'] is False
     assert metadata['binary_source_equivalence_proven'] is False
     assert 'model_name' not in metadata and 'prompt_fingerprint' not in metadata
     assert not any(k.endswith('_ns') for k in metadata)
     root=Path(__file__).resolve().parents[1]
-    for name in ('planner.py','cost_models.py'):
-        assert 'from .mmvq_work import' not in (root/'src/heterollm_sim'/name).read_text(encoding='utf-8-sig')
+    planner_source=(root/'src/heterollm_sim/planner.py').read_text(encoding='utf-8-sig')
+    cost_source=(root/'src/heterollm_sim/cost_models.py').read_text(encoding='utf-8-sig')
+    assert 'from .mmvq_work import' in planner_source
+    assert 'from .mmvq_work import' in cost_source
+    assert 'source_geometry_unpriced' in planner_source
+    assert 'source_geometry_priced' in cost_source
+    assert 'unpriced_no_mma_wave_claim' in cost_source
 
 
 def test_contract_hashes_immutable():
