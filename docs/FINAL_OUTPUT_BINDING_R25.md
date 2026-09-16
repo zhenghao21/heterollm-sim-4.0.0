@@ -34,7 +34,7 @@ retained. Consequently this is a semantic correction, not a guaranteed decrease
 in TTFT/TPOT. Accuracy must be reported separately from semantic correctness.
 
 Validation performed in the isolated worktree:
-- New binding tests: 33 passed (small synthetic real GGUF builder objects,
+- New binding tests: 34 passed (small synthetic real GGUF builder objects,
   production scenario builder/final replan, intercepted run_scenario boundary,
   row counts/dependencies, corruption, default-off, serialization and MTP).
 - Relevant preexisting selector/planner/static-predictor/GPU-invocation/GGUF
@@ -49,3 +49,5 @@ verify_freeze_references, worker_cell, predict_cell and CLI parser. Apply the
 worker hook after all existing static bindings and before the final replan.
 Concurrent edits to that file should be merged narrowly. The new module is
 included automatically by the existing source_freeze Python-file sweep.
+
+Additional static physical-dispatch regression: ordinary Q5_K prefill B=64/R=1 retains attention M=64 while both final FFN invocations use M=1. The down projection re-enters the MMVQ branch. Fused up/gate remains explicitly uncovered for single-physical-matrix MMQ qualification; this is not claimed as dispatch proof. No timing calibration or native run was used.

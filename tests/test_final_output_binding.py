@@ -323,3 +323,25 @@ def test_frozen_configuration_mismatch_is_not_an_alias(frozen):
     candidate = binding.apply_binding(scene, frozen.inputs, gguf=frozen.gguf)
     assert model_declaration(candidate.model) is None
     assert 'scenario_runtime_shape_differs_from_frozen_configuration' in candidate.workload.metadata[binding.AUDIT_KEY]['reasons']
+
+
+def test_output_rows_reenter_physical_dispatch_instead_of_scaling_old_m64_cost():
+    from tests.test_llama_gpu_invocations import scenario, contract, projections
+    from heterollm_sim.llama_gpu_invocations import apply_llama_gpu_invocation_contract
+    device = {"available": True, "sm_count": 84, "max_shared_memory_per_block_optin_bytes": 101376}
+    base = apply_llama_gpu_invocation_contract(scenario(m=64, fmt="Q5_K"),
+        contract(device=device), enabled=True, enable_mmq_source_costs=True)
+    selected = replace(base, model=replace(base.model,
+        metadata={**base.model.metadata, SOURCE_KEY: source_declaration()}))
+    tasks = projections(planner.compile_serving_cohort_schedule(selected, _cohort(64, 1)))
+    attention = [t for t in tasks if t.metadata["projection_id"].startswith("attention.")]
+    tails = [t for t in tasks if t.metadata["projection_id"].startswith("mlp.")]
+    assert attention and tails
+    assert all(t.metadata["gpu_native_invocation"]["m"] == 64 for t in attention)
+    assert all(t.metadata["gpu_native_invocation"]["m"] == 1 for t in tails)
+    down = next(t for t in tails if t.metadata["projection_id"] == "mlp.down")
+    assert down.metadata["mmq_source_work"]["status"] == "mmvq_precedes_mmq"
+    assert down.metadata["mmq_source_work"]["m"] == 1
+    fused = next(t for t in tails if t.metadata["projection_id"] == "mlp.up_gate")
+    assert fused.metadata["mmq_source_work"]["status"] == "uncovered"
+    assert fused.metadata["mmq_source_work"]["reason"] == "one_physical_projection_not_proven"
