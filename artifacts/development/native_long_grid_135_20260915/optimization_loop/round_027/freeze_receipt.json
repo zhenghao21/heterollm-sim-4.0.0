@@ -1,0 +1,33 @@
+{
+  "schema": "r27-paired-freeze-receipt/v1",
+  "created_utc": "2026-09-16T18:42:11.874446+00:00",
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\protocol.json",
+    "sha256": "c22bee296871b993b6aa97731e8a42a9a177263ecd9123a47ab728ee69cd78d3",
+    "bytes": 59805
+  },
+  "off": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\off\\freeze.json",
+    "sha256": "fa053d3bd182488c6dbe413c7cf977459182eee992ec9d48122315690ef34921",
+    "bytes": 47875629
+  },
+  "on": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\on\\freeze.json",
+    "sha256": "1f81e67f73082e3575cc88df6838c8ecf9f732e42afb218efdb166eeb0766ff0",
+    "bytes": 53021323
+  },
+  "compared_cells": 131,
+  "baseline_static_compared_cells": 131,
+  "frozen_source_preflights": {
+    "off": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\preflight\\freeze_off.json",
+      "sha256": "46104c3ce68e694e820be815a99c0c7c6d9547ad76f8320208dc9cff9ac96320",
+      "bytes": 2121
+    },
+    "on": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\preflight\\freeze_on.json",
+      "sha256": "c6a4bd909fb19045d95d9ec994888ac31f48e5629003f23b3134b1085a80b74c",
+      "bytes": 2145
+    }
+  }
+}

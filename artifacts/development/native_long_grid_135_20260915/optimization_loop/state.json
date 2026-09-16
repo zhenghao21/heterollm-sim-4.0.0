@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_026_target_ExC_path_qualified_round_027_preparation",
+  "status": "round_027_frozen_preflights_passed_wrapper_v2_prepared",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1866,7 +1866,7 @@
     "performance_parameter_admitted": false
   },
   "round_027_preparation": {
-    "status": "pre_freeze_commit_byte_check_rejected_CRLF_only",
+    "status": "both_freezes_created_real131_preflights_passed",
     "baseline": "round_025/off/freeze.json",
     "source_files": 115,
     "inherited_source_files": 113,
@@ -1882,7 +1882,28 @@
     },
     "predictions_run": false,
     "gate_B": "unvalidated",
-    "rejection": "round_027/preparation_rejected.0001.json"
+    "rejection": "round_027/preparation_rejected.0001.json",
+    "frozen_preflights": {
+      "compared_cells": 131,
+      "baseline_compared": 131,
+      "arms": {
+        "off": {
+          "status": "passed",
+          "verified_cells": 131,
+          "qualification_counts": {},
+          "source_sha256": "f1add50460e14c600566aee84f754a5fea7d7743eb952194daad8a8c206f73c0"
+        },
+        "on": {
+          "status": "passed",
+          "verified_cells": 131,
+          "qualification_counts": {
+            "conditional": 131
+          },
+          "source_sha256": "9c627742d7010b6d06edc4b96029338620935094f6233931a5b3ed17d4fa66fa"
+        }
+      }
+    },
+    "reviewed_commit": "e4192981d3318c4b92060ac2ee4d72e8f93bc224"
   },
   "round_026_wrapper_correctness": {
     "status": "rejected",
@@ -1891,6 +1912,14 @@
     "gpu_execution_performed": false,
     "reason": "all reported GPU processes incorrectly required empty for non-timed correctness",
     "numerical_qualification": false,
+    "performance_parameters_admitted": 0
+  },
+  "round_026_wrapper_correctness_v2": {
+    "status": "prepared_not_executed",
+    "host_tests": 23,
+    "same_gpu_executable": true,
+    "background_GPU_isolation_verified": false,
+    "timing_not_qualified": true,
     "performance_parameters_admitted": 0
   }
 }
