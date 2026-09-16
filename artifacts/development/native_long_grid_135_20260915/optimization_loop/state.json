@@ -1864,5 +1864,23 @@
     "wrapper_numerical_verified": false,
     "wrapper_dynamic_equivalence_verified": false,
     "performance_parameter_admitted": false
+  },
+  "round_027_preparation": {
+    "status": "drivers_prepared_not_frozen",
+    "baseline": "round_025/off/freeze.json",
+    "source_files": 115,
+    "inherited_source_files": 113,
+    "replaced_files": [
+      "tools/predict_stable_native_dataset.py",
+      "tools/native_final_output_binding.py"
+    ],
+    "preflight": "both serialized frozen-source real131 validators before any prediction, repeated at lock",
+    "tests": {
+      "command": "E:/anaconda/python.exe -m pytest -q artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/test_freeze_candidate.py artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/test_run_candidate.py artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/test_summarize_groups.py",
+      "result": "32 passed in2.58s",
+      "native_or_simulation": false
+    },
+    "predictions_run": false,
+    "gate_B": "unvalidated"
   }
 }

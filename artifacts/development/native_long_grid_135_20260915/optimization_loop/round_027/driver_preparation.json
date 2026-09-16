@@ -1,0 +1,96 @@
+{
+  "schema": "r27-driver-preparation/v1",
+  "created_utc": "2026-09-16T18:15:19.292003+00:00",
+  "status": "code_and_structure_tests_ready_not_frozen",
+  "observed_root_head": "17d63b94a05f99a8066de413266f02e3faba63df",
+  "baseline_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_025\\off\\freeze.json",
+    "sha256": "88f08e04f3d26c59aec0e5b71abfe6bfb5ae2561b765213e56d873fbd4bf0051",
+    "bytes": 47875629
+  },
+  "baseline_source_count": 115,
+  "source_inheritance": {
+    "R25_off_exact_files": 113,
+    "reviewed_commit_replacements": [
+      "tools/predict_stable_native_dataset.py",
+      "tools/native_final_output_binding.py"
+    ],
+    "additions": 0,
+    "deletions": 0,
+    "same_source_off_on": true
+  },
+  "preflight_contract": "freeze and lock each execute verify_freeze_references from both arms in fresh processes; exact131 normalized proofs required before controls/allowfull",
+  "tests": {
+    "command": "E:/anaconda/python.exe -m pytest -q artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/test_freeze_candidate.py artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/test_run_candidate.py artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/test_summarize_groups.py",
+    "result": "32 passed in2.58s",
+    "native_or_simulation": false
+  },
+  "files": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\freeze_candidate.py",
+      "sha256": "c7d8b2c87592a7201039bae8d53d8cf3730aa98f2079c2d9ff68bd1b9d109513",
+      "bytes": 15652
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\run_candidate.py",
+      "sha256": "84ed7450c3e104b459a071159164ad904734796bd6f903284d0214b66d75b2d1",
+      "bytes": 9184
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\summarize_groups.py",
+      "sha256": "050842660d7827a0424f3653bacf4bca023de1e2cd157563b101dace873ce457",
+      "bytes": 5549
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\verify_frozen_preflight.py",
+      "sha256": "5734802280bd56c27ef087844991230e4ecbad0b12d1fed55c9c28bb7394f952",
+      "bytes": 4784
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\test_freeze_candidate.py",
+      "sha256": "4a3f9ca252f268b90c7271a619da541f74db0995dffd3301fd9107e7653cf605",
+      "bytes": 11389
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\test_run_candidate.py",
+      "sha256": "5ff06874cb374927da52d39b48c016e456b61e219ca5968a783819bfff5f5e9f",
+      "bytes": 5332
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\test_summarize_groups.py",
+      "sha256": "6872443208795289ff3b9cd48fad3913b9286a958ccd026efc47f14b9e74f0d8",
+      "bytes": 1717
+    }
+  ],
+  "commands_after_root_review_commit": [
+    "E:/anaconda/python.exe artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/freeze_candidate.py --reviewed-commit <FULL_REVIEWED_COMMIT_SHA>",
+    "E:/anaconda/python.exe artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/run_candidate.py lock",
+    "E:/anaconda/python.exe artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/run_candidate.py full --workers 4 --timeout-seconds 600",
+    "E:/anaconda/python.exe artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/run_candidate.py score",
+    "E:/anaconda/python.exe artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/summarize_groups.py"
+  ],
+  "fixed_denominator_per_arm": 131,
+  "terminal_barrier_count": 262,
+  "threshold": "all three APE strictly less than10% for each fixed cell",
+  "gate_B": "unvalidated",
+  "prior_R25_failures": "preserved, not retroactively accepted",
+  "new_freezes_created": false,
+  "predictions_run": false,
+  "native_run": false,
+  "commit_or_push": false,
+  "reviewed_replacement_preview": [
+    {
+      "relative": "tools/predict_stable_native_dataset.py",
+      "baseline_sha256": "e7f8c7311d57d2d7a4cf0572aec98d37b522d7ee202e62ba51674bd5b93cc7eb",
+      "observed_HEAD_sha256": "e10b1b1881ffa86104dea7eaa2805d275ecdc87a6233a83960fe7bdcc6983839",
+      "bytes": 227023
+    },
+    {
+      "relative": "tools/native_final_output_binding.py",
+      "baseline_sha256": "94436c070f5647a00e18312ae7bb2490d247a440511eb729c20093d86e48ddf9",
+      "observed_HEAD_sha256": "a4c2f6b38efe53666e356802f82cbbc30f135bd99a6c1b11388096b2141d39dc",
+      "bytes": 19828
+    }
+  ],
+  "baseline_static_inputs": "freeze,lock and every guard require newoff identical to R25/off per cell after only three explicitly verified copy/digest normalizations; model/deployment and preparation status also equal"
+}
