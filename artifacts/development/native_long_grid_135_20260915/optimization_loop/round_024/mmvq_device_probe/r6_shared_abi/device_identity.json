@@ -1,0 +1,23 @@
+{
+  "schema": "heterollm.mmvq-shared-abi-device-identity/v1",
+  "gpu_execution_performed": false,
+  "timed_runs": 0,
+  "pairs": {
+    "mmvq_main": {
+      "target_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r5_device_code_compare\\extract_all\\ggml-cuda.38.sm_120a.cubin",
+      "target_sha256": "6de26730d421e0987837773bcbacd2fb247f47a9bf6f327bbdc16d3f94a79bb0",
+      "wrapper_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\extract_all\\mmvq-source-slice-link-probe.1.sm_120a.cubin",
+      "wrapper_sha256": "6de26730d421e0987837773bcbacd2fb247f47a9bf6f327bbdc16d3f94a79bb0",
+      "bytes": 5450408,
+      "bytes_equal": true
+    },
+    "q8_1_conversion": {
+      "target_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r5_device_code_compare\\extract_all\\ggml-cuda.48.sm_120a.cubin",
+      "target_sha256": "1000c076b15dab0dbf817985fd8741b30c557dda9f46ac6251e536d3ffc98140",
+      "wrapper_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_024\\mmvq_device_probe\\r6_shared_abi\\extract_all\\mmvq-source-slice-link-probe.2.sm_120a.cubin",
+      "wrapper_sha256": "1000c076b15dab0dbf817985fd8741b30c557dda9f46ac6251e536d3ffc98140",
+      "bytes": 222816,
+      "bytes_equal": true
+    }
+  }
+}
