@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_goal_revised_every_cell_all3_below10",
+  "status": "active_goal_audited_two_gates",
   "user_goal": "鍥哄畾杩欑粍native锛屾寜浠诲姟涔﹁嚜鍔ㄤ紭鍖栨満鍒跺苟鎸佺画鎺ㄨ繘",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -682,19 +682,38 @@
     "starting_full_evaluations_completed": 3
   },
   "targets": {
-    "per_group_per_metric_median_ape_pct_strict": 10,
-    "per_group_per_metric_p90_ape_pct_max": 20,
-    "per_group_per_metric_worst_ape_pct_max": 30,
     "fixed_set_prediction_coverage_min_pct": 100,
     "also_report_strict_all3_below10_cells": true,
-    "acceptance_unit": "each_frozen_cell_each_engine_metric",
+    "acceptance_unit": "each_cell_each_engine_metric_separately_for_development_and_independent_acceptance",
     "every_cell_every_metric_ape_pct_strict": 10,
     "required_cells": 131,
     "required_metric_values": 393,
     "missing_failed_nonfinite_or_insufficient_evidence_passes": false,
     "rounding_before_comparison": false,
     "single_frozen_version_required": true,
-    "group_statistics_are_diagnostic": true
+    "group_statistics_are_diagnostic": true,
+    "development_gate": {
+      "required_cells": 131,
+      "required_metric_values": 393,
+      "threshold_pct_strict": 10,
+      "evidence_role": "initial_screen_development_regression",
+      "formal_acceptance": false
+    },
+    "formal_gate": {
+      "threshold_pct_strict": 10,
+      "independent_set_required": true,
+      "registered_domain_required": true,
+      "sampling_plan_frozen_before_collection": true,
+      "joint_confidence_level": 0.95,
+      "uncertainty_crossing_threshold": "insufficient_evidence",
+      "cross_hardware_required_for_single_hardware_claim": false
+    },
+    "verdicts": [
+      "passed",
+      "accuracy_failed",
+      "insufficient_evidence",
+      "unvalidated"
+    ]
   },
   "dataset_role": "Previously disclosed development/regression data; never independent blind validation.",
   "rounds": [
@@ -1219,6 +1238,21 @@
       "explicit_user_hard_resource_limit",
       "unresolvable_external_blocker"
     ],
-    "independent_work_continues_when_possible": true
+    "independent_work_continues_when_possible": true,
+    "no_progress_review_after_rounds": 3,
+    "completion_requires": "both_A_and_B_within_declared_scope"
+  },
+  "goal_evaluator_status": "declarative_only_not_implemented",
+  "goal_audit": {
+    "observed_batches_per_cell": 3,
+    "formal_repeatability_accepted_cells": 0,
+    "native_evaluable_coverage_pct": 80.8641975308642,
+    "no_native_remeasurement_this_change": true,
+    "threshold_not_relaxed": true
+  },
+  "historical_group_targets_not_active": {
+    "per_group_per_metric_median_ape_pct_strict": 10,
+    "per_group_per_metric_p90_ape_pct_max": 20,
+    "per_group_per_metric_worst_ape_pct_max": 30
   }
 }
