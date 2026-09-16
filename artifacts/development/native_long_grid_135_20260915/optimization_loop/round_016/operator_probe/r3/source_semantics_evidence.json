@@ -1,0 +1,103 @@
+{
+  "source_commit": "3057bb66c86c46d5781e50e85462a760ba7d1feb",
+  "source_runtime_equivalence_proven": false,
+  "anchors": [
+    {
+      "purpose": "MMVQ activation half scale and original sum",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cu",
+      "sha256": "12ab0782e5e9cf273dcc584edc7413729b18609dc20b4bc6c7a53efd5656c48f",
+      "matching_lines": [
+        92
+      ],
+      "anchor": "const int8_t q = amax == 0.0f ? 0 : roundf(xi / d);"
+    },
+    {
+      "purpose": "MMVQ half2 store",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cu",
+      "sha256": "12ab0782e5e9cf273dcc584edc7413729b18609dc20b4bc6c7a53efd5656c48f",
+      "matching_lines": [
+        100
+      ],
+      "anchor": "y[ib].ds = make_half2(d, sum);"
+    },
+    {
+      "purpose": "MMQ F32 inverse",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cu",
+      "sha256": "12ab0782e5e9cf273dcc584edc7413729b18609dc20b4bc6c7a53efd5656c48f",
+      "matching_lines": [
+        515
+      ],
+      "anchor": "const float d_inv = 127.0f / amax;"
+    },
+    {
+      "purpose": "MMQ reciprocal",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cu",
+      "sha256": "12ab0782e5e9cf273dcc584edc7413729b18609dc20b4bc6c7a53efd5656c48f",
+      "matching_lines": [
+        521
+      ],
+      "anchor": "const float d = 1.0f / d_inv;"
+    },
+    {
+      "purpose": "MMQ F32 D4 store",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\quantize.cu",
+      "sha256": "12ab0782e5e9cf273dcc584edc7413729b18609dc20b4bc6c7a53efd5656c48f",
+      "matching_lines": [
+        551
+      ],
+      "anchor": "y[ib].d4[iqs/32]  = d;"
+    },
+    {
+      "purpose": "Q5 D4 dispatch",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\mmq.cuh",
+      "sha256": "d4fac91062e5cbcb083ec4c4f16cb4bf5ca741db903b5e2cd413e2e8dcfa2fae",
+      "matching_lines": [
+        68,
+        404,
+        572,
+        736
+      ],
+      "anchor": "case GGML_TYPE_Q5_0:"
+    },
+    {
+      "purpose": "Q8 D4 dispatch",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\mmq.cuh",
+      "sha256": "d4fac91062e5cbcb083ec4c4f16cb4bf5ca741db903b5e2cd413e2e8dcfa2fae",
+      "matching_lines": [
+        72,
+        406,
+        584,
+        748
+      ],
+      "anchor": "case GGML_TYPE_Q8_0:"
+    },
+    {
+      "purpose": "Q5 signed dot weight transform",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\mmq-load-tiles.cuh",
+      "sha256": "6efed511aee0b370ed11f74c04e50fc4af29a0baf11f7d0686ee85e31e538404",
+      "matching_lines": [
+        353
+      ],
+      "anchor": "qs0     = __vsubss4(qs0, 0x10101010);"
+    },
+    {
+      "purpose": "Q5 MMVQ original sum correction",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\vecdotq.cuh",
+      "sha256": "9d165e8e36db9bdfb69bfc2301e550a58c4a3057907bbf4d075b5f3eb72347a2",
+      "matching_lines": [
+        200
+      ],
+      "anchor": "return d5 * (sumi * ds8f.x - (16*vdr/QI5_0) * ds8f.y);"
+    },
+    {
+      "purpose": "Q8 signed dot",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\ggml\\src\\ggml-cuda\\vecdotq.cuh",
+      "sha256": "9d165e8e36db9bdfb69bfc2301e550a58c4a3057907bbf4d075b5f3eb72347a2",
+      "matching_lines": [
+        257
+      ],
+      "anchor": "return d8_0*d8_1 * ((T) sumi);"
+    }
+  ],
+  "gpu_access": false
+}

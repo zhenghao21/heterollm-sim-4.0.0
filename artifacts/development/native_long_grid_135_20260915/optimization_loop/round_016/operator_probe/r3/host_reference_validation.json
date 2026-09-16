@@ -1,0 +1,120 @@
+{
+  "schema": "operator-surface-host-reference-validation/v1",
+  "created_utc": "2026-09-16T02:45:52.291436+00:00",
+  "status": "passed_host_only",
+  "gpu_access": false,
+  "native_timing_used": false,
+  "path_difference_assertion": true,
+  "samples_total": 1536,
+  "results": [
+    {
+      "K": 32,
+      "quant": "Q5_0",
+      "path": "MMVQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 0.0,
+      "path_tolerance_fraction": 0.0
+    },
+    {
+      "K": 32,
+      "quant": "Q5_0",
+      "path": "MMQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 0.0,
+      "path_tolerance_fraction": 0.0
+    },
+    {
+      "K": 32,
+      "quant": "Q8_0",
+      "path": "MMVQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 0.0,
+      "path_tolerance_fraction": 0.0
+    },
+    {
+      "K": 32,
+      "quant": "Q8_0",
+      "path": "MMQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 0.0,
+      "path_tolerance_fraction": 0.0
+    },
+    {
+      "K": 896,
+      "quant": "Q5_0",
+      "path": "MMVQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 8.279457688331604e-07,
+      "path_tolerance_fraction": 0.005700739724214792
+    },
+    {
+      "K": 896,
+      "quant": "Q5_0",
+      "path": "MMQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 8.428469300270081e-07,
+      "path_tolerance_fraction": 0.005332363036823061
+    },
+    {
+      "K": 896,
+      "quant": "Q8_0",
+      "path": "MMVQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 9.12696123123169e-06,
+      "path_tolerance_fraction": 0.02874331762651965
+    },
+    {
+      "K": 896,
+      "quant": "Q8_0",
+      "path": "MMQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 7.927228580228984e-06,
+      "path_tolerance_fraction": 0.02794194325061962
+    },
+    {
+      "K": 1024,
+      "quant": "Q5_0",
+      "path": "MMVQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 7.962808012962341e-07,
+      "path_tolerance_fraction": 0.00591438654166243
+    },
+    {
+      "K": 1024,
+      "quant": "Q5_0",
+      "path": "MMQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 7.004273356869817e-07,
+      "path_tolerance_fraction": 0.004990702245325046
+    },
+    {
+      "K": 1024,
+      "quant": "Q8_0",
+      "path": "MMVQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 7.90320336818695e-06,
+      "path_tolerance_fraction": 0.02185769949286665
+    },
+    {
+      "K": 1024,
+      "quant": "Q8_0",
+      "path": "MMQ",
+      "samples": 128,
+      "cpp_python_max_abs_error": 0.0,
+      "max_tested_float_reduction_difference": 7.2503462433815e-06,
+      "path_tolerance_fraction": 0.026957071435452305
+    }
+  ],
+  "limitation": "Tests exercise exact source arithmetic and selected alternate float reduction orders, not actual GPU dispatch, an exhaustive numerical bound, or runtime equivalence."
+}

@@ -1,0 +1,100 @@
+{
+  "schema": "operator-collection-r2-preparation-status/v1",
+  "created_utc": "2026-09-16T02:52:54.248146+00:00",
+  "status": "code_ready_waiting_clock_receipt_and_root_freeze_approval",
+  "gpu_runs": 0,
+  "freeze_exists": false,
+  "probe_manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\build_manifest.json",
+    "bytes": 92531,
+    "sha256": "3ba824ac8617394a826c4938fe5cf3756e4776cdf9b112f7c8f141b6ba4c44a0"
+  },
+  "expected_root_approved_probe_manifest_sha256": "3ba824ac8617394a826c4938fe5cf3756e4776cdf9b112f7c8f141b6ba4c44a0",
+  "clock_control_receipt_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\clock_control_start.json",
+  "target_sm_clock_mhz": 2400,
+  "sm_clock_tolerance_mhz": 30,
+  "tests": {
+    "passed": 75,
+    "seconds": 1.21,
+    "scope": "host-only synthetic freeze/interval/process supervision/clock domain tests plus read-only historical SQLite schema"
+  },
+  "p1_fixes": [
+    "external approved freeze SHA and complete bound reference sets",
+    "sticky failed_identity stop before next stage",
+    "all same-device captured external GPU overlap rejected",
+    "child Popen bookkeeping failure still waits for actual exit"
+  ],
+  "p2_fixes": [
+    "observed kernel family preserved separately from expected match",
+    "critical loaded module offline binding checks; unbound CUDA/OS retained"
+  ],
+  "script_refs": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\common.py",
+      "bytes": 14237,
+      "sha256": "31adfc161d102aae791f424ecb45cef33d81dcf60d636e10598eaa28665ca08d"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\extract.py",
+      "bytes": 19011,
+      "sha256": "da145e76dab9fcf9e58edff96f727a6af292b270ce62aad48bdc287db2a52403"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\quality.py",
+      "bytes": 3186,
+      "sha256": "4285dbdef3bfb05352b625c4ce8a6f634b2791a94f0c46ad923ca144afd4dcfb"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\runner.py",
+      "bytes": 16842,
+      "sha256": "4e184ec9be6716d6d3b8927aa689d6d8ad62e9cc1491121ce491577aee4300ba"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\test_collection.py",
+      "bytes": 21189,
+      "sha256": "68fc12b9197121bbeff104586448e09d3a6ad258a56e803777be703ff8769edf"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\worker.py",
+      "bytes": 6864,
+      "sha256": "0080b31bd289f64c19b62f1639ec882fdb6c3c4255fd7b85baa6094275605c44"
+    }
+  ],
+  "readme_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\README.md",
+    "bytes": 7059,
+    "sha256": "35eb392bd5ea8474a5b41581856699bb3ab6a843e489b963c9837e9f4bac51df"
+  },
+  "prepare_entry": [
+    "E:\\anaconda\\python.exe",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\runner.py",
+    "prepare",
+    "--root-reviewed",
+    "--probe-root",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3"
+  ],
+  "run_entry_template": [
+    "E:\\anaconda\\python.exe",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\collection_r2\\runner.py",
+    "run",
+    "--root-reviewed",
+    "--idle-window-confirmed",
+    "--expected-freeze-sha256",
+    "ROOT_APPROVED_COLLECTION_SHA",
+    "--clock-control-receipt",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\clock_control_start.json",
+    "--clock-control-sha256",
+    "ROOT_CLOCK_RECEIPT_SHA",
+    "--max-stages",
+    "1"
+  ],
+  "original_collection_untouched": true,
+  "original_freeze_sha256": "8f9dca14c964da35dc56a4469240ce858c915020ec51a815c4080034afe6bcec",
+  "query_coverage_report": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\query_coverage_audit.md",
+    "bytes": 6444,
+    "sha256": "04c6aa34cf6936350f1842d055e2b6c393b36600f4ee6f897e5b4d0fdf77eff1"
+  },
+  "no_LLM_actuals_read": true,
+  "no_fit": true
+}

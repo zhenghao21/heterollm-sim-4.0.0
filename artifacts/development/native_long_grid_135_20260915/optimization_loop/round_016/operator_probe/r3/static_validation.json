@@ -1,0 +1,10 @@
+{
+  "status": "passed",
+  "timestamp": "2026-09-16T02:46:33.058301+00:00",
+  "single_graph_call": true,
+  "cache_sweep_before_NVTX": true,
+  "validation_outside_NVTX_and_timing": true,
+  "both_quant_source_path_gates": true,
+  "python_syntax_files": 8,
+  "gpu_access": false
+}

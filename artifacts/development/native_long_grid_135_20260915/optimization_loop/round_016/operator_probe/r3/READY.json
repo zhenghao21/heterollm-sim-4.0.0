@@ -1,0 +1,56 @@
+{
+  "schema": "round016-operator-probe-ready/v3",
+  "created_utc": "2026-09-16T02:48:49.647719+00:00",
+  "status": "compiled_host_tested_waiting_root_review_before_freeze",
+  "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3",
+  "gpu_runs": 0,
+  "freeze_exists": false,
+  "native_binary_modified": false,
+  "r1_r2_and_collection_failure_records_preserved": true,
+  "executable": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\operator-surface-probe.exe",
+    "sha256": "fe1e0c26564d03f8535832c326449a47ce0e4e8ce1d3c6bf8d5facbe9c327311",
+    "bytes": 143360
+  },
+  "change": "Explicit absolute-path loading and pinning of all four frozen native DLLs before the existing loaded-module identity gate and before CUDA initialization.",
+  "collection_contract": {
+    "raw_schema": "single-operator-surface-probe/v2",
+    "timing_contract": "actual-backend-single-graph-envelope/v2",
+    "same26_configs_and_thresholds_as_r2": true,
+    "expected_dispatch_is_not_observed": true
+  },
+  "validation": {
+    "pytest_passed": 19,
+    "fake_loader_checks": 8,
+    "host_cpp_numpy_samples": 1536,
+    "host_cpp_numpy_error": 0.0,
+    "old_MMVQ_samples": 49152,
+    "old_max_abs_error": 1.3373792171478271e-06,
+    "powershell_parse": "passed",
+    "static": "passed",
+    "locked_dependencies_verified": 46
+  },
+  "evidence": {
+    "module_preload": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\module_preload_validation.json",
+      "sha256": "a29463e0f858755aef971ec3c32edc2141376d2dabe648ab73bb62dbbafb5a35",
+      "bytes": 4626
+    },
+    "source_copy": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\revision_provenance.json",
+      "sha256": "005b173d91f81e3cf28e4092815732c28a97105bab2e610d47b4693cfae0b398",
+      "bytes": 5071
+    },
+    "readme": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\operator_probe\\r3\\README.md",
+      "sha256": "8eb582b2610840216d255d380adc76e8787b541868d5324bafb6529849e0afb1",
+      "bytes": 3465
+    }
+  },
+  "next": "Root review then freeze_build.py; collector new revision points to r3 and accepts ready/v3. First actual GPU pair is root-owned; keep old failed pair immutable.",
+  "limits": [
+    "Actual Windows loading of native DLLs not exercised by this host-only turn.",
+    "No GPU dispatch or performance accuracy claim.",
+    "The existing incomplete native source/build correspondence remains a conditional-transfer limitation."
+  ]
+}

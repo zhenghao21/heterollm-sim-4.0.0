@@ -1,0 +1,47 @@
+{
+  "schema": "round016-analytical-baseline-validation/v1",
+  "created_utc": "2026-09-16T03:01:15.452900+00:00",
+  "status": "complete26_static_predictions_host_tests_passed",
+  "prediction": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\analytical_predictions.0001.json",
+    "sha256": "66da88e6b8d24a1728945ddb17454ba42d028ec524f7b118fb3b175f1acb3c20",
+    "bytes": 1517610
+  },
+  "prediction_created_utc": "2026-09-16T03:00:15.122612+00:00",
+  "script": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\analytical_predictions.py",
+    "sha256": "a7643d6d7d14be9386ae6df792b6b57322ffb2bdab7c10d0684bb8f7d7fb58e6",
+    "bytes": 8465
+  },
+  "tests": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_016\\test_analytical_predictions.py",
+    "sha256": "5f89af9d37fdf7f48997e7d1042abce963f69436e8a646d876e887ab898c4878",
+    "bytes": 7428
+  },
+  "tests_passed": 80,
+  "tests_failed": 0,
+  "test_command": "E:/anaconda/python.exe -m pytest artifacts/development/native_long_grid_135_20260915/optimization_loop/round_016/test_analytical_predictions.py -q",
+  "repairs": [
+    "Separate inherited analytical a16 compute width from F32 physical input/output storage, matching planner materialized projection.",
+    "Store quant payload without metadata; GemmWorkload.weight_bytes adds metadata exactly once.",
+    "Keep source-qualified MMQ int8 internal dispatch explicit; generic MMVQ fp16 math proxy explicitly remains uncalibrated fallback.",
+    "Validate exact preregistered26 joint-shape set and freeze protocol/source/static-hardware references before and after computation."
+  ],
+  "family_counts": {
+    "MMVQ": 16,
+    "MMQ": 10
+  },
+  "source_timing_used": false,
+  "native_or_gpu_executed": false,
+  "target_llm_actuals_read": false,
+  "cost_parameters_fitted": false,
+  "clock_mhz": 2400,
+  "clock_basis": "Root-requested static target; nativebuilder cycles-per-MMA derived at2.617GHz retained, only current clock set2.4GHz.",
+  "comparison_scope": "Only device role intervals versus matching future extracted kernel durations; launches and host graph wall reported separately.",
+  "limits": [
+    "Static predictions cannot establish measured kernel path or native/source equivalence.",
+    "MMVQ main integer instruction mix unresolved.",
+    "No source costs/core planner changes in this subtask.",
+    "Existing profile closures and final measurement quality still gate any later calibration."
+  ]
+}
