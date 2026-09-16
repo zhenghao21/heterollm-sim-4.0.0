@@ -1,0 +1,32 @@
+{
+  "schema": "r27-two-arm-controls/v1",
+  "created_utc": "2026-09-16T18:46:59.686674+00:00",
+  "arms": [
+    "off",
+    "on"
+  ],
+  "denominator": 131,
+  "strict_threshold_pct": 10,
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\protocol.json",
+    "sha256": "c22bee296871b993b6aa97731e8a42a9a177263ecd9123a47ab728ee69cd78d3",
+    "bytes": 59805
+  },
+  "freeze_receipt_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\freeze_receipt.json",
+    "sha256": "223a0fc89d39b2a2816902844b81d7e865888397ced808bb74e4ba3d4ae5bfc9",
+    "bytes": 1706
+  },
+  "lock_preflights": {
+    "off": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\preflight\\lock_off.json",
+      "sha256": "b71450bf789fec1e3ba2f78adaaf2eff6b8a97a804e268bf6ba5ad9a3456ce6b",
+      "bytes": 2119
+    },
+    "on": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\preflight\\lock_on.json",
+      "sha256": "6ad08e738274f27fb9e1e8a7df60c144a880a634933e83a8dfde91cc8f68580f",
+      "bytes": 2143
+    }
+  }
+}
