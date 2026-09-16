@@ -1977,5 +1977,29 @@
     "output": "off/on/delta PNG+SVG; exact evidence archive and 40MiB parts",
     "new_scoring": false,
     "excluded_failed_cells": 0
+  },
+  "round_026_wrapper_launch_match": {
+    "status": "compiled_and_host_checked_not_executed",
+    "pins": {
+      "build_manifest.json": "ed3e558c51cb4aba2665d9703d32cc9c7bebf869bfc50d5b23d74ec0d7c3edd4",
+      "host_test_receipt.json": "9ea07061d7846964aca51b6fab1df86eb87039d413143706d3c21c6741467c4a",
+      "source_manifest.json": "2451a9e2ae464306c71637e6d11cbc33735e7b4505a68de960bfe7d26fb00f02",
+      "run_wrapper_capture.py": "0d937ad4e30088a535850fb1c169db49b54c2f029e5feafbd1b41ef34ae1c942"
+    },
+    "python_host_checks": 33,
+    "CPU_layout_passed": true,
+    "device_cubins_byte_identical": true,
+    "continuous_layout_stride_values": [
+      393216,
+      128,
+      3072
+    ],
+    "source_QI5_0": 4,
+    "blocks_per_iteration": 64,
+    "requires_R27_terminal_count": 262,
+    "GPU_executed": false,
+    "runtime_match_verified": false,
+    "new_shim_numerical_qualification": false,
+    "performance_parameter_admitted": false
   }
 }

@@ -216,7 +216,7 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 
 1. 完成正在执行的R27末层选行对照。两路freeze及lock均已通过冻结源码的真实131格worker预检，off/on及R25/off基线静态输入逐项对照通过；115个源码中仅替换两个已提交的规范化修复文件，32项结构测试和独立复审通过。已启动off后on、每路131格的仿真；4个worker、每格600秒预算，所有262个终态落盘后统一评分，失败保留。后处理入口已通过8项合成测试，将生成off/on及差值热图并按原工具分卷归档；缺少完整评分时拒绝读取，固定集内失败显示X、固定集外显示短横线，尚未作图。R25启动失败与R27创建前Git换行拒收均保留，不修改旧结果、不放宽身份校验。
 2. 评估选行修正的实际影响。依据源码预先限定受影响算子：普通架构的末层FFN缩行可能降低原本偏低的TTFT；混合架构的final norm及gather补全可能增时。结构正确性、源码条件资格与精度收益分开报告；不承诺全模型或TPOT改善。
-3. 完成R26 wrapper与target的动态对照。固定Q5_0/M1/K4096/N3072的target ExC路径及原wrapper数值资格已分别通过；数值V2保留后台活动，明确不用于性能标定，原启动前拒收保持。下一步在新shim按连续布局补齐六个channel/sample stride，并采相邻conversion→main的完整参数与指针关系，中间不插同步或D2H；新shim数值重新验证，不能自动继承旧结果。已发现旧说明性geometry字段的QI/blocks_per_iter写错，锁定源码为4/64；固定shape分支不变，原件保留并另附勘误。M4仍留出，0性能参数准入。
+3. R27完整结束后执行R26 wrapper与target动态对照。固定Q5_0/M1/K4096/N3072的target路径与旧wrapper数值资格已分别通过。新shim已按连续布局补齐六个stride，两个cubin与目标黄金字节一致，33项Python主机检查及CPU布局程序通过；入口须先验证R27的262终态屏障。捕获pass中conversion→main相邻发射、中间不插同步/D2H，随后关闭CUPTI，用独立fixture重新验证新shim数值。QI5_ERRATUM已依据锁定源码更正QI=4、每迭代64 blocks，旧contract/原始记录不变。动态匹配与新shim数值仍未执行；M4仍留出，0性能参数准入。
 4. 仅在路径、数值与测量资格通过后冻结合成性能实验。分别测CUDA-event主kernel/转换、warm复用和超过L2的旋转工作集；CUPTI采集只作路径证据。先规定development/holdout、样本量、波动门限和失败规则，再运行；不按131格误差选择系数，也不以CTA数直接换经验带宽。
 5. 下一机制优先定位MMVQ访存几何与host建图/提交重叠。R28正在准备锁定target DLL的独立多节点合成图探针，分别记录提交wall、线程CPU服务、GPU事件与同步等待；它不能直接证明LLM内部can_reuse/build_graph时段，暂无新时延参数。真实microbatch、nonflash物理KV、retained高水位、slot生命周期作为源码约束；已有nonflash、logits、sampling、launch和sync成本先查重。固定三档prompt没有ubatch尾块，c不能替代kernel M，native token时间戳仅作诊断。未知成本标未定价，不追加p/c残差；连续工具完善须按第8节复盘，转入可改变预测的机制验证。
 6. 每轮原位更新任务书、提交、推送并核验远端。A固定131/131格、393/393项均严格<10%；不达标继续有证据的机制假设。通过A后另用独立B，当前B尚未验证。
@@ -239,6 +239,6 @@ R23的27个GPU proof表示失败已作为历史保留。R24将其中26格恢复�
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
 - optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、execution_closed.json：已拒绝批次的冻结、131配置错位重导和退出记录，未评分。
 - optimization_loop/round_024/mmvq_device_probe/r5_device_code_compare/、r6_shared_abi/：设备代码及共享ABI证据，均无性能系数。
-- optimization_loop/round_026/target_capture_run.0001/、target_capture_ex_run.0001/：旧API拒收及新ExC实际路径通过的完整原始记录；mmvq_wrapper_correctness/为待GPU验证的数值程序。
+- optimization_loop/round_026/target_capture_run.0001/、target_capture_ex_run.0001/：旧API拒收及新ExC实际路径通过的完整原始记录；wrapper_correctness_v2_run.0001/为已通过的数值记录；mmvq_wrapper_launch_match/为待执行的连续布局动态对照与QI勘误。
 - optimization_loop/round_023/optimization_direction_metric_audit.md、optimization_direction_source_audit.md、host_cost_ownership_audit.md、mmvq_memory_geometry_audit.md：已纳入任务书的参考方向审计。
 - optimization_loop/round_022/REPORT.md、round_023/REPORT.md及各轮归档索引：历史误差、退化和失败保留。
