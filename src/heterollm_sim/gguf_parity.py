@@ -449,6 +449,7 @@ def build_model_from_gguf(gguf: GGUFMetadata):
     # omit a separate output/lm_head tensor.  llama.cpp reuses token_embd for
     # the final projection in that case, so bind the same physical tensor
     # instead of rejecting an otherwise valid model.
+    output_norm = next((t for t in gguf.tensor_directory if t.name == "output_norm.weight"), None)
     output_tied_to_embedding = output is None
     if output_tied_to_embedding:
         output = embedding
@@ -467,7 +468,13 @@ def build_model_from_gguf(gguf: GGUFMetadata):
                   # block geometry and the planner must not interpret these
                   # audit fields as one global artifact format.
                   "gguf_embedding_binding": {k: v for k, v in binding(embedding).items() if k != "block_size"},
-                  "gguf_output_binding": {k: v for k, v in binding(output).items() if k != "block_size"}})
+                  "gguf_output_binding": {k: v for k, v in binding(output).items() if k != "block_size"},
+                  # Static input only; these bytes already belong to the model
+                  # artifact and must not create a second capacity allocation.
+                  "gguf_output_norm_binding": ({k: v for k, v in binding(output_norm).items() if k != "block_size"}
+                                               if output_norm is not None else None),
+                  "gguf_norm_epsilon": gguf.metadata.get(
+                      f"{gguf.architecture}.attention.layer_norm_rms_epsilon")})
     return ModelSpec(name="GGUF-" + gguf.architecture, graph=graph, metadata=graph.attributes)
 
 

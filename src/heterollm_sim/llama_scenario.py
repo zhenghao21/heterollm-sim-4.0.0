@@ -162,6 +162,69 @@ def _llama_slot_order_qualification(
         "preserves_engine_start_definition": True, "accuracy_validated": False}
 
 
+def llama_final_norm_static_binding(scenario: ScenarioConfig, config: LlamaCppRuntimeConfig) -> Mapping[str, Any]:
+    """Bind the norm's own tensor; output-layer placement is only a candidate.
+
+    Locked source: llama-model.cpp dev_output; llama-graph.cpp build_norm;
+    ggml-backend.cpp weight preference and adjacent-backend expansion. Runtime
+    buffer overrides/dispatch are not claimed as observed by this static rule.
+    """
+    metadata = dict(scenario.model.metadata)
+    nested = scenario.model.graph.attributes.get("metadata", {})
+    if isinstance(nested, Mapping):
+        metadata.update(nested)
+    raw = metadata.get("gguf_output_norm_binding", metadata.get("final_norm_weight_binding"))
+    if not isinstance(raw, Mapping):
+        return {"schema": "llama.cpp.final-norm-static/v1", "status": "weight_binding_missing",
+                "native_dispatch_proven": False, "accuracy_validated": False}
+    shape = raw.get("shape")
+    if not isinstance(shape, (tuple, list)) or len(shape) != 1 or type(shape[0]) is not int or shape[0] <= 0:
+        raise ValueError("output_norm.weight must have its own positive one-dimensional shape")
+    view = model_graph_execution_view(scenario.model.graph, schema_version=scenario.model.schema_version)
+    norm = next((op for op in view.operators if op.operator_id == "final_norm"), None)
+    output = next((t for t in view.tensors if norm is not None and t.tensor_id in norm.output_tensor_ids), None)
+    if output is None or not output.shape or shape[0] != output.shape[-1]:
+        raise ValueError("output_norm.weight width differs from the model's final norm width")
+    dtype = str(raw.get("type", "")).upper()
+    bits = {"F32": 32, "F16": 16, "BF16": 16}.get(dtype)
+    if bits is None or type(raw.get("n_bytes")) is not int or raw["n_bytes"] != shape[0] * bits // 8:
+        raise ValueError("output_norm.weight requires exact scalar dtype and physical byte size")
+    # A weight vector is not evidence about a custom graph's edges. Reuse
+    # the existing opt-in, fixed-source ordinary-completion call-chain binding.
+    # It covers the reviewed llama/qwen2/qwen35 build_norm(RMS, weight, NULL).
+    from .final_layer_output_selection import model_declaration, resolve_declaration
+    declaration = model_declaration(scenario.model)
+    graph_policy = resolve_declaration(declaration, scenario.model.architecture,
+                                      mtp_present=scenario.workload.mtp is not None)
+    graph_pattern = ({"status": "fixed_source_call_chain", "declaration": dict(declaration),
+                      "graph_architecture": scenario.model.architecture,
+                      "call": "build_norm(cur, output_norm, NULL, LLM_NORM_RMS, -1)",
+                      "source_rules": ("src/llama-graph.cpp:build_norm",
+                                       "src/models/{llama,qwen2,qwen35}.cpp:output norm")}
+                     if graph_policy is not None else {"status": "unknown_custom_graph"})
+    return {"schema": "llama.cpp.final-norm-static/v1", "status": "source_conditional",
+            # Only the norm's own scalar-storage fields belong here. Generic
+            # artifact metadata walkers also visit runtime metadata, so copying
+            # a tensor-directory block_size would poison unrelated GEMMs.
+            "weight": {**{k: raw[k] for k in ("name", "type", "n_bytes", "offset") if k in raw},
+                       "shape": tuple(shape), "bits": bits},
+            "graph_pattern_binding": graph_pattern,
+            "epsilon": metadata.get("gguf_norm_epsilon", metadata.get("final_norm_epsilon")),
+            # This locked revision counts output in the tail: i_gpu_start is
+            # n_layer_all + 1 - n_gpu_layers and dev_output uses il=n_layer_all.
+            "output_device_candidate": "cpu" if config.gpu_layers == 0 else "rank_gpu",
+            "output_device_rule": "locked_tail_including_output_layer",
+            "model_source_sha256": "94ede4e7ac8119c5a4d2fad97e3432008ec7d30b42ab37395db6e2a8047d1984",
+            "weight_buffer_selection": "native_output_candidate_list_then_per_tensor_compatibility",
+            "scope": "RMS_NORM followed by its own one-dimensional weight MUL",
+            "runtime_fingerprint": config.fingerprint,
+            "source_rules": ("llama-graph.cpp:build_norm", "llama-model.cpp:dev_output",
+                             "ggml-backend.cpp:backend_id_from_cur/pass2",
+                             "ggml-cuda.cu:get_op_batch_size/device_supports_op"),
+            "capacity_accounting": "included_in_existing_model_artifact_no_extra_allocation",
+            "native_dispatch_proven": False, "accuracy_validated": False}
+
+
 def apply_llama_runtime_config(
     scenario: ScenarioConfig,
     config: LlamaCppRuntimeConfig,
@@ -229,6 +292,7 @@ def apply_llama_runtime_config(
             **hybrid_capabilities,
             **slot_metadata,
             "llama_cpp_runtime": config.to_dict(),
+            "llama_cpp_final_norm_static": llama_final_norm_static_binding(scenario, config),
             "llama_cpp_mixed_phase_batching": mixed_batching,
             "context_limit_semantics": "per_slot_runtime_limit",
         },
@@ -305,4 +369,4 @@ def apply_llama_runtime_config(
     return lowered
 
 
-__all__ = ["apply_llama_runtime_config"]
+__all__ = ["apply_llama_runtime_config", "llama_final_norm_static_binding"]

@@ -1548,7 +1548,7 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "先修final_norm权重身份/操作粒度及真实backend归属，再根据实际GPU消费者与原生同步点拆逐ubatch前端；图生命周期已在真实serving记录partial/unpriced；既有R30/R31保留、不重测native。",
+  "next_round_hypothesis": "按实际展开的GPU消费者过滤cohort前端/H2D，并同步compact stage；随后拆正确的逐ubatch生产消费/同步关系，用新冻结复用131格native比较。norm与lifecycle修复已完成，性能目标尚未重评。",
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 6,
   "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
@@ -1709,6 +1709,15 @@
       "verified_utc": "2026-09-17T01:32:31.459Z",
       "status": "pushed_and_remote_verified",
       "scope": "architecture diagnostic order; standalone graph lifecycle; R30 freeze and R31 prepared source evidence"
+    },
+    {
+      "commit": "cc2d68dc4a3e63f6f398a6ad4e6b0a89eb579daf",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "cc2d68dc4a3e63f6f398a6ad4e6b0a89eb579daf",
+      "verified_utc": "2026-09-17T01:59:29.145Z",
+      "status": "pushed_and_remote_verified",
+      "scope": "partial unpriced CPU graph lifecycle in actual OnlineRuntime; system priority refinement"
     }
   ],
   "operator_microbenchmark": {
@@ -2456,12 +2465,182 @@
       "native_synchronization": "GPU async returns; CPU compute synchronous; input reuse/backend reassignment/reallocation have distinct waits; no unconditional miss fence"
     },
     "final_norm_placement": {
-      "status": "confirmed_structural_defect_minimum_fix_in_progress",
+      "status": "implemented_reviewed_and_regression_tested_not_error_evaluated",
       "evidence": "no-offload CPU placement still yields GPU final_norm and frontend in short actual online graph",
       "native_semantics": "RMS_NORM followed by output_norm weight MUL; possible split backend; CUDA fusion source predicates required",
       "existing_granularity_gap": "reduce/apply merges RMS application and scale; typed final_norm lacks output_norm weight identity",
       "do_not_infer": "ngl0 is not a global no-GPU switch when op_offload=true",
-      "coefficient_changes": 0
+      "coefficient_changes": 0,
+      "static_tensor_observation": {
+        "observed_utc": "2026-09-17T01:59:29.145Z",
+        "scope": "GGUF metadata and tensor directory only; no tensor payload or target latency read",
+        "full_identity_revalidated": false,
+        "reader_source": "import sys,json,struct,os,hashlib,math\nsys.path.insert(0,'src')\nfrom heterollm_sim.gguf_parity import _read_string,_read_value,_TENSOR_TYPES\nout=[]\nfor ref in json.loads(sys.argv[1]):\n p=ref['path']\n with open(p,'rb') as f:\n  initial=os.fstat(f.fileno());head=f.read(24)\n  assert len(head)==24 and head[:4]==b'GGUF'\n  version,nt,nk=struct.unpack('<IQQ',head[4:]);assert version in (2,3)\n  values={}\n  for _ in range(nk):\n   key=_read_string(f);value=_read_value(f,struct.unpack('<I',f.read(4))[0])\n   if key=='general.architecture' or key.endswith('.embedding_length'):values[key]=value\n  matches=[]\n  for _ in range(nt):\n   name=_read_string(f);rank=struct.unpack('<I',f.read(4))[0];assert rank<=8\n   dims=struct.unpack('<'+'Q'*rank,f.read(8*rank));typ=struct.unpack('<I',f.read(4))[0];offset=struct.unpack('<Q',f.read(8))[0]\n   if name=='output_norm.weight':\n    spec=_TENSOR_TYPES[typ];n=math.prod(dims);assert n%spec[1]==0\n    matches.append({'name':name,'shape':list(dims),'type_id':typ,'dtype':spec[0],'physical_bytes':n//spec[1]*spec[2],'offset':offset})\n  end=f.tell();f.seek(0);directory_sha=hashlib.sha256(f.read(end)).hexdigest();final=os.fstat(f.fileno())\n  assert (initial.st_ino,initial.st_size,initial.st_mtime_ns)==(final.st_ino,final.st_size,final.st_mtime_ns)\n  assert initial.st_size==ref.get('bytes',ref.get('size_bytes'))\n  out.append({'model':ref['model'],'path':p,'frozen_expected_full_sha256':ref['sha256'],'full_identity_revalidated':False,'scope':'header_only_static_observation_no_tensor_payload_read','header_bytes':end,'header_sha256':directory_sha,'static_metadata':values,'output_norm':matches})\nprint(json.dumps(out))",
+        "reader_source_sha256": "207e79d3fa339d49389678122b9b4300bfc780d2836d431c7975ae62b3f15028",
+        "records": [
+          {
+            "model": "qwen25",
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "frozen_expected_full_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+            "full_identity_revalidated": false,
+            "scope": "header_only_static_observation_no_tensor_payload_read",
+            "header_bytes": 5947741,
+            "header_sha256": "8f5c49a4f5fbfac3454db56577cfa7b6acbee856c371fc97a726e7f621e3143f",
+            "static_metadata": {
+              "general.architecture": "qwen2",
+              "qwen2.embedding_length": 896
+            },
+            "output_norm": [
+              {
+                "name": "output_norm.weight",
+                "shape": [
+                  896
+                ],
+                "type_id": 0,
+                "dtype": "F32",
+                "physical_bytes": 3584,
+                "offset": 485448704
+              }
+            ]
+          },
+          {
+            "model": "smollm2",
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\smollm2-1.7b-instruct-q4_k_m.gguf",
+            "frozen_expected_full_sha256": "decd2598bc2c8ed08c19adc3c8fdd461ee19ed5708679d1c54ef54a5a30d4f33",
+            "full_identity_revalidated": false,
+            "scope": "header_only_static_observation_no_tensor_payload_read",
+            "header_bytes": 1782458,
+            "header_sha256": "b6887f45071edc7756cd60c932ccb170f3284c41d6aa16011ef60aaf7c2e755c",
+            "static_metadata": {
+              "general.architecture": "llama",
+              "llama.embedding_length": 2048
+            },
+            "output_norm": [
+              {
+                "name": "output_norm.weight",
+                "shape": [
+                  2048
+                ],
+                "type_id": 0,
+                "dtype": "F32",
+                "physical_bytes": 8192,
+                "offset": 1053818880
+              }
+            ]
+          },
+          {
+            "model": "tinyllama",
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+            "frozen_expected_full_sha256": "9fecc3b3cd76bba89d504f29b616eedf7da85b96540e490ca5824d3f7d2776a0",
+            "full_identity_revalidated": false,
+            "scope": "header_only_static_observation_no_tensor_payload_read",
+            "header_bytes": 1709436,
+            "header_sha256": "e87584fdf33359077fa5137179592b2453e372a1351554eb0fd8d45a8aa766d4",
+            "static_metadata": {
+              "general.architecture": "llama",
+              "llama.embedding_length": 2048
+            },
+            "output_norm": [
+              {
+                "name": "output_norm.weight",
+                "shape": [
+                  2048
+                ],
+                "type_id": 0,
+                "dtype": "F32",
+                "physical_bytes": 8192,
+                "offset": 667070464
+              }
+            ]
+          },
+          {
+            "model": "qwen35",
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\Qwen3.5-0.8B-Q4_K_M.gguf",
+            "frozen_expected_full_sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+            "full_identity_revalidated": false,
+            "scope": "header_only_static_observation_no_tensor_payload_read",
+            "header_bytes": 10961919,
+            "header_sha256": "b3e9e53dc77ba19dee590364ee00ca1a4d8541631501cbf926e7bb4a01805b1f",
+            "static_metadata": {
+              "general.architecture": "qwen35",
+              "qwen35.embedding_length": 1024
+            },
+            "output_norm": [
+              {
+                "name": "output_norm.weight",
+                "shape": [
+                  1024
+                ],
+                "type_id": 0,
+                "dtype": "F32",
+                "physical_bytes": 4096,
+                "offset": 0
+              }
+            ]
+          },
+          {
+            "model": "qwen38",
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\gpu_extension\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.readonly.gguf",
+            "frozen_expected_full_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+            "full_identity_revalidated": false,
+            "scope": "header_only_static_observation_no_tensor_payload_read",
+            "header_bytes": 10996696,
+            "header_sha256": "b73ce04dceb6297a44c2727f711056d48ba66f09fff303592c9d4809b6a1c58b",
+            "static_metadata": {
+              "general.architecture": "qwen35",
+              "qwen35.embedding_length": 5120
+            },
+            "output_norm": [
+              {
+                "name": "output_norm.weight",
+                "shape": [
+                  5120
+                ],
+                "type_id": 0,
+                "dtype": "F32",
+                "physical_bytes": 20480,
+                "offset": 1042944000
+              }
+            ]
+          }
+        ]
+      },
+      "targeted_tests_passed": 45,
+      "independent_review": "body plus CPU/generic and default-GGUF compatibility corrections passed",
+      "related_regression": {
+        "passed": 185,
+        "skipped": 1,
+        "skip_reason": "explicit FINAL_OUTPUT_REAL131_STATIC opt-in unset",
+        "deselected": 4,
+        "deselection_reason": "real GGUF full-reader cases already passed in prior 185-pass suite; do not repeat their full file reads",
+        "duration_seconds": 33.92,
+        "session_id": 28940,
+        "natural_exit_code": 0
+      },
+      "first_related_regression": {
+        "passed": 185,
+        "skipped": 1,
+        "duration_seconds": 54.17,
+        "session_id": 26889,
+        "natural_exit_code": 0,
+        "includes_real_GGUF_metadata_and_hash_reader_checks": true
+      },
+      "compatibility": "missing F32 activation evidence keeps legacy analytical task demands and dependencies; contradictions still rejected",
+      "metadata_scope_fix": "scalar norm block_size is not exposed as global GEMM quantization metadata",
+      "native_remeasured": false,
+      "coefficients_added": 0,
+      "default_gpu_frontend_filter": "not_yet_implemented"
+    },
+    "next_frontend": {
+      "status": "source_design_audited_ready_for_implementation",
+      "approach": "CPU prefix then actual body discovery then scoped GPU frontend; rebuild stages from same dependencies",
+      "preserve": [
+        "CPU preparation/packing",
+        "operator-owned transfers",
+        "launch-only real GPU operations",
+        "MTP untouched consumer paths"
+      ],
+      "do_not_use": "ngl0 or GPU control resource prefix as consumer evidence"
     }
   }
 }

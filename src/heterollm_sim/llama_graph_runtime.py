@@ -181,6 +181,8 @@ class LlamaGraphRuntime:
             "unobserved_reasons": dict(self.unobserved_reasons), "transitions": tuple(self.records),
             "failures": tuple(self.failure_records), "retained_transition_count": len(self.records),
             "dropped_transition_count": self.dropped_records, "all_observed_records_retained": self.dropped_records == 0,
+            "record_retention_scope": "runtime_memory_before_external_report_projection",
+            "external_projection_completeness": "not_assessed_by_runtime",
             "service_cost_ns": None, "duration_adjustment_ns": 0.0, "cost_parameters_added": 0,
             "timing_qualification": "unchanged_unpriced_structure_only", "native_reuse_verified": False,
             "state_previous_unknown": self.state.previous_unknown,

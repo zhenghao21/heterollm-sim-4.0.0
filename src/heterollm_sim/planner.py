@@ -18491,6 +18491,192 @@ def _compile_parallel_shared_expert(
     )
 
 
+def _llama_final_norm_plan(scenario, rank, activation_component, rows, hidden_size):
+    """Resolve the unweighted RMS and weight MUL before pricing either."""
+    if scenario.llama_cpp_config is None:
+        return None
+    mapping = scenario.placement.op_to_component
+    if any(key in mapping for key in ("final_norm", "final_norm.reduce", "final_norm.apply")):
+        return None  # preserve authored coarse/half-norm contracts
+    from .llama_scenario import llama_final_norm_static_binding
+    binding = llama_final_norm_static_binding(scenario, scenario.llama_cpp_config)
+    if binding.get("status") == "weight_binding_missing":
+        return None
+    weight = binding["weight"]
+    if weight["shape"] != (hidden_size,):
+        raise ValueError("final norm weight width differs from activation width")
+    cpu, gpu = scenario.host_orchestration_profile.cpu_component_id, rank.component_id
+    gpu_available = _kind(_component(scenario, gpu)) == "gpu"
+    owner = cpu if binding["output_device_candidate"] == "cpu" else gpu
+    owner = str(next((scenario.placement.tensor_to_component[key] for key in
+        (weight["name"], "final_norm_weights", "final_norm.weight")
+        if key in scenario.placement.tensor_to_component), owner))
+    owner_kind = _kind(_component(scenario, owner))
+    weight_device = cpu if owner_kind == "host_memory" else gpu if owner_kind in {"hbm", "memory"} else owner
+    mul_cuda_supported = weight["type"].upper() in {"F32", "F16"}
+    if _kind(_component(scenario, weight_device)) == "gpu" and not mul_cuda_supported:
+        owner = weight_device = cpu  # norm's own buffer compatibility, not lm-head's
+    offload = scenario.workload.metadata.get("llama_cpp_cuda_op_offload", {})
+    minimum = offload.get("minimum_m") if isinstance(offload, Mapping) else None
+    offload_known = (isinstance(offload, Mapping) and offload.get("status") == "enabled"
+                     and type(minimum) is int and minimum > 0)
+    scale_device = weight_device
+    if (_kind(_component(scenario, weight_device)) == "cpu" and gpu_available
+            and scenario.llama_cpp_config.op_offload and offload_known
+            and rows >= minimum and mul_cuda_supported):
+        scale_device = gpu
+    # Native pass2 expands GPU down before GPU up. A CPU weight-MUL stops
+    # expansion upwards, but cannot relocate an already GPU-produced RMS.
+    rms_device = (activation_component if _kind(_component(scenario, activation_component)) == "gpu"
+                  else scale_device if _kind(_component(scenario, scale_device)) == "gpu" else cpu)
+    rms_device = str(mapping.get("final_norm.rms", rms_device))
+    scale_device = str(mapping.get("final_norm.weight_scale", scale_device))
+    epsilon = binding.get("epsilon")
+    epsilon_known = type(epsilon) in (float, int) and math.isfinite(epsilon) and epsilon >= 0
+    if epsilon is not None and not epsilon_known:
+        raise ValueError("native RMS epsilon must be finite and nonnegative")
+    invocation = scenario.workload.metadata.get(_GPU_INVOCATION_KEY, {})
+    same_device = rms_device == scale_device
+    device_kind = _kind(_component(scenario, rms_device))
+    cpu_controls = scenario.workload.metadata.get("llama_cpp_cpu_final_norm_controls", {})
+    cpu_controls = cpu_controls if isinstance(cpu_controls, Mapping) else {}
+    cpu_fusion_enabled, cpu_use_ref = cpu_controls.get("fusion_enabled"), cpu_controls.get("use_ref")
+    if any(value is not None and type(value) is not bool for value in (cpu_fusion_enabled, cpu_use_ref)):
+        raise ValueError("CPU final norm fusion/use_ref controls must be booleans or unknown")
+    if device_kind == "cpu":
+        fusion_enabled = (False if cpu_fusion_enabled is False or cpu_use_ref is True else
+                          True if cpu_fusion_enabled is True and cpu_use_ref is False else None)
+    else:
+        fusion_enabled = invocation.get("fusion_enabled") if isinstance(invocation, Mapping) else None
+    graph_bound = binding["graph_pattern_binding"]["status"] == "fixed_source_call_chain"
+    known = True if graph_bound else None
+    local_weight = owner == scale_device or (owner_kind == "host_memory" and device_kind == "cpu")
+    conditions = {"same_backend": same_device,
+        "same_split": known if local_weight and same_device else None,
+        "rms_f32": True, "mul_f32": weight["type"].upper() == "F32",
+        "adjacent": known, "rms_single_use": known, "rms_is_view": False if graph_bound else None,
+        "rms_is_output": False if graph_bound else None, "rms_is_mul_left_operand": known,
+        "other_operand_same_shape": rows == 1,
+        "shape_connection_matches": known, "memory_ranges_compatible": known,
+        "input_nb0": 4 if graph_bound else None,
+        "activation_contiguous_rows": known, "weight_contiguous_rows": known,
+        "weight_contiguous_columns": known,
+        "epsilon_nonnegative": epsilon_known,
+        "cpu_nonreference_plan": None if cpu_use_ref is None else not cpu_use_ref}
+    authored = scenario.workload.metadata.get("llama_cpp_final_norm_graph_conditions", {})
+    if isinstance(authored, Mapping):
+        for key in conditions:
+            if key in authored: conditions[key] = authored[key]
+    required_true = ("same_backend", "same_split", "rms_f32", "mul_f32", "adjacent",
+                     "rms_single_use", "shape_connection_matches", "epsilon_nonnegative")
+    required_true += (("weight_contiguous_columns", "cpu_nonreference_plan") if device_kind == "cpu" else
+        ("memory_ranges_compatible", "activation_contiguous_rows", "weight_contiguous_rows"))
+    required_false = ("rms_is_view", "rms_is_output")
+    right_operand_possible = (device_kind == "cpu" or conditions["rms_is_mul_left_operand"] is not False
+                             or conditions["other_operand_same_shape"] is not False)
+    right_operand_known = (device_kind == "cpu" or conditions["rms_is_mul_left_operand"] is True
+                          or conditions["other_operand_same_shape"] is True)
+    possible = (all(conditions[key] is not False for key in required_true)
+        and all(conditions[key] is not True for key in required_false)
+        and conditions["input_nb0"] in (None, 4) and right_operand_possible)
+    qualified = (graph_bound and all(conditions[key] is True for key in required_true)
+        and all(conditions[key] is False for key in required_false)
+        and conditions["input_nb0"] == 4 and right_operand_known)
+    fused = bool(same_device and device_kind in {"cpu", "gpu"}
+                 and weight["type"].upper() == "F32" and possible and fusion_enabled is not False)
+    status = ("source_conditional_fused" if fused and fusion_enabled is True and qualified else
+              "conditional_fused_lower_envelope" if fused else "separate_native_operations")
+    return {**binding, "weight_owner": owner, "rms_component": rms_device,
+        "scale_component": scale_device, "activation_component": activation_component,
+        "norm_rows": rows, "offload_minimum_rows": minimum,
+        "weight_scale_offload_applied": scale_device != weight_device,
+        "offload_dispatch_known": not scenario.llama_cpp_config.op_offload or offload_known
+            or _kind(_component(scenario, weight_device)) == "gpu",
+        "fusion_enabled": fusion_enabled, "fusion_backend": device_kind,
+        "cpu_fusion_controls": {"fusion_enabled": cpu_fusion_enabled, "use_ref": cpu_use_ref},
+        "fusion_conditions": conditions, "fused": fused, "fusion_status": status,
+        "unpriced_additional_dispatch_if_unfused": int(status == "conditional_fused_lower_envelope"),
+        "unpriced_additional_launch_if_unfused": int(device_kind == "gpu" and status == "conditional_fused_lower_envelope"),
+        "source_refs": tuple(invocation.get("source_refs", ())) if isinstance(invocation, Mapping) else (),
+        "native_dispatch_proven": False, "accuracy_validated": False}
+
+
+def _add_llama_final_norm(builder, scenario, router, plan, rank, contract,
+                         phase, dependencies, elements, rows, hidden_width, metadata):
+    """Whole RMS then MUL, or one fused kernel; never an external sum tensor."""
+    activation_bytes = elements * 4
+    weight_bytes = hidden_width * contract["weight"]["bits"] // 8
+    weight_reads = rows * weight_bytes
+    rms_cpu = _kind(_component(scenario, contract["rms_component"])) == "cpu"
+    # CPU source computes 1/sqrt: one scalar reciprocal beyond CUDA rsqrt.
+    rms_ops = 3 * elements + rows * (2 if rms_cpu else 1)
+    depth = max(1, int(math.ceil(math.log2(max(1, hidden_width))))) + 3
+    base_name = "{}.rank{:03d}.final_norm".format(phase, rank.rank)
+    common = {**{key: value for key, value in metadata.items() if key != "phase"},
+        "execution_phase": metadata.get("phase"), "final_norm_placement": contract,
+        "physical_invocation_model": "native_RMS_NORM_and_weight_MUL",
+        "activation_bytes": activation_bytes, "weight_bytes": weight_bytes,
+        "capacity_accounting": "existing_model_weight_artifact"}
+
+    def transfer(source, target, size, prior, suffix, kind):
+        if source == target or (_kind(_component(scenario, source)) == "host_memory"
+                and _kind(_component(scenario, target)) == "cpu"):
+            return tuple(prior)
+        end = _add_transfer_tasks(builder, router, source, target, size, prior,
+            name=base_name + suffix, routing_policy=plan.routing_policy,
+            metadata={**common, "event_kind": "final_norm_input_transfer", "transfer_payload": kind,
+                      "input_bytes": size, "output_tensor_id": base_name + suffix})
+        return (end,)
+
+    def emit(target, prior, *, suffix, operations, reads, writes, sfu, op):
+        work = {"native_op": op, "logical_operations": operations,
+            "logical_read_bytes": reads, "logical_write_bytes": writes,
+            "transcendental_operations": sfu, "external_reduction_temporary_bytes": 0,
+            "physical_dispatches": 1, "memory_count_basis": "source_logical_loads_not_measured_DRAM"}
+        details = {**common, "event_kind": "final_norm_" + suffix,
+                   "final_norm_work": work, "modeled_memory_write_bytes": writes}
+        if _kind(_component(scenario, target)) == "gpu":
+            return _add_rank_tensor_kernel(builder, scenario, router, plan, rank,
+                TensorKernelWorkload(operations=operations, read_bytes=reads, write_bytes=writes,
+                    transcendental_operations=sfu, dependency_depth=depth,
+                    working_set_bytes=2 * activation_bytes + weight_bytes,
+                    name="final_norm_" + suffix),
+                base_name + "." + suffix, prior, metadata=details,
+                execution_component_id=target, input_is_local=True)
+        end, _ = _add_rank_primitive(builder, scenario, router, plan, rank,
+            OperatorClass.ELEMENTWISE,
+            ElementwiseWorkload(elements=elements, operations_per_element=operations // elements,
+                fixed_operations=operations % elements, fixed_transcendental_operations=sfu,
+                input_bits=32, output_bits=32, read_storage_bytes=reads, write_storage_bytes=writes,
+                dependency_depth=depth, working_set_bytes=2 * activation_bytes + weight_bytes,
+                name="final_norm_" + suffix),
+            "final_norm." + suffix, base_name + "." + suffix, prior,
+            source_component_id=target, target_component_id=target,
+            input_component_bytes=((target, reads),), metadata=details)
+        return end
+
+    rms_target, scale_target = contract["rms_component"], contract["scale_component"]
+    prior = transfer(contract["activation_component"], rms_target, activation_bytes,
+                     dependencies, ".activation_transfer", "activation")
+    if contract["fused"]:
+        prior = transfer(contract["weight_owner"], scale_target, weight_bytes,
+                         prior, ".weight_transfer", "output_norm.weight")
+        return emit(rms_target, prior, suffix="rms_mul", operations=rms_ops + elements,
+                    reads=2 * activation_bytes + weight_reads, writes=activation_bytes,
+                    sfu=rows, op="RMS_NORM+MUL")
+    # CPU unfused ops.cpp performs sum -> memcpy(y,x) -> in-place scale(y):
+    # 3 logical activation reads and 2 writes. CUDA writes the output directly.
+    rms_end = emit(rms_target, prior, suffix="rms", operations=rms_ops,
+                   reads=(3 if rms_cpu else 2) * activation_bytes,
+                   writes=(2 if rms_cpu else 1) * activation_bytes, sfu=rows, op="RMS_NORM")
+    prior = transfer(rms_target, scale_target, activation_bytes,
+                     (rms_end,), ".normalized_transfer", "normalized_activation")
+    prior = transfer(contract["weight_owner"], scale_target, weight_bytes,
+                     prior, ".weight_transfer", "output_norm.weight")
+    return emit(scale_target, prior, suffix="weight_scale", operations=elements,
+                reads=activation_bytes + weight_reads, writes=activation_bytes, sfu=0, op="MUL")
+
+
 def _compile_parallel_final_norm(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
@@ -18557,6 +18743,27 @@ def _compile_parallel_final_norm(
         }
         if output_selection is not None:
             metadata["final_layer_output_selection"] = _selection_audit(output_selection, "final_norm")
+        actual_source = builder.rank_value_component(dependencies, rank.rank) or rank.component_id
+        native_norm = _llama_final_norm_plan(scenario, rank, actual_source, batch_tokens, hidden_size)
+        if native_norm is not None and activation_bits != 32:
+            # A static norm weight does not prove F32 activation storage. Keep
+            # the pre-existing analytical path for ordinary GGUF/runtime inputs
+            # that lack this optional source-mechanism prerequisite. The binding
+            # was still validated above, so contradictory shapes/bytes fail.
+            metadata["final_norm_placement_fallback"] = {
+                "status": "analytical_fallback",
+                "reason": "f32_hidden_storage_not_declared",
+                "timing_completeness": "partial",
+                "activation_bits": activation_bits,
+                "weight_bits": native_norm["weight"]["bits"],
+                "native_mechanism_applied": False,
+                "accuracy_validated": False,
+            }
+        elif native_norm is not None:
+            ends[rank.rank] = _add_llama_final_norm(
+                builder, scenario, router, plan, rank, native_norm, phase, dependencies,
+                hidden_elements, batch_tokens, hidden_shard.local_size, metadata)
+            continue
         norm_reduce, norm_component = _add_rank_primitive(
             builder,
             scenario,
