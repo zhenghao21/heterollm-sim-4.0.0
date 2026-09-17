@@ -1,0 +1,50 @@
+{
+  "schema": "r33-bounded-startup-resume-decision/v1",
+  "created_utc": "2026-09-17T06:39:06.144784+00:00",
+  "original_failure_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\full_rejected.0001.json",
+    "sha256": "afe964ce200c290b7ffc1282a91bf7193fd0627ac17088bf0250d6f14e681078",
+    "bytes": 448
+  },
+  "controlled_core_diagnostic_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\diagnostic\\core_stability.0001\\finish.json",
+    "sha256": "379e61fc9b7d1112a7c55651ec10e86ec74a9e3d3ca3067a3459b066fd0188ea",
+    "bytes": 837071
+  },
+  "same_read_startup_guard_observation_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\diagnostic\\startup_guard.0001\\finish.json",
+    "sha256": "21928901a1d50552a51982232bf0971291a0b9331b3086813fe50bdea59fb0b7",
+    "bytes": 331541
+  },
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\protocol.json",
+    "sha256": "3c6270fad8c56d0ddcaf1cf55f11e2d9bdac0ae37cd97b46e1befb3a01a19ce5",
+    "bytes": 259297
+  },
+  "controls_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\controls.json",
+    "sha256": "18bf7ffbfd5d179408514241878e8d3a16d889b8b3925be7dd68f2a22f2c8cd0",
+    "bytes": 1439
+  },
+  "retry_of_startup_phase": true,
+  "max_additional_startup_attempts": 1,
+  "driver_internal_automatic_retry": false,
+  "reason": "Initial rejection occurred before any coordinator/worker/prediction. Same-read guard with independent digests now completed; inputs and source unchanged. A single explicit resumed attempt must re-run all original frozen gates and preserve prior rejection.",
+  "failure_root_cause": "unresolved",
+  "original_failure_reclassified": false,
+  "diagnostic_guard_is_formal_acceptance": false,
+  "formal_runner_has_shadowed_functions": false,
+  "failed_results_overwritten": false,
+  "predictions_before_resume": 0,
+  "on_further_identity_failure": "preserve rejection and investigate; no further startup retries",
+  "native_remeasurement": false,
+  "command": [
+    "E:/anaconda/python.exe",
+    "run_candidate.py",
+    "full",
+    "--workers",
+    "4",
+    "--timeout-seconds",
+    "600"
+  ]
+}

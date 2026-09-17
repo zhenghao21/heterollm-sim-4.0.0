@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_033_full_startup_identity_rejected_finite_integrity_diagnostic",
+  "status": "round_033_full_predictions_running_after_bounded_recorded_startup_recovery",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1548,8 +1548,8 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Controlled512 in-memory per-core digest trials passed; source-reference alias audit negative. Capture same-read actual/expected/three-digest information while reproducing only one original R33 startup guard, no coordinator/prediction/native and no automatic retry.",
-  "full_131_evaluations_started": 6,
+  "next_round_hypothesis": "Monitor live R33 full session62083; off baseline then on candidate with same131 native. Preserve all terminals and startup failures, no reattempting failed cells. Score only after sealed262; then compare structural and error changes before choosing next mechanism.",
+  "full_131_evaluations_started": 7,
   "full_131_evaluations_completed": 6,
   "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
   "best_candidate_status": "No new accuracy candidate admitted. Latest completed R27/on:9/131 cells and74/393 metric items pass; R32 rejected in preparation before predictions. A fails; B unvalidated.",
@@ -1754,6 +1754,15 @@
       "verified_utc": "2026-09-17T06:14:10.700910+00:00",
       "status": "pushed_and_remote_verified",
       "scope": "same-execution model identity failure diagnostics and R33 common-verifier paired freeze;15 identity tests and73 driver tests"
+    },
+    {
+      "commit": "07e1b0085b6fa2606b97f7023a5d9b0c557e0f3a",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "07e1b0085b6fa2606b97f7023a5d9b0c557e0f3a",
+      "verified_utc": "2026-09-17T06:47:36.888201+00:00",
+      "status": "pushed_and_remote_verified",
+      "scope": "R33 freeze/lock and first startup rejection,512-trial controlled digest diagnostic"
     }
   ],
   "operator_microbenchmark": {
@@ -2804,7 +2813,7 @@
     "later_diagnostic": "one4MiB-block read: OpenSSL/CNG match expected; all gate stat fields stable at diagnostic time only; original cause unknown"
   },
   "round_033_preparation": {
-    "status": "freeze_and_lock_passed_full_startup_guard_rejected",
+    "status": "full_off_running_after_one_recorded_startup_resume",
     "baseline_commit": "8b715dc80ded2a35d7ab52b46339320149a33da4",
     "candidate_commit": "b72743490814e3818336febc9576aa6d95e309bf",
     "common_source_override_paths": [
@@ -2820,7 +2829,7 @@
     "hbm_mode_both_arms": "legacy_mma_output_wave",
     "gate_B": "unvalidated",
     "native_remeasured": false,
-    "prediction_started": false,
+    "prediction_started": true,
     "freeze_passed_cells_per_arm": 131,
     "lock_passed_cells_per_arm": 131,
     "protocol_ref": {
@@ -2867,6 +2876,33 @@
       "original_failure_reclassified": false,
       "timing_or_accuracy_claim": false,
       "interpretation": "No disagreement observed in fixed in-memory data; original startup reference mismatch remains unexplained"
+    },
+    "tool_session_id": 62083,
+    "observed_utc": "2026-09-17T06:47:36.888201+00:00",
+    "observed_prediction_counts": {
+      "off": {
+        "predicted": 30
+      },
+      "on": {}
+    },
+    "startup_resume_decision_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\startup_resume_decision.0001.json",
+      "sha256": "51d08aec77b98a43d9043a5a57dbbe4b5746f99226f19fc25516ab0c3d1b41c7",
+      "bytes": 2659
+    },
+    "startup_guard_diagnostic_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\diagnostic\\startup_guard.0001\\finish.json",
+      "sha256": "21928901a1d50552a51982232bf0971291a0b9331b3086813fe50bdea59fb0b7",
+      "bytes": 331541
+    },
+    "further_automatic_startup_retries_allowed": false,
+    "original_failure_reclassified": false,
+    "postprocess_readonly_compatibility": "root checked no residual115/same-source/nominal assumptions; full262 barrier retained; not executed before completion",
+    "off_full_evaluation_counted": true,
+    "subagent_service_error": {
+      "stage": "postprocess-readonly-compatibility",
+      "status": "403 quota exhausted before review",
+      "fallback": "same root model completed local read-only check; formal simulator unaffected"
     }
   }
 }

@@ -234,12 +234,12 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 
 新静态覆盖审计检查R27/on的131条已存预测，共157类MMVQ签名：现有Q5_0/M1/K4096/N3072微基准在已表示签名中命中0；Q4_K/M1/K2048/N2048出现在SmolLM2/TinyLlama共45格、171200个任务。账本未表示部分仍为未知，不能把缺记录当成不存在；所有签名cache/native dispatch资格仍未知，不能因shape匹配直接准入成本。下一轮优先覆盖实际结构，零命中shape仅作工具链资格验证。
 
-final norm设备/算子粒度的结构修复已完成，尚未用新冻结比较误差。当前优先检查实际GPU消费者与提交/传输的归属，以及逐ubatch的CPU生产—GPU消费关系；CPU图转换现已记录，但输入兼容性、重分配条件与服务成本仍部分未知。这些是已有源码和任务图指向的候选缺口，不把系统性偏低直接归因于其中任何一项。MMVQ访存采用MMA输出tile效率的族混用保留为独立成本假设。已有nonflash、logits、sampling、launch不能整段再加；kernel_launch已归GPU frontend。P128/512/1536均整除ubatch64，不能默认有尾块；c不等于kernel M。
+final norm设备/算子粒度的结构修复已完成，尚未用新冻结比较误差。非MTP在线target的GPU消费者与提交/传输归属已完成148项结构回归，准确性仍待R33对照；后续结构候选是逐ubatch的CPU生产—GPU消费关系；CPU图转换现已记录，但输入兼容性、重分配条件与服务成本仍部分未知。这些是已有源码和任务图指向的候选缺口，不把系统性偏低直接归因于其中任何一项。MMVQ访存采用MMA输出tile效率的族混用保留为独立成本假设。已有nonflash、logits、sampling、launch不能整段再加；kernel_launch已归GPU frontend。P128/512/1536均整除ubatch64，不能默认有尾块；c不等于kernel M。
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
 1. **先补身份失败的同次现场信息，再建立新冻结。** GPU消费者/H2D/CPU前缀结构修复已完成，148项联合回归及独立复核通过，并随b7430a9推送。R32真实冻结中两路生成成功，off的131格静态预检通过，on在SmolLM2完整身份检查被拒，未启动任何预测。原异常合并了读取长度、文件状态和SHA条件，未保存实际值，不能把错误名称当成已证明的摘要损坏。R32已封存失败，不再重试；同次读取的预期/实际值与分项原因补丁已完成，9项新测试及6项原身份回归通过；保持原通过谓词、单次4MiB读取、失败关闭，不放宽门槛。
-2. **新R33按同输入双路对照重新冻结。** 基线仍为8b715dc的结构，候选为本轮已审核的前端结构；两路共同使用同一审核提交中的身份诊断补丁，逐文件记录真实Git来源，其余源码分别从对应提交构造。最终两路唯一仿真源码差异仍为planner，两边legacy_mma_output_wave及final_output_selection相同，native/配置/成本/extractor不变。R33驱动73项回归及独立来源复核通过，b727434已推送；真实freeze/lock的四份预检均131格通过。但full启动guard在off的硬件架构PDF引用校验中被拒，coordinator/worker/预测均未启动。同内存三算法诊断已完成32核×16次共512次、无观察到不一致且mask全部恢复；引用alias及各格预期字段审计也未复现错误。原失败仍未解释，下一步只诊断运行一次启动guard并捕捉同次实际/预期/三摘要，不启动coordinator，不立即新建R34，不反复换编号试到通过或追认旧失败。后续完整预测结束且262终态齐全才评分、配对统计及作图。
+2. **新R33按同输入双路对照重新冻结。** 基线仍为8b715dc的结构，候选为本轮已审核的前端结构；两路共同使用同一审核提交中的身份诊断补丁，逐文件记录真实Git来源，其余源码分别从对应提交构造。最终两路唯一仿真源码差异仍为planner，两边legacy_mma_output_wave及final_output_selection相同，native/配置/成本/extractor不变。R33驱动73项回归及独立来源复核通过，b727434已推送；真实freeze/lock的四份预检均131格通过。但full启动guard在off的硬件架构PDF引用校验中被拒，coordinator/worker/预测均未启动。同内存三算法诊断完成512次，无观察到不一致且mask全部恢复；引用alias审计未复现错误，随后一次启动guard同次读取三摘要诊断也通过。原异常原因仍未知，旧拒收不追认。因尚无worker/预测且冻结输入未变，已预先记录仅一次原版启动恢复，禁止进一步自动重试；该次原版校验通过，R33/off的131格仿真现已实际运行，on随后串行执行。任何失败格保留且不重试，完整262终态齐全才评分、配对统计及作图。
 3. **取得新对照后核对机制适用范围。** R27旧保存记录中，可见单物理组18115批、双组775批、三组34批；多组仅见qwen35与qwen38 GPU，2947批缺少可用覆盖字段，仍记未知。这是旧仿真结构线索，不是native分派证明。逐ubatch的CPU准备、GPU异步执行、CPU同步返回、buffer复用及backend重分配等待按真实触发检查；组内串行关系不能解释普通单组模型的全部偏差。保留跨cohort重叠，不因graph miss直接加全局fence；共同CPU核心预算的当前误差因果未证，暂不扩资源系统。
 4. **只对明确的事件和服务对象补状态或成本证据。** CPU图状态机已在实际serving逐ubatch推进，模板cache不跳过转换；warmup末图、完整input roster、精确KV视图及部分同步控制仍unknown/partial/unpriced。先核对相关触发、次数、等待及owner；保留已有readback→通知→采样→commit链和GPU frontend的kernel_launch owner。R28主机计数存在15.625ms粒度与长窗回压，不直接换成微秒CPU成本。前端修复范围为非MTP在线target；MTP/静态request旧分支及逐ubatch生产时序保留为待审范围，不宣称已全部覆盖。
 5. **保留并有目的地使用底层对照。** R30原freeze/lock与4份131格预检不改，262预测仍未执行；它只回答旧结构下MMVQ HBM折扣的成本假设。R31 Q4同源wrapper已编译并通过69项主机回归，实际资格与100进程/1200秒计时尚未执行；在上层对照后仍未解释的路径上再启用。Q4静态shape曾命中45格，cache/layout与性能迁移仍未资格化，M4和K边界保持留出；CPU旧IQ smoke不能直接为当前27B提供系数。
@@ -263,7 +263,7 @@ final norm设备/算子粒度的结构修复已完成，尚未用新冻结比较
 - optimization_loop/round_027/heatmaps.0001/：off、on与APE差值的PNG/SVG热图；X为失败，短横线为固定集之外。
 - optimization_loop/round_028/static_kernel_coverage.0001.json、verify_static_kernel_coverage.py：131预测静态签名、微基准覆盖及独立重算入口。
 - optimization_loop/round_030/protocol.json、freeze_receipt.json、controls.json、preflight/：真实冻结与lock凭据；postprocess/：262终态后的热图及干净归档入口，尚未处理真实R30结果。
-- optimization_loop/round_033/：前端结构对照的新驱动，两路共用审核过的身份诊断补丁，逐文件锁定Git来源；73项合成回归与独立复核、四份131格真实freeze/lock预检通过；startup_identity_observation.0001.json记录启动guard的小PDF身份失败，尚无预测。
+- optimization_loop/round_033/：前端结构对照的新驱动，两路共用审核过的身份诊断补丁，逐文件锁定Git来源；73项合成回归与独立复核、四份131格真实freeze/lock预检通过；startup_identity_observation.0001.json保留启动guard的小PDF身份失败；startup_resume_decision.0001.json记录一次有界恢复，基线仿真进行中。
 - optimization_loop/round_032/：已拒绝的真实冻结，preparation_closed.0001.json及preparation_failure_evidence.0001.zip/json保存144项逐字节核验的失败证据；diagnostic/仅为一次后续独立读取，不能追认原失败。
 - optimization_loop/round_031/q4k_timing/preparation_validation.0002.json：Q4同源wrapper编译、身份与69项主机回归记录，实际GPU资格/计时待执行。
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
