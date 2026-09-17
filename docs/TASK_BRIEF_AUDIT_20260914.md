@@ -237,12 +237,12 @@ final norm设备/算子粒度的结构修复已完成，尚未用新冻结比较
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
-1. **GPU消费者依赖修复已完成最终复核。** 非MTP在线target已按真实算子设备建立消费组，保留CPU cohort准备/packing、零定价真实launch、算子自带的权重/输入/输出传输；CPU-only组不产生GPU提交。首次GPU输入现在等待对应ready，阶段汇总保留此前可运行的CPU前缀，148项联合回归及独立复核通过；专用稳定阶段身份防止下一批错误继承上批H2D等待。MTP proposer/target/catchup及静态request仍走旧分支；本轮没有重构逐ubatch生产时序或增加经验系数。复杂细分超限须显式保留为失败，不能剔格改善覆盖率。
-2. **立即建立R32干净双路冻结并比较固定131格。** 基线为已审核8b715dc，候选为本轮审核提交；每路从Git原始blob构造117份Python源码，唯一允许差异为planner。两路均保留legacy_mma_output_wave和final_output_selection；native、配置、成本参数、extractor保持相同。R32驱动57项合成测试及独立审查通过，涵盖两路独立导入、精确静态输入、来源/恢复校验、观察异常后自然退出及262终态评分屏障；当前尚未执行真实freeze。提交推送后执行freeze→lock→两路完整预测→评分→配对统计与热图，不能沿用R27数值称为本轮结果。
-3. **根据新对照核对适用范围，再决定下一项结构修复。** R27旧保存记录中，可见单物理组18115批、双组775批、三组34批；多组仅见qwen35与qwen38 GPU，2947批缺少可用覆盖字段，仍记未知。这是旧仿真结构线索，不是native分派证明，也不能代替R32重新统计。逐ubatch的CPU准备、GPU异步执行、CPU同步返回、buffer复用及backend重分配等待要按真实触发检查；组内串行关系不能自动解释普通单组模型的全部偏差。保留已有跨cohort重叠，不因graph miss直接加全局fence。共同CPU核心预算仍为通用缺口，当前误差因果未证，暂不扩资源系统。
-4. **只对明确的事件和服务对象补状态或成本证据。** CPU图状态机已在实际serving逐ubatch推进；模板cache不跳过转换，warmup末图、完整input roster、精确KV视图及部分同步控制仍unknown/partial/unpriced。先核对相关触发、次数、等待及owner；保留已有readback→通知→采样→commit链和GPU frontend的kernel_launch owner。R28主机计数存在15.625ms粒度与长窗回压，不直接换成微秒CPU成本，未完成的9个service进程不自动补测。
-5. **保留并有目的地使用底层对照。** R30原freeze/lock与4份131格预检不改，262预测仍未执行；它只回答旧结构下MMVQ HBM折扣的成本假设。R31 Q4同源wrapper已编译并通过69项主机回归，实际资格与100进程/1200秒计时尚未执行；根据R32后仍未解释的普通注意力路径，决定是否启用。Q4静态shape曾命中45格，cache/layout与性能迁移仍未资格化，M4和K边界保持留出；CPU旧IQ smoke不能直接为当前27B提供系数。
-6. **每轮提交推送、复核目标并续轮。** 最新完整结果仍R27/on：9/131格、74/393项通过，共同129格两路均仅7格全过；覆盖恢复不等于精度改善。本轮新冻结和误差尚未完成。阶段复盘已转向“结构修复后及时实测对照”，不再把待执行冻结长期积压；每轮原位更新任务书、commit、push并核对远端。固定131格/393项尚未全部严格<10%，A仍失败；达到A后另做独立B，当前B未验证。
+1. **先补身份失败的同次现场信息，再建立新冻结。** GPU消费者/H2D/CPU前缀结构修复已完成，148项联合回归及独立复核通过，并随b7430a9推送。R32真实冻结中两路生成成功，off的131格静态预检通过，on在SmolLM2完整身份检查被拒，未启动任何预测。原异常合并了读取长度、文件状态和SHA条件，未保存实际值，不能把错误名称当成已证明的摘要损坏。R32已封存失败，不再重试；后续只增加同次读取的预期/实际值与分项原因，保持原通过谓词、单次4MiB读取、失败关闭，不放宽门槛。
+2. **新R33按同输入双路对照重新冻结。** 基线仍为8b715dc的结构，候选为本轮已审核的前端结构；两路共同使用同一审核提交中的身份诊断补丁，逐文件记录真实Git来源，其余源码分别从对应提交构造。最终两路唯一仿真源码差异仍为planner，两边legacy_mma_output_wave及final_output_selection相同，native/配置/成本/extractor不变。R33先完成小回归和来源复核、提交推送，再执行freeze→lock→两路完整预测→评分→配对统计与热图。若再次身份失败，保留当次现场并定位，不能反复换编号试到通过或把后续成功追认旧失败。
+3. **取得新对照后核对机制适用范围。** R27旧保存记录中，可见单物理组18115批、双组775批、三组34批；多组仅见qwen35与qwen38 GPU，2947批缺少可用覆盖字段，仍记未知。这是旧仿真结构线索，不是native分派证明。逐ubatch的CPU准备、GPU异步执行、CPU同步返回、buffer复用及backend重分配等待按真实触发检查；组内串行关系不能解释普通单组模型的全部偏差。保留跨cohort重叠，不因graph miss直接加全局fence；共同CPU核心预算的当前误差因果未证，暂不扩资源系统。
+4. **只对明确的事件和服务对象补状态或成本证据。** CPU图状态机已在实际serving逐ubatch推进，模板cache不跳过转换；warmup末图、完整input roster、精确KV视图及部分同步控制仍unknown/partial/unpriced。先核对相关触发、次数、等待及owner；保留已有readback→通知→采样→commit链和GPU frontend的kernel_launch owner。R28主机计数存在15.625ms粒度与长窗回压，不直接换成微秒CPU成本。前端修复范围为非MTP在线target；MTP/静态request旧分支及逐ubatch生产时序保留为待审范围，不宣称已全部覆盖。
+5. **保留并有目的地使用底层对照。** R30原freeze/lock与4份131格预检不改，262预测仍未执行；它只回答旧结构下MMVQ HBM折扣的成本假设。R31 Q4同源wrapper已编译并通过69项主机回归，实际资格与100进程/1200秒计时尚未执行；在上层对照后仍未解释的路径上再启用。Q4静态shape曾命中45格，cache/layout与性能迁移仍未资格化，M4和K边界保持留出；CPU旧IQ smoke不能直接为当前27B提供系数。
+6. **每轮提交推送、复核目标并续轮。** 最新完整结果仍R27/on：9/131格、74/393项通过，共同129格两路均仅7格全过；覆盖恢复不等于精度改善。R32的身份拒收独立报告，不产生新的误差结论。当前循环先解决具体证据阻断并完成新比较，不把准备完成当作目标完成；每轮原位更新任务书、commit、push并核对远端。固定131格/393项尚未全部严格<10%，A仍失败；达到A后另做独立B，当前B未验证。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
@@ -262,7 +262,7 @@ final norm设备/算子粒度的结构修复已完成，尚未用新冻结比较
 - optimization_loop/round_027/heatmaps.0001/：off、on与APE差值的PNG/SVG热图；X为失败，短横线为固定集之外。
 - optimization_loop/round_028/static_kernel_coverage.0001.json、verify_static_kernel_coverage.py：131预测静态签名、微基准覆盖及独立重算入口。
 - optimization_loop/round_030/protocol.json、freeze_receipt.json、controls.json、preflight/：真实冻结与lock凭据；postprocess/：262终态后的热图及干净归档入口，尚未处理真实R30结果。
-- optimization_loop/round_032/：117份Git原始源码的前端结构双路对照驱动及57项合成回归；真实freeze与预测尚未启动。
+- optimization_loop/round_032/：已拒绝的真实冻结，preparation_closed.0001.json及preparation_failure_evidence.0001.zip/json保存144项逐字节核验的失败证据；diagnostic/仅为一次后续独立读取，不能追认原失败。
 - optimization_loop/round_031/q4k_timing/preparation_validation.0002.json：Q4同源wrapper编译、身份与69项主机回归记录，实际GPU资格/计时待执行。
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
 - optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、execution_closed.json：已拒绝批次的冻结、131配置错位重导和退出记录，未评分。

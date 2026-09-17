@@ -1,0 +1,12 @@
+{
+  "schema": "r32-preparation-failure/v1",
+  "created_utc": "2026-09-17T05:44:58.933556+00:00",
+  "reviewed_commit": "b7430a954ba4a0ab7c2c6169f3df40f741aff929",
+  "arm": null,
+  "status": "failed",
+  "reason": "EvidenceError: frozen-source preflight failed: on",
+  "partial_files_preserved": true,
+  "automatic_retry": false,
+  "native_run": false,
+  "prediction_run": false
+}

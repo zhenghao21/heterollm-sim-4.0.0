@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_032_structure_reviewed_ready_to_commit_and_freeze",
+  "status": "round_032_preparation_rejected_identity_cause_unknown_diagnostic_patch_and_R33_preparation",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1548,11 +1548,11 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Finish frontend/H2D CPU-prefix review, then immediately freeze clean8b baseline versus reviewed planner-only candidate in R32; same131 native/config/costs. Full262 sealed terminals before scores. Recheck group scope and remaining mechanisms after paired results; no additional coefficients or acceptance changes.",
+  "next_round_hypothesis": "Preserve R32 failed freeze; add same-execution identity failure diagnostics without altering acceptance predicate or read count, then R33 common verifier plus baseline8b vs reviewed frontend, final arm diff planner-only. Do not retroactively accept or retry R32.",
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 6,
   "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
-  "best_candidate_status": "No new accuracy candidate admitted. Latest completed R27/on:131 predicted,9/131 cells and74/393 metric items pass; common129 cells only7 pass in each arm. R32 not yet frozen or scored. A fails and B remains unvalidated.",
+  "best_candidate_status": "No new accuracy candidate admitted. Latest completed R27/on:9/131 cells and74/393 metric items pass; R32 rejected in preparation before predictions. A fails; B unvalidated.",
   "version_control_policy": {
     "enabled": true,
     "effective_utc": "2026-09-15T15:14:39.539409+00:00",
@@ -1727,6 +1727,15 @@
       "verified_utc": "2026-09-17T05:40:25.401738+00:00",
       "status": "pushed_and_remote_verified",
       "scope": "previous final norm and default GGUF entry compatibility; reverified before R32 commit"
+    },
+    {
+      "commit": "b7430a954ba4a0ab7c2c6169f3df40f741aff929",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "b7430a954ba4a0ab7c2c6169f3df40f741aff929",
+      "verified_utc": "2026-09-17T05:56:19.014000+00:00",
+      "status": "pushed_and_remote_verified",
+      "scope": "consumer-qualified frontend/H2D, compact CPU prefix and stable cross-batch indices, R32 clean Git drivers;148 model tests,57 driver tests"
     }
   ],
   "operator_microbenchmark": {
@@ -2746,7 +2755,7 @@
     }
   },
   "round_032_preparation": {
-    "status": "source_and_drivers_reviewed_ready_to_commit_and_freeze",
+    "status": "closed_preparation_rejected_no_predictions",
     "path": "artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_032",
     "baseline_commit": "8b715dc80ded2a35d7ab52b46339320149a33da4",
     "source_members_per_arm": 117,
@@ -2763,6 +2772,17 @@
     "frontend_tests_passed": 148,
     "frontend_review": "passed",
     "driver_review": "passed",
-    "no_accuracy_improvement_claim": true
+    "no_accuracy_improvement_claim": true,
+    "reviewed_commit": "b7430a954ba4a0ab7c2c6169f3df40f741aff929",
+    "freeze_created_both_arms": true,
+    "freeze_receipt_created": false,
+    "off_preflight_passed_cells": 131,
+    "on_preflight_passed_cells": 0,
+    "failure": "SmolLM2 generic retained full model identity gate mismatch; original digest/length/stat missing",
+    "closure": "round_032/preparation_closed.0001.json",
+    "failure_evidence_archive": "round_032/preparation_failure_evidence.0001.zip",
+    "archive_byte_restore_verified": true,
+    "retry": false,
+    "later_diagnostic": "one4MiB-block read: OpenSSL/CNG match expected; all gate stat fields stable at diagnostic time only; original cause unknown"
   }
 }
