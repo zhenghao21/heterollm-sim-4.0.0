@@ -6679,6 +6679,7 @@ def _add_host_orchestration(
     name: str,
     request_count: int,
     token_count: int,
+    include_gpu_transfer: bool = True,
 ) -> str:
     """Lower one aggregate V4 CPU/controller prep sequence per realized cohort.
 
@@ -6700,7 +6701,7 @@ def _add_host_orchestration(
     cpu_control = runtime_profile.cpu
     transport_control = runtime_profile.pcie_dma_iommu
     gpu_control = runtime_profile.gpu_controllers.get(gpu_id)
-    if gpu_control is None:
+    if include_gpu_transfer and gpu_control is None:
         # ScenarioConfig validates the runtime registry.  A non-default GPU
         # reference can still be supplied by a custom orchestration profile;
         # fail closed instead of silently borrowing another GPU's controller.
@@ -6912,6 +6913,35 @@ def _add_host_orchestration(
         )
         prior = (packed,)
 
+    if not include_gpu_transfer:
+        return prior[0]
+    return _add_host_cohort_gpu_transfer(
+        builder, scenario, router, plan, prior,
+        name=name, request_count=request_count, token_count=token_count,
+        gpu_component_id=gpu_id,
+    )
+
+
+def _add_host_cohort_gpu_transfer(
+    builder: _TaskBuilder,
+    scenario: ScenarioConfig,
+    router: TopologyRouter,
+    plan: ParallelPlan,
+    dependencies: Sequence[str],
+    *,
+    name: str,
+    request_count: int,
+    token_count: int,
+    gpu_component_id: str,
+) -> str:
+    """Stage the declared cohort control payload only for a real GPU consumer."""
+
+    profile = scenario.host_orchestration_profile
+    cpu_id = profile.cpu_component_id
+    gpu_id = gpu_component_id
+    transport_control = scenario.runtime_profile.pcie_dma_iommu
+    payload_bytes = profile.payload_bytes(request_count, token_count)
+    prior = tuple(dependencies)
     iommu_pages = max(
         1,
         (payload_bytes + transport_control.iommu_page_size_bytes - 1)
@@ -7073,6 +7103,7 @@ def _add_physical_invocation_frontend(
     invocation_group_ids: Sequence[str] = (),
     execution_phase: Optional[str] = None,
     first_decode_invocation: bool = False,
+    gpu_component_id: Optional[str] = None,
 ) -> str:
     """Lower aggregate command build, driver submit, and GPU CP work."""
 
@@ -7083,7 +7114,7 @@ def _add_physical_invocation_frontend(
         raise ValueError("physical invocation frontend identity is invalid")
 
     cpu_id = profile.cpu_component_id
-    gpu_id = profile.gpu_component_id
+    gpu_id = gpu_component_id or profile.gpu_component_id
     cpu_profile, _host_memory_profile = _cpu_profiles(scenario, cpu_id)
     gpu_control = scenario.runtime_profile.gpu_controllers.get(gpu_id)
     if gpu_control is None:
@@ -7305,6 +7336,181 @@ def _add_physical_invocation_frontend(
                 },
             )
     return command_processor
+
+
+_GPU_CONSUMER_FRONTEND_STAGE = "gpu_consumer_frontend"
+# The established estimators expose ``model`` rather than a common device
+# field. Keep an explicit registry: an unknown/custom ``gpu_*`` label is not
+# proof of a lowered GPU operator, and communication tasks never qualify.
+_GPU_OPERATOR_COST_MODELS = frozenset({
+    "gpu_hbm_roofline",
+    "gpu_elementwise_roofline",
+    "gpu_reduction_roofline",
+    "gpu_memory_roofline",
+    "gpu_fused_attention_v3",
+    "gpu_fused_attention_q4_mma_materialization_v1",
+})
+
+
+def _gpu_frontend_stage_index(role: str, logical_task: str = "") -> int:
+    """Stable private indices; never renumber preserved model stages.
+
+    Serving keys cross-chunk readiness by request/component/index for *all*
+    roles. Existing model indices are non-negative; legacy prefix slots use
+    -1/-2. Private indices end in magnitude digit 1, disjoint from the runtime
+    MMU overlay's ``root_index * 10 - 3`` (digit 3), and remain exact even after
+    that overlay's multiplication in the float-validated stage wire format.
+    """
+
+    identity = {"schema": "gpu-frontend-stage-index/v1", "role": role, "logical_task": logical_task}
+    return -(1_000_001 + 10 * int(stable_hash(identity)[:11], 16))
+
+
+def _actual_gpu_consumer_component(
+    task: object, gpu_component_ids: Set[str],
+) -> Optional[str]:
+    """Recognize lowered GPU operator work, never a controller's own demand.
+
+    A zero-priced source-required launch is still a GPU invocation.  Requiring
+    positive time, or treating every ``gpu.*`` resource as compute, would lose
+    the former and let the frontend manufacture its own consumers respectively.
+    """
+
+    metadata = getattr(task, "metadata", {})
+    cost = metadata.get("cost_model", {})
+    if (metadata.get("orchestration_stage") is not None
+            or getattr(task, "category", None) not in {TaskCategory.COMPUTE, TaskCategory.MEMORY}
+            or not isinstance(cost, Mapping)):
+        return None
+    qualified_model = cost.get("model") in _GPU_OPERATOR_COST_MODELS
+    source_required_launch = (
+        metadata.get("phase") == "kernel_launch"
+        and cost.get("device") == "gpu" and cost.get("launch_only") is True
+    )
+    if not (qualified_model or source_required_launch):
+        return None
+    component = metadata.get("execution_component", metadata.get("target_component"))
+    return str(component) if component in gpu_component_ids else None
+
+
+def _add_gpu_consumer_frontends(
+    builder: _TaskBuilder,
+    scenario: ScenarioConfig,
+    router: TopologyRouter,
+    plan: ParallelPlan,
+    groups: Sequence[object],
+    dependencies: Sequence[str],
+    *,
+    name: str,
+    execution_phase: str,
+    first_decode_invocation: bool = False,
+) -> Mapping[str, object]:
+    """Finalize target frontends after both ordinary and cached body lowering.
+
+    The body is compiled once.  Frontend tasks are separate from invocation
+    templates and acquire no activation ownership.  Only actual consuming
+    tasks gain a readiness edge; unrelated CPU groups keep their original DAG.
+    MTP still uses its pre-existing proposer/target/catchup frontend contract.
+    """
+
+    first_frontend_index = len(builder.tasks)
+    group_by_id = {str(group.group_id): group for group in groups}
+    gpu_ids = {component.component_id for component in scenario.hardware.components
+               if _kind(component) == "gpu"}
+    consumers: Dict[str, List[int]] = {}
+    groups_by_gpu: Dict[str, Set[str]] = {}
+    # Snapshot before adding any control work: the generated frontend cannot
+    # recursively qualify itself, even if future metadata becomes richer.
+    for index, task in enumerate(tuple(builder.tasks)):
+        group_id = task.metadata.get("operator_invocation_group_id")
+        if group_id not in group_by_id:
+            continue
+        gpu_id = _actual_gpu_consumer_component(task, gpu_ids)
+        if gpu_id is not None:
+            consumers.setdefault(gpu_id, []).append(index)
+            groups_by_gpu.setdefault(gpu_id, set()).add(str(group_id))
+    # Input transfers cannot establish GPU eligibility. Once an operator
+    # proves that this (group, device) is consumed, its GPU-bound data movement
+    # must observe the same readiness edge. Snapshot only the original body:
+    # never bind the newly generated cohort payload to its own frontend.
+    input_transfers: Dict[str, List[int]] = {}
+    for index, task in enumerate(builder.tasks[:first_frontend_index]):
+        metadata = task.metadata
+        gpu_id = metadata.get("target_component")
+        group_id = metadata.get("operator_invocation_group_id")
+        if (gpu_id in groups_by_gpu and group_id in groups_by_gpu[gpu_id]
+                and task.category == TaskCategory.COMMUNICATION
+                and metadata.get("transfer_kind") == "data"
+                and metadata.get("orchestration_stage") is None
+                and metadata.get("source_component") != gpu_id):
+            input_transfers.setdefault(str(gpu_id), []).append(index)
+    coverage: Dict[str, object] = {}
+    for gpu_id in sorted(consumers):
+        used_groups = tuple(group for group in groups
+                            if str(group.group_id) in groups_by_gpu[gpu_id])
+        group_ids = tuple(str(group.group_id) for group in used_groups)
+        request_ids = tuple(dict.fromkeys(request_id for group in used_groups
+                                         for request_id in group.request_ids))
+        token_count = sum(int(group.token_batch) for group in used_groups)
+        first = len(builder.tasks)
+        uploaded = _add_host_cohort_gpu_transfer(
+            builder, scenario, router, plan, dependencies,
+            name=name + "." + gpu_id + ".payload",
+            request_count=len(request_ids), token_count=token_count,
+            gpu_component_id=gpu_id,
+        )
+        ready = _add_physical_invocation_frontend(
+            builder, scenario, plan, (uploaded,),
+            name=name + "." + gpu_id,
+            request_count=len(request_ids), token_count=token_count,
+            invocation_count=len(group_ids), invocation_family="target_operator",
+            orchestration_stage=_GPU_CONSUMER_FRONTEND_STAGE,
+            invocation_group_ids=group_ids, execution_phase=execution_phase,
+            first_decode_invocation=first_decode_invocation,
+            gpu_component_id=gpu_id,
+        )
+        for index in range(first, len(builder.tasks)):
+            task = builder.tasks[index]
+            builder.tasks[index] = replace(task, metadata={
+                **task.metadata,
+                "orchestration_stage": _GPU_CONSUMER_FRONTEND_STAGE,
+                "gpu_consumer_component_id": gpu_id,
+                "physical_invocation_group_ids": group_ids,
+                "gpu_consumer_request_ids": request_ids,
+                "gpu_consumer_frontend_basis": "lowered_operator_execution_device",
+            })
+        for index in (*consumers[gpu_id], *input_transfers.get(gpu_id, ())):
+            task = builder.tasks[index]
+            builder.tasks[index] = replace(
+                task, dependencies=tuple(dict.fromkeys((*task.dependencies, ready))),
+            )
+        coverage[gpu_id] = {
+            "invocation_group_ids": group_ids,
+            "submission_count": len(group_ids),
+            "request_ids": request_ids,
+            "token_count": token_count,
+            "consumer_task_count": len(consumers[gpu_id]),
+            "gpu_input_transfer_task_count": len(input_transfers.get(gpu_id, ())),
+        }
+    if coverage:
+        # Preserve the public ScheduleIR's topological order after adding
+        # readiness edges to already-lowered body tasks. IDs and the body's
+        # original relative order/dependencies are unchanged; only the new
+        # control branches move directly after their shared CPU preparation.
+        frontends = builder.tasks[first_frontend_index:]
+        del builder.tasks[first_frontend_index:]
+        positions = {task.task_id: index for index, task in enumerate(builder.tasks)}
+        insert_at = max((positions[dependency] for dependency in dependencies), default=-1) + 1
+        builder.tasks[insert_at:insert_at] = frontends
+    return {
+        "status": "applied", "scope": "target_operator_non_mtp",
+        "basis": "lowered_operator_execution_device",
+        "by_gpu": coverage,
+        "cpu_only_invocation_group_ids": tuple(
+            str(group.group_id) for group in groups
+            if not any(str(group.group_id) in values for values in groups_by_gpu.values())
+        ),
+    }
 
 
 def _add_request_marker_boundary(
@@ -23050,6 +23256,213 @@ def _compact_device_suffix_stage(
     }, None
 
 
+def _refine_gpu_frontend_wait_stages(
+    scenario: ScenarioConfig,
+    records: Sequence[TaskExecutionRecord],
+    stages: Sequence[Mapping[str, object]],
+    frontend_task_ids: Set[str],
+) -> List[Mapping[str, object]]:
+    """Keep frontend waits off independent CPU work inside a coarse region.
+
+    Usually the pre-GPU CPU prefix is quiescent and remains one small stage.
+    If its branches overlap GPU inputs, only that initial region is represented
+    by atomic positive-work stages. Zero-service markers remain in the raw DAG;
+    their dependency closure is expanded, never replaced with invented time.
+    The first quiescent cut bounds refinement independently of decoder depth.
+    """
+
+    if not frontend_task_ids:
+        return list(stages)
+    by_id = {record.task_id: record for record in records}
+    waiting: Dict[str, bool] = {task_id: True for task_id in frontend_task_ids}
+
+    def needs_frontend(task_id: str) -> bool:
+        pending = [(task_id, False)]
+        while pending:
+            current, expanded_dependencies = pending.pop()
+            if current in waiting:
+                continue
+            record = by_id.get(current)
+            if record is None:
+                waiting[current] = False
+            elif expanded_dependencies:
+                waiting[current] = any(waiting[dependency] for dependency in record.dependencies)
+            else:
+                pending.append((current, True))
+                pending.extend((dependency, False) for dependency in reversed(record.dependencies)
+                               if dependency not in waiting)
+        return waiting[task_id]
+
+    def row_records(row: Mapping[str, object]) -> Tuple[TaskExecutionRecord, ...]:
+        return tuple(by_id[str(task["task_id"])] for task in row["execution_tasks"])
+
+    def positive(record: TaskExecutionRecord) -> bool:
+        return max((d.service_ns for d in record.demands), default=0.0) > 0.0
+
+    affected: Set[str] = set()
+    for row in stages:
+        group_id = row.get("group_id")
+        if group_id is None:
+            continue
+        positive_rows = tuple(record for record in row_records(row) if positive(record))
+        if (any(needs_frontend(record.task_id) for record in positive_rows)
+                and any(not needs_frontend(record.task_id) for record in positive_rows)):
+            affected.add(str(group_id))
+    by_group: Dict[str, List[TaskExecutionRecord]] = {}
+    for row in stages:
+        if row.get("group_id") is not None:
+            by_group.setdefault(str(row["group_id"]), []).extend(row_records(row))
+    for group_id, group_records in by_group.items():
+        free = tuple(record for record in group_records
+                     if positive(record) and not needs_frontend(record.task_id))
+        gated = tuple(record for record in group_records
+                      if positive(record) and needs_frontend(record.task_id))
+        # A free sibling can overlap the first GPU transfer even if an old
+        # component partition put them in separate stages. A whole-prefix
+        # barrier is still false in that case, so refine that startup region.
+        if free and gated and min(record.start_ns for record in gated) < max(record.end_ns for record in free):
+            affected.add(group_id)
+    if not affected:
+        return list(stages)
+
+    cohort_id = next((str(record.metadata["cohort_id"]) for record in records
+                      if record.metadata.get("event_kind") == "serving_cohort_complete"), "")
+
+    def logical_task_identity(record: TaskExecutionRecord) -> str:
+        # TaskBuilder IDs contain the cohort, sequence counter, and task name.
+        # Strip only those execution namespaces; retain rank/operator/phase
+        # suffixes. A source operation keeps its slot if the number/order of
+        # other refined tasks changes in the next physical batch.
+        value = record.task_id
+        if cohort_id and value.startswith(cohort_id + "."):
+            value = value[len(cohort_id) + 1:]
+            value = re.sub(r"^\d{5,}\.", "", value)
+        else:
+            value = re.sub(r"^.*?\.\d{5,}\.", "", value)
+        for prefix in (cohort_id, _UNSAFE_TASK_NAME_PATTERN.sub("-", cohort_id)):
+            if prefix and value.startswith(prefix + "."):
+                value = value[len(prefix) + 1:]
+        return re.sub(r"^(?:prefill|decode|mixed)(?:\.group\d+)?\.", "", value)
+
+    replacements: Dict[str, Tuple[Set[str], List[Mapping[str, object]]]] = {}
+    for group_id in sorted(affected):
+        group_rows = tuple(row for row in stages if row.get("group_id") == group_id)
+        group_records = tuple(record for row in group_rows for record in row_records(row))
+        free = tuple(record for record in group_records
+                     if positive(record) and not needs_frontend(record.task_id))
+        cut = max(record.end_ns for record in free)
+        for record in sorted(group_records, key=lambda record: (record.start_ns, record.end_ns, record.task_id)):
+            if record.start_ns >= cut:
+                break
+            cut = max(cut, record.end_ns)
+        prefix = tuple(record for record in group_records if record.start_ns < cut)
+        prefix_ids = {record.task_id for record in prefix}
+        interleaved = any(needs_frontend(record.task_id) and positive(record) for record in prefix)
+        chunks = (
+            tuple((record,) for record in prefix if positive(record))
+            if interleaved else (prefix,)
+        )
+        # A pathological/custom graph must not silently turn every decode into
+        # an unbounded stage expansion. This budget is structural, not timing.
+        if len(chunks) > 128:
+            raise ValueError("GPU frontend prefix exceeds the 128-stage detailed refinement budget")
+        request_ids = tuple(group_rows[0]["request_ids"])
+        new_rows: List[Mapping[str, object]] = []
+        omitted_zero_ids = tuple(record.task_id for record in prefix if interleaved and not positive(record))
+        for index, chunk in enumerate(chunks):
+            owners = {
+                str(record.metadata.get("execution_component", record.metadata.get("target_component")))
+                for record in chunk
+                if record.metadata.get("cost_model")
+            }
+            component_id = next(iter(owners)) if len(owners) == 1 else scenario.host_orchestration_profile.cpu_component_id
+            if component_id not in {component.component_id for component in scenario.hardware.components
+                                    if _kind(component) in {"cpu", "gpu", "cim"}}:
+                component_id = scenario.host_orchestration_profile.cpu_component_id
+            new_rows.append({
+                "stage_id": group_id + ".frontend_prefix.{:04d}".format(index),
+                "stage_index": _gpu_frontend_stage_index(
+                    "frontend_initial_task", logical_task_identity(chunk[0])
+                ) if interleaved else _gpu_frontend_stage_index("frontend_cpu_prefix"),
+                "group_id": group_id,
+                "stage_role": "frontend_wait_region" if interleaved else "frontend_cpu_prefix",
+                "dependencies": (), "request_ids": request_ids,
+                "component_id": component_id, "layer_ids": (),
+                "execution_tasks": tuple({"task_id": record.task_id} for record in chunk),
+                "frontend_wait_refinement": {
+                    "representation": "bounded_detailed_initial_region" if interleaved else "quiescent_cpu_prefix",
+                    "prefix_task_count": len(prefix), "prefix_stage_count": len(chunks),
+                    "zero_service_dependency_markers": omitted_zero_ids if index == 0 else (),
+                },
+            })
+        replacements[group_id] = (prefix_ids, new_rows)
+
+    refined: List[Mapping[str, object]] = []
+    emitted: Set[str] = set()
+    for row in stages:
+        group_id = row.get("group_id")
+        if group_id in replacements:
+            prefix_ids, new_rows = replacements[str(group_id)]
+            if group_id not in emitted:
+                refined.extend(new_rows)
+                emitted.add(str(group_id))
+            remaining = tuple(task for task in row["execution_tasks"] if str(task["task_id"]) not in prefix_ids)
+            if not any(positive(by_id[str(task["task_id"])]) for task in remaining):
+                continue
+            row = {**row, "execution_tasks": remaining}
+        refined.append(row)
+
+    stage_by_task = {str(task["task_id"]): str(row["stage_id"])
+                     for row in refined for task in row["execution_tasks"]}
+    expanded: Dict[str, Tuple[str, ...]] = {}
+
+    def represented_ancestors(task_id: str) -> Tuple[str, ...]:
+        if task_id in stage_by_task:
+            return (task_id,)
+        if task_id not in expanded:
+            record = by_id.get(task_id)
+            if record is None or positive(record):
+                raise ValueError("GPU frontend refinement lost a nonzero or unknown task: " + task_id)
+            expanded[task_id] = tuple(dict.fromkeys(
+                ancestor for dependency in record.dependencies
+                for ancestor in represented_ancestors(dependency)
+            ))
+        return expanded[task_id]
+
+    rebuilt: Dict[str, Mapping[str, object]] = {}
+    ordering: Dict[str, Tuple[float, int]] = {}
+    for index, row in enumerate(refined):
+        stage_id = str(row["stage_id"])
+        stage_records = tuple(replace(record, dependencies=tuple(dict.fromkeys(
+            ancestor for dependency in record.dependencies
+            for ancestor in represented_ancestors(dependency)
+        ))) for record in row_records(row))
+        dependencies = tuple(dict.fromkeys(
+            stage_by_task[dependency] for record in stage_records for dependency in record.dependencies
+            if stage_by_task[dependency] != stage_id
+        ))
+        ordered, local_ends, _intervals = _replay_local_record_timeline(stage_records)
+        rebuilt[stage_id] = {
+            **row, "dependencies": dependencies,
+            "service_ns": max(local_ends.values(), default=0.0),
+            "observed_span_ns": max(record.end_ns for record in ordered) - min(record.start_ns for record in ordered),
+            "resource_ids": tuple(sorted({d.resource_id for record in ordered for d in record.demands})),
+            "execution_tasks": _execution_task_facts(ordered, tuple(row["request_ids"])),
+        }
+        ordering[stage_id] = (min(record.start_ns for record in ordered), index)
+    result: List[Mapping[str, object]] = []
+    done: Set[str] = set()
+    while len(done) < len(rebuilt):
+        ready = [key for key, row in rebuilt.items() if key not in done
+                 and set(row["dependencies"]) <= done]
+        if not ready:
+            raise ValueError("GPU frontend refinement cannot represent cyclic aggregate stage boundaries")
+        for key in sorted(ready, key=lambda key: ordering[key]):
+            result.append(rebuilt[key])
+            done.add(key)
+    return result
+
+
 def _compact_execution_stages(
     scenario: ScenarioConfig,
     records: Sequence[TaskExecutionRecord],
@@ -23153,6 +23566,34 @@ def _compact_execution_stages(
         if target_frontend_stage is not None
         else None
     )
+    frontend_stage_by_task: Dict[str, str] = {}
+    frontend_records_by_gpu: Dict[str, List[TaskExecutionRecord]] = {}
+    for record in records:
+        if record.metadata.get("orchestration_stage") == _GPU_CONSUMER_FRONTEND_STAGE:
+            gpu_id = str(record.metadata["gpu_consumer_component_id"])
+            frontend_records_by_gpu.setdefault(gpu_id, []).append(record)
+    for index, (gpu_id, frontend_records) in enumerate(sorted(frontend_records_by_gpu.items())):
+        request_ids = tuple(dict.fromkeys(
+            str(request_id) for record in frontend_records
+            for request_id in record.metadata.get("gpu_consumer_request_ids", ())
+        ))
+        stage, reason = _compact_host_control_stage(
+            scenario, frontend_records, request_ids,
+            orchestration_stage=_GPU_CONSUMER_FRONTEND_STAGE,
+            stage_role=_GPU_CONSUMER_FRONTEND_STAGE,
+            stage_id="serving.gpu_consumer_frontend." + gpu_id,
+            stage_index=_gpu_frontend_stage_index(_GPU_CONSUMER_FRONTEND_STAGE),
+            dependencies=(host_prefix_stage_id,) if host_prefix_stage_id else (),
+        )
+        if reason is not None:
+            return (), reason
+        if stage is not None:
+            # The envelope is the GPU readiness queue; its task slices still
+            # expose every CPU, DMA and CP resource. It is not a global CPU gate.
+            stage = {**stage, "component_id": gpu_id}
+            stages.append(stage)
+            for record in frontend_records:
+                frontend_stage_by_task[record.task_id] = str(stage["stage_id"])
     terminal_stage_by_group: Dict[str, str] = {}
     for group_id, group_records in sorted(
         records_by_group.items(),
@@ -23373,6 +23814,12 @@ def _compact_execution_stages(
             )
             observed_start = min(record.start_ns for record in stage_records)
             observed_end = max(record.end_ns for record in stage_records)
+            dependencies.extend(
+                frontend_stage_by_task[dependency]
+                for record in stage_records for dependency in record.dependencies
+                if dependency in frontend_stage_by_task
+            )
+            dependencies = list(dict.fromkeys(dependencies))
             stage_row = {
                 "stage_id": stage_id,
                 "stage_index": stage_index,
@@ -23623,6 +24070,9 @@ def _compact_execution_stages(
         return (), suffix_fallback_reason
     if device_suffix_stage is not None:
         stages.append(device_suffix_stage)
+    stages = _refine_gpu_frontend_wait_stages(
+        scenario, records, stages, set(frontend_stage_by_task),
+    )
     prepared_stages = _prepare_execution_stage_rows(stages)
     if prepared_stages is None:
         # Preserve the raw public payload and let serving's fail-closed parser
@@ -23706,7 +24156,7 @@ def _estimate_serving_cohort_cost(
         task
         for task in lowering.schedule.tasks
         if task.metadata.get("orchestration_stage")
-        in {"host_prefix", "host_target_frontend", "host_suffix"}
+        in {"host_prefix", "host_target_frontend", "host_suffix", _GPU_CONSUMER_FRONTEND_STAGE}
     )
     host_orchestration_ns = sum(
         max((demand.service_ns for demand in task.demands), default=0.0)
@@ -23730,7 +24180,7 @@ def _estimate_serving_cohort_cost(
         stage
         for stage in execution_stages
         if stage.get("stage_role")
-        in {"host_prefix", "host_target_frontend", "host_suffix"}
+        in {"host_prefix", "host_target_frontend", "host_suffix", _GPU_CONSUMER_FRONTEND_STAGE}
     )
     execution_stages_include_host_orchestration = bool(explicit_host_stages)
     if execution_stages_include_host_orchestration:
@@ -24104,6 +24554,9 @@ def _lower_serving_cohort(
         if cached_router is not None
         else _topology_router(scenario)
     )
+    consumer_frontend_enabled = not (
+        mtp_items or (mtp_policy is not None and mtp_policy.enabled)
+    )
     prepared = _add_host_orchestration(
         builder,
         scenario,
@@ -24113,6 +24566,7 @@ def _lower_serving_cohort(
         name=cohort_id + ".host_orchestration",
         request_count=len(items),
         token_count=token_batch,
+        include_gpu_transfer=not consumer_frontend_enabled,
     )
     dependencies: Tuple[str, ...] = (prepared,)
     proposer_group_ends: Dict[str, str] = {}
@@ -24188,32 +24642,33 @@ def _lower_serving_cohort(
                 dependencies=dependencies,
             )
         dependencies = (proposal,)
-    target_frontend = _add_physical_invocation_frontend(
-        builder,
-        scenario,
-        plan,
-        dependencies,
-        name=cohort_id + ".target_operator_frontend",
-        request_count=len(items),
-        token_count=token_batch,
-        invocation_count=len(invocation_groups),
-        invocation_family="target_operator",
-        orchestration_stage=(
-            "host_target_frontend" if mtp_items else "host_prefix"
-        ),
-        execution_phase=kind,
-        first_decode_invocation=(
-            kind == "decode"
-            and all(
-                int(getattr(item, "context_tokens", 0) or 0)
-                == int(next((r.prompt_tokens for r in scenario.workload.requests
-                             if r.request_id == str(getattr(item, "request_id", ""))), -1))
-                for item in items
-            )
-        ),
-        invocation_group_ids=tuple(group.group_id for group in invocation_groups),
-    )
-    dependencies = (target_frontend,)
+    if not consumer_frontend_enabled:
+        target_frontend = _add_physical_invocation_frontend(
+            builder,
+            scenario,
+            plan,
+            dependencies,
+            name=cohort_id + ".target_operator_frontend",
+            request_count=len(items),
+            token_count=token_batch,
+            invocation_count=len(invocation_groups),
+            invocation_family="target_operator",
+            orchestration_stage=(
+                "host_target_frontend" if mtp_items else "host_prefix"
+            ),
+            execution_phase=kind,
+            first_decode_invocation=(
+                kind == "decode"
+                and all(
+                    int(getattr(item, "context_tokens", 0) or 0)
+                    == int(next((r.prompt_tokens for r in scenario.workload.requests
+                                 if r.request_id == str(getattr(item, "request_id", ""))), -1))
+                    for item in items
+                )
+            ),
+            invocation_group_ids=tuple(group.group_id for group in invocation_groups),
+        )
+        dependencies = (target_frontend,)
     group_ends: Dict[str, str] = {}
     for group in invocation_groups:
         group_dependencies = dependencies
@@ -24234,6 +24689,22 @@ def _lower_serving_cohort(
             dependencies=group_dependencies,
         )
         group_ends[group.group_id] = group_end
+    gpu_consumer_frontend = (
+        _add_gpu_consumer_frontends(
+            builder, scenario, router, plan, invocation_groups, (prepared,),
+            name=cohort_id + ".target_operator_frontend", execution_phase=kind,
+            first_decode_invocation=(
+                kind == "decode" and all(
+                    int(getattr(item, "context_tokens", 0) or 0)
+                    == int(next((r.prompt_tokens for r in scenario.workload.requests
+                                 if r.request_id == str(getattr(item, "request_id", ""))), -1))
+                    for item in items
+                )
+            ),
+        )
+        if consumer_frontend_enabled
+        else {"status": "legacy_mtp_frontend_preserved", "scope": "mtp"}
+    )
     completion_dependencies: Tuple[str, ...] = tuple(group_ends.values())
     equal_length_batch = bool(invocation_groups) and all(
         group.batching_semantics == "explicit_equal_length_stateful_ubatch"
@@ -24406,6 +24877,7 @@ def _lower_serving_cohort(
         ),
         scenario_hash=scenario_hash,
         extra_metadata={
+            "gpu_consumer_frontend": gpu_consumer_frontend,
             "token_batch": token_batch,
             "physical_batch_rows": token_batch,
             "max_num_ubatch_tokens": (

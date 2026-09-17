@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_027_scored_A_failed_next_mechanism_evidence",
+  "status": "round_032_structure_reviewed_ready_to_commit_and_freeze",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -674,12 +674,12 @@
     "max_mechanism_rounds": 6,
     "max_full_131_evaluations": 4,
     "max_wall_seconds": 28800,
-    "deadline_utc": "2026-09-16T09:27:11.734008+00:00",
+    "deadline_utc": "2026-09-17T11:52:54.669487+00:00",
     "prediction_workers": 4,
     "per_cell_timeout_seconds": 600,
-    "start_utc": "2026-09-16T01:27:11.734008+00:00",
-    "starting_round": 13,
-    "starting_full_evaluations_completed": 3,
+    "start_utc": "2026-09-17T03:52:54.669487+00:00",
+    "starting_round": 32,
+    "starting_full_evaluations_completed": 6,
     "limit_semantics": "review_checkpoint_not_termination"
   },
   "targets": {
@@ -1548,11 +1548,11 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "按实际展开的GPU消费者过滤cohort前端/H2D，并同步compact stage；随后拆正确的逐ubatch生产消费/同步关系，用新冻结复用131格native比较。norm与lifecycle修复已完成，性能目标尚未重评。",
+  "next_round_hypothesis": "Finish frontend/H2D CPU-prefix review, then immediately freeze clean8b baseline versus reviewed planner-only candidate in R32; same131 native/config/costs. Full262 sealed terminals before scores. Recheck group scope and remaining mechanisms after paired results; no additional coefficients or acceptance changes.",
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 6,
   "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
-  "best_candidate_status": "No new accuracy candidate admitted. Latest scored R24:130 predicted/1 failed,9/131 all-three pass; R25 startup rejection preserved, not scored. A fails and B remains unvalidated.",
+  "best_candidate_status": "No new accuracy candidate admitted. Latest completed R27/on:131 predicted,9/131 cells and74/393 metric items pass; common129 cells only7 pass in each arm. R32 not yet frozen or scored. A fails and B remains unvalidated.",
   "version_control_policy": {
     "enabled": true,
     "effective_utc": "2026-09-15T15:14:39.539409+00:00",
@@ -1718,6 +1718,15 @@
       "verified_utc": "2026-09-17T01:59:29.145Z",
       "status": "pushed_and_remote_verified",
       "scope": "partial unpriced CPU graph lifecycle in actual OnlineRuntime; system priority refinement"
+    },
+    {
+      "commit": "8b715dc80ded2a35d7ab52b46339320149a33da4",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "8b715dc80ded2a35d7ab52b46339320149a33da4",
+      "verified_utc": "2026-09-17T05:40:25.401738+00:00",
+      "status": "pushed_and_remote_verified",
+      "scope": "previous final norm and default GGUF entry compatibility; reverified before R32 commit"
     }
   ],
   "operator_microbenchmark": {
@@ -1765,6 +1774,18 @@
       "closed_utc": "2026-09-15T22:06:30.572094+00:00",
       "status": "budget_closed_accuracy_failed",
       "full_evaluations_completed": 3
+    },
+    {
+      "max_mechanism_rounds": 6,
+      "max_full_131_evaluations": 4,
+      "max_wall_seconds": 28800,
+      "deadline_utc": "2026-09-16T09:27:11.734008+00:00",
+      "prediction_workers": 4,
+      "per_cell_timeout_seconds": 600,
+      "start_utc": "2026-09-16T01:27:11.734008+00:00",
+      "starting_round": 13,
+      "starting_full_evaluations_completed": 3,
+      "limit_semantics": "review_checkpoint_not_termination"
     }
   ],
   "continuation_policy": {
@@ -1822,14 +1843,28 @@
       "reviewed_utc": "2026-09-16T06:22:43.358290+00:00",
       "outcome": "source/evidence gaps closed, R18all60anchor errors improved but0cells passed; nextstageCPUcost+hostdriver mechanism, no thresholdsrelaxed",
       "not_a_stop": true
+    },
+    {
+      "completed_stage": {
+        "stage": 4,
+        "starting_round": 19,
+        "started_utc": "2026-09-16T06:22:43.358290+00:00",
+        "review_after_rounds": 6,
+        "review_at_utc": "2026-09-16T14:22:43.358290+00:00",
+        "review_only_not_stop": true,
+        "full_evaluations_review_limit": 4
+      },
+      "reviewed_utc": "2026-09-17T03:52:54.669487+00:00",
+      "outcome": "R27 remains latest full accuracy evidence; R30/R31 prepared but unexecuted. Source/lifecycle/final-norm/frontend structure advanced without new accuracy admission. Next stage completes R32 matched-source frontend comparison before selecting another hypothesis.",
+      "not_a_stop": true
     }
   ],
   "current_stage": {
-    "stage": 4,
-    "starting_round": 19,
-    "started_utc": "2026-09-16T06:22:43.358290+00:00",
+    "stage": 5,
+    "starting_round": 32,
+    "started_utc": "2026-09-17T03:52:54.669487+00:00",
     "review_after_rounds": 6,
-    "review_at_utc": "2026-09-16T14:22:43.358290+00:00",
+    "review_at_utc": "2026-09-17T11:52:54.669487+00:00",
     "review_only_not_stop": true,
     "full_evaluations_review_limit": 4
   },
@@ -1973,7 +2008,7 @@
     "numerical": {
       "conversion_bytes_compared": 4608,
       "output_rows_checked": 3072,
-      "max_absolute_error": 0.000009059906005859375,
+      "max_absolute_error": 9.059906005859375e-06,
       "max_bound_ratio": 0.00031881050850333644,
       "worst_row": 2332,
       "numerical_qualification": true,
@@ -2330,8 +2365,8 @@
       "Q8_byte_mismatches": 0,
       "outputs": 2048,
       "failed": 0,
-      "max_absolute_error": 4.76837158203125e-7,
-      "max_error_bound_fraction": 0.000008530026957980784
+      "max_absolute_error": 4.76837158203125e-07,
+      "max_error_bound_fraction": 8.530026957980784e-06
     },
     "path_verified": true,
     "cache_layout_in_native_LLM": "unvalidated",
@@ -2367,7 +2402,7 @@
     "new_coefficients": 0
   },
   "architecture_diagnostic": {
-    "updated_utc": "2026-09-17T01:21:29.412Z",
+    "updated_utc": "2026-09-17T03:23:02.900103+00:00",
     "source_scope": "current production; scheduler/planner/control-plane source checked byte-identical to R30 off/on",
     "new_acceptance_gates": 0,
     "diagnostic_order": [
@@ -2629,10 +2664,10 @@
       "metadata_scope_fix": "scalar norm block_size is not exposed as global GEMM quantization metadata",
       "native_remeasured": false,
       "coefficients_added": 0,
-      "default_gpu_frontend_filter": "not_yet_implemented"
+      "default_gpu_frontend_filter": "implemented_reviewed_pending_R32_evaluation"
     },
     "next_frontend": {
-      "status": "source_design_audited_ready_for_implementation",
+      "status": "implemented_reviewed_148_regressions_passed_ready_for_R32",
       "approach": "CPU prefix then actual body discovery then scoped GPU frontend; rebuild stages from same dependencies",
       "preserve": [
         "CPU preparation/packing",
@@ -2640,7 +2675,94 @@
         "launch-only real GPU operations",
         "MTP untouched consumer paths"
       ],
-      "do_not_use": "ngl0 or GPU control resource prefix as consumer evidence"
+      "do_not_use": "ngl0 or GPU control resource prefix as consumer evidence",
+      "scope": "non-MTP online target; static request and MTP retain prior paths",
+      "entry_transfer_readiness": "same group/device real GPU input transfers gated after consumer qualification",
+      "compact": "split independent CPU prefix at real readiness boundary; bounded initial overlap details; explicit failure above128",
+      "related_tests_passed": 148,
+      "related_test_duration_seconds": 8.35,
+      "cost_coefficients_added": 0,
+      "native_remeasured": false,
+      "independent_review": "passed final transport readiness, CPU prefix compact equivalence and cross-batch stable stage identity",
+      "stage_identity": "dedicated stable indices separate from retained model and MMU stages; same-runtime consecutive prefill tested"
+    },
+    "input_length_audit": {
+      "observed_utc": "2026-09-17T03:23:02.900103+00:00",
+      "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+      "cells_checked": 131,
+      "request_output_counts_checked": 894,
+      "compared_fields": [
+        "prompt_tokens",
+        "len(config.prompt_token_ids)",
+        "config.expected_prompt_tokens",
+        "output_tokens",
+        "native_actuals.engine_token_times_count"
+      ],
+      "mismatches": 0,
+      "all_batch_ubatch": 64,
+      "all_declared_prompt_remainders": 0,
+      "deployment_config_counts": {
+        "gpu_layers_minus_1": 84,
+        "gpu_layers_0": 20,
+        "gpu_layers_66": 27
+      },
+      "scope": "frozen token-count contract only; no new native measurement, timing fit, raw re-extraction, or physical-group tail proof",
+      "interpretation": "no declared-prompt remainder; actual group membership and backend still require lowered execution semantics"
+    },
+    "stored_invocation_group_audit": {
+      "observed_utc": "2026-09-17T03:46:23.402770+00:00",
+      "source": "round_027/on/predictions/*.prediction.json -> batch_schedule.batches.cost_metadata.execution_stages[stage_role=host_prefix].covered_invocation_group_ids",
+      "scope": "retained prior simulator structure only; not proof of native dispatch or current R32 grouping",
+      "prediction_files": 131,
+      "visible_group_histogram": {
+        "1": 18115,
+        "2": 775,
+        "3": 34
+      },
+      "unknown_batches": 2947,
+      "by_model": {
+        "qwen25": {
+          "1": 2994
+        },
+        "qwen35": {
+          "1": 3242,
+          "2": 362,
+          "3": 16
+        },
+        "qwen38_gpu": {
+          "1": 4023,
+          "2": 413,
+          "3": 18
+        },
+        "smollm2": {
+          "1": 4113
+        },
+        "tinyllama": {
+          "1": 3743
+        }
+      },
+      "rules": "Only nonempty all-string covered-ID lists counted; absent/truncated/unusable scope remains unknown; source group records absent from exports are not inferred",
+      "interpretation": "multi-group producer/consumer candidate relevant to visible hybrid GPU cases; cannot explain all conventional single-group errors; recount changed schedules after R32"
     }
+  },
+  "round_032_preparation": {
+    "status": "source_and_drivers_reviewed_ready_to_commit_and_freeze",
+    "path": "artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_032",
+    "baseline_commit": "8b715dc80ded2a35d7ab52b46339320149a33da4",
+    "source_members_per_arm": 117,
+    "allowed_source_diff": [
+      "src/heterollm_sim/planner.py"
+    ],
+    "hbm_mode_both_arms": "legacy_mma_output_wave",
+    "native_selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "driver_tests_passed": 57,
+    "driver_independent_review": "passed including observation/journal failures and natural exit",
+    "full_predictions_started": false,
+    "gate_A": "not_evaluated",
+    "gate_B": "unvalidated",
+    "frontend_tests_passed": 148,
+    "frontend_review": "passed",
+    "driver_review": "passed",
+    "no_accuracy_improvement_claim": true
   }
 }

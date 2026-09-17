@@ -212,7 +212,8 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 | 原生身份与冻结 | 全文SHA、长度、路径及freeze/resume一致性检查；迟到worker自然退出后一次性发布终态 | 身份一致不证明性能等价；历史SHA失败不被后续成功追认。180项生命周期相关回归及9项独立模拟通过 |
 | 输出行语义 | qwen2/llama在最后FFN前选行；qwen35在全行final norm后选行；保留GET_ROWS与物理microbatch行数 | R27完整对照已评分，新增经验系数0；源条件资格不等于native实际分派证明 |
 | CPU图生命周期结构 | 一个运行时context保留previous graph；区分known absent/unknown、reuse/miss、reserve与执行失败；在实际cohort成功后逐ubatch提交，模板cache不跳过转换 | 52项基础状态测试、13项新集成及43项相邻回归通过；独立复核无阻断。真实小场景开启/关闭诊断的请求、batch、事件及总时间相同；仍是partial/unpriced，精确输入roster和原生最后图身份未被证明，尚非有价格的DAG节点 |
-| final norm设备与操作粒度 | 绑定自身norm权重；分别决定完整RMS与weight MUL的backend；处理CPU/GPU各自融合、分裂传输及逻辑读写。修复scalar block_size污染全局量化元数据，缺F32 activation证据时保留原分析回退 | 45项定向回归通过，独立复核通过；最终相关联合185通过、1项显式opt-in静态检查跳过，4项此前已通过的真实GGUF读取检查不重复执行。未新增经验系数，准确性须另行冻结比较；GPU前端过滤尚未修复 |
+| final norm设备与操作粒度 | 绑定自身norm权重；分别决定完整RMS与weight MUL的backend；处理CPU/GPU各自融合、分裂传输及逻辑读写。修复scalar block_size污染全局量化元数据，缺F32 activation证据时保留原分析回退 | 45项定向及此前185项相关回归通过；普通GGUF入口的分析回退保留，未新增经验系数。后续前端修复与本机制的组合另通过本轮148项联合回归，准确性尚待新冻结比较 |
+| GPU消费者与前端依赖 | 非MTP在线target先保留CPU准备、展开body，再按实际GPU与唯一消费组生成传输/提交/CP；首次GPU输入传输等待对应ready，独立CPU前缀保留重叠；compact按真实等待边界细分 | 148项联合回归通过；M64首次Q/K/V各32768 bytes的传输等待正确，慢CP下详细DAG、compact与实际在线回放完成时间一致。通常只增1个CPU前缀stage；复杂初始交叠区域最多128个细分stage，超限显式失败并计入原验收分母。最终独立复核通过；新增阶段身份与保留阶段、MMU阶段分离，同一运行时连续两批回归通过。MTP与静态入口仍沿用旧路径 |
 | MMVQ路径与数值 | 共享ABI纠正；连续布局wrapper与target动态路径和数值通过；Q4_K/M1/K2048/N2048独立target探针通过 | Q5工具shape在已有预测账本零命中；Q4账本覆盖45格但cache/layout未资格化，均未准入新性能系数 |
 | 冻结成本对照与采集准备 | R30完成freeze/lock及4份131格预检；R31计时工具完成编译、69项主机回归和两项独立审查 | R30尚无完整预测；R31新wrapper实际资格与计时未执行。已有工作保留，优先处理已确认的系统结构缺口 |
 
@@ -232,23 +233,23 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 
 新静态覆盖审计检查R27/on的131条已存预测，共157类MMVQ签名：现有Q5_0/M1/K4096/N3072微基准在已表示签名中命中0；Q4_K/M1/K2048/N2048出现在SmolLM2/TinyLlama共45格、171200个任务。账本未表示部分仍为未知，不能把缺记录当成不存在；所有签名cache/native dispatch资格仍未知，不能因shape匹配直接准入成本。下一轮优先覆盖实际结构，零命中shape仅作工具链资格验证。
 
-当前优先缺口是final norm设备/算子粒度与逐ubatch的CPU生产—GPU消费关系；CPU图转换现已记录，但输入兼容性、重分配条件与服务成本仍部分未知。MMVQ访存采用MMA输出tile效率的族混用保留为独立成本假设。已有nonflash、logits、sampling、launch不能整段再加；kernel_launch已归GPU frontend。P128/512/1536均整除ubatch64，不能默认有尾块；c不等于kernel M。
+final norm设备/算子粒度的结构修复已完成，尚未用新冻结比较误差。当前优先检查实际GPU消费者与提交/传输的归属，以及逐ubatch的CPU生产—GPU消费关系；CPU图转换现已记录，但输入兼容性、重分配条件与服务成本仍部分未知。这些是已有源码和任务图指向的候选缺口，不把系统性偏低直接归因于其中任何一项。MMVQ访存采用MMA输出tile效率的族混用保留为独立成本假设。已有nonflash、logits、sampling、launch不能整段再加；kernel_launch已归GPU frontend。P128/512/1536均整除ubatch64，不能默认有尾块；c不等于kernel M。
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
-1. **按真实GPU消费者过滤前端及cohort H2D。** final norm的设备/粒度修复已完成并通过回归，下一步在实际body展开或模板重放后，以已生成的GPU算子成本身份和实际GPU设备建立“group→消费GPU集合”。控制任务本身不能证明有GPU消费者；有源码身份的launch-only算子即使零数据/零定价也不能误删。保留CPU cohort准备/packing及算子自带的真实输入、权重、logits传输；只给消费组生成相应GPU提交和CP工作，CPU-only组不贡献提交数，也不等不相关GPU前端。不能用gpu_layers=0总禁GPU：固定CPU27B实际op_offload=true，M64可能有真实GPU工作。
-2. **任务图与compact stage同步修复。** 最小接入位于_lower_serving_cohort，先CPU准备、展开实际body，再补有范围的GPU前端依赖；全局host_prefix只收公共CPU工作。GPU后缀按覆盖group与设备分组，阶段汇总重新计算真实资源区间，不能只在报告里减毫秒。首轮验证全CPU/op_offload=false、M1与M64的offload分派、CPU/GPU独立组及双GPU计数，并覆盖模板命中；比较原始DAG与compact stage起止时间。MTP proposer/catchup若暂未同改，保留原分支及其GPU消费者，不误删。
-3. **随后保留CPU逐ubatch生产与设备消费顺序。** 锁定源码表明GPU async compute允许CPU开始下一组前置工作；CPU backend compute则同步返回。输入buffer复用、backend变化/重分配和跨backend复制的等待位置分别建模，miss本身不等于全局fence。维持cohort固定工作与逐invocation工作总量，不复制整段前端或重复收取等待。当前跨cohort重叠及gpu0.frontend的kernel_launch owner已有依据，保留。共同CPU核心预算仍是通用缺口，但短CPU场景424任务/45个GEMM与控制重叠为0，当前131误差因果未证，不优先扩资源系统。
-4. **完善已有状态诊断，再对明确服务对象定价。** CPU图状态机已在实际serving按ubatch推进，一个context保存previous graph；模板cache不跳过转换。warmup后未知图、完整input roster、精确KV视图与部分同步控制仍unknown，记录保持partial/unpriced。后续先补本轮相关的状态触发证据及有资源归属的事件，不将128+12G command-build改成LLM残差，也不重复补已有readback→通知→采样→commit链。R28 host计数有15.625ms粒度，短窗为0、长窗出现回压，不能据此直接定价微秒CPU服务；其余9个service进程不自动补测。
-5. **更新冻结与成本对照，继续有目的的底层取证。** R30保持原freeze/lock及4份131格预检，完整262预测尚未启动；其off/on只回答旧结构中的MMVQ HBM折扣影响。当前结构修改必须用新冻结，不改写R30，也不把新旧结果混成同一版本。R31 Q4同源wrapper已编译并通过69项主机测试，实际资格与100进程/1200秒计时未执行；待上层问题明确后用于相关服务成本。Q4静态shape命中45格不等于cache/layout已验证，M4与K边界留出；CPU旧IQ smoke的binary/shape不覆盖当前27B，不直接导入系数。现有GPU权重冷读检查已排除单矩阵L2误命中猜测。
-6. **每轮提交推送并检查目标。** 本轮final norm的45项定向及最终185项相关回归通过；计时契约、固定native与A门阈值不变，尚无本轮冻结误差结果。最新完整对照仍R27/on：9/131格、74/393项通过，共同129格两路都仅7格全过；覆盖恢复不能算精度改善。先完成上述结构修复与对照冻结，再复用原native比较。每轮原位更新任务书、commit、push并核对远端，未达到固定131格/393项均严格<10%则按有证据的假设续轮；A后另做独立B，当前B未验证。
+1. **GPU消费者依赖修复已完成最终复核。** 非MTP在线target已按真实算子设备建立消费组，保留CPU cohort准备/packing、零定价真实launch、算子自带的权重/输入/输出传输；CPU-only组不产生GPU提交。首次GPU输入现在等待对应ready，阶段汇总保留此前可运行的CPU前缀，148项联合回归及独立复核通过；专用稳定阶段身份防止下一批错误继承上批H2D等待。MTP proposer/target/catchup及静态request仍走旧分支；本轮没有重构逐ubatch生产时序或增加经验系数。复杂细分超限须显式保留为失败，不能剔格改善覆盖率。
+2. **立即建立R32干净双路冻结并比较固定131格。** 基线为已审核8b715dc，候选为本轮审核提交；每路从Git原始blob构造117份Python源码，唯一允许差异为planner。两路均保留legacy_mma_output_wave和final_output_selection；native、配置、成本参数、extractor保持相同。R32驱动57项合成测试及独立审查通过，涵盖两路独立导入、精确静态输入、来源/恢复校验、观察异常后自然退出及262终态评分屏障；当前尚未执行真实freeze。提交推送后执行freeze→lock→两路完整预测→评分→配对统计与热图，不能沿用R27数值称为本轮结果。
+3. **根据新对照核对适用范围，再决定下一项结构修复。** R27旧保存记录中，可见单物理组18115批、双组775批、三组34批；多组仅见qwen35与qwen38 GPU，2947批缺少可用覆盖字段，仍记未知。这是旧仿真结构线索，不是native分派证明，也不能代替R32重新统计。逐ubatch的CPU准备、GPU异步执行、CPU同步返回、buffer复用及backend重分配等待要按真实触发检查；组内串行关系不能自动解释普通单组模型的全部偏差。保留已有跨cohort重叠，不因graph miss直接加全局fence。共同CPU核心预算仍为通用缺口，当前误差因果未证，暂不扩资源系统。
+4. **只对明确的事件和服务对象补状态或成本证据。** CPU图状态机已在实际serving逐ubatch推进；模板cache不跳过转换，warmup末图、完整input roster、精确KV视图及部分同步控制仍unknown/partial/unpriced。先核对相关触发、次数、等待及owner；保留已有readback→通知→采样→commit链和GPU frontend的kernel_launch owner。R28主机计数存在15.625ms粒度与长窗回压，不直接换成微秒CPU成本，未完成的9个service进程不自动补测。
+5. **保留并有目的地使用底层对照。** R30原freeze/lock与4份131格预检不改，262预测仍未执行；它只回答旧结构下MMVQ HBM折扣的成本假设。R31 Q4同源wrapper已编译并通过69项主机回归，实际资格与100进程/1200秒计时尚未执行；根据R32后仍未解释的普通注意力路径，决定是否启用。Q4静态shape曾命中45格，cache/layout与性能迁移仍未资格化，M4和K边界保持留出；CPU旧IQ smoke不能直接为当前27B提供系数。
+6. **每轮提交推送、复核目标并续轮。** 最新完整结果仍R27/on：9/131格、74/393项通过，共同129格两路均仅7格全过；覆盖恢复不等于精度改善。本轮新冻结和误差尚未完成。阶段复盘已转向“结构修复后及时实测对照”，不再把待执行冻结长期积压；每轮原位更新任务书、commit、push并核对远端。固定131格/393项尚未全部严格<10%，A仍失败；达到A后另做独立B，当前B未验证。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
 - 固定native、历史冻结/预测/评分不可变；复用actual，只重跑simulator。完整文件SHA不能由payload摘要、header或stat代替。临时身份失败保留，不能悄悄重跑至成功。
 - R24来自R23冻结113个源码字节继承及1个已提交adapter替换，完整预测/评分已结束，139项详细证据逐字节归档并分3卷上传。
 - R25两路相同源码、相同成本开关和配置，仅末层选行处理不同；来源为R24冻结加已提交候选文件，不混主区历史WIP。protocol、freeze receipt、controls已保存；评分由262终态屏障约束。R25现已因on启动校验失败封存，133项冻结/预测明细已逐字节归档并分3卷，driver/helper/冻结源码继续不可变。采集合成证据必须核对关闭凭据及实际进程退出；存在任何新轮仿真或native/probe进程时仍禁止并行执行。
-- 第4阶段6轮/8小时为复盘点而非停止条件；出现连续无效优化按第8节换假设。新探针编译与静态审阅可并行，CPU/GPU性能采集与重仿真串行，子进程自然退出。
+- 第4阶段复盘：R27之后的来源、状态和结构工作尚无新的完整误差收益证据，R30/R31准备不算性能通过。第5阶段以R32结构对照为起点，6轮/8小时及4次完整评估为复盘点而非停止条件；先完成新比较，再按受影响范围选机制，避免继续只扩工具。新探针编译与静态审阅可并行，CPU/GPU性能采集与重仿真串行，子进程自然退出。
 - 提交相关源码、测试、任务书及小证据；大JSON/trace逐字节分卷。不上传GGUF/DLL/EXE/OBJ/cubin或整棵复制源码，构建脚本和身份凭据可复现。
 
 ## 15. 最近结果与交付位置（动态，原位更新）
@@ -261,6 +262,7 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 - optimization_loop/round_027/heatmaps.0001/：off、on与APE差值的PNG/SVG热图；X为失败，短横线为固定集之外。
 - optimization_loop/round_028/static_kernel_coverage.0001.json、verify_static_kernel_coverage.py：131预测静态签名、微基准覆盖及独立重算入口。
 - optimization_loop/round_030/protocol.json、freeze_receipt.json、controls.json、preflight/：真实冻结与lock凭据；postprocess/：262终态后的热图及干净归档入口，尚未处理真实R30结果。
+- optimization_loop/round_032/：117份Git原始源码的前端结构双路对照驱动及57项合成回归；真实freeze与预测尚未启动。
 - optimization_loop/round_031/q4k_timing/preparation_validation.0002.json：Q4同源wrapper编译、身份与69项主机回归记录，实际GPU资格/计时待执行。
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
 - optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、execution_closed.json：已拒绝批次的冻结、131配置错位重导和退出记录，未评分。
