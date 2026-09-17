@@ -207,10 +207,15 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 
 ## 11. 已完成修改与验证（动态，原位更新）
 
-- R24身份修复统一path/sha256/bytes，拒绝矛盾长度和非法类型，缓存命中复核header；补齐未映射模型的freeze/resume全文SHA。原R23 104个数值预测全部精确不变，证明本轮没有成本收益；恢复覆盖导致总体分布变化不能当作精度改善。
-- R25修复真实GGUF架构名及metadata owner错位，在最后replan之前绑定选行。qwen2/llama于最后FFN前选行，qwen35于全行final norm后选行；indices/GET_ROWS保留，不重复增加lm-head。M64/R1静态探针保留attention M64，FFN重新分派M1，down进入MMVQ，融合up/gate仍明确保留单矩阵资格未覆盖。新增成本系数0。
-- R25主区联合回归114通过/1跳过；独立语义复审61通过；两路冻结及运行器保护9通过，计数有重叠不相加。两路复制后的extractor与硬件资料仅在已核对字节、别名和派生摘要的明确字段位置归一化。首次硬件资料路径比较失败保留，有单独qualification凭据，未改变冻结内容。
-- MMVQ R6共享ABI已修正conversion的type/k/m/padded_k四个int声明，定义与caller共用头；旧少参数声明负向编译被C2733拒绝，2项检查通过。R6重新提取的主MMVQ和Q8_1 cubin分别5450408B、222816B，与目标DLL逐字节相同。旧R4证据不改。R26 ExC记录器已通过固定合成shape的target运行时路径检查；wrapper数值V2实际通过，4608B转换精确一致，3072行输出零失败，最大绝对差9.059906e−6、最大误差界占比0.000318811。R26连续布局新wrapper与target的动态路径及数值后来均已通过；其他shape、cache与计时资格仍待验证，0参数准入。
+| 机制或基础工作 | 当前已完成内容 | 验证与明确边界 |
+|---|---|---|
+| 原生身份与冻结 | 全文SHA、长度、路径及freeze/resume一致性检查；迟到worker自然退出后一次性发布终态 | 身份一致不证明性能等价；历史SHA失败不被后续成功追认。180项生命周期相关回归及9项独立模拟通过 |
+| 输出行语义 | qwen2/llama在最后FFN前选行；qwen35在全行final norm后选行；保留GET_ROWS与物理microbatch行数 | R27完整对照已评分，新增经验系数0；源条件资格不等于native实际分派证明 |
+| CPU图生命周期结构 | 一个运行时context保留previous graph；区分known absent/unknown、reuse/miss、reserve与执行失败；在实际cohort成功后逐ubatch提交，模板cache不跳过转换 | 52项基础状态测试、13项新集成及43项相邻回归通过；独立复核无阻断。真实小场景开启/关闭诊断的请求、batch、事件及总时间相同；仍是partial/unpriced，精确输入roster和原生最后图身份未被证明，尚非有价格的DAG节点 |
+| MMVQ路径与数值 | 共享ABI纠正；连续布局wrapper与target动态路径和数值通过；Q4_K/M1/K2048/N2048独立target探针通过 | Q5工具shape在已有预测账本零命中；Q4账本覆盖45格但cache/layout未资格化，均未准入新性能系数 |
+| 冻结成本对照与采集准备 | R30完成freeze/lock及4份131格预检；R31计时工具完成编译、69项主机回归和两项独立审查 | R30尚无完整预测；R31新wrapper实际资格与计时未执行。已有工作保留，优先处理已确认的系统结构缺口 |
+
+历史具体失败、回归计数、构建与逐字节归档见第15节索引及state.json，不把旧轮完成叙述反复追加到本节。
 
 ## 12. 最新误差及主要缺口（动态，原位更新）
 
@@ -226,13 +231,15 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 
 新静态覆盖审计检查R27/on的131条已存预测，共157类MMVQ签名：现有Q5_0/M1/K4096/N3072微基准在已表示签名中命中0；Q4_K/M1/K2048/N2048出现在SmolLM2/TinyLlama共45格、171200个任务。账本未表示部分仍为未知，不能把缺记录当成不存在；所有签名cache/native dispatch资格仍未知，不能因shape匹配直接准入成本。下一轮优先覆盖实际结构，零命中shape仅作工具链资格验证。
 
-明确缺口仍为MMVQ访存采用MMA输出tile效率的族混用、host提交/建图/同步重叠尚未独立定价。字节账本未发现重复；已有nonflash、logits、sampling、launch不能整段再加。P128/512/1536均整除ubatch64，不能默认有尾块；c不等于kernel M。
+当前优先缺口是final norm设备/算子粒度与逐ubatch的CPU生产—GPU消费关系；CPU图转换现已记录，但输入兼容性、重分配条件与服务成本仍部分未知。MMVQ访存采用MMA输出tile效率的族混用保留为独立成本假设。已有nonflash、logits、sampling、launch不能整段再加；kernel_launch已归GPU frontend。P128/512/1536均整除ubatch64，不能默认有尾块；c不等于kernel M。
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
 1. **先完成有界系统结构诊断，区分已表达、缺建和待证。** 已核对当前源码及R30冻结：任务的资源共同启动但分别释放，GPU需求复用设备/内存组件资源，并非每个task凭空获得独立带宽。readback→完成通知→采样→token commit及下一decode依赖已存在，通知和采样仍有未定价/partial部分，不能再整段补节点或重复加等待。runtime_lowering已接入一次scenario-control-plane初始化；真实prefill/decode由planner/serving生成，因此修改通用dispatcher不会自动修复逐批执行。以上调用链证据可复用，本轮不重写simulate_schedule。
-2. **首先补CPU llama建图生命周期的结构表达。** 锁定llama-context.cpp:1347及llama-graph.h:815表明每ubatch检查前图；命中跳过reset/build/alloc-plan，但仍set_inputs/compute；miss后重建，reserve会使前图失效。现有cohort host prepare和128+12G command-build没有表达这一状态机，compiled_graph_cache_stats只是仿真器内部缓存。先实现首次miss→同shape复用→token值变化不单独失效→输出行/序列/mask变化失效→reserve失效→禁复用的结构回归；缺失必要条件须标unknown，不能默认为hit。graph分配规划与实际buffer扩容分开，CPU-only不生成虚假的GPU提交。最小纯结构状态机已实现并通过52项回归，明确区分已知空图、warmup后未知图、reserve失效和执行失败失效；真实ubatch接入仍在实现，尚未改变预测路径或引入时延系数，不能把独立模块通过当作结构缺口已经关闭。
-3. **核对生产—消费关系和物理资源预算，再决定关系修复。** 当前CPU command-build→driver submit→GPU command processor按invocation group聚合；kernel_launch究竟是CPU提交还是GPU前端服务，必须按开始/结束条件和owner核对，不能只凭串行边就断言应有重叠。建立两kernel回归：后一host submit可与前一GPU执行重叠，但后一GPU执行仍等数据依赖。CPU全核GEMM与单核控制工作目前没有共同核心预算，是能力缺口；先确定固定场景是否触发，再补容量声明，不能用整机CPU锁替代共享核心。compute与DMA内存端点只在显式声明同一物理owner时竞争；先核对场景映射和字节所有权，不自动把所有读写方向锁成同一资源。上述均为机制回归与适用性诊断，不新增准确率门槛。
+2. **首先补CPU llama建图生命周期的结构表达。** 锁定llama-context.cpp:1347及llama-graph.h:815表明每ubatch检查前图；命中跳过reset/build/alloc-plan，但仍set_inputs/compute；miss后重建，reserve会使前图失效。现有cohort host prepare和128+12G command-build没有表达这一状态机，compiled_graph_cache_stats只是仿真器内部缓存。先实现首次miss→同shape复用→token值变化不单独失效→输出行/序列/mask变化失效→reserve失效→禁复用的结构回归；缺失必要条件须标unknown，不能默认为hit。graph分配规划与实际buffer扩容分开，CPU-only不生成虚假的GPU提交。最小状态机及真实serving接入已完成：52项基础测试、13项新集成和43项相邻回归通过，另有独立复核。每个实际ubatch均推进context状态，cache命中不能冒充native复用；warmup后未知图与执行失败仍未知。诊断保持partial/unpriced，时间线未调整，尚不能将兼容性/服务成本缺口称为关闭。
+3. **优先修复已证实的设备归属，再保留逐ubatch生产顺序。** 明确ngl=0且op_offload=false的短CPU场景仍生成GPU前端及final norm；原生build_norm是RMS_NORM后接带output_norm权重的MUL，可能有activation在GPU、scale在CPU的分裂分派。现有final_norm.reduce/apply合并了RMS应用与weight-scale，typed norm未携带权重身份；不能直接按lm_head给整段选设备。当前进入最小粒度/placement修复：绑定真实norm权重，复用既有成本、保留操作工作量与跨device数据依赖，按源码融合契约避免重复launch，测试31/32/33实际norm行及选行顺序。固定CPU27B实际op_offload=true，M64可能有真实GPU工作；不能以gpu_layers=0整组禁GPU。完成最终placement后按实际GPU消费者检查前端及H2D。
+
+   后续拆分CPU逐ubatch工作时，原生GPU异步compute允许下一组CPU准备与前组GPU执行重叠，但输入缓冲复用/重新分配会在对应位置等待；CPU backend compute则同步返回。保持cohort固定工作与逐invocation工作总量，不能每组复制整段前端、把miss一律变全局fence、或将等待再次计作CPU服务。跨cohort重叠已存在，kernel_launch明确属于gpu0.frontend，均保留。共同CPU核心预算是通用能力缺口，但短CPU场景424任务/45个GEMM与控制重叠为0，GPU的4处重叠仅涉及embedding；当前误差因果未证，不优先扩资源系统。上述是诊断和结构回归，不新增准确率门槛。
 4. **保留已冻结的成本对照，按明确问题继续下钻。** R30已真实冻结并完成lock，4份新Python预检均131/131通过；115份源码中4份来自e3be58e，其余111份继承R27/on。off/on仅切换legacy_mma_output_wave与nominal_bandwidth_analytical_fallback，完整262预测尚未启动。该对照只能回答旧结构中MMVQ误用MMA HBM折扣的影响，不证明系统结构完整。结构修复如改变预测必须另建冻结，不能改写R30。保留0新经验系数、600秒软观察及自然退出规则；未退出/未封口阻止恢复与评分，不能因等待超时杀进程。
 5. **微基准由上述缺口决定用途，不按误差追加采集。** R29 Q4_K/M1/K2048/N2048的target路径和独立数值已通过；它在已有账本命中45格，但cache/layout未知仍不具有成本迁移资格。R31同源wrapper计时工具已编译，修正Q4 conversion grid8及观察中断等待自然退出，两项独立复核和69项主机回归通过；新wrapper实际资格、100进程/1200秒有限计时尚未执行，待结构诊断明确所需服务对象后使用。M4及K边界留出；envelope扰动通过不能宣称短kernel无偏。R28的195样本显示CPU计数15.625ms粒度，首个host service长窗口出现回压，微秒级host服务价格仍不可准入；其余9个service进程暂不自动补齐。已有CPU IQ3/IQ4 smoke仅覆盖旧DLL、M32/N256/K256、16线程热缓存graph wall，与27B锁定线程版DLL/affinity及decode shape不匹配，不直接导入系数。固定native CUDA graphs编译OFF，不能错删直接launch；权重访存默认冷读的检查已排除“单矩阵L2命中误减权重流量”猜测。
 6. **每轮回到固定范围评分与继续条件。** R27的262终态、配对评分、三张热图和553项干净逐字节归档已完成，6个≤40MiB分卷已验证；旧夹具归档留本机不发布。R27/on仍9/131格、74/393项通过，off/on共同129格都只有7格全过，覆盖恢复不算精度改善。R27新的五遍身份诊断一致仅表示本次未复现，不追认旧失败、不重测LLM。每轮最小修改和相关验证后原位更新任务书、commit、push并核对远端，检查A固定131格/393项均严格<10%；未达到则按有证据的假设续轮。通过A后另做独立B，当前B未验证。

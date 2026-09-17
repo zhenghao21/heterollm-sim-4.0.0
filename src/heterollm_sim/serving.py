@@ -55,6 +55,7 @@ from .event_kernel import (
     _validated_phase_sequence,
 )
 from .execution_control import ExecutionControl
+from .llama_graph_runtime import LlamaGraphRuntime
 from .retained_kv_state import (
     RetainedKVState,
     BOUND as _RETAINED_KV_BOUND,
@@ -4789,6 +4790,7 @@ class _OnlineRuntime:
         self.events: List[ServingEvent] = []
         self.batches: List[ServingBatch] = []
         self._runtime_origin_ns = runtime_origin_ns
+        self._llama_graph_runtime = LlamaGraphRuntime(plan.scenario)
         self.now = max(
             runtime_origin_ns,
             min(
@@ -13547,21 +13549,23 @@ class _OnlineRuntime:
 
     def _execute(self, cohort: BatchCohort) -> None:
         retained = self._retained_kv_state
-        if retained is None:
-            self._execute_cohort(cohort)
-            return
         try:
             self._execute_cohort(cohort)
         except BaseException as error:
+            self._llama_graph_runtime.failed(cohort.cohort_id, error)
             # An execution or commit may have partially changed native state.
             # Keep diagnostic rows, but never reuse them as a valid bound after
             # failure/cancellation. This is fail-stop, not an error recovery model.
-            retained.mark_invalid("cohort execution or commit failed: " + type(error).__name__)
+            if retained is not None:
+                retained.mark_invalid("cohort execution or commit failed: " + type(error).__name__)
             raise
 
     def _execute_cohort(self, cohort: BatchCohort) -> None:
         cohort = self._with_kv_scan_lower_bound(cohort)
         cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+        # Diagnose each realized ubatch even when the cost provider reused a
+        # template. Preparation is pure; timing and the task DAG are unchanged.
+        graph_transition = self._llama_graph_runtime.prepare(cohort, cost.metadata)
         cost = self._apply_resource_contention(cohort, cost)
         cost = self._apply_owner_residency(cohort, cost)
         reported_host_ns = max(
@@ -14106,6 +14110,7 @@ class _OnlineRuntime:
             self._request_device_ready_ns[item.request_id] = item_end_ns
         self.events.append(ServingEvent(end_ns, "batch_end", cohort_id=cohort.cohort_id, details={"kind": cohort.kind}))
         self.now = end_ns
+        self._llama_graph_runtime.commit(graph_transition)
 
     def _finish(self, state: _MutableRequest, timestamp_ns: float) -> None:
         if state.status == RequestStatus.FINISHED:
@@ -14468,9 +14473,10 @@ class _OnlineRuntime:
             makespan,
             prompt_cache_metrics=self.prompt_cache.metrics(),
             owner_residency_metrics=owner_residency_metrics,
-            runtime_kernel_metrics=dict(
-                self._execution_resource_kernel.metrics
-            ),
+            runtime_kernel_metrics={
+                **dict(self._execution_resource_kernel.metrics),
+                "llama_cpu_graph_lifecycle": self._llama_graph_runtime.summary(),
+            },
         )
 
 

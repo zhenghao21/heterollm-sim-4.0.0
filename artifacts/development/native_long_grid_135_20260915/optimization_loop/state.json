@@ -1548,7 +1548,7 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "先补真实ubatch的CPU llama graph状态转换，再核对CPU核心共享和host-submit/device-ready边界；R30成本冻结保留独立对照，R31未执行采集不按误差追加。",
+  "next_round_hypothesis": "先修final_norm权重身份/操作粒度及真实backend归属，再根据实际GPU消费者与原生同步点拆逐ubatch前端；图生命周期已在真实serving记录partial/unpriced；既有R30/R31保留、不重测native。",
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 6,
   "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
@@ -1700,6 +1700,15 @@
       "status": "pushed",
       "verified_utc": "2026-09-16T15:02:09.685Z",
       "artifact_git_blob_byte_checks": 46
+    },
+    {
+      "commit": "9e0f175b7846870140ef54c06ab0c760e1e084c7",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "9e0f175b7846870140ef54c06ab0c760e1e084c7",
+      "verified_utc": "2026-09-17T01:32:31.459Z",
+      "status": "pushed_and_remote_verified",
+      "scope": "architecture diagnostic order; standalone graph lifecycle; R30 freeze and R31 prepared source evidence"
     }
   ],
   "operator_microbenchmark": {
@@ -2322,7 +2331,7 @@
   "graph_lifecycle_audit": {
     "fixed_native_cuda_graphs": false,
     "cuda_graph_direct_launch_semantics": "already_covered",
-    "llama_cpu_graph_reuse_rebuild": "state transitions not separately modeled; not merely unpriced",
+    "llama_cpu_graph_reuse_rebuild": "per-actual-ubatch partial transition diagnostics integrated; exact inputs and scheduled service costs still unmodeled",
     "scope": "source audit only; no target LLM latency fit",
     "runtime_dispatcher_scope": "bootstrap only; planner/serving owns inference actions"
   },
@@ -2391,7 +2400,7 @@
     ],
     "current_implementation": {
       "module": "src/heterollm_sim/llama_graph_lifecycle.py",
-      "status": "standalone_state_machine_tested_not_integrated",
+      "status": "integrated_partial_unpriced_real_online_runtime",
       "pricing_changes": 0,
       "source_refs": [
         "source/llama.cpp-semantic/src/llama-context.cpp:1347",
@@ -2400,9 +2409,59 @@
       ],
       "tests_passed": 52,
       "test_path": "tests/test_llama_graph_lifecycle.py",
-      "prediction_path_changed": false,
-      "integration_status": "in_progress_actual_online_runtime",
-      "initial_state": "explicit_unknown_when_native_warmup_last_graph_unproven"
+      "prediction_path_changed": "diagnostic metadata only; actual schedule and costs unchanged",
+      "integration_status": "reviewed_and_tested",
+      "initial_state": "explicit_unknown_when_native_warmup_last_graph_unproven",
+      "integration_tests_passed": 13,
+      "adjacent_tests_passed": 43,
+      "independent_review": "no blocking issue",
+      "timing_comparison": "tiny real provider cache replay and recorder-disabled baseline exact for requests batches events makespan",
+      "complete_native_input_roster": false
+    },
+    "core_budget_trigger_check": {
+      "kind": "bounded_synthetic_online_not_target_latency",
+      "hardware_mapping": "16 physical cores/32 logical; native threads=threads_batch=16",
+      "shape": {
+        "layers": 1,
+        "hidden": 32,
+        "ffn": 64,
+        "vocabulary": 64,
+        "prompt": 12,
+        "output": 2,
+        "concurrency": 2,
+        "batch": 8,
+        "ubatch": 4
+      },
+      "cpu": {
+        "tasks": 424,
+        "pipeline_tasks": 264,
+        "gemm_tasks": 45,
+        "control_pipeline_overlaps": 0
+      },
+      "gpu": {
+        "tasks": 380,
+        "pipeline_tasks": 34,
+        "gemm_tasks": 0,
+        "control_pipeline_overlaps": 4,
+        "overlap_scope": "embedding CPU dispatch/memory only, not all-core GEMM"
+      },
+      "fast_vs_detailed_stage_time_max_delta_ns": 0,
+      "conclusion": "generic capacity gap remains; current fixed-domain error causality not established; do not prioritize a new core-pool implementation"
+    },
+    "host_frontend_check": {
+      "multi_ubatch_frontend": "one aggregated command build/submit per cohort remains in actual online layout",
+      "cross_cohort_overlap": "exists",
+      "kernel_launch_owner": "gpu0.frontend",
+      "next": "source check CPU next-ubatch readiness, stream dependency and reuse/allocation synchronization before reconnecting tasks",
+      "native_synchronization": "GPU async returns; CPU compute synchronous; input reuse/backend reassignment/reallocation have distinct waits; no unconditional miss fence"
+    },
+    "final_norm_placement": {
+      "status": "confirmed_structural_defect_minimum_fix_in_progress",
+      "evidence": "no-offload CPU placement still yields GPU final_norm and frontend in short actual online graph",
+      "native_semantics": "RMS_NORM followed by output_norm weight MUL; possible split backend; CUDA fusion source predicates required",
+      "existing_granularity_gap": "reduce/apply merges RMS application and scale; typed final_norm lacks output_norm weight identity",
+      "do_not_infer": "ngl0 is not a global no-GPU switch when op_offload=true",
+      "coefficient_changes": 0
     }
   }
 }
