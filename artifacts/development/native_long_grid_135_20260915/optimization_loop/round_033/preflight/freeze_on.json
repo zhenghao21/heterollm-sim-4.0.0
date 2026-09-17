@@ -1,0 +1,44 @@
+{
+  "schema": "r33-frozen-source-preflight/v1",
+  "stage": "freeze",
+  "arm": "on",
+  "started_utc": "2026-09-17T06:06:25.661708+00:00",
+  "freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\on\\freeze.json",
+    "sha256": "26a13142b612662512ef28fe427e59b1d28e89a49076463a993c6997b2dac59e",
+    "bytes": 53022007
+  },
+  "protocol_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\protocol.json",
+    "sha256": "3c6270fad8c56d0ddcaf1cf55f11e2d9bdac0ae37cd97b46e1befb3a01a19ce5",
+    "bytes": 259297
+  },
+  "verifier_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\verify_frozen_preflight.py",
+    "sha256": "668e02f664128f502a1bc4ea46c0cf97405951e88c6787d19c90765cf4fa573d",
+    "bytes": 6732
+  },
+  "native_run": false,
+  "prediction_run": false,
+  "target_errors_read": false,
+  "verified_cells": 131,
+  "mmvq_hbm_mode": "legacy_mma_output_wave",
+  "final_output_selection": true,
+  "source_sha256": "02a4cd61c9be84cda0de81ed4b1a47e7a3bb328530d3091128b0a33d40a2b8bc",
+  "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+  "qualification_counts": {
+    "conditional": 131
+  },
+  "actual_api": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\on\\source\\tools\\predict_stable_native_dataset.py",
+    "sha256": "5d55ad9bf33bd2025c6a431bb97174121e25dbbe470298cbcd14c73434afa02e",
+    "bytes": 242954
+  },
+  "actual_binding_helper": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\on\\source\\tools\\native_final_output_binding.py",
+    "sha256": "a4c2f6b38efe53666e356802f82cbbc30f135bd99a6c1b11388096b2141d39dc",
+    "bytes": 19828
+  },
+  "status": "passed",
+  "finished_utc": "2026-09-17T06:06:48.275893+00:00"
+}
