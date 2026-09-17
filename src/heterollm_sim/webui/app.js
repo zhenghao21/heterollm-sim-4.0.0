@@ -1759,43 +1759,9 @@ function scenarioRequestIsCurrent(snapshot, { mappingSensitive = true } = {}) {
 
 function mappingRunReadiness() {
   if (!state.scenario) return { ready: false, code: "scenario_missing", reason: uiText("当前没有可运行场景。", "There is no scenario available to run.") };
-  if (state.mappingStale) {
-    const staleReason = state.mappingStaleReason || uiText(
-      "当前映射与模型、硬件、并行或驻留输入不一致。",
-      "The current mapping does not match the model, hardware, parallelism, or residency inputs.",
-    );
-    return {
-      ready: false,
-      code: "mapping_stale",
-      reason: state.settings.language === "en"
-        ? localizedBackendValue(
-          { code: "mapping_stale", message: staleReason },
-          staleReason,
-          "The mapping is stale; refresh the runtime placement and validate again.",
-        )
-        : staleReason,
-    };
-  }
-  const decision = controlPlaneDecision(state.scenario?.placement);
-  if (decision.fully_placed === false) {
-    const unplaced = asArray(decision.unplaced).length;
-    return {
-      ready: false,
-      code: "mapping_incomplete",
-      reason: unplaced
-        ? uiText("运行时放置仍有 {count} 项未完成，不能运行。", "Runtime placement left {count} items unresolved; the scenario cannot run.", { count: unplaced })
-        : uiText("运行时控制平面尚未确认全部算子与张量均已放置。", "The runtime control plane has not confirmed complete operator and tensor placement."),
-    };
-  }
-  const expected = String(state.mappingInputFingerprint || "");
-  const current = String(state.currentInputFingerprint || "");
-  if (expected && current && expected !== current) {
-    return {
-      ready: false,
-      code: "mapping_fingerprint_mismatch",
-      reason: uiText("服务端映射输入指纹与当前输入指纹不一致。", "The server mapping-input fingerprint does not match the current input fingerprint."),
-    };
-  }
+  // V4 materializes placement inside every run. Previous decisions are
+  // read-only evidence, not a prerequisite for submitting new authoring input.
+  // Topology, capacity and model errors still pass through backend validation.
   return { ready: true, code: "", reason: "" };
 }
 
@@ -2161,6 +2127,13 @@ function sanitizeV4ScenarioCapabilities(scenario) {
 function scenarioPayloadForTransport(scenario = state.scenario) {
   if (!scenario) return null;
   const payload = ensureScenarioShape(deepClone(scenario));
+  // Do not send a previous run's derived placement back as authoring input.
+  // Keep policy and unrelated metadata; the V4 backend recomputes decisions.
+  const controlPlane = payload.placement.metadata.control_plane;
+  if (controlPlane && typeof controlPlane === "object") {
+    delete controlPlane.decision;
+    delete controlPlane.evidence;
+  }
   const orchestrationIssue = hostOrchestrationReferenceIssue(payload);
   if (orchestrationIssue) throw new Error(orchestrationIssue);
   return payload;
@@ -3020,14 +2993,37 @@ function controlPlanePolicy(placement) {
   return asObject(controlPlane.policy);
 }
 
+function runtimePlacementForView(placement = state.scenario?.placement) {
+  if (placement !== state.scenario?.placement || state.reportStale || state.mappingStale) return {};
+  const runtime = asObject(state.report?.runtime_placement);
+  return runtime.schema_version === "runtime-placement/v1" ? runtime : {};
+}
+
 function controlPlaneDecision(placement) {
-  const controlPlane = placementControlPlaneMetadata(placement);
-  return asObject(controlPlane.decision);
+  const runtime = asObject(runtimePlacementForView(placement).control_plane);
+  return asObject(runtime.decision || placementControlPlaneMetadata(placement).decision);
 }
 
 function controlPlaneEvidence(placement) {
-  const controlPlane = placementControlPlaneMetadata(placement);
-  return asObject(controlPlane.evidence);
+  const runtime = asObject(runtimePlacementForView(placement).control_plane);
+  return asObject(runtime.evidence || placementControlPlaneMetadata(placement).evidence);
+}
+
+function acceptRuntimePlacement(report) {
+  if (asObject(report?.runtime_placement).schema_version !== "runtime-placement/v1") return;
+  // The report owns these outputs. Never copy them into editable placement:
+  // V4 explicitly rejects manual op/tensor maps on the next submission.
+  state.mappingStale = false;
+  state.mappingStaleReason = "";
+  state.mappingInputFingerprint = "";
+  state.currentInputFingerprint = "";
+  const controlPlane = placementControlPlaneMetadata(state.scenario.placement);
+  delete controlPlane.decision;
+  delete controlPlane.evidence;
+  const ui = placementUiMetadata(state.scenario.placement, { create: true });
+  ui.mapping_stale = false;
+  delete ui.mapping_stale_reason;
+  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
 }
 
 function placementUiMetadata(placement, { create = false } = {}) {
@@ -3357,12 +3353,11 @@ async function validateScenario({ quiet = false } = {}) {
   if (!state.scenario) return null;
   const requestGeneration = ++validationRequestGeneration;
   const requestSnapshot = scenarioRequestSnapshot();
-  const requestPayload = scenarioPayloadForTransport();
   setBusy(true, uiText("正在校验场景", "Validating scenario"), uiText("检查拓扑、容量、映射与降级转换支持范围…", "Checking topology, capacity, mapping, and current lowering support…"));
   try {
     const payload = await apiRequest("/validate", {
       method: "POST",
-      body: JSON.stringify(requestPayload),
+      body: JSON.stringify(scenarioPayloadForTransport()),
     });
     if (requestGeneration !== validationRequestGeneration || !scenarioRequestIsCurrent(requestSnapshot)) {
       if (!quiet) {
@@ -3617,6 +3612,7 @@ function finishRunJob(snapshot) {
     state.comparison = null;
     state.reportStale = scenarioChanged;
     if (!scenarioChanged) {
+      acceptRuntimePlacement(report);
       state.dirty = false;
       state.validation = {
         errors: [],
@@ -3699,7 +3695,6 @@ async function startRunJob() {
     return;
   }
   const requestSnapshot = scenarioRequestSnapshot();
-  const requestPayload = scenarioPayloadForTransport();
   state.runJobSubmitting = true;
   state.runJobScenarioGeneration = requestSnapshot.scenarioGeneration;
   state.runJobMappingGeneration = requestSnapshot.mappingGeneration;
@@ -3710,7 +3705,7 @@ async function startRunJob() {
     const snapshot = await apiRequest("/run-jobs", {
       method: "POST",
       body: JSON.stringify({
-        scenario: requestPayload,
+        scenario: scenarioPayloadForTransport(),
         retention_policy: String(state.runEstimate.recommended_retention_policy),
       }),
     });
@@ -3789,7 +3784,6 @@ async function runScenario(event = null) {
   if (!validatedReadiness.ready) return blockRunForMapping(validatedReadiness, "运行");
   const requestGeneration = ++runEstimateRequestGeneration;
   const requestSnapshot = scenarioRequestSnapshot();
-  const requestPayload = scenarioPayloadForTransport();
   setBusy(
     true,
     uiText("正在估算仿真规模", "Estimating simulation scale"),
@@ -3802,7 +3796,7 @@ async function runScenario(event = null) {
   try {
     estimate = await apiRequest("/run-estimate", {
       method: "POST",
-      body: JSON.stringify(requestPayload),
+      body: JSON.stringify(scenarioPayloadForTransport()),
     });
     if (requestGeneration !== runEstimateRequestGeneration || !scenarioRequestIsCurrent(requestSnapshot)) {
       toast(
@@ -3832,26 +3826,28 @@ async function runScenario(event = null) {
 
 async function compareScenario() {
   if (!state.scenario || state.busy) return;
-  if (state.mappingStale) {
-    const staleReason = mappingRunReadiness().reason || uiText("当前映射与输入不一致。", "The current mapping does not match the inputs.");
-    const reason = uiText("{reason} 请先刷新运行时放置。", "{reason} Refresh runtime placement first.", { reason: staleReason });
-    switchView("mapping");
-    renderControlPlaneStatus();
-    toast(uiText("映射已过期，已阻止比较", "Comparison blocked because the mapping is stale"), reason, "warning", 7500);
+  if (runJobIsActive() || state.runJobSubmitting) {
+    toast(uiText("仿真仍在运行", "Simulation still running"), uiText("请等待当前任务完成或取消后再比较 GPU 基线。", "Wait for the current job to finish or cancel it before comparing the GPU baseline."), "info");
     return;
   }
+  const requestSnapshot = scenarioRequestSnapshot();
   setBusy(true, "正在构建 GPU 基线", "POST /api/compare · 候选场景与 GPU-only placement 分析…");
   try {
     const payload = await apiRequest("/compare", {
       method: "POST",
       body: JSON.stringify(scenarioPayloadForTransport()),
     });
+    if (!scenarioRequestIsCurrent(requestSnapshot)) {
+      toast(uiText("已忽略过期比较结果", "Stale comparison ignored"), uiText("场景已修改，请重新比较当前版本。", "The scenario changed; compare the current version again."), "info");
+      return;
+    }
     reconcileMappingFingerprint(payload);
     state.comparison = payload;
     state.report = payload.candidate;
     state.runJob = null;
     state.runJobScenarioGeneration = null;
     state.reportStale = false;
+    acceptRuntimePlacement(state.report);
     state.dirty = false;
     renderAll();
     switchView("results");
@@ -4018,10 +4014,16 @@ function traceStepSummary() {
       label: uiText("{count} 个批次摘要", "{count} batch summaries", { count: formatNumber(batchCount) }),
     };
   }
+  const eventLabels = {
+    exact: ["{count} 个精确事件", "{count} exact events"],
+    representative: ["{count} 个代表性事件", "{count} representative events"],
+    aggregate: ["{count} 个聚合事件", "{count} aggregate events"],
+  };
+  const labels = eventLabels[playback.data?.fidelity] || ["{count} 个事件", "{count} events"];
   return {
     count: aggregateEventCount,
     label: aggregateEventCount
-      ? uiText("{count} 个聚合事件", "{count} aggregate events", { count: formatNumber(aggregateEventCount) })
+      ? uiText(labels[0], labels[1], { count: formatNumber(aggregateEventCount) })
       : uiText("无可回放事件", "No replayable events"),
   };
 }
@@ -4065,7 +4067,7 @@ function renderSteps() {
     : uiText(`${opMappings} 算子 · ${tensorMappings} 张量`, `${opMappings} operators · ${tensorMappings} tensors`);
   dom.mappingStatus.classList.toggle("is-stale", state.mappingStale);
   dom.workloadStatus.textContent = uiText(`${requests} 请求`, `${requests} requests`);
-  dom.resultsStatus.textContent = state.report ? uiText("报告就绪", "Report ready") : state.reportStale ? uiText("结果已过期", "Results stale") : uiText("未运行", "Not run");
+  dom.resultsStatus.textContent = state.reportStale ? uiText("结果已过期", "Results stale") : state.report ? uiText("报告就绪", "Report ready") : uiText("未运行", "Not run");
   $$(".step-count").forEach((node) => node.classList.toggle("has-errors", errors > 0));
 }
 
@@ -12333,7 +12335,7 @@ function renderMapping() {
 
 function effectiveParallelRanks() {
   const placement = asObject(state.scenario?.placement);
-  const parallel = asObject(placement.parallel);
+  const parallel = asObject(runtimePlacementForView(placement).parallel || placement.parallel);
   const explicit = asArray(parallel.rank_mapping);
   if (explicit.length) {
     return explicit.map((rank, index) => ({
@@ -13542,7 +13544,16 @@ function setTraceSelectedIndex(index) {
   const normalized = Number.isInteger(index) && index >= 0 && index < playback.filteredEvents.length ? index : -1;
   playback.selectedIndex = normalized;
   playback.selectedEventId = normalized >= 0 ? playback.filteredEvents[normalized].event_id : null;
+  syncTraceNavigationButtons();
   return normalized;
+}
+
+function syncTraceNavigationButtons() {
+  const playback = state.tracePlayback;
+  // Navigation belongs to the global player, not the optional event table.
+  // Keep it live even when the semantic stream is collapsed or filtered empty.
+  if (dom.tracePreviousButton) dom.tracePreviousButton.disabled = playback.selectedIndex <= 0 && playback.page?.previous_offset == null;
+  if (dom.traceNextButton) dom.traceNextButton.disabled = playback.selectedIndex >= playback.filteredEvents.length - 1 && !playback.page?.has_more;
 }
 
 function traceEventIndexById(eventId) {
@@ -13719,6 +13730,12 @@ function renderTracePageState() {
       "Task replay · Batch {batch} · {first}–{last} / {total} · global simulation time",
       { batch: playback.batchFilter, first: formatNumber(first), last: formatNumber(last), total: formatNumber(page.total) },
     );
+  } else if (["exact", "representative"].includes(playback.data?.fidelity) && playback.events.length) {
+    dom.tracePageStatus.textContent = uiText(
+      "报告内任务回放：{fidelity} · 已载入 {loaded} / {total} 个事件；无需批次按需加载。",
+      "In-report task replay: {fidelity} · {loaded} / {total} events loaded; no on-demand batch loading is needed.",
+      { fidelity: traceFidelityLabel(playback.data.fidelity), loaded: formatNumber(playback.events.length), total: formatNumber(playback.data.total_events ?? playback.events.length) },
+    );
   } else if (traceTaskReplayAvailable(playback)) {
     dom.tracePageStatus.textContent = uiText("聚合总览：请选择一个批次以按需加载真实任务级 Trace。", "Aggregate overview: select a batch to load its real task-level Trace on demand.");
   } else {
@@ -13766,8 +13783,7 @@ function renderTracePlayback() {
     )
     : uiText("尚无 Trace", "No Trace yet");
   if (!hasReplay) return;
-  dom.tracePreviousButton.disabled = playback.selectedIndex <= 0 && playback.page?.previous_offset == null;
-  dom.traceNextButton.disabled = playback.selectedIndex >= playback.filteredEvents.length - 1 && !playback.page?.has_more;
+  syncTraceNavigationButtons();
   dom.traceLimitations.innerHTML = asArray(data?.limitations).length
     ? data.limitations.map((item) => `<div class="trace-limitation">${escapeHtml(traceLimitationText(item))}</div>`).join("")
     : "";
@@ -15573,8 +15589,7 @@ function renderTraceEventTable() {
       }
     });
   });
-  dom.tracePreviousButton.disabled = playback.selectedIndex <= 0 && playback.page?.previous_offset == null;
-  dom.traceNextButton.disabled = playback.selectedIndex >= playback.filteredEvents.length - 1 && !playback.page?.has_more;
+  syncTraceNavigationButtons();
 }
 
 function percentile(values, fraction) {

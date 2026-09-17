@@ -1807,3 +1807,80 @@ def test_missing_sampling_binding_remains_explicitly_unmodeled(tmp_path, monkeyp
 def test_sampling_contract_cannot_change_on_resume(tmp_path):
     with pytest.raises(SystemExit):
         adapter.main(["--output", str(tmp_path), "--resume", "--sampling-contract", str(tmp_path / "contract.json")])
+
+
+@pytest.mark.parametrize("kind", ["StopIteration", "RuntimeError"])
+def test_worker_failure_retains_same_attempt_traceback(tmp_path, monkeypatch, kind):
+    path, _, row, calls = fixture(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    adapter.freeze_selection(path, out, data_root=tmp_path)
+    seen = []
+    def fail_at_consumer(inputs, **kwargs):
+        seen.append(inputs["cell_id"])
+        if kind == "StopIteration":
+            next(iter(()))
+        raise RuntimeError("consumer placement mismatch")
+    monkeypatch.setattr(adapter, "predict_cell", fail_at_consumer)
+    result_path = out / "predictions" / (row["cell_id"] + ".prediction.json")
+    adapter.worker_cell(out / "freeze.json", row["cell_id"], result_path)
+    result, _ = adapter.grid.read_document(result_path)
+    assert result["status"] == "failed" and result["native_answers_used"] is False
+    diagnostic = result["failure_diagnostic"]
+    assert diagnostic["exception_type"] == kind
+    assert "fail_at_consumer" in diagnostic["traceback"]
+    assert kind in diagnostic["traceback"]
+    assert diagnostic["freeze_ref"] == result["freeze_ref"]
+    assert diagnostic["cell_id"] == row["cell_id"]
+    assert diagnostic["worker_pid"] > 0 and diagnostic["automatic_retry"] is False
+    assert seen == [row["cell_id"]] and not calls["run"]
+
+
+def test_failed_cell_stops_new_launches_and_preserves_pending_for_diagnosis(tmp_path, monkeypatch):
+    path, selection, row, calls = fixture(tmp_path, monkeypatch)
+    rows = [dict(copy.deepcopy(row), cell_id=row["cell_id"] + "_failure_" + str(i)) for i in range(3)]
+    selection.update(selected_cells=rows, selected_count=3, selected_cell_ids=[r["cell_id"] for r in rows])
+    for group in selection["coverage"]:
+        group["selected_cells"] = 3 if group["model_key"] == "qwen38_gpu" else 0
+        group["excluded_cells"] = 27 - group["selected_cells"]
+    document(path, seal(selection))
+    out = tmp_path / "out"
+    adapter.freeze_selection(path, out, data_root=tmp_path)
+    before = adapter.grid.file_ref(out / "freeze.json")
+    launched = []
+    def failure(inputs, **kwargs):
+        raise RuntimeError("deterministic output-index mismatch")
+    monkeypatch.setattr(adapter, "predict_cell", failure)
+    class FakeWorker:
+        pid = 12345
+        returncode = None
+        def __init__(self, command, **kwargs):
+            self.command = command
+            launched.append(command[command.index("--worker-cell") + 1])
+        def wait(self, timeout=None):
+            command = self.command
+            adapter.worker_cell(Path(command[command.index("--worker-freeze") + 1]),
+                command[command.index("--worker-cell") + 1], Path(command[command.index("--worker-result") + 1]))
+            self.returncode = 0
+            return 0
+        def poll(self):
+            return self.returncode
+        def terminate(self):
+            raise AssertionError("started worker must finish naturally")
+        kill = terminate
+    monkeypatch.setattr(subprocess, "Popen", FakeWorker)
+    result = adapter.run_predictions(out, workers=1, stop_on_cell_failure=True)
+    assert launched == [rows[0]["cell_id"]]
+    assert result["pending_cells"] == 2 and result["selected_denominator"] == 3
+    assert [r["status"] for r in result["cells"]] == ["failed", "pending", "pending"]
+    notice_paths = list((out / "runs").glob("run.0001.failed.*.json"))
+    assert len(notice_paths) == 1
+    notice, _ = adapter.grid.read_document(notice_paths[0])
+    assert notice["cell_id"] == rows[0]["cell_id"]
+    assert notice["automatic_retry"] is False and notice["termination_requested"] is False
+    finish, _ = adapter.grid.read_document(out / "runs/run.0001.finish.json")
+    assert finish["launches_stopped_after_cell_failure"] is True
+    assert finish["all_started_workers_exited_and_sealed"] is True
+    assert finish["launches_stopped_after_observation_interrupt"] is False
+    assert not (out / "runs/coordinator.lock").exists()
+    assert before == adapter.grid.file_ref(out / "freeze.json")
+    assert not calls["run"]

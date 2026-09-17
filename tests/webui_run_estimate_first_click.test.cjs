@@ -243,12 +243,22 @@ function loadRunHarness(fetchImpl) {
     openDiagnostics = () => {};
     renderRuntimeHealth = () => {};
     renderAll = () => {};
+    switchView = (view) => { state.activeView = view; };
+    scheduleRunJobPoll = () => {};
     toast = (title, message = "", kind = "info") => { __toasts.push({ title, message, kind }); };
     showOperationError = (title, error) => { __operationErrors.push({ title, code: error?.code, message: error?.message }); };
     globalThis.__runHarness = {
       state,
       dom,
       runScenario,
+      startRunJob,
+      finishRunJob,
+      compareScenario,
+      scenarioPayloadForTransport,
+      controlPlaneDecision,
+      controlPlaneEvidence,
+      acceptRuntimePlacement,
+      effectiveParallelRanks,
       bindModalDialogLifecycle,
       toasts: __toasts,
       operationErrors: __operationErrors,
@@ -375,4 +385,148 @@ test("a failed health probe does not mislabel the API as online", async () => {
   assert.equal(ui.state.connection.status, "offline");
   assert.equal(ui.dom.runJobDialog.open, false);
   assert.equal(ui.state.busy, false);
+});
+
+
+test("V4 stale or incomplete previous placement never blocks a new validated run", async () => {
+  const calls = [];
+  const ui = loadRunHarness(async (url, options) => {
+    calls.push({ url, payload: JSON.parse(options.body) });
+    if (url === "/api/validate") return response(200, { valid: true, errors: [], mapping_stale: false });
+    if (url === "/api/run-estimate") return response(200, estimatePayload());
+    if (url === "/api/run-jobs") return response(202, { job_id: "fresh-job", status: "running" });
+    throw new Error(`unexpected ${url}`);
+  });
+  ui.state.mappingStale = true;
+  ui.state.mappingInputFingerprint = "old";
+  ui.state.currentInputFingerprint = "edited";
+  ui.state.scenario.placement.metadata = {
+    retained_note: "preserve custom metadata",
+    control_plane: {
+      policy: { options: { objective: "latency" } },
+      decision: { fully_placed: false, generated_op_keys: ["old-op"] },
+      evidence: { input_fingerprint: "old" },
+    },
+  };
+  await ui.runScenario();
+  assert.equal(ui.dom.runJobDialog.open, true);
+  await ui.startRunJob();
+  assert.deepEqual(calls.map(c => c.url), ["/api/validate", "/api/run-estimate", "/api/run-jobs"]);
+  for (const { payload } of calls) {
+    const authoring = payload.scenario || payload;
+    assert.deepEqual(Object.keys(authoring.placement.metadata.control_plane), ["policy"]);
+    assert.equal(authoring.placement.metadata.retained_note, "preserve custom metadata");
+    assert.deepEqual(authoring.placement.op_to_component, {});
+  }
+  assert.equal(calls[2].payload.retention_policy, estimatePayload().recommended_retention_policy);
+  assert.equal(ui.state.scenario.placement.metadata.control_plane.evidence.input_fingerprint, "old");
+  assert.equal(ui.operationErrors.length, 0);
+});
+
+test("local authoring errors are diagnosed and leave run retryable without unhandled rejection", async () => {
+  let requests = 0;
+  const ui = loadRunHarness(async () => { requests++; throw new Error("must not send"); });
+  ui.state.scenario.profiles.host_orchestration.cpu_component_id = "missing-cpu";
+  await assert.doesNotReject(ui.runScenario());
+  assert.equal(requests, 0);
+  assert.equal(ui.operationErrors.length, 1);
+  assert.equal(ui.state.busy, false);
+  assert.equal(ui.dom.runButton.disabled, false);
+  assert.equal(ui.dom.runJobDialog.open, false);
+});
+
+test("V4 run still stops on backend validation errors before estimate or submission", async () => {
+  const calls = [];
+  const ui = loadRunHarness(async (url) => {
+    calls.push(url);
+    return response(200, { valid: false, errors: ["invalid capacity"] });
+  });
+  ui.state.mappingStale = true;
+  await ui.runScenario();
+  assert.deepEqual(calls, ["/api/validate"]);
+  assert.equal(ui.dom.runJobDialog.open, false);
+  assert.equal(ui.state.validation.errors.length, 1);
+});
+
+function runtimeReport() {
+  return {
+    manifest: { run_id: "contract-test" },
+    requests: {},
+    runtime_placement: {
+      schema_version: "runtime-placement/v1",
+      read_only: true,
+      parallel: { rank_mapping: [{ rank: 0, component_id: "actual-gpu", memory_component_id: "actual-hbm" }] },
+      control_plane: {
+        decision: { fully_placed: true, operator_execution_targets: { "layer0.qkv": [{ rank: 0, component_id: "actual-gpu" }] }, rank_weight_shards: { weight: [{ rank: 0 }] } },
+        evidence: { input_fingerprint: "runtime-fingerprint" },
+      },
+    },
+  };
+}
+
+test("completed runtime placement populates read-only views without polluting V4 authoring", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  ui.state.scenario = ui.scenarioPayloadForTransport();
+  ui.state.mappingStale = true;
+  ui.state.runJobScenarioGeneration = ui.state.scenarioGeneration;
+  ui.state.runJobMappingGeneration = ui.state.mappingGeneration;
+  ui.finishRunJob({ job_id: "completed", status: "completed", report: runtimeReport() });
+  assert.equal(ui.state.reportStale, false);
+  assert.equal(ui.state.mappingStale, false);
+  assert.equal(ui.controlPlaneDecision(ui.state.scenario.placement).fully_placed, true);
+  assert.equal(ui.controlPlaneEvidence(ui.state.scenario.placement).input_fingerprint, "runtime-fingerprint");
+  assert.equal(ui.effectiveParallelRanks()[0].component_id, "actual-gpu");
+  const payload = ui.scenarioPayloadForTransport();
+  assert.equal(payload.runtime_placement, undefined);
+  assert.equal(payload.placement.metadata.control_plane, undefined);
+  assert.deepEqual(Object.keys(payload.placement.op_to_component), []);
+  assert.deepEqual(Object.keys(payload.placement.tensor_to_component), []);
+});
+
+test("background completion after edits is stale and never replaces the current mapping view", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  ui.state.scenario = ui.scenarioPayloadForTransport();
+  ui.state.runJobScenarioGeneration = ui.state.scenarioGeneration;
+  ui.state.runJobMappingGeneration = ui.state.mappingGeneration;
+  ui.state.scenarioGeneration++;
+  ui.state.mappingStale = true;
+  ui.finishRunJob({ job_id: "old-job", status: "completed", report: runtimeReport() });
+  assert.equal(ui.state.reportStale, true);
+  assert.equal(ui.state.mappingStale, true);
+  assert.deepEqual(Object.keys(ui.controlPlaneDecision(ui.state.scenario.placement)), []);
+});
+
+test("GPU comparison cannot overwrite an active background job", async () => {
+  let requests = 0;
+  const ui = loadRunHarness(async () => { requests++; throw new Error("must not send"); });
+  ui.state.runJob = { job_id: "still-running", status: "running" };
+  await ui.compareScenario();
+  assert.equal(requests, 0);
+  assert.equal(ui.state.runJob.job_id, "still-running");
+});
+
+test("comparison ignores obsolete responses after scenario edits", async () => {
+  let ui;
+  ui = loadRunHarness(async () => {
+    ui.state.scenarioGeneration++;
+    return response(200, { candidate: runtimeReport() });
+  });
+  await ui.compareScenario();
+  assert.equal(ui.state.report, null);
+  assert.equal(ui.state.comparison, null);
+  assert.equal(ui.state.busy, false);
+});
+
+
+test("accepting fresh placement retires imported old decisions rather than reviving them on reload", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  ui.state.scenario = ui.scenarioPayloadForTransport();
+  ui.state.scenario.placement.metadata.control_plane = {
+    policy: { objective: "balanced" },
+    decision: { fully_placed: false },
+    evidence: { input_fingerprint: "obsolete" },
+  };
+  ui.acceptRuntimePlacement(runtimeReport());
+  assert.deepEqual(Object.keys(ui.state.scenario.placement.metadata.control_plane), ["policy"]);
+  assert.equal(ui.state.scenario.placement.metadata.control_plane.policy.objective, "balanced");
 });

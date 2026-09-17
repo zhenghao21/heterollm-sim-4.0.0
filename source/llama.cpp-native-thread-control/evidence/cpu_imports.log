@@ -1,0 +1,253 @@
+"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\dumpbin.exe" /imports F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-native-thread-control\build-native-thread-control\bin\ggml-cpu.dll
+Microsoft (R) COFF/PE Dumper Version 14.44.35228.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-native-thread-control\build-native-thread-control\bin\ggml-cpu.dll
+
+File Type: DLL
+
+  Section contains the following imports:
+
+    ggml-base.dll
+             1800B82E0 Import Address Table
+             1800E3678 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                         2A3 quantize_row_q5_1_ref
+                         2A2 quantize_row_q5_0_ref
+                         299 quantize_row_mxfp4_ref
+                         29A quantize_row_nvfp4_ref
+                         29D quantize_row_q2_K_ref
+                         29E quantize_row_q3_K_ref
+                         2A1 quantize_row_q4_K_ref
+                         2A4 quantize_row_q5_K_ref
+                         2A5 quantize_row_q6_K_ref
+                         2A8 quantize_row_q8_K_ref
+                         2A9 quantize_row_tq1_0_ref
+                         2AA quantize_row_tq2_0_ref
+                         297 quantize_row_iq4_nl_ref
+                         177 ggml_new_tensor_1d
+                         173 ggml_new_buffer
+                         22E ggml_unravel_index
+                         125 ggml_get_unary_op
+                         119 ggml_get_glu_op
+                         21C ggml_threadpool_params_default
+                         15E ggml_log_internal
+                          2A ggml_aligned_malloc
+                          29 ggml_aligned_free
+                          CC ggml_critical_section_start
+                          CB ggml_critical_section_end
+                         13B ggml_guid_matches
+                          4C ggml_backend_buft_is_host
+                          7D ggml_backend_reg_dev_get
+                          50 ggml_backend_cpu_buffer_from_ptr
+                          51 ggml_backend_cpu_buffer_type
+                         16D ggml_n_dims
+                          47 ggml_backend_buft_alloc_buffer
+                         29B quantize_row_q1_0_ref
+                         29C quantize_row_q2_0_ref
+                         29F quantize_row_q4_0_ref
+                         2A0 quantize_row_q4_1_ref
+                         221 ggml_time_us
+                         124 ggml_get_type_traits
+                         1D9 ggml_rope_yarn_corr_dims
+                         117 ggml_get_data_f32
+                         148 ggml_is_contiguous_channels
+                         152 ggml_is_scalar
+                          E1 ggml_element_size
+                          F5 ggml_fp16_to_fp32_row
+                         146 ggml_is_contiguous_1
+                          AB ggml_can_repeat
+                         149 ggml_is_contiguous_rows
+                         285 quantize_iq4_xs
+                         11F ggml_get_no_alloc
+                          FB ggml_free
+                         141 ggml_init
+                          2C ggml_are_same_shape
+                         144 ggml_is_contiguous
+                         14E ggml_is_empty
+                         151 ggml_is_quantized
+                         181 ggml_op_name
+                         228 ggml_type_name
+                         1DC ggml_row_size
+                         229 ggml_type_size
+                          A5 ggml_blck_size
+                         16E ggml_nbytes
+                         17D ggml_nrows
+                         172 ggml_nelements
+                          1C ggml_abort
+
+    KERNEL32.dll
+             1800B8020 Import Address Table
+             1800E33B8 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                         221 GetCurrentProcessId
+                         452 QueryPerformanceCounter
+                         385 IsDebuggerPresent
+                         38C IsProcessorFeaturePresent
+                         2F3 GetSystemTimeAsFileTime
+                         220 GetCurrentProcess
+                         580 SetUnhandledExceptionFilter
+                         5C1 UnhandledExceptionFilter
+                         4E4 RtlVirtualUnwind
+                         4DD RtlLookupFunctionEntry
+                         4D6 RtlCaptureContext
+                         225 GetCurrentThreadId
+                         125 DisableThreadLibraryCalls
+                         36F InitializeSListHead
+                         59F TerminateProcess
+                         26A GetLastError
+                         346 GlobalMemoryStatusEx
+                         565 SetThreadAffinityMask
+                         56D SetThreadInformation
+                         570 SetThreadPriority
+                         224 GetCurrentThread
+                          F5 CreateThread
+                         5EB WaitForSingleObject
+                         592 SleepConditionVariableSRW
+                         5F3 WakeAllConditionVariable
+                         367 InitializeConditionVariable
+                           1 AcquireSRWLockShared
+                           0 AcquireSRWLockExclusive
+                         4BA ReleaseSRWLockShared
+                         4B9 ReleaseSRWLockExclusive
+                         370 InitializeSRWLock
+                          89 CloseHandle
+
+    ADVAPI32.dll
+             1800B8000 Import Address Table
+             1800E3398 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                         28E RegOpenKeyExA
+                         29B RegQueryValueExA
+                         25E RegCloseKey
+
+    MSVCP140.dll
+             1800B8128 Import Address Table
+             1800E34C0 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                         28E ?_Xlength_error@std@@YAXPEBD@Z
+
+    VCRUNTIME140.dll
+             1800B8138 Import Address Table
+             1800E34D0 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                           8 __C_specific_handler
+                          36 _purecall
+                          3D memmove
+                           1 _CxxThrowException
+                          22 __std_exception_destroy
+                          21 __std_exception_copy
+                          3E memset
+                          3C memcpy
+                          25 __std_type_info_destroy_list
+
+    VCRUNTIME140_1.dll
+             1800B8188 Import Address Table
+             1800E3520 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                           0 __CxxFrameHandler4
+
+    api-ms-win-crt-stdio-l1-1-0.dll
+             1800B82B8 Import Address Table
+             1800E3650 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                           3 __stdio_common_vfprintf
+                           0 __acrt_iob_func
+
+    api-ms-win-crt-math-l1-1-0.dll
+             1800B81D8 Import Address Table
+             1800E3570 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                         120 truncf
+                          D0 ldexp
+                          B6 expf
+                         11B tanhf
+                         10A roundf
+                          B8 expm1f
+                          C4 fmaxf
+                          C7 fminf
+                          B0 erff
+                          91 cosf
+                          FF powf
+                          E0 log2
+                          E6 logf
+                         117 sqrtf
+                         113 sinf
+
+    api-ms-win-crt-convert-l1-1-0.dll
+             1800B8198 Import Address Table
+             1800E3530 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          50 atoi
+
+    api-ms-win-crt-environment-l1-1-0.dll
+             1800B81A8 Import Address Table
+             1800E3540 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          10 getenv
+
+    api-ms-win-crt-runtime-l1-1-0.dll
+             1800B8258 Import Address Table
+             1800E35F0 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          16 _cexit
+                          3F _seh_filter_dll
+                          18 _configure_narrow_argv
+                          33 _initialize_narrow_environment
+                          34 _initialize_onexit_table
+                          36 _initterm
+                          37 _initterm_e
+                          1E _crt_atexit
+                          3A _invoke_watson
+                          3C _register_onexit_function
+                          22 _execute_onexit_table
+
+    api-ms-win-crt-string-l1-1-0.dll
+             1800B82D0 Import Address Table
+             1800E3668 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          86 strcmp
+
+    api-ms-win-crt-heap-l1-1-0.dll
+             1800B81B8 Import Address Table
+             1800E3550 Import Name Table
+                     0 time date stamp
+                     0 Index of first forwarder reference
+
+                          19 malloc
+                           8 _callnewh
+                          18 free
+
+  Summary
+
+       86000 .data
+        6000 .pdata
+       2D000 .rdata
+        1000 .reloc
+        1000 .rsrc
+       B7000 .text

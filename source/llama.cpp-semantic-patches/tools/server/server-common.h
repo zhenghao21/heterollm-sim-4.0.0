@@ -368,6 +368,11 @@ struct server_slot_stats {
     int64_t t_prompt_last = 0;
     int64_t t_gen_last    = 0;
 
+    // Raw engine counter timestamps for reproducible extraction. These reuse
+    // the existing clock read; they are not SSE/client receive timestamps.
+    std::vector<int64_t> engine_token_times_us;
+    bool engine_capture_times = true;
+
     // can only move one direction: start -> prompt -> gen
     void update_prompt_start() {
         GGML_ASSERT(t_start == 0);
@@ -383,6 +388,9 @@ struct server_slot_stats {
     void update_gen_last() {
         GGML_ASSERT(t_prompt_last > 0);
         t_gen_last = ggml_time_us();
+        if (engine_capture_times) {
+            engine_token_times_us.push_back(n_gen == 1 ? t_prompt_last : t_gen_last);
+        }
     }
 
     // these are time durations

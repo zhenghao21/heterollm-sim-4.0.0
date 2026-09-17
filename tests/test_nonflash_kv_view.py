@@ -190,8 +190,13 @@ def test_qk_pv_and_softmax_receive_rectangular_workloads_not_only_audit_metadata
     reductions = [call.args[6] for call in primitive.call_args_list if call.args[6].name == "softmax_reduce_max_sum"]
     norms = [call.args[6] for call in primitive.call_args_list if call.args[6].name == "softmax_sub_exp_normalize"]
     assert len(reductions) == len(norms) == 2
-    assert all(work.input_elements == 64 * 256 for work in reductions)
-    assert all(work.elements == 64 * 256 for work in norms)
+    # The physical score tensor is [query_head, query_row, KV_row].
+    # Both ordinary fixture layers have four query heads; padding only changes
+    # the KV axis and must not erase the head axis.
+    assert all(layer.attention_heads == 4 for layer in planner._execution_layers(case))
+    assert all(work.input_elements == 4 * 64 * 256 for work in reductions)
+    assert all(work.output_elements == 4 * 64 for work in reductions)
+    assert all(work.elements == 4 * 64 * 256 for work in norms)
 
 
 @pytest.mark.parametrize("architecture", ["llama", "qwen2", "qwen3_5_hybrid_transformer"])

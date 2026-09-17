@@ -1,8 +1,8 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_033_full_predictions_running_after_bounded_recorded_startup_recovery",
-  "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
+  "status": "active_R39_fresh131_running",
+  "user_goal": "复用固定131格native证据持续进行机制优化；每格Engine TTFT/TPOT/E2E严格小于10%为A开发目标，随后完成声明范围内独立B验收。只在确定性缺口修复且基线/候选误差改善验收通过后集中提交并推送；失败立即查因定向补测，原记录不可覆盖。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
     "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
@@ -1548,19 +1548,27 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Finish live R33 on after off closed111predicted20failed; preserve all262 terminals before score. Then new version repairs proven output-index actual-consumer placement/dependency mismatch before any cost calibration. No native remeasurement or scene constants.",
-  "full_131_evaluations_started": 8,
-  "full_131_evaluations_completed": 7,
-  "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
-  "best_candidate_status": "No new accuracy candidate admitted. Latest completed R27/on:9/131 cells and74/393 metric items pass; R32 rejected in preparation before predictions. A fails; B unvalidated.",
+  "next_round_hypothesis": "Wait sameR39full natural completion;on failure immediate diagnostics and maxone hash recheck;after complete identity valid seal/scoring compare validR34 and diagnosticR37 separately,do not auto-admit or submit. R36 dependencies next,R38 batched geometry after.",
+  "full_131_evaluations_started": 12,
+  "full_131_evaluations_completed": 10,
+  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on",
+  "best_candidate_status": "No new accuracy candidate admitted. R34/on completed131/131;5/131cells and56/393metrics pass. Common111cells/333metrics versusR33/on unchanged;20candidate execution recoveries only. Retain correct semantic repair uncommitted; A fails; B unvalidated.",
   "version_control_policy": {
     "enabled": true,
-    "effective_utc": "2026-09-15T15:14:39.539409+00:00",
-    "per_completed_optimization": "local_commit_then_push_current_github_upstream",
+    "effective_utc": "2026-09-17T08:04:00.630250+00:00",
+    "per_completed_optimization": "commit_then_push_only_after_deterministic_gap_fixed_and_baseline_candidate_error_improvement_accepted",
     "scope": "completed round code, relevant tests, task brief, compact evidence only",
     "exclude": "unrelated/WIP edits; GGUF; runtime binaries; large native raw and traces",
     "force_push_allowed": false,
-    "user_authorized": true
+    "user_authorized": true,
+    "intermediate_updates": "worktree_only; no status-only or preparation-only commits",
+    "development_freeze": "immutable content-addressed candidate source with baseline commit and per-file hashes; final commit after acceptance must match tested bytes",
+    "clarified_utc": "2026-09-17T09:57:42.340470+00:00",
+    "error_improvement_acceptance_required": true,
+    "coverage_recovery_alone_qualifies": false,
+    "commit_source_byte_match_required": true,
+    "full_final_goal_required_for_each_commit": false,
+    "correct_semantic_repair_without_accuracy_gain": "retain_worktree_and_continue; never restore_known_wrong_semantics_for_lower_error"
   },
   "version_control_receipts": [
     {
@@ -1772,6 +1780,15 @@
       "verified_utc": "2026-09-17T07:34:21.571746+00:00",
       "status": "pushed_and_remote_verified",
       "scope": "bounded R33 startup recovery and live evaluation"
+    },
+    {
+      "commit": "d959f5de9406b5bc396dc6ec725abd6f66195733",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "d959f5de9406b5bc396dc6ec725abd6f66195733",
+      "verified_utc": "2026-09-17T08:34:42.299291+00:00",
+      "status": "pushed_and_remote_verified",
+      "scope": "prior-policy architecture-first task-brief and small structural reproduction; new commit cadence applies prospectively"
     }
   ],
   "operator_microbenchmark": {
@@ -1911,7 +1928,16 @@
     "review_after_rounds": 6,
     "review_at_utc": "2026-09-17T11:52:54.669487+00:00",
     "review_only_not_stop": true,
-    "full_evaluations_review_limit": 4
+    "full_evaluations_review_limit": 4,
+    "latest_review": {
+      "reviewed_utc": "2026-09-17T13:01:05.041Z",
+      "trigger": "2026-09-17T11:52:54.669487Z time checkpoint elapsed",
+      "latest_valid_accuracy": "R34/on; A not passed; R35 globally rejected before scoring; R36 structure-only",
+      "new_fitted_cost_parameters": 0,
+      "decision": "Use one 4MiB-read/1MiB-subchunk diagnostic with same-read evidence; fix coordinator logs; do not repeat the historical five-pass diagnostic or re-run the unchanged rejected R35 campaign.",
+      "independent_parallel_work": "Audit actual GGUF consumed fields and immutable metadata snapshot feasibility; no actual weight values used by cost modeling.",
+      "next_accuracy_action": "Only after evidence supports a legal new comparison; maintain fixed131 and isolate head-axis and controller-root mechanisms."
+    }
   },
   "round_024_preparation": {
     "status": "committed_pushed_frozen_locked_full_running",
@@ -2444,7 +2470,72 @@
     "wall_budget_seconds": 1200,
     "execution_priority": "after targeted architectural diagnosis identifies the service object",
     "service_cost_qualification": "unvalidated",
-    "new_coefficients": 0
+    "new_coefficients": 0,
+    "wrapper_qualification": {
+      "status": "new_Q4_wrapper_path_and_independent_numeric_qualified",
+      "finish_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\qualification.0001\\finish.json",
+        "sha256": "d05c4425bfaede344ba8f92c2ca1d034d391421409f15a9440a8ef936975fbf0",
+        "bytes": 5291
+      },
+      "path_qualified": true,
+      "numeric_qualified": true,
+      "timed": false,
+      "service_cost_qualification": "unvalidated",
+      "observed_utc": "2026-09-17T10:15:08.920881+00:00"
+    },
+    "timing_status": "closed_budget_exhausted6valid7rejected87missing_no_cost_admission",
+    "timing_observation": {
+      "tool_session_id": 8144,
+      "coordinator_pid": 24364,
+      "observed_utc": "2026-09-17T10:29:55.645863+00:00",
+      "start_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\run.0001\\start.json",
+        "sha256": "90f2a52b128886c30a5af888f24252fbb117fee302ad63883f4e1e6298e35308",
+        "bytes": 37890
+      },
+      "status": "terminal_naturally_exited_budget_exhausted",
+      "observed_failure": "192kernels_expected_and_present;0runtime_API_and0external_correlation_records",
+      "failure_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\run.0001\\b01_pair_warm_AB\\finish.json",
+        "sha256": "0ba4fbc8626083ff9e2eab5000c958456acb0fd0de9c9b336b916e3983235875",
+        "bytes": 2408
+      },
+      "second_failure_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\run.0001\\b01_pair_warm_B\\finish.json",
+        "sha256": "3b32b7ccd13358fe68b7bc51277a88626147dba83f77644e4143a1bebd651046",
+        "bytes": 2403
+      },
+      "root_cause_status": "runtime_activity_collection_missing;filter_vs_observer_compatibility_not_yet_distinguished",
+      "same_frozen_run_modified": false,
+      "process_interrupted": false,
+      "performance_parameters_admitted": 0,
+      "next_action": "new_untimed_bounded_activity_diagnostic_before_any_repeat_timing"
+    },
+    "timing_result": {
+      "terminal_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\run.0001\\complete_05.json",
+        "sha256": "e70c3e3c55257e93240c25548b819467bf26985514b81566c1474d6f4d3881d8",
+        "bytes": 280
+      },
+      "planned_formal_processes": 100,
+      "sealed_formal_processes": 13,
+      "valid": 6,
+      "rejected": 7,
+      "missing": 87,
+      "all_spawned_naturally_exited": true,
+      "coordinator_returncode": 1,
+      "performance_parameters_admitted": 0,
+      "failures": [
+        "runtime_and_external_activity_missing",
+        "warmup_stored_end800ns_before_minimum:loop_condition_uses_later_timestamp"
+      ],
+      "observer_failure_root_cause": "not_yet_distinguished_filter_vs_integration",
+      "runner_gaps": [
+        "does_not_stop_on_generic_rejected_slot",
+        "repeated_complete_historical_barrier_per_slot_dominates_budget"
+      ]
+    }
   },
   "architecture_diagnostic": {
     "updated_utc": "2026-09-17T03:23:02.900103+00:00",
@@ -2822,7 +2913,7 @@
     "later_diagnostic": "one4MiB-block read: OpenSSL/CNG match expected; all gate stat fields stable at diagnostic time only; original cause unknown"
   },
   "round_033_preparation": {
-    "status": "full_on_running_off_closed111predicted20failed",
+    "status": "full_closed262_both111predicted20failed_original_failures_preserved_R34repair_complete",
     "baseline_commit": "8b715dc80ded2a35d7ab52b46339320149a33da4",
     "candidate_commit": "b72743490814e3818336febc9576aa6d95e309bf",
     "common_source_override_paths": [
@@ -2886,14 +2977,15 @@
       "interpretation": "No disagreement observed in fixed in-memory data; original startup reference mismatch remains unexplained"
     },
     "tool_session_id": 62083,
-    "observed_utc": "2026-09-17T07:34:21.571746+00:00",
+    "observed_utc": "2026-09-17T08:34:42.299291+00:00",
     "observed_prediction_counts": {
       "off": {
         "predicted": 111,
         "failed": 20
       },
       "on": {
-        "predicted": 33
+        "predicted": 111,
+        "failed": 20
       }
     },
     "startup_resume_decision_ref": {
@@ -2943,8 +3035,1288 @@
       "formal_off_failed_cells": 20,
       "formal_worker_traceback_available": false,
       "root_cause_scope": "synthetic graph proves index GPU target versus CPU GET_ROWS consumer mismatch; formal20 cells have matching exception type but no per-cell stack",
-      "repair_status": "next version only after current freeze completes; no frozen-source edits",
-      "next_action": "bind index placement/copy/dependency to actual consumer, preserve per-invocation preparation and unique target copy; test placement/M/path/template boundaries"
+      "repair_status": "candidate implementation in independent worktree; structure/tests under review; content freeze and failed-cell supplements next",
+      "next_action": "bind index placement/copy/dependency to actual consumer, preserve per-invocation preparation and unique target copy; test placement/M/path/template boundaries",
+      "exact_cell_reproduction": {
+        "cell_id": "qwen38_p128_o32_c1__fixed_runtime",
+        "result_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\diagnostic\\exact_failed_cell.0001\\finish.json",
+          "sha256": "44c5827f971137e239467e39c7f809804240a8b07801accb8169069c7d7a4489",
+          "bytes": 6583
+        },
+        "same_exception_reproduced": true,
+        "actual_stack_site": "planner._bind_output_index_upload next(...)",
+        "scoring_eligible": false,
+        "scope": "one exact frozen failing cell; do not claim historical original worker had a stack"
+      }
+    },
+    "process_returncode": 0,
+    "all_started_workers_naturally_exited": true,
+    "on_full_evaluation_completed_counted": true,
+    "scoring_status": "off_on_complete_grouped_pair_complete",
+    "scoring_report_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\report.json",
+      "sha256": "a36644f7517a8e2d6d867669302b4b4aec5ded73e5534bdcc3f3ef4b29f7c7ae",
+      "bytes": 24508
+    },
+    "grouped_pair_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\grouped_paired_report.json",
+      "sha256": "cd4a87298bf7a8357cd7465277b96ae8c5345cde3547869e4af986a06e3f4356",
+      "bytes": 363437
     }
+  },
+  "evaluation_failure_policy": {
+    "effective_utc": "2026-09-17T08:04:00.630250+00:00",
+    "action": "immediate_cause_diagnosis_and_targeted_supplement_on_any_failed_baseline_or_candidate_cell",
+    "original_attempt_immutable": true,
+    "deterministic_bug": "repair first in independent worktree, new immutable freeze, rerun failed and affected cells; no blind same-code retries",
+    "other_failure": "identify identity/environment/config/extractor cause before evidence-backed retry; preserve all attempts",
+    "comparison": "never mix changed sources into one freeze; original failed baseline remains failed; report coverage recovery separately from accuracy",
+    "current_run": "R35 rejected at final model identity; single bounded readpath diagnostic naturally exited0 but did not reproduce cause and does not validate R35. R36 remains not launched.",
+    "clarified_utc": "2026-09-17T12:35:52.375Z",
+    "dispatch": "stop_new_dispatch_for_affected_group_on_execution_failure; already_started_workers_exit_naturally; no_kill",
+    "accuracy_failed": "valid prediction with complete identity/timing evidence and highAPE; keep score and diagnose mechanism, do_not_repeat_unchanged_run_until_pass",
+    "insufficient_evidence": "diagnose_missing_or_invalid_evidence; never_classify_as_accuracy_improvement",
+    "shared_non_treatment_defect": "apply_same_repair_to_both_arms_and_create_new_freezes_before_isolated_mechanism_comparison; preserve_original_attempts",
+    "global_guard_failure": "Preserve failed attempt;no scoring until phase-specific recovery prerequisites and one permitted full recheck pass.",
+    "same_attempt_logs_required": true,
+    "observation_timeout": "tool_wait_or_status_observation_timeout_is_not_experiment_failure; no_kill_or_restart; declared_budget_exceeded_stops_new_dispatch_only_and_drains_started_workers",
+    "unresolved_transient_failure": "One complete identity recheck is now authorized by user; preserve original failure. Apply phase-specific recovery, no repeated chain resets. Environment intervention is needed on failed recheck/recurrent failure in same recovery chain, not automatically after a successful one-time recheck.",
+    "hash_recheck": {
+      "max_rechecks_per_failure_chain": 1,
+      "scope": "same freeze/object/expected identity;full file verification",
+      "reuse_existing_matching_user_recheck": true,
+      "no_budget_reset_by_new_attempt": true,
+      "on_recheck_failure": "diagnose_and_stop_affected_dispatch",
+      "score_only_failure": "reuse immutable predictions only if entry/end/worker provenance valid;new linked score attempt;all original gates remain",
+      "prediction_failure": "no retroactive validation;new prediction attempt required"
+    }
+  },
+  "round_034_preparation": {
+    "status": "full131_scored_coverage_recovered_paired_accuracy_unchanged_commit_deferred",
+    "created_utc": "2026-09-17T08:34:42.299291+00:00",
+    "source_kind": "uncommitted_content_snapshot",
+    "parent": "round_033/on",
+    "same_native": true,
+    "failed_cell_supplement_count": 20,
+    "then_full_denominator": 131,
+    "commit_deferred_until_paired_error_improvement_acceptance": true,
+    "new_test_status": "270 joint tests passed;72 exact consumer tests include real invocation cache plus two supported online-stage paths;three mixed-stage fallbacks explicitly retained",
+    "independent_review": "planner and content-freeze separate agents reviewed; host-only audit metadata corrected; test/source binding and inventory strengthened; run success explicitly cannot authorize commit",
+    "native_remeasured": false,
+    "observed_utc": "2026-09-17T09:57:42.340470+00:00",
+    "tool_session_id": 54689,
+    "protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\protocol.json",
+      "sha256": "0af5133eeeb30a6931509dd618284c72922ae1a664c7300436ef71e6e5aa7c53",
+      "bytes": 185679
+    },
+    "per_arm_source_files": 117,
+    "override_paths": [
+      "src/heterollm_sim/planner.py",
+      "tools/predict_stable_native_dataset.py"
+    ],
+    "joint_regressions_passed": 270,
+    "new_consumer_binding_tests_passed": 72,
+    "structural_validation_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\structural_validation.json",
+      "sha256": "e6e1ddac71c033aa15f3067db1286b800ed4639c9dbda9b79a515e8bbf062efa",
+      "bytes": 2938
+    },
+    "prediction_started": true,
+    "candidate_accuracy_improvement": "not_demonstrated; common111cells_and333metrics_unchanged",
+    "commit_authorized": false,
+    "observed_terminal_count": 131,
+    "prior_stage_coverage_audit": {
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\diagnostic\\r33_saved_stage_fallback_coverage.json",
+        "sha256": "f4c118925b94bad468774fbf143761ea00820c570d9d1b29fc35b582a82b7eb9",
+        "bytes": 296732
+      },
+      "complete_cells": 111,
+      "observed_batches": 18924,
+      "matching_fallbacks": 0,
+      "unknown_failed_cpu_cells": 20,
+      "native_dispatch_claim": false,
+      "interpretation": "toy mixed-device fallback has no observed hit in111 successful R33 cells; cannot use it to explain those errors"
+    },
+    "coordinator_pid": 28484,
+    "supplement_session_id": 84649,
+    "supplement_finish_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\processes\\supplement.0001\\finish.json",
+      "sha256": "b7f766e7c0e5f5351c33677de27f28fd97460e0d0e420b7ecbb36463e7cff486",
+      "bytes": 738
+    },
+    "failed_cells_recovered": 20,
+    "full_cells_to_predict_after_resume": 111,
+    "full_start_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\processes\\full.0001\\start.json",
+      "sha256": "70e2892f1833c1c065122e7ee5e96fbda7ce1a7c638700ce78c0c42e0db0d71c",
+      "bytes": 1034
+    },
+    "full_evaluation_counted": true,
+    "host_graph_cost_ownership_review": {
+      "source_refs": [
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on\\source\\src\\heterollm_sim\\planner.py",
+          "sha256": "18a7adb6445aa73fd26bc2d0c79feafded96a0953284e3fc9fb9194681883be0",
+          "bytes": 1068107
+        },
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on\\source\\src\\heterollm_sim\\cost_models.py",
+          "sha256": "5937c4ec667256f4a3dc7c67ea89d878f62f141ed5a5bbc141708d84caa7fb75",
+          "bytes": 211947
+        },
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on\\source\\src\\heterollm_sim\\llama_graph_runtime.py",
+          "sha256": "372150a18eab8a7a585265a105aee6cb59ba8d7aaf001e420cb27c2bd01b0102",
+          "bytes": 10473
+        },
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on\\source\\src\\heterollm_sim\\llama_graph_lifecycle.py",
+          "sha256": "16ed151169c53f98153288500579984d41ddfc9b9e8d2e0cac7f37659d1b9b1f",
+          "bytes": 16794
+        },
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on\\source\\src\\heterollm_sim\\serving.py",
+          "sha256": "63c20872ca0d5204c943826ab56e13f486187b8054ed753ec3d0fb071e744d0a",
+          "bytes": 679365
+        }
+      ],
+      "kind": "independent_read_only_frozen_source_audit",
+      "native_timings_read": false,
+      "finding": "CPU graph lifecycle is metadata after cost generation; GPU frontend already charges host graph_and_command_build so additive graph charging may double count",
+      "known_default_costs": {
+        "command_build_instructions": "128+12*invocation_count",
+        "driver_submit_ns_per_invocation": 250,
+        "gpu_cp_ns_per_16_invocations": 5000,
+        "kernel_launch_ns_default": 1000
+      },
+      "unknown": [
+        "real graph input roster and reuse decision",
+        "buffer expansion events",
+        "CPU graph work vs command build owner",
+        "per-context versus per-GPU multiplicity",
+        "producer-consumer overlap boundaries"
+      ],
+      "current_error_causality": "unproven",
+      "next_evidence": "distinguishing event counts/identities and CPU/GPU intervals before independent service-time calibration"
+    },
+    "observed_status_counts": {
+      "predicted": 131,
+      "failed": 0
+    },
+    "paired_reporting": {
+      "control_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\report_repair.control.json",
+        "sha256": "54bc343df5df9275f8dc82f4aa0539f2e26efac531075a12af40136c18aea02f",
+        "bytes": 2595
+      },
+      "script_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\report_repair.py",
+        "sha256": "b05636ae3719ca34fe677afeb26aeddf0526bdaf557936b7cb122bbf8a5ec110",
+        "bytes": 25929
+      },
+      "synthetic_tests_passed": 10,
+      "native_answers_read_for_preparation": false,
+      "aggregation": "three independent metric directions;mixed when improvement and regression coexist; no mean cancellation",
+      "coverage_recovery_separate": true,
+      "source_and_size_alias_checks_reviewed": true,
+      "strict_A_evaluator": "on/source/tools/evaluate_strict_engine_goal.py after full131 scoring",
+      "commit_authorized": false,
+      "status": "completed_no_paired_accuracy_improvement",
+      "report_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\report_repair.json",
+        "sha256": "88e3baeeafb47cb31f0bc697a6a8a06cd2f6a772de7523401129b6d10d61c646",
+        "bytes": 419199
+      }
+    },
+    "q4_backup_readonly_audit": {
+      "reviewed_commit": "9e0f175b7846870140ef54c06ab0c760e1e084c7",
+      "source_files_compared": 15,
+      "runtime_modules_compared": 5,
+      "matches_existing_preparation": true,
+      "runtime_dll_matches_fixed_native": true,
+      "GPU_run": false,
+      "qualification_run": false,
+      "timing_run": false,
+      "parameter_admission": "none",
+      "remaining_gates": [
+        "new wrapper launch and independent numeric qualification",
+        "HES capability and clean state",
+        "budgeted100process timing/observer comparability",
+        "separate service cost qualification"
+      ]
+    },
+    "full_evaluation_attempt_registered": true,
+    "full_evaluation_completed_counted": true,
+    "full_evaluation_completed": true,
+    "full_finish_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\processes\\full.0001\\finish.json",
+      "sha256": "e0d54926eefcd25fde4cfa6e5ba7d05505254169c3c845eb926c35f3039ab3e6",
+      "bytes": 739
+    },
+    "candidate_freeze_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on\\freeze.json",
+      "sha256": "3f081e58478a1c12e3b3f9923841ab05599276ec091d173dc535cb297209a8c4",
+      "bytes": 53022528
+    },
+    "candidate_score_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on\\errors.0001.json",
+      "sha256": "b919cc30f8153a81afc2a68a52f70b8af5a47f65215b0d5b47994aaaea599237",
+      "bytes": 1108268
+    },
+    "baseline_score_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\on\\errors.0001.json",
+      "sha256": "86f50980c279d4c07d417452327e826b33f8a1b1b49f8d560a1299b843171178",
+      "bytes": 1079985
+    },
+    "paired_report_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\report_repair.json",
+      "sha256": "88e3baeeafb47cb31f0bc697a6a8a06cd2f6a772de7523401129b6d10d61c646",
+      "bytes": 419199
+    },
+    "strict_goal_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\strict_goal.0001.json",
+      "sha256": "99ab8d5631dec906b9b06b28ffe48eb8e43fbf494ef3891e192e4d68643296e4",
+      "bytes": 351969
+    },
+    "r34_candidate_execution_recovered_cells": 20,
+    "r33_baseline_original_failed_cells": 20,
+    "coverage_recovery_is_not_accuracy_improvement": true,
+    "paired_common_scored_cells": 111,
+    "paired_metric_outcomes": {
+      "unchanged": 333,
+      "unscored": 60
+    },
+    "gate_A": {
+      "verdict": "accuracy_failed",
+      "passed_cells": 5,
+      "accuracy_failed_cells": 126,
+      "insufficient_evidence_cells": 0,
+      "required_cells": 131,
+      "required_metrics": 393,
+      "failure_counts_may_overlap": true,
+      "passing_metrics": 56,
+      "threshold_pct_strict": 10,
+      "prediction_coverage_pct": 100
+    },
+    "gate_B": "unvalidated",
+    "task_complete": false,
+    "next_action": "next_mechanism_round",
+    "commit_source_byte_match_required": true,
+    "heatmap_report_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\heatmaps.0001\\report.md",
+      "sha256": "35888e0a68bc57edbe002f437924edda2e87a7aa7af5cb39c36541989ffcbcc2",
+      "bytes": 112987
+    },
+    "heatmaps": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\heatmaps.0001",
+    "recovered_cpu_stage_audit": {
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\diagnostic\\r34_cpu_saved_stage_fallback_coverage.json",
+        "sha256": "36e6263c211c5b14bf7abd21d07422a08716f755391786775cd3048f1c06695f",
+        "bytes": 27849
+      },
+      "cells": 20,
+      "batches": 2947,
+      "serial_fallbacks": 0,
+      "native_dispatch_proven": false
+    }
+  },
+  "observed_utc": "2026-09-17T16:51:34.144191+00:00",
+  "round_035_preparation": {
+    "status": "full131_predictions_generated_end_model_identity_failed_no_score",
+    "created_utc": "2026-09-17T11:00:53.409762+00:00",
+    "parent": "round_034/on",
+    "source_kind": "uncommitted_content_snapshot",
+    "override_paths": [
+      "src/heterollm_sim/planner.py"
+    ],
+    "deterministic_gap": "generic nonflash attention score_heads=1 drops query head axis",
+    "mechanism_evidence": "native score[query_heads,query_rows,KVrows], existing parsed query_head_shard and ordinary no-descriptor path",
+    "expected_effect": "score intermediate bytes,softmax rows/elements,PV probability input and working-set geometry corrected",
+    "expected_unchanged": "QK/PV FLOPs; unique GQA KV bytes; source-required launch counts; specialized attention descriptor path",
+    "native_remeasured": false,
+    "cost_parameters_added": 0,
+    "prediction_started": true,
+    "commit_authorized": false,
+    "structural_tests": 141,
+    "CUPTI_diagnostic_required_for_this_semantic_fix": false,
+    "protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\protocol.json",
+      "sha256": "2bcd88774ca6112798d3083c7aa9f3dad2db630fda0e20c7681e3054760425ee",
+      "bytes": 190718
+    },
+    "candidate_freeze_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\on\\freeze.json",
+      "sha256": "98100ffbd1a58e6e94e58e416efa6657992a14d28160ac44c119e56123dfd45a",
+      "bytes": 53022480
+    },
+    "source_files": 117,
+    "only_planner_changed": true,
+    "driver_tests": 8,
+    "structural_validation_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\structural_validation.json",
+      "sha256": "f17faa1e223c195388406e274f5ab926830f148cfe445a761bfc735a9ca2c45b",
+      "bytes": 2780
+    },
+    "statically_affected_cells": 62,
+    "statically_unchanged_cells": 69,
+    "observed_utc": "2026-09-17T12:35:52.375Z",
+    "full_evaluation_counted": true,
+    "tool_session_id": 31499,
+    "coordinator_pid": 26536,
+    "independent_source_and_driver_review": "no_blocking_findings; accuracy_not_assessed",
+    "observed_terminal_count": 131,
+    "observed_status_counts": {
+      "predicted": 131
+    },
+    "paired_report_control_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\report_repair.control.json",
+      "sha256": "da1653a9c8aeb9c7523c917418596915b48916218e8db5bd2ce5b75272bf36d0",
+      "size_bytes": 2902
+    },
+    "reporter_synthetic_tests_passed": 10,
+    "returncode": 1,
+    "natural_exit_observed": true,
+    "prediction_execution_complete": false,
+    "final_model_identity_valid": false,
+    "supervisor_identity_scope": "source_static_prediction_references_only; not_final_model_identity",
+    "accuracy_acceptance": "not_performed",
+    "coordinator_lock_preserved": true,
+    "identity_failure_observation_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\failure_observation.0001.json",
+      "sha256": "5dde509f1ddc1d4de484d137340f4dbde703a409aea8cb5bc4ca6468f0198eae",
+      "size_bytes": 3509
+    },
+    "supervisor_finish_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\processes\\full.0001\\finish.json",
+      "sha256": "f91ceaa058688821f8e9dba068051ed6a3dc131f4bbe8948a660a318eab63924",
+      "size_bytes": 822
+    },
+    "diagnosis_required_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\processes\\full.0001\\diagnosis_required.json",
+      "sha256": "de49760d2d8d095646440275d06d86db0fff8cf1055149b1870b0de290844cc6",
+      "size_bytes": 1335
+    },
+    "full_evaluation_counted_meaning": "Counts a started full131 run against review budget only; not completion or acceptance.",
+    "full_evaluation_completed": false,
+    "environment_hypothesis": {
+      "observation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\environment_observation.0001.json",
+        "sha256": "bc8a4d54b36d5b44a340b1cdfe771038a46228531efd1cce0fb0668136fcc5d7",
+        "size_bytes": 2319
+      },
+      "observed": "4x32GiB; two part numbers; SMBIOS ConfiguredClockSpeed=5600 for all four modules",
+      "vendor_source": "https://www.amd.com/en/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x3d.html",
+      "vendor_retrieved_utc": "2026-09-17T12:51:39.284Z",
+      "vendor_four_dimm_max_memory_speed": "DDR5-3600 for both 4x1R and 4x2R",
+      "status": "candidate_environment_explanation_only; not_root_cause_proof",
+      "hardware_settings_changed": false,
+      "system_event_scope": "2026-09-17T12:15:00Z to 12:30:00Z returned no events; cannot exclude intermittent faults"
+    },
+    "single_readpath_diagnostic": {
+      "status": "diagnostic_read_agreed_but_cause_unresolved",
+      "returncode": 0,
+      "natural_exit_observed": true,
+      "tool_session_id": 91682,
+      "model_open_count": 1,
+      "bytes_read": 14865116128,
+      "raw_4m_read_count": 3545,
+      "subchunk_1m_count": 14177,
+      "raw_prefix_divergence": null,
+      "chunk_mismatch_count": 0,
+      "history_mismatch_count": 0,
+      "full_digest_matches_expected": true,
+      "source_runtime_history_checks_passed": true,
+      "model_inference_runs": 0,
+      "original_R35_validated": false,
+      "cause": "unresolved; no difference reproduced in this one subsequent read",
+      "allow_scoring": false,
+      "result_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\runs\\readpath_probe_0001\\result.json",
+        "sha256": "2568db2722da0da49d162528c9e197f8323340cb86f259081835eff9c78361a4",
+        "size_bytes": 10613
+      },
+      "manifest_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\runs\\readpath_probe_0001\\manifest.json",
+        "sha256": "e6a46455594eda1011e37c913ffd5302438c8622dbc5b65afba4d0867ffc7e87",
+        "size_bytes": 4114
+      },
+      "chunks_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\runs\\readpath_probe_0001\\chunks.jsonl",
+        "sha256": "5620320aba0bf155d8390e661d161dd552342b3b20449c082ccdca0d77732fc6",
+        "size_bytes": 3834430
+      },
+      "test_junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\validation.0001.xml",
+        "sha256": "79077401fce2dc778c071cf7d9e06818d2eea3b27de5a065e941eb9f1c502a2e",
+        "size_bytes": 2568
+      },
+      "synthetic_tests_passed": 11,
+      "source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\readpath_probe.py",
+        "sha256": "a95a20d02acbe39a8d23aeb46c7d285f38f5fe0ef9b4df80815e752beb92ce4a",
+        "size_bytes": 20913
+      },
+      "test_source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\test_readpath_probe.py",
+        "sha256": "fb77b06c3add7ee26e0e545de383dba03e41e51c585b866bec243c58b1011fe9",
+        "size_bytes": 9905
+      }
+    },
+    "known_data_memory_control": {
+      "status": "control_completed_no_anomaly",
+      "returncode": 0,
+      "natural_exit_observed": true,
+      "tool_session_id": 64789,
+      "main_buffer_bytes": 4294967296,
+      "write_bytes": 4294967296,
+      "logical_verify_read_bytes": 8589934592,
+      "pages_verified": 8192,
+      "directions": [
+        "forward",
+        "reverse"
+      ],
+      "first_failure": null,
+      "buffer_released": true,
+      "model_file_reads": 0,
+      "original_R35_validated": false,
+      "allow_scoring": false,
+      "result_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\runs\\memory_control_0001\\result.json",
+        "sha256": "098a4653c31e5c11e5ffefa7b9f1f58a901bdf9a9440fc5143b9436aef12f814",
+        "size_bytes": 8552
+      },
+      "manifest_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\runs\\memory_control_0001\\manifest.json",
+        "sha256": "18d3dae390dc5397063ec4de208c0c4c3966fff37e2c9dd55f6d5e6bdfe2db8d",
+        "size_bytes": 3599
+      },
+      "synthetic_validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\test_memory_control.junit.0002.xml",
+        "sha256": "2aa53e463c6f4d4e539acabe1390398e7946484ac54f235934f9a43a948ee8a6",
+        "size_bytes": 2837
+      },
+      "synthetic_tests_passed": 12,
+      "source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\memory_control.py",
+        "sha256": "f5b92e55b84bd4a892a4fd29f910659163004ff9c243bb7178fa3137080c58bd",
+        "size_bytes": 13720
+      },
+      "tests_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\test_memory_control.py",
+        "sha256": "99d6c5a9f945eb0a449380c213bfd955a9e7564c5e1cad82b87acff64da1ec24",
+        "size_bytes": 6162
+      }
+    }
+  },
+  "round_036_preparation": {
+    "status": "structural_candidate_ready_parent_R35_end_identity_failed_not_launched",
+    "created_utc": "2026-09-17T11:53:20.260270+00:00",
+    "parent": "round_035/on",
+    "override_paths": [
+      "src/heterollm_sim/serving.py"
+    ],
+    "source_kind": "uncommitted_content_snapshot",
+    "deterministic_gap": "CPU command and ingress demand admitted pure GPU frontend as root for all future cohort GPU memory waves; serializes controller service before actual operators",
+    "correction": "resolve GPU backing/cache domains then classify same positive physical demand by resource owner; excludes command-only prefix without relying on omitted task metadata",
+    "structural_validation_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\structural_validation.json",
+      "sha256": "a2f4e31d9b91e655364ba631d1ec55497023bab510e9c3612630c16360860177",
+      "bytes": 3685
+    },
+    "tests_passed": 35,
+    "performance_cost_coefficients_added": 0,
+    "native_remeasured": false,
+    "prediction_started": false,
+    "commit_authorized": false,
+    "driver_tests_passed": 8,
+    "latest_validation_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\structural_validation_for_freeze.0003.json",
+      "sha256": "9516297176b1b1334e3dc1326f466fde81d261fe4a597a64b374af9cbd104132",
+      "size_bytes": 2198
+    },
+    "runner_prepared": true,
+    "freeze_prepared": false,
+    "prior32test_validation_preserved": true,
+    "parent_validity": "unresolved; require valid comparison lineage before freeze",
+    "log_capture_repair": {
+      "deterministic_gap": "R35 child coordinator stderr inherited console only; supervisor source/reference guard appeared valid despite child final-model failure",
+      "change": "future unfrozen driver exclusively captures child stdout/stderr; launch/parent exceptions preserve traceback; source/reference identity and coordinator execution separated",
+      "test_count": 8,
+      "test_command": "E:/anaconda/python.exe -m pytest -q artifacts/development/native_long_grid_135_20260915/optimization_loop/round_036/test_run_candidate.py",
+      "junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\driver-capture-validation.0001.xml",
+        "sha256": "a35ad11e504713b0c5b7194f00ab7f7af41469496ef9245c181f4871706e0d29",
+        "size_bytes": 2100
+      },
+      "driver_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\run_candidate.py",
+        "sha256": "9e8c43c83f9cf664c373c99b0171a8809bf9df3d78b76085b9784b4054ed04b5",
+        "size_bytes": 17312
+      },
+      "test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\test_run_candidate.py",
+        "sha256": "9df35b8c092c20c6ee3923ad060d55cc6b94c26b03c6f30f7691a1fd3eace50b",
+        "size_bytes": 6294
+      },
+      "native_remeasured": false,
+      "model_body_read": false,
+      "predictions_started": false,
+      "commit_authorized": false,
+      "completed_utc": "2026-09-17T12:47:46.461Z",
+      "independent_review": "r35_identity_scope: no blocking findings; 8 tests inspected; old R35 remains rejected"
+    },
+    "future_parent_driver_repair": {
+      "status": "root_verified_runtime_size_bytes_to_checker_bytes_mapping;no_valid_parent_no_freeze",
+      "source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\run_candidate.py",
+        "sha256": "f7b12293b029110084ae52f5815d4504e1be36251c32e68e69dc866ca3b79712",
+        "size_bytes": 25569
+      },
+      "test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\test_run_candidate.py",
+        "sha256": "faaa74bbe199d795001a9b071b771811ba1c1aeb9612e9f84fb2a6a3a46c4f6c",
+        "size_bytes": 13316
+      },
+      "junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\parent-lineage-validation.0004.xml",
+        "sha256": "e3f4fbed12ff941c378b0e9e772c00842b7ff3baf50555c260c2afd5d51905d0",
+        "size_bytes": 8751
+      },
+      "tests_passed": 38,
+      "parent": "round_037/on",
+      "freeze_created": false,
+      "prediction_started": false,
+      "accuracy_gain_claimed": false
+    },
+    "r39_source_compatibility": {
+      "created_utc": "2026-09-17T16:38:08.207685+00:00",
+      "scope": "R39 source compatibility only;not approved accuracy parent",
+      "source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\candidate_source\\src\\heterollm_sim\\serving.py",
+        "sha256": "2175ce73b0b1a7910493c9e5a61513382bcfb92c6199c3bb06aa2f11f4ccb27b",
+        "size_bytes": 679594
+      },
+      "parent_source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\candidate_source\\src\\heterollm_sim\\serving.py",
+        "sha256": "63c20872ca0d5204c943826ab56e13f486187b8054ed753ec3d0fb071e744d0a",
+        "size_bytes": 679365
+      },
+      "junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\r39-parent-structural.0001.xml",
+        "sha256": "95a8d7b7719ec9373b56b37eae127bcb3215038b51b69870fda3a75314a844e5",
+        "size_bytes": 5185
+      },
+      "tests_passed": 35,
+      "ast_delta_only": "_OnlineRuntime._with_gpu_controller_stages",
+      "verified_import": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\candidate_source\\src\\heterollm_sim\\serving.py",
+      "freeze_created": false,
+      "prediction_run": false,
+      "commit_authorized": false
+    }
+  },
+  "last_goal_turn_classification": "progress:liveR39full confirmed;root corrected report identity roles forscore andstrict,22tests passed andadaptercontrol frozen before score;independent review pending",
+  "gguf_input_boundary_audit": {
+    "auditor": "r35_identity_scope",
+    "status": "read_only_design_feasibility; not_implemented",
+    "observed_worker_behavior": "Each worker parses metadata/tensor directory then separately hashes all model bytes; retained helper re-reads selected header fields.",
+    "current_freeze_lacks": "complete GGUFMetadata and tensor directory",
+    "future_proposal": "A new explicitly versioned freeze may bind full-model identity from one verified read to a complete metadata/tensor-directory snapshot consumed by workers. Full-model identity entry/exit gates remain; no reinterpretation of R35.",
+    "accuracy_gain_claimed": false,
+    "single_read_binding_repair": {
+      "status": "implemented_and_structurally_tested_uncommitted",
+      "deterministic_gap": "Reader parsed metadata then rewound the same handle to hash a second returned byte sequence; stable stat identity alone did not bind geometry to the hashed bytes.",
+      "change": "A hashing read stream feeds parser and full digest from the same returned bytes; remaining alignment/payload is consumed without rewind. Existing expected-SHA, whole length and file identity gates remain.",
+      "source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\gguf_parity.py",
+        "sha256": "e8ede286e1a63f3e5f814492587c4b8b4650af10b01cb7e2bd3794b3e169fc90",
+        "size_bytes": 27355
+      },
+      "test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tests\\test_gguf_single_pass_identity.py",
+        "sha256": "2f6046efcbc1182e8e6793bbab350e345d787a1118d9f306be3423f9ae6cc176",
+        "size_bytes": 4309
+      },
+      "old_frozen_reproduction_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\metadata_binding_repro.0001.xml",
+        "sha256": "a6eadc1cf81b5fb31e8d3c1a406842cac56f099a6e5b04b1401ced6651571533",
+        "size_bytes": 5273
+      },
+      "old_frozen_reproduction_failures": 3,
+      "validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\identity_diagnostic\\metadata_binding_validation.0001.xml",
+        "sha256": "690c60f7be6ba700abe385722602969088ddd01aa111d2b4bc228ab97744015a",
+        "size_bytes": 1299
+      },
+      "synthetic_tests_passed": 8,
+      "real_GGUF_read": false,
+      "original_R35_root_cause_proven": false,
+      "cost_parameters_changed": false,
+      "old_freezes_modified": false,
+      "accuracy_improvement_claimed": false,
+      "commit_authorized": false
+    }
+  },
+  "round_037_preparation": {
+    "status": "paired_diagnostic_available_strict_gate_rejected_header_identity",
+    "parent_baseline": "round_034/on",
+    "baseline_role": "reuse_original_valid131_predictions_and_scoring; not_newly_executed_off_arm",
+    "excluded_prediction_source": "round_035; globally_rejected",
+    "semantic_delta": "query_head score axis only; planner copied from R35 tested source snapshot",
+    "common_observability_delta": "stronger same-read full identity guard with chunk/prefix evidence and independent hash implementations; no cost/scenario/metric changes",
+    "expected_affected_cells": 62,
+    "expected_unchanged_cells": 69,
+    "required_cells": 131,
+    "allowed_new_full_candidate_attempts": 1,
+    "root_cause_of_old_failure": "unresolved",
+    "prerequisites": "source AST/numeric-call-chain equivalence; all existing SHA/length/identity gates retained; runtime/helpers frozen; bounded controls completed without observed inconsistency",
+    "if_new_failure": "seal and diagnose immediately; no automatic new directory retry; escalate unexplained repeated consistency faults to environment/second-host intervention",
+    "native_remeasured": false,
+    "prediction_started": true,
+    "freeze_prepared": true,
+    "commit_authorized": false,
+    "prediction_freeze_created": true,
+    "source_snapshot_frozen_files": 119,
+    "protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\protocol.json",
+      "sha256": "486c62e53e7481e2ef6502e4e47aed9ff2de2a4de4a9c0a47b22be5bd4c611cb",
+      "size_bytes": 193808
+    },
+    "candidate_freeze_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\on\\freeze.json",
+      "sha256": "0fec5d5ba7fd50393a21e7f8f7023c7ab2e5083640156b01aa252ac4f676ab0b",
+      "size_bytes": 53023387
+    },
+    "observed_utc": "2026-09-17T14:18:09.123458+00:00",
+    "verify_passed": true,
+    "full_attempt": "full.0001",
+    "coordinator_pid": 51076,
+    "tool_session_id": 1137,
+    "execution_start_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\processes\\full.0001\\start.json",
+      "sha256": "5f4f7ebdfe83a664e84a1ae6692da667663271372516d25a9299985b978be3d7",
+      "size_bytes": 1034
+    },
+    "execution_child_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\processes\\full.0001\\child.json",
+      "sha256": "c9ae40becd04b9e16ef2d2e9165747227f7e8533333d01cc726943a3a89ba9f1",
+      "size_bytes": 160
+    },
+    "started_utc": "2026-09-17T14:14:45.480212+00:00",
+    "paired_report_preparation": {
+      "status": "frozen_and_independently_reviewed_no_blocker;actual_report_not_executed",
+      "script_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\report_repair.py",
+        "sha256": "52fb8c3bda80fba2f717ad8522d37c4115d49b8ec52e014a9f74c6ec4e974c40",
+        "size_bytes": 37964
+      },
+      "control_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\report_repair.control.json",
+        "sha256": "bc8f55e53c9b181b90008ddafc8b9c8b5314c586b425334d6db85efa94a87081",
+        "size_bytes": 10694
+      },
+      "test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\test_report_repair.py",
+        "sha256": "9114faacce20bf9cb2bb5296098856abaaf19a81965c9e6c21f4a5c087f4a45c",
+        "size_bytes": 24901
+      },
+      "junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\test_report_repair.junit.0001.xml",
+        "sha256": "8f5c0bbf5b06a0bc8e65d068e3aea1539b046bcd6186b532e3ec6cf6431460f0",
+        "size_bytes": 6955
+      },
+      "tests_passed": 34,
+      "reviewer": "/root/r37_report_review",
+      "review_observed_utc": "2026-09-17T14:40:13.372441+00:00",
+      "candidate_metrics_read_for_report_selection": false,
+      "commit_authorized": false
+    },
+    "prediction_completed": true,
+    "terminal_cells": 131,
+    "failed_cells": [],
+    "finished_utc": "2026-09-17T15:18:42.018719+00:00",
+    "execution_finish_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\processes\\full.0001\\finish.json",
+      "sha256": "bbda57510636e021dc38bc41d3a71704319b5899c1e9276105984a7dae1f894f",
+      "size_bytes": 1743
+    },
+    "post_run_verify_passed": true,
+    "score_session_id": 25329,
+    "allow_scoring": false,
+    "accuracy_result_valid": false,
+    "score_failure": {
+      "session_id": 25329,
+      "natural_exit_returncode": 1,
+      "summary_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\on\\identity_checks\\252bc997304947f4a7081ebf8796ae53\\summary.json",
+        "sha256": "3a93690df0cbfdff096a1755d02a29e93de7ce53b51fc65318ad3b6a3fe754d6",
+        "size_bytes": 5490
+      },
+      "model_error_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\on\\identity_checks\\252bc997304947f4a7081ebf8796ae53\\model_error_9ab83cde2bff545a.json",
+        "sha256": "8187c59bcdd97dd98d59c081691413b48bc7c67742379c7a189390eef1bacaaa",
+        "size_bytes": 3110
+      },
+      "chunk_comparison_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\scoring_identity_failure.0001.json",
+        "sha256": "76e49b2e6507f5cdc5a57b454a8866b4522cdaae505498ffe1b7495eb3af6f01",
+        "size_bytes": 3143
+      },
+      "three_full_digests_agree": true,
+      "expected_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+      "actual_sha256": "9f9f4e325b4f8345ffa1d2c76972a5126e45ff66818fc5a66a3eeebf78e73d90",
+      "differing_block": 9960,
+      "offset": 10443816960,
+      "length": 1048576,
+      "matching_blocks": 14176,
+      "file_stat_identity_unchanged": true,
+      "root_cause": "unresolved_storage_cache_memory_readpath;not_single_hash_algorithm_divergence",
+      "scores_written": false,
+      "automatic_retry": false
+    },
+    "bounded_readpath_intervention": {
+      "status": "completed_no_anomaly_reproduced_cause_unresolved",
+      "script_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\readpath_intervention.py",
+        "sha256": "6f2156792033770fdc8617f17bc67535cf47909c0d1d0f4da2211f3034705c0e",
+        "size_bytes": 5489
+      },
+      "fixture_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\readpath_fixture.0001\\result.json",
+        "sha256": "d28888bbc207d5f6ac3d64eb634a65da50ffcebaeb64c74e48f3a784f0be28a7",
+        "size_bytes": 2813
+      },
+      "target_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\readpath_target.0001\\result.json",
+        "sha256": "52420b3fee22836465baa6456a6673a44fff6a91e5ca91c4bf41e3736c8f49d0",
+        "size_bytes": 2930
+      },
+      "blocks": [
+        9959,
+        9960,
+        9961
+      ],
+      "total_target_bytes_read": 6291456,
+      "cached_and_no_buffering_equal": true,
+      "historical_hashes_match": true,
+      "model_read_passes": 2,
+      "whole_model_read": false,
+      "native_inference_run": false,
+      "allow_scoring": false,
+      "automatic_retry": false,
+      "limits": "NO_BUFFERING bypasses Windows data cache, not memory/CPU/device firmware caches/storage driver; subsequent agreement does not validate failed R37 scoring"
+    },
+    "environment_followup": {
+      "observed_utc": "2026-09-17T15:50:15.520754+00:00",
+      "wsl_read_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\wsl_bounded_read.0001.json",
+        "sha256": "78c9e3225240f092de83a77162d84240e3ca4a350cdbfa3a71368c0da78e789b",
+        "size_bytes": 1688
+      },
+      "wsl_result": "three_blocks_match_historical;different_OS_runtime_same_physical_hardware",
+      "target_bytes_read": 3145728,
+      "process_elevated": false,
+      "storage_reliability_query": "CIM access denied for all3disks;no counters obtained",
+      "independent_hardware_available": false,
+      "cause_resolved": false,
+      "allow_scoring": false,
+      "next_required_evidence": "Offline memory/CPU integrity test after a user-coordinated environment intervention, or independent physical machine;not another same-condition score retry"
+    },
+    "user_authorized_block_retest": {
+      "result_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\block9960_user_retest.0001\\result.json",
+        "sha256": "ef8d209a3812ec66dd5483b0090e76de1ff70698766f4ae83cacc8ec3e7b9c0f",
+        "size_bytes": 2824
+      },
+      "status": "completed_no_inconsistency_reproduced",
+      "pairs": 3,
+      "reads": 6,
+      "target_bytes_read": 6291456,
+      "all_match_historical": true,
+      "cause_resolved": false,
+      "allow_scoring": false
+    },
+    "user_full_identity_recheck": {
+      "status": "passed_current_identity",
+      "result_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\user_full_identity_recheck.0001\\result.json",
+        "sha256": "c4256dcaabcb8f21ea3a0e577b47284c8ec85cc9cf42e7b519c52b1eeb460417",
+        "size_bytes": 530
+      },
+      "summary_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\user_full_identity_recheck.0001\\evidence\\summary.json",
+        "sha256": "79e9158f5d49cc90c7cc5482d000d6773b261d8c6d669c69fe88a04b221bc5a6",
+        "size_bytes": 15627
+      },
+      "model_count": 5,
+      "bytes_read": 17613430912,
+      "three_full_hashes_match_all_models": true,
+      "original_failure_preserved": true,
+      "old_failure_cause_resolved": false,
+      "native_inference_run": false,
+      "score_run": false
+    },
+    "recovery_report": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\score_recovery.0001\\report.json",
+    "paired_outcomes": {
+      "improved": 54,
+      "unchanged": 69,
+      "mixed": 8
+    },
+    "strict_gate_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\score_recovery.0001\\strict_goal.json",
+    "regression_review": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\score_recovery.0001\\regression_review.0001.json",
+    "regression_signature_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\score_recovery.0001\\regression_signature.0001.json",
+    "holistic_admission": {
+      "decision": "conditionally_retain_no_commit",
+      "supports": [
+        "query_head score geometry has source/shape justification",
+        "diagnostic54improved69unchanged"
+      ],
+      "against": [
+        "strict gate insufficient evidence on header identity",
+        "8SmolLM2mixed cells13regressed metrics including1new10percent crossing",
+        "independent accuracy validation not demonstrated"
+      ],
+      "reason": "retain correct semantics;do not submit or claim acceptance until evidence and concentrated decode regression explanation closes",
+      "not_based_on_fixed_regression_cutoff": true
+    }
+  },
+  "nonflash_batched_geometry_audit": {
+    "status": "isolated_implementation_in_progress;no_prediction_freeze_or_accuracy_claim",
+    "scope": "ordinary unified KV,F16,CUDA,actual per-stream M>=64,compute override captured as unset/auto,TP1 singleGPU,width==Hq*d; existing physical L lower-bound remains",
+    "qk_per_head": [
+      "M",
+      "d",
+      "L",
+      "Hq"
+    ],
+    "pv_per_head": [
+      "M",
+      "L",
+      "d",
+      "Hq"
+    ],
+    "pv_lda": "cache_capacity_C",
+    "preserve": [
+      "useful FLOPs",
+      "score/softmax geometry from R35",
+      "unique Hkv KV bytes",
+      "event and launch multiplicity"
+    ],
+    "next_minimal_change": "optional immutable batched matrix work/geometry descriptor; existing physical-proxy wave calculations; fresh compile and replay together",
+    "not_included": [
+      "cost parameter fit",
+      "actual CTA/occupancy claim",
+      "dtype/conversion/pointer kernel cost",
+      "small-M mapping"
+    ],
+    "native_sources": [
+      "source/llama.cpp-semantic/src/llama-graph.cpp:2660",
+      "source/llama.cpp-semantic/ggml/src/ggml-cuda/ggml-cuda.cu:1571",
+      "source/llama.cpp-semantic/src/llama-kv-cache.cpp:1286"
+    ],
+    "cost_parameters_added": 0,
+    "accuracy_gain_claimed": false,
+    "implementation": {
+      "directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\candidate_source",
+      "initial_source_parent": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_037\\on\\source",
+      "source_parent_role": "code_snapshot_only;not_claimed_valid_accuracy_baseline",
+      "candidate_freeze_created": false,
+      "prediction_started": false,
+      "cost_geometry_and_fresh_replay": "agents_implementing_in_isolated_files",
+      "configuration_adapter": "implemented_pinned_source_runtime_and_captured_compute_type_qualification",
+      "adapter_source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\candidate_source\\tools\\predict_stable_native_dataset.py",
+        "sha256": "e2053ca9ebb37b775e0e0b9a7cd37572e032129437b54493e2db4b3dd3b8c1e5",
+        "size_bytes": 251969
+      },
+      "adapter_test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\tests\\test_nonflash_batched_gemm_adapter.py",
+        "sha256": "afae6d45723b9e9066d59cd91f44d5601e907ba7580967c1ac932fb358f3b0b4",
+        "size_bytes": 9981
+      },
+      "adapter_validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\adapter-validation.0003.xml",
+        "sha256": "7bef4b7797caa94ea1353108629808efebba59736d5cea091f22b8345786dab6",
+        "size_bytes": 9433
+      },
+      "adapter_tests_passed": 40,
+      "static_source_runtime_and_compute_capture_bound_cells": 131,
+      "coverage_scope": "static input qualification only;actual invocation geometry is checked separately",
+      "native_remeasured": false,
+      "model_or_target_latencies_read": false,
+      "accuracy_gain_claimed": false,
+      "order": "complete_R37_valid_comparison_then_R36_dependency_candidate_then_batched_geometry",
+      "commit_authorized": false,
+      "adapter_review_fix": {
+        "finding": "graph/cache llama.dll identity not cross-bound in first adapter",
+        "status": "fixed_awaiting_final_readonly_review",
+        "old_repro_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\adapter-module-repro.0001.xml",
+          "sha256": "1f7f834cd0c579cac9b18225511756bfe8c24490070e8aaa313f7e5cb83c55af",
+          "size_bytes": 11541
+        },
+        "pre_repair_failed_cases": 7,
+        "repair": "require unique same path/SHA across GPU runtime contract,KV view llama module,and native module refs;hash this identity"
+      },
+      "cost_geometry": {
+        "status": "implemented_structural_tests_passed_waiting_independent_review",
+        "source_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\candidate_source\\src\\heterollm_sim\\cost_models.py",
+          "sha256": "fd23d7b60ddae269d0ed50b0cc18a4717e9077ce5653fe39a75e1ef0b2e404ee",
+          "size_bytes": 215485
+        },
+        "test_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\tests\\test_nonflash_batched_gemm_cost.py",
+          "sha256": "238b8d8cb3443f1d7c8102a4dbb6be5ee05642102081b6319658faeeb04d37aa",
+          "size_bytes": 10420
+        },
+        "validation_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\cost-geometry-and-regression.0002.xml",
+          "sha256": "854f511aa9c9a123fc49639697e751d326724ef6cb7a111358735dce95030191",
+          "size_bytes": 20907
+        },
+        "tests_passed": 94,
+        "useful_flops_bytes_launch_preserved": true,
+        "performance_proxy_validated": false,
+        "accuracy_gain_claimed": false
+      },
+      "status": "isolated_implementation_structurally_ready_no_prediction_freeze_or_accuracy_claim",
+      "structural_validation_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\structural_validation.0002.json",
+        "sha256": "09a6329acc7dc6962e154e685b59a62bf6b9dff80cc00029528d0ab3affc5b80",
+        "size_bytes": 6559
+      },
+      "combined_tests_passed": 190,
+      "planner": {
+        "source_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\candidate_source\\src\\heterollm_sim\\planner.py",
+          "sha256": "ae3ca3a56a27c0e01f5810b5fa3cfd5d91086f7d41756c2501e5048f81c4372b",
+          "size_bytes": 1076696
+        },
+        "test_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\tests\\test_nonflash_batched_gemm_planner.py",
+          "sha256": "7ecaedf7353deba25b9f6e57e39dafc8d03ef17946138737ab009d2fe8566a08",
+          "size_bytes": 11496
+        },
+        "validation_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_038\\planner-validation.0004.xml",
+          "sha256": "1020831f0365f8348ec507e7e40556d7f58ff1122d1da1555656a31b4b482a1e",
+          "size_bytes": 13180
+        },
+        "tests_passed": 56,
+        "replay_scope": "M64 exact-cohort provider cache proven;cross-L manual cost override demands/cost/phase/query metadata match fresh;M1 dynamic serving gate not expanded",
+        "geometry_scope": "GQA divisibility;TP1/common headwidth;captured fastFP16 and transposed F16V evidence for ldaC",
+        "review_status": "source qualifications and actual provider/cache/cost metadata evidence gaps closed;root reviewed assertions;combined190pass"
+      }
+    }
+  },
+  "blocking_audit": {
+    "same_condition_consecutive_goal_turns_at_least": 3,
+    "condition": "Repeated retained-model read-content inconsistency;failed R37 scoring remains unresolved after bounded Windows cached/NO_BUFFERING and WSL controls",
+    "verified_now": {
+      "R37_score_files": 0,
+      "active_accuracy_or_diagnostic_processes": 0,
+      "R36_frozen": false,
+      "R38_frozen": false,
+      "R38_structural_tests_passed": 190
+    },
+    "required_external_change": "User-coordinated offline integrity test/environment intervention or access to an independent physical execution machine",
+    "not_proven": "Specific faulty component,permanent GGUF corruption,or restored trust from subsequent successful reads",
+    "goal_complete": false,
+    "thresholds_changed": false,
+    "native_dataset_changed": false,
+    "commit_or_push_performed": false,
+    "superseded_by_user_policy": "2026-09-18 explicit continue + once-per-hash-failure recheck;current R37 qualifies for scoring-only recovery subject to evidence verification"
+  },
+  "retained_header_single_read_repair": {
+    "status": "fresh131_scored_strict_evidence_complete_accuracy_failed",
+    "source_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\candidate_source\\tools\\predict_stable_native_dataset.py",
+      "sha256": "1bdcc9e371c1b1082050feb4553cb074bc82213729f55d3de88da7f1b466a5f5",
+      "size_bytes": 245090
+    },
+    "helper_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\candidate_source\\tools\\retained_header_stream.py",
+      "sha256": "523e67eda1bbd2a7aeedaa978c8d9733fffcc64de3dfbbd9bfb353567db57e93",
+      "size_bytes": 980
+    },
+    "test_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\tests\\test_retained_header_single_read.py",
+      "sha256": "884472fcd10023a087fc974c1c79804be40cb7a31b658930ce71e370f569acab",
+      "size_bytes": 10139
+    },
+    "junit_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\header-validation.0005.xml",
+      "sha256": "27b70764eb6d9c29f57a5a4d78c380c17d55ccecd27bbbf4d2af9fb74c8648b4",
+      "size_bytes": 3433
+    },
+    "basis": "R37 source;only retained header function plus helper changed;not main-worktree GGUF repair",
+    "subagent_scope_deviation_corrected": "subagent edited main function despite isolated ownership;root extracted only new function intoR39 and restored prior function without reverting other WIP",
+    "native_or_GGUF_read": false,
+    "new_prediction_run": false,
+    "accuracy_claimed": false,
+    "remaining": [
+      "preflight complete",
+      "source-equivalence and inherited evidence assess",
+      "fresh prediction and accuracy validation"
+    ],
+    "actual_R37_failure_explained": false,
+    "tests_passed": 15,
+    "final_independent_review": "passed;scope_limited_to_cached_stat_failure_evidence",
+    "protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\protocol.json",
+      "sha256": "049a2010412fdc18d7ff680346a43a213db8dfa18014ea2bc7565923a1ce0457",
+      "size_bytes": 94210
+    },
+    "freeze_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\on\\freeze.json",
+      "sha256": "5233716911081f82a97746e2eac857d5e3bca31a5dd9d60c1bff16e19944114f",
+      "size_bytes": 53024657
+    },
+    "preflight_pid": 22360,
+    "preflight_session_id": 51798,
+    "prediction_started": true,
+    "preflight_returncode": 0,
+    "prediction_pid": 44004,
+    "prediction_session_id": 45320,
+    "normal_scope_equivalence": {
+      "tests_passed": 8,
+      "junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\equivalence-validation.0001.xml",
+        "sha256": "1825d9eb1dd1a39687798d020887e88c98ef91ad0ff31fbf9f03cfc50a63ad97",
+        "size_bytes": 2065
+      },
+      "test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\tests\\test_retained_header_equivalence.py",
+        "sha256": "6bc86a92ef079ccf3a9727239b4b379ed019055c6a42bd9f1a2d8d46e53c3a9b",
+        "size_bytes": 1605
+      },
+      "result": "all scope fields identical to frozenR37 reader on stable synthetic bytes;different block_count and large arrays;not real model correctness proof"
+    },
+    "report_preparation": {
+      "scope_control_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\report_preparation.control.json",
+        "sha256": "b14ffe9031f8ab189bfe5889d0219cb70e32cf50965aa9ec84b9260e0e56fef0",
+        "size_bytes": 55915
+      },
+      "implementation_complete": true,
+      "status": "v2_frozen_before_score_reviewed_27_tests_passed",
+      "baseline": "R34 valid",
+      "candidate": "R39 fresh131",
+      "R37": "source_parent_only_not_accepted_baseline",
+      "numerical_statistics": "frozenR37/R23 functions",
+      "commit_authorized": false,
+      "required_fix": "role-bound preflight/full/score/optional strict identity receipts;neverfixed3count",
+      "actual_scoring_started": false,
+      "script_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\report_repair_v2.py",
+        "sha256": "6fc11c347a5e3f1360ed690e0976d78b0cbd6f4930deb8067cc5836cac8c14fd",
+        "bytes": 44143
+      },
+      "adapter_control_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\report_repair_v2.control.json",
+        "sha256": "e94b4937f8fa3d1ff07c86059ce69b6fddff6adcbe05911c278e8d893d6d5bd0",
+        "bytes": 11022
+      },
+      "test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\test_report_repair_v2.py",
+        "sha256": "959f05744d61f47f7c1e0a60fd4519745b2ae3682c2965644ae3deda0fb4ecdb",
+        "bytes": 7321
+      },
+      "junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\report-v2-tests.0002.xml",
+        "sha256": "fd83f51eb6f5bd725872ab0ff6ce3602ef13088396aaa0bd678beffc10ac86a8",
+        "bytes": 5530
+      },
+      "tests_passed": 22,
+      "independent_review": "pending_agent_slot_limit",
+      "scores_read": false,
+      "strict_binding": "exact131 IDs and freeze/score refs; zero insufficient evidence; stage-specific identity receipts"
+    },
+    "misplaced_test_cleanup": {
+      "preserved_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\tests\\subagent_original_main_fixture.py",
+        "sha256": "6881078ea65112c220d7036bd63adc41da8489bf8b6a5901952c50029f118f38",
+        "size_bytes": 3080
+      },
+      "main_unenabled_repair_test_removed": true,
+      "existing_WIP_preserved": true
+    },
+    "evaluation_launcher": {
+      "status": "prepared_prerequisite_tests_passed_not_executed",
+      "source_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\run_evaluation.py",
+        "sha256": "70438606c5b70aa3d9b806929c6750bf1b301228b7da4006db725f3585f1eea0",
+        "size_bytes": 4895
+      },
+      "test_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\tests\\test_run_evaluation.py",
+        "sha256": "8f027499af328ac1cf009b5033b67e917f43e98e2bdd6840018abda6fc91dbaa",
+        "size_bytes": 1965
+      },
+      "junit_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\evaluation-runner.0002.xml",
+        "sha256": "d0c21ccc0a70051ded44fa88c28660cdb3e97e448830c22ac481e8784827f66a",
+        "size_bytes": 1629
+      },
+      "tests_passed": 7,
+      "first_failed_fixture_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\evaluation-runner.0001.xml",
+        "sha256": "af2e891f89fe20ba9636317bcf3b2da5b26fca507b6e6aabbf725cddd6bf6573",
+        "size_bytes": 30657
+      },
+      "first_failure_reason": "pytest xunit reserved setup name mistaken forfixture;renamed helper",
+      "limits": "prerequisite checks only;not replacement for complete report/evidence validation",
+      "actual_scoring_started": false
+    },
+    "paired_report_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\report_repair_v2.json",
+      "sha256": "4bcdf1bedd282df9e76bb52a1551bea673af06e9959a31a7557125505c5b34ac",
+      "bytes": 2548070
+    },
+    "strict_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\strict_goal.0001.json",
+      "sha256": "1fdbb8b72d2a89558a58339c9570a0b2c98cbffa2bef03d22b77e107e1a0dd9a",
+      "bytes": 422177
+    },
+    "full_finish_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_039\\full.0001\\finish.json",
+      "sha256": "c2fd7a85751c76407b7e38c2b7c3483add97770b4a4b59e73ccf1aa05a7be9bf",
+      "bytes": 132
+    },
+    "admission": "conditionally_retain_for_next_mechanism_no_commit",
+    "admission_reason": "54 improved,69 unchanged,8 mixed; all evidence complete; concentrated regressions still need mechanism attribution; final6of131 insufficient",
+    "final_goal_passed": false,
+    "commit_authorized": false
+  },
+  "regression_admission_policy": {
+    "mode": "evidence_based_holistic_review",
+    "fixed_regression_percentage": null,
+    "weighted_aggregate_score": false,
+    "final_each_cell_each_engine_APE_strict_pct": 10,
+    "required_review": [
+      "semantic_correctness",
+      "evidence_and_identity_complete",
+      "fixed_coverage",
+      "per_model_deployment_metric_and_worst_group_benefits",
+      "independent_validation_scope",
+      "each_regression_signed_APE_absolute_ms_and_lost_passes",
+      "old_gap_vs_new_bug_vs_insufficient_evidence",
+      "counterarguments_and_tradeoff_reason"
+    ],
+    "outcomes": [
+      "accept",
+      "conditionally_retain_no_commit",
+      "rollback"
+    ],
+    "hard_constraints_not_tradeable": [
+      "identity",
+      "timing_boundary",
+      "no_target_latency_fit",
+      "coverage_and_failures_preserved"
+    ],
+    "effective_utc": "2026-09-17T16:27:03.397731+00:00",
+    "supersedes": "unconfirmed20percent policy"
+  },
+  "round_040_controller_repair": {
+    "status": "recovery_strict_exit_identity_failed_chain_sealed",
+    "parent": "round_039/on",
+    "protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_040\\protocol.json",
+      "sha256": "8d444c79b349403b352f425b0be802f17172f02719ed576a5a33404ef2056f9d",
+      "size_bytes": 199700
+    },
+    "freeze_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_040\\on\\freeze.json",
+      "sha256": "ddecf44f0f5eeba7ad188445e2359af187c7bb3c47ac15e22b841f8b58ecca8e",
+      "size_bytes": 53023466
+    },
+    "driver_tests_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_040\\driver-tests.0001.xml",
+      "sha256": "63e03fdbf351c2a88e50cabadeeee7cc5304e222df9bd32f3f7bd572fd8a4c1d",
+      "size_bytes": 11168
+    },
+    "driver_tests_passed": 49,
+    "native_remeasurement": false,
+    "cost_parameters_changed": false,
+    "previous_prelaunch_failure_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_036\\prelaunch_failure.0001.json",
+      "sha256": "273eab629ff89522a3c1648a5f1132f1e4aa0c2cc55be855df3f6e3d042cb92e",
+      "size_bytes": 1027
+    },
+    "commit_authorized": false,
+    "report_preparation": {
+      "status": "reviewed_and_frozen_before_score",
+      "control_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_040\\report_controller.control.json",
+        "sha256": "998641baa6d004a305d6c87329fa6b2f9bcfd81e1dbae2e4a707f83af0689723",
+        "bytes": 44696
+      },
+      "joint_tests_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_040\\report-evaluation-integration.0001.xml",
+        "sha256": "4929d4232827b0fddca76a753d8d6d7df31826c6736c130937e6cef0c47fcfaf",
+        "bytes": 5146
+      },
+      "tests_passed": 23,
+      "evaluation_launcher_ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_040\\run_evaluation.py",
+        "sha256": "bd7e788c25ef5d3df607ac30cc0371ca0a945aedc3c85a81adbf71c547fed715",
+        "bytes": 19795
+      },
+      "scores_read": false,
+      "commit_authorized": false
+    },
+    "successful_cells": 120,
+    "failed_cells": 1,
+    "pending_cells": 10,
+    "score_allowed": false,
+    "recheck_passed": true,
+    "recheck_budget_remaining": 0,
+    "recheck_scope": "14865116128 bytes; raw/sub OpenSSL and CNG all match frozen157479; stat checks pass",
+    "historical_failure_revalidated": false,
+    "root_cause": "unresolved intermittent observed read/hash mismatch; file replacement not established",
+    "next_action": "existing_chunk_log_differential_diagnosis_no_model_reread",
+    "recovery_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_040\\recovery.0001",
+    "recovery_coordinator_pid": 38716,
+    "scoring_requires": "explicit cross-directory bundle adapter; same formulas; full provenance",
+    "recovery_successful_cells": 11,
+    "recovery_failed_cells": 0,
+    "recovery_exit_code": 0,
+    "recovery_identity_before_after": "passed",
+    "adapter_control_sha256": "bdf7c3be60ce092a8c8023a5cd9471e6b85b2f9fcbfbc904c2202ba1f1d9f545",
+    "bundle_sha256": "8cfb3960b52f32d4c70892e44d3fc7c9a04691ef70ed0641f9216a4a9584be10",
+    "strict_valid": false,
+    "strict_identity_failure": "7b474db707ff45179b7b85bbced401cf",
+    "strict_observed_sha256": "aebe0ac3b493ffd4d21f8e1e5c4459199cc9e4e64a01c16bb38e2e4eb6ac3068",
+    "environment_diagnosis": {
+      "chunk_mismatch_index": 3454,
+      "previous_accepted_reads_with_same_chunk": 7,
+      "memory_probe": "bounded_streamed_synthetic_digest_passed_not_full_RAM_validation",
+      "root_cause": "unresolved",
+      "next_action": "independent_data_path_diagnostic_or_environment_repair_required_before_new_accuracy_acceptance",
+      "capture_tool_status": "synthetic9_passed_diagnostic_only_not_integrated_or_used_on_model",
+      "capture_limits": {
+        "saved_bytes": 4194304,
+        "read_chunk_bytes": 1048576
+      },
+      "synthetic_storage_probe": "256MiB same-process3 and independent-process3 matched regenerated seed and OpenSSL/CNG; buffered only; root cause unresolved"
+    }
+  },
+  "round_042_structural_candidate": {
+    "status": "structural41_passed_real_lowerer_multistage_verified_not_accuracy_tested",
+    "source_parent_only": "round_040/on/source; not accepted accuracy parent",
+    "real_lowerer_probe_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_042\\candidate_source\\tests\\real-lowerer-multistage-controller-probe.0001.json",
+      "sha256": "9103fd6a4525e6facb1b38e45cfe767c7d3e3a6c2ca9bff572333dd7477dca0a",
+      "bytes": 8897
+    },
+    "hbm_bytes_by_stage": [
+      32036,
+      47440
+    ],
+    "frozen": false,
+    "commit_authorized": false
   }
 }

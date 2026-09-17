@@ -439,9 +439,9 @@ struct server_slot {
         SERVER_HOST_MARK(label.c_str());
     }
 
-    // Compute markers deliberately surround llama_decode() and its required
-    // synchronization.  The engine_token markers below remain the sampling
-    // and counter boundary; they must not be interpreted as full decode wall.
+    // Compute markers surround llama_decode() and its required synchronization.
+    // The engine_token markers remain the sampling/counter boundary and are
+    // not a substitute for the full decode wall.
     void trace_engine_compute_begin(uint64_t token_index, uint64_t token_count = 1) {
         const std::string label = string_format(
             "engine_compute_begin|slot=%d|token_index=%llu|token_count=%llu",
@@ -3269,6 +3269,13 @@ private:
 
                     // TODO: maybe move branch to outside of this loop in the future
                     if (slot.state == SLOT_STATE_STARTED) {
+                        // Reserve outside the engine boundary; recording below
+                        // reuses the existing per-token ggml_time_us reading.
+                        const char * capture_times = std::getenv("LLAMA_ENGINE_TOKEN_TIMES");
+                        slot.stats.engine_capture_times = !capture_times || std::string(capture_times) != "0";
+                        if (slot.stats.engine_capture_times && slot.task->params.n_predict > 0) {
+                            slot.stats.engine_token_times_us.reserve(slot.task->params.n_predict);
+                        }
                         slot.stats.update_prompt_start();
                         slot.trace_engine_request_begin();
                         slot.trace_prefill_begin();
@@ -3806,11 +3813,9 @@ private:
             has_output |= batch.tokens[i].output;
         }
 
-        // Capture the full target compute interval for ordinary (non-
-        // speculative) sampled slots.  The slot's i_batch is already assigned
-        // while constructing the batch, so no timing-based attribution is
-        // needed.  Speculative verification keeps its existing multi-token
-        // path and will receive a dedicated marker in a later patch.
+        // Capture full target compute for ordinary sampled slots. Speculative
+        // verification retains its multi-token path and will get a dedicated
+        // marker in a later patch.
         std::vector<server_slot *> engine_compute_slots;
         iterate(slots, [&](server_slot & slot) {
             if (slot.i_batch < off || slot.i_batch >= off + batch_view.n_tokens ||

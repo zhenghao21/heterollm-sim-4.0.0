@@ -31,6 +31,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
 for import_root in (ROOT, ROOT / "src"):
@@ -2929,6 +2930,13 @@ def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, d
         prediction = predict_cell(inputs, diagnostic_events=diagnostic_events, diagnostic_event_limit=diagnostic_event_limit)
     except Exception as exc:
         prediction = failure(entry, type(exc).__name__ + ": " + str(exc))
+        prediction["failure_diagnostic"] = {
+            "exception_type": type(exc).__name__, "message": str(exc),
+            "traceback": traceback.format_exc(),
+            "worker_pid": os.getpid(), "cell_id": cell_id,
+            "freeze_ref": freeze_ref,
+            "automatic_retry": False,
+        }
     trace = prediction.pop("_diagnostic_events", None)
     if trace is not None:
         trace_path = Path(result_path).with_name(entry["cell_id"] + ".diagnostic-events.json")
@@ -3016,9 +3024,11 @@ def _verify_attempts(run_dir, result_dir):
             raise ValueError("attempt seal has no matching execution")
 
 
-def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None, workers=4, cell_ids=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT):
+def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None, workers=4, cell_ids=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT, stop_on_cell_failure=False):
     """Bound concurrent workers; elapsed time is observation only, never termination."""
     workers = integer(workers, "workers")
+    if type(stop_on_cell_failure) is not bool:
+        raise ValueError("stop_on_cell_failure must be boolean")
     integer(diagnostic_event_limit, "diagnostic event limit")
     if diagnostic_event_limit > 20000:
         raise ValueError("diagnostic event limit must not exceed 20000")
@@ -3066,7 +3076,8 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
             "per_cell_soft_observation_seconds": observation_seconds,
             "hard_time_limit_enforced": False, "wait_policy": "natural_exit_soft_observation",
             "late_results": "scoreable_only_after_natural_exit0_and_complete_identity",
-            "max_cells": max_cells, "scheduled_cells": len(scheduled)}
+            "max_cells": max_cells, "scheduled_cells": len(scheduled),
+            "stop_on_cell_failure": stop_on_cell_failure}
         receipt = {"schema": "stable-native-prediction-run/v1", "phase": "start", "created_utc": now(),
             "run_id": run_id, "freeze_ref": freeze_ref, "source_sha256": freeze["source"]["sha256"],
             "selection_sha256": freeze["selection_sha256"], "execution_budget": budget,
@@ -3131,6 +3142,8 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
                 valid = True
             except Exception as exc:
                 record = prediction_document(entry, failure(entry, type(exc).__name__ + ": " + str(exc)), freeze, freeze_ref, started)
+            if stop_on_cell_failure and record["status"] != "predicted":
+                stop_launch.set()
             elapsed = time.monotonic() - clock
             execution_ref = grid.write_new(attempt / "execution.json", {"schema":"stable-native-worker-execution/v1",
                 "created_utc":now(),"cell_id":entry["cell_id"],"freeze_ref":freeze_ref,
@@ -3145,7 +3158,8 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
             reference = grid.write_new(result_path, record)
             grid.write_new(attempt / "sealed.json", {"execution_ref":execution_ref,"prediction_ref":reference,"created_utc":now()})
             return {"cell_id":entry["cell_id"],"status":record["status"],"prediction_ref":reference,
-                "late":deadline_ref is not None or elapsed>observation_seconds,"elapsed_seconds":elapsed}
+                "late":deadline_ref is not None or elapsed>observation_seconds,"elapsed_seconds":elapsed,
+                "observation_interruptions":interruptions}
 
         completed_by_id = {}; iterator = iter(scheduled); observation_interruptions = 0
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -3168,6 +3182,14 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
                         raise
                     completed_by_id[cell_id] = record
                     print(f"[{len(completed_by_id)}/{len(scheduled)}] {cell_id}: {record['status']}", flush=True)
+                    if stop_on_cell_failure and record["status"] != "predicted":
+                        stop_launch.set()
+                        grid.write_new(run_dir / (run_id + ".failed." + grid.stable_hash(cell_id) + ".json"), {
+                            "schema": "stable-native-immediate-cell-failure/v1", "created_utc": now(),
+                            "cell_id": cell_id, "freeze_ref": freeze_ref, "prediction_ref": record["prediction_ref"],
+                            "action": "stop_new_launches_drain_started_workers_then_diagnose_and_supplement",
+                            "automatic_retry": False, "termination_requested": False,
+                        })
                     entry = None if stop_launch.is_set() else next(iterator, None)
                     if entry is not None:in_flight[pool.submit(execute, entry)] = entry["cell_id"]
         _verify_attempts(run_dir, result_dir)
@@ -3179,7 +3201,9 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
             "successful_cells":sum(r["status"]=="predicted" for r in ordered),
             "failed_or_incomplete_cells":sum(r["status"]!="predicted" for r in ordered),
             "late_cells":sum(r["late"] for r in ordered),"maximum_observed_wait_seconds":max((r["elapsed_seconds"] for r in ordered),default=0),
-            "launches_stopped_after_observation_interrupt":stop_launch.is_set(),"pending_cells":manifest["pending_cells"],
+            "launches_stopped_after_observation_interrupt":observation_interruptions > 0 or any(r.get("observation_interruptions", 0) for r in ordered),
+            "launches_stopped_after_cell_failure":stop_on_cell_failure and any(r["status"] != "predicted" for r in ordered),
+            "pending_cells":manifest["pending_cells"],
             "selected_denominator":freeze["selected_denominator"],"all_started_workers_exited_and_sealed":True})
         drained_and_sealed = True
         return manifest
@@ -3408,6 +3432,7 @@ def main(argv=None):
     parser.add_argument("--max-cells", type=int)
     parser.add_argument("--cell-id", action="append", help="run only these frozen IDs this time; repeat for multiple cells")
     parser.add_argument("--workers", type=int, default=4, help="independent cell processes; 1..8, default 4")
+    parser.add_argument("--stop-on-cell-failure", action="store_true", help="stop new launches on a failed cell; drain workers naturally for immediate diagnosis")
     parser.add_argument("--diagnostic-events", action="store_true")
     parser.add_argument("--diagnostic-event-limit", type=int, default=DIAGNOSTIC_EVENT_LIMIT)
     parser.add_argument("--score", action="store_true")
@@ -3447,7 +3472,7 @@ def main(argv=None):
     elif not (args.output / "freeze.json").is_file():
         parser.error("--selection required for initial freeze")
     if not args.freeze_only and not args.score:
-        run_predictions(args.output, timeout_seconds=positive(args.timeout_seconds, "timeout"), resume=args.resume, max_cells=args.max_cells, workers=args.workers, cell_ids=args.cell_id, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit)
+        run_predictions(args.output, timeout_seconds=positive(args.timeout_seconds, "timeout"), resume=args.resume, max_cells=args.max_cells, workers=args.workers, cell_ids=args.cell_id, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit, stop_on_cell_failure=args.stop_on_cell_failure)
     if args.score:
         score_predictions(args.output, native_report=args.native_report)
 

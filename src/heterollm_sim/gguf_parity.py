@@ -104,6 +104,27 @@ class GGUFMetadata:
                 "tensor_directory": [t.__dict__ for t in self.tensor_directory]}
 
 
+class _HashedReadStream:
+    """Hash the exact bytes returned to the parser and the unread payload once."""
+
+    def __init__(self, raw: BinaryIO):
+        self.raw = raw
+        self.digest = sha256()
+        self.bytes_read = 0
+
+    def read(self, size: int = -1) -> bytes:
+        data = self.raw.read(size)
+        self.digest.update(data)
+        self.bytes_read += len(data)
+        return data
+
+    def tell(self) -> int:
+        return self.raw.tell()
+
+    def fileno(self) -> int:
+        return self.raw.fileno()
+
+
 def _read_string(f: BinaryIO) -> str:
     raw = f.read(8)
     if len(raw) != 8:
@@ -157,7 +178,8 @@ def _as_int(value: Any) -> int | None:
 
 def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
     p = Path(path)
-    with p.open("rb") as f:
+    with p.open("rb") as raw:
+        f = _HashedReadStream(raw)
         initial_stat = os.fstat(f.fileno())
         head = f.read(24)
         if len(head) != 24 or head[:4] != b"GGUF":
@@ -208,15 +230,14 @@ def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
         for tensor in directory:
             if data_start + tensor.offset + tensor.n_bytes > file_size:
                 raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
-        # Hash the same open file that supplied metadata, then reject changes.
-        # This closes the two-open identity gap; it does not diagnose historical
-        # read corruption or replace the caller's expected SHA comparison.
-        digest = sha256()
-        f.seek(0)
-        bytes_read = 0
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(chunk)
-            bytes_read += len(chunk)
+        # The parser and digest consume the same returned bytes. Rewinding the
+        # same handle would still allow metadata from one read to be paired
+        # with a different subsequent read's digest while file stats match.
+        # Continue through alignment padding and payload; do not reread headers.
+        for _chunk in iter(lambda: f.read(1024 * 1024), b""):
+            pass
+        digest = f.digest
+        bytes_read = f.bytes_read
         final_stat = os.fstat(f.fileno())
         path_stat = p.stat()
         # Windows fstat/stat can differ in timestamp semantics; ctime

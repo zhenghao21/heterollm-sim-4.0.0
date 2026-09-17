@@ -1,0 +1,279 @@
+--- a/ggml/src/ggml-cuda/ggml-cuda.cu
++++ b/ggml/src/ggml-cuda/ggml-cuda.cu
+@@ -93,10 +93,14 @@
+
+ #if defined(GGML_CUDA_NVTX)
+ #include <nvtx3/nvToolsExt.h>
++#include "llama-trace-annotations.h"
+
+ class ggml_cuda_nvtx_scope {
+ public:
+-    explicit ggml_cuda_nvtx_scope(const ggml_tensor * tensor) {
++    explicit ggml_cuda_nvtx_scope(const ggml_tensor * tensor) : active(llama_trace_annotations_enabled()) {
++        if (!active) {
++            return;
++        }
+         char label[512];
+         const char * name = tensor && tensor->name ? tensor->name : "unnamed";
+         const char * op = tensor ? ggml_op_name(tensor->op) : "unknown";
+@@ -120,9 +124,15 @@
+                  type, layout);
+         nvtxRangePushA(label);
+     }
+-    ~ggml_cuda_nvtx_scope() { nvtxRangePop(); }
++    ~ggml_cuda_nvtx_scope() {
++        if (active) {
++            nvtxRangePop();
++        }
++    }
+     ggml_cuda_nvtx_scope(const ggml_cuda_nvtx_scope &) = delete;
+     ggml_cuda_nvtx_scope & operator=(const ggml_cuda_nvtx_scope &) = delete;
++private:
++    const bool active;
+ };
+ #endif
+
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -22,6 +22,7 @@
+
+ #if defined(GGML_CUDA_NVTX)
+ #include <nvtx3/nvToolsExt.h>
++#include "llama-trace-annotations.h"
+ // nvToolsExt.h may transitively expose Windows min/max macros.
+ #ifdef min
+ #undef min
+@@ -2506,8 +2507,11 @@
+             ggml_cgraph * gf,
+                    bool   batched) {
+ #if defined(GGML_CUDA_NVTX)
+-    const char * phase_label = batched ? "phase:prefill" : "phase:decode";
+-    nvtxRangePushA(phase_label);
++    const bool trace_annotations = llama_trace_annotations_enabled();
++    if (trace_annotations) {
++        const char * phase_label = batched ? "phase:prefill" : "phase:decode";
++        nvtxRangePushA(phase_label);
++    }
+ #endif
+     int n_threads        = batched ? cparams.n_threads_batch : cparams.n_threads;
+     ggml_threadpool_t tp = batched ? threadpool_batch        : threadpool;
+@@ -2531,7 +2535,9 @@
+     }
+
+ #if defined(GGML_CUDA_NVTX)
+-    nvtxRangePop();
++    if (trace_annotations) {
++        nvtxRangePop();
++    }
+ #endif
+
+     // fprintf(stderr, "splits: %d\n", ggml_backend_sched_get_n_splits(sched));
+@@ -4355,7 +4361,7 @@
+
+ uint64_t llama_trace_range_start(const char * name) {
+ #if defined(GGML_CUDA_NVTX)
+-    if (name == nullptr) {
++    if (!llama_trace_annotations_enabled() || name == nullptr) {
+         return 0;
+     }
+     return static_cast<uint64_t>(nvtxRangeStartA(name));
+@@ -4367,7 +4373,7 @@
+
+ void llama_trace_range_end(uint64_t range_id) {
+ #if defined(GGML_CUDA_NVTX)
+-    if (range_id != 0) {
++    if (llama_trace_annotations_enabled() && range_id != 0) {
+         nvtxRangeEnd(static_cast<nvtxRangeId_t>(range_id));
+     }
+ #else
+@@ -4377,7 +4383,7 @@
+
+ void llama_trace_mark(const char * name) {
+ #if defined(GGML_CUDA_NVTX)
+-    if (name != nullptr) {
++    if (llama_trace_annotations_enabled() && name != nullptr) {
+         nvtxMarkA(name);
+     }
+ #else
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -5,6 +5,9 @@
+ #include "server-task.h"
+ #include "server-queue.h"
+ #include "server-trace.h"
++#if defined(LLAMA_SERVER_HOST_TRACE)
++#include "llama-trace-annotations.h"
++#endif
+ #include "server-schema.h"
+ #include "server-stream.h"
+
+@@ -378,6 +381,10 @@
+     bool trace_first_token_emitted = false;
+
+     void trace_request_begin(const server_task & request) {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         const std::string label = string_format(
+             "request_begin|slot=%d|prompt_tokens=%d|predict_tokens=%d",
+             id, request.n_tokens(), request.params.n_predict);
+@@ -385,9 +392,16 @@
+         trace_request_range = SERVER_HOST_RANGE_START(label.c_str());
+         trace_first_token_emitted = false;
+         trace_prefill_active = false;
++#else
++        GGML_UNUSED(request);
++#endif
+     }
+
+     void trace_prefill_begin() {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         if (trace_prefill_active) {
+             return;
+         }
+@@ -395,9 +409,15 @@
+         SERVER_HOST_MARK(label.c_str());
+         trace_prefill_range = SERVER_HOST_RANGE_START(label.c_str());
+         trace_prefill_active = true;
++#else
++#endif
+     }
+
+     void trace_prefill_end() {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         if (!trace_prefill_active) {
+             return;
+         }
+@@ -406,67 +426,125 @@
+         trace_prefill_active = false;
+         const std::string label = string_format("prefill_end|slot=%d", id);
+         SERVER_HOST_MARK(label.c_str());
++#else
++#endif
+     }
+
+     void trace_first_token() {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         if (trace_first_token_emitted) {
+             return;
+         }
+         const std::string label = string_format("first_token|slot=%d", id);
+         SERVER_HOST_MARK(label.c_str());
+         trace_first_token_emitted = true;
++#else
++#endif
+     }
+
+     // Explicit engine counters mirror server_slot_stats boundaries.  These
+     // point markers are diagnostic only: the existing ggml_time_us() updates
+     // remain the source of truth for prompt/decode timing.
+     void trace_engine_request_begin() {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         const std::string label = string_format("engine_request_begin|slot=%d", id);
+         SERVER_HOST_MARK(label.c_str());
++#else
++#endif
+     }
+
+     void trace_engine_token_begin(uint64_t token_index, uint64_t token_count = 1) {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         const std::string label = string_format(
+             "engine_token_begin|slot=%d|token_index=%llu|token_count=%llu",
+             id, (unsigned long long) token_index, (unsigned long long) token_count);
+         SERVER_HOST_MARK(label.c_str());
++#else
++        GGML_UNUSED(token_index);
++        GGML_UNUSED(token_count);
++#endif
+     }
+
+     void trace_engine_token_end(uint64_t token_index, uint64_t token_count = 1) {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         const std::string label = string_format(
+             "engine_token_end|slot=%d|token_index=%llu|token_count=%llu",
+             id, (unsigned long long) token_index, (unsigned long long) token_count);
+         SERVER_HOST_MARK(label.c_str());
++#else
++        GGML_UNUSED(token_index);
++        GGML_UNUSED(token_count);
++#endif
+     }
+
+     // Compute markers surround llama_decode() and its required synchronization.
+     // The engine_token markers remain the sampling/counter boundary and are
+     // not a substitute for the full decode wall.
+     void trace_engine_compute_begin(uint64_t token_index, uint64_t token_count = 1) {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         const std::string label = string_format(
+             "engine_compute_begin|slot=%d|token_index=%llu|token_count=%llu",
+             id, (unsigned long long) token_index, (unsigned long long) token_count);
+         SERVER_HOST_MARK(label.c_str());
++#else
++        GGML_UNUSED(token_index);
++        GGML_UNUSED(token_count);
++#endif
+     }
+
+     void trace_engine_compute_end(uint64_t token_index, uint64_t token_count = 1) {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         const std::string label = string_format(
+             "engine_compute_end|slot=%d|token_index=%llu|token_count=%llu",
+             id, (unsigned long long) token_index, (unsigned long long) token_count);
+         SERVER_HOST_MARK(label.c_str());
++#else
++        GGML_UNUSED(token_index);
++        GGML_UNUSED(token_count);
++#endif
+     }
+
+     void trace_engine_request_end() {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         const std::string label = string_format("engine_request_end|slot=%d", id);
+         SERVER_HOST_MARK(label.c_str());
++#else
++#endif
+     }
+
+     void trace_request_end() {
++#if defined(LLAMA_SERVER_HOST_TRACE)
++        if (!llama_trace_annotations_enabled()) {
++            return;
++        }
+         trace_prefill_end();
+         const std::string label = string_format("request_end|slot=%d", id);
+         SERVER_HOST_MARK(label.c_str());
+         SERVER_HOST_RANGE_END(trace_request_range);
+         trace_request_range = 0;
++#else
++#endif
+     }
+
+     void reset() {

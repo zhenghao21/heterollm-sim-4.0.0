@@ -1,0 +1,10 @@
+{
+  "status": "complete",
+  "binary": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-annotation-control\\build-annotation-control\\bin\\llama-server.exe",
+  "build_seconds": 9.875000000029104,
+  "version_smoke": true,
+  "guard_validation": true,
+  "baseline_runtime_preserved": true,
+  "baseline_link_inputs_preserved": true,
+  "performance_measurement_run": false
+}

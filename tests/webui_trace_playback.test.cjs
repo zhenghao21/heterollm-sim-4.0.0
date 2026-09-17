@@ -45,6 +45,7 @@ function helpers(language = "zh-CN") {
     traceVisualizationFromReport,
     tracePageEndpoint,
     tracePageData,
+    renderTracePageState,
     tracePagePagination,
     tracePageCacheKey,
     tracePageCacheGet,
@@ -1296,4 +1297,50 @@ test("trace nodes omit memory warning tooltips when no logical segments exist", 
   assert.match(renderBody, /titleAttribute = title \?/);
   assert.match(css, /\.playback-view \.trace-node:is\(:hover, \.is-selected\)\[data-trace-memory-summary\]::after/);
   assert.doesNotMatch(renderBody, /没有声明逻辑地址区间/);
+});
+
+
+test("static exact and representative report events retain their backend fidelity in sidebar", () => {
+  const ui = helpers();
+  ui.state.tracePlayback.events = [{ event_id: "task" }];
+  ui.state.tracePlayback.batchTraceIndex = [];
+  ui.state.tracePlayback.mode = "aggregate";
+  for (const [fidelity, label] of [["exact", "3 个精确事件"], ["representative", "3 个代表性事件"], ["aggregate", "3 个聚合事件"]]) {
+    ui.state.tracePlayback.data = { total_events: 3, fidelity };
+    assert.deepEqual({ ...ui.traceStepSummary() }, { count: 3, label });
+  }
+});
+
+test("global previous/next controls update even with the semantic event stream collapsed", () => {
+  const ui = helpers();
+  const playback = ui.state.tracePlayback;
+  playback.filteredEvents = [{ event_id: "first" }, { event_id: "last" }];
+  playback.semanticStreamOpen = false;
+  ui.dom.tracePreviousButton = { disabled: true };
+  ui.dom.traceNextButton = { disabled: false };
+  ui.setTraceSelectedIndex(1);
+  assert.equal(ui.dom.tracePreviousButton.disabled, false);
+  assert.equal(ui.dom.traceNextButton.disabled, true);
+  ui.setTraceSelectedIndex(0);
+  assert.equal(ui.dom.tracePreviousButton.disabled, true);
+  assert.equal(ui.dom.traceNextButton.disabled, false);
+  playback.page = { previous_offset: 0, has_more: true };
+  ui.setTraceSelectedIndex(0);
+  assert.equal(ui.dom.tracePreviousButton.disabled, false);
+  ui.setTraceSelectedIndex(1);
+  assert.equal(ui.dom.traceNextButton.disabled, false);
+});
+
+
+test("in-report static task traces are not described as missing aggregate-only playback", () => {
+  const ui = helpers();
+  ui.dom.tracePageBar = { classList: { toggle() {} } };
+  ui.dom.tracePageStatus = { textContent: "" };
+  const playback = ui.state.tracePlayback;
+  playback.events = [{ event_id: "task0" }, { event_id: "task1" }];
+  playback.data = { fidelity: "exact", total_events: 5 };
+  playback.mode = "aggregate";
+  ui.renderTracePageState();
+  assert.match(ui.dom.tracePageStatus.textContent, /精确事件.*2 \/ 5/u);
+  assert.doesNotMatch(ui.dom.tracePageStatus.textContent, /聚合回放|没有可读取/u);
 });

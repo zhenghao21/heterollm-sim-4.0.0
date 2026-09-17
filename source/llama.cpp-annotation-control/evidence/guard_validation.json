@@ -1,0 +1,65 @@
+{
+  "schema": "annotation_guard_validation_v1",
+  "switch_and_scope_cases": [
+    {
+      "env": null,
+      "returncode": 0
+    },
+    {
+      "env": "0",
+      "returncode": 0
+    },
+    {
+      "env": "1",
+      "returncode": 0
+    },
+    {
+      "env": "true",
+      "returncode": 0
+    },
+    {
+      "env": "01",
+      "returncode": 0
+    },
+    {
+      "env": "",
+      "returncode": 0
+    }
+  ],
+  "host_labels_compiled_out": [
+    {
+      "label": "engine_compute_begin|slot=",
+      "old_present": true,
+      "new_present": false
+    },
+    {
+      "label": "engine_compute_end|slot=",
+      "old_present": true,
+      "new_present": false
+    },
+    {
+      "label": "engine_token_begin|slot=",
+      "old_present": true,
+      "new_present": false
+    },
+    {
+      "label": "engine_token_end|slot=",
+      "old_present": true,
+      "new_present": false
+    },
+    {
+      "label": "request_begin|slot=",
+      "old_present": true,
+      "new_present": false
+    },
+    {
+      "label": "prefill_begin|slot=",
+      "old_present": true,
+      "new_present": false
+    }
+  ],
+  "server_non_annotation_bytes_unchanged_after_newline_normalization": true,
+  "scope_checks": "off: no metadata/layout/format/push/pop; on: nested and null scopes balanced; runtime choice cached",
+  "version_smoke_exit_code": 0,
+  "performance_measurement_run": false
+}

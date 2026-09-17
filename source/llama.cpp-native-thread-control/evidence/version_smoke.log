@@ -1,0 +1,3 @@
+F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-native-thread-control\build-native-thread-control\bin\llama-server.exe --version
+version: 0.4.0-dev (build 1, commit 3057bb6)
+built with MSVC 19.44.35228.0 for Windows AMD64

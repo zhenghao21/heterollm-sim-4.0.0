@@ -12434,44 +12434,6 @@ class _OnlineRuntime:
         for gpu_id, controllers in sorted(
             runtime_profile.gpu_controllers.items()
         ):
-            gpu_candidates = tuple(
-                stage
-                for stage in original
-                if stage.component_id == gpu_id
-                and any(
-                    demand.bytes_moved > 0 or demand.work_units > 0
-                    for task in stage.execution_tasks
-                    for demand in task.demands
-                )
-                and any(
-                    not any(
-                        marker in demand.resource_id
-                        for marker in (
-                            "command_processor",
-                            "command_queue",
-                            "launch",
-                            "mmu_tlb",
-                            "l2_controller",
-                            "vram_controller",
-                        )
-                    )
-                    for task in stage.execution_tasks
-                    for demand in task.demands
-                )
-            )
-            if not gpu_candidates:
-                continue
-            candidate_ids = {stage.stage_id for stage in gpu_candidates}
-            roots = tuple(
-                stage
-                for stage in gpu_candidates
-                if not any(
-                    dependency in candidate_ids
-                    for dependency in stage.dependencies
-                )
-            )
-            if not roots:
-                continue
             # Resolve the planner-owned cache/backing domains before adding
             # runtime controller observers.  The analytical GPU cost model
             # already owns L2 hit/bandwidth service on its declared cache
@@ -12537,6 +12499,40 @@ class _OnlineRuntime:
                 self._gpu_controller_resource_domains[gpu_id] = cached_domains
             l2_resource_id, frozen_memory_resource_ids = cached_domains
             memory_resource_ids = set(frozen_memory_resource_ids)
+
+            # Classify from physical resource ownership, which survives the
+            # compact stage handoff (task metadata may be omitted there).
+            # CPU command work, ingress links, and command processors address
+            # this GPU but do not consume the cohort's future model traffic.
+            controller_markers = (
+                "command_processor", "command_queue", "launch", "mmu_tlb",
+                "l2_controller", "vram_controller",
+            )
+            gpu_candidates = tuple(
+                stage for stage in original
+                if stage.component_id == gpu_id and any(
+                    (demand.bytes_moved > 0 or demand.work_units > 0)
+                    and (
+                        demand.resource_id in memory_resource_ids
+                        or demand.resource_id == l2_resource_id
+                        or (
+                            demand.resource_id.startswith(gpu_id + ".")
+                            and not any(marker in demand.resource_id
+                                        for marker in controller_markers)
+                        )
+                    )
+                    for task in stage.execution_tasks for demand in task.demands
+                )
+            )
+            if not gpu_candidates:
+                continue
+            candidate_ids = {stage.stage_id for stage in gpu_candidates}
+            roots = tuple(
+                stage for stage in gpu_candidates
+                if not any(dependency in candidate_ids for dependency in stage.dependencies)
+            )
+            if not roots:
+                continue
 
             # A task can expose the same byte fact on concurrent compute and
             # memory resources.  ``fallback_total_bytes`` therefore retains

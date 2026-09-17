@@ -1,0 +1,8 @@
+{
+  "status": "complete",
+  "binary": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\llama-server.exe",
+  "cpu_dll_sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+  "all_other_runtime_files_unchanged": true,
+  "no_openmp_imports": true,
+  "performance_measurement_run": false
+}

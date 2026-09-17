@@ -1,0 +1,30 @@
+{
+  "schema": "native_thread_features_validation_v1",
+  "runtime_features": {
+    "old_openmp": {
+      "AVX": "1",
+      "AVX2": "1",
+      "BMI2": "1",
+      "F16C": "1",
+      "FMA": "1",
+      "LLAMAFILE": "1",
+      "OPENMP": "1",
+      "REPACK": "1",
+      "SSE3": "1",
+      "SSSE3": "1"
+    },
+    "new_native_threads": {
+      "AVX": "1",
+      "AVX2": "1",
+      "BMI2": "1",
+      "F16C": "1",
+      "FMA": "1",
+      "LLAMAFILE": "1",
+      "REPACK": "1",
+      "SSE3": "1",
+      "SSSE3": "1"
+    }
+  },
+  "other_cpu_features_identical": true,
+  "no_performance_measurement": true
+}

@@ -13303,7 +13303,7 @@ def _iter_parallel_request_task_chunks(
     )
     first_invocation_task = len(builder.tasks)
     selection = _final_output_selection(scenario, plan, request.prompt_tokens, (request.prompt_tokens - 1,))
-    invocation_prior, output_indices, upload_ids = _prepare_output_selection_inputs(
+    invocation_prior, output_indices = _prepare_output_selection_inputs(
         builder, scenario, router, plan, selection, "prefill", (prepared,))
     end = _compile_parallel_iteration(
         builder,
@@ -13333,7 +13333,7 @@ def _iter_parallel_request_task_chunks(
         output_selection=selection,
         output_indices_dependency=output_indices,
     )
-    _bind_output_index_upload(builder, first_invocation_task, upload_ids)
+    _bind_output_index_upload(builder, scenario, router, plan, first_invocation_task, output_indices)
     next_token = 0
     if request.output_tokens > 0:
         end = _add_host_visible_logits_sampling_commit(
@@ -13384,7 +13384,7 @@ def _iter_parallel_request_task_chunks(
             )
             first_invocation_task = len(builder.tasks)
             selection = _final_output_selection(scenario, plan, 1, (0,))
-            invocation_prior, output_indices, upload_ids = _prepare_output_selection_inputs(
+            invocation_prior, output_indices = _prepare_output_selection_inputs(
                 builder, scenario, router, plan, selection, phase, (prepared,))
             end = _compile_parallel_iteration(
                 builder,
@@ -13407,7 +13407,7 @@ def _iter_parallel_request_task_chunks(
                 builder, scenario, plan, router, phase, (end,),
                 output_selection=selection, output_indices_dependency=output_indices,
             )
-            _bind_output_index_upload(builder, first_invocation_task, upload_ids)
+            _bind_output_index_upload(builder, scenario, router, plan, first_invocation_task, output_indices)
             end = _add_host_visible_logits_sampling_commit(
                 builder,
                 scenario,
@@ -14399,10 +14399,10 @@ def _prepare_output_selection_inputs(
     builder: _TaskBuilder, scenario: ScenarioConfig, router: TopologyRouter,
     plan: ParallelPlan, selection: Optional[_FinalOutputSelection],
     phase: str, dependencies: Sequence[str],
-) -> Tuple[Tuple[str, ...], Optional[str], Tuple[str, ...]]:
-    """One host input update and one destination copy, outside layer caches."""
+) -> Tuple[Tuple[str, ...], Optional[str]]:
+    """Prepare host indices once; placement is bound to the actual consumers."""
     if selection is None:
-        return tuple(dependencies), None, ()
+        return tuple(dependencies), None
     rank = plan.rank_at(0, 0, 0)
     layer = _execution_layers(scenario)[-1]
     prefix = phase + "." + layer.layer_id + ".output_ids"
@@ -14424,80 +14424,106 @@ def _prepare_output_selection_inputs(
                     "logical_write_bytes": writes, "physical_memory_traffic_status": "unknown_not_charged",
                     "unpriced_terms": ["compiled_I8_condition_address_and_loop_work", "input_sync_and_driver_control"]}})
         prior = (host_end,)
-    target = (
-        _parallel_target(scenario, layer, "attention", rank)
-        if selection.position == "before_last_ffn"
-        else _primitive_target(scenario, router, rank, OperatorClass.ELEMENTWISE,
-                               "final_norm.apply", fallback_keys=("final_norm",))
-    )
-    if _kind(_component(scenario, target)) not in {"cpu", "gpu"}:
-        raise ValueError("final output selection requires a declared CPU or GPU target")
-    if not writes or _kind(_component(scenario, target)) == "cpu":
-        return prior, host_end, ()
-    first_transfer = len(builder.tasks)
-    host_memory = _compute_local_runtime_memory_component_id(scenario, cpu_id)
-    upload = _add_transfer_tasks(builder, router, host_memory, target, writes, prior,
-        name=prefix + ".upload", routing_policy=plan.routing_policy,
-        metadata={"event_kind": "output_row_index_transfer_internal", "rank": rank.rank,
-            "final_layer_output_selection": {**_selection_audit(selection, "index_upload"),
-                "index_tensor_id": prefix, "index_bytes": writes, "destination_component": target,
-                "copy_scope": "one_source_tensor_destination_and_invocation",
-                "unpriced_terms": ["input_copy_driver_submission_and_stream_sync"]}})
-    ids = tuple(task.task_id for task in builder.tasks[first_transfer:])
-    for index in range(first_transfer, len(builder.tasks)):
-        task = builder.tasks[index]
-        builder.discard_rank_value(task.task_id, rank.rank)
-        if task.task_id == upload:
-            builder.tasks[index] = replace(task, metadata={**task.metadata,
-                "event_kind": "output_row_index_transfer"})
-    return prior, upload, ids
+    return prior, host_end
 
 
 def _bind_output_index_upload(
-    builder: _TaskBuilder, first: int, upload_ids: Sequence[str],
+    builder: _TaskBuilder, scenario: ScenarioConfig, router: TopologyRouter,
+    plan: ParallelPlan, first: int, indices_dependency: Optional[str],
 ) -> None:
-    """Place the shared input at its first consuming declared device segment.
+    """Copy one host tensor per actual GPU consumer and physical invocation.
 
-    This follows the existing planner's operator placement; it does not assert
-    that the native backend scheduler made those same assignments.
+    GET_ROWS placement is known only after lowering final norm (or the final
+    attention branches).  An operator-map guess here can disagree with a
+    shape-dependent CPU/GPU split.  Layer templates retain the host dependency;
+    binding happens after expansion, before the full invocation is captured.
     """
-    if not upload_ids:
+    if indices_dependency is None:
         return
     by_id = {task.task_id: index for index, task in enumerate(builder.tasks)}
-    upload_first, upload_last = by_id[upload_ids[0]], upload_ids[-1]
-    target = builder.tasks[upload_first].metadata["final_layer_output_selection"]["destination_component"]
+    host = builder.tasks[by_id[indices_dependency]]
+    if host.metadata.get("event_kind") != "output_row_indices":
+        raise ValueError("output indices must originate in this invocation's host preparation")
+    host_audit = host.metadata["final_layer_output_selection"]
+    selection_audit = {key: value for key, value in host_audit.items() if key not in {
+        "logical_read_bytes", "logical_write_bytes", "physical_memory_traffic_status", "unpriced_terms",
+    }}
+    byte_count = int(host_audit["logical_write_bytes"])
     numerical = []
-    for index in range(first, len(builder.tasks)):
-        task = builder.tasks[index]
-        if task.task_id in upload_ids or task.metadata.get("event_kind") in {
-            "output_row_indices", "qwen35_shared_graph_input",
-        }:
+    consumers: Dict[str, List[str]] = {}
+    for task in builder.tasks[first:]:
+        if task.metadata.get("event_kind") in {"output_row_indices", "qwen35_shared_graph_input"}:
             continue
         component = task.metadata.get("target_component")
-        cost = task.metadata.get("cost_model")
-        if component and isinstance(cost, Mapping) and task.category != TaskCategory.COMMUNICATION:
-            numerical.append((index, component))
-    gather = next(index for index, component in numerical
-                  if component == target and builder.tasks[index].metadata.get("event_kind") == "output_row_selection")
-    segment = []
-    for index, component in numerical:
-        if index > gather:
-            break
-        if component == target:
-            segment.append(index)
-        else:
-            segment.clear()
-    if not segment:
-        raise ValueError("output-index destination segment could not be located")
-    entry_index = segment[0]
-    entry, upload = builder.tasks[entry_index], builder.tasks[upload_first]
-    if any(dependency in upload_ids for dependency in entry.dependencies):
-        # No earlier node in this segment: the gather already waits for upload.
+        if component and isinstance(task.metadata.get("cost_model"), Mapping) and task.category != TaskCategory.COMMUNICATION:
+            numerical.append((task.task_id, component))
+        if task.metadata.get("event_kind") == "output_row_selection":
+            if not component or _kind(_component(scenario, component)) not in {"cpu", "gpu"}:
+                raise ValueError("output selection consumer must declare its CPU or GPU placement")
+            consumers.setdefault(component, []).append(task.task_id)
+    if byte_count and not consumers:
+        raise ValueError("nonempty output indices have no lowered GET_ROWS consumer")
+    if not byte_count:
+        if consumers:
+            raise ValueError("empty output indices cannot feed a GET_ROWS consumer")
         return
-    builder.tasks[upload_first] = replace(upload, dependencies=tuple(dict.fromkeys(
-        (*upload.dependencies, *entry.dependencies))))
-    builder.tasks[entry_index] = replace(entry, dependencies=tuple(dict.fromkeys(
-        (*entry.dependencies, upload_last))))
+
+    rank = plan.rank_at(0, 0, 0)
+    host_memory = _compute_local_runtime_memory_component_id(scenario, str(host.metadata["target_component"]))
+    for target, gather_ids in consumers.items():
+        if _kind(_component(scenario, target)) == "cpu":
+            continue
+        # Find the first numerical device segment containing this consumer.
+        # The upload waits on that segment's input; only this segment and its
+        # gathers wait on the upload, leaving an independent CPU prefix free.
+        first_gather = next((task_id for task_id, component in numerical
+                             if component == target and task_id in gather_ids), None)
+        if first_gather is None:
+            raise ValueError("output-index GPU consumer has no numerical device segment")
+        segment = []
+        for task_id, component in numerical:
+            if component == target:
+                segment.append(task_id)
+            else:
+                segment.clear()
+            if task_id == first_gather:
+                break
+        if not segment:
+            raise ValueError("output-index destination segment could not be located")
+        by_id = {task.task_id: index for index, task in enumerate(builder.tasks)}
+        entry_id = segment[0]
+        entry = builder.tasks[by_id[entry_id]]
+        prior = tuple(dict.fromkeys((indices_dependency, *entry.dependencies)))
+        first_transfer = len(builder.tasks)
+        saved_previous, saved_dma = builder.previous, builder._last_coherent_dma_task
+        upload = _add_transfer_tasks(builder, router, host_memory, target, byte_count, prior,
+            name=str(host_audit["index_tensor_id"]) + ".upload." + target,
+            routing_policy=plan.routing_policy,
+            metadata={"event_kind": "output_row_index_transfer_internal", "rank": rank.rank,
+                "final_layer_output_selection": {**selection_audit, "stage": "index_upload",
+                    "index_bytes": byte_count, "destination_component": target,
+                    "placement_source": "actual_output_row_selection_consumer",
+                    "copy_scope": "one_source_tensor_destination_and_invocation",
+                    "unpriced_terms": ["input_copy_driver_submission_and_stream_sync"]}})
+        builder.previous, builder._last_coherent_dma_task = saved_previous, saved_dma
+        for i in range(first_transfer, len(builder.tasks)):
+            task = builder.tasks[i]
+            builder.discard_rank_value(task.task_id, rank.rank)
+            if task.task_id == upload:
+                builder.tasks[i] = replace(task, metadata={**task.metadata,
+                    "event_kind": "output_row_index_transfer"})
+        # Retain creation order so template replay preserves stable task ids.
+        # Schedule execution and segment capture both validate forward edges.
+        gather_set = set(gather_ids)
+        for i in range(first, len(builder.tasks)):
+            task = builder.tasks[i]
+            if task.task_id == entry_id:
+                deps = (*task.dependencies, upload)
+            elif task.task_id in gather_set:
+                deps = tuple(upload if dep == indices_dependency else dep for dep in task.dependencies)
+            else:
+                continue
+            builder.tasks[i] = replace(task, dependencies=tuple(dict.fromkeys(deps)))
 
 
 def _add_output_row_selection(
@@ -15673,11 +15699,11 @@ def _compile_parallel_layer_body(
             rank,
             fallback_keys=("{}.attention".format(layer.layer_id),),
         )
-        score_heads = (
-            query_head_shard.local_size
-            if attention_execution is not None
-            else 1
-        )
+        # Ordinary MHA/GQA keeps one score matrix per physical query head,
+        # even without a specialized attention execution descriptor.  The
+        # folded QK/PV GEMM dimensions already include query width; only the
+        # score tensor, softmax rows, and their working sets use this count.
+        score_heads = query_head_shard.local_size
         score_elements = max(
             1, score_heads * token_batch * context_tokens
         )
@@ -21054,7 +21080,7 @@ def _compile_or_replay_serving_invocation(
     initial_dma = builder._last_coherent_dma_task
     selection = _final_output_selection(scenario, plan, group.token_batch,
         tuple(index for index, lane in enumerate(group.lanes) if lane.requires_logits))
-    prepared, output_indices, upload_ids = _prepare_output_selection_inputs(
+    prepared, output_indices = _prepare_output_selection_inputs(
         builder, scenario, router, plan, selection, phase, dependencies)
     group_end = _compile_parallel_iteration(
         builder,
@@ -21097,7 +21123,7 @@ def _compile_or_replay_serving_invocation(
                 logit_rows=group.logit_token_batch,
                 committed_rows=group.committed_logit_token_batch,
             )
-    _bind_output_index_upload(builder, first_task_index, upload_ids)
+    _bind_output_index_upload(builder, scenario, router, plan, first_task_index, output_indices)
     _tag_serving_invocation_group_tasks(
         builder,
         first_task_index,

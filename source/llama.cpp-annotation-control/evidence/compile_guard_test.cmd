@@ -1,0 +1,3 @@
+@echo off
+call "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Auxiliary/Build/vcvars64.bat" >nul
+cl /nologo /EHsc /std:c++17 /O2 /I"F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-annotation-control\ggml\include" "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-annotation-control\evidence\annotation_guard_test.cpp" /Fo"F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-annotation-control\evidence\annotation_guard_test.obj" /Fe"F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\source\llama.cpp-annotation-control\evidence\annotation_guard_test.exe"
