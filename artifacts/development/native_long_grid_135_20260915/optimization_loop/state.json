@@ -1548,9 +1548,9 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Monitor live R33 full session62083; off baseline then on candidate with same131 native. Preserve all terminals and startup failures, no reattempting failed cells. Score only after sealed262; then compare structural and error changes before choosing next mechanism.",
-  "full_131_evaluations_started": 7,
-  "full_131_evaluations_completed": 6,
+  "next_round_hypothesis": "Finish live R33 on after off closed111predicted20failed; preserve all262 terminals before score. Then new version repairs proven output-index actual-consumer placement/dependency mismatch before any cost calibration. No native remeasurement or scene constants.",
+  "full_131_evaluations_started": 8,
+  "full_131_evaluations_completed": 7,
   "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
   "best_candidate_status": "No new accuracy candidate admitted. Latest completed R27/on:9/131 cells and74/393 metric items pass; R32 rejected in preparation before predictions. A fails; B unvalidated.",
   "version_control_policy": {
@@ -1763,6 +1763,15 @@
       "verified_utc": "2026-09-17T06:47:36.888201+00:00",
       "status": "pushed_and_remote_verified",
       "scope": "R33 freeze/lock and first startup rejection,512-trial controlled digest diagnostic"
+    },
+    {
+      "commit": "5918cc5b3a10dd18b5fb71ab0eeadd50cc267438",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "5918cc5b3a10dd18b5fb71ab0eeadd50cc267438",
+      "verified_utc": "2026-09-17T07:34:21.571746+00:00",
+      "status": "pushed_and_remote_verified",
+      "scope": "bounded R33 startup recovery and live evaluation"
     }
   ],
   "operator_microbenchmark": {
@@ -2813,7 +2822,7 @@
     "later_diagnostic": "one4MiB-block read: OpenSSL/CNG match expected; all gate stat fields stable at diagnostic time only; original cause unknown"
   },
   "round_033_preparation": {
-    "status": "full_off_running_after_one_recorded_startup_resume",
+    "status": "full_on_running_off_closed111predicted20failed",
     "baseline_commit": "8b715dc80ded2a35d7ab52b46339320149a33da4",
     "candidate_commit": "b72743490814e3818336febc9576aa6d95e309bf",
     "common_source_override_paths": [
@@ -2852,7 +2861,6 @@
       "sha256": "605ddddb76ef1a2b0fa1c3ee480b63416ad684d8ec5034e742b8cf6c2c412f76",
       "bytes": 3407
     },
-    "worker_count": 0,
     "failing_evidence": "off/evidence/nvidia-rtx-blackwell-gpu-architecture.pdf",
     "cause": "unknown; original actual reference not captured",
     "no_retry_or_R34_without_new_diagnostic_evidence": true,
@@ -2878,12 +2886,15 @@
       "interpretation": "No disagreement observed in fixed in-memory data; original startup reference mismatch remains unexplained"
     },
     "tool_session_id": 62083,
-    "observed_utc": "2026-09-17T06:47:36.888201+00:00",
+    "observed_utc": "2026-09-17T07:34:21.571746+00:00",
     "observed_prediction_counts": {
       "off": {
-        "predicted": 30
+        "predicted": 111,
+        "failed": 20
       },
-      "on": {}
+      "on": {
+        "predicted": 33
+      }
     },
     "startup_resume_decision_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\startup_resume_decision.0001.json",
@@ -2903,6 +2914,37 @@
       "stage": "postprocess-readonly-compatibility",
       "status": "403 quota exhausted before review",
       "fallback": "same root model completed local read-only check; formal simulator unaffected"
+    },
+    "worker_count_at_rejected_startup": 0,
+    "on_full_evaluation_counted": true,
+    "off_full_evaluation_completed_counted": true,
+    "output_index_consumer_structural_diagnostic": {
+      "observed_utc": "2026-09-17T07:34:21.571746+00:00",
+      "refs": [
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\diagnostic\\output_index_consumer_repro.off.json",
+          "sha256": "259851774e08a0416014c94f612983b9f805879b0155ca8ac35e6d4efe609b72",
+          "bytes": 5063
+        },
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\diagnostic\\output_index_consumer_repro.on.json",
+          "sha256": "af2d9a773836647307842cffbdd961fa7fddcf1aa07de0800aa4a2fb55762989",
+          "bytes": 5057
+        },
+        {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\diagnostic\\output_index_consumer_repro.py",
+          "sha256": "b0f397e305ed6b397b1df10c64c1c6f902f2b60c7679683104e2b6bb331992cc",
+          "bytes": 3153
+        }
+      ],
+      "both_frozen_sources_reproduced": true,
+      "native_remeasured": false,
+      "target_timings_used": false,
+      "formal_off_failed_cells": 20,
+      "formal_worker_traceback_available": false,
+      "root_cause_scope": "synthetic graph proves index GPU target versus CPU GET_ROWS consumer mismatch; formal20 cells have matching exception type but no per-cell stack",
+      "repair_status": "next version only after current freeze completes; no frozen-source edits",
+      "next_action": "bind index placement/copy/dependency to actual consumer, preserve per-invocation preparation and unique target copy; test placement/M/path/template boundaries"
     }
   }
 }
