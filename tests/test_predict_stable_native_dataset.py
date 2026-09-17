@@ -192,22 +192,37 @@ def test_freeze_precedes_prediction_and_worker_never_reads_answers(tmp_path, mon
     assert len(calls["run"]) == 1  # scoring never reruns or alters predictions
 
 
-def test_timeout_keeps_denominator_and_resume_preserves_result(tmp_path, monkeypatch):
+def test_soft_deadline_keeps_late_success_and_resume_preserves_result(tmp_path, monkeypatch):
     path, _, _, calls = fixture(tmp_path, monkeypatch)
     out = tmp_path / "out"
     adapter.freeze_selection(path, out, data_root=tmp_path)
-    def timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
-    monkeypatch.setattr(subprocess, "run", timeout)
+    launches=[]
+    class NaturalWorker:
+        pid=12345
+        returncode=None
+        def __init__(self, command, **kwargs):self.command=command;self.waits=0;launches.append(command)
+        def wait(self, timeout=None):
+            self.waits+=1
+            if self.waits==1:raise subprocess.TimeoutExpired(self.command,timeout)
+            command=self.command
+            adapter.worker_cell(Path(command[command.index("--worker-freeze")+1]),command[command.index("--worker-cell")+1],Path(command[command.index("--worker-result")+1]))
+            self.returncode=0;return 0
+        def poll(self):return self.returncode
+        def kill(self):pytest.fail("must never kill")
+        def terminate(self):pytest.fail("must never terminate")
+    monkeypatch.setattr(subprocess,"Popen",NaturalWorker)
     result = adapter.run_predictions(out, timeout_seconds=.01)
-    assert result["selected_denominator"] == result["failed_or_incomplete_cells"] == 1
+    assert result["selected_denominator"] == result["successful_cells"] == 1
     before = result["cells"][0]["prediction_ref"]
+    record,_=adapter.grid.read_document(before["path"])
+    evidence=adapter.verify_worker_execution(record,before["path"])
+    assert evidence["late"] and evidence["natural_exit_observed"] and not evidence["hard_time_limit_enforced"]
     resumed = adapter.run_predictions(out, resume=True)
-    assert resumed["cells"][0]["prediction_ref"] == before
-    assert not calls["run"]
+    assert resumed["cells"][0]["prediction_ref"] == before and len(launches)==1
+    assert len(calls["run"])==1
     score = adapter.score_predictions(out)
     assert score["overall"]["engine_ttft_ms"]["selected_cells"] == 1
-    assert score["overall"]["engine_ttft_ms"]["missing_cells"] == 1
+    assert score["overall"]["engine_ttft_ms"]["missing_cells"] == 0
 
 
 def test_missing_static_inputs_remain_failed_not_excluded(tmp_path, monkeypatch):
@@ -326,7 +341,13 @@ def test_bounded_workers_keep_selection_order_and_separate_run_receipts(tmp_path
         finally:
             with lock:
                 tracker["live"] -= 1
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    class FakeWorker:
+        pid=12345
+        returncode=None
+        def __init__(self,command,**kwargs):self.command=command;self.kwargs=kwargs
+        def wait(self,timeout=None):self.returncode=fake_run(self.command,**self.kwargs).returncode;return self.returncode
+        def poll(self):return self.returncode
+    monkeypatch.setattr(subprocess, "Popen", FakeWorker)
     result = adapter.run_predictions(out, workers=2, timeout_seconds=17)
     assert tracker == {"live": 0, "peak": 2}
     assert result["successful_cells"] == result["selected_denominator"] == 5
@@ -334,7 +355,7 @@ def test_bounded_workers_keep_selection_order_and_separate_run_receipts(tmp_path
     start, _ = adapter.grid.read_document(out / "runs/run.0001.start.json")
     finish, _ = adapter.grid.read_document(out / "runs/run.0001.finish.json")
     assert start["execution_budget"]["workers"] == finish["execution_budget"]["workers"] == 2
-    assert start["execution_budget"]["per_cell_timeout_seconds"] == 17
+    assert start["execution_budget"]["per_cell_soft_observation_seconds"] == 17
     assert [r["cell_id"] for r in finish["cells"]] == selection["selected_cell_ids"]
     assert adapter.grid.file_ref(out / "freeze.json") == freeze_before
     assert not (out / "runs/coordinator.lock").exists()
@@ -514,7 +535,13 @@ def test_cell_filter_runs_only_requested_pilots_then_resumes_full_denominator(tm
             command[command.index("--worker-cell") + 1],
             Path(command[command.index("--worker-result") + 1]))
         return SimpleNamespace(returncode=0)
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    class FakeWorker:
+        pid=12345
+        returncode=None
+        def __init__(self,command,**kwargs):self.command=command;self.kwargs=kwargs
+        def wait(self,timeout=None):self.returncode=fake_run(self.command,**self.kwargs).returncode;return self.returncode
+        def poll(self):return self.returncode
+    monkeypatch.setattr(subprocess, "Popen", FakeWorker)
     requested = [rows[2]["cell_id"], rows[0]["cell_id"]]
     first = adapter.run_predictions(out, workers=2, cell_ids=requested)
     assert first["selected_denominator"] == 3 and first["successful_cells"] == 2 and first["pending_cells"] == 1

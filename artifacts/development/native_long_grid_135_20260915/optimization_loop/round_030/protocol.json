@@ -1,0 +1,1206 @@
+{
+  "schema": "r30-nominal-hbm-normalized-inputs/v1",
+  "created_utc": "2026-09-16T22:39:14.451174+00:00",
+  "reviewed_commit": "e3be58e4039d29cbff0ba4e992d36459aaca9f43",
+  "baseline_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_027\\on\\freeze.json",
+    "sha256": "1f81e67f73082e3575cc88df6838c8ecf9f732e42afb218efdb166eeb0766ff0",
+    "bytes": 53021323
+  },
+  "native_lock": {
+    "native_locked": true,
+    "selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "selected_cells": 131,
+    "raw_files": 131,
+    "formal_requests": 894
+  },
+  "helpers": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\freeze_candidate.py",
+      "sha256": "99f1b12df0c075c089564a87b30c862c7132445d4e669d89e9a29d1409c80dac",
+      "bytes": 22416
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\run_candidate.py",
+      "sha256": "a1295459c03d3124046072fbdd879234dd3f813103ab89833f5b07c729228cdc",
+      "bytes": 13480
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\summarize_groups.py",
+      "sha256": "090e96789f9d6c16bac2fa445719492bfa161fff493f535a060b2a3473f0195d",
+      "bytes": 5508
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\verify_frozen_preflight.py",
+      "sha256": "671816e7fc1182ccf7a493b49045e833c4814844e2a894ee0baf1645fef5abb8",
+      "bytes": 5187
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\test_freeze_candidate.py",
+      "sha256": "f4ec0bf8957866eecb2708a0c547119257727ec3ed3d5fc07b4779097ac0779e",
+      "bytes": 13773
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\test_run_candidate.py",
+      "sha256": "661b952d85c65e60080fa8d5a6da74ae1a05ff5b2a0e345f645c1dc3c43177a4",
+      "bytes": 7304
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\test_summarize_groups.py",
+      "sha256": "bd6b70628f47be8302a17dd32ad2775fba1a849cf5c852baafb8cf5f1ab2654c",
+      "bytes": 1717
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\test_nominal_dynamic_modes.py",
+      "sha256": "378b8310c813ebb4194e291bd037ee93502569732cff2ba3b888641f02ffc7c5",
+      "bytes": 2094
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\test_natural_worker_lifecycle.py",
+      "sha256": "c5f67f1bee5707903255517c458bbcfc315d3654a95eb5b04e13a5e6ede5e091",
+      "bytes": 10362
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\summarize_ablation.py",
+      "sha256": "fa2ce1fe89439f434ff67ccea7d079fe826509ebd7908b070af08143048379a0",
+      "bytes": 46563
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_023\\evaluate_candidate.py",
+      "sha256": "526378e3b8c8e110f3205138ff09c35b8a63ab3cace58e235da9f5cafa047d2f",
+      "bytes": 14406
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\verify_fixed_native.py",
+      "sha256": "ed8580608ec9d6269ed6ded0ef3657d8ad672bfe1c2c8ab9c5cc107b2c9aa66d",
+      "bytes": 3676
+    }
+  ],
+  "helper_copies": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\0_freeze_candidate.py",
+      "sha256": "99f1b12df0c075c089564a87b30c862c7132445d4e669d89e9a29d1409c80dac",
+      "bytes": 22416
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\1_run_candidate.py",
+      "sha256": "a1295459c03d3124046072fbdd879234dd3f813103ab89833f5b07c729228cdc",
+      "bytes": 13480
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\2_summarize_groups.py",
+      "sha256": "090e96789f9d6c16bac2fa445719492bfa161fff493f535a060b2a3473f0195d",
+      "bytes": 5508
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\3_verify_frozen_preflight.py",
+      "sha256": "671816e7fc1182ccf7a493b49045e833c4814844e2a894ee0baf1645fef5abb8",
+      "bytes": 5187
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\4_test_freeze_candidate.py",
+      "sha256": "f4ec0bf8957866eecb2708a0c547119257727ec3ed3d5fc07b4779097ac0779e",
+      "bytes": 13773
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\5_test_run_candidate.py",
+      "sha256": "661b952d85c65e60080fa8d5a6da74ae1a05ff5b2a0e345f645c1dc3c43177a4",
+      "bytes": 7304
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\6_test_summarize_groups.py",
+      "sha256": "bd6b70628f47be8302a17dd32ad2775fba1a849cf5c852baafb8cf5f1ab2654c",
+      "bytes": 1717
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\7_test_nominal_dynamic_modes.py",
+      "sha256": "378b8310c813ebb4194e291bd037ee93502569732cff2ba3b888641f02ffc7c5",
+      "bytes": 2094
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\8_test_natural_worker_lifecycle.py",
+      "sha256": "c5f67f1bee5707903255517c458bbcfc315d3654a95eb5b04e13a5e6ede5e091",
+      "bytes": 10362
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\9_summarize_ablation.py",
+      "sha256": "fa2ce1fe89439f434ff67ccea7d079fe826509ebd7908b070af08143048379a0",
+      "bytes": 46563
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\10_evaluate_candidate.py",
+      "sha256": "526378e3b8c8e110f3205138ff09c35b8a63ab3cace58e235da9f5cafa047d2f",
+      "bytes": 14406
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\control_source\\11_verify_fixed_native.py",
+      "sha256": "ed8580608ec9d6269ed6ded0ef3657d8ad672bfe1c2c8ab9c5cc107b2c9aa66d",
+      "bytes": 3676
+    }
+  ],
+  "source_refs": [
+    {
+      "relative": "src/heterollm_sim/__init__.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\__init__.py",
+        "sha256": "7b934a00c96af6549f411319f8dce7ca9532248bedea18d44e3be29b5deb99fa",
+        "bytes": 3698
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/__main__.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\__main__.py",
+        "sha256": "e014c07c71c5daede3fe8520fd696eaaed07cb19d77c01c14147273d0f9ed71b",
+        "bytes": 50
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/architecture_presets.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\architecture_presets.py",
+        "sha256": "8e4e1589340594da625e770de493d092898267831fa1886d703e7cc0d5eeec1b",
+        "bytes": 100276
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/architecture_scan.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\architecture_scan.py",
+        "sha256": "e8968b0fc07d3f940db2439a902de0cfbb37c46f0b6338e30d7b0d7e9ac086d3",
+        "bytes": 45613
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/batched_accelerator.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\batched_accelerator.py",
+        "sha256": "4fb430d99c2dc4bf2eacb57523771043b8f3acedb041ddd1e004393396ae79c8",
+        "bytes": 18194
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/cache_state.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\cache_state.py",
+        "sha256": "616ae54f32ca2f169fcb0230e5c5900e6181d59a5fb06af6156e9d302d9c59ee",
+        "bytes": 18648
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/calibration.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\calibration.py",
+        "sha256": "ab93a65e5daaae0b3ef2af5de02b2fd0964ddc8fd09e2444885ad2e977da8331",
+        "bytes": 54672
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/cli.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\cli.py",
+        "sha256": "a9455f5e27f3661a2333eea6c88e2911962ed59b7a1f4ac13c91bc0e8f871e04",
+        "bytes": 15206
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/communication.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\communication.py",
+        "sha256": "6e6a6273da6d80f0a3778c4c03adc1627bfe66dda351893db22a0a58be0e3607",
+        "bytes": 47700
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/compiler_ir.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\compiler_ir.py",
+        "sha256": "56f7b386752e6afc026bb7d8140eeae2277b4b728867828aa512e77aa53f0c8a",
+        "bytes": 99056
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/component_presets.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\component_presets.py",
+        "sha256": "4b9df1d6e95a6b6894222994affca32ed45035b9b77e338477432ef648a0d993",
+        "bytes": 76749
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/config.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\config.py",
+        "sha256": "aee237248171e5228253f2afea611834a90af18a0ac9ab7b8ecd91a4ee0f3df0",
+        "bytes": 76580
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/contracts.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\contracts.py",
+        "sha256": "ec65514059ca2abccc166efd1e8fb576f6afd8f9b9e27b62ee00d55dae58834c",
+        "bytes": 11640
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/control_plane.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\control_plane.py",
+        "sha256": "d4d26da232162eeffd269790f85ab9abebbfd15da13f2888df9c549757eaf6ae",
+        "bytes": 37287
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/control_plane_planner.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\control_plane_planner.py",
+        "sha256": "b96364bb91f4a7a1b89b18dd12ba1e090f24549f90ce0ed2a6fd3d2c11a789b5",
+        "bytes": 204390
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/control_plane_state.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\control_plane_state.py",
+        "sha256": "ab10c289f4aa18c9b01e5fcf5e3bf796e9b4ad38392c97f0544d9246ebee350a",
+        "bytes": 11172
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/conversion_work.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\conversion_work.py",
+        "sha256": "903d4271f0029c19469e1e79386a08c2330f5336c776ba41b41afa1d1ed4ef91",
+        "bytes": 13470
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/cost_models.py",
+      "origin": "reviewed_commit",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\cost_models.py",
+        "sha256": "5937c4ec667256f4a3dc7c67ea89d878f62f141ed5a5bbc141708d84caa7fb75",
+        "bytes": 211947
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/engine.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\engine.py",
+        "sha256": "93a5c854de9df960951bb67d40adacb389cd9335c36844b0892c82ac3c3c4537",
+        "bytes": 6552
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/event_kernel.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\event_kernel.py",
+        "sha256": "387381ad2ab32ff0ffeefbb12c3035abeb7e55db8b5bfd5a429e6fa29ceba9a4",
+        "bytes": 92897
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/execution_control.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\execution_control.py",
+        "sha256": "4db9e288721acc7be8f4095fcc80703667eb3c7358debaaeafb3547ad2664524",
+        "bytes": 3309
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/final_layer_output_selection.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\final_layer_output_selection.py",
+        "sha256": "31c8cc0e43f528eb9393d742430d36552d9e8c212ee83477b874608ff2c5d6cc",
+        "bytes": 6622
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/gguf_parity.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\gguf_parity.py",
+        "sha256": "0e7087e29e07db38b0c879f81b6efbf9521386cf0da4f9db1f2d1c6d61b09dfb",
+        "bytes": 26150
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/invocation.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\invocation.py",
+        "sha256": "0759507f412bc553870d075d53d3cd9145d9ad0a432f57c984e18e40bd17302a",
+        "bytes": 10336
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/ir.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\ir.py",
+        "sha256": "90bcc803f37db1a3a15de6b49983a7a3987aaf1d1efdfdfdb135d96011bd2373",
+        "bytes": 98942
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/kernel_calibration.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\kernel_calibration.py",
+        "sha256": "07645fee75270aa4b4d9428e46f8034df29c7bdcfa3a3669e121c0a42d03e38c",
+        "bytes": 76999
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/kernel_mapping.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\kernel_mapping.py",
+        "sha256": "734b93296cf1a53551e49edb455c8513f5d0fd799a31ff28a031104575954391",
+        "bytes": 8118
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/kernel_query_ledger.py",
+      "origin": "reviewed_commit",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\kernel_query_ledger.py",
+        "sha256": "9e6d18daf06286b9cb0b44445b6cdd2ae65d8212f5292fa25ea96d532facaeed",
+        "bytes": 8364
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/llama_gpu_invocations.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\llama_gpu_invocations.py",
+        "sha256": "cf703b50109540789f59d09958903fc0894a8dcfde9c1eca90c5f27bc62fc2b4",
+        "bytes": 34000
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/llama_scenario.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\llama_scenario.py",
+        "sha256": "8f8f13d8feee497081f43527c13fc57a3db0fdb779c4f835266466d5074efb73",
+        "bytes": 18264
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/llama_tensor_storage.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\llama_tensor_storage.py",
+        "sha256": "49b24fe34a02ee2bb41756521db908433bbebcdcfef8d743e9fc938fe55901cf",
+        "bytes": 15509
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/metrics.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\metrics.py",
+        "sha256": "dcd02de1dd554a85c691db711fe02e561c31be821aa11d1a7834b980ea16a45c",
+        "bytes": 23036
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/mmq_work.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\mmq_work.py",
+        "sha256": "8cbe042675fb67d77ce4ca3d41daafcc617633591b38cf0a6a6b5f364324ecc9",
+        "bytes": 15884
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/mmvq_issue_bound.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\mmvq_issue_bound.py",
+        "sha256": "522c9accd9344f63e46d071fa959214dfdf4fb3b5a146395bcf63dddc15793cf",
+        "bytes": 7722
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/mmvq_work.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\mmvq_work.py",
+        "sha256": "391fd8d49f78c37d2c4983e797debf1e3b480aa302636fc01c359b82e7b2d01b",
+        "bytes": 9371
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/model_catalog.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\model_catalog.py",
+        "sha256": "f7044b34fb8408d428219b73eb6b335580900ac632f013e7cfd4aea916f36f31",
+        "bytes": 42531
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/model_presets.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\model_presets.py",
+        "sha256": "947f10ff4887d6fa5b32784182cb2a7b65212653397f5f2666e1395007f2dfe3",
+        "bytes": 83600
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/model_presets_shas.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\model_presets_shas.py",
+        "sha256": "a414c877aa955189d814e73a57543518da83bc8e6de6cc052d614cc0cc5231d1",
+        "bytes": 10893
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/mtp.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\mtp.py",
+        "sha256": "32ff8f9bf64f2da4a232c7cb8fc5b6f4d9b3d3cd46c951173aa2cb574bfccac2",
+        "bytes": 8593
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/parallel.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\parallel.py",
+        "sha256": "c9c292902acda57a7074f3b8c63b6aa944ffa801ceac23a70dc157ad3c973f31",
+        "bytes": 14210
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/planner.py",
+      "origin": "reviewed_commit",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\planner.py",
+        "sha256": "f66110c45ef60c9177f5c99dd8b9cc61bb28e5d3a0467b9088a4231afcffed13",
+        "bytes": 1028197
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/precision.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\precision.py",
+        "sha256": "4ade37a3e133e850676f813c0513b2e429c75cc5cc10e34d010437f1a4f0f34a",
+        "bytes": 3237
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/projection_descriptors.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\projection_descriptors.py",
+        "sha256": "c2321b43b697282186824385287c171dd27548b0540032078158b44aaeb6bfbd",
+        "bytes": 20713
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/protocol_presets.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\protocol_presets.py",
+        "sha256": "ac6177334c22378040815b7c25d7b8545681dde6c9173e3496ea61dda5e5e990",
+        "bytes": 24986
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/qwen35_attention_work.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\qwen35_attention_work.py",
+        "sha256": "06722fe65f679fd840daa0dc8c570fafeb0b9efa2b283ea39730775027b376ed",
+        "bytes": 13361
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/reference.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\reference.py",
+        "sha256": "90dad69a6c5ff3d6f607ffda4341be541bd28950a66fad43d7fe383d052f59c9",
+        "bytes": 20585
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/reporting.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\reporting.py",
+        "sha256": "a06aa0c99f8ad82e49b7b17aaa86c1b4f1e4597d032f788a51b6dc4ebfbf71ef",
+        "bytes": 232803
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/residency.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\residency.py",
+        "sha256": "e5b0ec3744cded0cfc4b3fc1ddc8651fa8cab47e97a9d2f89f867789d43b56f1",
+        "bytes": 68588
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/retained_kv_state.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\retained_kv_state.py",
+        "sha256": "66902ea65da31bc2736cc3d3869950732ae8412ed8ec8ce60a285c246434db4c",
+        "bytes": 11250
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/run_estimation.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\run_estimation.py",
+        "sha256": "9983e0fb76cef63295a684b36040bd648645a78b17cef36a38b5a148949028ca",
+        "bytes": 13658
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/run_jobs.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\run_jobs.py",
+        "sha256": "46922e762bf6cca70fad65e9c074497241ef13d426b00eefac13c832a8e8b704",
+        "bytes": 26997
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/runtime.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\runtime.py",
+        "sha256": "215d39ca390d59aef50c0c39565e0f18ae75e1f7de295fe2a237870d45dd85a2",
+        "bytes": 9712
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/runtime_adapters.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\runtime_adapters.py",
+        "sha256": "1bd1d77e46a839cfddfa6da0165ee9ab8c3dd82ff67f76e9875ad98ef53e839b",
+        "bytes": 35267
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/runtime_diagnostics.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\runtime_diagnostics.py",
+        "sha256": "d0528c4d8bd352620e1b65a73c097a8388a0a8cf218552449ff563f2b4cae771",
+        "bytes": 7505
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/runtime_ir.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\runtime_ir.py",
+        "sha256": "8bf4847f07c78eef91c39a84b62c00e261ca94323d43d469f98aaaca6957b1ed",
+        "bytes": 17116
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/runtime_lowering.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\runtime_lowering.py",
+        "sha256": "dd8a92e45748f4e7258f2ffb97ef9ef6caf83b10d543cf73218200e031df7dc6",
+        "bytes": 33229
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/runtime_state.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\runtime_state.py",
+        "sha256": "6d70d59e9520427783481bc4a773952465018d0ef00d01bc3c150c3e109e135e",
+        "bytes": 8487
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/scalable_serving.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\scalable_serving.py",
+        "sha256": "63c72488d6550271bd85593fd4a55d3f1db02b7ddd615fe42942430ba7d6e2d7",
+        "bytes": 16306
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/schema_v1.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\schema_v1.py",
+        "sha256": "b80dabebdfc26a8bb494d519b003db3c0bce60f4295ed19dac15655789111924",
+        "bytes": 76738
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/schema_v4.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\schema_v4.py",
+        "sha256": "b4178fd757944fdbedbd9e1c03dc8f566e5188276809495dd6dd20914bee82c6",
+        "bytes": 22575
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/serde.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\serde.py",
+        "sha256": "6cd393107ee43e3b77c0d891e7f14da7cf497e6df8dd49b48c6e17a4c82f7768",
+        "bytes": 2779
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/serving.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\serving.py",
+        "sha256": "5534a061945e8bae9b50cffb94c3a8e1e1137540895d35103f7acb6849eab29b",
+        "bytes": 694754
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/streaming_des.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\streaming_des.py",
+        "sha256": "4ff44357741981ff94e36bf95f0fffa657fa6424dd53cee37ca8a6e81f7b312a",
+        "bytes": 46107
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/task_mapping.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\task_mapping.py",
+        "sha256": "3835cc25c98d3f6ace6d1e1f75ae510326aed29b86b42c8f34e7b9d8eefa8c4a",
+        "bytes": 3466
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/topology.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\topology.py",
+        "sha256": "80835c549c210b0b9844e135346af7e11e86ade5fd153c10d95f8d55d7e66c38",
+        "bytes": 23075
+      }
+    },
+    {
+      "relative": "src/heterollm_sim/web.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\src\\heterollm_sim\\web.py",
+        "sha256": "644573ea2d37adc20d403bc6916c7b0d9f05e1841dc3053b674a12351100bc8e",
+        "bytes": 52124
+      }
+    },
+    {
+      "relative": "tools/audit_cpu_shape_holdout_b12.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\audit_cpu_shape_holdout_b12.py",
+        "sha256": "e21201a44ef3c6e082cba76c4d4dbfbea9cc3d81458e6703f528ae4c7da77594",
+        "bytes": 14187
+      }
+    },
+    {
+      "relative": "tools/audit_engine_holdout_candidates.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\audit_engine_holdout_candidates.py",
+        "sha256": "c152e6e2c7a9497d16e38691f50165accfd4cef01c9765e780ce6ef57e608f31",
+        "bytes": 6916
+      }
+    },
+    {
+      "relative": "tools/audit_exact_operator_gate_b09.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\audit_exact_operator_gate_b09.py",
+        "sha256": "a63d7e7eac4967b83956bd16e4684cb9a2a2d37c3936440fd010625ec29c2ede",
+        "bytes": 3616
+      }
+    },
+    {
+      "relative": "tools/audit_native_repeatability.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\audit_native_repeatability.py",
+        "sha256": "8f6608b3dae92b5619310cdff0dbc4f9bda166a6724bd300b69e4d705253646b",
+        "bytes": 27322
+      }
+    },
+    {
+      "relative": "tools/audit_operator_cost_coverage.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\audit_operator_cost_coverage.py",
+        "sha256": "61b4a7b0eb2fded79092cde6094c96890a23e1af8c245afdbda9f6a799bdcc58",
+        "bytes": 5705
+      }
+    },
+    {
+      "relative": "tools/build_calibration_profile.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\build_calibration_profile.py",
+        "sha256": "a4a8e6dc967cfd3fe1d93bb77e17f1684e728b5f074413ee2cd619c3ec73e22c",
+        "bytes": 5080
+      }
+    },
+    {
+      "relative": "tools/build_semantic_calibration.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\build_semantic_calibration.py",
+        "sha256": "994aa37ef33cc77d4bfd7647548ac5c44971d62f7e95eb23ba461ca97166a3c0",
+        "bytes": 26157
+      }
+    },
+    {
+      "relative": "tools/build_stage_holdout_report.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\build_stage_holdout_report.py",
+        "sha256": "ce880fadbbf60b24b6a8ae0f4042cdad4428abd4a0d4fbc88582ad712209d9d1",
+        "bytes": 5870
+      }
+    },
+    {
+      "relative": "tools/check_freeze_manifest.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\check_freeze_manifest.py",
+        "sha256": "1083768143f0811def449ba08c1f1dcde8155d14ca9e100c23259555a224d2ba",
+        "bytes": 20566
+      }
+    },
+    {
+      "relative": "tools/check_native_grid_parser_replay.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\check_native_grid_parser_replay.py",
+        "sha256": "a5bd28d9e8819f135072181f55c09dc0db602efdb8dc8d9783d52cfccdc9f072",
+        "bytes": 14847
+      }
+    },
+    {
+      "relative": "tools/check_token_observer.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\check_token_observer.py",
+        "sha256": "767eb57e13e59481c5e83dbb94c75fed672c741c5efd6c1f936157fe8692ac12",
+        "bytes": 4273
+      }
+    },
+    {
+      "relative": "tools/evaluate_strict_engine_goal.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\evaluate_strict_engine_goal.py",
+        "sha256": "a87eaea4d367e4a89f60029207fcf84f122be2c69765ddf4955452faebe5fe56",
+        "bytes": 13298
+      }
+    },
+    {
+      "relative": "tools/evaluation_contract.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\evaluation_contract.py",
+        "sha256": "02417d57fb54fd1ccad74ce74dbc92b03267c47d6d48dcae0674dfadd3ff6f84",
+        "bytes": 23727
+      }
+    },
+    {
+      "relative": "tools/extract_cpu_perf_trace.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\extract_cpu_perf_trace.py",
+        "sha256": "da31b61856b67b7339c2ed223e0778b0cfde362f4963121f583a8d5d45c21c94",
+        "bytes": 6077
+      }
+    },
+    {
+      "relative": "tools/extract_cuda_api_phase.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\extract_cuda_api_phase.py",
+        "sha256": "ea2e83834ae30756a658abb1f6b47aeb09855e224a9a6a415894f22110732415",
+        "bytes": 5704
+      }
+    },
+    {
+      "relative": "tools/extract_nsys_trace.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\extract_nsys_trace.py",
+        "sha256": "1484ddb3ab71203704c43da53890066d4987e8feab3927dc84d7edcac736170c",
+        "bytes": 18391
+      }
+    },
+    {
+      "relative": "tools/frozen_simulator_replay.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\frozen_simulator_replay.py",
+        "sha256": "f89006c11b8e341413fc81fe34b3b21291fae8b82be71c64a903e671f0602cf1",
+        "bytes": 29199
+      }
+    },
+    {
+      "relative": "tools/generalization_acceptance_matrix.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\generalization_acceptance_matrix.py",
+        "sha256": "9856590555f2212f627ddf8dab8f12de21ae17f95bd40cb2ef88d420cc92e65a",
+        "bytes": 33873
+      }
+    },
+    {
+      "relative": "tools/host_runtime_microbench.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\host_runtime_microbench.py",
+        "sha256": "292e76ccf167d3da4e9e32e67f192e0948ac5063e292b27ea4421034ebaf2896",
+        "bytes": 9101
+      }
+    },
+    {
+      "relative": "tools/join_native_simulator.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\join_native_simulator.py",
+        "sha256": "b14e1dd21a2739958b6c9f1d984c2d4e09d07799af8be11d2d3198350c9eff2e",
+        "bytes": 3758
+      }
+    },
+    {
+      "relative": "tools/llama_runtime_source_binding.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\llama_runtime_source_binding.py",
+        "sha256": "fd9c9744b46265e5bc4c02e6ccb89f157ed3e1dec27007fb37998ddb708f8bd1",
+        "bytes": 38260
+      }
+    },
+    {
+      "relative": "tools/merge_generalization_acceptance.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\merge_generalization_acceptance.py",
+        "sha256": "70b17d53e2002769170444df07cd9c5ad2a90bf183a0f078c40ef01a69ac94d2",
+        "bytes": 51785
+      }
+    },
+    {
+      "relative": "tools/native_162_dataset.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_162_dataset.py",
+        "sha256": "87487a8864e2d860abb2be74cf2fe97422bd033dc7ce59c9012708d5466a47a2",
+        "bytes": 45494
+      }
+    },
+    {
+      "relative": "tools/native_cohort_client.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_cohort_client.py",
+        "sha256": "faa0d8fff2ccd4bfa41c674e6dd6a43581c20ec18cf64a5fff82a25e2cb33fc1",
+        "bytes": 4826
+      }
+    },
+    {
+      "relative": "tools/native_error_matrix.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_error_matrix.py",
+        "sha256": "2a7f365c3d87cf6dab2ac2223fcd33486ad5cb55c93ab4f3fa9aa1b95bec154a",
+        "bytes": 11480
+      }
+    },
+    {
+      "relative": "tools/native_final_output_binding.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_final_output_binding.py",
+        "sha256": "a4c2f6b38efe53666e356802f82cbbc30f135bd99a6c1b11388096b2141d39dc",
+        "bytes": 19828
+      }
+    },
+    {
+      "relative": "tools/native_grid_predict.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_grid_predict.py",
+        "sha256": "7bf97514bdb2c90ff13d336b3bca657c42a117f92ee9f47bff1648f491c8d729",
+        "bytes": 18651
+      }
+    },
+    {
+      "relative": "tools/native_http_client.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_http_client.py",
+        "sha256": "5f4e126e9f3f38f988bdb34b98e5d660fa87f0191156862bf246c560fca903b9",
+        "bytes": 5979
+      }
+    },
+    {
+      "relative": "tools/native_llama_compare.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_llama_compare.py",
+        "sha256": "1c51e5f479fce3e6bfc14222f56b049893a1701edb813579ba19d61db54a0182",
+        "bytes": 121112
+      }
+    },
+    {
+      "relative": "tools/native_llama_profile.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_llama_profile.py",
+        "sha256": "e2df8e4a1d709c3581207aaa3282ebd46cdd679c2b8f61f4e91b701edeabb24e",
+        "bytes": 25899
+      }
+    },
+    {
+      "relative": "tools/native_long_grid_report.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_long_grid_report.py",
+        "sha256": "6498b353aaeeeb9d39625aafab6bec0c7990624d31552232db1fd6cc1bb7f5eb",
+        "bytes": 39314
+      }
+    },
+    {
+      "relative": "tools/native_multimodel_matrix.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_multimodel_matrix.py",
+        "sha256": "d5d48c88c752900b53fb219cef97f46f02903ac6c667b3159db33b9ac2effb12",
+        "bytes": 6210
+      }
+    },
+    {
+      "relative": "tools/native_repeatability_experiment.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_repeatability_experiment.py",
+        "sha256": "44797d425e71fb6f2fccf011802f606b5d67a38b153aa472c69b048250c26e54",
+        "bytes": 45290
+      }
+    },
+    {
+      "relative": "tools/native_runtime_evidence.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_runtime_evidence.py",
+        "sha256": "31e9ed39bec84c503fa3ead644819d0a30489db2261d9430708efac87a727c01",
+        "bytes": 13897
+      }
+    },
+    {
+      "relative": "tools/native_sampling_contract.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_sampling_contract.py",
+        "sha256": "0b7c043610985e54d999938fa594879a573da93d701dd1fe965dfc94ad9ec210",
+        "bytes": 28689
+      }
+    },
+    {
+      "relative": "tools/native_variance_experiment.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\native_variance_experiment.py",
+        "sha256": "713e86ddad984bdf9f340f612d2b4349c00cc2edc91e70069d4d988c08ebfe16",
+        "bytes": 11563
+      }
+    },
+    {
+      "relative": "tools/plot_error_heatmaps.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\plot_error_heatmaps.py",
+        "sha256": "8a55885ae1f50a70006f474c1a036190855bb41ca94b5b4127b25fe1f0745944",
+        "bytes": 8456
+      }
+    },
+    {
+      "relative": "tools/plot_generalization_acceptance.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\plot_generalization_acceptance.py",
+        "sha256": "dfcb1d51c79f404360f9609f56fedb8ae672d73c5beea850219816375f8a5d1e",
+        "bytes": 3366
+      }
+    },
+    {
+      "relative": "tools/predict_stable_native_dataset.py",
+      "origin": "reviewed_commit",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\predict_stable_native_dataset.py",
+        "sha256": "b60200c6d2afbcdfd311faec8812bfaf11c2670cd051192d4d2066dfd4dacc8a",
+        "bytes": 240894
+      }
+    },
+    {
+      "relative": "tools/prepare_native_grid_prompts.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\prepare_native_grid_prompts.py",
+        "sha256": "d1365ea2ad1ad07245d91e0954725d43c206ad97c03cd062f4f751490bd68d39",
+        "bytes": 23023
+      }
+    },
+    {
+      "relative": "tools/render_optimization_loop_report.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\render_optimization_loop_report.py",
+        "sha256": "5acd64b074b939cee1686657d2361480ee92353df836fa5de7243074b2dfca26",
+        "bytes": 33105
+      }
+    },
+    {
+      "relative": "tools/render_stable_native_evaluation.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\render_stable_native_evaluation.py",
+        "sha256": "b239697a3fa0f0a0fcd5bb1e2c30ce0d00e772bf45910f7c00c4375f21e41a81",
+        "bytes": 48749
+      }
+    },
+    {
+      "relative": "tools/replay_simulator_from_native.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\replay_simulator_from_native.py",
+        "sha256": "01cce911e2073bb267fb08b4adc2e24c9befae664f1681decc1859eb1a2b94a5",
+        "bytes": 51687
+      }
+    },
+    {
+      "relative": "tools/retained_warmup_extractor.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\retained_warmup_extractor.py",
+        "sha256": "810e161d87140a34f62f5539bacb4f5f780419f945e76467468ccf3c665b9481",
+        "bytes": 23369
+      }
+    },
+    {
+      "relative": "tools/run_generalization_matrix.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\run_generalization_matrix.py",
+        "sha256": "0d181cd46b9ab12f5ad90068c772308ccb8679e3db6cf4148e2e6d030d54a306",
+        "bytes": 7364
+      }
+    },
+    {
+      "relative": "tools/run_kernel_microbench_b05.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\run_kernel_microbench_b05.py",
+        "sha256": "e70369adf2f08fe75a212911c32eb5c19ff9c7f43e9a4564eeeb3ce0ebe5f581",
+        "bytes": 2826
+      }
+    },
+    {
+      "relative": "tools/summarize_native_variance.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\summarize_native_variance.py",
+        "sha256": "4c06fdc227cc4a69c08c3be6c370f31df1289e1fcc4a1ce89c26048146542d21",
+        "bytes": 5610
+      }
+    },
+    {
+      "relative": "tools/unified_evidence_manifest.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\unified_evidence_manifest.py",
+        "sha256": "517cdd89eb865916ce8728b108d15567495a08747222b783e7e8951373632591",
+        "bytes": 23733
+      }
+    },
+    {
+      "relative": "tools/verify_fixed_native.py",
+      "origin": "R27_on_frozen",
+      "ref": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\execution_source\\tools\\verify_fixed_native.py",
+        "sha256": "ed8580608ec9d6269ed6ded0ef3657d8ad672bfe1c2c8ab9c5cc107b2c9aa66d",
+        "bytes": 3676
+      }
+    }
+  ],
+  "arms": [
+    "off",
+    "on"
+  ],
+  "denominator": 131,
+  "strict_threshold_pct": 10,
+  "blind": false,
+  "gate_B": "unvalidated",
+  "new_cost_coefficients": 0,
+  "native_remeasurement": false,
+  "target_latency_fitting": false,
+  "source_policy": "R27/on115 files; four reviewed-commit replacements and111 byte-identical inherited files; same source both arms",
+  "modes": {
+    "off": "legacy_mma_output_wave",
+    "on": "nominal_bandwidth_analytical_fallback"
+  },
+  "final_output_selection_both_arms": true,
+  "worker_wait_policy": "natural_exit_soft_observation",
+  "soft_observation_seconds": 600,
+  "hard_time_limit_enforced": false,
+  "late_result_policy": "late alone is not failure; score only natural exit0 with complete identities",
+  "nonzero_exit_policy": "retain raw attempt and publish failed terminal even when raw says predicted",
+  "resume_policy": "all attempted cells must be sealed; live/unresolved attempts forbid new launch",
+  "treatment": "MMVQ HBM legacy/nominal analytical fallback; all R27/on other inputs and flags unchanged",
+  "fix": "replace MMA HBM wave penalty only for canonical MMVQ work; no accuracy guarantee and no added empirical coefficients",
+  "expected_direction": "HBM demand may decrease for eligible source MMVQ; other owners unchanged; actual accuracy improvement not guaranteed",
+  "workflow": "both frozen-source full131 preflights at freeze and lock, then262 terminal barrier before scoring; no terminal retry",
+  "prior_campaigns": "R27 and earlier preserved; not retroactively accepted"
+}

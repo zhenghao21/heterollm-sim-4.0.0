@@ -1548,7 +1548,7 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "R28: first finish exact wrapper path/numeric and identity diagnosis; static ledger shows reference Q5 benchmark zero represented matches, prioritize actual Q4_K M1 K2048 N2048 and source-valid MMVQ analytical family separation; host pilot before CPU-service claims.",
+  "next_round_hypothesis": "先补真实ubatch的CPU llama graph状态转换，再核对CPU核心共享和host-submit/device-ready边界；R30成本冻结保留独立对照，R31未执行采集不按误差追加。",
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 6,
   "current_semantic_candidate": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/artifacts/development/native_long_grid_135_20260915/optimization_loop/round_027/on",
@@ -2228,7 +2228,7 @@
     }
   },
   "round_030_preparation": {
-    "status": "source_and_natural_exit_reviewed_ready_for_freeze",
+    "status": "frozen_and_locked_not_executed",
     "source_base": "round_027/on",
     "source_replacements": [
       "src/heterollm_sim/cost_models.py",
@@ -2253,6 +2253,44 @@
       "hard_kill_policy": false,
       "existing_terminal_retry": false,
       "unresolved_attempt_blocks_resume": true
+    },
+    "reviewed_source_commit": "e3be58e4039d29cbff0ba4e992d36459aaca9f43",
+    "protocol_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\protocol.json",
+      "sha256": "e6f9ce049ba99f476596baf1d79edb860d7755756d6a38d74fe7841a2cfb8fa0",
+      "bytes": 61595
+    },
+    "freeze_receipt_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\freeze_receipt.json",
+      "sha256": "e2716ec311616cc9a3142e7d0b02fb7f5c9a74f24ef958d14704271badf4e53a",
+      "bytes": 1706
+    },
+    "controls_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\controls.json",
+      "sha256": "0d5507daf29e28cae17b2eaf75478418874763483c1a9dbf8398a2a5b1365ec1",
+      "bytes": 1438
+    },
+    "freeze_refs": {
+      "off": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\off\\freeze.json",
+        "sha256": "508a30020e5e8785ec17cabf6576b28b553714703181a53489e38f56faacd60e",
+        "bytes": 53022229
+      },
+      "on": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_030\\on\\freeze.json",
+        "sha256": "bb7c6159f6082659677dd0156ff0ccfd4d120adea9437d002811134b8853fd36",
+        "bytes": 53030029
+      }
+    },
+    "fresh_preflight_count": 4,
+    "fresh_preflight_cells_each": 131,
+    "full_predictions_started": false,
+    "scope": "isolated cost ablation on pre-lifecycle structure; preserves frozen source and does not prove structural completeness",
+    "postprocess": {
+      "status": "prepared_no_real_results_processed",
+      "synthetic_tests": 23,
+      "final_gate_B_adaptation_test": 1,
+      "full_synthetic_archive_repeated": false
     }
   },
   "round_029_preparation": {
@@ -2284,7 +2322,87 @@
   "graph_lifecycle_audit": {
     "fixed_native_cuda_graphs": false,
     "cuda_graph_direct_launch_semantics": "already_covered",
-    "llama_cpu_graph_reuse_rebuild": "not separately priced",
-    "scope": "source audit only; no target LLM latency fit"
+    "llama_cpu_graph_reuse_rebuild": "state transitions not separately modeled; not merely unpriced",
+    "scope": "source audit only; no target LLM latency fit",
+    "runtime_dispatcher_scope": "bootstrap only; planner/serving owns inference actions"
+  },
+  "round_031_preparation": {
+    "status": "compiled_reviewed_not_GPU_executed",
+    "build_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\build_manifest.json",
+      "sha256": "3661af0f5a09412a2f1434824402584d65def5fe2a5959fc2bb252844546a3c6",
+      "bytes": 108310
+    },
+    "validation_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\preparation_validation.0002.json",
+      "sha256": "22e319f838de71c366b51ac4a2561dbe148a75ec1b908f6a0cba6e8798f1eb00",
+      "bytes": 13326
+    },
+    "host_tests_passed": 69,
+    "independent_review": "Q4 protocol geometry and natural-exit interruption fixes verified",
+    "wrapper_runtime_qualification": "not_executed",
+    "formal_timing": "not_executed",
+    "max_processes": 100,
+    "wall_budget_seconds": 1200,
+    "execution_priority": "after targeted architectural diagnosis identifies the service object",
+    "service_cost_qualification": "unvalidated",
+    "new_coefficients": 0
+  },
+  "architecture_diagnostic": {
+    "updated_utc": "2026-09-17T01:21:29.412Z",
+    "source_scope": "current production; scheduler/planner/control-plane source checked byte-identical to R30 off/on",
+    "new_acceptance_gates": 0,
+    "diagnostic_order": [
+      "stage_placement_completeness",
+      "control_execution_dependencies",
+      "shared_resources_and_competition",
+      "state_lifecycle_and_event_counts",
+      "critical_path_and_double_counting"
+    ],
+    "findings": [
+      {
+        "kind": "covered",
+        "item": "co-start resource demands release individually; same device uses shared component resources"
+      },
+      {
+        "kind": "structural_gap",
+        "item": "CPU llama graph reuse/rebuild/allocation planning transitions not represented per ubatch; simulation compiled cache is not native reuse"
+      },
+      {
+        "kind": "structural_capacity_gap_effect_unproven",
+        "item": "all-core CPU GEMM and serial-control work lack one core budget; fixed-domain overlap requires targeted check"
+      },
+      {
+        "kind": "partial_semantics_evidence_required",
+        "item": "cohort command frontend and operator kernel_launch require start/end/owner contract before splitting"
+      },
+      {
+        "kind": "covered_cost_partial",
+        "item": "readback completion sampling commit dependencies exist; missing service cost must not be repaired as duplicate path"
+      },
+      {
+        "kind": "configuration_evidence_required",
+        "item": "compute and DMA endpoint memory owner sharing only explicit, inspect mappings before adding constraints"
+      },
+      {
+        "kind": "scope_clarified",
+        "item": "RuntimeDispatcher participates only in bootstrap; planner/serving owns actual prefill and decode"
+      }
+    ],
+    "current_implementation": {
+      "module": "src/heterollm_sim/llama_graph_lifecycle.py",
+      "status": "standalone_state_machine_tested_not_integrated",
+      "pricing_changes": 0,
+      "source_refs": [
+        "source/llama.cpp-semantic/src/llama-context.cpp:1347",
+        "source/llama.cpp-semantic/src/llama-graph.h:815",
+        "source/llama.cpp-semantic/src/llama-graph.cpp:1406"
+      ],
+      "tests_passed": 52,
+      "test_path": "tests/test_llama_graph_lifecycle.py",
+      "prediction_path_changed": false,
+      "integration_status": "in_progress_actual_online_runtime",
+      "initial_state": "explicit_unknown_when_native_warmup_last_graph_unproven"
+    }
   }
 }

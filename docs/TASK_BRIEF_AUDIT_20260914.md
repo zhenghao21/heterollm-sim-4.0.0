@@ -158,10 +158,22 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 8. 自动优化循环（稳定）
 
-每轮按以下顺序执行，并保留三种对照：纯分析基线、现有校准模型、新机制模型。
+每轮采用自顶向下的诊断优先级，并保留三种对照：纯分析基线、现有校准模型、新机制模型。先区分“实际过程没有表达或关系建错”的结构问题，与“过程已经正确表达但局部服务成本不准”的成本问题；最终误差同号或偏低本身不能区分两者。engine-first规定主计时边界，本节规定该边界内的诊断顺序，两者不可替代。
 
-1. 从开发集定位执行图、shape、量化、访存、kernel、调度、计时或测量问题；先按模型/部署、误差符号、P/O/C切片、逐请求闭合关系及重复波动分层。趋势比较固定其余因素，只比较完整匹配组，缺格和失败另计，不能把观察相关性当成因果证明；
-2. 提出单一、可证伪的机制假设；在评估前由源码与静态shape规定预计受影响集合、变化方向及应不变集合，不按看过的误差选择容易格；
+系统级缺口排查围绕以下五项展开。沿用身份、配置和适用域仍匹配的已有审计证据，仅补查本轮受影响部分；不是每轮从头审遍整个系统，也不要求上层先取得某个精度分数才准许下钻。
+
+| 诊断问题 | 核对内容 | 能区分结构与成本的证据 |
+|---|---|---|
+| 实际执行哪些阶段 | engine内主机准备、提交、设备执行、传输、同步、采样；设备与数据放置；冷启动与稳态 | 锁定源码调用链、实际阶段及数据搬运次数，不能仅检查模块名称存在 |
+| 阶段如何互相制约 | 控制与执行依赖、异步生产与消费、流水与重叠、下一token触发条件 | 阶段顺序、CPU/GPU活跃区间、同步位置和batch形成过程 |
+| 谁共享资源 | CPU控制线程、算力、显存带宽、链路、拷贝引擎和队列是否有共同owner | 资源映射与占用/释放时间；不能给同一物理资源重复赋予独立容量 |
+| 什么状态保留或改变 | 权重/KV驻留、图与缓冲区复用，以及按进程/请求/batch/token发生的事件 | 状态转换条件及次数；源码声明不等于当前预测路径已使用 |
+| 总时延如何形成 | 关键路径、依赖等待、资源等待、背压及包含关系 | 逐请求完成链与资源时间线，检查遗漏、错误重叠和重复计费 |
+
+粗粒度计算图、设备放置和数据从哪里来、经过哪些链路、搬运几次属于系统级抽象；融合、kernel分派、tile与cache细化可在问题明确后继续下钻。多资源任务共同启动并不自动构成错误：必须结合上游任务划分审查是否保留必要先后关系、释放时机与重叠。对已有证据支持的上层缺口，优先修正事件、状态、依赖和资源归属；上层未发现相关问题或证据指向成本时，再对关键路径上的局部服务定价。下层证据揭示新系统机制时返回修订上层。此顺序不增加验收门槛，不允许用局部成本调整补偿尚未解释的上层缺口。
+
+1. 从开发集按模型/部署、误差符号、P/O/C切片、逐请求闭合关系及重复波动分层，首先按上述五项检查系统级机制遗漏或关系错误，记录“已表达、未表达、证据不足”及当前预测调用链。趋势比较固定其余因素，只比较完整匹配组，缺格和失败另计；系统性误差不是结构缺口的充分证据；
+2. 先列出能解释误差的竞争性结构/成本假设，选择能够区分它们的最小证据，再为本轮选定单一、可证伪的机制假设。评估前由源码、事件状态与静态shape规定预计受影响集合、变化方向及应不变集合，不按看过的误差选择容易格；
 3. 收集锁定源码、trace、独立微基准或推导证据，先核对现有成本所有权，避免重复收取nonflash、KV写入、logits传输、采样、launch和sync；
 4. 进行最小修改并跑结构回归；实际microbatch的M、量化分派与物理KV视图均由真实语义决定，不能以并发数、模型名称或prompt档位替代；
 5. 做同输入开/关成对消融，报告signed error、APE、绝对毫秒、共同有效格变化、覆盖率与失败；区分机制正确性、因果假设和精度收益，正确语义被其它资源瓶颈遮蔽不等于实现无效，不能仅因平均误差下降就准入；
@@ -198,7 +210,7 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 - R24身份修复统一path/sha256/bytes，拒绝矛盾长度和非法类型，缓存命中复核header；补齐未映射模型的freeze/resume全文SHA。原R23 104个数值预测全部精确不变，证明本轮没有成本收益；恢复覆盖导致总体分布变化不能当作精度改善。
 - R25修复真实GGUF架构名及metadata owner错位，在最后replan之前绑定选行。qwen2/llama于最后FFN前选行，qwen35于全行final norm后选行；indices/GET_ROWS保留，不重复增加lm-head。M64/R1静态探针保留attention M64，FFN重新分派M1，down进入MMVQ，融合up/gate仍明确保留单矩阵资格未覆盖。新增成本系数0。
 - R25主区联合回归114通过/1跳过；独立语义复审61通过；两路冻结及运行器保护9通过，计数有重叠不相加。两路复制后的extractor与硬件资料仅在已核对字节、别名和派生摘要的明确字段位置归一化。首次硬件资料路径比较失败保留，有单独qualification凭据，未改变冻结内容。
-- MMVQ R6共享ABI已修正conversion的type/k/m/padded_k四个int声明，定义与caller共用头；旧少参数声明负向编译被C2733拒绝，2项检查通过。R6重新提取的主MMVQ和Q8_1 cubin分别5450408B、222816B，与目标DLL逐字节相同。旧R4证据不改。R26 ExC记录器已通过固定合成shape的target运行时路径检查；wrapper数值V2实际通过，4608B转换精确一致，3072行输出零失败，最大绝对差9.059906e−6、最大误差界占比0.000318811。wrapper与target动态等价、其他shape、cache及计时扰动仍待验证，0参数准入。
+- MMVQ R6共享ABI已修正conversion的type/k/m/padded_k四个int声明，定义与caller共用头；旧少参数声明负向编译被C2733拒绝，2项检查通过。R6重新提取的主MMVQ和Q8_1 cubin分别5450408B、222816B，与目标DLL逐字节相同。旧R4证据不改。R26 ExC记录器已通过固定合成shape的target运行时路径检查；wrapper数值V2实际通过，4608B转换精确一致，3072行输出零失败，最大绝对差9.059906e−6、最大误差界占比0.000318811。R26连续布局新wrapper与target的动态路径及数值后来均已通过；其他shape、cache与计时资格仍待验证，0参数准入。
 
 ## 12. 最新误差及主要缺口（动态，原位更新）
 
@@ -218,12 +230,12 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
-1. 封存R27结论、三张热图和逐字节证据。262终态、两路评分及分组报告已完成，热图已视觉核对。旧递归归档包含主机测试夹具，保留本机但不发布；后继archive_verified.0001已仅选择553项真实证据，6个≤40MiB分卷重组及还原逐字节通过。A仍失败，不能将7→9的覆盖变化称精度改善。
-2. R26新wrapper动态与新shim数值对照已实际通过，finish为6a130dc0f36aa4163c290e299c56fdb367103b27e40b281e4204442f67cf286c，尚无计时参数。R27新独占身份诊断0002亦完成五遍一致；保留旧串行成功与整体预算拒收，累计六遍模型逻辑读取89190696768B，不追认旧失败、不重测LLM。
-3. 收敛下一轮微基准范围到实际算子。Q5_0零命中工具已修复HES非法反事实、强杀及资格混用并通过47项主机测试，暂不投入其5-block正式性能采集。Q4_K/M1/K2048/N2048是优先取证点；R29独立target路径/数值探针0003已编译，45项Python和66项C++主机检查通过，补齐孤立探针进程识别与捕获期分配/释放拒收，实际GPU路径与独立数值已通过：conversion grid8/block256、main grid2048/block32×4，2304B Q8全等、2048输出全部通过（最大绝对差4.768372e−7、最大误差界占比8.530027e−6）。成本仍未测量，不能直接迁移45格；下一步复用现有计时方法构建Q4_K同源wrapper和受控成本观测，M4及K边界留出。不要按131格误差选择数值或最优shape。
-4. 分开推进两条可改变预测的机制：完整MMVQ源契约上的执行K账本补全及去除MMA带宽折扣的默认关闭分析候选已接入普通GPU、动态attention、offload、各级缓存键与冻结配置；较完整相关回归289通过/1可选跳过，最后专用集113通过，独立代码复核无阻断。R30将继承R27/on的115文件，替换4个已提交生产文件，其余111字节不变，两路只改变HBM模式，尚未冻结或运行。执行器已把旧worker超时隐式kill改为600秒软观察期限、自然等待、raw尝试独占与正式终态一次发布；180项相关回归及9项独立模拟生命周期测试通过，真实小型Python子进程也通过。超期成功可评分但明确记录late，非零退出即便有raw也失败，未退出/未封口阻止恢复与262屏障；即将提交后真实冻结，不能提前宣称预检通过；锁定DLL宿主计数/提交控制0004通过33项Python及C++主机测试，3个有限pilot和chain/fanout两种1/4/16节点路径已实际通过，计时参数仍未准入。名义带宽候选不是测量过的MMVQ带宽，不能把CTA≥SM称为饱和；条件经验值只能命中完整适用键，cache未知不得补填。每kernel frontend、driver queue、GPU command processor、CPU command-build逐项查owner，不能用一段API wall同时更新多个费用。固定native compiled_cuda_graphs=false已核实，直接launch语义已覆盖；CPU llama can_reuse与CUDA graph replay是两套机制，前者的检查/复用/重建/重新分配目前尚未分别建模。后续先按实际batch、输出行、序列与padded KV边界产生事件，再独立定价，不能把128+12G指令假设改成LLM残差。
-5. 计时资格按边界分别验收。合法HES调用成功+STATE仅构成SDK契约下的启用资格，没有直接模式readback；U/A/B/AB整体wall/event扰动≤5%不能证明短kernel服务偏差≤5%。kernel observed duration可用于限定条件的开发假设，必须单列未识别系统偏差，不能宣称无扰动成本已合格。host原始100ns单位/周期数不证明精度；3个pilot已实际完成195样本：165个线程CPU计数为0，观测到的最小正增量156250个100ns单位=15.625ms；64ms busy的计数CV为6.564%，不能据此定价微秒级服务。16/64ms的中位accounting/wall比约0.97656，仅为条件诊断；不自动导入1000ns/250ns，不无限延长采样求过线。两种路径及首个chain service进程已完成；该进程32–2048 kernel窗口的每kernel提交wall约1.7µs，8192–32768 kernel窗口升至约3.9–4.4µs，长窗口伴随回压/等待且多数短窗口CPU计数为0，不能拟合全局固定提交系数。预登记10个service进程目前仅1个完成，其余9个待定，不宣称完整留出验收；不能用短窗口的0CPU值定价，线程服务定价须有合格长窗口或独立调度事件证据。
-6. 每轮完成修改及相关验证后原位更新任务书、提交、推送并核验远端，再检查A固定131/131格、393/393项严格<10%。不达标继续有证据的候选；连轮工具完善必须回到实际覆盖和成本所有权。通过A后另做独立B，当前B未验证。
+1. **先完成有界系统结构诊断，区分已表达、缺建和待证。** 已核对当前源码及R30冻结：任务的资源共同启动但分别释放，GPU需求复用设备/内存组件资源，并非每个task凭空获得独立带宽。readback→完成通知→采样→token commit及下一decode依赖已存在，通知和采样仍有未定价/partial部分，不能再整段补节点或重复加等待。runtime_lowering已接入一次scenario-control-plane初始化；真实prefill/decode由planner/serving生成，因此修改通用dispatcher不会自动修复逐批执行。以上调用链证据可复用，本轮不重写simulate_schedule。
+2. **首先补CPU llama建图生命周期的结构表达。** 锁定llama-context.cpp:1347及llama-graph.h:815表明每ubatch检查前图；命中跳过reset/build/alloc-plan，但仍set_inputs/compute；miss后重建，reserve会使前图失效。现有cohort host prepare和128+12G command-build没有表达这一状态机，compiled_graph_cache_stats只是仿真器内部缓存。先实现首次miss→同shape复用→token值变化不单独失效→输出行/序列/mask变化失效→reserve失效→禁复用的结构回归；缺失必要条件须标unknown，不能默认为hit。graph分配规划与实际buffer扩容分开，CPU-only不生成虚假的GPU提交。最小纯结构状态机已实现并通过52项回归，明确区分已知空图、warmup后未知图、reserve失效和执行失败失效；真实ubatch接入仍在实现，尚未改变预测路径或引入时延系数，不能把独立模块通过当作结构缺口已经关闭。
+3. **核对生产—消费关系和物理资源预算，再决定关系修复。** 当前CPU command-build→driver submit→GPU command processor按invocation group聚合；kernel_launch究竟是CPU提交还是GPU前端服务，必须按开始/结束条件和owner核对，不能只凭串行边就断言应有重叠。建立两kernel回归：后一host submit可与前一GPU执行重叠，但后一GPU执行仍等数据依赖。CPU全核GEMM与单核控制工作目前没有共同核心预算，是能力缺口；先确定固定场景是否触发，再补容量声明，不能用整机CPU锁替代共享核心。compute与DMA内存端点只在显式声明同一物理owner时竞争；先核对场景映射和字节所有权，不自动把所有读写方向锁成同一资源。上述均为机制回归与适用性诊断，不新增准确率门槛。
+4. **保留已冻结的成本对照，按明确问题继续下钻。** R30已真实冻结并完成lock，4份新Python预检均131/131通过；115份源码中4份来自e3be58e，其余111份继承R27/on。off/on仅切换legacy_mma_output_wave与nominal_bandwidth_analytical_fallback，完整262预测尚未启动。该对照只能回答旧结构中MMVQ误用MMA HBM折扣的影响，不证明系统结构完整。结构修复如改变预测必须另建冻结，不能改写R30。保留0新经验系数、600秒软观察及自然退出规则；未退出/未封口阻止恢复与评分，不能因等待超时杀进程。
+5. **微基准由上述缺口决定用途，不按误差追加采集。** R29 Q4_K/M1/K2048/N2048的target路径和独立数值已通过；它在已有账本命中45格，但cache/layout未知仍不具有成本迁移资格。R31同源wrapper计时工具已编译，修正Q4 conversion grid8及观察中断等待自然退出，两项独立复核和69项主机回归通过；新wrapper实际资格、100进程/1200秒有限计时尚未执行，待结构诊断明确所需服务对象后使用。M4及K边界留出；envelope扰动通过不能宣称短kernel无偏。R28的195样本显示CPU计数15.625ms粒度，首个host service长窗口出现回压，微秒级host服务价格仍不可准入；其余9个service进程暂不自动补齐。已有CPU IQ3/IQ4 smoke仅覆盖旧DLL、M32/N256/K256、16线程热缓存graph wall，与27B锁定线程版DLL/affinity及decode shape不匹配，不直接导入系数。固定native CUDA graphs编译OFF，不能错删直接launch；权重访存默认冷读的检查已排除“单矩阵L2命中误减权重流量”猜测。
+6. **每轮回到固定范围评分与继续条件。** R27的262终态、配对评分、三张热图和553项干净逐字节归档已完成，6个≤40MiB分卷已验证；旧夹具归档留本机不发布。R27/on仍9/131格、74/393项通过，off/on共同129格都只有7格全过，覆盖恢复不算精度改善。R27新的五遍身份诊断一致仅表示本次未复现，不追认旧失败、不重测LLM。每轮最小修改和相关验证后原位更新任务书、commit、push并核对远端，检查A固定131格/393项均严格<10%；未达到则按有证据的假设续轮。通过A后另做独立B，当前B未验证。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
@@ -242,9 +254,11 @@ R25的on因配置证明错位在启动前拒收、0格预测；旧批次已封�
 - optimization_loop/round_024/REPORT.md、identity_repair_report.json、repaired/errors.0001.json：历史完整评分、104格精确复现及失败。
 - optimization_loop/round_027/heatmaps.0001/：off、on与APE差值的PNG/SVG热图；X为失败，短横线为固定集之外。
 - optimization_loop/round_028/static_kernel_coverage.0001.json、verify_static_kernel_coverage.py：131预测静态签名、微基准覆盖及独立重算入口。
+- optimization_loop/round_030/protocol.json、freeze_receipt.json、controls.json、preflight/：真实冻结与lock凭据；postprocess/：262终态后的热图及干净归档入口，尚未处理真实R30结果。
+- optimization_loop/round_031/q4k_timing/preparation_validation.0002.json：Q4同源wrapper编译、身份与69项主机回归记录，实际GPU资格/计时待执行。
 - optimization_loop/round_024/full_predictions.json、full_scores.json、detailed_evidence.parts.json：先预测后评分与3卷恢复入口。
 - optimization_loop/round_025/protocol.json、freeze_receipt.json、controls.json、execution_closed.json：已拒绝批次的冻结、131配置错位重导和退出记录，未评分。
 - optimization_loop/round_024/mmvq_device_probe/r5_device_code_compare/、r6_shared_abi/：设备代码及共享ABI证据，均无性能系数。
-- optimization_loop/round_026/target_capture_run.0001/、target_capture_ex_run.0001/：旧API拒收及新ExC实际路径通过的完整原始记录；wrapper_correctness_v2_run.0001/为已通过的数值记录；mmvq_wrapper_launch_match/为待执行的连续布局动态对照与QI勘误。
+- optimization_loop/round_026/target_capture_run.0001/、target_capture_ex_run.0001/：旧API拒收及新ExC实际路径通过的完整原始记录；wrapper_correctness_v2_run.0001/为已通过的数值记录；mmvq_wrapper_launch_match/为已通过的连续布局动态对照与QI勘误。
 - optimization_loop/round_023/optimization_direction_metric_audit.md、optimization_direction_source_audit.md、host_cost_ownership_audit.md、mmvq_memory_geometry_audit.md：已纳入任务书的参考方向审计。
 - optimization_loop/round_022/REPORT.md、round_023/REPORT.md及各轮归档索引：历史误差、退化和失败保留。

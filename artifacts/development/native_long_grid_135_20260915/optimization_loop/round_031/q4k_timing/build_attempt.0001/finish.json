@@ -1,0 +1,9 @@
+{
+  "status": "compiled_static_identity_passed",
+  "manifest_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_031\\q4k_timing\\build_manifest.json",
+    "sha256": "6cb169f27017638d9aa9ef5138dd0ff3230705c0e201e02976c35fab33ce36f3",
+    "bytes": 107997
+  },
+  "GPU_executed": false
+}
