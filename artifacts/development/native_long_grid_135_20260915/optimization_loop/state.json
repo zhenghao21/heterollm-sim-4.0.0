@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "round_032_preparation_rejected_identity_cause_unknown_diagnostic_patch_and_R33_preparation",
+  "status": "round_033_shared_identity_diagnostics_reviewed_ready_to_commit_and_freeze",
   "user_goal": "固定这组 native，按照任务书自动优化仿真机制，直到声明范围内A、B两门达到目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -1736,6 +1736,15 @@
       "verified_utc": "2026-09-17T05:56:19.014000+00:00",
       "status": "pushed_and_remote_verified",
       "scope": "consumer-qualified frontend/H2D, compact CPU prefix and stable cross-batch indices, R32 clean Git drivers;148 model tests,57 driver tests"
+    },
+    {
+      "commit": "097959ed617abb5a795925207acee6ecf57ec0d5",
+      "branch": "main",
+      "remote": "origin",
+      "remote_head": "097959ed617abb5a795925207acee6ecf57ec0d5",
+      "verified_utc": "2026-09-17T06:02:16.790375+00:00",
+      "status": "pushed_and_remote_verified",
+      "scope": "R32 failed freeze and single-pass diagnostic;144-member11MB archive restore verified"
     }
   ],
   "operator_microbenchmark": {
@@ -2784,5 +2793,24 @@
     "archive_byte_restore_verified": true,
     "retry": false,
     "later_diagnostic": "one4MiB-block read: OpenSSL/CNG match expected; all gate stat fields stable at diagnostic time only; original cause unknown"
+  },
+  "round_033_preparation": {
+    "status": "reviewed_ready_to_commit_no_actual_freeze",
+    "baseline_commit": "8b715dc80ded2a35d7ab52b46339320149a33da4",
+    "candidate_commit": "resolved_from_next_reviewed_git_commit",
+    "common_source_override_paths": [
+      "tools/predict_stable_native_dataset.py"
+    ],
+    "per_arm_source_files": 117,
+    "only_allowed_arm_difference": "src/heterollm_sim/planner.py",
+    "new_driver_tests_passed": 73,
+    "new_identity_tests_passed": 9,
+    "existing_identity_tests_passed": 6,
+    "independent_review": "passed",
+    "identity_failure_root_cause": "unknown; diagnostics only, original acceptance predicates unchanged",
+    "hbm_mode_both_arms": "legacy_mma_output_wave",
+    "gate_B": "unvalidated",
+    "native_remeasured": false,
+    "prediction_started": false
   }
 }

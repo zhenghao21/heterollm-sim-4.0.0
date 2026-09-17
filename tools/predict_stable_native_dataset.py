@@ -1379,23 +1379,59 @@ def verify_retained_model_identities(model_refs):
 
     Kept separate from evidence_refs: individual workers already hash their own
     model in read_gguf_metadata and must not hash every campaign model again.
+    Failure diagnostics describe this read, never a retry or a second hash.
     """
     import hashlib
     refs = retained_model_identity_refs(model_refs)
     fingerprint = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    def observation(stat, observed_utc):
+        return {"observed_utc": observed_utc, **dict(zip(
+            ("st_dev", "st_ino", "st_size", "st_mtime_ns"), fingerprint(stat)))}
     for ref in refs:
         print("retained model identity: full SHA256 " + ref["path"], file=sys.stderr, flush=True)
+        started_utc = now()
         path = Path(ref["path"])
         digest, length = hashlib.sha256(), 0
         with path.open("rb") as stream:
             before = os.fstat(stream.fileno())
+            before_utc = now()
             for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
                 digest.update(chunk)
                 length += len(chunk)
             after = os.fstat(stream.fileno())
-        if (length != ref["bytes"] or not fingerprint(before) == fingerprint(after) == fingerprint(path.stat())
-                or digest.hexdigest() != ref["sha256"]):
-            raise ValueError("retained KV full model SHA256/identity mismatch: " + ref["path"])
+            after_utc = now()
+        actual_sha256 = digest.hexdigest()
+        path_after, path_stat_error = None, None
+        try:
+            path_after = path.stat()
+        except Exception as exc:
+            path_stat_error = exc
+        path_after_utc = now()
+        checks = {
+            "length_matches": length == ref["bytes"],
+            "handle_identity_unchanged": fingerprint(before) == fingerprint(after),
+            "path_identity_matches_opened_file": path_after is not None and fingerprint(after) == fingerprint(path_after),
+            "sha256_matches": actual_sha256 == ref["sha256"],
+        }
+        # These are exactly the original length, chained fingerprint and SHA
+        # predicates. In particular, ctime is not an identity gate.
+        if not all(checks.values()):
+            diagnostic = {
+                "schema": "retained-model-identity-check/v1",
+                "path": ref["path"], "read_chunk_bytes": 4 * 1024 * 1024,
+                "started_utc": started_utc, "finished_utc": now(),
+                "expected": {"bytes": ref["bytes"], "sha256": ref["sha256"]},
+                "actual": {"bytes": length, "sha256": actual_sha256,
+                    "fstat_before": observation(before, before_utc),
+                    "fstat_after": observation(after, after_utc),
+                    "path_stat_after": observation(path_after, path_after_utc) if path_after is not None else None},
+                "checks": checks,
+                "failed_checks": [name for name, passed in checks.items() if not passed],
+                "path_stat_error": {"type": type(path_stat_error).__name__, "message": str(path_stat_error),
+                    "observed_utc": path_after_utc} if path_stat_error is not None else None,
+            }
+            raise ValueError("retained KV full model SHA256/identity mismatch: " + ref["path"]
+                + "; diagnostic=" + json.dumps(diagnostic, ensure_ascii=False, separators=(",", ":"), allow_nan=False)) from path_stat_error
     return refs
 
 
