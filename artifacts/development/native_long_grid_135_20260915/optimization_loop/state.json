@@ -1,8 +1,8 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_next_mechanism_after_r42_regression",
-  "user_goal": "复用固定131格native证据进行机制优化；R42已完成评分但退化，下一轮审计其GPU controller关键路径并继续以每格Engine TTFT/TPOT/E2E严格小于10%为目标。",
+  "status": "paused_by_user_after_online_slot_completion_diagnosis",
+  "user_goal": "复用固定131格native证据持续执行机制优化；以每格Engine TTFT/TPOT/E2E误差均严格小于10%为开发目标，不拟合目标场景答案；开发达标后进行独立B门验收。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
     "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
@@ -1546,13 +1546,13 @@
       "result_remote_verified": true
     }
   ],
-  "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
+  "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\on",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "paused; resume with predict then score only; no standalone freeze/strict/recheck/report",
+  "next_round_hypothesis": "Reproduce per-slot sampling completion loss through real online stage compaction/replay, then implement one bounded timing-ownership candidate; no standalone marker-only patch",
   "full_131_evaluations_started": 12,
   "full_131_evaluations_completed": 10,
-  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_042\\candidate_source",
-  "best_candidate_status": "R42 structural candidate retained; accuracy not tested. Predict/score identity hot path relaxed; no accuracy claim yet.",
+  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_047\\candidate_source",
+  "best_candidate_status": "R35 remains provisional full131 baseline; R47 five-cell gate failed; no new baseline or completed-goal claim",
   "version_control_policy": {
     "enabled": true,
     "effective_utc": "2026-09-17T08:04:00.630250+00:00",
@@ -1851,9 +1851,9 @@
     }
   ],
   "continuation_policy": {
-    "auto_continue_until_target": false,
-    "status": "paused",
-    "reason": "user_requested_predict_score_only_framework",
+    "auto_continue_until_target": true,
+    "status": "active",
+    "reason": "User requested continuing the authorized task in the new conversation",
     "resume_condition": "explicit_user_instruction",
     "public_operations": [
       "predict",
@@ -1870,9 +1870,10 @@
       "failure_recheck",
       "report",
       "heatmap_acceptance"
-    ]
+    ],
+    "execution_state": "R47 finished; continuing source-based online completion diagnosis; no active predictor or collection"
   },
-  "goal_evaluator_status": "A_unmet_B_unvalidated_paused",
+  "goal_evaluator_status": "A_unmet_B_unvalidated",
   "goal_audit": {
     "observed_batches_per_cell": 3,
     "formal_repeatability_accepted_cells": 0,
@@ -1932,9 +1933,10 @@
   ],
   "current_stage": {
     "stage": 5,
-    "status": "active_predict_score_identity_relaxed",
-    "latest_valid_accuracy": "R34/on; A not passed; B unvalidated",
-    "next_action": "run_R42_predict_then_score_with_relaxed_identity"
+    "status": "active_online_slot_completion_diagnosis",
+    "latest_valid_accuracy": "R35/on full131 provisional baseline; R44/R45 three-cell diagnostics completed; A unmet; B unvalidated",
+    "next_action": "Reproduce per-slot sampling completion loss through real online stage compaction/replay, then implement one bounded timing-ownership candidate; no standalone marker-only patch",
+    "latest_completed_round": 47
   },
   "round_024_preparation": {
     "status": "committed_pushed_frozen_locked_full_running",
@@ -4376,7 +4378,7 @@
       "engine_e2e": 1054.5797483696128
     },
     "decision": "do_not_use_for_candidate_rejection_or_causal_attribution",
-    "next": "audit_gpu_controller_critical_path",
+    "next": "historical score remains incomparable; use matched R44/R45 diagnostic scores for this pilot",
     "reason": "freeze omitted R35/R40 runtime semantic contracts; matched-config rerun required"
   },
   "historical_identity_failures_reassessment": "required; R35/R37 rescored, R40 partial until missing/failed cells are safely restored",
@@ -4396,8 +4398,8 @@
       "e2e_median_pct": 24.468
     },
     "identity_status": "historical identity gate failed; reused only as development accuracy baseline after explicit reevaluation",
-    "r40": "not_selected; 120/131 scored and 11 unreplayable",
-    "r42": "rejected; 131/131 scored but materially regressed"
+    "r40": "not_selected; restored131/131; GPU local improvement but global regression",
+    "r42": "configuration_incomparable_diagnostic_only; do not reject or attribute causality from old relaxed scores"
   },
   "round_043_r40_reassessment": {
     "status": "complete_full131_accuracy_failed",
@@ -4411,15 +4413,15 @@
     },
     "decision": "retain_as_gpu_qwen38_local_candidate_only; do_not_replace_r35"
   },
-  "active_next_mechanism_after_r42_regression": "matched_config_gpu_controller_pilot_then_shared_prefill_first_token_audit",
+  "active_next_mechanism_after_r42_regression": "matched reassessment completed as R44/R45; next shared prefill/first-token causal stage audit",
   "candidate_reassessment_summary": {
     "r35": "global provisional development baseline; 131/131; 6/131 strict cells",
     "r37": "accuracy-equivalent to r35; identity/equivalence record only",
     "r40": "131/131 after recovery; local qwen38_gpu improvement but global regression",
-    "r42": "full131 accuracy regression; rejected"
+    "r42": "Old full131 score incomparable; matched R44 three-cell pilot shows regression and cannot replace R35"
   },
   "round_043_matched_config_pilot": {
-    "status": "blocked_before_prediction_by_stale_parent_source_refs",
+    "status": "failed_before_simulation_stale_source_root_and_worker_cli_mismatch",
     "candidate": "round_042_per_stage_controller",
     "configuration_source": "round_040/on/freeze.json",
     "requested_cells": [
@@ -4427,8 +4429,379 @@
       "qwen38_p1536_o128_c1__fixed_runtime",
       "qwen38_gpu_p128_o256_c4__fixed_runtime"
     ],
-    "failure": "freeze references optimization_loop/round_040/on/source files removed or unavailable; no prediction or score produced",
+    "failure": "freeze source.root still points at R40 source; modern coordinator passed predict to the historical worker CLI; no valid prediction or score",
     "interpretation": "evidence packaging/replay issue, not accuracy result",
-    "next": "rebuild matched runtime snapshot from current source and R35/R40 contracts, then rerun same 3 cells"
+    "next": "superseded by completed R44/R45 fresh-source matched replay; no retry of old invalid attempt"
+  },
+  "round_044": {
+    "status": "matched_pilot_complete_candidate_not_accepted",
+    "updated_utc": "2026-09-18T11:05:19.561838+00:00",
+    "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_044\\baseline_replay",
+    "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_044\\candidate_replay",
+    "requested_cells": [
+      "qwen25_p1536_o256_c4__fixed_runtime",
+      "qwen38_p1536_o128_c1__fixed_runtime",
+      "qwen38_gpu_p128_o256_c4__fixed_runtime"
+    ],
+    "full_development_denominator": 131,
+    "pilot_denominator": 3,
+    "identical_static_inputs_and_contracts": true,
+    "only_simulator_delta": "R42 _with_gpu_controller_stages in serving.py",
+    "tooling_fix": "Forward existing strict_identity into final-output binding; keep static/sampling/model semantic checks; strict mode still checks external evidence",
+    "tests": {
+      "final_output_binding_passed": 39,
+      "final_output_binding_skipped": 1,
+      "prediction_lifecycle_passed": 5,
+      "r42_structure_passed": 6
+    },
+    "tooling_independent_review": "No blocking findings; source/caller inspection only; no duplicated data replay",
+    "initial_attempt": "Both arms stopped before simulation on nested mandatory historical source verification; records retained under baseline/ and candidate/",
+    "native_remeasurement": false,
+    "cost_coefficient_changes": false,
+    "accuracy_claim": "R42 stage-local version regresses under matched inputs in this 3-cell pilot; not accepted as replacement; no full131 accuracy inference",
+    "predicted_cells_per_arm": 3,
+    "scored_metrics_per_arm": 9,
+    "baseline_exactly_reproduces_R35": true,
+    "baseline_strict_pass_cells": 0,
+    "candidate_strict_pass_cells": 0,
+    "baseline_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_044\\baseline_replay\\errors.0001.json",
+    "candidate_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_044\\candidate_replay\\errors.0001.json",
+    "comparison": [
+      {
+        "cell_id": "qwen25_p1536_o256_c4__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 29.97231061360204,
+          "engine_tpot_ms": 30.361780982382324,
+          "engine_e2e_ms": 30.56701344346012
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 46.924739735711796,
+          "engine_tpot_ms": 40.23046406539434,
+          "engine_e2e_ms": 41.542123212372545
+        }
+      },
+      {
+        "cell_id": "qwen38_p1536_o128_c1__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 12.574732102581642,
+          "engine_tpot_ms": 22.31558208896976,
+          "engine_e2e_ms": 7.850240665013855
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 11.597869762980043,
+          "engine_tpot_ms": 22.315582088970196,
+          "engine_e2e_ms": 8.255165629147237
+        }
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o256_c4__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 20.788421353404225,
+          "engine_tpot_ms": 13.915927805203529,
+          "engine_e2e_ms": 11.991461125225312
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 39.78332109076584,
+          "engine_tpot_ms": 10.739695165600828,
+          "engine_e2e_ms": 12.371957983273509
+        }
+      }
+    ],
+    "decision": "no_full131_expansion_and_no_candidate_commit",
+    "next_mechanism": "zero-service controller records introduce phantom queue dependencies (real event-kernel counterexample)"
+  },
+  "round_045": {
+    "status": "scored_structural_fix_no_pilot_accuracy_change",
+    "baseline_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_044\\baseline_replay\\errors.0001.json",
+    "previous_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_044\\candidate_replay\\errors.0001.json",
+    "candidate_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_045\\candidate_source",
+    "prediction_output": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_045\\on",
+    "scope": "same3cell; global131 denominator unchanged",
+    "mechanism": "Zero-service L2/VRAM observer demands must not acquire queued resources; retain diagnostics, original barriers and positive-service queue dependencies",
+    "real_kernel_counterexamples_before_ns": {
+      "idle_l2_only": 1100,
+      "busy_zero_vram": 10000,
+      "busy_observer_l2": 10000,
+      "idle_hbm_bypass": 1300,
+      "busy_zero_l2": 10300
+    },
+    "structural_tests": "3 counterexamples failed before patch; all18 isolated controller/frontend regressions pass after patch",
+    "native_remeasurement": false,
+    "cost_coefficient_changes": false,
+    "baseline_adopted": false,
+    "commit_authorized_by_accuracy": false,
+    "updated_utc": "2026-09-18T11:09:13.892839+00:00",
+    "predicted_cells": 3,
+    "scored_metrics": 9,
+    "strict_pass_cells": 0,
+    "strict_gate": {
+      "verdict": "accuracy_failed",
+      "passed_cells": 0,
+      "accuracy_failed_cells": 3,
+      "insufficient_evidence_cells": 0,
+      "required_cells": 3,
+      "required_metrics": 9,
+      "threshold_pct_strict": 10
+    },
+    "score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_045\\on\\errors.0001.json",
+    "r42_aggregate_exact_match_cells": 3,
+    "interpretation": "Phantom zero-service queue dependency is proven by real-kernel regression but is not active on these three pilot cells; it does not explain their current error",
+    "independent_review": "No execution-blocking findings; metadata observations retained, but aggregate ledger work_units currently drops removed observer transaction counts",
+    "known_limitations": [
+      "Aggregate diagnostic ledger falls back to zero work_units for removed zero-service observers; raw service_domains.transaction_count remains available; timing is unaffected by that reporting gap",
+      "Observer-ledger reporting gap fixed in unfrozen successor R46; immutable R45 source/results unchanged"
+    ],
+    "decision": "retain isolated structural fix, no replacement of R35, no full131 expansion, no commit/push because accuracy acceptance gate not met"
+  },
+  "round_046": {
+    "status": "diagnostic_only_fix_complete",
+    "candidate_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_046\\candidate_source",
+    "change": "Controller observer ledger work_units now falls back to preserved metadata transaction_count; no scheduling demands reintroduced",
+    "tests": "11 isolated controller tests passed; parent inspected the one-line production delta and regression",
+    "prediction_policy": "No repeated LLM replay for a reporting-only change; R45 timing evidence retained, not relabeled as a new prediction",
+    "native_remeasurement": false,
+    "cost_coefficient_changes": false,
+    "baseline_adopted": false
+  },
+  "round_047": {
+    "status": "five_cell_scored_candidate_not_accepted",
+    "candidate_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_047\\candidate_source",
+    "hypothesis": "Ordinary nonflash shared CPU F32 attention-mask materialization is absent from the current input preparation; add its known logical store requests once per single physical ubatch",
+    "scope": "One physical group; ordinary llama/qwen2 architecture; existing qualified conditional nonflash view; no inference of physical KV holes",
+    "cost_model": "Existing estimate_cpu_logical_stream; write_bytes=query_rows*conditional_kv_columns*4; no new coefficients",
+    "unpriced_terms": [
+      "copy-row loads",
+      "cell metadata reads and comparisons",
+      "allocator/compiler details",
+      "cache writeback",
+      "device upload"
+    ],
+    "expected_direction": "nonnegative added host preparation on supported cells; unsupported/multigroup paths unchanged; magnitude not chosen from actual latency",
+    "tests": {
+      "mask_unit_and_online_stage_tests": 7,
+      "all_related_candidate_regressions_passed": 51
+    },
+    "test_contract_change": "Legacy equal-task-count tests updated in isolated candidate to exactly one shared mask task; projection demands compared by stable name to avoid ordinal shifts",
+    "pilot_cells": [
+      "qwen25_p1536_o256_c4__fixed_runtime",
+      "qwen38_p1536_o128_c1__fixed_runtime",
+      "qwen38_gpu_p128_o256_c4__fixed_runtime",
+      "qwen25_p512_o32_c2__fixed_runtime",
+      "tinyllama_p512_o32_c2__fixed_runtime"
+    ],
+    "comparison_only_cells": [
+      "qwen25_p512_o32_c2__fixed_runtime",
+      "tinyllama_p512_o32_c2__fixed_runtime"
+    ],
+    "prediction_started": true,
+    "global_development_denominator": 131,
+    "native_remeasurement": false,
+    "calibration_applied": false,
+    "baseline_adopted": false,
+    "prediction_output": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_047\\on",
+    "independent_review": "No blocking findings; 7 new tests independently rerun and passed",
+    "freeze_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_047\\on\\freeze.json",
+      "sha256": "dd42ba1553ea924f0d798f7b24508ad7a6e73e9927d1e5ddaad52d7c06841afd",
+      "size_bytes": 18768603
+    },
+    "updated_utc": "2026-09-18T12:05:41.681173+00:00",
+    "predicted_cells": 5,
+    "scored_metrics": 15,
+    "strict_gate": {
+      "verdict": "accuracy_failed",
+      "passed_cells": 0,
+      "accuracy_failed_cells": 5,
+      "insufficient_evidence_cells": 0,
+      "required_cells": 5,
+      "required_metrics": 15,
+      "threshold_pct_strict": 10
+    },
+    "score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_047\\on\\errors.0001.json",
+    "comparison": [
+      {
+        "cell_id": "qwen25_p1536_o256_c4__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 29.97231061360204,
+          "engine_tpot_ms": 30.361780982382324,
+          "engine_e2e_ms": 30.56701344346012
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 46.88995928697265,
+          "engine_tpot_ms": 40.217183976135765,
+          "engine_e2e_ms": 41.5254070276936
+        }
+      },
+      {
+        "cell_id": "qwen38_p1536_o128_c1__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 12.574732102581642,
+          "engine_tpot_ms": 22.31558208896976,
+          "engine_e2e_ms": 7.850240665013855
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 11.597869762980043,
+          "engine_tpot_ms": 22.315582088970196,
+          "engine_e2e_ms": 8.255165629147237
+        }
+      },
+      {
+        "cell_id": "qwen38_gpu_p128_o256_c4__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 20.788421353404225,
+          "engine_tpot_ms": 13.915927805203529,
+          "engine_e2e_ms": 11.991461125225312
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 39.78332109076584,
+          "engine_tpot_ms": 10.739695165600828,
+          "engine_e2e_ms": 12.371957983273509
+        }
+      },
+      {
+        "cell_id": "qwen25_p512_o32_c2__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 57.323436781968155,
+          "engine_tpot_ms": 44.896247619483205,
+          "engine_e2e_ms": 48.5514228350031
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 64.47779608118631,
+          "engine_tpot_ms": 51.365463413169564,
+          "engine_e2e_ms": 55.27463979716992
+        }
+      },
+      {
+        "cell_id": "tinyllama_p512_o32_c2__fixed_runtime",
+        "baseline_ape_pct": {
+          "engine_ttft_ms": 38.655392071481685,
+          "engine_tpot_ms": 21.60879881505223,
+          "engine_e2e_ms": 27.702880275879856
+        },
+        "candidate_ape_pct": {
+          "engine_ttft_ms": 48.024763243247406,
+          "engine_tpot_ms": 33.60796232369641,
+          "engine_e2e_ms": 38.762351637606145
+        }
+      }
+    ],
+    "incremental_qwen25_long_vs_R45_ms": {
+      "engine_ttft": 0.09422997416001522,
+      "engine_tpot": 0.0007529209099685907,
+      "engine_e2e": 0.2886563307497454
+    },
+    "unaffected_by_mask_scope": [
+      "qwen38_p1536_o128_c1__fixed_runtime",
+      "qwen38_gpu_p128_o256_c4__fixed_runtime"
+    ],
+    "unaffected_scope_reason": "GGUF architecture qwen35 is outside this ordinary llama/qwen2 mask candidate",
+    "decision": "Retain isolated semantic/diagnostic work; do not replace R35, expand this version to131, or commit/push; this small store-only increment does not explain major errors",
+    "unchanged_native_selection_sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5"
+  },
+  "current_architecture_audit": {
+    "server_source_snapshot": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling_parity\\source_snapshots\\server_context.cpp",
+    "server_source_snapshot_sha256": "99f7aead4dd6b190292db2a14b2586d4076871a3710a49a94c71424b6f05501e",
+    "server_source_recovery": "Exact recorded bytes recovered; current-source code identical except trailing blank lines; no file rewritten",
+    "first_token": "Shared decode/output barrier, then serial slot sample/accept/timestamp; no extra first-token decode",
+    "kv_extent": "Source uses padded used_max_p1, not occupied count; existing final warmup counts do not uniquely recover allocator layout; do not invent a larger n_kv",
+    "gpu_stream_probe": "Real qwen25 one-prefill64 graph: 1984 tasks, 796 positive GPU data tasks, zero interval-overlap pairs; no evidence for this shape being underestimated due to overlapping GPU kernels",
+    "historical_limits": "Source-to-reused-object proof still conditional for parts of backend; no native timing or new measurement used"
+  },
+  "existing_generic_microbenchmark_qualification": {
+    "status": "measured_smoke_only_not_admitted_as_current_cost_profile",
+    "root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\generic_gemm_microbench_v1\\smoke",
+    "measured_cases": 12,
+    "all_numerical_smoke_checks_passed": true,
+    "shape": [
+      32,
+      256,
+      256
+    ],
+    "device_domains": [
+      "cpu",
+      "cuda"
+    ],
+    "weight_formats": [
+      "F16",
+      "Q4_K",
+      "Q6_K",
+      "Q8_0",
+      "IQ3_S",
+      "IQ4_XS"
+    ],
+    "formal_repeats_each": 20,
+    "cache_policy": "same_buffers_repeated_hot_cache_no_flush",
+    "hbm_validated": false,
+    "time_boundary": "whole ggml_backend_graph_compute including dispatch/conversion/GEMM/internal synchronization; not kernel-only",
+    "common_module_match": [
+      "ggml-base.dll"
+    ],
+    "common_module_differences": [
+      "ggml-cpu.dll",
+      "ggml-cuda.dll"
+    ],
+    "performance_equivalence_proven": false,
+    "native_llm_answers_used": false,
+    "new_measurement_started": false,
+    "reason_not_applied": "Single hot-cache shape, different CPU/CUDA libraries, no current-runtime performance equivalence or shape surface; whole-call wall cannot be appended as kernel cost or extra launch/sync",
+    "readme_note": "Original README no-timed-run claim is stale; actual preserved smoke JSON contains measured runs. Historical files left immutable."
+  },
+  "next_cost_evidence_authorization": {
+    "required": true,
+    "source": "TASK_BRIEF_AUDIT_20260914.md section8",
+    "explicit_rule": "仓库中保留的native采集、微基准和历史解析工具不属于运行入口，不得被自动优化循环调用。",
+    "proposed_action": "Separately authorize a preregistered generic CPU/GPU operator and host submission/synchronization microbenchmark phase using current runtime libraries without replacing them",
+    "preserved_constraints": [
+      "Do not remeasure the fixed131 native LLM cells",
+      "Do not fit target-LLM TTFT/TPOT/E2E",
+      "Freeze shapes, formats, hardware/runtime identity, cache regimes, repeat policy and timing boundary before sampling",
+      "Reserve independent generic comparison shapes",
+      "Do not mix whole-call wall with kernel-only or count launch/sync twice"
+    ],
+    "execution_authorized": false,
+    "automatic_collection_allowed": false
+  },
+  "output_boundary_audit": {
+    "status": "online_two_slot_counterexample_confirmed_patch_pending",
+    "source_snapshot": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_018\\sampling_parity\\source_snapshots\\server_context.cpp",
+    "confirmed": "Native iterates slot sampling/accept/timepoints; simulator preserves serial row service totals but item terminals map to group/stage end",
+    "not_established": "cpu_token_commit is not proven to be response/text work; do not remove its service or move markers solely on its name",
+    "entrypoint_caveat": "Fixed dataset uses online serving item_completion_ns, not standalone request TraceMarker path",
+    "next": "Paused by user. Resume only against a user-provided optimization direction; do not autonomously select or start the next round.",
+    "constraints": [
+      "Preserve total service and batch completion",
+      "Preserve shared logits transfer and output barrier",
+      "Do not infer missing accept/response cost",
+      "Keep costs and native data fixed"
+    ]
+  },
+  "latest_online_slot_completion_diagnosis": {
+    "status": "structural_counterexample_confirmed_patch_not_implemented_or_scored",
+    "method": "Actual planner and online _OnlineRuntime replay; two slots with one logits row each; explicit_equal_length_stateful_ubatch",
+    "item_completion_ns": {
+      "a/prefill": 28222.208333333332,
+      "b/prefill": 28222.208333333332
+    },
+    "cohort_makespan_ns": 28222.208333333332,
+    "finding": "Both item terminals depend on the aggregate CPU sampling/commit tail and replay to the same group/stage end; per-row completion is not exposed",
+    "decision": "Keep R35 provisional baseline; do not admit an unscored row-terminal patch; A/B gates remain unpassed",
+    "required_before_any_future_admission": [
+      "Expose per-row terminal ordering in planner",
+      "Preserve task-end timing through execution-stage replay",
+      "Bind each online item to its row completion",
+      "Preserve total sampling service, cohort makespan and shared logits transfer",
+      "Run matched baseline/candidate predict then score"
+    ],
+    "native_remeasured": false
+  },
+  "pause_reason": "User requested one workspace commit and remote push after this round, then no autonomous optimization; execute and verify only user-provided directions.",
+  "pause_closeout_validation": {
+    "command": "python -m pytest tests/test_final_output_binding.py tests/test_sampling_binding_replan.py tests/test_predict_stable_native_dataset.py -q",
+    "passed": 166,
+    "skipped": 1,
+    "failed": 7,
+    "failure_reason": "Historical recurrent/slot-order contracts reject source/llama.cpp-annotation-control/tools/server/server-context.cpp because its current SHA256 differs from the frozen reference; four tamper cases encounter this identity failure before their intended assertion. No frozen evidence or validation gates changed.",
+    "diff_check": "passed",
+    "acceptance": "A/B not passed"
   }
 }

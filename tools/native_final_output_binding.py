@@ -219,7 +219,7 @@ def bind_static_inputs(campaign, inputs, *, model_scope_reader):
     return bound
 
 
-def verify_sampling_projection(source, inputs):
+def verify_sampling_projection(source, inputs, *, verify_files=True):
     """Check against the freeze-verified sampler document, never its raw timings."""
     import json
     from tools.native_sampling_contract import _profile_id
@@ -227,7 +227,8 @@ def verify_sampling_projection(source, inputs):
     if not isinstance(sampling, Mapping):
         return
     value = source["sampling_contract_ref"]
-    verify_ref(value)
+    if verify_files:
+        verify_ref(value)
     document = json.loads(Path(value["path"]).read_text(encoding="utf-8-sig"))
     rows = [row for row in document.get("cells", []) if row.get("cell_id") == inputs["cell_id"]]
     require(len(rows) == 1, "sampling contract cell missing or duplicate")
@@ -240,8 +241,9 @@ def verify_sampling_projection(source, inputs):
             "sampling projection differs from freeze-verified contract")
     require(sampling.get("provenance", {}).get("selection_ref", {}).get("sha256")
             == document.get("selection_ref", {}).get("sha256"), "sampling selection identity differs")
-    collector = sampling.get("provenance", {}).get("collector_source_ref")
-    verify_ref(collector)
+    if verify_files:
+        collector = sampling.get("provenance", {}).get("collector_source_ref")
+        verify_ref(collector)
 
 
 def verify_cell(inputs, *, verify_files=True):
@@ -261,7 +263,7 @@ def verify_cell(inputs, *, verify_files=True):
         for value in source["evidence_refs"]:
             verify_ref(value)
         require(rederive_source(source) == source, "source contract differs from re-derived build facts")
-    verify_sampling_projection(source, inputs)
+    verify_sampling_projection(source, inputs, verify_files=verify_files)
     expected = derive_cell(source, cell_id=inputs["cell_id"], model_ref=inputs["prediction_model_ref"],
         model_scope={"architecture": proof.get("gguf_architecture")}, config=inputs["config"],
         native_refs=[inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])], sampling=inputs.get("sampling_binding"))
@@ -269,8 +271,9 @@ def verify_cell(inputs, *, verify_files=True):
     return proof
 
 
-def apply_binding(scenario, inputs, *, gguf):
-    proof = verify_cell(inputs)
+def apply_binding(scenario, inputs, *, gguf, strict_identity=True):
+    # Development replay still validates the frozen semantics and model identity.
+    proof = verify_cell(inputs, verify_files=strict_identity)
     if proof is None:
         return scenario
     require(gguf.sha256 == proof["model_sha256"] and gguf.architecture == proof["gguf_architecture"], "worker GGUF identity differs")

@@ -232,7 +232,10 @@ def test_campaign_must_match_each_static_cell_and_default_off_has_no_new_inputs(
     with pytest.raises(ValueError): binding.verify_freeze({'cells': freeze['cells']})
 
 
-def test_predict_worker_applies_binding_before_real_final_replan_without_simulation(frozen, monkeypatch):
+@pytest.mark.parametrize("strict_identity", [True, False])
+def test_predict_worker_applies_binding_before_real_final_replan_without_simulation(frozen, monkeypatch, strict_identity):
+    if not strict_identity:
+        frozen.paths["server_context"].write_text("later source revision", encoding="utf-8")
     captured = {}
     monkeypatch.setattr(adapter.grid, 'read_gguf_metadata', lambda path: frozen.gguf)
     real_builder = adapter.grid.build_matching_scenario
@@ -247,11 +250,31 @@ def test_predict_worker_applies_binding_before_real_final_replan_without_simulat
         captured['scenario'] = scene
         raise ReachedSimulationBoundary()
     monkeypatch.setattr(adapter.grid.reporting, 'run_scenario', capture)
-    with pytest.raises(ReachedSimulationBoundary): adapter.predict_cell(frozen.inputs)
+    with pytest.raises(ReachedSimulationBoundary):
+        adapter.predict_cell(frozen.inputs, strict_identity=strict_identity)
     scene = captured['scenario']
     assert model_declaration(scene.model) == source_declaration()
     from heterollm_sim.control_plane_state import mapping_fingerprint_status
     assert mapping_fingerprint_status(scene)['mapping_stale'] is False
+
+
+def test_relaxed_final_output_binding_keeps_semantics_but_skips_file_rechecks(frozen, monkeypatch):
+    scene = production_scene(frozen.gguf)
+    strict = binding.apply_binding(scene, frozen.inputs, gguf=frozen.gguf)
+    def changed_reference(_value):
+        raise ValueError("historical evidence changed")
+    monkeypatch.setattr(binding, "verify_ref", changed_reference)
+    with pytest.raises(ValueError, match="historical evidence changed"):
+        binding.apply_binding(scene, frozen.inputs, gguf=frozen.gguf)
+    relaxed = binding.apply_binding(scene, frozen.inputs, gguf=frozen.gguf, strict_identity=False)
+    assert model_declaration(relaxed.model) == model_declaration(strict.model)
+    assert relaxed.workload.metadata[binding.AUDIT_KEY] == strict.workload.metadata[binding.AUDIT_KEY]
+    changed = copy.deepcopy(frozen.inputs)
+    changed["config"]["batch"] += 1
+    with pytest.raises(ValueError, match="cell proof differs"):
+        binding.apply_binding(scene, changed, gguf=frozen.gguf, strict_identity=False)
+    with pytest.raises(ValueError, match="worker GGUF identity differs"):
+        binding.apply_binding(scene, frozen.inputs, gguf=replace(frozen.gguf, sha256="4" * 64), strict_identity=False)
 
 
 def test_cli_refuses_enable_without_prerequisites_and_resume_mutation(tmp_path):

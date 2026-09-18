@@ -1,6 +1,6 @@
 # 仿真器机制建模、可信度与泛化优化任务书
 
-> **文档状态（动态）**：继续自动优化循环；哈希校验失败按第8节仅完整复核一次，并按失败阶段决定恢复范围。R37预测已完整执行，原评分失败保留；用户要求的五模型完整复核已通过，恢复评分与配对报告已生成，但独立严格验收因GGUF元数据头不一致返回证据不足；恢复链不再重试。R39同次读取绑定修复已独立审查并新冻结，131格预测、评分和证据完整性已通过；严格准确性仅6/131格达标，有条件保留继续机制优化，暂不提交。尚未通过误差验收。R36/R38结构检查不代替精度验收。验收主口径为engine-first，client仅作二级诊断；稳定章节定义规则，动态章节原位替换。
+> **文档状态（动态）**：按用户要求，本轮收尾后暂停自动优化循环；后续仅执行和验证用户指定方向。R35 保持临时开发基线；R44/R45 未达到替换条件，R46 仅诊断汇总修复，R47 五格 0/5 达标、不接纳。真实在线双 slot 反例已确认完成点合并的结构缺口，尚未实现和评分逐行完成点修复，不宣称修复完成。固定 native 不重测、不拟合答案；A/B 均未通过。
 >
 > **适用项目**：`F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0`
 >
@@ -181,11 +181,16 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 - R42 修复 GPU controller 服务归属：每个 GPU 数据阶段承担自己的 MMU/L2/VRAM 服务，串行阶段不再把全部访存提前归到首个 root；CPU、H2D、DMA、PCIe 和 command processor 字节不会制造 GPU 访存回退，显式零字节声明不会继承其他资源字节。
 - R42 局部结构测试 6 项通过，既有 GPU controller、consumer、runtime 集成回归 35 项通过；真实 lowerer 多阶段探针确认两个阶段分别为 32,036B 与 47,440B，并保留串行依赖。
 - 验收框架进一步精简为 `predict`/`score`：`evaluation_contract.py` 是 Engine 指标公式的唯一来源；score 同时完成固定 native 绑定、逐请求时间戳重算、覆盖率和严格门判定，不再调用独立 strict/report/recheck 入口。
+- R44 修复工具层校验开关传递：默认宽松预测不重复校验 final-output 历史外部文件；保留采样投影、静态配置和 GGUF/场景一致性，严格模式仍校验来源。39 项模块回归、5 项预测流程回归、6 项 R42 结构回归通过；1 项真实全量集测试按其既有环境门槛跳过。独立代码审查未发现阻塞问题。
+- R45 的真实事件内核反例：L2-only 阶段正常完成于 1100ns，却会因零服务 VRAM/L2 需求排到 10000ns；HBM bypass 则从 1300ns 被拖到 10300ns。只在控制器构造处过滤零服务资源需求，不修改通用事件内核；修复后资源竞争与 barrier 回归共 18 项通过。
+- R46 已将已移除的零服务观察需求的 `work_units` 从保留的 `service_domains.transaction_count` 回填，11 项测试通过。仅诊断汇总变化，不重跑或重命名 R45 的历史预测。
+- R47 在隔离候选中新增一次 CPU F32 mask 写入，复用现有乐观单核逻辑写入成本，未引入新参数；7 项新测试覆盖写量、共享次数、提交依赖及在线 stage 保留，相关回归合计 51 项通过。行复制读取、条件判断、分配及 GPU mask 上传仍未计价，KV 长度仍保留既有条件下界。
+- 暂停前收尾验证：final-output binding、sampling binding replan、stable native predictor 三个测试模块合计 166 通过、1 跳过、7 失败。失败均由历史 recurrent/slot-order 契约引用的 `server-context.cpp` SHA-256 与当前文件不一致触发，其中四个篡改测试在预期断言前即被身份检查拦截；未改冻结证据、未放宽门禁，不宣称全测试通过。`git diff --check` 通过。
 - 以上结构结果不等同于准确性改善。没有通过 A 门前不得宣称支持域已达标。
 
 ## 12. 当前误差与流程缺口（动态，原位更新）
 
-当前开发基线为 R35/on；R39 与 R35 的完整评分结果等价，R40 覆盖不完整，R42 已完成全量 `predict`/`score` 但候选退化。这些准确性结论与运行框架身份问题分开记录，身份失败不能被当作仿真误差。
+当前开发基线为 R35/on；R39 与 R35 的完整评分结果等价，R40 已补齐 131 格但全局精度未改善，R42 原全量评分配置不可比；R44 同配置三格试验则可比，已确认这版候选不满足替换基线条件。这些准确性结论与运行框架身份问题分开记录，身份失败不能被当作仿真误差。
 
 审计确认原流程的主要阻塞来自重复 provenance、runtime/module、worker attempt 和 coordinator lock 校验，而不是 native actual 缺失。默认优化路径已移除这些重复阻断，只保留 native selection 的 schema、cell ID、实际字段和逐格结果检查。完整身份复核保留为显式 `--strict-identity` 选项，不属于正常优化循环。
 
@@ -193,25 +198,36 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 13. 当前执行计划（动态，原位更新）
 
-R35 已被选为当前开发基线（仅用于成对比较，不代表验收通过）。R40 已完成 131 格补全评分，证据完整率恢复到 100%，但只作为局部 GPU 候选；R42 既有评分使用的 freeze 缺少 R35/R40 的 runtime_build_audit、GPU invocation、host-offload、nonflash KV、KV warmup、final output selection 等配置，不能与 R35 成对比较；其极端退化结果保留为“不可比诊断”，不用于淘汰或归因。下一轮以 R35 为父基线，复用 R35/R40 完整运行时开关，先做匹配配置的最小 GPU controller 候选比较；随后检查 qwen25/qwen35/tinyllama 共同偏低的 prefill、首 token、host-submit 与同步阶段是否完整建模。先确认执行语义，再决定局部成本修正；匹配配置试验若被历史 freeze 源文件引用阻断，必须基于当前源码重建最小运行快照，不能修改旧 freeze 绕过检查；不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
+R35 已被选为当前开发基线（仅用于成对比较，不代表验收通过）。R40 已完成 131 格补全评分，评分覆盖恢复为 131/131，但这不等于正式身份与统计证据通过，仍只作为局部 GPU 候选；R42 既有评分使用的 freeze 缺少 R35/R40 的 runtime_build_audit、GPU invocation、host-offload、nonflash KV、KV warmup、final output selection 等配置，不能与 R35 成对比较；其极端退化结果保留为“不可比诊断”，不用于淘汰或归因。R44 已完成以 R35 为父基线的匹配配置三格比较，R42 版本未过替换门。R45 已在隔离候选中修复零服务控制器排队，复用 R44 基线，仅对新候选完成同三格预测/评分；结果与 R42 完全相同，说明此缺陷未解释本组三格误差。系统审计已确认共享输出同步后逐 slot 采样的源码关系，并找回与清单完全一致的 server 源码快照。qwen25 单 prefill64 实际图的 796 个正耗时 GPU 数据任务无区间重叠，不以错误并行作为该形状的原因；现有 warmup counts 不能确定物理 KV 索引范围，不按误差扩大 KV 长度。当前 R47 验证普通非 Flash mask 的 CPU 输入写入缺项：原三格加 qwen25/tinyllama 的 p512/o32/c2 两个比较格，已完成独立审查与 predict→score，五格 0/5 达标，不扩跑或接纳这版候选。先确认执行语义，再决定局部成本修正；匹配配置试验若被历史 freeze 源文件引用阻断，必须基于当前源码重建最小运行快照，不能修改旧 freeze 绕过检查；不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
 
 默认 `predict`/`score` 流程只保留必要的输入结构检查、逐格结果状态和误差计算：不在 worker、收尾和 score 前重复验证完整 provenance、源码快照、runtime/module SHA、attempt seal 或 coordinator lock。`freeze.json` 和 worker 文件仍可作为内部场景包与失败记录，但不再作为默认评分阻断条件。需要严格身份复核时才显式启用 `--strict-identity`。
 
 单格 simulator 失败继续写入该格结果并计入覆盖率；已完成的格可以独立进入 `score`。默认流程不重新采集 native，也不使用 native actual 拟合成本模型。native selection 仍需通过最小 schema、cell ID 和实际字段检查。
 
-本轮已完成底层 JSON 单次读取、稳定快照和进程内缓存；主流程已关闭重复身份门禁、历史 attempt 门禁和默认全局锁。下一步审计 R42 引入的 GPU controller 关键路径；只有确定性缺口修复并且候选组相对基线改善后才提交，未达到目标则进入下一轮，不把身份失败误写成仿真误差。
+本轮已完成底层 JSON 单次读取、稳定快照和进程内缓存；主流程已关闭重复身份门禁、历史 attempt 门禁和默认全局锁。R44 已按相同静态输入完成三格配对；R45 仅去除零服务控制器需求的资源排队，保留原 stage 依赖、正服务竞争及全部观察元数据；只有确定性缺口修复并且候选组相对基线改善后才提交，未达到目标则进入下一轮，不把身份失败误写成仿真误差。
+
+R47 的新增已知 mask store 工作仅使 qwen25 长输入三项预测增加约 0.09423/0.000753/0.28866ms（相对 R45 的 TTFT/TPOT/E2E），无法解释当前主要误差；qwen38 的 GGUF 架构是 qwen35，明确不在这次普通架构写入候选的支持域内，结果未变。新增两个比较格也未满足替换基线条件。
+
+已有通用 GEMM smoke 实际保存了 12 项数值检查通过的测量，但仅覆盖 M/N/K=32/256/256 单一热缓存形状，CPU/CUDA DLL 与固定 native 的版本不同，且计时含 dispatch、conversion、GEMM、sync。它们不证明当前性能等价、跨 shape 或 HBM 带宽，不能直接入模或再叠加启动/同步。下一成本证据阶段建议先固定通用形状、格式、缓存策略、运行时身份、重复策略和独立比较组；第8节明确禁止自动调用微基准，因此在用户单独授权前不执行该采样，不重测固定131格、不拟合目标 LLM 答案。
+
+本轮已用真实 planner 与在线 `_OnlineRuntime` 构造双 slot、多 logits cohort 反例：`a/prefill`、`b/prefill` 各一个 logits row，使用 `explicit_equal_length_stateful_ubatch`，两个 `serving_item_complete` 与 cohort makespan 均为 28222.208333333332ns。两个 item terminal 依赖同一聚合 CPU sampling/commit 尾部，在线 stage replay 只能恢复同一 group/stage 末端，确认逐 slot 完成点的结构缺口。尚未实现逐行 terminal 暴露、task end 保留和在线 item 绑定，也未完成对应成对预测/评分，因此不接纳未经评分的补丁。未来若用户指定修复该方向，必须保持总服务、批次末端和共享 logits transfer，不得只改固定集未使用的通用 TraceMarker。`cpu_token_commit` 尚未证明属于响应处理，不因名称把其服务移出 Engine 边界。
+
+按用户最新指令，自动优化循环在本轮收尾后暂停；不自行启动下一轮、不自行选取优化方向，等待用户给出方向后只负责执行和验证。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
 固定 native、历史预测和评分结果保持不可变；当 simulator 成本模型、binary、模型、硬件、命令行配置、prompt/output policy、计时契约和 extractor 均未改变时，可复用已保存的 native raw/逐 token 时间戳，只重跑 `predict`，再运行 `score`。每个运行只需要 prediction 结果集合和一个 score；失败直接记录在两者中，不自动重测、不覆盖原结果。
 
-R35 已作为当前开发基线；R40 的准确性状态为“局部 GPU 候选/全局失败”，R42 既有结果状态为“配置不可比/不作准确性结论”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。本轮完成 R42 全量开发评分，但未宣称 A/B 门通过；R42 已判定为候选退化。
+R35 已作为当前开发基线；R40 的准确性状态为“局部 GPU 候选/全局失败”，R42 既有结果状态为“配置不可比/不作准确性结论”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。R42 原全量开发评分不用于淘汰或归因；R44 同配置三格成对重放已完成：两组均 0/3 格三项全 <10%，基线精确复现 R35；R42 在 qwen25 三项与 qwen38_gpu 的 TTFT/E2E 均退化，不扩跑这版 131 格。R45 三格已完整预测/评分，与 R42 的全部 aggregate 完全相同，仍 0/3 达标；因此不替换 R35，不扩跑这版 131 格，不按误差补成本参数。未宣称 A/B 门通过。
 
 ## 15. 最近结果与交付位置（动态，原位更新）
 
 - 固定 native：`artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json`。
 - 循环状态：`artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json`。
 - 当前开发基线评分：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_035/on/errors.0001.json`（身份门禁曾失败，仅作准确性基线）。
+- R44 成对运行：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_044/{baseline_replay,candidate_replay}`；旧失败记录保留，不覆盖。
+- R45 隔离候选与预测：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_045/{candidate_source,on}`。
+- R46/R47 隔离候选：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_046/candidate_source`、`round_047/candidate_source`。
 - R42 候选源码：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_042/candidate_source`。
 - 仿真器关键实现：`src/heterollm_sim/serving.py`、`src/heterollm_sim/planner.py`、`tools/predict_stable_native_dataset.py`、`tools/evaluation_contract.py`。
 - 历史 round 目录保留原始失败和必要证据，但不再要求为同一事实复制新的 report、control、bundle、receipt 或审计文档。

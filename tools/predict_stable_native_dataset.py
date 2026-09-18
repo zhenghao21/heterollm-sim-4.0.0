@@ -2527,7 +2527,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         options["slot_order_contract"] = inputs["slot_order_contract"]
     if inputs.get("final_output_selection", False) is not False or inputs.get("final_output_selection_binding") is not None:
         from tools.native_final_output_binding import apply_binding
-        scenario = apply_binding(scenario, inputs, gguf=gguf)
+        scenario = apply_binding(scenario, inputs, gguf=gguf, strict_identity=strict_identity)
     scenario, placement_refresh = replan_final_static_scenario(scenario, **options)
     slot_qualification = scenario.workload.metadata.get("llama_cpp_slot_order", {})
     slot_qualification = slot_qualification if isinstance(slot_qualification, dict) else {}
