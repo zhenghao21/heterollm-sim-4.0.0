@@ -167,7 +167,7 @@ def test_resume_cannot_change_switch_or_document(tmp_path, option):
     args = ["--output", str(tmp_path), "--resume", option]
     if option.endswith("document"): args.append("changed.pdf")
     with pytest.raises(SystemExit) as exc:
-        adapter.main(args)
+        adapter.main(["predict", *args])
     assert exc.value.code == 2
 
 
@@ -175,7 +175,8 @@ def test_initial_freeze_cli_accepts_switch(tmp_path, monkeypatch):
     calls = []
     real_freeze_selection = adapter.freeze_selection
     monkeypatch.setattr(adapter, "freeze_selection", lambda *a, **kw: calls.append(kw))
-    adapter.main(["--selection", "selection.json", "--output", str(tmp_path), "--freeze-only",
+    monkeypatch.setattr(adapter, "run_predictions", lambda *a, **kw: None)
+    adapter.main(["predict", "--selection", "selection.json", "--output", str(tmp_path),
         "--gpu-invocation-contract", "contract.json", "--gpu-mmq-source-costs",
         "--gpu-conversion-cta-costs", "--mmvq-vector-issue-bound"])
     assert calls[0]["mmvq_vector_issue_bound"] is True

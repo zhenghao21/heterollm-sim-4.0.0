@@ -256,9 +256,9 @@ def test_predict_worker_applies_binding_before_real_final_replan_without_simulat
 
 def test_cli_refuses_enable_without_prerequisites_and_resume_mutation(tmp_path):
     with pytest.raises(SystemExit):
-        adapter.main(['--output', str(tmp_path), '--selection', 'missing', '--final-output-selection', '--freeze-only'])
+        adapter.main(['predict', '--output', str(tmp_path), '--selection', 'missing', '--final-output-selection'])
     with pytest.raises(SystemExit):
-        adapter.main(['--output', str(tmp_path), '--resume', '--final-output-selection'])
+        adapter.main(['predict', '--output', str(tmp_path), '--resume', '--final-output-selection'])
 
 
 def test_bound_model_serialization_preserves_canonical_owner(frozen):

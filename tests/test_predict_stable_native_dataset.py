@@ -189,6 +189,8 @@ def test_freeze_precedes_prediction_and_worker_never_reads_answers(tmp_path, mon
     assert metric["native_median_ms"] == 12 and metric["signed_error_pct"] == 50
     assert metric["absolute_error_ms"] == 6
     assert report["overall"]["engine_ttft_ms"]["signed_error_pct"]["median"] == 50
+    assert report["strict_gate"]["verdict"] == "insufficient_evidence"
+    assert report["strict_gate"]["insufficient_evidence_cells"] == 1
     assert len(calls["run"]) == 1  # scoring never reruns or alters predictions
 
 
@@ -859,7 +861,7 @@ def test_iq_panel_treatment_cannot_be_added_to_an_existing_freeze_by_cli(tmp_pat
     adapter.freeze_selection(path, out, data_root=tmp_path)
     before = adapter.grid.file_ref(out / "freeze.json")
     with pytest.raises(SystemExit):
-        adapter.main(["--output", str(out), "--resume", "--iq-panel-assume-default-unset"])
+        adapter.main(["predict", "--output", str(out), "--resume", "--iq-panel-assume-default-unset"])
     assert adapter.grid.file_ref(out / "freeze.json") == before
 
 
@@ -888,7 +890,7 @@ def test_slot_order_treatment_cannot_be_enabled_during_resume(tmp_path, monkeypa
     adapter.freeze_selection(path, out, data_root=tmp_path)
     frozen = adapter.grid.file_ref(out / "freeze.json")
     with pytest.raises(SystemExit):
-        adapter.main(["--output", str(out), "--resume", "--slot-order-contract", str(tmp_path / "unread-contract.json")])
+        adapter.main(["predict", "--output", str(out), "--resume", "--slot-order-contract", str(tmp_path / "unread-contract.json")])
     assert adapter.grid.file_ref(out / "freeze.json") == frozen and not calls["run"]
 
 
@@ -1129,7 +1131,7 @@ def test_host_offload_cannot_be_added_during_resume(tmp_path, monkeypatch):
     adapter.freeze_selection(path, output, data_root=tmp_path)
     before = adapter.grid.file_ref(output / "freeze.json")
     with pytest.raises(SystemExit):
-        adapter.main(["--output", str(output), "--resume", "--host-offload-source-contract", "unread.json"])
+        adapter.main(["predict", "--output", str(output), "--resume", "--host-offload-source-contract", "unread.json"])
     assert adapter.grid.file_ref(output / "freeze.json") == before
 
 
@@ -1283,7 +1285,7 @@ def test_tensor_storage_treatments_cannot_change_during_resume(tmp_path, monkeyp
     adapter.freeze_selection(path, output, data_root=tmp_path)
     before = adapter.grid.file_ref(output / "freeze.json")
     with pytest.raises(SystemExit):
-        adapter.main(["--output", str(output), "--resume", *args])
+        adapter.main(["predict", "--output", str(output), "--resume", *args])
     assert adapter.grid.file_ref(output / "freeze.json") == before
 
 
@@ -1291,7 +1293,7 @@ def test_tensor_storage_treatments_cannot_change_during_resume(tmp_path, monkeyp
 def test_explicit_hidden_cli_option_requires_tensor_storage_contract(tmp_path, monkeypatch, flag):
     path, _, _, _ = fixture(tmp_path, monkeypatch)
     with pytest.raises(SystemExit):
-        adapter.main(["--selection", str(path), "--output", str(tmp_path / "out"), "--freeze-only", flag])
+        adapter.main(["predict", "--selection", str(path), "--output", str(tmp_path / "out"), flag])
     assert not (tmp_path / "out").exists()
 
 
@@ -1547,7 +1549,7 @@ def test_gpu_invocation_switches_cannot_be_added_during_resume(tmp_path, monkeyp
     adapter.freeze_selection(path, out, data_root=tmp_path)
     before = adapter.grid.file_ref(out / "freeze.json")
     with pytest.raises(SystemExit):
-        adapter.main(["--output", str(out), "--resume", *switches])
+        adapter.main(["predict", "--output", str(out), "--resume", *switches])
     assert adapter.grid.file_ref(out / "freeze.json") == before
 
 
@@ -1555,7 +1557,7 @@ def test_gpu_invocation_switches_cannot_be_added_during_resume(tmp_path, monkeyp
 def test_gpu_cost_cli_option_requires_invocation_contract(tmp_path, monkeypatch, flag):
     path, _, _, _ = fixture(tmp_path, monkeypatch)
     with pytest.raises(SystemExit):
-        adapter.main(["--selection", str(path), "--output", str(tmp_path / "out"), "--freeze-only", flag])
+        adapter.main(["predict", "--selection", str(path), "--output", str(tmp_path / "out"), flag])
     assert not (tmp_path / "out").exists()
 
 
@@ -1806,7 +1808,7 @@ def test_missing_sampling_binding_remains_explicitly_unmodeled(tmp_path, monkeyp
 
 def test_sampling_contract_cannot_change_on_resume(tmp_path):
     with pytest.raises(SystemExit):
-        adapter.main(["--output", str(tmp_path), "--resume", "--sampling-contract", str(tmp_path / "contract.json")])
+        adapter.main(["predict", "--output", str(tmp_path), "--resume", "--sampling-contract", str(tmp_path / "contract.json")])
 
 
 @pytest.mark.parametrize("kind", ["StopIteration", "RuntimeError"])

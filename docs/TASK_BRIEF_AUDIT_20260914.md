@@ -162,7 +162,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 4. 只有确定性缺口已修复，且候选在未参与假设形成的比较组上改善或保持、没有不可接受退化，才接受候选并提交；否则保留失败记录并回滚/继续下一候选；
 5. 评分结束后检查 A 门是否达到固定131格每格三项 Engine 误差严格<10%。未达到则自动进入下一轮；达到后冻结候选并转入独立 B 门。用户明确暂停、预算耗尽或外部阻塞时停止。
 
-身份、计时、失败、隔离和验收都复用同一最小运行框架：`prepare/freeze → predict → score → strict →（仅失败时）failure_recheck`。报告只生成一个 canonical summary；热图、HTML、JUnit 和阶段回执是可选展示或失败诊断，不是额外验收层，也不能替代原始预测、native 时间戳或评分结果。历史轮次只作记录，不再被活动入口重复验证。
+运行框架只保留两个外部入口：`predict → score`。`predict` 内部完成静态场景投影、必要的输入身份绑定和 simulator 运行；`score` 内部完成固定 native 绑定、逐请求 Engine 时间戳重算、覆盖率、失败分类和每格三项 `<10%` 判定。没有独立 freeze、strict、failure_recheck、report 或热图验收步骤；热图、HTML、JUnit 和历史回执只属于可选诊断。仓库中保留的 native 采集、微基准和历史解析工具不属于运行入口，不得被自动优化循环调用。
 
 ## 9. 交付与停止条件（稳定）
 
@@ -180,7 +180,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 - R42 修复 GPU controller 服务归属：每个 GPU 数据阶段承担自己的 MMU/L2/VRAM 服务，串行阶段不再把全部访存提前归到首个 root；CPU、H2D、DMA、PCIe 和 command processor 字节不会制造 GPU 访存回退，显式零字节声明不会继承其他资源字节。
 - R42 局部结构测试 6 项通过，既有 GPU controller、consumer、runtime 集成回归 35 项通过；真实 lowerer 多阶段探针确认两个阶段分别为 32,036B 与 47,440B，并保留串行依赖。
-- 验收框架已精简：`evaluation_contract.py` 是 engine 指标公式的唯一来源；严格评分只保留一次固定 native 锁、一次冻结绑定、一次 score/prediction 读取和逐请求时间戳重算；去掉重复的评估器实现快照、策略快照和审计期二次全文重哈希。热图、HTML、JUnit 和阶段回执只作可选展示或失败诊断。
+- 验收框架进一步精简为 `predict`/`score`：`evaluation_contract.py` 是 Engine 指标公式的唯一来源；score 同时完成固定 native 绑定、逐请求时间戳重算、覆盖率和严格门判定，不再调用独立 strict/report/recheck 入口。
 - 以上结构结果不等同于准确性改善。没有通过 A 门前不得宣称支持域已达标。
 
 ## 12. 最新误差及主要缺口（动态，原位更新）
@@ -191,20 +191,20 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 13. 当前执行及下一轮优化顺序（动态，原位更新）
 
-本轮 R42 已完成确定性的 GPU controller 服务归属修复和 6 项结构回归；真实 lowerer 多阶段探针确认两个 GPU 阶段分别承担 32,036B 与 47,440B，尚未进行 131 格预测或准确性验收。本轮随后完成了验证闭环精简：严格验收复用统一 engine 时间戳公式，移除重复的评估器身份快照/策略快照和二次全文重哈希；删除本轮新增但不参与运行的两份独立审计报告。没有启动新的 native 或仿真优化轮。
+本轮 R42 已完成确定性的 GPU controller 服务归属修复和 6 项结构回归；真实 lowerer 多阶段探针确认两个 GPU 阶段分别承担 32,036B 与 47,440B，尚未进行 131 格预测或准确性验收。本轮将外部运行框架收缩为 `predict`/`score`，并删除独立 strict、report、failure_recheck 生命周期。没有启动新的 native 或仿真优化轮。
 
-下一次若用户恢复任务，只按最小闭环运行 R42 的基线/候选成对比较；任一格失败立即查因并定向补测，哈希失败最多完整复核一次。只有在候选组改善验收通过后才接受、提交并推送；否则不提交状态性更新。
+下一次若用户恢复任务，只运行 R42 的 `predict` 和 `score`；任一格失败直接写入 prediction/score 并计入覆盖率，不自动重测。只有候选组改善验收通过后才接受、提交并推送；否则不提交状态性更新。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
-固定 native、历史预测和评分结果保持不可变；当 simulator 成本模型、binary、模型、硬件、命令行配置、prompt/output policy、计时契约和 extractor 均未改变时，可复用已保存的 native raw/逐 token 时间戳，只重跑 simulator。每个运行只需要一个冻结清单、一个预测结果集合、一个 score 和一个 strict 结果；失败或哈希异常时才生成一次带原因的复核记录。原始失败不删除、不覆盖，成功复核也不改写原结论。
+固定 native、历史预测和评分结果保持不可变；当 simulator 成本模型、binary、模型、硬件、命令行配置、prompt/output policy、计时契约和 extractor 均未改变时，可复用已保存的 native raw/逐 token 时间戳，只重跑 `predict`，再运行 `score`。每个运行只需要 prediction 结果集合和一个 score；失败直接记录在两者中，不自动重测、不覆盖原结果。
 
-R42 结构候选尚未冻结，准确性状态为“未测试”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。本轮只完成最小框架和任务书审计，未宣称 A/B 门通过。
+R42 结构候选尚未运行 predict/score，准确性状态为“未测试”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。本轮只完成运行框架审计，未宣称 A/B 门通过。
 
 ## 15. 最近结果与交付位置（动态，原位更新）
 
 - 固定 native：`artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json`。
 - 循环状态：`artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json`。
 - R42 候选源码：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_042/candidate_source`。
-- 仿真器关键实现：`src/heterollm_sim/serving.py`、`src/heterollm_sim/planner.py`、`tools/evaluation_contract.py`、`tools/evaluate_strict_engine_goal.py`。
+- 仿真器关键实现：`src/heterollm_sim/serving.py`、`src/heterollm_sim/planner.py`、`tools/predict_stable_native_dataset.py`、`tools/evaluation_contract.py`。
 - 历史 round 目录保留原始失败和必要证据，但不再要求为同一事实复制新的 report、control、bundle、receipt 或审计文档。

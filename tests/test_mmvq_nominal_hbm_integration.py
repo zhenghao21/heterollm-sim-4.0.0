@@ -118,10 +118,11 @@ def test_new_freeze_binds_mode_per_cell_and_resume_rejects_mutation(tmp_path,mon
 
 def test_cli_mode_is_initial_freeze_only(tmp_path,monkeypatch):
     calls=[];monkeypatch.setattr(adapter,"freeze_selection",lambda *a,**k:calls.append(k))
-    adapter.main(["--selection","synthetic.json","--output",str(tmp_path),"--freeze-only","--mmvq-hbm-mode",NOMINAL])
+    monkeypatch.setattr(adapter,"run_predictions",lambda *a,**k:None)
+    adapter.main(["predict", "--selection","synthetic.json","--output",str(tmp_path),"--mmvq-hbm-mode",NOMINAL])
     assert calls[0]["mmvq_hbm_mode"]==NOMINAL
     for args in (["--output",str(tmp_path),"--resume"],["--worker-freeze","synthetic.json"]):
-        with pytest.raises(SystemExit) as error:adapter.main([*args,"--mmvq-hbm-mode",NOMINAL])
+        with pytest.raises(SystemExit) as error:adapter.main(["predict", *args,"--mmvq-hbm-mode",NOMINAL])
         assert error.value.code==2
 
 

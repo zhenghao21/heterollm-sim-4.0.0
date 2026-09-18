@@ -1,13 +1,11 @@
-"""Mechanistic evaluation of a frozen stable-native selection; never blind.
+"""Two-stage mechanistic evaluation: ``predict`` then ``score``.
 
-Selection interface: native-stable-dataset/v1 from native_162_dataset.py.
-selected_cells[] supplies config, model_ref, native_runtime_refs, static_hardware
-and native_actuals. Only explicit static fields enter the frozen worker inputs;
-native_actuals and metric values are read only by the independent scoring step.
-
---selection FILE --output DIR --data-root ROOT --freeze-only creates the freeze.
---output DIR --resume runs bounded subprocesses from the copied source tree.
---output DIR --score reads answers afterwards, with optional --native-report.
+The public lifecycle has only two operations.  ``predict`` builds the static
+scenario projection internally and runs the simulator without reading native
+answers.  ``score`` reads that prediction plus the fixed native selection and
+computes the Engine TTFT/TPOT/E2E errors and the strict per-cell gate.  Freeze
+records and worker state remain private implementation artifacts; there is no
+separate freeze, strict, report, or recovery command.
 """
 from __future__ import annotations
 import argparse
@@ -38,6 +36,7 @@ for import_root in (ROOT, ROOT / "src"):
     sys.path.insert(0, str(import_root))
 from tools import native_grid_predict as grid
 from tools import native_162_dataset as selector
+from tools.evaluation_contract import derive_engine_metrics_ms
 from heterollm_sim.config import SamplingPolicy
 from heterollm_sim.cost_models import (
     MMVQ_HBM_MODE_LEGACY, MMVQ_HBM_MODE_NOMINAL, MMVQ_HBM_MODES,
@@ -3092,7 +3091,7 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
             attempt = run_dir / "attempts" / grid.stable_hash({"cell_id": entry["cell_id"]})
             attempt.mkdir(parents=True, exist_ok=False)
             raw_path = attempt / "worker-result.json"
-            command = [sys.executable, str(executable), "--worker-freeze", str(freeze_path),
+            command = [sys.executable, str(executable), "predict", "--worker-freeze", str(freeze_path),
                 "--worker-cell", entry["cell_id"], "--worker-result", str(raw_path)]
             if diagnostic_events:
                 command += ["--diagnostic-events", "--diagnostic-event-limit", str(diagnostic_event_limit)]
@@ -3323,10 +3322,95 @@ def cohort_engine_comparison(prediction, native_row):
     return result
 
 
+def strict_score_cell(prediction, native):
+    """Validate one prediction and recompute the three Engine metrics once."""
+    issues, values = [], {metric: [] for metric in METRICS}
+    parallel = native.get("parallel")
+    requests = prediction.get("requests") if isinstance(prediction, dict) else None
+    if not isinstance(prediction, dict) or prediction.get("status") != "predicted":
+        return {"verdict": "insufficient_evidence", "issues": ["prediction unavailable"], "metrics": {}}
+    if prediction.get("native_answers_used") is not False:
+        issues.append("native answers were used")
+    if type(parallel) is not int or parallel < 1 or not isinstance(requests, list) or len(requests) != parallel:
+        return {"verdict": "insufficient_evidence", "issues": [*issues, "request coverage mismatch"], "metrics": {}}
+    ids = set()
+    for request in requests:
+        if not isinstance(request, dict):
+            issues.append("request must be an object")
+            continue
+        request_id = request.get("request_index")
+        if type(request_id) is not int or request_id in ids or not 0 <= request_id < parallel:
+            issues.append("request identity missing or duplicated")
+            continue
+        ids.add(request_id)
+        output_tokens = request.get("visible_output_tokens")
+        if type(output_tokens) is not int or output_tokens <= 1 or output_tokens != native.get("output_tokens"):
+            issues.append("output token count mismatch")
+            continue
+        if request.get("prompt_tokens") != native.get("prompt_tokens"):
+            issues.append("prompt token count mismatch")
+        try:
+            derived = derive_engine_metrics_ms(
+                request.get("engine_request_begin_ns"),
+                request.get("engine_first_token_ns"),
+                request.get("engine_last_token_ns"),
+                output_tokens,
+            )
+        except ValueError as exc:
+            issues.append(str(exc))
+            continue
+        for metric, value in derived.items():
+            if not positive(request.get(metric), "request metric") or not math.isclose(
+                value, request[metric], rel_tol=1e-9, abs_tol=1e-8
+            ):
+                issues.append(metric + " timestamp mismatch")
+            values[metric].append(value)
+    if issues or any(len(values[metric]) != parallel for metric in METRICS):
+        return {"verdict": "insufficient_evidence", "issues": issues or ["incomplete request metrics"], "metrics": {}}
+    metrics = {}
+    for metric in METRICS:
+        simulator = statistics.median(values[metric])
+        aggregate = prediction.get("aggregate", {}).get(metric, {})
+        if (
+            aggregate.get("planned_requests") != parallel
+            or aggregate.get("observed_requests") != parallel
+            or aggregate.get("missing_requests") != 0
+            or not positive(aggregate.get("median_ms"), "aggregate median")
+            or not math.isclose(simulator, aggregate["median_ms"], rel_tol=1e-9, abs_tol=1e-8)
+        ):
+            issues.append(metric + " aggregate mismatch")
+            continue
+        try:
+            native_median, native_runs = native_run_medians(native, metric)
+        except (ValueError, KeyError, TypeError) as exc:
+            issues.append(metric + " native median: " + str(exc))
+            continue
+        signed = simulator - native_median
+        metrics[metric] = {
+            "simulator_median_ms": simulator,
+            "native_median_ms": native_median,
+            "native_run_medians_ms": native_runs,
+            "signed_error_ms": signed,
+            "absolute_error_ms": abs(signed),
+            "signed_error_pct": 100 * signed / native_median,
+            "absolute_percentage_error_pct": 100 * abs(signed) / native_median,
+            "passed": abs(signed) / native_median * 100 < 10,
+        }
+    if issues or len(metrics) != len(METRICS):
+        return {"verdict": "insufficient_evidence", "issues": issues or ["metric derivation incomplete"], "metrics": metrics}
+    return {
+        "verdict": "passed" if all(item["passed"] for item in metrics.values()) else "accuracy_failed",
+        "issues": [],
+        "metrics": metrics,
+        "all3_below10": all(item["passed"] for item in metrics.values()),
+    }
+
+
 def score_predictions(output, *, native_report=None):
     """Independent actual comparison; never invokes or alters predictions."""
     output = Path(output).resolve(strict=True)
     freeze, freeze_ref = grid.read_document(output / "freeze.json")
+    verify_freeze_references(freeze)
     if (output / "runs/coordinator.lock").exists():
         raise ValueError("active/unresolved coordinator blocks scoring")
     _verify_attempts(output / "runs", output / "predictions")
@@ -3360,6 +3444,16 @@ def score_predictions(output, *, native_report=None):
                     "signed_error_pct": 100 * signed / measured, "absolute_percentage_error_pct": 100 * abs(signed) / measured}
             except (ValueError, KeyError, TypeError) as exc:
                 scored["metrics"][metric] = {"status": "unscored", "reason": str(exc)}
+        strict = strict_score_cell(prediction, actual.get(ident, {}))
+        scored["strict"] = strict
+        for metric, item in strict.get("metrics", {}).items():
+            scored["metrics"].setdefault(metric, {"status": "scored"})
+            scored["metrics"][metric].update(item)
+            scored["metrics"][metric]["status"] = "scored"
+        if strict.get("verdict") == "insufficient_evidence":
+            for metric in METRICS:
+                if metric not in strict.get("metrics", {}):
+                    scored["metrics"].setdefault(metric, {"status": "unscored", "reason": "; ".join(strict.get("issues", []))})
         scored["cohort_engine_span_diagnostic"] = cohort_engine_comparison(prediction, actual.get(ident))
         rows.append(scored)
     coverage = freeze["coverage"]
@@ -3379,20 +3473,33 @@ def score_predictions(output, *, native_report=None):
             "native_excluded_cells": group.get("excluded_cells", group["planned_cells"] - group["selected_cells"]),
             "deployment_configurations": sorted({row["deployment"] for row in grouped[name]}),
             **error_summary(grouped[name])}
+    strict_rows = [row.get("strict", {}) for row in rows]
+    strict_passed = sum(item.get("verdict") == "passed" for item in strict_rows)
+    strict_failed = sum(item.get("verdict") == "accuracy_failed" for item in strict_rows)
+    strict_missing = sum(item.get("verdict") == "insufficient_evidence" for item in strict_rows)
+    strict_gate = {
+        "verdict": "accuracy_failed" if strict_failed else "insufficient_evidence" if strict_missing else "passed",
+        "passed_cells": strict_passed,
+        "accuracy_failed_cells": strict_failed,
+        "insufficient_evidence_cells": strict_missing,
+        "required_cells": len(rows),
+        "required_metrics": len(rows) * len(METRICS),
+        "threshold_pct_strict": 10,
+    }
     report = {"schema": "stable-native-simulation-errors/v1", "created_utc": now(), "evaluation_type": "development_post_selection",
         "blind_evaluation": False, "formal_prediction_eligible": False, "calibration_applied": False,
         "comparison_definition": "Median simulated request timing versus median of three native per-run scenario medians; signed error = sim - native; percentile uses linear interpolation.",
         "freeze_ref": freeze_ref, "native_report_ref": native_ref, "selected_denominator": len(rows), "overall": error_summary(rows),
-        "coverage": coverage, "by_model_deployment": group_reports,
+        "strict_gate": strict_gate, "coverage": coverage, "by_model_deployment": group_reports,
         "by_model": {k: error_summary(group) for k, group in by_model.items()},
         "by_deployment": {k: error_summary(group) for k, group in by_deployment.items()}, "cells": rows}
-    verify_freeze_references(freeze)
     grid.write_new(output / f"errors.{len(list(output.glob('errors.*.json'))) + 1:04d}.json", report)
     return report
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", choices=("predict", "score"), help="the only public lifecycle operation")
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--data-root", type=Path)
@@ -3426,8 +3533,7 @@ def main(argv=None):
     parser.add_argument("--iq-panel-source-contract", type=Path, help="explicit frozen CPU IQ panel source/build/history contract; default off")
     parser.add_argument("--iq-panel-assume-default-unset", action="store_true", help="explicit conditional ablation for unknown GGML_NO_IQ_PANEL; never proves native dispatch")
     parser.add_argument("--model-snapshot-map", type=Path, help="JSON object mapping native model paths to byte-identical prediction copy paths; initial freeze only")
-    parser.add_argument("--freeze-only", action="store_true")
-    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--resume", action="store_true", help="resume an interrupted predict output")
     parser.add_argument("--timeout-seconds", type=float, default=600, help="soft observation deadline; workers always exit naturally")
     parser.add_argument("--max-cells", type=int)
     parser.add_argument("--cell-id", action="append", help="run only these frozen IDs this time; repeat for multiple cells")
@@ -3435,11 +3541,10 @@ def main(argv=None):
     parser.add_argument("--stop-on-cell-failure", action="store_true", help="stop new launches on a failed cell; drain workers naturally for immediate diagnosis")
     parser.add_argument("--diagnostic-events", action="store_true")
     parser.add_argument("--diagnostic-event-limit", type=int, default=DIAGNOSTIC_EVENT_LIMIT)
-    parser.add_argument("--score", action="store_true")
     parser.add_argument("--native-report", type=Path)
-    parser.add_argument("--worker-freeze", type=Path)
-    parser.add_argument("--worker-cell")
-    parser.add_argument("--worker-result", type=Path)
+    parser.add_argument("--worker-freeze", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--worker-cell", help=argparse.SUPPRESS)
+    parser.add_argument("--worker-result", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.worker_freeze and args.mmvq_hbm_mode is not None:
         parser.error("--mmvq-hbm-mode cannot override a frozen worker")
@@ -3448,32 +3553,35 @@ def main(argv=None):
         return
     if not args.output:
         parser.error("--output required")
-    if (args.mmvq_hbm_mode is not None or args.final_output_selection is not None or args.retained_kv_warmup_state is not None or args.retained_kv_warmup_extractor or args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
-        parser.error("model snapshots/build audit/recurrent/IQ panel/slot-order/host-offload/tensor-storage/GPU invocation contracts are only accepted for an initial selection freeze")
-    if args.final_output_selection and (args.host_offload_source_contract is None or args.sampling_contract is None or args.tensor_storage_contract is None or args.tensor_storage_f32_hidden is not True):
-        parser.error("--final-output-selection requires runtime, sampling and F32 hidden-storage contracts")
-    if args.retained_kv_warmup_state and args.nonflash_kv_view_source_contract is None:
-        parser.error("--retained-kv-warmup-state requires --nonflash-kv-view-source-contract")
-    if args.retained_kv_warmup_extractor and not args.retained_kv_warmup_state:
-        parser.error("--retained-kv-warmup-extractor requires --retained-kv-warmup-state")
-    if args.mmvq_vector_issue_bound and (args.gpu_invocation_contract is None or args.gpu_mmq_source_costs is not True or args.gpu_conversion_cta_costs is not True):
-        parser.error("--mmvq-vector-issue-bound requires GPU invocation, MMQ and conversion source costs")
-    if args.mmvq_issue_hardware_document and not args.mmvq_vector_issue_bound:
-        parser.error("--mmvq-issue-hardware-document requires --mmvq-vector-issue-bound")
-    if args.gpu_mmq_source_costs is not None and args.gpu_invocation_contract is None:
-        parser.error("--gpu-mmq-source-costs requires --gpu-invocation-contract")
-    if args.gpu_conversion_cta_costs and args.gpu_mmq_source_costs is not True:
-        parser.error("--gpu-conversion-cta-costs requires --gpu-mmq-source-costs")
-    if args.tensor_storage_f32_hidden is not None and args.tensor_storage_contract is None:
-        parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
-    if args.selection and not args.resume:
-        snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
-        freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor, final_output_selection=bool(args.final_output_selection), mmvq_hbm_mode=args.mmvq_hbm_mode if args.mmvq_hbm_mode is not None else MMVQ_HBM_MODE_LEGACY)
-    elif not (args.output / "freeze.json").is_file():
-        parser.error("--selection required for initial freeze")
-    if not args.freeze_only and not args.score:
+    if args.mode == "predict":
+        if (args.mmvq_hbm_mode is not None or args.final_output_selection is not None or args.retained_kv_warmup_state is not None or args.retained_kv_warmup_extractor or args.mmvq_vector_issue_bound is not None or args.mmvq_issue_hardware_document or args.nonflash_kv_view_source_contract or args.sampling_contract or args.model_snapshot_map or args.runtime_build_audit or args.recurrent_batching_contract or args.iq_panel_source_contract or args.iq_panel_assume_default_unset or args.slot_order_contract or args.host_offload_source_contract or args.tensor_storage_contract or args.tensor_storage_f32_hidden is not None or args.gpu_invocation_contract or args.gpu_mmq_source_costs is not None or args.gpu_conversion_cta_costs is not None) and (not args.selection or args.resume):
+            parser.error("source/runtime contracts are accepted only when starting a new predict run")
+        if args.final_output_selection and (args.host_offload_source_contract is None or args.sampling_contract is None or args.tensor_storage_contract is None or args.tensor_storage_f32_hidden is not True):
+            parser.error("--final-output-selection requires runtime, sampling and F32 hidden-storage contracts")
+        if args.retained_kv_warmup_state and args.nonflash_kv_view_source_contract is None:
+            parser.error("--retained-kv-warmup-state requires --nonflash-kv-view-source-contract")
+        if args.retained_kv_warmup_extractor and not args.retained_kv_warmup_state:
+            parser.error("--retained-kv-warmup-extractor requires --retained-kv-warmup-state")
+        if args.mmvq_vector_issue_bound and (args.gpu_invocation_contract is None or args.gpu_mmq_source_costs is not True or args.gpu_conversion_cta_costs is not True):
+            parser.error("--mmvq-vector-issue-bound requires GPU invocation, MMQ and conversion source costs")
+        if args.mmvq_issue_hardware_document and not args.mmvq_vector_issue_bound:
+            parser.error("--mmvq-issue-hardware-document requires --mmvq-vector-issue-bound")
+        if args.gpu_mmq_source_costs is not None and args.gpu_invocation_contract is None:
+            parser.error("--gpu-mmq-source-costs requires --gpu-invocation-contract")
+        if args.gpu_conversion_cta_costs and args.gpu_mmq_source_costs is not True:
+            parser.error("--gpu-conversion-cta-costs requires --gpu-mmq-source-costs")
+        if args.tensor_storage_f32_hidden is not None and args.tensor_storage_contract is None:
+            parser.error("--tensor-storage-f32-hidden requires --tensor-storage-contract")
+        freeze_path = args.output / "freeze.json"
+        if args.selection and not args.resume and not freeze_path.exists():
+            snapshots = grid.read_document(args.model_snapshot_map)[0] if args.model_snapshot_map else None
+            freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor, final_output_selection=bool(args.final_output_selection), mmvq_hbm_mode=args.mmvq_hbm_mode if args.mmvq_hbm_mode is not None else MMVQ_HBM_MODE_LEGACY)
+        elif not freeze_path.is_file():
+            parser.error("predict requires --selection for a new output or an existing prediction output")
         run_predictions(args.output, timeout_seconds=positive(args.timeout_seconds, "timeout"), resume=args.resume, max_cells=args.max_cells, workers=args.workers, cell_ids=args.cell_id, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit, stop_on_cell_failure=args.stop_on_cell_failure)
-    if args.score:
+    else:
+        if args.selection or args.data_root or args.resume or args.cell_id or args.max_cells:
+            parser.error("score accepts only --output and optional --native-report")
         score_predictions(args.output, native_report=args.native_report)
 
 

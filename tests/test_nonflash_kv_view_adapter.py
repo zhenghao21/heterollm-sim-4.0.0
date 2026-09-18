@@ -70,5 +70,5 @@ def test_freeze_persists_opt_in_and_worker_uses_frozen_value(tmp_path, monkeypat
 
 def test_resume_cannot_change_physical_view_switch(tmp_path):
     with pytest.raises(SystemExit) as exc:
-        adapter.main(["--output", str(tmp_path), "--resume", "--nonflash-kv-view-source-contract", "new.json"])
+        adapter.main(["predict", "--output", str(tmp_path), "--resume", "--nonflash-kv-view-source-contract", "new.json"])
     assert exc.value.code == 2
