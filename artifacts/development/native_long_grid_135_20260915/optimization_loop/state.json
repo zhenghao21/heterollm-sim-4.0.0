@@ -1,8 +1,8 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_predict_score_identity_relaxed",
-  "user_goal": "复用固定131格native证据进行机制优化；当前进入R42 predict/score身份门禁精简后的准确性测试，继续以每格Engine TTFT/TPOT/E2E严格小于10%为目标。",
+  "status": "active_next_mechanism_after_r42_regression",
+  "user_goal": "复用固定131格native证据进行机制优化；R42已完成评分但退化，下一轮审计其GPU controller关键路径并继续以每格Engine TTFT/TPOT/E2E严格小于10%为目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
     "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
@@ -669,7 +669,7 @@
   "original_grid_denominator": 162,
   "native_remeasurement_allowed_in_this_loop": false,
   "native_policy": "Never modify selection, native values, original freeze, binary, prompts or extraction contract; verify selection/raw hashes before and after each evaluated round.",
-  "baseline_evaluation": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
+  "baseline_evaluation": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_035\\on\\errors.0001.json",
   "budget": {
     "max_mechanism_rounds": 6,
     "max_full_131_evaluations": 4,
@@ -4355,5 +4355,47 @@
       "default_coordinator_lock"
     ],
     "accuracy_claim": "not_claimed"
+  },
+  "round_043_r42_accuracy": {
+    "status": "candidate_rejected_regression",
+    "cells": 131,
+    "strict_pass_cells": 0,
+    "ape_median_pct": {
+      "engine_ttft": 58.956954040894914,
+      "engine_tpot": 26.86042090431976,
+      "engine_e2e": 40.54686051968421
+    },
+    "ape_p90_pct": {
+      "engine_ttft": 1037.0899815644789,
+      "engine_tpot": 62.11230344571348,
+      "engine_e2e": 156.6154858883447
+    },
+    "worst_pct": {
+      "engine_ttft": 3100.685881251648,
+      "engine_tpot": 84.42857293258324,
+      "engine_e2e": 1054.5797483696128
+    },
+    "decision": "do_not_accept_or_commit",
+    "next": "audit_gpu_controller_critical_path"
+  },
+  "historical_identity_failures_reassessment": "required; R35/R37 rescored, R40 partial until missing/failed cells are safely restored",
+  "baseline_role": "R35/on provisional accuracy development baseline; identity gate failure retained as provenance caveat; not final acceptance",
+  "historical_candidate_reassessment": {
+    "updated_utc": "2026-09-18T00:00:00+00:00",
+    "selected_baseline": "round_035/on",
+    "selection_reason": "complete131 and strictly improves R34/on on all three Engine APE medians and does not worsen P90 or worst",
+    "r34_reference": {
+      "ttft_median_pct": 40.01046056850844,
+      "tpot_median_pct": 30.59934758552928,
+      "e2e_median_pct": 29.851065047274272
+    },
+    "r35_selected": {
+      "ttft_median_pct": 28.433819827132055,
+      "tpot_median_pct": 25.95006256796849,
+      "e2e_median_pct": 24.468
+    },
+    "identity_status": "historical identity gate failed; reused only as development accuracy baseline after explicit reevaluation",
+    "r40": "not_selected; 120/131 scored and 11 unreplayable",
+    "r42": "rejected; 131/131 scored but materially regressed"
   }
 }

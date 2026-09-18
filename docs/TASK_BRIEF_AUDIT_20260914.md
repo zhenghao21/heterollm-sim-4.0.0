@@ -174,7 +174,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 固定 native 是 `stable_native_dataset.json` 锁定的 131 格、894 请求，选择文件 SHA-256 为 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`。覆盖五个模型和六种部署；原始 162 格及稳定性排除仍按历史记录保留。本轮不重测 native，不使用目标场景时延拟合成本。
 
-当前有效准确性父版本仍为 R34/on：131 格完整评分，严格 A 门为 5/131 格、56/393 项通过，A/B 均未通过。R42 是结构候选，已通过局部结构验证但尚未进入全量预测或准确性评分。历史轮次和失败只作为不可变记录，不得用它们替代 R42 的新比较。
+当前开发基线已切换为 R35/on 的完整 131 格评分结果：Engine TTFT/TPOT/E2E APE 中位数分别为 28.434%/25.950%/24.468%，相对 R34/on 的 40.010%/30.599%/29.851% 有确定性改善；R35 曾发生身份门禁失败，因此仅作为“准确性开发基线”，不作为最终验收通过。R34/on 保留为历史对照。R40 因 11 格无法重放，不替换完整基线；R42 全量 relaxed 评分明显退化，不接纳为基线。
 
 ## 11. 已完成修改与验证（动态，原位更新）
 
@@ -185,7 +185,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 12. 当前误差与流程缺口（动态，原位更新）
 
-当前有效准确性父版本仍是 R34/on；R39 已有完整评分但严格目标失败，R42 仍未完成全量 `predict`/`score`。这些准确性结论与运行框架身份问题分开记录，身份失败不能被当作仿真误差。
+当前开发基线为 R35/on；R39 与 R35 的完整评分结果等价，R40 覆盖不完整，R42 已完成全量 `predict`/`score` 但候选退化。这些准确性结论与运行框架身份问题分开记录，身份失败不能被当作仿真误差。
 
 审计确认原流程的主要阻塞来自重复 provenance、runtime/module、worker attempt 和 coordinator lock 校验，而不是 native actual 缺失。默认优化路径已移除这些重复阻断，只保留 native selection 的 schema、cell ID、实际字段和逐格结果检查。完整身份复核保留为显式 `--strict-identity` 选项，不属于正常优化循环。
 
@@ -193,24 +193,25 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 13. 当前执行计划（动态，原位更新）
 
-R42 仍是最新结构候选，尚未完成全量准确性验收。本轮先修复运行框架的身份门禁开销，不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
+R35 已被选为当前开发基线（仅用于成对比较，不代表验收通过）。R42 已完成 131 格 relaxed predict/score，结果退化：Engine TTFT APE 中位数 58.957%、P90 1037.090%、最坏 3100.686%；TPOT 中位数 26.860%、P90 62.112%、最坏 84.429%；E2E 中位数 40.547%、P90 156.615%、最坏 1054.580%；三项均严格 <10% 的格数为 0/131。R42 不接纳、不合并、不提交；保留其评分作为开发证据。下一轮优先审计 R42 引入的 GPU controller 关键路径，检查重复计费、错误串行化和资源队列归属，不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
 
 默认 `predict`/`score` 流程只保留必要的输入结构检查、逐格结果状态和误差计算：不在 worker、收尾和 score 前重复验证完整 provenance、源码快照、runtime/module SHA、attempt seal 或 coordinator lock。`freeze.json` 和 worker 文件仍可作为内部场景包与失败记录，但不再作为默认评分阻断条件。需要严格身份复核时才显式启用 `--strict-identity`。
 
 单格 simulator 失败继续写入该格结果并计入覆盖率；已完成的格可以独立进入 `score`。默认流程不重新采集 native，也不使用 native actual 拟合成本模型。native selection 仍需通过最小 schema、cell ID 和实际字段检查。
 
-本轮已完成底层 JSON 单次读取、稳定快照和进程内缓存；主流程已关闭重复身份门禁、历史 attempt 门禁和默认全局锁。下一步先对 R42 运行 `predict`/`score`，只在确定性候选组改善并完成基线对比后提交；未达到目标则继续下一轮，不把身份失败误写成仿真误差。
+本轮已完成底层 JSON 单次读取、稳定快照和进程内缓存；主流程已关闭重复身份门禁、历史 attempt 门禁和默认全局锁。下一步审计 R42 引入的 GPU controller 关键路径；只有确定性缺口修复并且候选组相对基线改善后才提交，未达到目标则进入下一轮，不把身份失败误写成仿真误差。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 
 固定 native、历史预测和评分结果保持不可变；当 simulator 成本模型、binary、模型、硬件、命令行配置、prompt/output policy、计时契约和 extractor 均未改变时，可复用已保存的 native raw/逐 token 时间戳，只重跑 `predict`，再运行 `score`。每个运行只需要 prediction 结果集合和一个 score；失败直接记录在两者中，不自动重测、不覆盖原结果。
 
-R42 结构候选尚未运行 predict/score，准确性状态为“未测试”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。本轮只完成运行框架审计，未宣称 A/B 门通过。
+R35 已作为当前开发基线，R42 的准确性状态为“候选失败/退化”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。本轮完成 R42 全量开发评分，但未宣称 A/B 门通过；R42 已判定为候选退化。
 
 ## 15. 最近结果与交付位置（动态，原位更新）
 
 - 固定 native：`artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json`。
 - 循环状态：`artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json`。
+- 当前开发基线评分：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_035/on/errors.0001.json`（身份门禁曾失败，仅作准确性基线）。
 - R42 候选源码：`artifacts/development/native_long_grid_135_20260915/optimization_loop/round_042/candidate_source`。
 - 仿真器关键实现：`src/heterollm_sim/serving.py`、`src/heterollm_sim/planner.py`、`tools/predict_stable_native_dataset.py`、`tools/evaluation_contract.py`。
 - 历史 round 目录保留原始失败和必要证据，但不再要求为同一事实复制新的 report、control、bundle、receipt 或审计文档。
