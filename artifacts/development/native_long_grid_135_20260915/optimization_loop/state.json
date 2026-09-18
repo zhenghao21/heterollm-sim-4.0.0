@@ -4357,7 +4357,7 @@
     "accuracy_claim": "not_claimed"
   },
   "round_043_r42_accuracy": {
-    "status": "candidate_rejected_regression",
+    "status": "configuration_incomparable_diagnostic_only",
     "cells": 131,
     "strict_pass_cells": 0,
     "ape_median_pct": {
@@ -4375,8 +4375,9 @@
       "engine_tpot": 84.42857293258324,
       "engine_e2e": 1054.5797483696128
     },
-    "decision": "do_not_accept_or_commit",
-    "next": "audit_gpu_controller_critical_path"
+    "decision": "do_not_use_for_candidate_rejection_or_causal_attribution",
+    "next": "audit_gpu_controller_critical_path",
+    "reason": "freeze omitted R35/R40 runtime semantic contracts; matched-config rerun required"
   },
   "historical_identity_failures_reassessment": "required; R35/R37 rescored, R40 partial until missing/failed cells are safely restored",
   "baseline_role": "R35/on provisional accuracy development baseline; identity gate failure retained as provenance caveat; not final acceptance",
@@ -4410,7 +4411,7 @@
     },
     "decision": "retain_as_gpu_qwen38_local_candidate_only; do_not_replace_r35"
   },
-  "active_next_mechanism_after_r42_regression": "audit_gpu_path_against_r35_with_r40_local_evidence_then_shared_prefill_first_token_gap",
+  "active_next_mechanism_after_r42_regression": "matched_config_gpu_controller_pilot_then_shared_prefill_first_token_audit",
   "candidate_reassessment_summary": {
     "r35": "global provisional development baseline; 131/131; 6/131 strict cells",
     "r37": "accuracy-equivalent to r35; identity/equivalence record only",
