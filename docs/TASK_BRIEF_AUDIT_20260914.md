@@ -193,7 +193,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 13. 当前执行计划（动态，原位更新）
 
-R35 已被选为当前开发基线（仅用于成对比较，不代表验收通过）。R40 已完成 131 格补全评分，证据完整率恢复到 100%，但只作为局部 GPU 候选；R42 既有评分使用的 freeze 缺少 R35/R40 的 runtime_build_audit、GPU invocation、host-offload、nonflash KV、KV warmup、final output selection 等配置，不能与 R35 成对比较；其极端退化结果保留为“不可比诊断”，不用于淘汰或归因。下一轮以 R35 为父基线，复用 R35/R40 完整运行时开关，先做匹配配置的最小 GPU controller 候选比较；随后检查 qwen25/qwen35/tinyllama 共同偏低的 prefill、首 token、host-submit 与同步阶段是否完整建模。先确认执行语义，再决定局部成本修正；不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
+R35 已被选为当前开发基线（仅用于成对比较，不代表验收通过）。R40 已完成 131 格补全评分，证据完整率恢复到 100%，但只作为局部 GPU 候选；R42 既有评分使用的 freeze 缺少 R35/R40 的 runtime_build_audit、GPU invocation、host-offload、nonflash KV、KV warmup、final output selection 等配置，不能与 R35 成对比较；其极端退化结果保留为“不可比诊断”，不用于淘汰或归因。下一轮以 R35 为父基线，复用 R35/R40 完整运行时开关，先做匹配配置的最小 GPU controller 候选比较；随后检查 qwen25/qwen35/tinyllama 共同偏低的 prefill、首 token、host-submit 与同步阶段是否完整建模。先确认执行语义，再决定局部成本修正；匹配配置试验若被历史 freeze 源文件引用阻断，必须基于当前源码重建最小运行快照，不能修改旧 freeze 绕过检查；不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
 
 默认 `predict`/`score` 流程只保留必要的输入结构检查、逐格结果状态和误差计算：不在 worker、收尾和 score 前重复验证完整 provenance、源码快照、runtime/module SHA、attempt seal 或 coordinator lock。`freeze.json` 和 worker 文件仍可作为内部场景包与失败记录，但不再作为默认评分阻断条件。需要严格身份复核时才显式启用 `--strict-identity`。
 

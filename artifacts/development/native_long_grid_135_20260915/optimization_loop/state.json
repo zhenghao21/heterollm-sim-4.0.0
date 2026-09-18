@@ -4417,5 +4417,18 @@
     "r37": "accuracy-equivalent to r35; identity/equivalence record only",
     "r40": "131/131 after recovery; local qwen38_gpu improvement but global regression",
     "r42": "full131 accuracy regression; rejected"
+  },
+  "round_043_matched_config_pilot": {
+    "status": "blocked_before_prediction_by_stale_parent_source_refs",
+    "candidate": "round_042_per_stage_controller",
+    "configuration_source": "round_040/on/freeze.json",
+    "requested_cells": [
+      "qwen25_p1536_o256_c4__fixed_runtime",
+      "qwen38_p1536_o128_c1__fixed_runtime",
+      "qwen38_gpu_p128_o256_c4__fixed_runtime"
+    ],
+    "failure": "freeze references optimization_loop/round_040/on/source files removed or unavailable; no prediction or score produced",
+    "interpretation": "evidence packaging/replay issue, not accuracy result",
+    "next": "rebuild matched runtime snapshot from current source and R35/R40 contracts, then rerun same 3 cells"
   }
 }
