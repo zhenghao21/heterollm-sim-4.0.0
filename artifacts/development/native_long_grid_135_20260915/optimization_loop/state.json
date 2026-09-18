@@ -4397,5 +4397,24 @@
     "identity_status": "historical identity gate failed; reused only as development accuracy baseline after explicit reevaluation",
     "r40": "not_selected; 120/131 scored and 11 unreplayable",
     "r42": "rejected; 131/131 scored but materially regressed"
+  },
+  "round_043_r40_reassessment": {
+    "status": "complete_full131_accuracy_failed",
+    "result_ref": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_043/r40_reassessment/errors.0002.json",
+    "cells": 131,
+    "strict_pass_cells": 9,
+    "ape_median_pct": {
+      "engine_ttft": 37.079050768634275,
+      "engine_tpot": 23.371347664668505,
+      "engine_e2e": 26.319339268798622
+    },
+    "decision": "retain_as_gpu_qwen38_local_candidate_only; do_not_replace_r35"
+  },
+  "active_next_mechanism_after_r42_regression": "audit_gpu_path_against_r35_with_r40_local_evidence_then_shared_prefill_first_token_gap",
+  "candidate_reassessment_summary": {
+    "r35": "global provisional development baseline; 131/131; 6/131 strict cells",
+    "r37": "accuracy-equivalent to r35; identity/equivalence record only",
+    "r40": "131/131 after recovery; local qwen38_gpu improvement but global regression",
+    "r42": "full131 accuracy regression; rejected"
   }
 }

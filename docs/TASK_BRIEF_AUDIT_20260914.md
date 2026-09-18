@@ -174,7 +174,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 固定 native 是 `stable_native_dataset.json` 锁定的 131 格、894 请求，选择文件 SHA-256 为 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`。覆盖五个模型和六种部署；原始 162 格及稳定性排除仍按历史记录保留。本轮不重测 native，不使用目标场景时延拟合成本。
 
-当前开发基线已切换为 R35/on 的完整 131 格评分结果：Engine TTFT/TPOT/E2E APE 中位数分别为 28.434%/25.950%/24.468%，相对 R34/on 的 40.010%/30.599%/29.851% 有确定性改善；R35 曾发生身份门禁失败，因此仅作为“准确性开发基线”，不作为最终验收通过。R34/on 保留为历史对照。R40 因 11 格无法重放，不替换完整基线；R42 全量 relaxed 评分明显退化，不接纳为基线。
+当前开发基线已切换为 R35/on 的完整 131 格评分结果：Engine TTFT/TPOT/E2E APE 中位数分别为 28.434%/25.950%/24.468%，相对 R34/on 的 40.010%/30.599%/29.851% 有确定性改善；R35 曾发生身份门禁失败，因此仅作为“准确性开发基线”，不作为最终验收通过。R34/on 保留为历史对照。R40 已补齐为 131/131 格：qwen38_gpu 的 TPOT/E2E 局部改善，但 CPU qwen25、qwen35、smollm2、tinyllama 等分组退化，因此只保留为 GPU 局部候选，不替换完整基线；R42 全量 relaxed 评分明显退化，不接纳为基线。
 
 ## 11. 已完成修改与验证（动态，原位更新）
 
@@ -193,7 +193,7 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 
 ## 13. 当前执行计划（动态，原位更新）
 
-R35 已被选为当前开发基线（仅用于成对比较，不代表验收通过）。R42 已完成 131 格 relaxed predict/score，结果退化：Engine TTFT APE 中位数 58.957%、P90 1037.090%、最坏 3100.686%；TPOT 中位数 26.860%、P90 62.112%、最坏 84.429%；E2E 中位数 40.547%、P90 156.615%、最坏 1054.580%；三项均严格 <10% 的格数为 0/131。R42 不接纳、不合并、不提交；保留其评分作为开发证据。下一轮优先审计 R42 引入的 GPU controller 关键路径，检查重复计费、错误串行化和资源队列归属，不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
+R35 已被选为当前开发基线（仅用于成对比较，不代表验收通过）。R40 已完成 131 格补全评分，证据完整率恢复到 100%，但只作为局部 GPU 候选；R42 已完成 131 格 relaxed predict/score，结果退化：Engine TTFT APE 中位数 58.957%、P90 1037.090%、最坏 3100.686%；TPOT 中位数 26.860%、P90 62.112%、最坏 84.429%；E2E 中位数 40.547%、P90 156.615%、最坏 1054.580%；三项均严格 <10% 的格数为 0/131。R42 不接纳、不合并、不提交；保留其评分作为开发证据。下一轮以 R35 为父基线，先审计 qwen38_gpu 的 controller 资源归属、重复计费和串行化，并用 R40 的 GPU 局部改善作对照；随后检查 qwen25/qwen35/tinyllama 共同偏低的 prefill、首 token、host-submit 与同步阶段是否完整建模。先确认执行语义，再决定局部成本修正；不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
 
 默认 `predict`/`score` 流程只保留必要的输入结构检查、逐格结果状态和误差计算：不在 worker、收尾和 score 前重复验证完整 provenance、源码快照、runtime/module SHA、attempt seal 或 coordinator lock。`freeze.json` 和 worker 文件仍可作为内部场景包与失败记录，但不再作为默认评分阻断条件。需要严格身份复核时才显式启用 `--strict-identity`。
 
@@ -205,7 +205,7 @@ R35 已被选为当前开发基线（仅用于成对比较，不代表验收通�
 
 固定 native、历史预测和评分结果保持不可变；当 simulator 成本模型、binary、模型、硬件、命令行配置、prompt/output policy、计时契约和 extractor 均未改变时，可复用已保存的 native raw/逐 token 时间戳，只重跑 `predict`，再运行 `score`。每个运行只需要 prediction 结果集合和一个 score；失败直接记录在两者中，不自动重测、不覆盖原结果。
 
-R35 已作为当前开发基线，R42 的准确性状态为“候选失败/退化”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。本轮完成 R42 全量开发评分，但未宣称 A/B 门通过；R42 已判定为候选退化。
+R35 已作为当前开发基线；R40 的准确性状态为“局部 GPU 候选/全局失败”，R42 的准确性状态为“候选失败/退化”；当前固定 native 仍为 `stable_native_dataset.json`（SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`）。本轮完成 R42 全量开发评分，但未宣称 A/B 门通过；R42 已判定为候选退化。
 
 ## 15. 最近结果与交付位置（动态，原位更新）
 
