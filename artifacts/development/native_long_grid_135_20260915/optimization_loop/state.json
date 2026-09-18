@@ -1,8 +1,8 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-15T13:27:44.987878+00:00",
-  "status": "active_R39_fresh131_running",
-  "user_goal": "复用固定131格native证据持续进行机制优化；每格Engine TTFT/TPOT/E2E严格小于10%为A开发目标，随后完成声明范围内独立B验收。只在确定性缺口修复且基线/候选误差改善验收通过后集中提交并推送；失败立即查因定向补测，原记录不可覆盖。",
+  "status": "paused_after_process_simplification",
+  "user_goal": "复用固定131格native证据进行机制优化；当前R42结构修复与运行闭环精简已完成，本轮停止，不启动新的仿真或native测试。恢复时继续以每格Engine TTFT/TPOT/E2E严格小于10%为目标。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
     "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
@@ -1548,11 +1548,11 @@
   ],
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_simulation_v2",
   "control_profile_audit": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\control_profile_audit.json",
-  "next_round_hypothesis": "Wait sameR39full natural completion;on failure immediate diagnostics and maxone hash recheck;after complete identity valid seal/scoring compare validR34 and diagnosticR37 separately,do not auto-admit or submit. R36 dependencies next,R38 batched geometry after.",
+  "next_round_hypothesis": "paused_after_process_simplification; resume only after explicit user instruction; compare R42 baseline/candidate with the minimal freeze-predict-score-strict loop",
   "full_131_evaluations_started": 12,
   "full_131_evaluations_completed": 10,
-  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_034\\on",
-  "best_candidate_status": "No new accuracy candidate admitted. R34/on completed131/131;5/131cells and56/393metrics pass. Common111cells/333metrics versusR33/on unchanged;20candidate execution recoveries only. Retain correct semantic repair uncommitted; A fails; B unvalidated.",
+  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_042\\candidate_source",
+  "best_candidate_status": "R42 structural candidate retained; accuracy not tested. Process simplification completed; no new optimization round started.",
   "version_control_policy": {
     "enabled": true,
     "effective_utc": "2026-09-17T08:04:00.630250+00:00",
@@ -1851,19 +1851,19 @@
     }
   ],
   "continuation_policy": {
-    "auto_continue_until_target": true,
-    "stage_round_and_wall_limits": "review_checkpoint_not_stop",
-    "stop_only": [
-      "target_met",
-      "explicit_user_pause",
-      "explicit_user_hard_resource_limit",
-      "unresolvable_external_blocker"
+    "auto_continue_until_target": false,
+    "status": "paused",
+    "reason": "user_requested_stop_after_current_round_and_process_audit",
+    "resume_condition": "explicit_user_instruction",
+    "minimal_loop": [
+      "freeze",
+      "predict",
+      "score",
+      "strict"
     ],
-    "independent_work_continues_when_possible": true,
-    "no_progress_review_after_rounds": 3,
-    "completion_requires": "both_A_and_B_within_declared_scope"
+    "failure_recheck": "only_after_hash_or_execution_failure; at most one"
   },
-  "goal_evaluator_status": "A_implemented_B_unvalidated",
+  "goal_evaluator_status": "A_unmet_B_unvalidated_paused",
   "goal_audit": {
     "observed_batches_per_cell": 3,
     "formal_repeatability_accepted_cells": 0,
@@ -1923,21 +1923,9 @@
   ],
   "current_stage": {
     "stage": 5,
-    "starting_round": 32,
-    "started_utc": "2026-09-17T03:52:54.669487+00:00",
-    "review_after_rounds": 6,
-    "review_at_utc": "2026-09-17T11:52:54.669487+00:00",
-    "review_only_not_stop": true,
-    "full_evaluations_review_limit": 4,
-    "latest_review": {
-      "reviewed_utc": "2026-09-17T13:01:05.041Z",
-      "trigger": "2026-09-17T11:52:54.669487Z time checkpoint elapsed",
-      "latest_valid_accuracy": "R34/on; A not passed; R35 globally rejected before scoring; R36 structure-only",
-      "new_fitted_cost_parameters": 0,
-      "decision": "Use one 4MiB-read/1MiB-subchunk diagnostic with same-read evidence; fix coordinator logs; do not repeat the historical five-pass diagnostic or re-run the unchanged rejected R35 campaign.",
-      "independent_parallel_work": "Audit actual GGUF consumed fields and immutable metadata snapshot feasibility; no actual weight values used by cost modeling.",
-      "next_accuracy_action": "Only after evidence supports a legal new comparison; maintain fixed131 and isolate head-axis and controller-root mechanisms."
-    }
+    "status": "paused_after_process_simplification",
+    "latest_valid_accuracy": "R34/on; A not passed; B unvalidated",
+    "next_action": "wait_for_explicit_resume"
   },
   "round_024_preparation": {
     "status": "committed_pushed_frozen_locked_full_running",
@@ -4318,5 +4306,28 @@
     ],
     "frozen": false,
     "commit_authorized": false
+  },
+  "process_simplification": {
+    "updated_utc": "2026-09-18T00:37:08.147419+00:00",
+    "removed_active_duplicates": [
+      "duplicate evaluator implementation snapshots and policy snapshots",
+      "post-score full-document rehash",
+      "two newly added standalone audit reports"
+    ],
+    "canonical_flow": [
+      "freeze",
+      "predict",
+      "score",
+      "strict",
+      "failure_recheck_on_demand"
+    ],
+    "retained_essential_proofs": [
+      "fixed_native_sha",
+      "timing_boundary",
+      "prediction_before_reveal",
+      "failure_and_coverage",
+      "per_cell_engine_error"
+    ],
+    "accuracy_claim": "not_claimed"
   }
 }

@@ -41,6 +41,28 @@ def _finite_nonnegative(value: object) -> float | None:
     return number if math.isfinite(number) and number >= 0 else None
 
 
+def derive_engine_metrics_ms(begin_ns: object, first_ns: object, last_ns: object, output_tokens: object) -> dict[str, float]:
+    """Derive the three engine metrics from one request boundary.
+
+    This is the single arithmetic source used by replay scoring and strict
+    acceptance.  It intentionally accepts only a real multi-token request;
+    boundary and token-count validation stays with the caller.
+    """
+    values = (begin_ns, first_ns, last_ns)
+    if any(isinstance(value, bool) or not isinstance(value, (int, float))
+           or not math.isfinite(float(value)) or float(value) < 0 for value in values):
+        raise ValueError("engine timestamps must be finite non-negative numbers")
+    if not (float(begin_ns) < float(first_ns) < float(last_ns)):
+        raise ValueError("engine timestamps must be strictly ordered")
+    if isinstance(output_tokens, bool) or not isinstance(output_tokens, int) or output_tokens <= 1:
+        raise ValueError("engine TPOT requires more than one output token")
+    return {
+        "engine_ttft_ms": (float(first_ns) - float(begin_ns)) / 1e6,
+        "engine_tpot_ms": (float(last_ns) - float(first_ns)) / ((output_tokens - 1) * 1e6),
+        "engine_e2e_ms": (float(last_ns) - float(begin_ns)) / 1e6,
+    }
+
+
 def _stat_value(value: object, aggregation: str) -> float | None:
     if isinstance(value, Mapping):
         value = value.get(f"{aggregation}_ms")
@@ -452,6 +474,7 @@ def evaluate_metrics(native: Mapping[str, object], prediction: Mapping[str, obje
 
 __all__ = [
     "CLIENT_CONTRACT_ID", "ENGINE_CONTRACT_ID", "ENGINE_PROVEN_STATUSES",
+    "derive_engine_metrics_ms",
     "ENGINE_COUNTER_UNPROVEN_STATUS", "FORMAL_AGGREGATE_SCOPE", "METRIC_STATUSES",
     "SEMANTIC_PROOF_SCHEMA", "SUPPORTED_AGGREGATIONS", "evaluate_metrics",
     "metric_status_for_records", "metric_status_is_valid", "validate_engine_semantic_proof",
