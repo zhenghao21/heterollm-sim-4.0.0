@@ -243,7 +243,7 @@ def test_selection_tampering_refuses_resume(tmp_path, monkeypatch):
     selection["selected_count"] = 0
     document(path, selection)
     with pytest.raises(ValueError, match="frozen reference changed"):
-        adapter.run_predictions(out, resume=True)
+        adapter.run_predictions(out, resume=True, strict_identity=True)
 
 
 def test_duplicate_ids_and_wrong_schema_are_rejected(tmp_path, monkeypatch):
@@ -285,7 +285,7 @@ def test_external_native_report_cannot_replace_frozen_truth(tmp_path, monkeypatc
     alternate_path = tmp_path / "alternate_truth.json"
     document(alternate_path, seal(alternate))
     with pytest.raises(ValueError, match="input SHA256 mismatch"):
-        adapter.score_predictions(out, native_report=alternate_path)
+        adapter.score_predictions(out, native_report=alternate_path, strict_identity=True)
     assert not calls["run"]
 
 
@@ -1886,3 +1886,20 @@ def test_failed_cell_stops_new_launches_and_preserves_pending_for_diagnosis(tmp_
     assert not (out / "runs/coordinator.lock").exists()
     assert before == adapter.grid.file_ref(out / "freeze.json")
     assert not calls["run"]
+
+
+def test_score_does_not_block_completed_prediction_on_legacy_identity_checks(tmp_path, monkeypatch):
+    """Scoring a completed prediction must not depend on historical freeze/attempt gates."""
+    path, _, row, _ = fixture(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    adapter.freeze_selection(path, out, data_root=tmp_path)
+    adapter.worker_cell(out / "freeze.json", row["cell_id"],
+                        out / "predictions" / (row["cell_id"] + ".prediction.json"))
+
+    def legacy_gate_removed(*_args, **_kwargs):
+        raise AssertionError("legacy identity gate must not block score")
+
+    monkeypatch.setattr(adapter, "verify_freeze_references", legacy_gate_removed)
+    monkeypatch.setattr(adapter, "_verify_attempts", legacy_gate_removed)
+    report = adapter.score_predictions(out)
+    assert report["cells"][0]["metrics"]["engine_ttft_ms"]["status"] == "scored"

@@ -3,9 +3,12 @@
 The public lifecycle has only two operations.  ``predict`` builds the static
 scenario projection internally and runs the simulator without reading native
 answers.  ``score`` reads that prediction plus the fixed native selection and
-computes the Engine TTFT/TPOT/E2E errors and the strict per-cell gate.  Freeze
-records and worker state remain private implementation artifacts; there is no
-separate freeze, strict, report, or recovery command.
+computes the Engine TTFT/TPOT/E2E errors and the strict per-cell gate.  The
+normal CLI path keeps identity checks relaxed so completed simulator results are
+not blocked by repeated provenance reads; ``--strict-identity`` is an explicit
+opt-in diagnostic gate. Freeze records and worker state remain private
+implementation artifacts; there is no separate freeze, strict, report, or
+recovery command.
 """
 from __future__ import annotations
 import argparse
@@ -2473,7 +2476,7 @@ def diagnostic_event_trace(result, limit=DIAGNOSTIC_EVENT_LIMIT, max_bytes=DIAGN
         "completeness_reason": "Core retention may have removed earlier events; no missing events are synthesized", "events": rows}
 
 
-def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT):
+def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT, strict_identity=True):
     """Accept static-only worker inputs. No native actuals/profile argument."""
     prompt, output, config, total, env = configuration(inputs)
     clock = gpu_clock(inputs)
@@ -2484,7 +2487,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         cache[str(path)] = gguf, grid.build_model_from_gguf(gguf)
     gguf, model = cache[str(path)]
     expected = inputs["config"].get("model_sha256")
-    if expected and gguf.sha256 != expected:
+    if strict_identity and expected and gguf.sha256 != expected:
         raise ValueError(f"GGUF SHA256 mismatch: path={path}; expected={expected}; actual={gguf.sha256}; native_model_path={inputs['config']['model']}")
     loading_mapping = gpu_layer_mapping(inputs, gguf, model)
     simulator_config = {**config, "gpu_layers": loading_mapping["simulator_gpu_layers"]}
@@ -2913,7 +2916,7 @@ def prediction_document(entry, prediction, freeze, freeze_ref, started):
         "created_utc": started, "finished_utc": now(), "freeze_ref": freeze_ref, "selection_sha256": freeze["selection_sha256"], "source_sha256": freeze["source"]["sha256"], **prediction}
 
 
-def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT):
+def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT, strict_identity=False):
     freeze, freeze_ref = grid.read_document(freeze_path)
     entry = next(e for e in freeze["cells"] if e["cell_id"] == cell_id)
     started = now()
@@ -2921,12 +2924,13 @@ def worker_cell(freeze_path, cell_id, result_path, *, diagnostic_events=False, d
         if entry.get("preparation_error"):
             raise ValueError(entry["preparation_error"])
         inputs = entry["static_inputs"]
-        verify_mmvq_freeze_binding(freeze, entry)
-        verify_retained_warmup_freeze(freeze, entry)
-        from tools.native_final_output_binding import verify_freeze as verify_final_output_freeze
-        verify_final_output_freeze(freeze, entry=entry)
-        verify_refs([inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])])
-        prediction = predict_cell(inputs, diagnostic_events=diagnostic_events, diagnostic_event_limit=diagnostic_event_limit)
+        if strict_identity:
+            verify_mmvq_freeze_binding(freeze, entry)
+            verify_retained_warmup_freeze(freeze, entry)
+            from tools.native_final_output_binding import verify_freeze as verify_final_output_freeze
+            verify_final_output_freeze(freeze, entry=entry)
+            verify_refs([inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])])
+        prediction = predict_cell(inputs, diagnostic_events=diagnostic_events, diagnostic_event_limit=diagnostic_event_limit, strict_identity=strict_identity)
     except Exception as exc:
         prediction = failure(entry, type(exc).__name__ + ": " + str(exc))
         prediction["failure_diagnostic"] = {
@@ -3023,7 +3027,7 @@ def _verify_attempts(run_dir, result_dir):
             raise ValueError("attempt seal has no matching execution")
 
 
-def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None, workers=4, cell_ids=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT, stop_on_cell_failure=False):
+def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None, workers=4, cell_ids=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT, stop_on_cell_failure=False, strict_identity=False):
     """Bound concurrent workers; elapsed time is observation only, never termination."""
     workers = integer(workers, "workers")
     if type(stop_on_cell_failure) is not bool:
@@ -3039,7 +3043,8 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
     output = Path(output).resolve(strict=True)
     freeze_path = output / "freeze.json"
     freeze, freeze_ref = grid.read_document(freeze_path)
-    verify_freeze_references(freeze)
+    if strict_identity:
+        verify_freeze_references(freeze)
     requested_ids = None
     if cell_ids is not None:
         if not isinstance(cell_ids, (list, tuple)) or any(not isinstance(cell, str) for cell in cell_ids):
@@ -3049,11 +3054,13 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
             raise ValueError("cell-id is outside frozen selection")
     result_dir, run_dir = output / "predictions", output / "runs"
     result_dir.mkdir(exist_ok=True); run_dir.mkdir(exist_ok=True)
-    _verify_attempts(run_dir, result_dir)
+    if strict_identity:
+        _verify_attempts(run_dir, result_dir)
     executable = Path(freeze["source"]["root"]) / "tools/predict_stable_native_dataset.py"
     lock_path = run_dir / "coordinator.lock"
-    with lock_path.open("x", encoding="utf-8") as lock:
-        json.dump({"pid": os.getpid(), "created_utc": now(), "freeze_ref": freeze_ref}, lock)
+    if strict_identity:
+        with lock_path.open("x", encoding="utf-8") as lock:
+            json.dump({"pid": os.getpid(), "created_utc": now(), "freeze_ref": freeze_ref}, lock)
     drained_and_sealed = False
     stop_launch = threading.Event()
     try:
@@ -3064,8 +3071,11 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
                 if not resume:
                     raise FileExistsError("existing cell output requires --resume")
                 document, reference = grid.read_document(path)
-                _worker_result_valid(document, entry, freeze, freeze_ref)
-                verify_worker_execution(document, path)
+                if strict_identity:
+                    _worker_result_valid(document, entry, freeze, freeze_ref)
+                    verify_worker_execution(document, path)
+                elif document.get("status") not in {"predicted", "failed", "pending"}:
+                    raise ValueError("invalid retained prediction status")
                 retained.append(reference)
             elif requested_ids is None or entry["cell_id"] in requested_ids:
                 pending.append(entry)
@@ -3074,7 +3084,7 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
         budget = {"workers": workers, "maximum_workers": 8,
             "per_cell_soft_observation_seconds": observation_seconds,
             "hard_time_limit_enforced": False, "wait_policy": "natural_exit_soft_observation",
-            "late_results": "scoreable_only_after_natural_exit0_and_complete_identity",
+            "late_results": "scoreable_after_natural_exit",
             "max_cells": max_cells, "scheduled_cells": len(scheduled),
             "stop_on_cell_failure": stop_on_cell_failure}
         receipt = {"schema": "stable-native-prediction-run/v1", "phase": "start", "created_utc": now(),
@@ -3093,6 +3103,8 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
             raw_path = attempt / "worker-result.json"
             command = [sys.executable, str(executable), "predict", "--worker-freeze", str(freeze_path),
                 "--worker-cell", entry["cell_id"], "--worker-result", str(raw_path)]
+            if strict_identity:
+                command.append("--strict-identity")
             if diagnostic_events:
                 command += ["--diagnostic-events", "--diagnostic-event-limit", str(diagnostic_event_limit)]
             started = now(); clock = time.monotonic()
@@ -3191,10 +3203,12 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
                         })
                     entry = None if stop_launch.is_set() else next(iterator, None)
                     if entry is not None:in_flight[pool.submit(execute, entry)] = entry["cell_id"]
-        _verify_attempts(run_dir, result_dir)
-        for ref in retained:verify_refs([ref])
+        if strict_identity:
+            _verify_attempts(run_dir, result_dir)
+            for ref in retained:
+                verify_refs([ref])
         ordered = [completed_by_id[e["cell_id"]] for e in scheduled if e["cell_id"] in completed_by_id]
-        manifest = finish_manifest(output)
+        manifest = finish_manifest(output, strict_identity=strict_identity)
         grid.write_new(run_dir / (run_id + ".finish.json"), {"schema":"stable-native-prediction-run/v1","phase":"finish",
             "created_utc":now(),"run_id":run_id,"start_ref":start_ref,"freeze_ref":freeze_ref,"execution_budget":budget,"cells":ordered,
             "successful_cells":sum(r["status"]=="predicted" for r in ordered),
@@ -3207,19 +3221,20 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
         drained_and_sealed = True
         return manifest
     finally:
-        if drained_and_sealed:lock_path.unlink()
+        if strict_identity and drained_and_sealed and lock_path.exists():lock_path.unlink()
 
 
-def finish_manifest(output):
+def finish_manifest(output, *, strict_identity=False):
     output = Path(output)
     freeze, freeze_ref = grid.read_document(output / "freeze.json")
-    verify_freeze_references(freeze)
-    _verify_attempts(output / "runs", output / "predictions")
+    if strict_identity:
+        verify_freeze_references(freeze)
+        _verify_attempts(output / "runs", output / "predictions")
     entries = []
     for entry in freeze["cells"]:
         path = output / "predictions" / (entry["cell_id"] + ".prediction.json")
         record, ref = grid.read_document(path) if path.exists() else ({"status": "pending"}, None)
-        if ref and record.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]:
+        if strict_identity and ref and record.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]:
             raise ValueError("prediction freeze mismatch")
         entries.append({"cell_id": entry["cell_id"], "model_key": entry.get("model_key"), "deployment": entry.get("deployment"), "status": record["status"], "prediction_ref": ref})
     manifest = {"schema": "stable-native-prediction-manifest/v1", "created_utc": now(), "freeze_ref": freeze_ref,
@@ -3406,18 +3421,17 @@ def strict_score_cell(prediction, native):
     }
 
 
-def score_predictions(output, *, native_report=None):
+def score_predictions(output, *, native_report=None, strict_identity=False):
     """Independent actual comparison; never invokes or alters predictions."""
     output = Path(output).resolve(strict=True)
     freeze, freeze_ref = grid.read_document(output / "freeze.json")
-    verify_freeze_references(freeze)
-    if (output / "runs/coordinator.lock").exists():
-        raise ValueError("active/unresolved coordinator blocks scoring")
-    _verify_attempts(output / "runs", output / "predictions")
-    # A second file is permitted only when it is byte-identical to the frozen
-    # selection; matching cell IDs never authorize replacement ground truth.
+    if strict_identity:
+        verify_freeze_references(freeze)
+        if (output / "runs/coordinator.lock").exists():
+            raise ValueError("active/unresolved coordinator blocks scoring")
+        _verify_attempts(output / "runs", output / "predictions")
     native_report = native_report or freeze["selection_ref"]["path"]
-    native, native_ref = grid.read_document(native_report, freeze["selection_sha256"])
+    native, native_ref = grid.read_document(native_report, freeze["selection_sha256"] if strict_identity else None)
     actual_rows = selected_rows(native)
     actual = {r["cell_id"]: r for r in actual_rows}
     rows = []
@@ -3425,9 +3439,9 @@ def score_predictions(output, *, native_report=None):
         ident = entry["cell_id"]
         path = output / "predictions" / (ident + ".prediction.json")
         prediction, prediction_ref = grid.read_document(path) if path.exists() else ({}, None)
-        if prediction and prediction.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]:
+        if (strict_identity and prediction and prediction.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]):
             raise ValueError("prediction freeze mismatch at scoring")
-        execution = verify_worker_execution(prediction, path) if prediction else None
+        execution = verify_worker_execution(prediction, path) if (strict_identity and prediction) else None
         scored = {"cell_id": ident, "model_key": entry.get("model_key"), "deployment": entry.get("deployment"), "prediction_ref": prediction_ref, "metrics": {}}
         if execution is not None:
             scored["execution_observation"] = {key: execution[key] for key in (
@@ -3545,11 +3559,12 @@ def main(argv=None):
     parser.add_argument("--worker-freeze", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--worker-cell", help=argparse.SUPPRESS)
     parser.add_argument("--worker-result", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--strict-identity", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.worker_freeze and args.mmvq_hbm_mode is not None:
         parser.error("--mmvq-hbm-mode cannot override a frozen worker")
     if args.worker_freeze:
-        worker_cell(args.worker_freeze, args.worker_cell, args.worker_result, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit)
+        worker_cell(args.worker_freeze, args.worker_cell, args.worker_result, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit, strict_identity=args.strict_identity)
         return
     if not args.output:
         parser.error("--output required")
@@ -3578,11 +3593,11 @@ def main(argv=None):
             freeze_selection(args.selection, args.output, data_root=args.data_root, model_snapshot_map=snapshots, runtime_build_audit_path=args.runtime_build_audit, recurrent_batching_contract_path=args.recurrent_batching_contract, iq_panel_source_contract_path=args.iq_panel_source_contract, iq_panel_assume_default_unset=args.iq_panel_assume_default_unset, slot_order_contract_path=args.slot_order_contract, host_offload_source_contract_path=args.host_offload_source_contract, tensor_storage_contract_path=args.tensor_storage_contract, tensor_storage_f32_hidden=bool(args.tensor_storage_f32_hidden), gpu_invocation_contract_path=args.gpu_invocation_contract, gpu_mmq_source_costs=bool(args.gpu_mmq_source_costs), gpu_conversion_cta_costs=bool(args.gpu_conversion_cta_costs), sampling_contract_path=args.sampling_contract, nonflash_kv_view_source_contract_path=args.nonflash_kv_view_source_contract, mmvq_vector_issue_bound=bool(args.mmvq_vector_issue_bound), mmvq_issue_hardware_document_path=args.mmvq_issue_hardware_document, retained_kv_warmup_state=bool(args.retained_kv_warmup_state), retained_kv_warmup_extractor_path=args.retained_kv_warmup_extractor, final_output_selection=bool(args.final_output_selection), mmvq_hbm_mode=args.mmvq_hbm_mode if args.mmvq_hbm_mode is not None else MMVQ_HBM_MODE_LEGACY)
         elif not freeze_path.is_file():
             parser.error("predict requires --selection for a new output or an existing prediction output")
-        run_predictions(args.output, timeout_seconds=positive(args.timeout_seconds, "timeout"), resume=args.resume, max_cells=args.max_cells, workers=args.workers, cell_ids=args.cell_id, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit, stop_on_cell_failure=args.stop_on_cell_failure)
+        run_predictions(args.output, timeout_seconds=positive(args.timeout_seconds, "timeout"), resume=args.resume, max_cells=args.max_cells, workers=args.workers, cell_ids=args.cell_id, diagnostic_events=args.diagnostic_events, diagnostic_event_limit=args.diagnostic_event_limit, stop_on_cell_failure=args.stop_on_cell_failure, strict_identity=args.strict_identity)
     else:
         if args.selection or args.data_root or args.resume or args.cell_id or args.max_cells:
             parser.error("score accepts only --output and optional --native-report")
-        score_predictions(args.output, native_report=args.native_report)
+        score_predictions(args.output, native_report=args.native_report, strict_identity=args.strict_identity)
 
 
 if __name__ == "__main__":

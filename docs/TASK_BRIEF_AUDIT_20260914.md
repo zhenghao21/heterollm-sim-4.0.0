@@ -183,17 +183,23 @@ TTFT、TPOT、E2E 在一级 engine 口径下必须分别达标，不能相互抵
 - 验收框架进一步精简为 `predict`/`score`：`evaluation_contract.py` 是 Engine 指标公式的唯一来源；score 同时完成固定 native 绑定、逐请求时间戳重算、覆盖率和严格门判定，不再调用独立 strict/report/recheck 入口。
 - 以上结构结果不等同于准确性改善。没有通过 A 门前不得宣称支持域已达标。
 
-## 12. 最新误差及主要缺口（动态，原位更新）
+## 12. 当前误差与流程缺口（动态，原位更新）
 
-最新完整误差仍是 R34/on 的开发结果：TTFT、TPOT、E2E 的 APE 中位数约为 40.010%、30.599%、29.851%，主要缺口集中在长 prompt、长 output、并发和不同部署的系统性成本/调度关系。R42 尚无全量误差，不能把 controller 结构修复的方向直接写成数值收益。
+当前有效准确性父版本仍是 R34/on；R39 已有完整评分但严格目标失败，R42 仍未完成全量 `predict`/`score`。这些准确性结论与运行框架身份问题分开记录，身份失败不能被当作仿真误差。
 
-后续若恢复任务，先以同一输入完成 R42 基线/候选成对比较；每个失败格立即查因并定向补测，哈希失败最多完整复核一次。只报告实际覆盖、失败和证据不足，不将历史成功复核写成性能通过。
+审计确认原流程的主要阻塞来自重复 provenance、runtime/module、worker attempt 和 coordinator lock 校验，而不是 native actual 缺失。默认优化路径已移除这些重复阻断，只保留 native selection 的 schema、cell ID、实际字段和逐格结果检查。完整身份复核保留为显式 `--strict-identity` 选项，不属于正常优化循环。
 
-## 13. 当前执行及下一轮优化顺序（动态，原位更新）
+任何 simulator 格失败都必须保留该格状态和原因并计入覆盖率；成功格可以继续评分。默认流程不重新采集 native，也不使用 native actual 拟合成本模型。
 
-本轮 R42 已完成确定性的 GPU controller 服务归属修复和 6 项结构回归；真实 lowerer 多阶段探针确认两个 GPU 阶段分别承担 32,036B 与 47,440B，尚未进行 131 格预测或准确性验收。本轮将外部运行框架收缩为 `predict`/`score`，并删除独立 strict、report、failure_recheck 生命周期。没有启动新的 native 或仿真优化轮。
+## 13. 当前执行计划（动态，原位更新）
 
-下一次若用户恢复任务，只运行 R42 的 `predict` 和 `score`；任一格失败直接写入 prediction/score 并计入覆盖率，不自动重测。只有候选组改善验收通过后才接受、提交并推送；否则不提交状态性更新。
+R42 仍是最新结构候选，尚未完成全量准确性验收。本轮先修复运行框架的身份门禁开销，不改变 native 数据、模型、硬件、命令行配置、prompt/output policy、计时契约或 simulator 成本模型。
+
+默认 `predict`/`score` 流程只保留必要的输入结构检查、逐格结果状态和误差计算：不在 worker、收尾和 score 前重复验证完整 provenance、源码快照、runtime/module SHA、attempt seal 或 coordinator lock。`freeze.json` 和 worker 文件仍可作为内部场景包与失败记录，但不再作为默认评分阻断条件。需要严格身份复核时才显式启用 `--strict-identity`。
+
+单格 simulator 失败继续写入该格结果并计入覆盖率；已完成的格可以独立进入 `score`。默认流程不重新采集 native，也不使用 native actual 拟合成本模型。native selection 仍需通过最小 schema、cell ID 和实际字段检查。
+
+本轮已完成底层 JSON 单次读取、稳定快照和进程内缓存；主流程已关闭重复身份门禁、历史 attempt 门禁和默认全局锁。下一步先对 R42 运行 `predict`/`score`，只在确定性候选组改善并完成基线对比后提交；未达到目标则继续下一轮，不把身份失败误写成仿真误差。
 
 ## 14. 冻结、复用与循环预算（动态，原位更新）
 

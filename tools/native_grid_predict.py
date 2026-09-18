@@ -10,6 +10,7 @@ are consumed. Formal eligibility is deliberately false for every cell.
 from __future__ import annotations
 
 import argparse
+import copy
 from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
@@ -46,25 +47,79 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+# The prediction loop reads the same small JSON inputs repeatedly.  Keep a
+# process-local snapshot keyed by filesystem metadata so repeated references do
+# not reread and rehash unchanged files.  Raw bytes are retained only for small
+# files; large binaries still get a lightweight reference cache.
+_FILE_CACHE = {}
+_DOCUMENT_CACHE = {}
+_MAX_CACHED_RAW_BYTES = 16 * 1024 * 1024
+
+
+def _cache_key(path, stat_result):
+    return (str(path), stat_result.st_dev, stat_result.st_ino, stat_result.st_size, stat_result.st_mtime_ns, stat_result.st_ctime_ns)
+
+
+def _read_stable_snapshot(path):
+    """Read one stable file snapshot and return ``(raw, ref, cache_key)``.
+
+    A post-read stat detects a concurrent replacement without requiring a second
+    full read or hash.  One retry handles the normal case of a file being
+    rewritten while a producer is finishing; persistent churn remains an error.
+    """
+    path = Path(path).resolve(strict=True)
+    for _ in range(2):
+        before = path.stat()
+        key = _cache_key(path, before)
+        cached = _FILE_CACHE.get(key)
+        if cached is not None and cached["raw"] is not None:
+            return cached["raw"], dict(cached["ref"]), key
+        raw = path.read_bytes()
+        after = path.stat()
+        if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
+            continue
+        digest = hashlib.sha256(raw).hexdigest()
+        ref = {"path": str(path), "sha256": digest, "size_bytes": len(raw)}
+        _FILE_CACHE[key] = {
+            "raw": raw if len(raw) <= _MAX_CACHED_RAW_BYTES else None,
+            "ref": ref,
+        }
+        return raw, dict(ref), key
+    raise ValueError("input changed during read: " + str(path))
+
+
 def file_ref(path):
     path = Path(path).resolve(strict=True)
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
-            h.update(chunk)
-    return {"path": str(path), "sha256": h.hexdigest(), "size_bytes": path.stat().st_size}
+    stat_result = path.stat()
+    key = _cache_key(path, stat_result)
+    cached = _FILE_CACHE.get(key)
+    if cached is not None:
+        return dict(cached["ref"])
+    _raw, ref, _key = _read_stable_snapshot(path)
+    return ref
 
 
 def read_document(path, expected_sha=None):
-    ref = file_ref(path)
-    raw = Path(path).read_bytes()
-    if hashlib.sha256(raw).hexdigest() != ref["sha256"]:
-        raise ValueError("input changed during read: " + str(path))
+    path = Path(path).resolve(strict=True)
+    stat_result = path.stat()
+    key = _cache_key(path, stat_result)
+    cached_document = _DOCUMENT_CACHE.get(key)
+    if cached_document is not None:
+        document, ref = cached_document
+        if expected_sha and ref["sha256"] != expected_sha:
+            raise ValueError("input SHA256 mismatch: " + str(path))
+        return copy.deepcopy(document), dict(ref)
+
+    raw, ref, key = _read_stable_snapshot(path)
     if expected_sha and ref["sha256"] != expected_sha:
         raise ValueError("input SHA256 mismatch: " + str(path))
-    document = json.loads(raw.decode("utf-8-sig"))
+    try:
+        document = json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise
     if not isinstance(document, dict):
         raise ValueError("JSON object required: " + str(path))
+    _DOCUMENT_CACHE[key] = (copy.deepcopy(document), dict(ref))
     return document, ref
 
 
