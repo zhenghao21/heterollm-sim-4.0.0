@@ -17,3 +17,5 @@ artifacts/development/native_long_grid_135_20260915/optimization_loop/round_028/
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_029/** -text -whitespace
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_030/** -text -whitespace
 artifacts/development/native_long_grid_135_20260915/optimization_loop/round_031/** -text -whitespace
+# Source used by frozen native build contracts: preserve bytes, including EOF blank lines.
+source/llama.cpp-annotation-control/tools/server/server-context.cpp -text -whitespace

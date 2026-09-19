@@ -12,7 +12,7 @@ py -3.12 -m heterollm_sim.cli demo
 py -3.12 -m heterollm_sim.cli ui
 ```
 
-运行测试：`py -3.12 -m pytest -q`。Node.js 运行 `node --test tests/webui_*.test.cjs` 可检查静态前端。
+开发环境先安装测试与进程检查依赖：`py -3.12 -m pip install -e ".[dev]"`。运行测试：`py -3.12 -m pytest -q`。Node.js 运行 `node --test tests/webui_*.test.cjs` 可检查静态前端。
 
 历史测量、Bionic 适配器、原生批测和实验脚本不在此包中；它们仍保留在开发仓库。
 
@@ -32,5 +32,7 @@ py -3.12 tools/native_llama_compare.py --output artifacts/native_compare.json
 py -3.12 tools/predict_stable_native_dataset.py predict --selection <stable-native-dataset.json> --output <prediction-dir>
 py -3.12 tools/predict_stable_native_dataset.py score --output <prediction-dir> --native-report <stable-native-dataset.json>
 ```
+
+本任务当前禁止重新采集 native/微基准；上面的采集工具说明不是采集授权。执行约束以 `docs/TASK_BRIEF_AUDIT_20260914.md` 为准。
 
 `predict` 内部完成静态场景投影和仿真；`score` 内部完成固定 native 绑定、Engine 时间戳重算、覆盖率和每格三项误差判定。独立 freeze、strict、failure-recheck、report 和 heatmap 不再是运行步骤。

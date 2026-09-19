@@ -4,8 +4,8 @@ The public lifecycle has only two operations.  ``predict`` builds the static
 scenario projection internally and runs the simulator without reading native
 answers.  ``score`` reads that prediction plus the fixed native selection and
 computes the Engine TTFT/TPOT/E2E errors and the strict per-cell gate.  The
-normal CLI path keeps identity checks relaxed so completed simulator results are
-not blocked by repeated provenance reads; ``--strict-identity`` is an explicit
+normal CLI path checks result/configuration identity without rereading the entire
+historical source/model closure; ``--strict-identity`` is an explicit
 opt-in diagnostic gate. Freeze records and worker state remain private
 implementation artifacts; there is no separate freeze, strict, report, or
 recovery command.
@@ -1710,7 +1710,10 @@ def apply_retained_warmup_static_contract(scenario, inputs, *, gguf):
     model_ref = inputs.get("prediction_model_ref", inputs["native_model_ref"])
     model_scope = read_retained_gguf_scope(model_ref)
     if gguf.sha256 != model_ref["sha256"] or gguf.architecture != model_scope["architecture"]:
-        raise ValueError("retained warmup GGUF worker identity differs")
+        raise ValueError(
+            f"retained warmup GGUF worker identity differs: path={model_ref['path']}; "
+            f"sha256 expected={model_ref['sha256']} actual={gguf.sha256}; "
+            f"architecture expected={model_scope['architecture']} actual={gguf.architecture}")
     derived = derive_retained_cell_proof(warmup, selection_ref=proof["selection_ref"], extractor_ref=proof["extractor_ref"],
         nonflash_contract=proof["nonflash_contract"], nonflash_ref=proof["nonflash_contract_ref"],
         model_scope=model_scope, native_refs=[inputs["runtime_ref"], *inputs.get("runtime_module_refs", [])])
@@ -2476,8 +2479,23 @@ def diagnostic_event_trace(result, limit=DIAGNOSTIC_EVENT_LIMIT, max_bytes=DIAGN
         "completeness_reason": "Core retention may have removed earlier events; no missing events are synthesized", "events": rows}
 
 
+def verify_import_roots():
+    """Path changes cannot replace packages already cached by Python."""
+    for name, module in tuple(sys.modules.items()):
+        package = name.split(".", 1)[0]
+        if package not in ("heterollm_sim", "tools"):
+            continue
+        filename = getattr(module, "__file__", None)
+        if filename is None:
+            continue
+        expected = ROOT / ("src/heterollm_sim" if package == "heterollm_sim" else "tools")
+        if not Path(filename).resolve().is_relative_to(expected.resolve()):
+            raise ValueError(f"mixed source import: module={name}; actual={filename}; expected_root={expected}")
+
+
 def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnostic_event_limit=DIAGNOSTIC_EVENT_LIMIT, strict_identity=True):
     """Accept static-only worker inputs. No native actuals/profile argument."""
+    verify_import_roots()
     prompt, output, config, total, env = configuration(inputs)
     clock = gpu_clock(inputs)
     path = Path(inputs.get("prediction_model_ref", {}).get("path", inputs["config"]["model"]))
@@ -2487,7 +2505,7 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         cache[str(path)] = gguf, grid.build_model_from_gguf(gguf)
     gguf, model = cache[str(path)]
     expected = inputs["config"].get("model_sha256")
-    if strict_identity and expected and gguf.sha256 != expected:
+    if expected and gguf.sha256 != expected:
         raise ValueError(f"GGUF SHA256 mismatch: path={path}; expected={expected}; actual={gguf.sha256}; native_model_path={inputs['config']['model']}")
     loading_mapping = gpu_layer_mapping(inputs, gguf, model)
     simulator_config = {**config, "gpu_layers": loading_mapping["simulator_gpu_layers"]}
@@ -2612,8 +2630,9 @@ def source_freeze(destination):
 
 def verify_refs(refs):
     for ref in refs:
-        if grid.file_ref(ref["path"])["sha256"] != ref["sha256"]:
-            raise ValueError("frozen reference changed: " + ref["path"])
+        actual = grid.file_ref(ref["path"])["sha256"]
+        if actual != ref["sha256"]:
+            raise ValueError(f"frozen reference changed: {ref['path']}; expected={ref['sha256']}; actual={actual}")
 
 
 
@@ -3058,10 +3077,10 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
         _verify_attempts(run_dir, result_dir)
     executable = Path(freeze["source"]["root"]) / "tools/predict_stable_native_dataset.py"
     lock_path = run_dir / "coordinator.lock"
-    if strict_identity:
-        with lock_path.open("x", encoding="utf-8") as lock:
-            json.dump({"pid": os.getpid(), "created_utc": now(), "freeze_ref": freeze_ref}, lock)
+    with lock_path.open("x", encoding="utf-8") as lock:
+        json.dump({"pid": os.getpid(), "created_utc": now(), "freeze_ref": freeze_ref}, lock)
     drained_and_sealed = False
+    execution_started = False
     stop_launch = threading.Event()
     try:
         pending, retained = [], []
@@ -3071,11 +3090,9 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
                 if not resume:
                     raise FileExistsError("existing cell output requires --resume")
                 document, reference = grid.read_document(path)
+                _worker_result_valid(document, entry, freeze, freeze_ref)
                 if strict_identity:
-                    _worker_result_valid(document, entry, freeze, freeze_ref)
                     verify_worker_execution(document, path)
-                elif document.get("status") not in {"predicted", "failed", "pending"}:
-                    raise ValueError("invalid retained prediction status")
                 retained.append(reference)
             elif requested_ids is None or entry["cell_id"] in requested_ids:
                 pending.append(entry)
@@ -3173,6 +3190,7 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
                 "observation_interruptions":interruptions}
 
         completed_by_id = {}; iterator = iter(scheduled); observation_interruptions = 0
+        execution_started = True
         with ThreadPoolExecutor(max_workers=workers) as pool:
             in_flight = {}
             for _ in range(min(workers, len(scheduled))):
@@ -3221,7 +3239,7 @@ def run_predictions(output, *, timeout_seconds=600, resume=False, max_cells=None
         drained_and_sealed = True
         return manifest
     finally:
-        if strict_identity and drained_and_sealed and lock_path.exists():lock_path.unlink()
+        if (drained_and_sealed or not execution_started) and lock_path.exists():lock_path.unlink()
 
 
 def finish_manifest(output, *, strict_identity=False):
@@ -3234,15 +3252,15 @@ def finish_manifest(output, *, strict_identity=False):
     for entry in freeze["cells"]:
         path = output / "predictions" / (entry["cell_id"] + ".prediction.json")
         record, ref = grid.read_document(path) if path.exists() else ({"status": "pending"}, None)
-        if strict_identity and ref and record.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]:
-            raise ValueError("prediction freeze mismatch")
+        if ref:
+            _worker_result_valid(record, entry, freeze, freeze_ref)
         entries.append({"cell_id": entry["cell_id"], "model_key": entry.get("model_key"), "deployment": entry.get("deployment"), "status": record["status"], "prediction_ref": ref})
     manifest = {"schema": "stable-native-prediction-manifest/v1", "created_utc": now(), "freeze_ref": freeze_ref,
         "selected_denominator": len(entries), "successful_cells": sum(e["status"] == "predicted" for e in entries),
         "failed_or_incomplete_cells": sum(e["status"] not in ("predicted", "pending") for e in entries),
         "pending_cells": sum(e["status"] == "pending" for e in entries), "coverage": freeze["coverage"], "cells": entries,
         "evaluation_type": "development_post_selection", "blind_evaluation": False, "formal_prediction_eligible": False,
-        "native_answers_used_for_prediction": False, "verification": "selection and frozen execution source verified after predictions"}
+        "native_answers_used_for_prediction": False, "verification": "full frozen references and attempts verified" if strict_identity else "prediction identity verified; historical reference recheck not requested"}
     grid.write_new(output / f"manifest.{len(list(output.glob('manifest.*.json'))) + 1:04d}.json", manifest)
     return manifest
 
@@ -3375,9 +3393,12 @@ def strict_score_cell(prediction, native):
             issues.append(str(exc))
             continue
         for metric, value in derived.items():
-            if not positive(request.get(metric), "request metric") or not math.isclose(
-                value, request[metric], rel_tol=1e-9, abs_tol=1e-8
-            ):
+            try:
+                observed = positive(request.get(metric), "request metric")
+            except ValueError as exc:
+                issues.append(metric + ": " + str(exc))
+                continue
+            if not math.isclose(value, observed, rel_tol=1e-9, abs_tol=1e-8):
                 issues.append(metric + " timestamp mismatch")
             values[metric].append(value)
     if issues or any(len(values[metric]) != parallel for metric in METRICS):
@@ -3386,12 +3407,16 @@ def strict_score_cell(prediction, native):
     for metric in METRICS:
         simulator = statistics.median(values[metric])
         aggregate = prediction.get("aggregate", {}).get(metric, {})
+        try:
+            median = positive(aggregate.get("median_ms"), "aggregate median")
+        except ValueError as exc:
+            issues.append(metric + ": " + str(exc))
+            continue
         if (
             aggregate.get("planned_requests") != parallel
             or aggregate.get("observed_requests") != parallel
             or aggregate.get("missing_requests") != 0
-            or not positive(aggregate.get("median_ms"), "aggregate median")
-            or not math.isclose(simulator, aggregate["median_ms"], rel_tol=1e-9, abs_tol=1e-8)
+            or not math.isclose(simulator, median, rel_tol=1e-9, abs_tol=1e-8)
         ):
             issues.append(metric + " aggregate mismatch")
             continue
@@ -3425,13 +3450,13 @@ def score_predictions(output, *, native_report=None, strict_identity=False):
     """Independent actual comparison; never invokes or alters predictions."""
     output = Path(output).resolve(strict=True)
     freeze, freeze_ref = grid.read_document(output / "freeze.json")
+    if (output / "runs/coordinator.lock").exists():
+        raise ValueError("active/unresolved coordinator blocks scoring")
     if strict_identity:
         verify_freeze_references(freeze)
-        if (output / "runs/coordinator.lock").exists():
-            raise ValueError("active/unresolved coordinator blocks scoring")
         _verify_attempts(output / "runs", output / "predictions")
     native_report = native_report or freeze["selection_ref"]["path"]
-    native, native_ref = grid.read_document(native_report, freeze["selection_sha256"] if strict_identity else None)
+    native, native_ref = grid.read_document(native_report, freeze["selection_sha256"])
     actual_rows = selected_rows(native)
     actual = {r["cell_id"]: r for r in actual_rows}
     rows = []
@@ -3439,8 +3464,8 @@ def score_predictions(output, *, native_report=None, strict_identity=False):
         ident = entry["cell_id"]
         path = output / "predictions" / (ident + ".prediction.json")
         prediction, prediction_ref = grid.read_document(path) if path.exists() else ({}, None)
-        if (strict_identity and prediction and prediction.get("freeze_ref", {}).get("sha256") != freeze_ref["sha256"]):
-            raise ValueError("prediction freeze mismatch at scoring")
+        if prediction:
+            _worker_result_valid(prediction, entry, freeze, freeze_ref)
         execution = verify_worker_execution(prediction, path) if (strict_identity and prediction) else None
         scored = {"cell_id": ident, "model_key": entry.get("model_key"), "deployment": entry.get("deployment"), "prediction_ref": prediction_ref, "metrics": {}}
         if execution is not None:
@@ -3492,7 +3517,7 @@ def score_predictions(output, *, native_report=None, strict_identity=False):
     strict_failed = sum(item.get("verdict") == "accuracy_failed" for item in strict_rows)
     strict_missing = sum(item.get("verdict") == "insufficient_evidence" for item in strict_rows)
     strict_gate = {
-        "verdict": "accuracy_failed" if strict_failed else "insufficient_evidence" if strict_missing else "passed",
+        "verdict": "accuracy_failed" if strict_failed else "insufficient_evidence" if strict_missing or not rows else "passed",
         "passed_cells": strict_passed,
         "accuracy_failed_cells": strict_failed,
         "insufficient_evidence_cells": strict_missing,

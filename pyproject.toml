@@ -17,6 +17,9 @@ dependencies = [
     "ortools==9.15.6755",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "psutil>=5.9,<8"]
+
 [project.scripts]
 heterollm-sim = "heterollm_sim.cli:main"
 heterollm-import-v3 = "heterollm_sim.schema_v4:main"

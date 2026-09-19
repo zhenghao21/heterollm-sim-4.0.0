@@ -226,7 +226,7 @@ def test_hybrid_uncovered_preserves_original_prediction_and_scorability(data,tmp
     # Exercise the independent scorer with synthetic fixture actuals only.
     # The retained qualification must not turn this complete cell into unscored.
     freeze_ref=a.grid.file_ref(output/'freeze.json')
-    document(output/'predictions'/(inputs['cell_id']+'.prediction.json'),{**retained,'freeze_ref':freeze_ref})
+    document(output/'predictions'/(inputs['cell_id']+'.prediction.json'),a.prediction_document(freeze['cells'][0],retained,freeze,freeze_ref,a.now()))
     scored=a.score_predictions(output)
     assert scored['selected_denominator']==1
     assert all(scored['cells'][0]['metrics'][metric]['status']=='scored' for metric in a.METRICS)
@@ -493,3 +493,13 @@ def test_worker_entry_verification_does_not_hash_campaign_models_again(data, mon
         raise AssertionError("worker must use its existing read_gguf_metadata full hash")
     monkeypatch.setattr(a, "verify_retained_model_identities", forbidden)
     a.verify_retained_warmup_freeze(frozen, entry)
+
+@pytest.mark.parametrize('field,value', [('sha256','wrong-sha'),('architecture','wrong-architecture')])
+def test_worker_identity_error_reports_both_operands(data,field,value):
+    worker=SimpleNamespace(**vars(data['gguf']))
+    setattr(worker,field,value)
+    with pytest.raises(ValueError,match='GGUF worker identity differs') as error:
+        a.apply_retained_warmup_static_contract(data['scene'],data['inputs'],gguf=worker)
+    message=str(error.value)
+    assert 'sha256 expected=' in message and 'architecture expected=' in message
+    assert value in message and str(data['inputs']['native_model_ref']['path']) in message

@@ -15,3 +15,13 @@ Run `E:/anaconda/python.exe source/llama.cpp-annotation-control/build_overlay.py
 ## Qualification
 
 Version startup and scope/switch regression checks pass. No model performance measurement was run by the builder. New runtime identity and the annotation environment choice must be captured before comparison. The previous binary's semantic proof must not be reused for this runtime. Performance equivalence, observer overhead and variance remain to be measured by the experiment owner.
+
+## Frozen source bytes
+
+`tools/server/server-context.cpp` is a recorded compile input, not a formatting target.
+Its exact bytes (including the three trailing blank lines) must retain SHA-256
+`99f7aead4dd6b190292db2a14b2586d4076871a3710a49a94c71424b6f05501e`,
+as recorded in `evidence/source_manifest.json` and the build receipt.
+The repository attributes disable newline conversion for this file, and the adapter
+regression test checks both its digest and a Windows-style Git checkout.
+Do not trim or reformat frozen compile inputs; use a separate source copy for new builds.

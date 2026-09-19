@@ -433,6 +433,12 @@ def _multi_rank_cim_weight_backing_scenario():
         workload=workload,
         weights_resident=False,
     )
+    # This fixture adds eight GPU ranks; each needs its own explicit controller.
+    authoring = replace(authoring, runtime_profile=replace(
+        authoring.runtime_profile,
+        gpu_controllers={"gpu{}".format(index): scenario.runtime_profile.gpu_controllers["gpu0"]
+                         for index in range(world_size)},
+    ))
     mapping = plan_runtime_placement(
         authoring,
         PlacementPolicy(allow_cold_cim_streaming=True),

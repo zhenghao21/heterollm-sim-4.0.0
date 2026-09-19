@@ -76,7 +76,7 @@ def _read_stable_snapshot(path):
             return cached["raw"], dict(cached["ref"]), key
         raw = path.read_bytes()
         after = path.stat()
-        if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
+        if _cache_key(path, after) != key:
             continue
         digest = hashlib.sha256(raw).hexdigest()
         ref = {"path": str(path), "sha256": digest, "size_bytes": len(raw)}
@@ -95,8 +95,25 @@ def file_ref(path):
     cached = _FILE_CACHE.get(key)
     if cached is not None:
         return dict(cached["ref"])
-    _raw, ref, _key = _read_stable_snapshot(path)
-    return ref
+    if stat_result.st_size <= _MAX_CACHED_RAW_BYTES:
+        _raw, ref, _key = _read_stable_snapshot(path)
+        return ref
+    # Model files can be tens of GB: hashing must not allocate their full size.
+    for _ in range(2):
+        before = path.stat()
+        key = _cache_key(path, before)
+        digest = hashlib.sha256()
+        bytes_read = 0
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+                bytes_read += len(block)
+        if bytes_read != before.st_size or _cache_key(path, path.stat()) != key:
+            continue
+        ref = {"path": str(path), "sha256": digest.hexdigest(), "size_bytes": before.st_size}
+        _FILE_CACHE[key] = {"raw": None, "ref": ref}
+        return dict(ref)
+    raise ValueError("input changed during read: " + str(path))
 
 
 def read_document(path, expected_sha=None):
@@ -128,9 +145,10 @@ def write_new(path, document):
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(document)
     payload["content_sha256"] = stable_hash(payload)
+    # Reject malformed numeric/JSON values before reserving an evidence filename.
+    text = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     with path.open("x", encoding="utf-8", newline="\n") as stream:
-        json.dump(payload, stream, ensure_ascii=False, indent=2, allow_nan=False)
-        stream.write("\n")
+        stream.write(text)
     return file_ref(path)
 
 

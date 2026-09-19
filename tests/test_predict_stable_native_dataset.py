@@ -383,6 +383,7 @@ def test_zero_selected_cells_still_report_all_native_groups(tmp_path, monkeypatc
     report = adapter.score_predictions(out)
     assert set(report["by_model_deployment"]) == set(selector.GROUPS)
     assert all(group["native_selected_cells"] == 0 for group in report["by_model_deployment"].values())
+    assert report["strict_gate"]["verdict"] == "insufficient_evidence"
     assert not calls["run"]
 
 
@@ -1903,3 +1904,109 @@ def test_score_does_not_block_completed_prediction_on_legacy_identity_checks(tmp
     monkeypatch.setattr(adapter, "_verify_attempts", legacy_gate_removed)
     report = adapter.score_predictions(out)
     assert report["cells"][0]["metrics"]["engine_ttft_ms"]["status"] == "scored"
+
+@pytest.mark.parametrize("field", ["cell_id", "source_sha256", "selection_sha256", "model_key", "input_identity"])
+def test_default_lifecycle_rejects_wrong_prediction_identity(tmp_path, monkeypatch, field):
+    path, _, row, _ = fixture(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    adapter.freeze_selection(path, out, data_root=tmp_path)
+    result_path = out / "predictions" / (row["cell_id"] + ".prediction.json")
+    adapter.worker_cell(out / "freeze.json", row["cell_id"], result_path)
+    record, _ = adapter.grid.read_document(result_path)
+    record[field] = "wrong-candidate"
+    document(result_path, record)
+    for operation in (adapter.score_predictions, adapter.finish_manifest):
+        with pytest.raises(ValueError, match="identity"):
+            operation(out)
+    with pytest.raises(ValueError, match="identity"):
+        adapter.run_predictions(out, resume=True)
+    assert not list(out.glob("errors.*.json"))
+    assert not (out / "runs/coordinator.lock").exists()
+
+
+def test_default_score_rejects_resealed_different_truth(tmp_path, monkeypatch):
+    path, selection, _, _ = fixture(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    adapter.freeze_selection(path, out, data_root=tmp_path)
+    selection["selected_cells"][0]["native_actuals"][0]["metrics_ms"]["ttft"] = 9000
+    alternate = tmp_path / "alternate.json"
+    document(alternate, seal(selection))
+    with pytest.raises(ValueError, match="input SHA256 mismatch"):
+        adapter.score_predictions(out, native_report=alternate)
+
+
+def test_default_coordinator_lock_blocks_second_run_and_scoring(tmp_path, monkeypatch):
+    path, _, _, _ = fixture(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    adapter.freeze_selection(path, out, data_root=tmp_path)
+    lock = out / "runs/coordinator.lock"
+    document(lock, {"pid": 123})
+    with pytest.raises(FileExistsError):
+        adapter.run_predictions(out)
+    with pytest.raises(ValueError, match="coordinator"):
+        adapter.score_predictions(out)
+    assert lock.exists()
+
+
+@pytest.mark.parametrize("bad", [None, 0, -1, True, "12", float("nan"), float("inf")])
+@pytest.mark.parametrize("location", ["request", "aggregate"])
+def test_strict_scorer_classifies_invalid_numbers_as_insufficient_evidence(bad, location):
+    native = {"parallel": 1, "prompt_tokens": 4, "output_tokens": 2}
+    request = {"request_index": 0, "prompt_tokens": 4, "visible_output_tokens": 2,
+               "engine_request_begin_ns": 0, "engine_first_token_ns": 1_000_000,
+               "engine_last_token_ns": 2_000_000,
+               "engine_ttft_ms": 1, "engine_tpot_ms": 1, "engine_e2e_ms": 2}
+    prediction = {"status": "predicted", "native_answers_used": False, "requests": [request],
+                  "aggregate": {metric: {"median_ms": request[metric], "planned_requests": 1,
+                                         "observed_requests": 1, "missing_requests": 0}
+                                for metric in adapter.METRICS}}
+    if location == "request":
+        request["engine_ttft_ms"] = bad
+    else:
+        prediction["aggregate"]["engine_ttft_ms"]["median_ms"] = bad
+    result = adapter.strict_score_cell(prediction, native)
+    assert result["verdict"] == "insufficient_evidence"
+    assert any("positive and finite" in issue for issue in result["issues"])
+
+@pytest.mark.parametrize("package", ["tools", "heterollm_sim"])
+def test_predict_rejects_mixed_import_before_reading_model(tmp_path, monkeypatch, package):
+    import sys
+    monkeypatch.setitem(sys.modules, package + ".foreign_candidate",
+                        SimpleNamespace(__file__=str(tmp_path / "other_candidate.py")))
+    with pytest.raises(ValueError, match="mixed source import"):
+        adapter.predict_cell({})
+
+
+def test_default_predict_rejects_gguf_identity_before_simulation(tmp_path, monkeypatch):
+    _, selection, row, calls = fixture(tmp_path, monkeypatch)
+    inputs = adapter.static_inputs(row, selection, tmp_path)
+    inputs["config"]["model_sha256"] = "wrong-sha"
+    with pytest.raises(ValueError, match="GGUF SHA256 mismatch"):
+        adapter.predict_cell(inputs, strict_identity=False)
+    assert not calls["run"]
+
+
+def test_frozen_server_source_keeps_build_bytes_through_git_checkout(tmp_path):
+    """Formatting-only edits also invalidate the recorded native build identity."""
+    import hashlib
+    relative = Path("source/llama.cpp-annotation-control/tools/server/server-context.cpp")
+    source = adapter.ROOT / relative
+    manifest = json.loads((adapter.ROOT / "source/llama.cpp-annotation-control/evidence/source_manifest.json").read_text(encoding="utf-8"))
+    expected = manifest["modified_translation_units"]["tools/server/server-context.cpp"]["after_sha256"]
+    raw = source.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == expected, "frozen compile input changed (including EOF whitespace)"
+    repository = tmp_path / "checkout"
+    repository.mkdir()
+    def git(*args):
+        return subprocess.run(["git", "-C", str(repository), *args], check=True, capture_output=True)
+    git("init")
+    git("config", "core.autocrlf", "true")
+    (repository / ".gitattributes").write_bytes((adapter.ROOT / ".gitattributes").read_bytes())
+    target = repository / relative
+    target.parent.mkdir(parents=True)
+    target.write_bytes(raw)
+    git("add", ".gitattributes", relative.as_posix())
+    target.unlink()
+    git("checkout-index", "--", relative.as_posix())
+    assert target.read_bytes() == raw
+    assert hashlib.sha256(target.read_bytes()).hexdigest() == expected

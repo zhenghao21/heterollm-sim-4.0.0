@@ -144,3 +144,31 @@ def test_new_runtime_identity_is_required(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="actual new thread-control runtime"):
         grid.build_predictions(tmp_path / "protocol.json", tmp_path / "out", data_root=tmp_path)
     assert not calls["read"]
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), object()])
+def test_write_new_rejects_unserializable_evidence_without_partial_file(tmp_path, bad):
+    target = tmp_path / "result.json"
+    with pytest.raises((ValueError, TypeError)):
+        grid.write_new(target, {"metric": bad})
+    assert not target.exists()
+    grid.write_new(target, {"metric": 1})
+    before = target.read_bytes()
+    with pytest.raises(FileExistsError):
+        grid.write_new(target, {"metric": 2})
+    assert target.read_bytes() == before
+
+
+def test_large_file_reference_streams_and_reuses_unchanged_digest(tmp_path, monkeypatch):
+    import hashlib
+    target = tmp_path / "model.gguf"
+    payload = b"small stand-in for a large model"
+    target.write_bytes(payload)
+    monkeypatch.setattr(grid, "_MAX_CACHED_RAW_BYTES", 1)
+    def no_full_read(*args):
+        pytest.fail("large identity reads must stream")
+    monkeypatch.setattr(Path, "read_bytes", no_full_read)
+    expected = {"path": str(target.resolve()), "sha256": hashlib.sha256(payload).hexdigest(),
+                "size_bytes": len(payload)}
+    assert grid.file_ref(target) == expected
+    monkeypatch.setattr(Path, "open", no_full_read)
+    assert grid.file_ref(target) == expected
