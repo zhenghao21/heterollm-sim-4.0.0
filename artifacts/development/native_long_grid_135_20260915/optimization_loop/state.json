@@ -777,7 +777,7 @@
       }
     ]
   },
-  "baseline_role": "User-selected comparison starting point; incomplete execution closure and identity evidence do not establish accuracy acceptance.",
+  "baseline_role": "User-selected fixed R0 comparison starting point; canonical predict→score, identity, and boundary evidence are closed, but accuracy acceptance is not established (A: 29/131 cells passed, 102/131 failed; B: unvalidated; formal repeatability: false).",
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
   "best_candidate_status": "fixed_R0_baseline_by_user_canonical_predict_score_complete",
   "current_semantic_candidate": null,
