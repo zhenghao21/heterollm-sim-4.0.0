@@ -1,7 +1,0 @@
-{
-  "schema": "graph-gap-host-reference/v1",
-  "pass": true,
-  "checked_stage_elements": 83886080,
-  "mock_loader_pass": true,
-  "gpu_access": false
-}

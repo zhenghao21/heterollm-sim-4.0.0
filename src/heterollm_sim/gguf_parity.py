@@ -7,10 +7,18 @@ from pathlib import Path
 import struct
 import os
 from typing import Any, BinaryIO, Mapping
+import json
 
 
 class GGUFError(ValueError):
     pass
+
+
+# Sidecars are deliberately versioned independently from R0 evidence.  A
+# parser change must invalidate an old directory rather than silently reusing
+# geometry produced by a different parser.
+GGUF_METADATA_CACHE_SCHEMA = "gguf-metadata-cache/v1"
+GGUF_METADATA_PARSER_SOURCE = "heterollm_sim.gguf_parity:gguf-directory-parser/v1"
 
 
 _FILE_TYPE_NAMES = {
@@ -176,10 +184,10 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
-def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
+def _read_gguf_metadata(path: str | Path, *, hash_payload: bool = True) -> GGUFMetadata:
     p = Path(path)
     with p.open("rb") as raw:
-        f = _HashedReadStream(raw)
+        f = _HashedReadStream(raw) if hash_payload else raw
         initial_stat = os.fstat(f.fileno())
         head = f.read(24)
         if len(head) != 24 or head[:4] != b"GGUF":
@@ -230,21 +238,25 @@ def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
         for tensor in directory:
             if data_start + tensor.offset + tensor.n_bytes > file_size:
                 raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
-        # The parser and digest consume the same returned bytes. Rewinding the
-        # same handle would still allow metadata from one read to be paired
-        # with a different subsequent read's digest while file stats match.
-        # Continue through alignment padding and payload; do not reread headers.
-        for _chunk in iter(lambda: f.read(1024 * 1024), b""):
-            pass
-        digest = f.digest
-        bytes_read = f.bytes_read
+        # Full identity mode hashes the exact bytes returned to the parser.
+        # Metadata-only mode stops after the directory and never touches the
+        # tensor payload; the sidecar loader validates size/mtime/file-id.
+        if hash_payload:
+            for _chunk in iter(lambda: f.read(1024 * 1024), b""):
+                pass
+            digest = f.digest.hexdigest()
+            bytes_read = f.bytes_read
+        else:
+            digest = ""
+            bytes_read = None
         final_stat = os.fstat(f.fileno())
         path_stat = p.stat()
         # Windows fstat/stat can differ in timestamp semantics; ctime
         # is not a portable content-change clock. Check identity, size and mtime.
         identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size,
                                  stat.st_mtime_ns)
-        if (bytes_read != file_size or identity(initial_stat) != identity(final_stat)
+        if ((hash_payload and bytes_read != file_size)
+                or identity(initial_stat) != identity(final_stat)
                 or identity(final_stat) != identity(path_stat)):
             raise GGUFError(
                 f"GGUF changed during metadata/hash read: {p}; "
@@ -269,12 +281,184 @@ def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
     trunk_layers = raw_layers - nextn if raw_layers is not None else None
     if trunk_layers is not None and trunk_layers <= 0:
         raise GGUFError("GGUF block_count is not larger than nextn_predict_layers")
-    return GGUFMetadata(str(p.resolve()), digest.hexdigest(), int(version), int(tensor_count), int(kv_count),
+    return GGUFMetadata(str(p.resolve()), digest, int(version), int(tensor_count), int(kv_count),
                         str(arch) if arch is not None else None, trunk_layers,
                         _as_int(pick("embedding_length")), _as_int(pick("attention.head_count")),
                         _as_int(pick("attention.head_count_kv")), _as_int(vocab), _as_int(pick("context_length")),
                         _FILE_TYPE_NAMES.get(int(file_type)) if file_type is not None else None,
                         _as_int(file_type), metadata, tuple(directory))
+
+
+def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
+    """Read and hash a GGUF in the historical, strict default mode."""
+    return _read_gguf_metadata(path, hash_payload=True)
+
+
+def read_gguf_metadata_only(path: str | Path) -> GGUFMetadata:
+    """Read header/metadata/tensor directory without reading tensor payload."""
+    return _read_gguf_metadata(path, hash_payload=False)
+
+
+def _cache_file_id(stat: os.stat_result) -> str:
+    # st_ino is the Windows file index exposed by Python; include st_dev for
+    # files moved between volumes and keep the JSON representation portable.
+    return f"{int(stat.st_dev)}:{int(stat.st_ino)}"
+
+
+def _cache_source_stat(stat: os.stat_result) -> tuple[int, int, int, int]:
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+
+def _cache_payload(document: Mapping[str, Any]) -> bytes:
+    return json.dumps(document, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def _parser_source_sha256() -> str:
+    return sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def _metadata_cache_document(gguf: GGUFMetadata, stat: os.stat_result,
+                             *, parser_source: str = GGUF_METADATA_PARSER_SOURCE) -> dict[str, Any]:
+    return {
+        "schema": GGUF_METADATA_CACHE_SCHEMA,
+        "parser": {"schema_version": 1, "source_identity": parser_source,
+                    "source_sha256": _parser_source_sha256()},
+        "source": {"path": str(Path(gguf.path).resolve()), "size_bytes": int(stat.st_size),
+                   "mtime_ns": int(stat.st_mtime_ns), "file_id": _cache_file_id(stat),
+                   "sha256": gguf.sha256},
+        "gguf": {"path": gguf.path, "sha256": gguf.sha256, "version": gguf.version,
+                 "tensor_count": gguf.tensor_count, "metadata_kv_count": gguf.metadata_kv_count,
+                 "architecture": gguf.architecture, "n_layer": gguf.n_layer,
+                 "n_embd": gguf.n_embd, "n_head": gguf.n_head, "n_head_kv": gguf.n_head_kv,
+                 "vocab_size": gguf.vocab_size, "context_length": gguf.context_length,
+                 "quantization": gguf.quantization, "file_type": gguf.file_type,
+                 "metadata": dict(gguf.metadata),
+                 "tensor_directory": [dict(name=t.name, shape=list(t.shape), type_id=t.type_id,
+                    type_name=t.type_name, block_size=t.block_size, n_bytes=t.n_bytes, offset=t.offset)
+                    for t in gguf.tensor_directory]},
+    }
+
+
+def write_gguf_metadata_cache(gguf_path: str | Path, cache_path: str | Path | None = None) -> Path:
+    """Build a sidecar, hashing the source exactly once during creation."""
+    source = Path(gguf_path).resolve(strict=True)
+    target = Path(cache_path) if cache_path is not None else Path(str(source) + ".metadata.json")
+    if target.resolve() == source or (target.exists() and target.samefile(source)):
+        raise GGUFError("GGUF metadata cache output must not overwrite source GGUF")
+    before = source.stat()
+    gguf = read_gguf_metadata(source)
+    stat = source.stat()
+    if _cache_source_stat(before) != _cache_source_stat(stat):
+        raise GGUFError("GGUF changed during metadata cache creation")
+    document = _metadata_cache_document(gguf, stat)
+    document["content_sha256"] = sha256(_cache_payload(document)).hexdigest()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return target
+
+
+def gguf_metadata_digest(gguf: GGUFMetadata) -> str:
+    """Digest only the metadata and tensor directory used by the simulator."""
+    payload = {
+        "metadata": dict(gguf.metadata),
+        "tensor_directory": [
+            {"name": tensor.name, "shape": list(tensor.shape), "type_id": tensor.type_id,
+             "type_name": tensor.type_name, "block_size": tensor.block_size,
+             "n_bytes": tensor.n_bytes, "offset": tensor.offset}
+            for tensor in gguf.tensor_directory
+        ],
+    }
+    return sha256(_cache_payload(payload)).hexdigest()
+
+
+def _metadata_from_cache(document: Mapping[str, Any], source: Path) -> GGUFMetadata:
+    data = document.get("gguf")
+    if not isinstance(data, Mapping):
+        raise GGUFError("GGUF metadata cache missing gguf section")
+    try:
+        if (not isinstance(data.get("metadata"), dict)
+                or not isinstance(data.get("tensor_directory"), list)
+                or data.get("path") != str(source)):
+            raise ValueError("invalid metadata, directory or source path")
+        for field in ("version", "tensor_count", "metadata_kv_count"):
+            if type(data.get(field)) is not int:
+                raise ValueError("invalid " + field)
+        for field in ("n_layer", "n_embd", "n_head", "n_head_kv", "vocab_size", "context_length", "file_type"):
+            if data.get(field) is not None and type(data[field]) is not int:
+                raise ValueError("invalid " + field)
+        for item in data["tensor_directory"]:
+            if (not isinstance(item, dict) or not isinstance(item.get("shape"), list)
+                    or any(type(x) is not int for x in item["shape"])
+                    or any(type(item.get(field)) is not int for field in ("type_id", "block_size", "n_bytes", "offset"))
+                    or not isinstance(item.get("name"), str) or not isinstance(item.get("type_name"), str)):
+                raise ValueError("invalid tensor")
+        tensors = tuple(GGUFTensor(str(item["name"]), tuple(int(x) for x in item["shape"]), int(item["type_id"]),
+            str(item["type_name"]), int(item["block_size"]), int(item["n_bytes"]), int(item["offset"]))
+            for item in data["tensor_directory"])
+        if len(tensors) != data["tensor_count"]:
+            raise ValueError("tensor count mismatch")
+        return GGUFMetadata(str(source), str(data["sha256"]), int(data["version"]), int(data["tensor_count"]),
+            int(data["metadata_kv_count"]), data.get("architecture"), _as_int(data.get("n_layer")),
+            _as_int(data.get("n_embd")), _as_int(data.get("n_head")), _as_int(data.get("n_head_kv")),
+            _as_int(data.get("vocab_size")), _as_int(data.get("context_length")), data.get("quantization"),
+            _as_int(data.get("file_type")), dict(data.get("metadata") or {}), tensors)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise GGUFError("invalid GGUF metadata cache geometry") from exc
+
+
+def read_gguf_metadata_cache(gguf_path: str | Path, cache_path: str | Path | None = None,
+                             *, strict: bool = False) -> GGUFMetadata:
+    """Load a validated sidecar; strict mode rehashes the GGUF payload."""
+    source = Path(gguf_path).resolve(strict=True)
+    before = source.stat()
+    target = Path(cache_path) if cache_path is not None else Path(str(source) + ".metadata.json")
+    try:
+        document = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GGUFError(f"cannot read GGUF metadata cache: {target}") from exc
+    if not isinstance(document, dict):
+        raise GGUFError("GGUF metadata cache must be a JSON object")
+    if document.get("schema") != GGUF_METADATA_CACHE_SCHEMA:
+        raise GGUFError("unsupported GGUF metadata cache schema")
+    parser = document.get("parser")
+    if (not isinstance(parser, Mapping)
+            or type(parser.get("schema_version")) is not int or parser.get("schema_version") != 1
+            or parser.get("source_identity") != GGUF_METADATA_PARSER_SOURCE
+            or parser.get("source_sha256") != _parser_source_sha256()):
+        raise GGUFError("GGUF metadata cache parser identity mismatch")
+    actual_content = document.get("content_sha256")
+    unsigned = dict(document); unsigned.pop("content_sha256", None)
+    try:
+        expected_content = sha256(_cache_payload(unsigned)).hexdigest()
+    except (ValueError, TypeError) as exc:
+        raise GGUFError("invalid GGUF metadata cache JSON values") from exc
+    if actual_content != expected_content:
+        raise GGUFError("GGUF metadata cache content hash mismatch")
+    source_info = document.get("source")
+    if not isinstance(source_info, Mapping):
+        raise GGUFError("GGUF metadata cache missing source identity")
+    if (any(type(source_info.get(field)) is not int for field in ("size_bytes", "mtime_ns"))
+            or any(not isinstance(source_info.get(field), str) for field in ("path", "file_id", "sha256"))):
+        raise GGUFError("invalid GGUF metadata cache source identity")
+    stat = source.stat()
+    expected = (str(source), int(stat.st_size), int(stat.st_mtime_ns), _cache_file_id(stat))
+    actual = (str(source_info.get("path")), int(source_info.get("size_bytes", -1)),
+              int(source_info.get("mtime_ns", -1)), str(source_info.get("file_id")))
+    if expected != actual:
+        raise GGUFError(f"GGUF metadata cache source identity mismatch: {source}")
+    gguf = _metadata_from_cache(document, source)
+    if str(source_info.get("sha256")) != gguf.sha256:
+        raise GGUFError("GGUF metadata cache source SHA256 binding mismatch")
+    if strict:
+        fresh = read_gguf_metadata(source)
+        if fresh.sha256 != gguf.sha256:
+            raise GGUFError("GGUF metadata cache source SHA256 mismatch")
+        if _cache_payload(document["gguf"]) != _cache_payload(_metadata_cache_document(fresh, source.stat())["gguf"]):
+            raise GGUFError("GGUF metadata cache geometry mismatch")
+    if _cache_source_stat(before) != _cache_source_stat(source.stat()):
+        raise GGUFError("GGUF changed during metadata cache load")
+    return gguf
 
 
 def _expected_geometry(model: Any) -> dict[str, int | str | None]:
@@ -499,4 +683,7 @@ def build_model_from_gguf(gguf: GGUFMetadata):
     return ModelSpec(name="GGUF-" + gguf.architecture, graph=graph, metadata=graph.attributes)
 
 
-__all__ = ["GGUFError", "GGUFTensor", "GGUFMetadata", "read_gguf_metadata", "compare_gguf_to_model", "assert_gguf_parity", "build_model_from_gguf"]
+__all__ = ["GGUFError", "GGUFTensor", "GGUFMetadata", "GGUF_METADATA_CACHE_SCHEMA",
+           "GGUF_METADATA_PARSER_SOURCE", "read_gguf_metadata", "read_gguf_metadata_only",
+           "write_gguf_metadata_cache", "read_gguf_metadata_cache", "gguf_metadata_digest", "compare_gguf_to_model",
+           "assert_gguf_parity", "build_model_from_gguf"]

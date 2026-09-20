@@ -9,7 +9,7 @@ from heterollm_sim.conversion_work import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUND = ROOT / 'artifacts/development/native_long_grid_135_20260915/optimization_loop/round_016'
+GEOMETRY_FIXTURE = ROOT / 'tests/fixtures/baseline_evidence/kernel_launch_geometry.json'
 
 
 def contract(**changes):
@@ -142,14 +142,11 @@ def test_locked_source_hashes_if_source_checkout_available():
 
 
 def test_completed_conversion_launch_geometry_crosscheck_if_evidence_available():
-    # Only explicitly completed evidence roots. Never scans active collector/runs.
-    dirs = [ROUND / 'collection_r2/analysis_0001', ROUND / 'collection_r3/first_pair_analysis']
-    paths = [path for directory in dirs for path in directory.rglob('mapped_calls.json')]
-    if not paths:
-        pytest.skip('local completed trace evidence not present')
+    # Static geometry only: no timing data or active collector dependencies.
+    cases = json.loads(GEOMETRY_FIXTURE.read_text(encoding='utf-8'))['conversion_cases']
+    assert len(cases) == 9
     checked = 0
-    for path in paths:
-        doc = json.loads(path.read_text(encoding='utf-8-sig'))
+    for doc in cases:
         if any(c.get('issues') for c in doc['calls']):
             continue
         config = doc['config']

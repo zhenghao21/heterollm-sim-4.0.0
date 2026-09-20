@@ -1,9 +1,0 @@
-{
-  "status": "identity_verified_not_executed",
-  "config": "dev_Q5_0_m1_k896",
-  "mode": "event",
-  "device_access": false,
-  "graph_compute_calls": 0,
-  "frozen_files": 73,
-  "manifest_sha256": "4795d8d2945dc082b94fa632ee81c94d3a86f68a7279affe6c67cf9c66e833d1"
-}

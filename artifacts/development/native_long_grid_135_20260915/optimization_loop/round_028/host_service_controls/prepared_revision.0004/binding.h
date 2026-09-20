@@ -1,2 +1,0 @@
-#pragma once
-#define CONTROL_PROTOCOL_SHA "053fcbc067bd47bcfd513ac3dcd32023b3de828e3e3f9e6c9603b1e1a7bb42e7"

@@ -1,8 +1,0 @@
-{
-  "schema": "sampling-real-builder-replan-check/v1",
-  "sampling_policy_survived": true,
-  "mapping_validation_passed": true,
-  "native_executed": false,
-  "simulation_executed": false,
-  "timing_values_used": false
-}

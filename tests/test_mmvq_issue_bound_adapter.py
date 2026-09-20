@@ -187,7 +187,7 @@ def test_initial_freeze_cli_accepts_switch(tmp_path, monkeypatch):
 def test_real_131_static_cells_prepare_with_actual_pdf(tmp_path):
     """Explicit local PDF opt-in; reads static freeze fields only, never predictions."""
     path = os.environ.get("MMVQ_TEST_HARDWARE_DOCUMENT")
-    freeze_path = ROUND / "round_021/physical/freeze.json"
+    freeze_path = ROUND / "round_000/on/freeze.json"
     if not path or not freeze_path.is_file():
         pytest.skip("set MMVQ_TEST_HARDWARE_DOCUMENT to a local PDF path or download for real 131-cell static preparation")
     frozen = json.loads(freeze_path.read_text(encoding="utf-8"))
@@ -196,8 +196,8 @@ def test_real_131_static_cells_prepare_with_actual_pdf(tmp_path):
         "static_hardware": {"frozen_hardware": cell["static_inputs"]["hardware_snapshot"]},
         "native_runtime_refs": cell["static_inputs"]["runtime_module_refs"]}
         for cell in frozen["cells"]]
-    # R21 physical is intentionally CTA-off. Build a test-only static binding
-    # for the new opt-in freeze contract; do not mutate the frozen evidence.
+    # Build a test-only static binding for the explicit CTA opt-in contract;
+    # do not mutate the frozen baseline evidence.
     binding_cells = {}
     for cell in frozen["cells"]:
         evidence = json.loads(json.dumps(cell["static_inputs"]["gpu_invocation_evidence"]))

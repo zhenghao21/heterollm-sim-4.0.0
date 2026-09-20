@@ -1,8 +1,0 @@
-{
-  "status": "implementation_and_policy_snapshot_guarded",
-  "tests_from_worker": 78,
-  "root_combined_core_and_acceptance_tests": 120,
-  "scope": "identity before/after; canonical policy and state snapshots; partial accuracy/evidence flags; no actual rerun",
-  "native_remeasured": false,
-  "B_gate": "unvalidated"
-}

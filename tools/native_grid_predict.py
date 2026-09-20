@@ -28,7 +28,8 @@ for import_root in (ROOT, ROOT / "src"):
     sys.path.insert(0, str(import_root))
 
 from heterollm_sim import reporting
-from heterollm_sim.gguf_parity import read_gguf_metadata, build_model_from_gguf
+from heterollm_sim.gguf_parity import (read_gguf_metadata, read_gguf_metadata_cache,
+    build_model_from_gguf)
 from heterollm_sim.serde import stable_hash
 from tools.native_llama_compare import build_matching_scenario, _simulator_request_timing
 
@@ -122,10 +123,17 @@ def read_document(path, expected_sha=None):
     key = _cache_key(path, stat_result)
     cached_document = _DOCUMENT_CACHE.get(key)
     if cached_document is not None:
-        document, ref = cached_document
-        if expected_sha and ref["sha256"] != expected_sha:
-            raise ValueError("input SHA256 mismatch: " + str(path))
-        return copy.deepcopy(document), dict(ref)
+        document, ref, cached_raw = cached_document
+        # Direct test/producer rewrites can retain the same Windows stat
+        # tuple. Small JSON evidence is cheap to compare and must not return
+        # stale content merely because mtime/file-id did not move.
+        if cached_raw is not None and path.read_bytes() != cached_raw:
+            cached_document = None
+            _FILE_CACHE.pop(key, None)
+        else:
+            if expected_sha and ref["sha256"] != expected_sha:
+                raise ValueError("input SHA256 mismatch: " + str(path))
+            return copy.deepcopy(document), dict(ref)
 
     raw, ref, key = _read_stable_snapshot(path)
     if expected_sha and ref["sha256"] != expected_sha:
@@ -136,7 +144,7 @@ def read_document(path, expected_sha=None):
         raise
     if not isinstance(document, dict):
         raise ValueError("JSON object required: " + str(path))
-    _DOCUMENT_CACHE[key] = (copy.deepcopy(document), dict(ref))
+    _DOCUMENT_CACHE[key] = (copy.deepcopy(document), dict(ref), raw if len(raw) <= _MAX_CACHED_RAW_BYTES else None)
     return document, ref
 
 
@@ -241,6 +249,39 @@ def prompt_for(cell, prompt_models, model_path, data_root):
                "prompt_tokens": p, "prompt_token_ids_sha256": ids_hash}
 
 
+def _read_model_metadata(model_path):
+    """Use a validated sidecar when present; create no implicit evidence files."""
+    sidecar = Path(str(model_path) + ".metadata.json")
+    if sidecar.is_file():
+        return read_gguf_metadata_cache(model_path, sidecar)
+    return read_gguf_metadata(model_path)
+
+
+def model_metadata_cache_key(model_path):
+    """Invalidate in-process model geometry when the GGUF or sidecar changes."""
+    # Unit callers may inject a parsed GGUF for a synthetic path; production
+    # reads still validate the real file in read_gguf_metadata/_cache.
+    path = Path(model_path).resolve()
+    try:
+        source = path.stat()
+    except OSError:
+        source = None
+    sidecar = Path(str(path) + ".metadata.json")
+    try:
+        sidecar_stat = sidecar.stat()
+    except OSError:
+        sidecar_stat = None
+    fingerprint = lambda stat: None if stat is None else (
+        int(stat.st_dev), int(stat.st_ino), int(stat.st_size), int(stat.st_mtime_ns))
+    return str(path), fingerprint(source), fingerprint(sidecar_stat)
+
+
+def gguf_metadata_cache_ref(model_path):
+    """Return the sidecar file identity for prediction provenance, if present."""
+    sidecar = Path(str(model_path) + ".metadata.json")
+    return file_ref(sidecar) if sidecar.is_file() else None
+
+
 def configuration(cell):
     config = {"ctx": 2048, "parallel": cell.get("parallel", 1), "batch": 64,
               "ubatch": 64, "threads": 16, "gpu_layers": cell.get("gpu_layers", -1),
@@ -281,10 +322,10 @@ def predict_cell(cell, *, prompt_models, data_root, hardware, runtime, model_cac
     p, prompt_identity = prompt_for(cell, prompt_models, model_path, data_root)
     if p + output > 2048:
         raise ValueError("prompt + output exceeds per-slot context")
-    cache_key = str(model_path)
+    cache_key = model_metadata_cache_key(model_path)
     if cache_key not in model_cache:
         try:
-            gguf = read_gguf_metadata(model_path)
+            gguf = _read_model_metadata(model_path)
             model_cache[cache_key] = (gguf, build_model_from_gguf(gguf))
         except Exception as exc:
             model_cache[cache_key] = exc
@@ -318,7 +359,11 @@ def predict_cell(cell, *, prompt_models, data_root, hardware, runtime, model_cac
     complete = (len(requests) == config["parallel"]
                 and all(r["visible_output_tokens"] == output for r in requests)
                 and all(r[k] is not None for r in requests for k in METRICS))
-    identity = {"model": {"path": str(model_path), "sha256": gguf.sha256}, "prompt": prompt_identity,
+    model_identity = {"path": str(model_path), "sha256": gguf.sha256}
+    sidecar_ref = gguf_metadata_cache_ref(model_path)
+    if sidecar_ref is not None:
+        model_identity["metadata_sidecar"] = sidecar_ref
+    identity = {"model": model_identity, "prompt": prompt_identity,
         "configuration": config, "requested_output_tokens": output,
         "native_unified_total_context": 2048 * config["parallel"], "simulator_slot_context": 2048,
         "runtime_environment": dict(environment),

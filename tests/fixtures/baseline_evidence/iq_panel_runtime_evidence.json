@@ -1,0 +1,124 @@
+{
+  "schema": "cpu-iq-panel-historical-dispatch-audit/v1",
+  "created_utc": "2026-09-15T13:54:39.311995+00:00",
+  "status": "unknown",
+  "variable": "GGML_NO_IQ_PANEL",
+  "historical_state": "unknown",
+  "default_unset_assumption_is_not_evidence": true,
+  "today_environment_read": false,
+  "new_native_run": false,
+  "selected_cpu27_cells": 20,
+  "selection_ref_as_frozen": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
+    "sha256": "cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5",
+    "size_bytes": 9290976
+  },
+  "native_source_freeze_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\freeze.json",
+    "sha256": "b192ce05b20d2bd563b912a655ce05a98f022e2b0933287c85d736d4c5541c28",
+    "bytes": 512983
+  },
+  "sampled_raw_ref": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\supplement_sse_v2\\native\\qwen38_p1536_o128_c1__fixed_runtime__b00.json",
+    "sha256": "400d4fcc4054700369c637e76e2aa99d837c6b259742f679c3ef2dc74a81586f",
+    "bytes": 973567
+  },
+  "freeze_environment_recorded_keys": [
+    "CUDA_MODULE_LOADING",
+    "CUDA_VISIBLE_DEVICES",
+    "GGML_CPU_DISABLE_FUSION",
+    "GGML_CPU_OPERATOR_TRACE",
+    "GGML_CUDA_CUBLAS_COMPUTE_TYPE",
+    "GGML_CUDA_DISABLE_FUSION",
+    "GGML_CUDA_DISABLE_GRAPHS",
+    "GGML_CUDA_ENABLE_UNIFIED_MEMORY",
+    "GGML_CUDA_GRAPH_OPT",
+    "GGML_CUDA_NO_PINNED",
+    "GGML_CUDA_REGISTER_HOST",
+    "GGML_OP_OFFLOAD_MIN_BATCH",
+    "LLAMA_ENGINE_TOKEN_TIMES",
+    "LLAMA_GRAPH_REUSE_DISABLE",
+    "LLAMA_TRACE_ANNOTATIONS",
+    "OMP_NUM_THREADS"
+  ],
+  "raw_execution_environment_recorded_keys": [
+    "CUDA_MODULE_LOADING",
+    "CUDA_VISIBLE_DEVICES",
+    "GGML_CPU_DISABLE_FUSION",
+    "GGML_CPU_OPERATOR_TRACE",
+    "GGML_CUDA_CUBLAS_COMPUTE_TYPE",
+    "GGML_CUDA_DISABLE_FUSION",
+    "GGML_CUDA_DISABLE_GRAPHS",
+    "GGML_CUDA_ENABLE_UNIFIED_MEMORY",
+    "GGML_CUDA_GRAPH_OPT",
+    "GGML_CUDA_NO_PINNED",
+    "GGML_CUDA_REGISTER_HOST",
+    "GGML_OP_OFFLOAD_MIN_BATCH",
+    "LLAMA_ENGINE_TOKEN_TIMES",
+    "LLAMA_GRAPH_REUSE_DISABLE",
+    "LLAMA_TRACE_ANNOTATIONS",
+    "OMP_NUM_THREADS"
+  ],
+  "runtime_before_keys": [
+    "schema",
+    "status",
+    "pid",
+    "exe",
+    "method",
+    "captured_at",
+    "artifacts",
+    "current_modules",
+    "actual_modules",
+    "module_sha256_set",
+    "errors",
+    "limitations",
+    "process_identity",
+    "module_count",
+    "module_identity_sha256",
+    "completed_at"
+  ],
+  "evidence": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\native_repeatability_experiment.py",
+      "lines": [
+        52,
+        57
+      ],
+      "finding": "ENV_KEYS omits GGML_NO_IQ_PANEL."
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tools\\native_repeatability_experiment.py",
+      "lines": [
+        172,
+        179
+      ],
+      "finding": "Child inherits all os.environ values but only ENV_KEYS are recorded. Missing capture is not proof of unset."
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\ggml\\src\\ggml-cpu\\iqp.cpp",
+      "lines": [
+        1066,
+        1069
+      ],
+      "finding": "Any presence of GGML_NO_IQ_PANEL disables IQ panel, including a value of 0."
+    }
+  ],
+  "native_iqp_compiled_avx2": {
+    "compile_returncode": 0,
+    "has_avx2_define": true,
+    "iqp_source_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\ggml\\src\\ggml-cpu\\iqp.cpp",
+      "sha256": "7fc807378bd3632ee40cbc7203222ba1b3988d4fb5f9d5b11f0a7c965c0acf0d"
+    },
+    "cpu_backend_ref_as_frozen": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\build-native-thread-control\\bin\\ggml-cpu.dll",
+      "sha256": "6ead72f75befab54b1afdff993c8bbd780b83cb307f21f6a75ad21cdb33c4232",
+      "bytes": 958464
+    },
+    "build_receipt_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-native-thread-control\\evidence\\build_receipt.json",
+      "sha256": "c807d0b2cd1bdd8f7758b6078b57517da348ad0d95322284619a1b3fd0a41035"
+    }
+  },
+  "conclusion_zh": "可以确认此运行库编入AVX2 IQ panel分支，无法从已采集资料确认历史禁用变量是否存在。默认保持unknown；只有显式选择默认未设假设，才允许条件性消融。不能使用目标LLM时延推定开关。"
+}

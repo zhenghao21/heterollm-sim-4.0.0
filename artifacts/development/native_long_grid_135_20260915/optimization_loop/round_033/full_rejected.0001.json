@@ -1,9 +1,0 @@
-{
-  "schema": "r33-phase-failure/v1",
-  "created_utc": "2026-09-17T06:09:23.932610+00:00",
-  "phase": "full",
-  "status": "failed",
-  "reason": "EvidenceError: changed evidence: F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_033\\off\\evidence\\nvidia-rtx-blackwell-gpu-architecture.pdf",
-  "partial_results_preserved": true,
-  "automatic_retry": false
-}

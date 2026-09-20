@@ -1,3 +1,0 @@
-negative_legacy_abi.cpp
-F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\artifacts\development\native_long_grid_135_20260915\optimization_loop\round_024\mmvq_device_probe\r6_shared_abi\negative_legacy_abi.cpp(2): error C2733: “heterollm_mmvq_probe_convert_q8_1”: 无法重载具有外部 "C" 链接的函数
-F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\artifacts\development\native_long_grid_135_20260915\optimization_loop\round_024\mmvq_device_probe\r6_shared_abi\mmvq_probe_abi.h(4): note: 参见“heterollm_mmvq_probe_convert_q8_1”的声明

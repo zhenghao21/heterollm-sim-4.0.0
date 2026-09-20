@@ -720,7 +720,7 @@ def test_existing_overlay_build_audit_is_verified_without_large_binary_hashes(mo
 @pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
 def test_existing_recurrent_contract_is_rederived_and_bound_to_captured_runtime(tmp_path):
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
-    contract_path = base / "optimization_loop/round_001/recurrent_source_contract.json"
+    contract_path = base / "optimization_loop/round_000/dependencies/recurrent_source_contract.json"
     if not contract_path.exists():
         pytest.skip("local recorded recurrent source contract unavailable")
     selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
@@ -739,7 +739,7 @@ def test_existing_recurrent_contract_is_rederived_and_bound_to_captured_runtime(
 
 def local_iq_panel_contract():
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
-    contract = base / "optimization_loop/round_002/iq_panel_source_contract.json"
+    contract = adapter.ROOT / "tests/fixtures/baseline_evidence/iq_panel_source_contract.json"
     if not contract.exists():
         pytest.skip("local native IQ panel source contract unavailable")
     selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
@@ -897,7 +897,7 @@ def test_slot_order_treatment_cannot_be_enabled_during_resume(tmp_path, monkeypa
 
 def local_slot_order_contract():
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
-    path = base / "optimization_loop/round_003/slot_order_source_contract.json"
+    path = base / "optimization_loop/round_000/dependencies/slot_order_source_contract.json"
     if not path.exists():
         pytest.skip("local recorded slot-order source contract unavailable")
     selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
@@ -1203,7 +1203,7 @@ def test_uncovered_host_offload_binding_is_retained_but_never_enabled(tmp_path, 
 @pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
 def test_recorded_host_offload_binding_uses_current_runtime_and_captured_threshold_without_native_execution():
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
-    audit = base / "optimization_loop/round_004/runtime_source_binding_structural_audit.json"
+    audit = base / "optimization_loop/round_000/dependencies/runtime_source_binding_structural_audit.json"
     if not audit.is_file():
         pytest.skip("recorded host-offload build audit unavailable")
     selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
@@ -1369,7 +1369,7 @@ def test_tensor_storage_summary_preserves_explicit_bytes_and_does_not_sum_table_
 @pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
 def test_recorded_tensor_storage_contract_rederives_all_four_current_module_paths():
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
-    source_path = base / "optimization_loop/round_005/tensor_storage_source_contract.json"
+    source_path = base / "optimization_loop/round_000/dependencies/tensor_storage_source_contract.json"
     if not source_path.exists():
         pytest.skip("recorded tensor storage contract unavailable")
     selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
@@ -1391,7 +1391,7 @@ def test_recorded_tensor_storage_contract_rederives_all_four_current_module_path
 @pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
 def test_recorded_tensor_storage_rejects_forged_rule_even_if_document_is_resealed(tmp_path):
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
-    source = base / "optimization_loop/round_005/tensor_storage_source_contract.json"
+    source = base / "optimization_loop/round_000/dependencies/tensor_storage_source_contract.json"
     if not source.exists():
         pytest.skip("recorded tensor storage contract unavailable")
     contract, _ = adapter.grid.read_document(source)
@@ -1406,7 +1406,7 @@ def test_recorded_tensor_storage_rejects_forged_rule_even_if_document_is_reseale
 @pytest.mark.skipif(not (adapter.ROOT / "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json").is_file(), reason="requires the fixed local native evidence archive; not a portable unit fixture")
 def test_recorded_tensor_storage_rejects_selected_cpu_module_mismatch():
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
-    source = base / "optimization_loop/round_005/tensor_storage_source_contract.json"
+    source = base / "optimization_loop/round_000/dependencies/tensor_storage_source_contract.json"
     if not source.exists():
         pytest.skip("recorded tensor storage contract unavailable")
     selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
@@ -1673,7 +1673,7 @@ def test_gpu_invocation_real_gguf_import_nested_identity_and_final_replan(tmp_pa
 def local_gpu_invocation_contract(*, mmq=False):
     base = adapter.ROOT / "artifacts/development/native_long_grid_135_20260915"
     name = "derived_source_contract_mmq_optional.json" if mmq else "derived_source_contract.json"
-    source = base / "optimization_loop/round_006/candidate_src" / name
+    source = adapter.ROOT / "tests/fixtures/baseline_evidence" / name
     if not source.is_file():
         pytest.skip("recorded GPU invocation source contract unavailable")
     return base, source
@@ -1685,7 +1685,7 @@ def import_actual_gguf_audited_header(model_key):
     import inspect
     from heterollm_sim import gguf_parity
     base, _ = local_gpu_invocation_contract()
-    audit, _ = adapter.grid.read_document(base / "optimization_loop/round_006/gpu_invocation_dispatch_audit.json")
+    audit, _ = adapter.grid.read_document(adapter.ROOT / "tests/fixtures/baseline_evidence/model_header_evidence.json")
     selection, _ = adapter.grid.read_document(base / "stable_native_dataset.json")
     evidence = next(item for item in audit["model_header_evidence"] if item["model_key"] == model_key)
     row = next(item for item in adapter.selected_rows(selection) if item["model_key"] == model_key)
@@ -1751,7 +1751,7 @@ def test_gpu_invocation_real_contract_rederives_source_runtime_and_driver_probe(
     # then create a new contract from the currently locked native sources.
     from heterollm_sim.llama_gpu_invocations import derive_llama_gpu_invocation_contract
     previous, _ = adapter.grid.read_document(source)
-    runtime_path = base / "optimization_loop/round_004/runtime_source_binding_structural_audit.json"
+    runtime_path = base / "optimization_loop/round_000/dependencies/runtime_source_binding_structural_audit.json"
     runtime = adapter.verified_host_offload_source_contract(runtime_path, selected, adapter.ROOT)
     captured = {key: fact.get("value") for key, fact in previous["kernel_environment"].items() if fact["captured"]}
     device = previous["mmq_device_evidence"] if previous["mmq_device_evidence"]["available"] else None
@@ -2010,3 +2010,117 @@ def test_frozen_server_source_keeps_build_bytes_through_git_checkout(tmp_path):
     git("checkout-index", "--", relative.as_posix())
     assert target.read_bytes() == raw
     assert hashlib.sha256(target.read_bytes()).hexdigest() == expected
+
+
+def complete_engine_score_fixture(ttft_ms=120.0, tpot_ms=120.0, *, parallel=1):
+    """Synthetic complete timing evidence; native phases are 100ms each."""
+    native = {"parallel": parallel, "prompt_tokens": 4, "output_tokens": 2,
+              "native_runs": [{"ttft": 100.0, "tpot": 100.0, "e2e": 200.0} for _ in range(3)]}
+    request = {"prompt_tokens": 4, "visible_output_tokens": 2,
+               "engine_request_begin_ns": 0.0,
+               "engine_first_token_ns": ttft_ms * 1e6,
+               "engine_last_token_ns": (ttft_ms + tpot_ms) * 1e6,
+               "engine_ttft_ms": ttft_ms, "engine_tpot_ms": tpot_ms,
+               "engine_e2e_ms": ttft_ms + tpot_ms}
+    prediction = {"status": "predicted", "native_answers_used": False,
+                  "calibration_applied": False, "formal_prediction_eligible": False,
+                  "requests": [{**request, "request_index": i} for i in range(parallel)],
+                  "aggregate": {metric: {"median_ms": request[metric], "planned_requests": parallel,
+                                         "observed_requests": parallel, "missing_requests": 0}
+                                for metric in adapter.METRICS}}
+    return prediction, native
+
+
+@pytest.mark.parametrize("direction", [-1, 1])
+@pytest.mark.parametrize("error_pct,passed", [(20, True), (24.999999, True), (25, False),
+                                             (25.000001, False), (30, False)])
+def test_shared_ab_numeric_threshold_is_strict_25_without_rounding(direction, error_pct, passed):
+    phase_ms = 100 + direction * error_pct
+    prediction, native = complete_engine_score_fixture(phase_ms, phase_ms)
+    result = adapter.strict_score_cell(prediction, native)
+    assert result["threshold_pct_strict"] == 25
+    assert result["threshold_comparison"] == "<"
+    assert result["verdict"] == ("passed" if passed else "accuracy_failed")
+    assert result["all3_below_threshold"] is passed
+    assert "all3_below10" not in result
+    assert set(result["metrics"]) == set(adapter.METRICS)
+    for metric in result["metrics"].values():
+        assert metric["passed"] is passed
+        assert metric["absolute_percentage_error_pct"] == pytest.approx(error_pct, abs=1e-10)
+        assert metric["signed_error_pct"] == pytest.approx(direction * error_pct, abs=1e-10)
+
+
+@pytest.mark.parametrize("ttft_ms,tpot_ms,failed_metric", [
+    (125, 100, "engine_ttft_ms"), (100, 125, "engine_tpot_ms"),
+    (120, 120, "engine_e2e_ms")])
+def test_one_metric_at_25_fails_cell_even_when_other_metrics_pass(ttft_ms, tpot_ms, failed_metric):
+    prediction, native = complete_engine_score_fixture(ttft_ms, tpot_ms)
+    if failed_metric == "engine_e2e_ms":
+        # Individually valid runs: median(sum) need not equal sum(medians).
+        native["native_runs"] = [{"ttft": t, "tpot": p, "e2e": t + p}
+                                 for t, p in [(20, 100), (100, 92), (160, 160)]]
+    result = adapter.strict_score_cell(prediction, native)
+    assert result["verdict"] == "accuracy_failed"
+    assert result["all3_below_threshold"] is False
+    assert [name for name, metric in result["metrics"].items() if not metric["passed"]] == [failed_metric]
+
+
+@pytest.mark.parametrize("missing", ["prediction", "request", "timestamp", "aggregate", "native_repeat"])
+def test_new_threshold_never_overrides_missing_evidence(missing):
+    prediction, native = complete_engine_score_fixture()
+    if missing == "prediction":
+        prediction = {}
+    elif missing == "request":
+        prediction["requests"] = []
+    elif missing == "timestamp":
+        prediction["requests"][0].pop("engine_first_token_ns")
+    elif missing == "aggregate":
+        prediction["aggregate"]["engine_ttft_ms"]["missing_requests"] = 1
+    else:
+        native["native_runs"].pop()
+    result = adapter.strict_score_cell(prediction, native)
+    assert result["verdict"] == "insufficient_evidence"
+    assert result["issues"]
+    assert result["threshold_pct_strict"] == 25
+    assert result.get("all3_below_threshold") is not True
+
+
+@pytest.mark.parametrize("error_pct,passed", [(20, True), (25, False), (-25, False)])
+def test_score_cli_records_new_policy_without_rewriting_old_results(tmp_path, monkeypatch, error_pct, passed):
+    path, selection, row, calls = fixture(tmp_path, monkeypatch)
+    row.update(prompt_tokens=4, output_tokens=2)
+    for actual in row["native_actuals"]:
+        actual["metrics_ms"] = {"ttft": 100.0, "tpot": 100.0, "e2e": 200.0}
+    row["metrics"] = {name: {"native_median_ms": value} for name, value in actual["metrics_ms"].items()}
+    document(path, seal(selection))
+    out = tmp_path / "out"
+    freeze = adapter.freeze_selection(path, out, data_root=tmp_path)
+    freeze_ref = adapter.grid.file_ref(out / "freeze.json")
+    prediction, _ = complete_engine_score_fixture(100 + error_pct, 100 + error_pct, parallel=2)
+    prediction["input_identity"] = freeze["cells"][0]["static_inputs"]
+    result_path = out / "predictions" / (row["cell_id"] + ".prediction.json")
+    adapter.grid.write_new(result_path, adapter.prediction_document(
+        freeze["cells"][0], prediction, freeze, freeze_ref, adapter.now()))
+    legacy_path = out / "errors.0001.json"
+    adapter.grid.write_new(legacy_path, {"schema": "stable-native-simulation-errors/v1",
+                                       "strict_gate": {"threshold_pct_strict": 10},
+                                       "cells": [{"strict": {"all3_below10": False}}]})
+    retained = {p: p.read_bytes() for p in (path, out / "freeze.json", result_path, legacy_path)}
+    def no_prediction(*args, **kwargs):
+        pytest.fail("scoring must not rerun a prediction")
+    monkeypatch.setattr(adapter, "predict_cell", no_prediction)
+    adapter.main(["score", "--output", str(out)])
+    report, _ = adapter.grid.read_document(out / "errors.0002.json")
+    assert report["schema"] == "stable-native-simulation-errors/v2"
+    gate = report["strict_gate"]
+    assert gate["gate"] == "A"
+    assert gate["threshold_pct_strict"] == 25 and gate["threshold_comparison"] == "<"
+    assert gate["verdict"] == ("passed" if passed else "accuracy_failed")
+    assert gate["passed_cells"] == int(passed)
+    assert gate["accuracy_failed_cells"] == int(not passed)
+    assert gate["required_cells"] == 1 and gate["required_metrics"] == 3
+    assert report["formal_prediction_eligible"] is False and report["blind_evaluation"] is False
+    assert report["cells"][0]["strict"]["all3_below_threshold"] is passed
+    assert "all3_below10" not in json.dumps(report)
+    assert all(p.read_bytes() == raw for p, raw in retained.items())
+    assert not calls["run"]

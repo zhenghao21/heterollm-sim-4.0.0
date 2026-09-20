@@ -54,7 +54,7 @@ def _unique_digest(mapping, path):
 
 
 def _historical_sources(binding, refs):
-    """Recheck extra source bodies against R4's digest-bound base receipt."""
+    """Recheck extra source bodies against the digest-bound base receipt."""
     base_receipts=[]; annotation=[]; headers=[]
     for ref in binding.get("evidence_refs",()):
         name=Path(ref["path"]).name
@@ -64,7 +64,7 @@ def _historical_sources(binding, refs):
             if "old_link_inputs_postverified" in document:annotation.append(document)
             if "files" in document and "header" in name:headers.append(document)
     if len(base_receipts)!=1 or len(annotation)!=1 or len(headers)!=1:
-        raise ValueError("R4 binding requires unique original-source, annotation and header receipts")
+        raise ValueError("Runtime binding requires unique original-source, annotation and header receipts")
     base,overlay,header=base_receipts[0],annotation[0],headers[0]
     if base.get("returncode")!=0 or base.get("source_unchanged") is not True or overlay.get("old_link_inputs_postverified") is not True:
         raise ValueError("original source or inherited link inputs were not verified")
@@ -95,17 +95,17 @@ def derive_llama_gpu_invocation_contract(
     cuda_compute_capability: int,
     mmq_device_evidence: Mapping[str,Any]|None=None,
 ) -> dict[str,Any]:
-    """Derive from a verified R4 build binding and captured kernel controls.
+    """Derive from a verified runtime build binding and captured kernel controls.
 
     cuda_compute_capability uses llama.cpp units, e.g. 1200 for CUDA 12.0.
     mmq_device_evidence is optional and separate from invocation geometry.
     Missing or unknown controls remain uncovered; this function never reads
     today's environment or calls any native executable/device API.
     """
-    if not isinstance(runtime_binding,Mapping):raise ValueError("R4 runtime binding must be a mapping")
+    if not isinstance(runtime_binding,Mapping):raise ValueError("Runtime binding must be a mapping")
     binding=dict(runtime_binding);claimed=binding.pop("content_sha256",None)
     if binding.get("schema")!="llama-recorded-runtime-source-binding/v1" or binding.get("status")!="verified_build_chain" or claimed!=_hash(binding):
-        raise ValueError("R4 runtime source binding is unverified or mutated")
+        raise ValueError("Runtime source binding is unverified or mutated")
     if type(cuda_compute_capability) is not int or cuda_compute_capability//10 not in binding.get("compiled_cuda_architectures",()):
         raise ValueError("captured CUDA capability does not match compiled architecture")
     if not isinstance(captured_kernel_environment,Mapping):raise ValueError("kernel environment must be captured explicitly")

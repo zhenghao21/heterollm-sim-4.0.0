@@ -457,7 +457,7 @@ def test_real131_normalized_static_inputs_and_final_output_qualification():
     if os.environ.get("FINAL_OUTPUT_REAL131_STATIC") != "1":
         pytest.skip("explicit real131 static-only qualification opt-in")
     main = Path(r"F:\codex_project\37_LLMsim\heterollm-sim-4.0.0")
-    path = main / "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_025/on/freeze.json"
+    path = main / "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_000/on/freeze.json"
     frozen_campaign = json.loads(path.read_text(encoding="utf-8-sig"))
     selection, _ = adapter.grid.read_document(frozen_campaign["selection_ref"]["path"], frozen_campaign["selection_sha256"])
     source = frozen_campaign[binding.INPUT_KEY]["source_contract"]
@@ -466,7 +466,7 @@ def test_real131_normalized_static_inputs_and_final_output_qualification():
         "evidence_refs": source["evidence_refs"], "new_cost_coefficients": 0}
     saved = {entry["cell_id"]: entry for entry in frozen_campaign["cells"]}
     corrected = []
-    previous_mismatches = 0
+    normalization_mismatches = 0
     for row in adapter.selected_rows(selection):
         actual = adapter.static_inputs(row, selection, Path(frozen_campaign["data_root"]),
             model_snapshot_map=frozen_campaign["model_snapshot_map"], runtime_build_audit=frozen_campaign["runtime_build_audit"],
@@ -479,13 +479,14 @@ def test_real131_normalized_static_inputs_and_final_output_qualification():
         adapter.gpu_clock(actual)
         old = saved[row["cell_id"]]["static_inputs"]
         assert actual == {key: value for key, value in old.items() if key not in (binding.FLAG, binding.INPUT_KEY)}
-        previous_mismatches += old[binding.INPUT_KEY]["config"] != {key: actual["config"].get(key) for key in binding.CONFIG_KEYS}
+        normalization_mismatches += old[binding.INPUT_KEY]["config"] != {key: actual["config"].get(key) for key in binding.CONFIG_KEYS}
         bound = binding.bind_static_inputs(campaign, actual, model_scope_reader=adapter.read_retained_gguf_scope)
         assert bound[binding.INPUT_KEY]["config"]["flash_attn"] is False
         assert bound[binding.INPUT_KEY]["config"]["op_offload"] is True
         assert binding.verify_cell(bound, verify_files=False) == bound[binding.INPUT_KEY]
         corrected.append({"cell_id": row["cell_id"], "static_inputs": bound, "preparation_error": None})
-    assert len(corrected) == len(campaign["cells"]) == previous_mismatches == 131
+    assert len(corrected) == len(campaign["cells"]) == 131
+    assert normalization_mismatches == 0
     assert all(entry["static_inputs"][binding.INPUT_KEY]["status"] == "conditional" for entry in corrected)
     binding.verify_freeze({binding.FLAG: True, binding.INPUT_KEY: campaign, "cells": corrected})
-    print("real131:131 normalized inputs unchanged;131 old proof mismatches corrected;131 conditional proofs verified;no simulation/native/freeze writes")
+    print("real131:131 normalized inputs unchanged;0 baseline proof normalization mismatches;131 conditional proofs verified;no simulation/native/freeze writes")

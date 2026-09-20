@@ -1,3 +1,0 @@
-# R22 long graph preparation
-
-Fixed64/256 nodes,262144F32 elements; alternating0.5/2 prevents deep-chain underflow. Same original DLLs. One single-backend scheduler async graph compute plus graph-end scheduler synchronize. Persistent distinct tensors and all-stage bitwise checks at first/postwarmup/postformal. No1000ms settle. One+five+30 recorded calls, original quality thresholds. Kernel counts and fusion are observed in trace, not assumed. Original source/build chain preserved; new harness binary equivalence to native LLM application not asserted. Host-reference and identity-only validation never initialize CUDA or measure GPU. Root owns later execution after R21 completion and simulator idle.

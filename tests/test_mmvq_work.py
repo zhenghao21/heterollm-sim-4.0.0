@@ -100,9 +100,8 @@ def test_locked_source_hashes_if_local_source_available():
 
 def test_completed_trace_geometry_only_crosscheck():
     root=Path(__file__).resolve().parents[1]
-    path=root/'artifacts/development/native_long_grid_135_20260915/optimization_loop/round_016/collection_r2/first_pair_analysis/mapped_calls.json'
-    if not path.is_file():pytest.skip('optional completed synthetic trace unavailable')
-    doc=json.loads(path.read_text());c=doc['config'];w=work(m=c['M'],n=c['N'],k=c['K'],fmt=c['quant'])
+    path=root/'tests/fixtures/baseline_evidence/kernel_launch_geometry.json'
+    doc=json.loads(path.read_text(encoding='utf-8'))['mmvq_case'];c=doc['config'];w=work(m=c['M'],n=c['N'],k=c['K'],fmt=c['quant'])
     count=0
     for call in doc['calls']:
         for pair in call['kernel_launch_pairs']:

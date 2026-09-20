@@ -49,6 +49,8 @@ from heterollm_sim.cost_models import (
 METRICS = grid.METRICS
 ALIASES = dict(zip(("ttft", "tpot", "e2e"), METRICS))
 PREDICTION_TYPE = "mechanistic_development_post_selection_conditional"
+# Task brief §7.1: shared A/B numeric criterion, not a waiver of B evidence.
+ACCEPTANCE_APE_THRESHOLD_PCT = 25
 STATIC_KEYS = (
     "model", "model_sha256", "prompt_token_ids", "expected_prompt_tokens",
     "prompt_tokens", "output", "output_tokens", "parallel", "gpu_layers",
@@ -338,7 +340,7 @@ def verified_slot_order_contract(path, rows, data_root, *, source_chain_contract
     """Re-derive traversal and reuse the independently verified build/runtime chain.
 
     The saved slot contract names its probe, so an independently copied contract
-    can locate the existing round-one chain through that probe's ancestors.
+    can locate the R0 baseline chain through that probe's ancestors.
     Discover only this campaign's conventional chain path, never arbitrary JSON.
     Validating that chain does not enable recurrent scheduling.
     """
@@ -371,8 +373,8 @@ def verified_slot_order_contract(path, rows, data_root, *, source_chain_contract
     log = grid.resolve_data(log_ref["path"], data_root)
     verify_refs([{"path": str(log), "sha256": log_ref["sha256"]}])
     if source_chain_contract_path is None:
-        candidates = {Path(path).resolve().parent.parent / "round_001/recurrent_source_contract.json"}
-        candidates.update(parent / "optimization_loop/round_001/recurrent_source_contract.json" for parent in log.parents)
+        candidates = {Path(path).resolve().parent / "recurrent_source_contract.json"}
+        candidates.update(parent / "optimization_loop/round_000/dependencies/recurrent_source_contract.json" for parent in log.parents)
         existing = sorted({candidate.resolve() for candidate in candidates if candidate.is_file()}, key=str)
         if len(existing) != 1:
             raise ValueError("slot-order source chain contract is missing or ambiguous; supply its recurrent contract path")
@@ -537,7 +539,7 @@ def verified_tensor_storage_contract(path, rows, data_root, *, f32_hidden_storag
     if json.loads(json.dumps(derived)) != payload:
         raise ValueError("tensor-storage contract differs from re-derived source rules")
     if runtime_binding is None:
-        runtime_source_contract_path = runtime_source_contract_path or Path(path).resolve().parent.parent / "round_004/runtime_source_binding_structural_audit.json"
+        runtime_source_contract_path = runtime_source_contract_path or Path(path).resolve().parent / "runtime_source_binding_structural_audit.json"
         runtime_binding = verified_host_offload_source_contract(runtime_source_contract_path, rows, data_root)
     binding = runtime_binding["contract"]
     ev = source_api._Evidence(data_root)
@@ -878,11 +880,11 @@ def verified_gpu_invocation_contract(path, rows, data_root, *, enable_mmq_source
         raise ValueError("GPU invocation source contract schema mismatch")
     if runtime_binding is None:
         if runtime_source_contract_path is None:
-            candidates = {parent / "round_004/runtime_source_binding_structural_audit.json" for parent in Path(path).resolve().parents}
+            candidates = {parent / "runtime_source_binding_structural_audit.json" for parent in Path(path).resolve().parents}
             present = sorted({candidate.resolve() for candidate in candidates if candidate.is_file()}, key=str)
             if len(present) > 1:
                 raise ValueError("GPU invocation runtime source binding is ambiguous")
-            runtime_source_contract_path = present[0] if present else Path(path).resolve().parent.parent / "round_004/runtime_source_binding_structural_audit.json"
+            runtime_source_contract_path = present[0] if present else Path(path).resolve().parent / "runtime_source_binding_structural_audit.json"
         runtime_binding = verified_host_offload_source_contract(runtime_source_contract_path, rows, data_root)
     linkage = verify_gpu_invocation_source_links(runtime_binding, data_root)
     template_environment = {}
@@ -1887,6 +1889,23 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
         prediction_model_ref = dict(model_snapshot_map.get(config["model"], model_ref))
         if prediction_model_ref["sha256"] != model_ref["sha256"]:
             raise ValueError("prediction model copy differs from native GGUF identity")
+    gguf_metadata_sidecar_ref = None
+    sidecar_path = Path(str(Path(prediction_model_ref["path"]).resolve()) + ".metadata.json")
+    if sidecar_path.is_file():
+        from heterollm_sim.gguf_parity import (GGUF_METADATA_CACHE_SCHEMA,
+            GGUF_METADATA_PARSER_SOURCE, read_gguf_metadata_cache, gguf_metadata_digest)
+        sidecar_gguf = read_gguf_metadata_cache(prediction_model_ref["path"], sidecar_path)
+        if sidecar_gguf.sha256 != prediction_model_ref["sha256"]:
+            raise ValueError("GGUF metadata sidecar source SHA256 differs from prediction model")
+        sidecar_ref = grid.file_ref(sidecar_path)
+        gguf_metadata_sidecar_ref = {
+            **sidecar_ref,
+            "schema": GGUF_METADATA_CACHE_SCHEMA,
+            "parser_source": GGUF_METADATA_PARSER_SOURCE,
+            "source_path": str(Path(prediction_model_ref["path"]).resolve()),
+            "source_sha256": sidecar_gguf.sha256,
+            "metadata_digest": gguf_metadata_digest(sidecar_gguf),
+        }
     if "flash_attention" in raw:
         config["flash_attn"] = raw["flash_attention"]
     if raw.get("load_mode", "mmap") != "mmap":
@@ -1923,6 +1942,7 @@ def static_inputs(row, selection, data_root, *, model_snapshot_map=None, runtime
             "retained_kv_warmup_evidence": retained_warmup["cells"][row["cell_id"]],
             "retained_kv_warmup_contract": retained_warmup["cells"][row["cell_id"]]["contract"]} if retained_warmup is not None else {}),
         "native_model_ref": dict(model_ref), "prediction_model_ref": prediction_model_ref,
+        "gguf_metadata_sidecar_ref": gguf_metadata_sidecar_ref,
         "recurrent_batching_contract": recurrent_batching["contract"] if recurrent_batching else None,
         "recurrent_batching_evidence": recurrent_batching,
         "slot_order_contract": slot_order["contract"] if slot_order else None,
@@ -2500,10 +2520,25 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
     clock = gpu_clock(inputs)
     path = Path(inputs.get("prediction_model_ref", {}).get("path", inputs["config"]["model"]))
     cache = {} if model_cache is None else model_cache
-    if str(path) not in cache:
-        gguf = grid.read_gguf_metadata(path)
-        cache[str(path)] = gguf, grid.build_model_from_gguf(gguf)
-    gguf, model = cache[str(path)]
+    cache_key = grid.model_metadata_cache_key(path)
+    if cache_key not in cache:
+        # Formal workers share the same validated sidecar path as the
+        # diagnostic grid predictor; absent sidecars retain legacy fixtures.
+        gguf = grid._read_model_metadata(path)
+        cache[cache_key] = gguf, grid.build_model_from_gguf(gguf)
+    gguf, model = cache[cache_key]
+    sidecar_ref = inputs.get("gguf_metadata_sidecar_ref")
+    if sidecar_ref is not None:
+        from heterollm_sim.gguf_parity import gguf_metadata_digest
+        sidecar_path = Path(str(path) + ".metadata.json").resolve(strict=True)
+        actual_sidecar = grid.file_ref(sidecar_path)
+        for key in ("path", "sha256", "size_bytes"):
+            if actual_sidecar.get(key) != sidecar_ref.get(key):
+                raise ValueError("GGUF metadata sidecar identity mismatch: " + str(sidecar_path))
+        if (sidecar_ref.get("source_path") != str(path.resolve())
+                or sidecar_ref.get("source_sha256") != gguf.sha256
+                or sidecar_ref.get("metadata_digest") != gguf_metadata_digest(gguf)):
+            raise ValueError("GGUF metadata sidecar binding mismatch: " + str(sidecar_path))
     expected = inputs["config"].get("model_sha256")
     if expected and gguf.sha256 != expected:
         raise ValueError(f"GGUF SHA256 mismatch: path={path}; expected={expected}; actual={gguf.sha256}; native_model_path={inputs['config']['model']}")
@@ -2562,13 +2597,17 @@ def predict_cell(inputs, *, model_cache=None, diagnostic_events=False, diagnosti
         request.update(request_timepoints(result, metric, timing, request))
         requests.append(request)
     complete = len(requests) == config["parallel"] and all(r["visible_output_tokens"] == output and all(r[k] is not None for k in METRICS) for r in requests)
+    model_identity = {"path": str(path), "sha256": gguf.sha256}
+    sidecar_ref = grid.gguf_metadata_cache_ref(path)
+    if sidecar_ref is not None:
+        model_identity["metadata_sidecar"] = sidecar_ref
     prediction = {"status": "predicted" if complete else "incomplete", "reason": None if complete else "Missing request, token or timing boundary",
         "prediction_type": PREDICTION_TYPE, "native_answers_used": False, "calibration_applied": False, "formal_prediction_eligible": False,
         "unsupported_dimensions": unsupported_dimensions(inputs, model), "input_identity": {
             "static_inputs_sha256": grid.stable_hash(inputs), "sampling_binding": sampling,
             **({"final_output_selection_binding": inputs["final_output_selection_binding"],
                 "final_output_selection_application": scenario.workload.metadata.get("llama_cpp_final_output_binding")}
-                if "final_output_selection_binding" in inputs else {}), "model": {"path": str(path), "sha256": gguf.sha256},
+                if "final_output_selection_binding" in inputs else {}), "model": model_identity,
             "nonflash_kv_view_contract": inputs.get("nonflash_kv_view_contract"),
             **({"retained_kv_warmup_state": True, "retained_kv_warmup_contract": inputs["retained_kv_warmup_contract"],
                 "retained_kv_warmup_evidence": inputs["retained_kv_warmup_evidence"]} if "retained_kv_warmup_evidence" in inputs else {}),
@@ -2985,6 +3024,13 @@ def _worker_result_valid(record, entry, freeze, freeze_ref):
     if not (identity == entry["static_inputs"] or isinstance(identity, Mapping)
             and identity.get("static_inputs_sha256") == grid.stable_hash(entry["static_inputs"])):
         raise ValueError("worker static input identity differs")
+    frozen_sidecar = (entry.get("static_inputs") or {}).get("gguf_metadata_sidecar_ref")
+    if record.get("status") == "predicted" and frozen_sidecar is not None:
+        model_identity = identity.get("model") if isinstance(identity, Mapping) else None
+        sidecar_identity = model_identity.get("metadata_sidecar") if isinstance(model_identity, Mapping) else None
+        expected_sidecar_identity = {key: frozen_sidecar.get(key) for key in ("path", "sha256", "size_bytes")}
+        if sidecar_identity != expected_sidecar_identity:
+            raise ValueError("worker prediction GGUF metadata sidecar binding differs")
     if record["status"] == "predicted":
         for metric in METRICS:
             positive(record.get("aggregate", {}).get(metric, {}).get("median_ms"), metric)
@@ -3356,16 +3402,17 @@ def cohort_engine_comparison(prediction, native_row):
 
 
 def strict_score_cell(prediction, native):
-    """Validate one prediction and recompute the three Engine metrics once."""
+    """Validate one cell using the A/B numeric rule; independent B evidence is separate."""
+    criterion = {"threshold_pct_strict": ACCEPTANCE_APE_THRESHOLD_PCT, "threshold_comparison": "<"}
     issues, values = [], {metric: [] for metric in METRICS}
     parallel = native.get("parallel")
     requests = prediction.get("requests") if isinstance(prediction, dict) else None
     if not isinstance(prediction, dict) or prediction.get("status") != "predicted":
-        return {"verdict": "insufficient_evidence", "issues": ["prediction unavailable"], "metrics": {}}
+        return {**criterion, "verdict": "insufficient_evidence", "issues": ["prediction unavailable"], "metrics": {}}
     if prediction.get("native_answers_used") is not False:
         issues.append("native answers were used")
     if type(parallel) is not int or parallel < 1 or not isinstance(requests, list) or len(requests) != parallel:
-        return {"verdict": "insufficient_evidence", "issues": [*issues, "request coverage mismatch"], "metrics": {}}
+        return {**criterion, "verdict": "insufficient_evidence", "issues": [*issues, "request coverage mismatch"], "metrics": {}}
     ids = set()
     for request in requests:
         if not isinstance(request, dict):
@@ -3402,7 +3449,7 @@ def strict_score_cell(prediction, native):
                 issues.append(metric + " timestamp mismatch")
             values[metric].append(value)
     if issues or any(len(values[metric]) != parallel for metric in METRICS):
-        return {"verdict": "insufficient_evidence", "issues": issues or ["incomplete request metrics"], "metrics": {}}
+        return {**criterion, "verdict": "insufficient_evidence", "issues": issues or ["incomplete request metrics"], "metrics": {}}
     metrics = {}
     for metric in METRICS:
         simulator = statistics.median(values[metric])
@@ -3426,6 +3473,7 @@ def strict_score_cell(prediction, native):
             issues.append(metric + " native median: " + str(exc))
             continue
         signed = simulator - native_median
+        ape = 100 * abs(signed) / native_median
         metrics[metric] = {
             "simulator_median_ms": simulator,
             "native_median_ms": native_median,
@@ -3433,16 +3481,17 @@ def strict_score_cell(prediction, native):
             "signed_error_ms": signed,
             "absolute_error_ms": abs(signed),
             "signed_error_pct": 100 * signed / native_median,
-            "absolute_percentage_error_pct": 100 * abs(signed) / native_median,
-            "passed": abs(signed) / native_median * 100 < 10,
+            "absolute_percentage_error_pct": ape,
+            "passed": ape < ACCEPTANCE_APE_THRESHOLD_PCT,
         }
     if issues or len(metrics) != len(METRICS):
-        return {"verdict": "insufficient_evidence", "issues": issues or ["metric derivation incomplete"], "metrics": metrics}
+        return {**criterion, "verdict": "insufficient_evidence", "issues": issues or ["metric derivation incomplete"], "metrics": metrics}
     return {
+        **criterion,
         "verdict": "passed" if all(item["passed"] for item in metrics.values()) else "accuracy_failed",
         "issues": [],
         "metrics": metrics,
-        "all3_below10": all(item["passed"] for item in metrics.values()),
+        "all3_below_threshold": all(item["passed"] for item in metrics.values()),
     }
 
 
@@ -3517,15 +3566,17 @@ def score_predictions(output, *, native_report=None, strict_identity=False):
     strict_failed = sum(item.get("verdict") == "accuracy_failed" for item in strict_rows)
     strict_missing = sum(item.get("verdict") == "insufficient_evidence" for item in strict_rows)
     strict_gate = {
+        "gate": "A",
+        "threshold_comparison": "<",
         "verdict": "accuracy_failed" if strict_failed else "insufficient_evidence" if strict_missing or not rows else "passed",
         "passed_cells": strict_passed,
         "accuracy_failed_cells": strict_failed,
         "insufficient_evidence_cells": strict_missing,
         "required_cells": len(rows),
         "required_metrics": len(rows) * len(METRICS),
-        "threshold_pct_strict": 10,
+        "threshold_pct_strict": ACCEPTANCE_APE_THRESHOLD_PCT,
     }
-    report = {"schema": "stable-native-simulation-errors/v1", "created_utc": now(), "evaluation_type": "development_post_selection",
+    report = {"schema": "stable-native-simulation-errors/v2", "created_utc": now(), "evaluation_type": "development_post_selection",
         "blind_evaluation": False, "formal_prediction_eligible": False, "calibration_applied": False,
         "comparison_definition": "Median simulated request timing versus median of three native per-run scenario medians; signed error = sim - native; percentile uses linear interpolation.",
         "freeze_ref": freeze_ref, "native_report_ref": native_ref, "selected_denominator": len(rows), "overall": error_summary(rows),

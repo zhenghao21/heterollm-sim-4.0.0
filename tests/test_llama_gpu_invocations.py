@@ -338,10 +338,10 @@ class GPUInvocationSourceTests(unittest.TestCase):
         root=next((p for p in Path(__file__).resolve().parents if (p/"pyproject.toml").is_file()),None)
         if root is None:raise unittest.SkipTest("project source evidence unavailable")
         directory=root/"artifacts/development/native_long_grid_135_20260915"
-        path=directory/"optimization_loop/round_004/runtime_source_binding_structural_audit.json"
-        if not path.is_file():raise unittest.SkipTest("recorded R4 build evidence not included in this checkout")
+        path=directory/"optimization_loop/round_000/dependencies/runtime_source_binding_structural_audit.json"
+        if not path.is_file():raise unittest.SkipTest("baseline build evidence not included in this checkout")
         cls.binding=json.loads(path.read_text(encoding="utf-8"))["build_binding"]
-        cls.property_path=directory/"optimization_loop/operator_microbench_v2/driver_device_properties.json"
+        cls.property_path=root/"tests/fixtures/baseline_evidence/driver_device_properties.json"
         cls.hardware_path=directory/"hardware.json"
 
     def derive(self,environment=None,cc=1200,probe=None):

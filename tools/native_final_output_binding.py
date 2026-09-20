@@ -22,7 +22,7 @@ SCHEMA = "heterollm.final-output-binding/v1"
 FLAG = "final_output_selection"
 INPUT_KEY = "final_output_selection_binding"
 AUDIT_KEY = "llama_cpp_final_output_binding"
-# Current bytes independently reviewed in round_024/final_layer_binding_audit.
+# Current bytes independently reviewed for the locked final-layer source binding.
 # These identify source semantics, not historical compilation of include bodies.
 REVIEWED_SOURCES = {
     "qwen2": "1a9583580e9d753d60cfa45e5697a243d225aeaa0bf2d834946723aef0516287",

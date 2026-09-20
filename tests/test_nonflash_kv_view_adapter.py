@@ -12,10 +12,10 @@ ROUND = ROOT / "artifacts/development/native_long_grid_135_20260915/optimization
 
 
 def test_real_source_contract_rederives_from_locked_build_chain():
-    binding_path = ROUND / "round_004/runtime_source_binding_structural_audit.json"
-    contract_path = ROUND / "round_021/nonflash_kv_view_source_contract.json"
+    binding_path = ROUND / "round_000/dependencies/runtime_source_binding_structural_audit.json"
+    contract_path = ROUND / "round_000/dependencies/nonflash_kv_view_source_contract.json"
     if not binding_path.is_file() or not contract_path.is_file():
-        pytest.skip("historical source/build receipts are local evidence")
+        pytest.skip("baseline source/build receipts are local evidence")
     binding = adapter.verified_host_offload_source_contract(binding_path, [], ROOT)
     canonical = adapter.derive_nonflash_kv_view_contract(binding, ROOT)
     assert canonical == json.loads(contract_path.read_text(encoding="utf-8"))

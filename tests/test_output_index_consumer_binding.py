@@ -246,7 +246,7 @@ def test_index_binding_online_compaction_preserves_dag_completion(ngl, rows):
 
 @pytest.mark.parametrize("ngl,rows", [(0, 32), (0, 64), (1, 1)])
 def test_mixed_norm_backend_keeps_explicit_existing_stage_fallback(ngl, rows):
-    """R33 already rejects this mixed layer; do not claim online stage support."""
+    """The adapter already rejects this mixed layer; do not claim online stage support."""
     from heterollm_sim import serving
     case = case_for("qwen3_5_hybrid_transformer", ngl, True)
     cohort = _cohort(rows, 1, context=64 if rows == 1 else 0,

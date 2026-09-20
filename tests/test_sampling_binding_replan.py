@@ -1,4 +1,4 @@
-"""Regression coverage for the R18 typed sampling control-plane binding."""
+"""Regression coverage for the typed sampling control-plane binding."""
 
 from heterollm_sim.config import SamplingPolicy
 from tools.native_llama_compare import build_matching_scenario

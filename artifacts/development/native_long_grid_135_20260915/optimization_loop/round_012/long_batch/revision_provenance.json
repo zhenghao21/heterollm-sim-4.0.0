@@ -1,5 +1,0 @@
-{
-  "from": "round_010/stream_event_probe_dual_r2",
-  "changes": "batch64->1024 plus consistent validation formulas; unchanged grid, numeric and timing gates",
-  "old_freeze_modified": false
-}

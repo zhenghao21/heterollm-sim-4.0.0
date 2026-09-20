@@ -157,8 +157,8 @@ def test_request_slot_mapping_never_uses_native_start_finish(data):
 
 
 def test_real131_header_and_warmup_prepare_62_ordinary_69_uncovered(tmp_path):
-    if os.environ.get('R23_TEST_REAL_STATIC')!='1':pytest.skip('explicit real131 static preparation opt-in')
-    path=MAIN/'artifacts/development/native_long_grid_135_20260915/optimization_loop/round_022/current/freeze.json'
+    if os.environ.get('RETAINED_KV_TEST_REAL_STATIC')!='1':pytest.skip('explicit real131 static preparation opt-in')
+    path=MAIN/'artifacts/development/native_long_grid_135_20260915/optimization_loop/round_000/on/freeze.json'
     frozen=json.loads(path.read_text(encoding='utf-8'))
     selection_path=Path(frozen['selection_ref']['path'])
     selection=json.loads(selection_path.read_text(encoding='utf-8'))

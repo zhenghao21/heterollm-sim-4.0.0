@@ -1,7 +1,0 @@
-{
-  "status": "identity_preflight_failed_before_module_loading",
-  "error": "runtime environment mismatch: LLAMA_ENGINE_TOKEN_TIMES",
-  "cause": "invoking PATH-only shell convenience helper without frozen environment",
-  "resolution": "identity_check.py explicitly applies protocol environment and all clear keys; identity-only succeeded",
-  "gpu_work_executed": false
-}
