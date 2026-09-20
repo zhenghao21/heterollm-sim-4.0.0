@@ -807,7 +807,7 @@
       "predict",
       "score"
     ],
-    "current_action": "Canonical R0 predict→score complete; no optimization candidate started.",
+    "current_action": "R0 predict→score 已完成；后续按任务书 §8.1 从顶层软硬件架构假设检验开始选择有界候选，当前尚未选择R1假说或启动优化轮次。",
     "r0_run_id": "run.0001",
     "r0_prediction_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\freeze.json",
@@ -1013,6 +1013,13 @@
       "A numeric accuracy gate failed in 102 cells",
       "B independent set, registered domain and uncertainty evidence remain unvalidated",
       "formal_repeatability_accepted remains false"
+    ],
+    "maintenance_updates": [
+      {
+        "performed_utc": "2026-09-20T10:57:34+00:00",
+        "scope": "task_brief_top_down_hardware_software_gap_analysis_revision",
+        "summary": "Revised task brief §3, §8.1, §8.2.1 and §10.1; synchronized current_action. Preserved the original R0 closure audit and all baseline, evaluation, candidate and budget facts. Documentation maintenance only; no experiments."
+      }
     ]
   },
   "error_heatmap": {
