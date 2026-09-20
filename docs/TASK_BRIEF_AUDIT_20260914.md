@@ -261,12 +261,13 @@ R0是本次优化的固定比较起点。canonical R0 的 predict→score 已完
 |---|---|
 | 固定基线 | `LOOP/round_000/on` 中的冻结源码、配置和131格预测，按原始证据身份使用。 |
 | 基线证据限制 | canonical R0 已完成 131/131 格、393/393 指标和 worker/sidecar 身份闭环；A门数值结果为29格通过、102格精度失败，证据不足为0；B门尚未验证。 |
-| 当前维护源码 | R0冻结源码位于 `LOOP/round_000/on/source/`，R1必须从该冻结源码独立派生，明确允许变化，并按 §5 和 §8 检查实际加载身份及配对条件。 |
-| 循环状态 | `state.json` 的基线为R0，`rounds=[]`、`next_round=1`；没有活动候选或已确定的下一轮假说，R0 predict→score 已记录为一次完整基线评估但不计为优化轮次。 |
-| 待办 | 按 §8.1 先检验与当前问题相关的顶层软硬件架构假设，再沿因果链下探和回溯，选择有界候选及最小完整修复；当前没有预选的R1假说、活动候选或已接纳改进。 |
+| 当前维护源码 | R0冻结源码位于 `LOOP/round_000/on/source/`；R1、R2候选均从该冻结源码独立派生，R2源码位于 `LOOP/round_002/candidate_source/`，实际 freeze/source identity 以各轮 `freeze.json` 和 state refs 为准。 |
+| 循环状态 | `state.json` 已记录R1、R2 predict→score闭合，`rounds=[R1,R2]`、`next_round=3`；R0仍是固定比较起点。R2 的逐行 CPU sampling/output terminal 修复结构测试和配对运行均闭合，但393项APE在1e-9以内与R0等价，未接纳为新基线。 |
+| 待办 | 下一轮检查固定131格中 qualified cohort 的实际覆盖和 request engine boundary 生成链，解释 R2 语义修复未改变数值的原因；继续禁止读取答案拟合或重新采集native。 |
 | 资源边界 | 本次只使用已有合格证据；未采集native、未重测native、未采集微基准。canonical R0 使用4个预测worker、单格600秒软观测、自然退出策略；优化轮次仍遵守 §8.4。 |
 | 数值门槛 | 当前A/B按 §7.1 要求每格TTFT、TPOT、E2E的未舍入APE均严格<25%。canonical R0 已按当前评分器重跑并记录 v2 评分；旧评分口径只作为历史身份信息，不替代当前结果。 |
 | 验收状态 | A门为精度失败（102格未达到严格<25%），不是证据不足；B门尚未验证。固定native各3批次，仍有 `formal_repeatability_accepted=false` 限制；完整A门与独立B门的各自要求见 §7。 |
+| R1候选结果 | 控制面候选隔离每次run的reservation/allocation ledger，拒绝并发复用，并回写持久cache/placement/completion/metric状态；候选131/131预测、393/393指标有效，A门仍为29通过/102精度失败，逐项与R0数值相同，因此仅保留语义候选，不替换R0。 |
 
 ### 10.2 权威位置与运行入口
 
@@ -274,15 +275,17 @@ R0是本次优化的固定比较起点。canonical R0 的 predict→score 已完
 
 | 内容 | 位置/身份 |
 |---|---|
-| 本次循环状态与基线锁 | `LOOP/state.json`；记录 canonical R0 predict→score 完成、空的 `rounds` 和下一轮尚未开始。 |
+| 本次循环状态与基线锁 | `LOOP/state.json`；记录 canonical R0、R1、R2 predict→score 完成，R0固定、R1/R2未接纳，下一轮为3。 |
 | 固定native selection | `artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json`；SHA-256 `cab8f3a4baa90f082f2fd83592065aabcb598e3d1b8b2732f21bc5f3e49df9c5`。固定范围131格。 |
 | R0冻结清单 | `LOOP/round_000/on/freeze.json`；131格，freeze SHA-256 `2dbe20a52540e863659627da1ed31c2d51bc2dc4a5789014b0c9ff45f617b248`。 |
 | R0冻结源码 | `LOOP/round_000/on/source/`。 |
 | R0评分 | `LOOP/round_000/on/errors.0001.json`；score SHA-256 `1fa7544217cf1e61938f32d8b790550c10ae527c031b0fe62a0d0585fc5a7a7a`，当前评分 schema 为 v2、严格比较符为 `<25%`，A门结果为29/131通过。 |
 | R0 sidecar | 5个实际使用的 GGUF sidecar 均记录在 `LOOP/state.json` 的 `sidecar_policy.bound_sidecars` 和 freeze 每格 `gguf_metadata_sidecar_ref` 中；每个 sidecar 同时绑定源 SHA、文件身份和 metadata/tensor-directory digest。 |
 | R0运行闭包 | `LOOP/round_000/on/runs/run.0001.finish.json`、131个 prediction、131个 execution/attempt seal；predict→score 顺序和 strict identity 已完成。 |
-| 基线/候选误差热力图 | `LOOP/round_000/on/error_heatmap/manifest.json` 及其中 3 个 SVG；当前 `candidate_status=absent`，baseline 使用 canonical R0 score，candidate 和 delta 列显示为灰色占位。候选产生后用 `tools/plot_baseline_candidate_heatmap.py` 重新生成同一目录并更新 `state.json`。 |
-| 回归验证 | 完整 pytest 回归为 2593 passed、4 skipped；sidecar、baseline/candidate heatmap 专项和生命周期测试包含在内，`git diff --check` 与 Python 编译检查通过。 |
+| 基线/候选误差热力图 | R0基线图位于 `LOOP/round_000/on/error_heatmap/`；R2配对图位于 `LOOP/round_002/heatmap/manifest.json`，使用 `candidate_paired/errors.0001.json`，记录131行、三项指标和无实质APE delta。 |
+| R1候选评分/热力图 | 候选 freeze、131个 prediction、score 和热力图位于 `LOOP/round_001/candidate_retry/` 与 `LOOP/round_001/heatmap/`；R1 score 为 `stable-native-simulation-errors/v2`，131/131 格、393/393 指标有效，候选与R0三项APE逐项相同。R1不是新基线。 |
+| R2候选评分/热力图 | 配对候选冻结和131个 prediction 位于 `LOOP/candidate_paired/`；R2 score 为 `stable-native-simulation-errors/v2`，131/131 格、393/393 指标有效，A门仍29/131通过，较R0没有超过1e-9的APE改善；结构候选源码和4项 row/terminal 回归位于 `LOOP/round_002/`，R2不是新基线。 |
+| 回归验证 | R2候选专项回归为154 passed，执行阶段/控制器/混合批等扩展回归为70 passed，row terminal 新增断言4 passed，候选 Python 编译通过；R1既有完整回归为2593 passed、4 skipped。 |
 | 预测/评分与指标公式 | 当前维护的 `tools/predict_stable_native_dataset.py`、`tools/evaluation_contract.py`；运行顺序为 `predict → score`，不得为同步新评分口径改写R0冻结版本。 |
 
 误差热力图的刷新命令为：
@@ -296,4 +299,4 @@ R0是本次优化的固定比较起点。canonical R0 的 predict→score 已完
 
 候选尚未存在时省略 `--candidate-score`；生成器会保留 baseline 数值，并把 candidate 与 delta 标为 `NO CANDIDATE`/灰色，不把缺失候选当作零误差。候选 score 的 cell 集合、三项指标和 schema 必须与 baseline 一致，否则生成失败。
 
-**维护方式：** 当前状态只在本节及本次 `state.json` 更新。canonical R0 收尾已完成一次任务书审计；后续每轮结束按 §8.2 再审计。普通维护与回归检查按 §8.3 记录，不生成实验或验收通过结论。
+**维护方式：** 当前状态只在本节及本次 `state.json` 更新。canonical R0、R1 收尾审计均已记录；R2 收尾再次审计了表达清晰度、前后矛盾、重复规则、当前状态与证据引用，并记录了两次无效预测 attempt、一次路径身份 score retry 和最终配对结果。普通维护与回归检查按 §8.3 记录，不生成实验或验收通过结论。

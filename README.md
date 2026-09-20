@@ -37,10 +37,10 @@ py -3.12 tools/predict_stable_native_dataset.py score --output <prediction-dir> 
 
 `predict` 内部完成静态场景投影和仿真；`score` 内部完成固定 native 绑定、Engine 时间戳重算、覆盖率和每格三项误差判定。独立 freeze、strict、failure-recheck、report 和 heatmap 不再是运行步骤。
 
-当前评分按任务书A/B共用数值规则：每格 TTFT、TPOT、E2E 的未舍入 APE 均须严格小于25%，等于25%不通过。输出采用 `stable-native-simulation-errors/v2`，显式记录阈值与严格比较符；逐格字段为 `all3_below_threshold`。`strict_gate.gate=A` 表示当前固定集开发回归，不证明B门独立性或统计不确定性要求。canonical R0 已按此评分器完成 131 格评分；当前结果和 SHA 以 `optimization_loop/state.json` 及 `round_000/on/errors.0001.json` 为准。
+当前评分按任务书A/B共用数值规则：每格 TTFT、TPOT、E2E 的未舍入 APE 均须严格小于25%，等于25%不通过。输出采用 `stable-native-simulation-errors/v2`，显式记录阈值与严格比较符；逐格字段为 `all3_below_threshold`。`strict_gate.gate=A` 表示当前固定集开发回归，不证明B门独立性或统计不确定性要求。canonical R0、R1 与 R2 配对候选均按此评分器完成 131 格评分；当前结果和 SHA 以 `optimization_loop/state.json`、`round_000/on/errors.0001.json` 与 `candidate_paired/errors.0001.json` 为准。
 
 ## 当前优化起点
 
-本次优化从固定R0基线开始，基线位于 `artifacts/development/native_long_grid_135_20260915/optimization_loop/round_000/on`。`artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json` 以R0为基线、`rounds=[]`；首次优化轮次R1尚未执行。固定native范围仍为131格，循环外备份仅用于恢复，不参与本次优化计数。
+本次优化从固定R0基线开始，基线位于 `artifacts/development/native_long_grid_135_20260915/optimization_loop/round_000/on`。R1 已完成控制面事务隔离候选，R2 已完成 source-qualified 逐行 CPU sampling/output terminal 候选的配对 predict→score；R1、R2 的 393 项数值均与 R0 等价，因此 R0 仍是固定比较基线，候选不自动接纳。R2 的冻结输出实际位于 `optimization_loop/candidate_paired`，其热力图和轮次测试记录位于 `optimization_loop/round_002/`。固定native范围仍为131格，循环外备份仅用于恢复，不参与本次优化计数。
 
-R0是用户指定的比较起点。canonical R0 的 131 格 predict→score、worker seal、sidecar 身份和 strict identity 已闭合；A 门仍因数值精度失败而未通过，B 门尚未验证。后续候选须从 R0 冻结源码独立派生并按任务书核实身份及配对条件。完整约束与当前状态见 `docs/TASK_BRIEF_AUDIT_20260914.md`。
+R0是用户指定的比较起点。canonical R0 的 131 格 predict→score、worker seal、sidecar 身份和 strict identity 已闭合；R1 与 R2 也完成配对的 131 格 predict→score，但没有任何超过 1e-9 APE 的数值改善，R0 继续保持固定基线。A 门仍因数值精度失败而未通过，B 门尚未验证。后续候选须从 R0 冻结源码独立派生并按任务书核实身份及配对条件。完整约束与当前状态见 `docs/TASK_BRIEF_AUDIT_20260914.md`。

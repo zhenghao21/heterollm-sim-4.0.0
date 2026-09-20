@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-19T15:48:01.007128+00:00",
-  "status": "r0_baseline_predict_score_completed_first_optimization_round_not_started",
+  "status": "paused_by_user_after_r2_predict_score_completed_accuracy_equivalent_semantic_candidate_retained",
   "user_goal": "从固定R0基线开始首次机制优化循环；固定131格开发集每格Engine TTFT、TPOT、E2E误差严格小于25%，并按任务书完成独立验收。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -779,35 +779,194 @@
   },
   "baseline_role": "User-selected fixed R0 comparison starting point; canonical predict→score, identity, and boundary evidence are closed, but accuracy acceptance is not established (A: 29/131 cells passed, 102/131 failed; B: unvalidated; formal repeatability: false).",
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
-  "best_candidate_status": "fixed_R0_baseline_by_user_canonical_predict_score_complete",
-  "current_semantic_candidate": null,
-  "next_round_hypothesis": null,
-  "current_stage": "r0_predict_score_completed",
-  "next_round": 1,
-  "rounds": [],
-  "full_131_evaluations_started": 1,
-  "full_131_evaluations_completed": 1,
+  "best_candidate_status": "R0 fixed baseline retained; R1 semantic candidate structurally valid but accuracy-equivalent and unaccepted",
+  "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
+  "next_round_hypothesis": "R2 终结时序修复未改变固定集数值；下一轮应在不改 native 的前提下检查固定 131 格中 qualified cohort 的实际覆盖和 request engine boundary 生成链，定位剩余 TTFT/E2E 残差来源；若只是域外/未触发，应保留 row repair 作为语义后继并选择新的 source-qualified 机制假说。",
+  "current_stage": "paused_after_r2_predict_score_completed",
+  "next_round": 3,
+  "rounds": [
+    {
+      "round": 1,
+      "status": "completed_accuracy_equivalent_semantic_candidate_retained_unaccepted",
+      "started_utc": "2026-09-20T12:55:45+00:00",
+      "completed_utc": "2026-09-20T14:12:22.154597+00:00",
+      "native_remeasured": false,
+      "microbenchmark_collected": false,
+      "hypothesis": "ControlPlaneRuntime isolates per-run reservation/allocation ledgers and rejects concurrent reuse while preserving persistent RuntimeState cache/placement/completion/metric fields.",
+      "top_down_location": "runtime lifecycle and shared-resource ownership before operator lowering",
+      "candidate_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate_retry\\source",
+      "interrupted_attempt": {
+        "output": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate",
+        "status": "stopped_after_source_revision_before_score",
+        "predictions_completed": 91,
+        "reason": "candidate source was revised to preserve persistent RuntimeState fields; old attempt was not scoreable against final candidate bytes"
+      },
+      "evaluation": {
+        "output": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate_retry",
+        "prediction_cells": 131,
+        "prediction_failures": 0,
+        "score_cells": 131,
+        "score_metrics": 393,
+        "baseline_passed_cells": 29,
+        "candidate_passed_cells": 29,
+        "baseline_accuracy_failed_cells": 102,
+        "candidate_accuracy_failed_cells": 102,
+        "baseline_insufficient_evidence_cells": 0,
+        "candidate_insufficient_evidence_cells": 0,
+        "pair_metric_counts": {
+          "improved": 0,
+          "unchanged": 393,
+          "regressed": 0
+        },
+        "numeric_equal": true,
+        "score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate_retry\\errors.0001.json",
+        "heatmap_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\heatmap\\manifest.json"
+      },
+      "tests": {
+        "candidate_runtime_isolation": "3 passed",
+        "candidate_runtime_mechanics": "16 passed",
+        "candidate_runtime_control_plane": "80 passed",
+        "candidate_runtime_sha256": "2deb9f3022869daaae6c13214a2ae1a21cce6c5557b7c7b1143bf052fcf16802"
+      },
+      "decision": "retain_candidate_as_semantic_successor_not_accuracy_pass",
+      "next_hypothesis": "Qualify per-slot CPU sampling/output terminal ordering for explicit stable-admission cohorts; preserve shared D2H and aggregate service, and only split rows when source lane identity is complete.",
+      "task_brief_audit": {
+        "status": "complete",
+        "scope": "R1 candidate lifecycle repair and predict-score closure",
+        "summary": "Updated current status, recorded interrupted pre-revision attempt separately from final retry, preserved R0 as fixed baseline, and recorded 131-cell score equality plus structural test evidence. No native collection or microbenchmark was added.",
+        "unresolved": [
+          "R0 A accuracy remains failed in 102 cells",
+          "B independent set and uncertainty remain unvalidated",
+          "R1 semantic candidate has no numeric improvement and cannot replace R0"
+        ]
+      }
+    },
+    {
+      "round": 2,
+      "status": "completed_accuracy_equivalent_semantic_candidate_retained_unaccepted",
+      "started_utc": "2026-09-20T15:33:10.830507+00:00",
+      "completed_utc": "2026-09-20T16:32:25.236187+00:00",
+      "native_remeasured": false,
+      "microbenchmark_collected": false,
+      "hypothesis": "在 source-qualified stable-admission/vector-order、lane identity 完整、llama_cpp_cpu_chain、backend_sampling=false 的 ordinary non-MTP cohort 中，将 CPU sampling 的 candidate/filter/commit 按 row 串行，并把每个 item 的 terminal 绑定到对应 row stage；共享 logits D2H、总 CPU service、硬件、计时契约和不适用域的聚合回退保持不变。",
+      "top_down_location": "serving output lifecycle and request terminal mapping after shared logits D2H",
+      "candidate_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
+      "candidate_planner_sha256": "1391a6e5e7c334e0f2f3acd27c465edcb15be5ae9f2e9ac3d81211170258e689",
+      "invalid_attempts": [
+        {
+          "output": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_attempt_0001_missing_data_root",
+          "status": "completed_preparation_failed_unscoreable",
+          "prediction_cells": 131,
+          "prediction_failures": 131,
+          "score_attempted": false,
+          "reason": "predict was started without the explicit R0 data_root; every cell failed static preparation with input outside explicit data root; no native was collected or read."
+        },
+        {
+          "output": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_attempt_0002_unpaired_flags",
+          "status": "completed_predict_unpaired_configuration_not_scoreable",
+          "prediction_cells": 131,
+          "prediction_failures": 0,
+          "score_attempted": false,
+          "reason": "predict used only selection and data_root, omitting R0 frozen runtime/slot/sampling/GPU/tensor/nonflash/warmup/final-output/MMVQ contracts; retained as an unpaired diagnostic attempt and not scored."
+        }
+      ],
+      "evaluation": {
+        "output": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired",
+        "freeze_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\freeze.json",
+          "sha256": "e6d20e0f666afe23e84e1ec272c2949eb7cbe145eb651156780fe90a82668265",
+          "size_bytes": 53176170
+        },
+        "run_start_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\runs\\run.0001.start.json",
+          "sha256": "2da908ba558cba918f7f4c0a1318381e96ffdd4ae21c693e4176e6b7b21bf53f",
+          "size_bytes": 7134
+        },
+        "run_finish_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\runs\\run.0001.finish.json",
+          "sha256": "df2680bfaaf61e784ce9022f4361fa1ff3f8a0789747cdde8694d3114e675432",
+          "size_bytes": 77294
+        },
+        "prediction_cells": 131,
+        "prediction_failures": 0,
+        "score_cells": 131,
+        "score_metrics": 393,
+        "baseline_passed_cells": 29,
+        "candidate_passed_cells": 29,
+        "baseline_accuracy_failed_cells": 102,
+        "candidate_accuracy_failed_cells": 102,
+        "baseline_insufficient_evidence_cells": 0,
+        "candidate_insufficient_evidence_cells": 0,
+        "pair_metric_counts": {
+          "improved": 0,
+          "unchanged": 393,
+          "regressed": 0
+        },
+        "numeric_equal_within_ape_tolerance": true,
+        "max_abs_ape_delta_pct": 6.9468875096845295e-12,
+        "comparison_tolerance_pct": 1e-09,
+        "score_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
+          "sha256": "a368469c1b5403eed132afa798b98f2edf574db4eda592bf74b5fe45ac07ee0b",
+          "size_bytes": 1320957
+        },
+        "heatmap_ref": {
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\heatmap\\manifest.json",
+          "sha256": "6b70256a66f7cf601f22c6966433fb1432ba75b9b8dda388f26a402090aa419c",
+          "size_bytes": 1922
+        },
+        "score_path_retry": {
+          "first_attempt": "identity rejected after output directory move",
+          "second_attempt": "scored after restoring freeze-recorded absolute path",
+          "score_attempts_in_round": 2
+        }
+      },
+      "tests": {
+        "candidate_source_focused_regression": "154 passed",
+        "candidate_source_execution_stage_regression": "70 passed",
+        "candidate_row_terminal_regression": "4 passed",
+        "candidate_planner_sha256": "1391a6e5e7c334e0f2f3acd27c465edcb15be5ae9f2e9ac3d81211170258e689",
+        "candidate_row_test_sha256": "839c5a8cabfc40e3b61ee88446ee5186b9ac87241565a5498d24c47c3355183d",
+        "py_compile": "passed"
+      },
+      "decision": "retain_candidate_as_semantic_successor_not_accuracy_pass",
+      "decision_reason": "真实执行链路已按资格守卫拆出 per-item CPU output stages，row terminal 与 item terminal 映射结构回归通过；但配对 R2 与固定 R0 的393项未舍入 APE 在1e-9以内等价，A门仍29/131，故不替换R0、不提交开发基线。",
+      "next_hypothesis": "R2 终结时序修复未改变固定集数值；下一轮应在不改 native 的前提下检查固定 131 格中 qualified cohort 的实际覆盖和 request engine boundary 生成链，定位剩余 TTFT/E2E 残差来源；若只是域外/未触发，应保留 row repair 作为语义后继并选择新的 source-qualified 机制假说。",
+      "task_brief_audit": {
+        "status": "complete",
+        "scope": "R2 qualified per-row CPU sampling terminal repair and paired predict-score closure",
+        "summary": "记录两次不合格预测 attempt、一次 score 路径身份失败和恢复后的配对 score；确认 R0/R2 全部冻结契约一致，131/131 预测与393/393评分闭合，结构修复实际进入 compact execution stages；未采集或重测 native、未采集微基准。",
+        "unresolved": [
+          "A numeric accuracy gate remains failed in 102 cells",
+          "B independent set, registered domain and uncertainty evidence remain unvalidated",
+          "R2 semantic candidate is numerically equivalent and cannot replace the fixed R0 baseline"
+        ]
+      }
+    }
+  ],
+  "full_131_evaluations_started": 6,
+  "full_131_evaluations_completed": 5,
   "budget": {
-    "status": "consumed_for_r0_predict_score",
+    "status": "r2_predict_score_completed_candidate_numeric_equivalent",
     "native_collection": 0,
     "microbenchmark_collection": 0,
     "prediction_workers": 4,
     "per_cell_timeout_seconds": 600,
     "limits": "Record current effective run limits before the first experiment; baseline import does not consume an optimization round.",
-    "prediction_attempts": 1,
-    "score_attempts": 1,
-    "optimization_rounds_consumed": 0,
+    "prediction_attempts": 6,
+    "score_attempts": 4,
+    "optimization_rounds_consumed": 2,
     "effective_limits_source": "canonical run.0001.start.json; natural-exit soft observation; no hard worker termination",
     "native_remeasurement_allowed_in_this_loop": false
   },
   "continuation_policy": {
-    "status": "r0_predict_score_complete_ready_for_first_round",
-    "first_round_started": false,
+    "status": "paused_by_user_after_r2_completed",
+    "first_round_started": true,
     "public_operations": [
       "predict",
       "score"
     ],
-    "current_action": "R0 predict→score 已完成；后续按任务书 §8.1 从顶层软硬件架构假设检验开始选择有界候选，当前尚未选择R1假说或启动优化轮次。",
+    "current_action": "循环已按用户指令暂停；下一轮尚未启动，R0仍为固定比较基线。",
     "r0_run_id": "run.0001",
     "r0_prediction_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\freeze.json",
@@ -818,7 +977,13 @@
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\errors.0001.json",
       "sha256": "1fa7544217cf1e61938f32d8b790550c10ae527c031b0fe62a0d0585fc5a7a7a",
       "size_bytes": 1356080
-    }
+    },
+    "r1_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate_retry\\source",
+    "r1_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_001\\candidate_retry\\errors.0001.json",
+    "r1_decision": "retain_unaccepted_numeric_equivalent",
+    "r2_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
+    "r2_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
+    "r2_decision": "retain_unaccepted_numeric_equivalent"
   },
   "goal_evaluator_status": "A_accuracy_failed_B_unvalidated",
   "version_control_policy": {
@@ -994,48 +1159,44 @@
     ]
   },
   "task_brief_audit": {
-    "performed_utc": "2026-09-20T06:02:10+00:00",
-    "scope": "canonical R0 predict→score state closure",
+    "performed_utc": "2026-09-20T16:35:46+00:00",
+    "scope": "R2 round closure",
     "files_reviewed": [
       "docs/TASK_BRIEF_AUDIT_20260914.md",
       "artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json"
     ],
     "result": "updated_current_status_and_evidence_references",
     "changes": [
-      "recorded canonical R0 predict and score paths and SHA256",
-      "recorded 131 cells and 393 valid metrics",
-      "kept A accuracy result separate from B independent validation",
-      "recorded budget usage with zero native and microbenchmark collection",
-      "recorded sidecar schema/parser/source identity and metadata digest binding",
-      "completed full regression: 2593 passed and 4 skipped; git diff check, py_compile, and baseline-candidate heatmap tests passed"
+      "recorded R2 qualified per-row candidate source and actual row-stage regression evidence",
+      "recorded two invalid predict attempts and one path-identity score retry without hiding them",
+      "recorded paired R2 freeze with all R0 contract switches, 131 predictions, 393 metrics and score SHA",
+      "preserved R0 as fixed baseline after zero meaningful APE delta; no native or microbenchmark collection was added",
+      "按用户指令暂停循环；未启动下一轮，保留R2配对证据与所有失败/重试记录。"
     ],
     "unresolved": [
-      "A numeric accuracy gate failed in 102 cells",
+      "A numeric accuracy gate remains failed in 102 cells",
       "B independent set, registered domain and uncertainty evidence remain unvalidated",
-      "formal_repeatability_accepted remains false"
-    ],
-    "maintenance_updates": [
-      {
-        "performed_utc": "2026-09-20T10:57:34+00:00",
-        "scope": "task_brief_top_down_hardware_software_gap_analysis_revision",
-        "summary": "Revised task brief §3, §8.1, §8.2.1 and §10.1; synchronized current_action. Preserved the original R0 closure audit and all baseline, evaluation, candidate and budget facts. Documentation maintenance only; no experiments."
-      }
+      "R2 semantic candidate has no numeric improvement and cannot replace R0"
     ]
   },
   "error_heatmap": {
     "schema": "baseline-candidate-error-heatmap/v1",
     "manifest_ref": {
-      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\error_heatmap\\manifest.json",
-      "sha256": "e230da32d931d27ad1d73a6f84ec3fd93a26f5682687d418a58bfadbbaa0aa9c",
-      "size_bytes": 1663
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\heatmap\\manifest.json",
+      "sha256": "6b70256a66f7cf601f22c6966433fb1432ba75b9b8dda388f26a402090aa419c",
+      "size_bytes": 1922
     },
     "baseline_score_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\errors.0001.json",
       "sha256": "1fa7544217cf1e61938f32d8b790550c10ae527c031b0fe62a0d0585fc5a7a7a",
       "size_bytes": 1356080
     },
-    "candidate_score_ref": null,
-    "candidate_status": "absent",
+    "candidate_score_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
+      "sha256": "a368469c1b5403eed132afa798b98f2edf574db4eda592bf74b5fe45ac07ee0b",
+      "size_bytes": 1320957
+    },
+    "candidate_status": "present",
     "rows": 131,
     "metrics": [
       "engine_ttft_ms",
@@ -1044,6 +1205,6 @@
     ],
     "threshold_pct_strict": 25,
     "refresh_command": ".venv\\Scripts\\python.exe tools/plot_baseline_candidate_heatmap.py --baseline-score <baseline-score.json> --candidate-score <candidate-score.json> --out-dir <heatmap-dir>",
-    "current_artifact_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\error_heatmap"
+    "current_artifact_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\heatmap"
   }
 }
