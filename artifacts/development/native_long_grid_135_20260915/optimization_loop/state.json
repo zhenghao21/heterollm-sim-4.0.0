@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-19T15:48:01.007128+00:00",
-  "status": "paused_by_user_after_r2_predict_score_completed_accuracy_equivalent_semantic_candidate_retained",
+  "status": "r3_completed_structural_diagnosis_no_patch",
   "user_goal": "从固定R0基线开始首次机制优化循环；固定131格开发集每格Engine TTFT、TPOT、E2E误差严格小于25%，并按任务书完成独立验收。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -779,10 +779,10 @@
   },
   "baseline_role": "User-selected fixed R0 comparison starting point; canonical predict→score, identity, and boundary evidence are closed, but accuracy acceptance is not established (A: 29/131 cells passed, 102/131 failed; B: unvalidated; formal repeatability: false).",
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
-  "best_candidate_status": "R0 fixed baseline retained; R1 semantic candidate structurally valid but accuracy-equivalent and unaccepted",
+  "best_candidate_status": "R0 fixed baseline retained; R1/R2 unaccepted; R3 structural diagnosis completed with no production patch or accuracy result.",
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
-  "next_round_hypothesis": "R2 终结时序修复未改变固定集数值；下一轮应在不改 native 的前提下检查固定 131 格中 qualified cohort 的实际覆盖和 request engine boundary 生成链，定位剩余 TTFT/E2E 残差来源；若只是域外/未触发，应保留 row repair 作为语义后继并选择新的 source-qualified 机制假说。",
-  "current_stage": "paused_after_r2_predict_score_completed",
+  "next_round_hypothesis": "R3 is closed with a bounded structural finding and no production candidate; any future candidate requires a new explicit round and must derive from R0. Do not start R4 automatically.",
+  "current_stage": "r3_completed_waiting_commit_push",
   "next_round": 3,
   "rounds": [
     {
@@ -957,16 +957,23 @@
     "score_attempts": 4,
     "optimization_rounds_consumed": 2,
     "effective_limits_source": "canonical run.0001.start.json; natural-exit soft observation; no hard worker termination",
-    "native_remeasurement_allowed_in_this_loop": false
+    "native_remeasurement_allowed_in_this_loop": false,
+    "c2c_max_iterations": 12,
+    "c2c_max_iterations_source": "C:/Users/A/.codex/skills/codex-with-chatgpt/SKILL.md default; no workspace .c2c.json override found",
+    "c2c_current_task": "c2c_r3a1",
+    "c2c_completed_execution_review_cycles_this_task": 1,
+    "c2c_current_execution_iteration": 0,
+    "optimization_round_limit_accounting": "R1/R2 consumption remains 2; R3 diagnosis is not a reset and no new predict/score attempt has run",
+    "c2c_iteration_indexing": "0-based; iteration 0 contains the R3 diagnosis and closure corrections; no further PLAN or candidate implementation is authorized, and after DONE only the user-authorized commit/push remains"
   },
   "continuation_policy": {
-    "status": "paused_by_user_after_r2_completed",
+    "status": "r3_completed_waiting_commit_push",
     "first_round_started": true,
     "public_operations": [
       "predict",
       "score"
     ],
-    "current_action": "循环已按用户指令暂停；下一轮尚未启动，R0仍为固定比较基线。",
+    "current_action": "R3已结束：结构诊断复现但未实施生产补丁或精度评估；按用户指令等待最终复审后提交并推送，不启动R4。",
     "r0_run_id": "run.0001",
     "r0_prediction_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\freeze.json",
@@ -983,7 +990,14 @@
     "r1_decision": "retain_unaccepted_numeric_equivalent",
     "r2_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
     "r2_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
-    "r2_decision": "retain_unaccepted_numeric_equivalent"
+    "r2_decision": "retain_unaccepted_numeric_equivalent",
+    "next_step": "用户已授权的R3提交/推送；完成后停止优化续行。",
+    "resume_authorization": {
+      "user_instruction": "继续，使用codex with chatgpt进行自动优化循环",
+      "prior_status": "paused_by_user_after_r2_predict_score_completed_accuracy_equivalent_semantic_candidate_retained",
+      "recorded_utc": "2026-09-21T00:31:19.078170+00:00"
+    },
+    "r4_auto_start": false
   },
   "goal_evaluator_status": "A_accuracy_failed_B_unvalidated",
   "version_control_policy": {
@@ -1159,24 +1173,28 @@
     ]
   },
   "task_brief_audit": {
-    "performed_utc": "2026-09-20T16:35:46+00:00",
-    "scope": "R2 round closure",
+    "performed_utc": "2026-09-21T00:56:48.581470+00:00",
+    "scope": "R3 structural diagnosis closure",
     "files_reviewed": [
       "docs/TASK_BRIEF_AUDIT_20260914.md",
-      "artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json"
+      "artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json",
+      "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_003/diagnostics/r3_read_only_coverage.json",
+      "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_003/tests/test_compact_shared_zero_service.py",
+      "artifacts/development/native_long_grid_135_20260915/optimization_loop/candidate_paired/source/src/heterollm_sim/planner.py"
     ],
-    "result": "updated_current_status_and_evidence_references",
+    "result": "r3_closed_bounded_structural_finding_no_production_patch",
     "changes": [
-      "recorded R2 qualified per-row candidate source and actual row-stage regression evidence",
-      "recorded two invalid predict attempts and one path-identity score retry without hiding them",
-      "recorded paired R2 freeze with all R0 contract switches, 131 predictions, 393 metrics and score SHA",
-      "preserved R0 as fixed baseline after zero meaningful APE delta; no native or microbenchmark collection was added",
-      "按用户指令暂停循环；未启动下一轮，保留R2配对证据与所有失败/重试记录。"
+      "accepted 131-cell/298-request endpoint pairing correction with zero missing or duplicate request IDs",
+      "recorded 11046 retained equal-length multi-request decode stage observations as group-level summaries",
+      "ran three-case structural compaction test with actual P2 source imports: 3 passed",
+      "reproduced zero-service shared synchronization blocking row split; preserved it as a bounded condition, not a universal historical cause",
+      "kept R0 fixed, R1/R2 unaccepted, no predictor/scorer/native/microbenchmark and no R4 auto-start",
+      "user explicitly authorized commit and push after R3 closure"
     ],
     "unresolved": [
-      "A numeric accuracy gate remains failed in 102 cells",
+      "R0 A accuracy gate remains failed in 102 cells",
       "B independent set, registered domain and uncertainty evidence remain unvalidated",
-      "R2 semantic candidate has no numeric improvement and cannot replace R0"
+      "future candidate implementation and predict-score require a new explicit round; R3 does not authorize them"
     ]
   },
   "error_heatmap": {
@@ -1206,5 +1224,425 @@
     "threshold_pct_strict": 25,
     "refresh_command": ".venv\\Scripts\\python.exe tools/plot_baseline_candidate_heatmap.py --baseline-score <baseline-score.json> --candidate-score <candidate-score.json> --out-dir <heatmap-dir>",
     "current_artifact_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\heatmap"
+  },
+  "r3_read_only_diagnosis": {
+    "status": "r3_completed_structural_diagnosis_no_patch",
+    "generated_utc": "2026-09-21T00:33:34.138511+00:00",
+    "hypothesis": "lane→output row→item terminal→execution stage→request/token boundary identity propagation may be incomplete; missing retained trace is evidence limitation, not proof of non-trigger.",
+    "support_domain": "source-qualified fresh same-arrival stable-admission/vector-order ordinary non-MTP CPU sampling host-visible f32 logits with multi-row output; compare decode, mixed/last-prefill and single-request controls.",
+    "baseline_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
+    "formal_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired",
+    "paired_cell_count": 131,
+    "classification_counts": {
+      "multi_request_static_prerequisites_only_row_activation_unknown": 85,
+      "single_request_row_branch_excluded": 46
+    },
+    "evidence_counts": {
+      "aggregation_masking_supported_cells": 0,
+      "batch_truncated_False": 131,
+      "formal_p2_only": 131,
+      "lane_item_identity_unknown": 131,
+      "multi_request_physical_rows_unknown": 85,
+      "paired_request_boundary_cells": 131,
+      "paired_request_boundary_requests": 298,
+      "physical_row_count_unknown": 131,
+      "request_pairing_duplicate_total": 0,
+      "request_pairing_missing_total": 0,
+      "request_timepoints_verified": 131,
+      "single_request_excluded_from_row_branch": 46,
+      "terminal_stage_mapping_unknown": 131,
+      "timing_verified": 131,
+      "static_slot_contract_satisfied": 131
+    },
+    "competitive_explanations": {
+      "qualification_not_triggered": "46 single-request cells excluded; 85 multi-request cells have static slot prerequisites but actual row activation remains unknown",
+      "missing_item_index_on_normal_lane_path": "refuted_by_source_on_reviewed_construction_and_copy_path",
+      "identity_loss_or_fallback": "unresolved_in_lean_metadata_cache_compaction_and_online_resolution",
+      "aggregation_masking": "not_supported_for_saved_endpoint_metrics_at_declared_diagnostic_threshold",
+      "shared_resource_or_batch_barrier": "unresolved"
+    },
+    "artifact_ref": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_003\\diagnostics\\r3_read_only_coverage.json",
+      "sha256": "2858f1c6dce570b98e313a087d19e19c061bb0241a6ed9b28563042d07dec740",
+      "bytes": 845285
+    },
+    "representative_scope": "12 retained initial sample records; not an exhaustive signature or source review",
+    "next_action": "R3 closed. Do not start R4 or any new predict/score. After final review, commit and push only the R3 diagnostic checkpoint requested by the user.",
+    "source_review": {
+      "planner_sha256": "1391a6e5e7c334e0f2f3acd27c465edcb15be5ae9f2e9ac3d81211170258e689",
+      "qualification_item_index_guard": "not_required_by_qualification",
+      "row_terminal_index_guard": "non_int_or_bool_skipped",
+      "item_terminal_resolution": "row_terminal_when_present_else_completion_dependency_fallback",
+      "serving_stage_fallback": "terminal_stage_then_group_completion",
+      "first_mismatch": "Formal P2 retained execution stages show a reachable compact-stage boundary with one group-named cpu_output_commit and no row-named stage across 11046 equal-length multi-request decode batches. R3 reproduces a bounded compaction condition in the tested inputs: an unindexed zero-service shared output synchronization record is merged into the CPU output set and prevents row split. This does not establish the cause of all historical group-level stages; plural-group mapping, cache/remap, and online terminal propagation remain unverified.",
+      "candidate_decision": "non_active_followup_only_no_production_patch_or_score",
+      "refs": [
+        "candidate_paired/source/src/heterollm_sim/planner.py:19528-19625",
+        "candidate_paired/source/src/heterollm_sim/planner.py:19734-19742",
+        "candidate_paired/source/src/heterollm_sim/planner.py:25273-25362",
+        "candidate_paired/source/src/heterollm_sim/serving.py:13668-13747",
+        "tools/predict_stable_native_dataset.py:2476-2499"
+      ],
+      "timing_order_correction": "sampling_accept_then_engine_token_end_then_token_to_piece_process",
+      "normal_lane_item_index_negative_finding": "normal lane construction and qualification preserve integer item_index; missing-index explanation ruled out on reviewed path"
+    },
+    "candidate_decision": "r3_completed_structural_diagnosis_no_production_patch",
+    "request_pair_summary": {
+      "aggregation_masking_supported_cells": 0,
+      "cells_with_missing_or_duplicate_requests": 0,
+      "duplicate_request_ids_total": 0,
+      "median_delta_nontrivial_cells": 5,
+      "metric_nontrivial_abs_ms_threshold": 1e-09,
+      "missing_request_ids_total": 0,
+      "nontrivial_request_metric_delta_cells": 5,
+      "nontrivial_request_metric_delta_requests": 16,
+      "output_token_delta_count": 0,
+      "paired_cells": 131,
+      "paired_requests_total": 298,
+      "raw_delta_max_abs": {
+        "engine_e2e_ms": 5.471520125865936e-09,
+        "engine_first_token_ns": 0.0001983642578125,
+        "engine_last_token_ns": 0.0054931640625,
+        "engine_request_begin_ns": 6.103515625e-05,
+        "engine_tpot_ms": 3.296918293926865e-11,
+        "engine_ttft_ms": 1.382431946694851e-10
+      },
+      "diagnostic_endpoint_threshold_ns": 0.001,
+      "threshold_scope": "descriptive diagnostics only; not an error-acceptance rule or proof of rounding cause",
+      "finite_timepoints_and_values": true,
+      "request_formulas_and_existing_medians_checked": true,
+      "baseline_or_candidate_request_only_ids": 0,
+      "no_internal_token_interval_claim": true
+    },
+    "checkpoint_document_correction": "R3 final review completed: stale root-cause wording removed from active summaries; commit/push pending.",
+    "first_observable_mismatch": "R3 bounded structural diagnosis: for the tested TaskExecutionRecord inputs, an unindexed zero-service shared output synchronization record is merged into the CPU output set and prevents row split, producing a group-level stage; without that record or with a positive-service device output, two row stages remain. This proves the tested compaction condition only. Normal lane integer item_index propagation is ruled out on the reviewed path. Historical group-stage causes, plural-group mapping, cache/remap and online terminal propagation remain unverified. No production candidate or accuracy result.",
+    "candidate_direction": "non_active_followup_direction_only",
+    "execution_stage_observation": {
+      "formal_p2_prediction_root": "artifacts/development/native_long_grid_135_20260915/optimization_loop\\candidate_paired\\predictions",
+      "eligible_equal_length_multi_request_decode_batches": {
+        "eligible_batches": 11046,
+        "cpu_output_commit_stage_count_1": 11046,
+        "single_stage_group_named": 11046
+      },
+      "cells_with_observation": 85,
+      "samples": [
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 9,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 10,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 11,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 12,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 13,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 14,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 15,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 16,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 17,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 18,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 19,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        },
+        {
+          "cell_id": "qwen25_p128_o128_c4__fixed_runtime",
+          "batch_index": 20,
+          "request_ids": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "stage_id": "operator-invocation-group-0000.output_cpu_commit",
+          "group_id": "operator-invocation-group-0000",
+          "stage_role": "cpu_output_commit",
+          "request_ids_stage": [
+            "request-0000",
+            "request-0001",
+            "request-0002",
+            "request-0003"
+          ],
+          "dependencies": [
+            "operator-invocation-group-0000.stage0000"
+          ],
+          "execution_tasks_count": 18
+        }
+      ],
+      "interpretation": "All 11046 retained equal-length multi-request decode batches have exactly one group-named cpu_output_commit stage and no row-named compact stage. This is an observed propagation boundary in retained metadata; the R3 structural test separately reproduces a bounded zero-service shared-record compaction condition. It is not a production diagnosis or candidate approval; no prediction or score was rerun.",
+      "source_refs": [
+        "candidate_paired/source/src/heterollm_sim/planner.py:25198-25223",
+        "candidate_paired/source/src/heterollm_sim/planner.py:23924",
+        "candidate_paired/source/src/heterollm_sim/planner.py:24428",
+        "candidate_paired/source/src/heterollm_sim/planner.py:23570-23674",
+        "candidate_paired/source/src/heterollm_sim/serving.py:13665-13737"
+      ]
+    },
+    "structural_discrimination": {
+      "status": "reproduced",
+      "test_path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_003/tests/test_compact_shared_zero_service.py",
+      "command": "E:/anaconda/python.exe -m pytest -q artifacts/development/native_long_grid_135_20260915/optimization_loop/round_003/tests/test_compact_shared_zero_service.py",
+      "result": "3 passed in 0.12s",
+      "cases": {
+        "rows_only": {
+          "cpu_output_stage_count": 2,
+          "row_item_indices": [
+            0,
+            1
+          ],
+          "status": "pass"
+        },
+        "zero_service_shared_sync": {
+          "cpu_output_stage_count": 1,
+          "row_item_indices": [],
+          "stage_id": "g.output_cpu_commit",
+          "status": "reproduced_expected_group_fallback"
+        },
+        "positive_service_device": {
+          "cpu_output_stage_count": 2,
+          "row_item_indices": [
+            0,
+            1
+          ],
+          "device_output_completion_present": true,
+          "status": "pass"
+        }
+      },
+      "interpretation": "Zero-service shared output synchronization is merged into CPU candidates and blocks row split because split_rows requires every CPU stage record to carry an integer item_index. This is a structural gap reproduction, not an accuracy result or production patch."
+    }
   }
 }
