@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
   "created_utc": "2026-09-19T15:48:01.007128+00:00",
-  "status": "r3_completed_structural_diagnosis_no_patch",
+  "status": "r4_h4_scoped_negative_no_patch",
   "user_goal": "从固定R0基线开始首次机制优化循环；固定131格开发集每格Engine TTFT、TPOT、E2E误差严格小于25%，并按任务书完成独立验收。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -779,11 +779,11 @@
   },
   "baseline_role": "User-selected fixed R0 comparison starting point; canonical predict→score, identity, and boundary evidence are closed, but accuracy acceptance is not established (A: 29/131 cells passed, 102/131 failed; B: unvalidated; formal repeatability: false).",
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
-  "best_candidate_status": "R0 fixed baseline retained; R1/R2 unaccepted; R3 structural diagnosis completed with no production patch or accuracy result.",
+  "best_candidate_status": "R0 fixed baseline retained; R1/R2 unaccepted; R3 structural diagnosis completed with no scoring; R4 hardware-architecture diagnosis is user-authorized and awaiting structure-gate execution.",
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
-  "next_round_hypothesis": "R3 is closed with a bounded structural finding and no production candidate; any future candidate requires a new explicit round and must derive from R0. Do not start R4 automatically.",
-  "current_stage": "r3_completed_waiting_commit_push",
-  "next_round": 3,
+  "next_round_hypothesis": "R3 remains closed without scoring; user explicitly authorized R4. R4 must start from R0 frozen source, test H4_MEMORY_SERVICE_OWNERSHIP through a bounded hardware-resource structure gate, and must not enter predict→score before that gate passes.",
+  "current_stage": "r4_executed_waiting_gpt_review",
+  "next_round": 4,
   "rounds": [
     {
       "round": 1,
@@ -960,20 +960,20 @@
     "native_remeasurement_allowed_in_this_loop": false,
     "c2c_max_iterations": 12,
     "c2c_max_iterations_source": "C:/Users/A/.codex/skills/codex-with-chatgpt/SKILL.md default; no workspace .c2c.json override found",
-    "c2c_current_task": "c2c_r3a1",
-    "c2c_completed_execution_review_cycles_this_task": 1,
+    "c2c_current_task": "c2c_r4a1",
+    "c2c_completed_execution_review_cycles_this_task": 0,
     "c2c_current_execution_iteration": 0,
-    "optimization_round_limit_accounting": "R1/R2 consumption remains 2; R3 diagnosis is not a reset and no new predict/score attempt has run",
-    "c2c_iteration_indexing": "0-based; iteration 0 contains the R3 diagnosis and closure corrections; no further PLAN or candidate implementation is authorized, and after DONE only the user-authorized commit/push remains"
+    "optimization_round_limit_accounting": "R1/R2 consumption remains 2; R3 diagnosis is not a reset; R4 planning/structure work is not scoring and no new predict/score attempt has run",
+    "c2c_iteration_indexing": "0-based per C2C task; c2c_r4a1 iteration 0 is awaiting the R4 PLAN and does not reset optimization budget"
   },
   "continuation_policy": {
-    "status": "r3_completed_waiting_commit_push",
+    "status": "r4_executed_waiting_gpt_review",
     "first_round_started": true,
     "public_operations": [
       "predict",
       "score"
     ],
-    "current_action": "R3已结束：结构诊断复现但未实施生产补丁或精度评估；按用户指令等待最终复审后提交并推送，不启动R4。",
+    "current_action": "R4 H4访问链已核对：CPU HostMemory服务、零字节DMA描述符和PCIe payload阶段已分开记录；共享物理owner与第二次Host DRAM访问仍无依据，H4为证据不足；未实施生产补丁，未启动predict或score。",
     "r0_run_id": "run.0001",
     "r0_prediction_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\freeze.json",
@@ -991,13 +991,15 @@
     "r2_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
     "r2_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
     "r2_decision": "retain_unaccepted_numeric_equivalent",
-    "next_step": "用户已授权的R3提交/推送；完成后停止优化续行。",
+    "next_step": "发送R4服务职责EXECUTED并等待ChatGPT复审；H4未获生产候选或predict→score授权。",
     "resume_authorization": {
       "user_instruction": "继续，使用codex with chatgpt进行自动优化循环",
       "prior_status": "paused_by_user_after_r2_predict_score_completed_accuracy_equivalent_semantic_candidate_retained",
       "recorded_utc": "2026-09-21T00:31:19.078170+00:00"
     },
-    "r4_auto_start": false
+    "r4_auto_start": false,
+    "r4_authorized_by_user": true,
+    "r4_authorization": "进入R4轮次，从顶层硬件架构分析缺口开始；R3不评分。"
   },
   "goal_evaluator_status": "A_accuracy_failed_B_unvalidated",
   "version_control_policy": {
@@ -1267,7 +1269,7 @@
       "bytes": 845285
     },
     "representative_scope": "12 retained initial sample records; not an exhaustive signature or source review",
-    "next_action": "R3 closed. Do not start R4 or any new predict/score. After final review, commit and push only the R3 diagnostic checkpoint requested by the user.",
+    "next_action": "R3 remains closed with no scoring. User-authorized R4 planning is active; do not predict or score until the H4 hardware-resource structure gate is completed.",
     "source_review": {
       "planner_sha256": "1391a6e5e7c334e0f2f3acd27c465edcb15be5ae9f2e9ac3d81211170258e689",
       "qualification_item_index_guard": "not_required_by_qualification",
@@ -1643,6 +1645,102 @@
         }
       },
       "interpretation": "Zero-service shared output synchronization is merged into CPU candidates and blocks row split because split_rows requires every CPU stage record to carry an integer item_index. This is a structural gap reproduction, not an accuracy result or production patch."
+    }
+  },
+  "r4_planning": {
+    "status": "structure_gate_executed_no_patch",
+    "task_id": "c2c_r4a1",
+    "round": "R4",
+    "decision": "hardware_architecture_diagnosis_then_one_bounded_candidate",
+    "primary_hypothesis": "H4_MEMORY_SERVICE_OWNERSHIP",
+    "baseline": "R0_FIXED",
+    "r3_status": "diagnosis_preserved_no_scoring",
+    "formal_predict_score": "not_authorized_before_structure_gate",
+    "candidate_parent": "round_000/on frozen R0 source only",
+    "structure_gate_scope": "hardware components -> profiles -> resource demands -> physical owner/capacity/lane -> links/path -> queue ledger",
+    "representative_scope": "one existing R0 multi-request cell plus a control path selected by topology, not APE",
+    "prohibited": [
+      "R2 rerun",
+      "native collection",
+      "microbenchmark collection",
+      "answer-fitting hardware parameters",
+      "R3 row-terminal repair"
+    ],
+    "structure_gate_result": "evidence_insufficient_h4_host_memory_owner_unproven",
+    "selected_cell": "qwen25_p128_o32_c4__fixed_runtime",
+    "selected_parallel": 4,
+    "actual_hardware": "RTX5080-local",
+    "components": [
+      "gpu0",
+      "cpu0",
+      "hostmem0",
+      "hbm0"
+    ],
+    "links": [
+      "cpu-gpu-pcie",
+      "cpu-hostmem-ddr",
+      "gpu-hbm0"
+    ],
+    "owner_map": {},
+    "missing_capacity_ids": [
+      "gpu0.frontend",
+      "gpu0.l1_shared",
+      "gpu0.l2",
+      "gpu0.scalar",
+      "gpu0.sfu",
+      "gpu0.tensor_core",
+      "hbm0.hbm_fabric",
+      "link.cpu-gpu-pcie.cpu0->gpu0",
+      "link.cpu-gpu-pcie.gpu0->cpu0"
+    ],
+    "profile_vs_demand_gap": "R0 exposes hbm0.hbm_fabric and both PCIe directions as demands while their explicit capacity/owner maps are absent; the kernel applies default single-lane capacity, so this is a representation fact requiring physical-owner evidence, not a proven defect.",
+    "evidence_scope": "read-only R0 frozen source; no native, microbenchmark, predict, score, or answer-derived parameter",
+    "test_path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_004/tests/test_hardware_resource_closure.py",
+    "test_result": "4 passed in 5.82s",
+    "candidate_decision": "evidence_insufficient_no_production_patch_no_predict_score",
+    "host_dram_access_pair": {
+      "cpu_task": "host_cohort_pack with cpu0.memory",
+      "dma_task": "dma_controller_batch with cpu0.h2d_dma",
+      "link_task": "host_cohort_h2d with link.cpu-gpu-pcie.cpu0->gpu0",
+      "payload_bytes": 608,
+      "cpu_memory_demand_bytes": 1216,
+      "dma_setup_demand_bytes": 0,
+      "dma_setup_work_units": 1,
+      "pcie_payload_demand_bytes": 608,
+      "dependency_chain": "cpu0.memory -> iommu_translation_batch -> cpu0.h2d_dma -> PCIe link",
+      "owner_relation": "cpu0.h2d_dma is zero-byte descriptor/setup work, not a second Host DRAM bulk access; no basis exists to bind it to cpu0.memory as a common bandwidth owner",
+      "conclusion": "the selected path has ordered CPU packing, zero-byte DMA setup and PCIe payload transfer; H4 shared-memory budget remains evidence-insufficient, and merging DRAM with the DMA engine is refuted for this pair"
+    },
+    "next_step": "preserve scoped negative finding and H4 evidence-insufficient checkpoint; do not repeat this chain, create a production candidate, predict, or score without independent memory-service ownership evidence",
+    "review_decision": "accept_service_role_evidence_and_scoped_negative_finding",
+    "review_structure_gate": "not_passed",
+    "review_h4_status": "evidence_insufficient_shared_memory_service_defect_not_established",
+    "review_selected_pair": "direct_dram_dma_owner_merge_refuted",
+    "service_role_evidence": {
+      "cpu_pack": {
+        "resource_id": "cpu0.memory",
+        "bytes_moved": 1216,
+        "service_role": "CPU host-memory backing for payload read/write packing"
+      },
+      "iommu_translation": {
+        "bytes_moved": 608,
+        "service_role": "address-translation transaction accounting; not a second bulk DRAM transfer"
+      },
+      "dma_setup": {
+        "resource_id": "cpu0.h2d_dma",
+        "bytes_moved": 0,
+        "work_units": 1,
+        "service_role": "descriptor/queue setup only"
+      },
+      "default_h2d": {
+        "source": "cpu0",
+        "target": "gpu0",
+        "payload_bytes": 608,
+        "resource_id": "link.cpu-gpu-pcie.cpu0->gpu0",
+        "endpoint_memory_demands": "not_present_in_default_legacy_route",
+        "interpretation": "the observed pair does not prove a second Host DRAM access"
+      },
+      "owner_relation": "No evidence binds DMA setup or PCIe payload to cpu0.memory; physical shared-controller ownership remains unknown."
     }
   }
 }
