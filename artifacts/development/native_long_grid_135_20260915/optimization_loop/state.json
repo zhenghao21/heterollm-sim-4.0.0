@@ -779,10 +779,10 @@
   },
   "baseline_role": "User-selected fixed R0 comparison starting point; canonical predict→score, identity, and boundary evidence are closed, but accuracy acceptance is not established (A: 29/131 cells passed, 102/131 failed; B: unvalidated; formal repeatability: false).",
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
-  "best_candidate_status": "R0 fixed baseline retained; R1/R2 unaccepted; R3 structural diagnosis completed with no scoring; R4 hardware-architecture diagnosis is user-authorized and awaiting structure-gate execution.",
+  "best_candidate_status": "R0 fixed baseline retained; R1/R2 unaccepted; R3 structural diagnosis completed with no scoring; R4 top-level architecture gap candidate active and evidence-insufficient.",
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
-  "next_round_hypothesis": "R3 remains closed without scoring; user explicitly authorized R4. R4 must start from R0 frozen source, test H4_MEMORY_SERVICE_OWNERSHIP through a bounded hardware-resource structure gate, and must not enter predict→score before that gate passes.",
-  "current_stage": "r4_executed_waiting_gpt_review",
+  "next_round_hypothesis": "R4 remains a top-level architecture gap candidate. Continue H4_MEMORY_SERVICE_OWNERSHIP evidence/repair from R0 frozen source; top_level_architecture_gate is evidence_insufficient, so do not analyze lower-layer gaps or run predict→score until the top-level candidate is repaired and its structure gate passes.",
+  "current_stage": "r4_top_level_h4_evidence_insufficient_after_finite_negative",
   "next_round": 4,
   "rounds": [
     {
@@ -962,18 +962,18 @@
     "c2c_max_iterations_source": "C:/Users/A/.codex/skills/codex-with-chatgpt/SKILL.md default; no workspace .c2c.json override found",
     "c2c_current_task": "c2c_r4a1",
     "c2c_completed_execution_review_cycles_this_task": 0,
-    "c2c_current_execution_iteration": 0,
+    "c2c_current_execution_iteration": 4,
     "optimization_round_limit_accounting": "R1/R2 consumption remains 2; R3 diagnosis is not a reset; R4 planning/structure work is not scoring and no new predict/score attempt has run",
     "c2c_iteration_indexing": "0-based per C2C task; c2c_r4a1 iteration 0 is awaiting the R4 PLAN and does not reset optimization budget"
   },
   "continuation_policy": {
-    "status": "r4_executed_waiting_gpt_review",
+    "status": "r4_top_level_h4_evidence_insufficient_after_finite_negative",
     "first_round_started": true,
     "public_operations": [
       "predict",
       "score"
     ],
-    "current_action": "R4 H4访问链已核对：CPU HostMemory服务、零字节DMA描述符和PCIe payload阶段已分开记录；共享物理owner与第二次Host DRAM访问仍无依据，H4为证据不足；未实施生产补丁，未启动predict或score。",
+    "current_action": "GPT_REVIEW accepted the finite negative finding for the selected object: producer memory, PCIe transfer, and consumer HBM service exist and are ordered. Endpoint copy-read/write coverage remains unknown; no repairable gap is established.",
     "r0_run_id": "run.0001",
     "r0_prediction_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\freeze.json",
@@ -991,7 +991,7 @@
     "r2_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
     "r2_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
     "r2_decision": "retain_unaccepted_numeric_equivalent",
-    "next_step": "发送R4服务职责EXECUTED并等待ChatGPT复审；H4未获生产候选或predict→score授权。",
+    "next_step": "继续顶层H4服务职责对账；明确复制源读/目的写是否已被现有profile或算子服务覆盖。仅在证据证明必要访问/共享约束未表达时派生修正候选，结构门后predict→score；当前不下钻",
     "resume_authorization": {
       "user_instruction": "继续，使用codex with chatgpt进行自动优化循环",
       "prior_status": "paused_by_user_after_r2_predict_score_completed_accuracy_equivalent_semantic_candidate_retained",
@@ -999,7 +999,18 @@
     },
     "r4_auto_start": false,
     "r4_authorized_by_user": true,
-    "r4_authorization": "进入R4轮次，从顶层硬件架构分析缺口开始；R3不评分。"
+    "r4_authorization": "进入R4轮次，从顶层硬件架构分析缺口开始；R3不评分。",
+    "top_level_architecture_priority": {
+      "required": true,
+      "active_candidate_scope": "top_level_architecture",
+      "status": "evidence_insufficient",
+      "blocks_lower_layer": true,
+      "blocks_predict_score": false,
+      "note": "The block applies to lower-layer analysis; the top-level gap itself remains the active candidate for evidence and repair.",
+      "blocks_predict_score_reason": "Only the current unready top-level candidate is blocked by its own structure gate; a repaired top-level candidate must be predict-scored before acceptance.",
+      "active_candidate": "H4_MEMORY_SERVICE_OWNERSHIP endpoint eligibility",
+      "finite_negative_scope": "selected operator_input_transfer adjacent services only; endpoint coverage unresolved"
+    }
   },
   "goal_evaluator_status": "A_accuracy_failed_B_unvalidated",
   "version_control_policy": {
@@ -1028,6 +1039,24 @@
         "current status and evidence references"
       ],
       "record": "One concise entry in that round; no separate audit framework."
+    },
+    "top_level_architecture_gate": {
+      "required": true,
+      "priority": "first",
+      "candidate_rule": "A discovered top-level architecture gap is itself the active candidate; keep evidence, repair, and structure validation at the top level until closed.",
+      "statuses": [
+        "passed",
+        "evidence_insufficient",
+        "refuted",
+        "scope_insufficient"
+      ],
+      "blocks_lower_layer": true,
+      "blocks_predict_score_until_candidate_structure_gate": true,
+      "next_layer_allowed_only_when": "top_level_architecture_gate=passed after the active top-level candidate is repaired and structurally verified",
+      "scope": "§3 hardware architecture; model/workload; runtime architecture; software-hardware mapping and feedback",
+      "candidate_is_active_when_gap_found": true,
+      "candidate_requires_predict_score": true,
+      "lower_layer_allowed_only_after": "top-level candidate structure gate + predict -> score + independent review + no relevant top-level gap remains"
     }
   },
   "metadata_drift_resolution": {
@@ -1175,8 +1204,8 @@
     ]
   },
   "task_brief_audit": {
-    "performed_utc": "2026-09-21T00:56:48.581470+00:00",
-    "scope": "R3 structural diagnosis closure",
+    "performed_utc": "2026-09-21T00:00:00+00:00",
+    "scope": "R4 top-level architecture priority gate, active-candidate semantics, and mandatory candidate predict-score update",
     "files_reviewed": [
       "docs/TASK_BRIEF_AUDIT_20260914.md",
       "artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json",
@@ -1184,19 +1213,38 @@
       "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_003/tests/test_compact_shared_zero_service.py",
       "artifacts/development/native_long_grid_135_20260915/optimization_loop/candidate_paired/source/src/heterollm_sim/planner.py"
     ],
-    "result": "r3_closed_bounded_structural_finding_no_production_patch",
+    "result": "top_level_gap_is_active_candidate_and_must_use_same_predict_score_flow_before_acceptance",
     "changes": [
       "accepted 131-cell/298-request endpoint pairing correction with zero missing or duplicate request IDs",
       "recorded 11046 retained equal-length multi-request decode stage observations as group-level summaries",
       "ran three-case structural compaction test with actual P2 source imports: 3 passed",
       "reproduced zero-service shared synchronization blocking row split; preserved it as a bounded condition, not a universal historical cause",
       "kept R0 fixed, R1/R2 unaccepted, no predictor/scorer/native/microbenchmark and no R4 auto-start",
-      "user explicitly authorized commit and push after R3 closure"
+      "user explicitly authorized commit and push after R3 closure",
+      "added a hard first-priority gate covering all §3 top-level architecture objects",
+      "clarified that a discovered top-level architecture gap is itself the active candidate for evidence and repair",
+      "blocked lower-layer candidate analysis until the repaired top-level candidate passes its structure gate",
+      "allowed predict→score for a top-level candidate only after its own structure gate and pairing conditions pass",
+      "recorded R4 H4 as the active top-level candidate with evidence_insufficient status",
+      "clarified that the top-level architecture gap itself is the active candidate",
+      "required repaired top-level candidates to use the same frozen predict -> score and independent review flow",
+      "kept lower-layer analysis blocked until the top-level candidate is repaired, reviewed, and no relevant top-level gap remains",
+      "distinguished structural/logic correctness from measured error improvement",
+      "recorded concrete operator input-transfer endpoint eligibility evidence without inventing endpoint bandwidth or owner",
+      "bound the actual 229376-byte operator transfer to producer cpu0.memory and consumer hbm0.hbm_fabric service demands",
+      "recorded GPT_REVIEW finite negative finding while preserving unknown endpoint copy-read/write coverage"
     ],
     "unresolved": [
       "R0 A accuracy gate remains failed in 102 cells",
       "B independent set, registered domain and uncertainty evidence remain unvalidated",
-      "future candidate implementation and predict-score require a new explicit round; R3 does not authorize them"
+      "future candidate implementation and predict-score require a new explicit round; R3 does not authorize them",
+      "R4 H4 still lacks independent physical memory-service ownership evidence; lower-layer analysis remains blocked",
+      "No production patch, predict, or score is authorized until the active top-level candidate passes its structure gate",
+      "R4 H4 top-level candidate still lacks independent physical memory-service ownership evidence and a repair candidate",
+      "No predict or score has run for the R4 top-level candidate; it remains unaccepted",
+      "Need independent data-residency/physical-path evidence before treating endpoint omission as a repairable top-level defect",
+      "H4 overall remains open for other top-level paths; selected operator input path has a finite negative finding",
+      "Selected operator path does not establish endpoint copy-read/write coverage; H4 overall remains evidence_insufficient"
     ]
   },
   "error_heatmap": {
@@ -1696,8 +1744,8 @@
     "profile_vs_demand_gap": "R0 exposes hbm0.hbm_fabric and both PCIe directions as demands while their explicit capacity/owner maps are absent; the kernel applies default single-lane capacity, so this is a representation fact requiring physical-owner evidence, not a proven defect.",
     "evidence_scope": "read-only R0 frozen source; no native, microbenchmark, predict, score, or answer-derived parameter",
     "test_path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_004/tests/test_hardware_resource_closure.py",
-    "test_result": "4 passed in 5.82s",
-    "candidate_decision": "evidence_insufficient_no_production_patch_no_predict_score",
+    "test_result": "6 passed in 5.85s",
+    "candidate_decision": "top_level_h4_evidence_insufficient_no_patch_no_predict_score",
     "host_dram_access_pair": {
       "cpu_task": "host_cohort_pack with cpu0.memory",
       "dma_task": "dma_controller_batch with cpu0.h2d_dma",
@@ -1711,8 +1759,8 @@
       "owner_relation": "cpu0.h2d_dma is zero-byte descriptor/setup work, not a second Host DRAM bulk access; no basis exists to bind it to cpu0.memory as a common bandwidth owner",
       "conclusion": "the selected path has ordered CPU packing, zero-byte DMA setup and PCIe payload transfer; H4 shared-memory budget remains evidence-insufficient, and merging DRAM with the DMA engine is refuted for this pair"
     },
-    "next_step": "preserve scoped negative finding and H4 evidence-insufficient checkpoint; do not repeat this chain, create a production candidate, predict, or score without independent memory-service ownership evidence",
-    "review_decision": "accept_service_role_evidence_and_scoped_negative_finding",
+    "next_step": "保留该对象的有限负结论与复制端点服务未知项；继续顶层H4服务职责对账，不生成修正、不下钻、不predict、不score，除非补证证明必要访问或共享约束确实未表达",
+    "review_decision": "accept_finite_negative_adjacent_service_finding_keep_endpoint_coverage_unknown",
     "review_structure_gate": "not_passed",
     "review_h4_status": "evidence_insufficient_shared_memory_service_defect_not_established",
     "review_selected_pair": "direct_dram_dma_owner_merge_refuted",
@@ -1741,6 +1789,68 @@
         "interpretation": "the observed pair does not prove a second Host DRAM access"
       },
       "owner_relation": "No evidence binds DMA setup or PCIe payload to cpu0.memory; physical shared-controller ownership remains unknown."
-    }
+    },
+    "candidate_role": "top_level_architecture_gap_candidate",
+    "top_level_architecture_gate": {
+      "required": true,
+      "status": "evidence_insufficient",
+      "priority": "first",
+      "blocks_lower_layer": true,
+      "blocks_predict_score_until_candidate_structure_gate": true,
+      "active_candidate": "H4_MEMORY_SERVICE_OWNERSHIP",
+      "evidence_refs": [
+        "round_004/tests/test_hardware_resource_closure.py",
+        "round_004 execution output 88",
+        "round_000/on/source planner.py, communication.py, cost_models.py"
+      ],
+      "next_layer_allowed_only_when": "active top-level candidate repaired, structurally verified, predict-scored, independently reviewed, and no relevant top-level gap remains",
+      "candidate_is_top_level_gap": true,
+      "score_required_for_candidate_acceptance": true
+    },
+    "candidate_requires_predict_score": true,
+    "candidate_scoring_rule": "After this top-level candidate passes its own structure gate and pairing checks, run the same frozen R0 predict -> score flow and judge error improvement; logic correctness alone is insufficient.",
+    "lower_layer_blocked_until_top_level_gate_passed": true,
+    "endpoint_phase_evidence": {
+      "selected_data_object": "operator_input_transfer layer-000.input_norm.reduce (bound from actual R0 schedule)",
+      "selected_bytes": 229376,
+      "selected_source": "cpu0",
+      "selected_target": "gpu0",
+      "observed_resource": "link.cpu-gpu-pcie.cpu0->gpu0",
+      "observed_service_bytes": 229376,
+      "component_endpoint_fields": {
+        "hostmem0": {
+          "read_bandwidth_gbps": 0.0,
+          "write_bandwidth_gbps": 0.0,
+          "port_bandwidth_gbps": 716.8
+        },
+        "hbm0": {
+          "read_bandwidth_gbps": 0.0,
+          "write_bandwidth_gbps": 0.0,
+          "port_bandwidth_gbps": 7680.0
+        }
+      },
+      "hostmem0_to_hbm0_probe": "link phases only; endpoint demands absent; no explicit coherent_dma transfer_execution/span metadata",
+      "interpretation": "representation facts requiring physical/data-residency evidence; not sufficient to invent endpoint bandwidth, owner, or coherent fold",
+      "structure_test": "round_004/tests/test_hardware_resource_closure.py::test_memory_endpoint_eligibility_and_fold_metadata_are_explicit"
+    },
+    "operator_transfer_service_coverage": {
+      "data_object": "layer-000.input_norm.reduce prefill input_norm.reduce",
+      "transfer_task": "operator_input_transfer cpu0->gpu0 link.cpu-gpu-pcie.cpu0->gpu0",
+      "bytes": 229376,
+      "producer_task": "embedding cpu_memory",
+      "producer_resource": "cpu0.memory",
+      "producer_bytes_moved": 272498688,
+      "producer_output_bytes": 229376,
+      "producer_weight_gate": "source_is_cpu_attached_host_memory",
+      "consumer_task": "input_norm_reduce gpu_reduction",
+      "consumer_resource": "hbm0.hbm_fabric",
+      "consumer_bytes_moved": 229632,
+      "consumer_service_present": true,
+      "link_bytes_moved": 229376,
+      "conclusion": "For the selected object, producer memory work, PCIe link work, and consumer HBM work are present and ordered; this refutes the claim that adjacent memory services are entirely absent, but does not prove DMA source-read and destination-write endpoint coverage.",
+      "scope": "finite negative finding for this selected object; not a proof that all H2D paths are complete",
+      "endpoint_coverage": "unresolved"
+    },
+    "subhypothesis_result": "finite_negative_adjacent_service_absence_refuted_endpoint_coverage_unresolved"
   }
 }

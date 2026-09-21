@@ -402,3 +402,111 @@ def test_host_memory_cpu_access_and_h2d_path_are_explicit_but_owner_unknown() ->
     # The path proves ordering and resource identities, but no physical owner
     # mapping connects cpu0.memory to DMA or PCIe; H4 remains evidence-limited.
     assert schedule.resource_owners == {}
+
+
+def test_memory_endpoint_eligibility_and_fold_metadata_are_explicit() -> None:
+    """Separate endpoint capability facts from coherent-DMA fold eligibility."""
+
+    scenario, schedule, _evidence = _prepared()
+    operator_transfer = next(
+        task
+        for task in schedule.tasks
+        if task.metadata.get("event_kind") == "operator_input_transfer"
+        and task.metadata.get("operator_id") == "layer-000.input_norm.reduce"
+        and task.metadata.get("bytes") == 229376
+    )
+    assert operator_transfer.metadata["source_component"] == "cpu0"
+    assert operator_transfer.metadata["target_component"] == "gpu0"
+    payload_bytes = int(operator_transfer.metadata["bytes"])
+    components = scenario.hardware.component_map()
+    hostmem = components["hostmem0"]
+    hbm = components["hbm0"]
+    assert hostmem.is_active_memory and hbm.is_active_memory
+    # The measured R0 constructor carries positive bandwidth on the physical
+    # DDR/HBM ports, but the endpoint service fields consumed by
+    # TopologyRouter remain undeclared.  This is a representation fact, not a
+    # license to invent a read/write budget.
+    assert any(port.bandwidth_gbps > 0 for port in hostmem.ports)
+    assert any(port.bandwidth_gbps > 0 for port in hbm.ports)
+    assert hostmem.read_bandwidth_gbps == 0.0
+    assert hostmem.write_bandwidth_gbps == 0.0
+    assert hbm.read_bandwidth_gbps == 0.0
+    assert hbm.write_bandwidth_gbps == 0.0
+
+    phases = TopologyRouter(scenario.hardware).transfer_phases(
+        "hostmem0", "hbm0", payload_bytes, name="r4.endpoint_probe"
+    )
+    assert phases
+    assert all(phase.metadata.get("event_kind") == "transfer" for phase in phases)
+    assert all(
+        not demand.resource_id.startswith("component.hostmem0.")
+        and not demand.resource_id.startswith("component.hbm0.")
+        for phase in phases
+        for demand in phase.demands
+    )
+    # Existing link payload labels alone do not satisfy the router's explicit
+    # transfer_execution/coherent_dma_span_id contract.  Do not infer a fold.
+    assert all(
+        phase.metadata.get("transfer_execution") != "coherent_dma"
+        for phase in phases
+    )
+
+
+def test_operator_transfer_has_producer_link_and_consumer_memory_coverage() -> None:
+    """Bind one real transfer object to its surrounding memory services."""
+
+    _scenario, schedule, _evidence = _prepared()
+    by_id = {task.task_id: task for task in schedule.tasks}
+    transfer = next(
+        task
+        for task in schedule.tasks
+        if task.metadata.get("event_kind") == "operator_input_transfer"
+        and task.metadata.get("operator_id") == "layer-000.input_norm.reduce"
+        and task.metadata.get("bytes") == 229376
+    )
+    assert len(transfer.dependencies) == 1
+    embedding_complete = by_id[transfer.dependencies[0]]
+    assert embedding_complete.metadata.get("event_kind") == "embedding_complete"
+    assert len(embedding_complete.dependencies) == 1
+    producer = by_id[embedding_complete.dependencies[0]]
+    assert producer.metadata.get("event_kind") == "embedding"
+    assert producer.metadata.get("output_bytes") == 229376
+    assert producer.metadata.get("input_component") == "cpu0"
+    assert producer.metadata.get("weight_source_kind") == "host_memory"
+    assert producer.metadata.get("weight_source_transfer_emitted") is False
+    assert producer.metadata.get("weight_backing_read_gate") == (
+        "source_is_cpu_attached_host_memory"
+    )
+    producer_memory = next(
+        demand for demand in producer.demands if demand.resource_id == "cpu0.memory"
+    )
+    assert producer_memory.bytes_moved > 229376
+    assert producer_memory.service_ns > 0
+
+    consumer = next(
+        task
+        for task in schedule.tasks
+        if transfer.task_id in task.dependencies
+        and task.metadata.get("event_kind") == "input_norm_reduce"
+    )
+    assert len(consumer.dependencies) == 1
+    # The kernel launch is followed by the actual reduction service task.
+    reduction = next(
+        task
+        for task in schedule.tasks
+        if consumer.task_id in task.dependencies
+        and task.metadata.get("event_kind") == "input_norm_reduce"
+        and any(d.resource_id == "hbm0.hbm_fabric" for d in task.demands)
+    )
+    hbm_demand = next(
+        demand for demand in reduction.demands if demand.resource_id == "hbm0.hbm_fabric"
+    )
+    assert hbm_demand.bytes_moved == 229632
+    assert hbm_demand.service_ns > 0
+    link_demand = next(
+        demand
+        for demand in transfer.demands
+        if demand.resource_id == "link.cpu-gpu-pcie.cpu0->gpu0"
+    )
+    assert link_demand.bytes_moved == 229376
+    assert link_demand.service_ns > 0
