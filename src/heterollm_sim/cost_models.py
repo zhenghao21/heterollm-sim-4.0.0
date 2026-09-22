@@ -212,8 +212,13 @@ class GemmWorkload:
     source_partial_name: str = ""
     # Appended to preserve the existing positional constructor interface.
     mmvq_issue_contract: Optional[MMVQIssueContract] = None
+    # CIM-only operand arithmetic, not inferred from storage width. Legacy
+    # callers retain integer bit-slice semantics; fp16 must be explicit.
+    cim_arithmetic: str = "integer"
 
     def __post_init__(self) -> None:
+        if self.cim_arithmetic not in ("integer", "fp16"):
+            raise ValueError("cim_arithmetic must be integer or fp16")
         for field_name in ("m", "k", "n"):
             _require_positive_int(field_name, getattr(self, field_name))
         for field_name in (
@@ -1496,10 +1501,23 @@ class HBMProfile:
     efficiency: float = 1.0
     energy_pj_per_byte: float = 0.0
     resource_id: str = "hbm.channel"
+    read_latency_ns: float = 0.0
+    write_latency_ns: float = 0.0
+    transaction_bytes: int = 256
+    max_outstanding_requests: int = 32
+    read_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
+    write_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
 
     def __post_init__(self) -> None:
         _require_positive("bandwidth_gb_s", self.bandwidth_gb_s)
+        for name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
+            if getattr(self, name) is not None:
+                _require_positive(name, getattr(self, name))
         _require_efficiency("efficiency", self.efficiency)
+        _require_non_negative("read_latency_ns", self.read_latency_ns)
+        _require_non_negative("write_latency_ns", self.write_latency_ns)
+        _require_positive_int("transaction_bytes", self.transaction_bytes)
+        _require_positive_int("max_outstanding_requests", self.max_outstanding_requests)
         _require_non_negative("energy_pj_per_byte", self.energy_pj_per_byte)
         if not self.resource_id:
             raise ValueError("resource_id must not be empty")
@@ -1507,6 +1525,45 @@ class HBMProfile:
     @property
     def effective_bandwidth_gb_s(self) -> float:
         return self.bandwidth_gb_s * self.efficiency
+
+    @property
+    def effective_read_bandwidth_gb_s(self) -> float:
+        bandwidth = self.bandwidth_gb_s if self.read_bandwidth_gb_s is None else self.read_bandwidth_gb_s
+        return bandwidth * self.efficiency
+
+    @property
+    def effective_write_bandwidth_gb_s(self) -> float:
+        bandwidth = self.bandwidth_gb_s if self.write_bandwidth_gb_s is None else self.write_bandwidth_gb_s
+        return bandwidth * self.efficiency
+
+    def memory_service(
+        self, read_bytes: int, write_bytes: int = 0, *,
+        bandwidth_gb_s: Optional[float] = None,
+    ) -> Mapping[str, object]:
+        """Price directional payload; override scales the old reference BW.
+
+        The GPU shape factor applies independently to each direction, not to
+        a read/write average. Missing directional fields keep the old scalar
+        path, including its floating-point evaluation order.
+        """
+
+        reference_bw = self.effective_bandwidth_gb_s
+        effective_bw = reference_bw if bandwidth_gb_s is None else bandwidth_gb_s
+        _require_positive("bandwidth_gb_s", effective_bw)
+        shape_factor = effective_bw / reference_bw
+        return _memory_service(
+            read_bytes=read_bytes,
+            write_bytes=write_bytes,
+            bandwidth_gb_s=effective_bw,
+            read_bandwidth_gb_s=(None if self.read_bandwidth_gb_s is None else
+                                 self.effective_read_bandwidth_gb_s * shape_factor),
+            write_bandwidth_gb_s=(None if self.write_bandwidth_gb_s is None else
+                                  self.effective_write_bandwidth_gb_s * shape_factor),
+            read_latency_ns=self.read_latency_ns,
+            write_latency_ns=self.write_latency_ns,
+            transaction_bytes=self.transaction_bytes,
+            max_outstanding_requests=self.max_outstanding_requests,
+        )
 
 
 @dataclass(frozen=True)
@@ -1518,10 +1575,23 @@ class HostMemoryProfile:
     energy_pj_per_byte: float = 0.0
     resource_id: str = "host.memory"
     name: str = "host-memory"
+    read_latency_ns: float = 0.0
+    write_latency_ns: float = 0.0
+    transaction_bytes: int = 256
+    max_outstanding_requests: int = 32
+    read_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
+    write_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
 
     def __post_init__(self) -> None:
         _require_positive("bandwidth_gb_s", self.bandwidth_gb_s)
+        for name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
+            if getattr(self, name) is not None:
+                _require_positive(name, getattr(self, name))
         _require_efficiency("efficiency", self.efficiency)
+        _require_non_negative("read_latency_ns", self.read_latency_ns)
+        _require_non_negative("write_latency_ns", self.write_latency_ns)
+        _require_positive_int("transaction_bytes", self.transaction_bytes)
+        _require_positive_int("max_outstanding_requests", self.max_outstanding_requests)
         _require_non_negative("energy_pj_per_byte", self.energy_pj_per_byte)
         if not self.resource_id or not self.name:
             raise ValueError("resource and profile names must not be empty")
@@ -1530,6 +1600,45 @@ class HostMemoryProfile:
     def effective_bandwidth_gb_s(self) -> float:
         # Decimal GB/s is numerically equal to bytes/ns.
         return self.bandwidth_gb_s * self.efficiency
+
+    @property
+    def effective_read_bandwidth_gb_s(self) -> float:
+        bandwidth = self.bandwidth_gb_s if self.read_bandwidth_gb_s is None else self.read_bandwidth_gb_s
+        return bandwidth * self.efficiency
+
+    @property
+    def effective_write_bandwidth_gb_s(self) -> float:
+        bandwidth = self.bandwidth_gb_s if self.write_bandwidth_gb_s is None else self.write_bandwidth_gb_s
+        return bandwidth * self.efficiency
+
+    def memory_service(
+        self, read_bytes: int, write_bytes: int = 0, *,
+        bandwidth_gb_s: Optional[float] = None,
+    ) -> Mapping[str, object]:
+        """Price directional payload; override scales the old reference BW.
+
+        The GPU shape factor applies independently to each direction, not to
+        a read/write average. Missing directional fields keep the old scalar
+        path, including its floating-point evaluation order.
+        """
+
+        reference_bw = self.effective_bandwidth_gb_s
+        effective_bw = reference_bw if bandwidth_gb_s is None else bandwidth_gb_s
+        _require_positive("bandwidth_gb_s", effective_bw)
+        shape_factor = effective_bw / reference_bw
+        return _memory_service(
+            read_bytes=read_bytes,
+            write_bytes=write_bytes,
+            bandwidth_gb_s=effective_bw,
+            read_bandwidth_gb_s=(None if self.read_bandwidth_gb_s is None else
+                                 self.effective_read_bandwidth_gb_s * shape_factor),
+            write_bandwidth_gb_s=(None if self.write_bandwidth_gb_s is None else
+                                  self.effective_write_bandwidth_gb_s * shape_factor),
+            read_latency_ns=self.read_latency_ns,
+            write_latency_ns=self.write_latency_ns,
+            transaction_bytes=self.transaction_bytes,
+            max_outstanding_requests=self.max_outstanding_requests,
+        )
 
 
 @dataclass(frozen=True)
@@ -2180,8 +2289,48 @@ class DigitalSramCimProfile:
     accumulator_resource_id: str = "cim.accumulator"
     peripheral_resource_id: str = "cim.peripheral"
     name: str = "digital-sram-cim"
+    arithmetic_mode: str = "integer_bit_slice"
+    float_cycles_per_eval: Optional[float] = None
+    float_accumulator_outputs_per_cycle: Optional[float] = None
+    float_contract_basis: str = ""
+    weight_conversion_mode: str = "disabled"
+    weight_decode_elements_per_ns: float = 0.0
+    conversion_scratch_capacity_bytes: int = 0
+    activation_fp32_to_fp16_elements_per_ns: float = 0.0
+    conversion_contract_basis: str = ""
+    conversion_read_energy_pj_per_byte: float = 0.0
+    conversion_write_energy_pj_per_byte: float = 0.0
 
     def __post_init__(self) -> None:
+        if self.weight_conversion_mode not in ("disabled", "packed_to_fp16_cold"):
+            raise ValueError("unsupported CIM weight_conversion_mode")
+        for key in ("weight_decode_elements_per_ns", "activation_fp32_to_fp16_elements_per_ns",
+                    "conversion_read_energy_pj_per_byte", "conversion_write_energy_pj_per_byte"):
+            _require_non_negative(key, getattr(self, key))
+        _require_non_negative_int("conversion_scratch_capacity_bytes", self.conversion_scratch_capacity_bytes)
+        if self.weight_conversion_mode != "disabled":
+            if self.arithmetic_mode != "fp16_fp32_analytical":
+                raise ValueError("weight conversion requires floating CIM")
+            _require_positive("weight_decode_elements_per_ns", self.weight_decode_elements_per_ns)
+            _require_positive_int("conversion_scratch_capacity_bytes", self.conversion_scratch_capacity_bytes)
+            if not isinstance(self.conversion_contract_basis, str) or not self.conversion_contract_basis.strip():
+                raise ValueError("conversion_contract_basis must document hardware assumptions")
+        if self.arithmetic_mode not in ("integer_bit_slice", "fp16_fp32_analytical"):
+            raise ValueError("unsupported CIM arithmetic_mode")
+        if self.arithmetic_mode == "fp16_fp32_analytical":
+            for name in ("float_cycles_per_eval", "float_accumulator_outputs_per_cycle"):
+                value = getattr(self, name)
+                if value is None:
+                    raise ValueError(name + " is required by floating CIM contract")
+                _require_positive(name, value)
+            if not isinstance(self.float_contract_basis, str) or not self.float_contract_basis.strip():
+                raise ValueError("float_contract_basis must document the floating hardware assumption")
+            if self.accumulator_bits != 32:
+                raise ValueError("floating CIM contract requires FP32 accumulator_bits=32")
+        elif (self.float_cycles_per_eval is not None
+              or self.float_accumulator_outputs_per_cycle is not None
+              or self.float_contract_basis):
+            raise ValueError("floating CIM parameters require fp16_fp32_analytical mode")
         for field_name in (
             "array_count",
             "p_m",
@@ -2248,6 +2397,121 @@ class DigitalSramCimProfile:
         return estimate_cim_gemm(self, workload, weights_resident=weights_resident)
 
 
+def _memory_service(
+    *,
+    read_bytes: int,
+    write_bytes: int,
+    bandwidth_gb_s: float,
+    read_bandwidth_gb_s: Optional[float] = None,
+    write_bandwidth_gb_s: Optional[float] = None,
+    read_latency_ns: float = 0.0,
+    write_latency_ns: float = 0.0,
+    transaction_bytes: int = 256,
+    max_outstanding_requests: int = 32,
+) -> Mapping[str, object]:
+    """Analytical bandwidth/latency envelope for one resolved payload stream.
+
+    Reads and writes share the outstanding-request window.  Request-slot time
+    divided by that window is an optimistic concurrency bound, not a schedule.
+    A nonempty direction also cannot complete before its single-request latency.
+    Bandwidth and these bounds overlap (max, not sum).  Zero latency reproduces
+    the historical payload/BW model exactly, including partial transactions.
+
+    Inputs must already reflect cache misses or other physical-flow decisions.
+    No addresses, access ordering or achieved MLP are known: transaction counts
+    assume coalesced per-direction streams, and payload bytes are NOT rounded up
+    to transaction size.  Unaligned/strided overfetch must be supplied upstream.
+    """
+
+    _require_non_negative_int("read_bytes", read_bytes)
+    _require_non_negative_int("write_bytes", write_bytes)
+    _require_positive("bandwidth_gb_s", bandwidth_gb_s)
+    read_bw = bandwidth_gb_s if read_bandwidth_gb_s is None else read_bandwidth_gb_s
+    write_bw = bandwidth_gb_s if write_bandwidth_gb_s is None else write_bandwidth_gb_s
+    _require_positive("read_bandwidth_gb_s", read_bw)
+    _require_positive("write_bandwidth_gb_s", write_bw)
+    _require_non_negative("read_latency_ns", read_latency_ns)
+    _require_non_negative("write_latency_ns", write_latency_ns)
+    _require_positive_int("transaction_bytes", transaction_bytes)
+    _require_positive_int("max_outstanding_requests", max_outstanding_requests)
+    physical_bytes = read_bytes + write_bytes
+    read_transactions = _ceil_div(read_bytes, transaction_bytes)
+    write_transactions = _ceil_div(write_bytes, transaction_bytes)
+    transaction_count = read_transactions + write_transactions
+    effective_outstanding = min(max_outstanding_requests, transaction_count)
+    read_bandwidth_service_ns = read_bytes / read_bw if read_bytes else 0.0
+    write_bandwidth_service_ns = write_bytes / write_bw if write_bytes else 0.0
+    # One shared controller: directions add; preserve exact legacy rounding
+    # when their rates coincide (rather than adding two rounded divisions).
+    bandwidth_service_ns = (
+        physical_bytes / read_bw if read_bw == write_bw else
+        read_bandwidth_service_ns + write_bandwidth_service_ns
+    )
+    single_request_latency_ns = max(
+        read_latency_ns if read_transactions else 0.0,
+        write_latency_ns if write_transactions else 0.0,
+    )
+    request_slot_time_ns = (
+        read_transactions * read_latency_ns
+        + write_transactions * write_latency_ns
+    )
+    concurrency_service_ns = (
+        request_slot_time_ns / effective_outstanding
+        if effective_outstanding else 0.0
+    )
+    latency_service_ns = max(single_request_latency_ns, concurrency_service_ns)
+    service_ns = max(bandwidth_service_ns, latency_service_ns)
+    service_source = (
+        "zero_traffic" if not physical_bytes else
+        "latency_concurrency" if latency_service_ns > bandwidth_service_ns else
+        "bandwidth_and_latency_concurrency" if latency_service_ns == bandwidth_service_ns else
+        "bandwidth"
+    )
+    return {
+        "model": "memory_bandwidth_latency_concurrency_bound_v1",
+        "evidence": EvidenceStatus.ANALYTICAL.value,
+        "cycle_accurate": False,
+        "latency_model_enabled": read_latency_ns > 0.0 or write_latency_ns > 0.0,
+        "byte_scope": "resolved_backing_payload",
+        "logical_read_bytes": read_bytes,
+        "logical_write_bytes": write_bytes,
+        "logical_bytes": physical_bytes,
+        "physical_read_bytes": read_bytes,
+        "physical_write_bytes": write_bytes,
+        "physical_bytes": physical_bytes,
+        "physical_traffic_basis": "payload_only_no_transaction_padding",
+        "transaction_bytes": transaction_bytes,
+        "read_transactions": read_transactions,
+        "write_transactions": write_transactions,
+        "transaction_count": transaction_count,
+        "max_outstanding_requests": max_outstanding_requests,
+        "effective_outstanding": effective_outstanding,
+        "outstanding_basis": "configured_limit_capped_by_transaction_count",
+        "concurrency_assumption": "independent_requests_shared_read_write_window",
+        "read_latency_ns": read_latency_ns,
+        "write_latency_ns": write_latency_ns,
+        "bandwidth_gb_s": bandwidth_gb_s,
+        "read_bandwidth_gb_s": read_bw,
+        "write_bandwidth_gb_s": write_bw,
+        "read_bandwidth_service_ns": read_bandwidth_service_ns,
+        "write_bandwidth_service_ns": write_bandwidth_service_ns,
+        "bandwidth_model": "shared_controller_directional_serial_payload",
+        "bandwidth_service_ns": bandwidth_service_ns,
+        "single_request_latency_ns": single_request_latency_ns,
+        "request_slot_time_ns": request_slot_time_ns,
+        "concurrency_service_ns": concurrency_service_ns,
+        "latency_service_ns": latency_service_ns,
+        "latency_bound": latency_service_ns > bandwidth_service_ns,
+        "service_source": service_source,
+        "service_ns": service_ns,
+        "unmodeled_terms": (
+            "request_dependencies_and_achieved_mlp",
+            "transaction_alignment_fragmentation_and_padding",
+            "bank_row_buffer_refresh_and_read_write_turnaround",
+        ),
+    }
+
+
 def _cache_memory_demands(
     *,
     hierarchy: CacheHierarchyProfile,
@@ -2259,6 +2523,7 @@ def _cache_memory_demands(
     backing_bandwidth_gb_s: float,
     backing_energy_pj_per_byte: float,
     backing_resource_id: str,
+    backing_profile: Optional[HBMProfile | HostMemoryProfile] = None,
 ) -> Tuple[Tuple[ResourceDemand, ...], Mapping[str, object]]:
     """Account directional payload traffic over one closed cache interval.
 
@@ -2358,7 +2623,15 @@ def _cache_memory_demands(
         incoming_reads, incoming_writes = read_misses, downstream_writes
 
     backing_bytes = incoming_reads + incoming_writes
-    backing_service_ns = backing_bytes / backing_bandwidth_gb_s
+    backing_memory_service = (
+        backing_profile.memory_service(
+            incoming_reads, incoming_writes, bandwidth_gb_s=backing_bandwidth_gb_s,
+        ) if backing_profile is not None else _memory_service(
+            read_bytes=incoming_reads, write_bytes=incoming_writes,
+            bandwidth_gb_s=backing_bandwidth_gb_s,
+        )
+    )
+    backing_service_ns = float(backing_memory_service["service_ns"])
     demands.append(ResourceDemand(
         resource_id=backing_resource_id,
         service_ns=backing_service_ns,
@@ -2373,6 +2646,13 @@ def _cache_memory_demands(
         "reuse_factor": reuse_factor,
         "streaming_fraction": streaming_fraction,
         "levels": tuple(rows),
+        "logical_read_bytes": read_bytes,
+        "logical_write_bytes": write_bytes,
+        "logical_bytes": read_bytes + write_bytes,
+        "physical_read_bytes": incoming_reads,
+        "physical_write_bytes": incoming_writes,
+        "physical_bytes": backing_bytes,
+        "backing_memory_service": backing_memory_service,
         "backing_read_bytes": incoming_reads,
         "backing_write_bytes": incoming_writes,
         "backing_bytes": backing_bytes,
@@ -2844,7 +3124,11 @@ def estimate_gpu_gemm(
         backing_bandwidth_gb_s=shape_effective_hbm_bandwidth_gb_s,
         backing_energy_pj_per_byte=hbm.energy_pj_per_byte,
         backing_resource_id=hbm.resource_id,
+        backing_profile=hbm,
     )
+    # Keep cache payload reports invariant under timing-only profile changes.
+    cache_metadata = dict(cache_metadata)
+    backing_memory_service = cache_metadata.pop("backing_memory_service")
     memory_ns = max(
         (demand.service_ns for demand in memory_demands), default=0.0
     )
@@ -2947,6 +3231,7 @@ def estimate_gpu_gemm(
                     else ""
                 ),
                 "cache": cache_metadata,
+                "backing_memory_service": backing_memory_service,
                 "hbm_bandwidth": hbm_bandwidth_metadata,
                 "memory_traffic_semantics": (
                     "source_unique_and_partial_write_inherited_stateless_mapping"
@@ -3022,6 +3307,7 @@ def estimate_gpu_gemm(
                 else ""
             ),
             "cache": cache_metadata,
+            "backing_memory_service": backing_memory_service,
             "hbm_bandwidth": hbm_bandwidth_metadata,
             **issue_metadata,
         },
@@ -3077,6 +3363,7 @@ def estimate_gpu_tensor_kernel(
         memory_energy_pj_per_byte=hbm.energy_pj_per_byte,
         compute_resource_id=gpu.scalar_resource_id,
         memory_resource_id=hbm.resource_id,
+        memory_profile=hbm,
         dispatch_resource_id=gpu.launch_resource_id,
         dispatch_name="kernel_launch",
         dispatch_ns=gpu.kernel_launch_ns,
@@ -3294,7 +3581,11 @@ def estimate_gpu_fused_attention(
         backing_bandwidth_gb_s=hbm.effective_bandwidth_gb_s,
         backing_energy_pj_per_byte=hbm.energy_pj_per_byte,
         backing_resource_id=hbm.resource_id,
+        backing_profile=hbm,
     )
+    # Keep cache payload reports invariant under timing-only profile changes.
+    cache_metadata = dict(cache_metadata)
+    backing_memory_service = cache_metadata.pop("backing_memory_service")
     memory_ns = max(
         (demand.service_ns for demand in memory_demands), default=0.0
     )
@@ -3399,6 +3690,7 @@ def estimate_gpu_fused_attention(
         "qk_scale_operations": workload.qk_scale_operations,
         "memory_traffic_semantics": "compulsory_minimum_io",
         "cache": cache_metadata,
+        "backing_memory_service": backing_memory_service,
     }
     phases.append(
         CostPhase(
@@ -3474,6 +3766,7 @@ def _estimate_typed_roofline(
     memory_energy_pj_per_byte: float,
     compute_resource_id: str,
     memory_resource_id: str,
+    memory_profile: Optional[HBMProfile | HostMemoryProfile] = None,
     dispatch_resource_id: Optional[str] = None,
     dispatch_name: str,
     dispatch_ns: float,
@@ -3601,9 +3894,18 @@ def _estimate_typed_roofline(
             backing_bandwidth_gb_s=memory_bandwidth_gb_s,
             backing_energy_pj_per_byte=memory_energy_pj_per_byte,
             backing_resource_id=memory_resource_id,
+            backing_profile=memory_profile,
         )
     else:
-        backing_service_ns = bytes_moved / memory_bandwidth_gb_s
+        backing_memory_service = (
+            memory_profile.memory_service(
+                read_bytes, write_bytes, bandwidth_gb_s=memory_bandwidth_gb_s,
+            ) if memory_profile is not None else _memory_service(
+                read_bytes=read_bytes, write_bytes=write_bytes,
+                bandwidth_gb_s=memory_bandwidth_gb_s,
+            )
+        )
+        backing_service_ns = float(backing_memory_service["service_ns"])
         memory_demands = (
             ResourceDemand(
                 resource_id=memory_resource_id,
@@ -3614,9 +3916,21 @@ def _estimate_typed_roofline(
         ) if bytes_moved > 0 else ()
         cache_metadata = {
             "cache_model": "none",
+            "logical_read_bytes": read_bytes,
+            "logical_write_bytes": write_bytes,
+            "logical_bytes": bytes_moved,
+            "physical_read_bytes": read_bytes,
+            "physical_write_bytes": write_bytes,
+            "physical_bytes": bytes_moved,
+            "backing_read_bytes": read_bytes,
+            "backing_write_bytes": write_bytes,
+            "backing_memory_service": backing_memory_service,
             "backing_bytes": bytes_moved,
             "backing_service_ns": backing_service_ns,
         }
+    # Keep cache payload reports invariant under timing-only profile changes.
+    cache_metadata = dict(cache_metadata)
+    backing_memory_service = cache_metadata.pop("backing_memory_service")
     memory_ns = max(
         (demand.service_ns for demand in memory_demands), default=0.0
     )
@@ -3633,6 +3947,7 @@ def _estimate_typed_roofline(
         "read_bytes": read_bytes,
         "write_bytes": write_bytes,
         "cache": cache_metadata,
+        "backing_memory_service": backing_memory_service,
         "instruction_schedule": dict(instruction_metadata or {}),
     }
 
@@ -3755,6 +4070,7 @@ def estimate_gpu_elementwise(
         memory_energy_pj_per_byte=hbm.energy_pj_per_byte,
         compute_resource_id=gpu.scalar_resource_id,
         memory_resource_id=hbm.resource_id,
+        memory_profile=hbm,
         dispatch_resource_id=gpu.launch_resource_id,
         dispatch_name="kernel_launch",
         dispatch_ns=gpu.kernel_launch_ns,
@@ -3795,6 +4111,7 @@ def estimate_gpu_reduction(
         memory_energy_pj_per_byte=hbm.energy_pj_per_byte,
         compute_resource_id=gpu.scalar_resource_id,
         memory_resource_id=hbm.resource_id,
+        memory_profile=hbm,
         dispatch_resource_id=gpu.launch_resource_id,
         dispatch_name="kernel_launch",
         dispatch_ns=gpu.kernel_launch_ns,
@@ -3829,6 +4146,7 @@ def estimate_gpu_memory(
         memory_energy_pj_per_byte=hbm.energy_pj_per_byte,
         compute_resource_id=gpu.scalar_resource_id,
         memory_resource_id=hbm.resource_id,
+        memory_profile=hbm,
         dispatch_resource_id=gpu.launch_resource_id,
         dispatch_name="kernel_launch",
         dispatch_ns=gpu.kernel_launch_ns,
@@ -4570,6 +4888,7 @@ def estimate_cpu_gemm(
         memory_energy_pj_per_byte=memory.energy_pj_per_byte,
         compute_resource_id=cpu.compute_resource_id,
         memory_resource_id=memory.resource_id,
+        memory_profile=memory,
         dispatch_name="cpu_dispatch",
         dispatch_ns=cpu.dispatch_ns,
         dispatch_energy_pj=cpu.dispatch_energy_pj,
@@ -4624,6 +4943,7 @@ def estimate_cpu_elementwise(
         memory_energy_pj_per_byte=memory.energy_pj_per_byte,
         compute_resource_id=cpu.compute_resource_id,
         memory_resource_id=memory.resource_id,
+        memory_profile=memory,
         dispatch_name="cpu_dispatch",
         dispatch_ns=cpu.dispatch_ns,
         dispatch_energy_pj=cpu.dispatch_energy_pj,
@@ -4684,6 +5004,7 @@ def estimate_cpu_reduction(
         memory_energy_pj_per_byte=memory.energy_pj_per_byte,
         compute_resource_id=cpu.compute_resource_id,
         memory_resource_id=memory.resource_id,
+        memory_profile=memory,
         dispatch_name="cpu_dispatch",
         dispatch_ns=cpu.dispatch_ns,
         dispatch_energy_pj=cpu.dispatch_energy_pj,
@@ -4730,6 +5051,7 @@ def estimate_cpu_memory(
         memory_energy_pj_per_byte=memory.energy_pj_per_byte,
         compute_resource_id=cpu.compute_resource_id,
         memory_resource_id=memory.resource_id,
+        memory_profile=memory,
         dispatch_name="cpu_dispatch",
         dispatch_ns=cpu.dispatch_ns,
         dispatch_energy_pj=cpu.dispatch_energy_pj,
@@ -4851,12 +5173,102 @@ def _tree_levels(term_count: int, fan_in: int) -> int:
 
 
 def _required_accumulator_bits(workload: GemmWorkload, guard_bits: int) -> int:
+    """Integer exact-accumulation width only; never a floating-point proof."""
     return (
         workload.activation_bits
         + workload.weight_bits
         + int(math.ceil(math.log2(workload.k)))
         + guard_bits
     )
+
+
+def _estimate_cim_converted(profile, workload, weights_resident):
+    """Cold, full-matrix conversion in dedicated CIM-local scratch; no reuse claim."""
+    if weights_resident:
+        raise ValueError("converted CIM weights require cold per-call loading; warm residency unsupported")
+    formats = {fmt.upper() for fmt in workload.packed_weight_formats}
+    if not formats or not formats <= {"IQ3_S", "IQ4_XS"}:
+        raise ValueError("CIM conversion supports only IQ3_S/IQ4_XS")
+    if workload.cim_arithmetic != "fp16" or workload.activation_bits not in (16, 32):
+        raise ValueError("CIM conversion requires explicit FP16/FP32 input arithmetic")
+    if workload.weight_storage_bytes is None or workload.weight_storage_bytes <= 0:
+        raise ValueError("CIM conversion requires actual packed weight_storage_bytes")
+    if workload.activation_bytes not in (2 * workload.m * workload.k, 4 * workload.m * workload.k):
+        raise ValueError("CIM conversion requires dense FP16/FP32 input storage")
+    fp32 = workload.activation_bytes == 4 * workload.m * workload.k
+    if fp32 and profile.activation_fp32_to_fp16_elements_per_ns <= 0:
+        raise ValueError("FP32 input requires explicit activation_fp32_to_fp16_elements_per_ns")
+    padded = 2 * _ceil_div(workload.k, profile.p_k) * profile.p_k * _ceil_div(workload.n, profile.p_n) * profile.p_n
+    # Full packed and padded dense matrices coexist until conversion completes.
+    packed = workload.weight_bytes
+    activation_dense = 2 * workload.m * workload.k if fp32 else 0
+    scratch = packed + padded + workload.activation_bytes + activation_dense + workload.output_bytes
+    if scratch > profile.conversion_scratch_capacity_bytes:
+        raise ValueError("CIM conversion scratch capacity insufficient: needs %d bytes" % scratch)
+    dense = replace(workload, activation_bits=16, weight_bits=16,
+        activation_storage_bytes=2 * workload.m * workload.k,
+        weight_storage_bytes=2 * workload.k * workload.n,
+        packed_weight_formats=(), packed_weight_transform_operations=0,
+        packed_weight_format_segments=(), weight_metadata_bytes=0)
+    result = estimate_cim_gemm(replace(profile, weight_conversion_mode="disabled"), dense, False)
+    audit = dict(mode=profile.weight_conversion_mode, formats=tuple(sorted(formats)),
+        packed_read_bytes=packed, dense_padded_bytes=padded, scratch_peak_bytes=scratch,
+        input_storage_bits=32 if fp32 else 16, fp32_input_conversion=fp32,
+        loads_per_invocation=1, conversions_per_invocation=1,
+        lifecycle="cold_per_call_no_cross_call_reuse", calibrated=False,
+        contract_basis=profile.conversion_contract_basis,
+        weight_decode_elements_per_ns=profile.weight_decode_elements_per_ns,
+        activation_fp32_to_fp16_elements_per_ns=profile.activation_fp32_to_fp16_elements_per_ns,
+        energy_coefficients_unvalidated=True)
+    def phase(name, count, ns, energy):
+        return CostPhase(name=name, category=TaskCategory.MEMORY,
+            demands=(ResourceDemand(resource_id=profile.load_resource_id,
+                service_ns=ns, bytes_moved=count, energy_pj=energy),),
+            metadata={"weight_conversion": audit})
+    read_energy = profile.conversion_read_energy_pj_per_byte
+    write_energy = profile.conversion_write_energy_pj_per_byte
+    phases = [phase("weight_load", packed, profile.load_latency_ns + packed / profile.load_bandwidth_gb_s,
+                    packed * (profile.load_energy_pj_per_byte + write_energy)),
+        phase("weight_decode", packed + padded,
+            max(workload.k * workload.n / profile.weight_decode_elements_per_ns,
+                (packed + padded) / profile.load_bandwidth_gb_s),
+            packed * read_energy + padded * write_energy)]
+    if fp32:
+        phases.append(phase("activation_fp32_to_fp16", workload.activation_bytes + activation_dense,
+            max(workload.m * workload.k / profile.activation_fp32_to_fp16_elements_per_ns,
+                (workload.activation_bytes + activation_dense) / profile.activation_bandwidth_gb_s),
+            workload.activation_bytes * read_energy + activation_dense * write_energy))
+    load_bytes = result.metadata["resident_weight_bytes"]
+    phases.append(phase("dense_weight_program", load_bytes,
+        profile.load_latency_ns + load_bytes / profile.load_bandwidth_gb_s,
+        load_bytes * (read_energy + profile.load_energy_pj_per_byte)))
+    phases.extend(p for p in result.phases if p.name != "weight_load")
+    # One conservative invocation task holds the existing owner load resource
+    # through decode, programming and array execution, including across requests.
+    # Merely serializing per-phase loads would permit scratch overwrite.
+    duration = sum(p.service_ns for p in phases)
+    resources = {}
+    for p in phases:
+        for d in p.demands:
+            old = resources.get(d.resource_id)
+            resources[d.resource_id] = replace(d,
+                service_ns=d.service_ns + (old.service_ns if old else 0),
+                bytes_moved=d.bytes_moved + (old.bytes_moved if old else 0),
+                energy_pj=d.energy_pj + (old.energy_pj if old else 0),
+                work_units=d.work_units + (old.work_units if old else 0))
+    resources[profile.load_resource_id] = replace(resources[profile.load_resource_id], service_ns=duration)
+    audit.update(scratch_lifetime="whole_invocation_owner_load_lock",
+        admission_scope="planner_atomic_call_required_tp_ep_pp_1",
+        incoming_transfer_safety="planner_must_include_incoming_and_output_transfers",
+        array_storage_bytes=load_bytes, array_replication=result.metadata["weight_replication"],
+        scratch_dense_replication=1, array_storage_separate_from_scratch=True,
+        ordered_phases=tuple(dict(name=p.name, service_ns=p.service_ns,
+            bytes_moved=sum(d.bytes_moved for d in p.demands), energy_pj=p.energy_pj) for p in phases))
+    invocation = CostPhase(name="weight_load", category=TaskCategory.COMPUTE,
+        demands=tuple(resources.values()), metadata={"weight_conversion": audit,
+            "arithmetic_contract": result.metadata["arithmetic_contract"]})
+    return replace(result, phases=(invocation,),
+        metadata={**result.metadata, "weight_conversion": audit, "transfer_weight_bytes": packed})
 
 
 def estimate_cim_gemm(
@@ -4866,8 +5278,29 @@ def estimate_cim_gemm(
 ) -> CostEstimate:
     """Estimate an ADC-free weight-stationary digital SRAM-CIM GEMM."""
 
-    if workload.mmq_work is not None:
-        raise ValueError("MMQ source work is GPU-only")
+    if workload.mmq_work is not None or workload.mmvq_work is not None:
+        raise ValueError("MMQ/MMVQ source work is GPU-only")
+    if profile.weight_conversion_mode == "packed_to_fp16_cold" and workload.packed_weight_formats:
+        return _estimate_cim_converted(profile, workload, weights_resident)
+    floating = workload.cim_arithmetic == "fp16"
+    # A packed format is a decoder/scale contract, not an integer bit width.
+    # Only raw F16 labels may enter the explicit floating path; no conversion
+    # or dequantization cost is silently discarded, including resident weights.
+    if (any(fmt.casefold() not in ("f16", "fp16", "float16") or not floating
+            for fmt in workload.packed_weight_formats)
+            or workload.packed_weight_transform_operations
+            or workload.weight_metadata_bytes):
+        raise ValueError("CIM packed weights require an explicit decoded conversion contract; direct bit-slicing is unsupported")
+    if floating != (profile.arithmetic_mode == "fp16_fp32_analytical"):
+        raise ValueError("CIM workload arithmetic does not match the explicit hardware arithmetic contract")
+    if floating:
+        if (workload.activation_bits != 16 or workload.weight_bits != 16
+                or workload.output_bits not in (16, 32) or workload.accumulator_bits != 32):
+            raise ValueError("floating CIM requires FP16 operands, FP32 accumulation and FP16/FP32 output")
+        if (workload.activation_bytes != 2 * workload.m * workload.k
+                or workload.weight_bytes != 2 * workload.k * workload.n
+                or workload.output_bytes != _storage_bytes(workload.m * workload.n, workload.output_bits)):
+            raise ValueError("floating CIM requires materialized dense FP16 operands; storage conversion is not modeled")
     if workload.activation_bits not in profile.supported_activation_bits:
         raise ValueError(
             "unsupported activation bit width: %d" % workload.activation_bits
@@ -4875,9 +5308,9 @@ def estimate_cim_gemm(
     if workload.weight_bits not in profile.supported_weight_bits:
         raise ValueError("unsupported weight bit width: %d" % workload.weight_bits)
 
-    required_accumulator_bits = _required_accumulator_bits(
+    required_accumulator_bits = (32 if floating else _required_accumulator_bits(
         workload, profile.accumulator_guard_bits
-    )
+    ))
     available_accumulator_bits = min(
         workload.accumulator_bits, profile.accumulator_bits
     )
@@ -4890,8 +5323,8 @@ def estimate_cim_gemm(
     n_m = _ceil_div(workload.m, profile.p_m)
     n_k = _ceil_div(workload.k, profile.p_k)
     n_n = _ceil_div(workload.n, profile.p_n)
-    q_a = _ceil_div(workload.activation_bits, profile.input_parallel_bits)
-    q_w = _ceil_div(workload.weight_bits, profile.weight_parallel_bits)
+    q_a = 1 if floating else _ceil_div(workload.activation_bits, profile.input_parallel_bits)
+    q_w = 1 if floating else _ceil_div(workload.weight_bits, profile.weight_parallel_bits)
     bit_slice_count = q_a * q_w
 
     padded_weight_elements = n_k * profile.p_k * n_n * profile.p_n
@@ -4920,7 +5353,9 @@ def estimate_cim_gemm(
 
     block_waves = _ceil_div(n_m * placements, a_eff)
     array_cycles = (
-        block_waves * bit_slice_count * profile.cycles_per_eval
+        block_waves * bit_slice_count * (
+            float(profile.float_cycles_per_eval) if floating else profile.cycles_per_eval
+        )
     )
     array_service_ns = array_cycles / profile.frequency_ghz
     logical_evaluations = n_m * placements * bit_slice_count
@@ -4937,7 +5372,7 @@ def estimate_cim_gemm(
         )
     )
     wave_utilization = (n_m * placements) / float(block_waves * a_eff)
-    bit_utilization = (
+    bit_utilization = 1.0 if floating else (
         workload.activation_bits
         / float(q_a * profile.input_parallel_bits)
         * workload.weight_bits
@@ -5035,7 +5470,10 @@ def estimate_cim_gemm(
     if accumulation_ops:
         accumulation_cycles = int(
             math.ceil(
-                accumulation_ops / profile.accumulator_outputs_per_cycle
+                accumulation_ops / (
+                    float(profile.float_accumulator_outputs_per_cycle)
+                    if floating else profile.accumulator_outputs_per_cycle
+                )
             )
         )
         accumulator_service_ns = accumulation_cycles / profile.frequency_ghz
@@ -5114,12 +5552,31 @@ def estimate_cim_gemm(
         )
     )
 
+    arithmetic_contract = {
+        "arithmetic_mode": profile.arithmetic_mode,
+        "operand_arithmetic": workload.cim_arithmetic,
+        "accumulation_model": "fp32_rounded_partial_sums" if floating else "integer_exact_width_bound",
+        "accumulator_width_interpretation": "FP32_format_not_exact_sum_proof" if floating else "integer_growth_bound",
+        "evidence": EvidenceStatus.ANALYTICAL.value,
+        "calibrated": False,
+        "numerical_equivalence_verified": False,
+        "bit_slice_model_applied": not floating,
+        "contract_basis": profile.float_contract_basis if floating else "legacy_integer_bit_slice_contract",
+        "float_cycles_per_eval": profile.float_cycles_per_eval,
+        "float_accumulator_outputs_per_cycle": profile.float_accumulator_outputs_per_cycle,
+        "timing_completeness": "analytical_hardware_assumption" if floating else "analytical_integer_model",
+        "unmodeled_terms": ("rounding_overflow_subnormals_and_reduction_order",
+                            "floating_output_conversion_uses_generic_peripheral_proxy",
+                            "floating_energy_uses_unvalidated_profile_coefficients") if floating else (),
+    }
     return CostEstimate(
-        phases=tuple(phases),
+        phases=tuple(replace(phase, metadata={**phase.metadata, "arithmetic_contract": arithmetic_contract})
+                     for phase in phases),
         useful_ops=workload.operations,
         utilization=utilization,
         metadata={
             "model": "digital_sram_cim",
+            "arithmetic_contract": arithmetic_contract,
             "profile": profile.name,
             "weights_resident": weights_resident,
             "n_m": n_m,
