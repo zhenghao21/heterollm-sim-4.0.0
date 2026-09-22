@@ -510,3 +510,287 @@ def test_operator_transfer_has_producer_link_and_consumer_memory_coverage() -> N
     )
     assert link_demand.bytes_moved == 229376
     assert link_demand.service_ns > 0
+
+
+def test_operator_transfer_access_roles_and_buffer_identity_boundary() -> None:
+    """Account for the selected transfer's roles without inventing endpoints.
+
+    The formal graph identifies the activation tensor and its producer, while
+    the lowering currently carries only component/rank-value state across the
+    CPU-to-GPU boundary.  Keep those facts separate: producer read/write,
+    PCIe bulk, and consumer read/write are observable services.  The checked
+    placement and task metadata do not explicitly provide a scheduler copy
+    buffer identity; whether the current component/rank-value abstraction
+    fully expresses the required copy semantics remains an open question.
+    """
+
+    scenario, schedule, _evidence = _prepared()
+    by_id = {task.task_id: task for task in schedule.tasks}
+    transfer = next(
+        task
+        for task in schedule.tasks
+        if task.request_id == "request-0000"
+        and task.metadata.get("event_kind") == "operator_input_transfer"
+        and task.metadata.get("operator_id") == "layer-000.input_norm.reduce"
+        and task.metadata.get("bytes") == 229376
+        and ".prefill." in task.task_id
+    )
+    embedding_complete = by_id[transfer.dependencies[0]]
+    producer = by_id[embedding_complete.dependencies[0]]
+    launch = next(
+        task
+        for task in schedule.tasks
+        if task.request_id == "request-0000"
+        and task.metadata.get("event_kind") == "input_norm_reduce"
+        and task.metadata.get("operator_id") == "layer-000.input_norm.reduce"
+        and task.metadata.get("phase") == "kernel_launch"
+        and transfer.task_id in task.dependencies
+    )
+    reduction = next(
+        task
+        for task in schedule.tasks
+        if task.request_id == "request-0000"
+        and task.metadata.get("event_kind") == "input_norm_reduce"
+        and task.metadata.get("operator_id") == "layer-000.input_norm.reduce"
+        and task.metadata.get("phase") == "gpu_reduction"
+        and launch.task_id in task.dependencies
+    )
+
+    # Formal graph identity: embedding.output is produced by embedding and is
+    # consumed by the first decoder block.  The placement contract maps the
+    # operators and persistent weights, but has no activation-tensor residency.
+    graph = scenario.model.graph
+    embedding_op = next(op for op in graph.operators if op.operator_id == "embedding")
+    embedding_output = next(
+        tensor for tensor in graph.tensors if tensor.tensor_id == "embedding.output"
+    )
+    assert embedding_op.output_tensor_ids == ("embedding.output",)
+    assert embedding_output.producer_operator_id == "embedding"
+    assert embedding_output.consumer_operator_ids
+    assert scenario.placement.op_to_component["embedding"] == "cpu0"
+    assert scenario.placement.op_to_component["layer-000.input_norm.reduce"] == "gpu0"
+    assert "embedding.output" not in scenario.placement.tensor_to_component
+    assert scenario.placement.parallel.rank_mapping[0].memory_component_id == "hbm0"
+
+    # The producer's typed memory profile includes both the embedding weight
+    # read and activation write.  The transfer contributes only PCIe bulk, and
+    # the consumer's HBM demand includes its input read and result write.
+    assert producer.metadata["output_tensor_id"] == "embedding.output"
+    producer_cost = producer.metadata["cost_model"]
+    assert producer_cost["read_bytes"] == 272269312
+    assert producer_cost["write_bytes"] == 229376
+    producer_memory = next(
+        demand for demand in producer.demands if demand.resource_id == "cpu0.memory"
+    )
+    assert producer_memory.bytes_moved == 272498688
+    transfer_link = next(
+        demand
+        for demand in transfer.demands
+        if demand.resource_id == "link.cpu-gpu-pcie.cpu0->gpu0"
+    )
+    assert transfer_link.bytes_moved == 229376
+    reduction_cost = reduction.metadata["cost_model"]
+    assert reduction_cost["read_bytes"] == 229376
+    assert reduction_cost["write_bytes"] == 256
+    reduction_memory = next(
+        demand for demand in reduction.demands if demand.resource_id == "hbm0.hbm_fabric"
+    )
+    assert reduction_memory.bytes_moved == 229632
+
+    # These are representation boundaries, not proof of a defect: ordinary
+    # operator transfers carry no output tensor ID or copy-buffer ID, and the
+    # reduction task has no formal output tensor ID.  The current fixture does
+    # not establish how component/rank-value state constrains the scheduler's
+    # source read, destination write, or physical allocation reuse.
+    assert transfer.metadata.get("output_tensor_id") is None
+    assert transfer.metadata.get("copy_buffer_id") is None
+    assert reduction.metadata.get("output_tensor_id") is None
+
+
+
+def _r0_static_cell_for_copy_probe(inputs):
+    """Reuse the frozen worker's exact preparation prefix, never its run body."""
+    import ast
+    import copy
+    from heterollm_sim.gguf_parity import read_gguf_metadata_cache
+
+    source = R0_ON / "source" / "tools" / "predict_stable_native_dataset.py"
+    spec = importlib.util.spec_from_file_location("r4_r0_static_worker", source)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    module.verify_import_roots()
+    sidecar = inputs["gguf_metadata_sidecar_ref"]
+    model_path = Path(inputs["prediction_model_ref"]["path"])
+    assert Path(sidecar["path"]).is_file()
+    # No fallback to a GGUF payload scan: seed the worker's normal model cache.
+    gguf = read_gguf_metadata_cache(model_path, sidecar["path"], strict=False)
+    cache = {module.grid.model_metadata_cache_key(model_path): (
+        gguf, module.grid.build_model_from_gguf(gguf))}
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    prefix = copy.deepcopy(next(node for node in tree.body
+                               if isinstance(node, ast.FunctionDef) and node.name == "predict_cell"))
+    cut = next(i for i, node in enumerate(prefix.body)
+               if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+               and ast.unparse(node.value.func) == "grid.reporting.run_scenario")
+    prefix.name = "_prepare_only"
+    prefix.body = prefix.body[:cut] + [ast.Return(value=ast.Tuple(elts=[
+        ast.Name(id="scenario", ctx=ast.Load()),
+        ast.Name(id="placement_refresh", ctx=ast.Load())], ctx=ast.Load()))]
+    calls = {ast.unparse(node.func) for node in ast.walk(prefix) if isinstance(node, ast.Call)}
+    assert "replan_final_static_scenario" in calls
+    assert "apply_tensor_storage_static_contract" in calls
+    assert not any(name.endswith(("run_scenario", "simulate_online", "predict_cell")) for name in calls)
+    namespace = dict(vars(module))
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[prefix], type_ignores=[])),
+                 str(source), "exec"), namespace)
+    scenario, refresh = namespace["_prepare_only"](inputs, model_cache=cache)
+    module.verify_import_roots()
+    assert refresh["normal_validation_passed"] and refresh["mapping_stale"] is False
+    audit = scenario.workload.metadata["llama_cpp_tensor_storage"]
+    assert audit["status"] == "enabled" and audit["qualified"] is True
+    assert scenario.workload.metadata["llama_cpp_f32_hidden_storage"] is True
+    print("R4_I8_PREPARED", json.dumps({"worker": str(source), "sidecar": sidecar,
+        "gguf_sha256": gguf.sha256, "tensor_storage_status": audit["status"],
+        "mapping_stale": refresh["mapping_stale"]}, sort_keys=True))
+    return scenario
+
+
+def test_source_qualified_q0_decode_generations_keep_current_embedding_copy():
+    """Two retained Q0 cohorts; dependency-only replay, never a latency claim.
+
+    Invocation caching is inapplicable to this stateless Qwen2 path.  Keep its
+    real exclusion gate, compare the second same-context lowering with a fresh
+    lowering, and execute only each producer/copy/first-consumer closure.
+    """
+    from unittest.mock import patch
+    from heterollm_sim import planner
+    from heterollm_sim.serving import BatchCohort, BatchItem
+
+    assert Path(planner.__file__).resolve().is_relative_to(R0_SOURCE)
+    freeze = json.loads(FREEZE.read_text(encoding="utf-8"))
+    cell_id = "qwen25_p128_o32_c4__fixed_runtime"
+    inputs = next(cell["static_inputs"] for cell in freeze["cells"] if cell["cell_id"] == cell_id)
+    prediction_path = R0_ON / "predictions" / (cell_id + ".prediction.json")
+    prediction = json.loads(prediction_path.read_text(encoding="utf-8"))
+    retained = prediction["batch_schedule"]
+    assert retained["details_truncated"] is False
+    selected = retained["batches"][38:40]
+    assert [row["batch_index"] for row in selected] == [38, 39]
+    assert [row["items"][0]["context_tokens"] for row in selected] == [157, 158]
+    assert [row["items"][0]["completion_cursor"] for row in selected] == [31, 32]
+    for row in selected:
+        assert row["kind"] == "decode" and row["token_count"] == 1
+        assert row["request_ids"] == ["request-0003"]
+        assert row["items_truncated"] is False and len(row["items"]) == 1
+        assert row["cost_metadata"]["physical_batch_rows"] == 1
+    print("R4_I8_Q0_GEOMETRY", json.dumps({"path": str(prediction_path), "cohorts": [
+        {key: row[key] for key in ("batch_index", "cohort_id", "kind", "items", "metadata")}
+        for row in selected]}, sort_keys=True))
+    scenario = _r0_static_cell_for_copy_probe(inputs)
+    assert scenario.workload.mtp is None
+    # The Q0 diagnostic retains five item fields.  Ordinary non-MTP decode's
+    # omitted append/materialized/logit counts are one in frozen serving.py's
+    # BatchItem constructor (10453); this is not a fabricated task graph.
+    cohorts = tuple(BatchCohort(row["cohort_id"], row["kind"], 0.0,
+        tuple(BatchItem(**item, proposed_tokens=1, expected_accepted_tokens=1.0,
+                        kv_append_tokens=1, kv_materialized_tokens=1, logit_tokens=1)
+              for item in row["items"]), metadata=row["metadata"]) for row in selected)
+    groups = [planner._serving_invocation_groups(scenario, cohort) for cohort in cohorts]
+    assert all(len(items) == 1 and items[0].token_batch == 1 for items in groups)
+    assert all(items[0].batching_semantics == "stateless_scheduler_batch" for items in groups)
+    observations = []
+    original_binding = planner._serving_invocation_segment_binding
+
+    def record_binding(*args, **kwargs):
+        result = original_binding(*args, **kwargs)
+        observations.append(result is None)
+        return result
+
+    context = planner.CompilationContext(scenario, eager_full_attention_segments=False,
+                                         compiled_serving_invocation_segments=True)
+    with patch.object(planner, "_serving_invocation_segment_binding", side_effect=record_binding):
+        with planner._compilation_scope(scenario, context):
+            schedules = [planner.compile_serving_cohort_schedule(scenario, cohort) for cohort in cohorts]
+    assert observations == [True, True]
+    fresh_context = planner.CompilationContext(scenario, eager_full_attention_segments=False,
+                                               compiled_serving_invocation_segments=True)
+    with planner._compilation_scope(scenario, fresh_context):
+        fresh = planner.compile_serving_cohort_schedule(scenario, cohorts[1])
+    # Equality includes real demands, dependencies, earliest-start and metadata.
+    assert schedules[1].tasks == fresh.tasks
+    assert schedules[1].resource_capacities == fresh.resource_capacities
+    assert schedules[1].resource_owners == fresh.resource_owners
+    print("R4_I8_CACHE", json.dumps({"binding_none": observations,
+        "path": "stateless_scheduler_batch", "invocation_cache": "not_applicable",
+        "same_context_target_equals_fresh_tasks": True,
+        "cohort_task_counts": [len(schedule.tasks) for schedule in schedules]}, sort_keys=True))
+    identities = []
+    for cohort, schedule in zip(cohorts, schedules):
+        by_id = {task.task_id: task for task in schedule.tasks}
+
+        def ancestors(ident):
+            seen = set()
+            pending = list(by_id[ident].dependencies)
+            while pending:
+                current = pending.pop()
+                if current not in seen:
+                    seen.add(current)
+                    pending.extend(by_id[current].dependencies)
+            return seen
+
+        def one(**metadata):
+            matches = [task for task in schedule.tasks
+                       if all(task.metadata.get(key) == value for key, value in metadata.items())]
+            assert len(matches) == 1, (metadata, [task.task_id for task in matches])
+            return matches[0]
+
+        producer = one(event_kind="embedding", phase="cpu_memory")
+        produced = one(event_kind="embedding_complete")
+        copy_task = one(event_kind="operator_input_transfer", operator_id="layer-000.input_norm.reduce")
+        consumer = one(event_kind="input_norm_reduce", operator_id="layer-000.input_norm.reduce", phase="gpu_reduction")
+        assert producer.metadata["output_tensor_id"] == "embedding.output"
+        assert producer.metadata["native_get_rows_storage"]["qualified"] is True
+        assert copy_task.metadata["source_component"] == "cpu0"
+        assert copy_task.metadata["target_component"] == "gpu0"
+        assert copy_task.metadata["bytes"] == producer.metadata["output_bytes"] == 896 * 4
+        assert producer.task_id in ancestors(produced.task_id)
+        assert produced.task_id in ancestors(copy_task.task_id)
+        assert copy_task.task_id in ancestors(consumer.task_id)
+        assert producer.task_id in ancestors(consumer.task_id)
+        identities.append((producer.task_id, produced.task_id, copy_task.task_id, consumer.task_id))
+        closure = ancestors(consumer.task_id) | {consumer.task_id}
+        sliced = tuple(task for task in schedule.tasks if task.task_id in closure)
+        assert all(dependency in closure for task in sliced for dependency in task.dependencies)
+        assert len(sliced) < 100, "bounded probe must not execute a full cohort"
+        kernel = UnifiedEventKernel.from_closed_graph(sliced,
+            resource_capacities=schedule.resource_capacities, resource_owners=schedule.resource_owners)
+        events = {}
+        while kernel.has_active_tasks:
+            event = kernel.step()
+            assert event is not None
+            events[event.task.task_id] = event
+        assert len(events) == len(sliced)
+        for event in events.values():
+            assert all(event.start_ns >= events[dependency].end_ns
+                       for dependency in event.task.dependencies)
+            assert all(previous["end_ns"] <= event.start_ns
+                       for previous in event.resource_predecessors.values())
+        assert events[copy_task.task_id].start_ns >= events[produced.task_id].end_ns
+        assert events[consumer.task_id].start_ns >= events[copy_task.task_id].end_ns
+        print("R4_I8_GENERATION", json.dumps({"cohort_id": cohort.cohort_id,
+            "context_tokens": cohort.items[0].context_tokens,
+            "completion_cursor": cohort.items[0].completion_cursor,
+            "current_value_identity": identities[-1], "copy_bytes": copy_task.metadata["bytes"],
+            "source_storage": producer.metadata["native_get_rows_storage"],
+            "executed_slice_tasks": len(sliced), "time_scope": "analytical_dependency_slice_not_native_latency",
+            "events": [{"task_id": event.task.task_id, "dependencies": event.task.dependencies,
+                "start_ns": event.start_ns, "end_ns": event.end_ns,
+                "dependency_ready_ns": event.dependency_ready_ns,
+                "resource_predecessors": event.resource_predecessors,
+                "demands": [vars(demand) for demand in event.demands]}
+                for event in events.values()]}, sort_keys=True, default=str))
+    # Distinct current producers/copies/consumers are required.  A causal
+    # predecessor is allowed; do not prohibit earlier-generation ancestors.
+    assert all(left != right for left, right in zip(*identities))

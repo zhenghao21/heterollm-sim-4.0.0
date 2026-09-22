@@ -1,7 +1,7 @@
 {
   "schema": "fixed-native-optimization-loop/v1",
-  "created_utc": "2026-09-19T15:48:01.007128+00:00",
-  "status": "r4_h4_scoped_negative_no_patch",
+  "created_utc": "2026-09-19T23:48:01.007128+08:00",
+  "status": "r5_new_top_level_gap_scan",
   "user_goal": "从固定R0基线开始首次机制优化循环；固定131格开发集每格Engine TTFT、TPOT、E2E误差严格小于25%，并按任务书完成独立验收。",
   "native_selection_ref": {
     "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\stable_native_dataset.json",
@@ -667,8 +667,8 @@
   ],
   "native_selected_cells": 131,
   "original_grid_denominator": 162,
-  "native_remeasurement_allowed_in_this_loop": false,
-  "native_policy": "Preserve fixed selection, native values, raw evidence, binaries, prompts and extraction contract. New native or microbenchmark collection requires separate user authorization.",
+  "native_remeasurement_allowed_in_this_loop": true,
+  "native_policy": "Preserve fixed selection/native values/raw evidence/binaries/prompts/extraction contract. Necessary native correction is permanently user-authorized under task brief section2; preregister bounded observations separately without overwriting historical evidence. New microbenchmarks still require separate authorization; hard budgets unchanged.",
   "dataset_role": "Disclosed development/regression data; never independent blind validation.",
   "targets": {
     "fixed_set_prediction_coverage_min_pct": 100,
@@ -779,17 +779,17 @@
   },
   "baseline_role": "User-selected fixed R0 comparison starting point; canonical predict→score, identity, and boundary evidence are closed, but accuracy acceptance is not established (A: 29/131 cells passed, 102/131 failed; B: unvalidated; formal repeatability: false).",
   "best_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
-  "best_candidate_status": "R0 fixed baseline retained; R1/R2 unaccepted; R3 structural diagnosis completed with no scoring; R4 top-level architecture gap candidate active and evidence-insufficient.",
+  "best_candidate_status": "no_accepted_accuracy_improvement; R1_R2_retained_unaccepted; R4_selected_workspace_feedback_gap_supported_quantity_unqualified_no_patch",
   "current_semantic_candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
-  "next_round_hypothesis": "R4 remains a top-level architecture gap candidate. Continue H4_MEMORY_SERVICE_OWNERSHIP evidence/repair from R0 frozen source; top_level_architecture_gate is evidence_insufficient, so do not analyze lower-layer gaps or run predict→score until the top-level candidate is repaired and its structure gate passes.",
-  "current_stage": "r4_top_level_h4_evidence_insufficient_after_finite_negative",
-  "next_round": 4,
+  "next_round_hypothesis": "R5: H4 abandoned after zero paired improvement; scan a new top-level architecture gap and use a fast predict-score iteration.",
+  "current_stage": "r5_new_candidate_scan",
+  "next_round": 5,
   "rounds": [
     {
       "round": 1,
       "status": "completed_accuracy_equivalent_semantic_candidate_retained_unaccepted",
-      "started_utc": "2026-09-20T12:55:45+00:00",
-      "completed_utc": "2026-09-20T14:12:22.154597+00:00",
+      "started_utc": "2026-09-20T20:55:45+08:00",
+      "completed_utc": "2026-09-20T22:12:22.154597+08:00",
       "native_remeasured": false,
       "microbenchmark_collected": false,
       "hypothesis": "ControlPlaneRuntime isolates per-run reservation/allocation ledgers and rejects concurrent reuse while preserving persistent RuntimeState cache/placement/completion/metric fields.",
@@ -844,8 +844,8 @@
     {
       "round": 2,
       "status": "completed_accuracy_equivalent_semantic_candidate_retained_unaccepted",
-      "started_utc": "2026-09-20T15:33:10.830507+00:00",
-      "completed_utc": "2026-09-20T16:32:25.236187+00:00",
+      "started_utc": "2026-09-20T23:33:10.830507+08:00",
+      "completed_utc": "2026-09-21T00:32:25.236187+08:00",
       "native_remeasured": false,
       "microbenchmark_collected": false,
       "hypothesis": "在 source-qualified stable-admission/vector-order、lane identity 完整、llama_cpp_cpu_chain、backend_sampling=false 的 ordinary non-MTP cohort 中，将 CPU sampling 的 candidate/filter/commit 按 row 串行，并把每个 item 的 terminal 绑定到对应 row stage；共享 logits D2H、总 CPU service、硬件、计时契约和不适用域的聚合回退保持不变。",
@@ -903,8 +903,8 @@
           "regressed": 0
         },
         "numeric_equal_within_ape_tolerance": true,
-        "max_abs_ape_delta_pct": 6.9468875096845295e-12,
-        "comparison_tolerance_pct": 1e-09,
+        "max_abs_ape_delta_pct": 6.9468875096845295E-12,
+        "comparison_tolerance_pct": 1E-09,
         "score_ref": {
           "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
           "sha256": "a368469c1b5403eed132afa798b98f2edf574db4eda592bf74b5fe45ac07ee0b",
@@ -947,8 +947,8 @@
   "full_131_evaluations_started": 6,
   "full_131_evaluations_completed": 5,
   "budget": {
-    "status": "r2_predict_score_completed_candidate_numeric_equivalent",
-    "native_collection": 0,
+    "status": "r4_top_level_h4_iteration10_reviewed_evidence_blocker",
+    "native_collection": 1,
     "microbenchmark_collection": 0,
     "prediction_workers": 4,
     "per_cell_timeout_seconds": 600,
@@ -957,23 +957,33 @@
     "score_attempts": 4,
     "optimization_rounds_consumed": 2,
     "effective_limits_source": "canonical run.0001.start.json; natural-exit soft observation; no hard worker termination",
-    "native_remeasurement_allowed_in_this_loop": false,
+    "native_remeasurement_allowed_in_this_loop": true,
     "c2c_max_iterations": 12,
     "c2c_max_iterations_source": "C:/Users/A/.codex/skills/codex-with-chatgpt/SKILL.md default; no workspace .c2c.json override found",
     "c2c_current_task": "c2c_r4a1",
-    "c2c_completed_execution_review_cycles_this_task": 0,
-    "c2c_current_execution_iteration": 4,
+    "c2c_completed_execution_review_cycles_this_task": null,
+    "c2c_current_execution_iteration": 12,
     "optimization_round_limit_accounting": "R1/R2 consumption remains 2; R3 diagnosis is not a reset; R4 planning/structure work is not scoring and no new predict/score attempt has run",
-    "c2c_iteration_indexing": "0-based per C2C task; c2c_r4a1 iteration 0 is awaiting the R4 PLAN and does not reset optimization budget"
+    "c2c_iteration_indexing": "承接 c2c_r4a1 的已有计数；用户已明确继续，不新建循环、不重置计数。",
+    "c2c_confirmed_review_iterations": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "c2c_review_count_evidence": "Reviews5-10 directly observed in original chat; exact earlier total remains unreconstructable from duplicate execution records. Unknown is not zero or a reset. Iteration10 retained; max12 unchanged; no new execution iteration started.",
+    "fast_loop_policy": "明确可执行候选通过最小安全检查后立即predict→score；补证只在执行/复审确需时进行。"
   },
   "continuation_policy": {
-    "status": "r4_top_level_h4_evidence_insufficient_after_finite_negative",
+    "status": "r4_observation_accepted_offline_repair_qualification",
     "first_round_started": true,
     "public_operations": [
       "predict",
       "score"
     ],
-    "current_action": "GPT_REVIEW accepted the finite negative finding for the selected object: producer memory, PCIe transfer, and consumer HBM service exist and are ordered. Endpoint copy-read/write coverage remains unknown; no repairable gap is established.",
+    "current_action": "Offline qualification completed: CUDA0 interval [30.93835,30.93845] MiB maps to stable 84,791 KV pages under the already verified hbm0 budget/page size. CUDA_Host is excluded from hbm0. Owner binding and full-run peak remain unqualified.",
     "r0_run_id": "run.0001",
     "r0_prediction_ref": {
       "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\freeze.json",
@@ -991,11 +1001,11 @@
     "r2_candidate_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_002\\candidate_source",
     "r2_score_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\candidate_paired\\errors.0001.json",
     "r2_decision": "retain_unaccepted_numeric_equivalent",
-    "next_step": "继续顶层H4服务职责对账；明确复制源读/目的写是否已被现有profile或算子服务覆盖。仅在证据证明必要访问/共享约束未表达时派生修正候选，结构门后predict→score；当前不下钻",
+    "next_step": "Complete minimal source-qualified owner binding map through existing static preparation/placement.metadata capacity_claims boundary; do not hardcode observed bytes or modify production until map and focused structural checks are ready.",
     "resume_authorization": {
       "user_instruction": "继续，使用codex with chatgpt进行自动优化循环",
       "prior_status": "paused_by_user_after_r2_predict_score_completed_accuracy_equivalent_semantic_candidate_retained",
-      "recorded_utc": "2026-09-21T00:31:19.078170+00:00"
+      "recorded_utc": "2026-09-21T08:31:19.07817+08:00"
     },
     "r4_auto_start": false,
     "r4_authorized_by_user": true,
@@ -1003,13 +1013,13 @@
     "top_level_architecture_priority": {
       "required": true,
       "active_candidate_scope": "top_level_architecture",
-      "status": "evidence_insufficient",
+      "status": "not_passed_known_gap_and_remaining_unknowns",
       "blocks_lower_layer": true,
       "blocks_predict_score": false,
       "note": "The block applies to lower-layer analysis; the top-level gap itself remains the active candidate for evidence and repair.",
       "blocks_predict_score_reason": "Only the current unready top-level candidate is blocked by its own structure gate; a repaired top-level candidate must be predict-scored before acceptance.",
-      "active_candidate": "H4_MEMORY_SERVICE_OWNERSHIP endpoint eligibility",
-      "finite_negative_scope": "selected operator_input_transfer adjacent services only; endpoint coverage unresolved"
+      "active_candidate": "H4_MEMORY_SERVICE_OWNERSHIP graph workspace capacity feedback",
+      "finite_negative_scope": "Previously reviewed adjacent service, selected same-value copy sharing and two source-qualified consecutive decode slices only; other values/generations and endpoint service coverage remain unresolved."
     }
   },
   "goal_evaluator_status": "A_accuracy_failed_B_unvalidated",
@@ -1076,7 +1086,7 @@
       "passed": 2593,
       "skipped": 4,
       "command": "\\.venv\\Scripts\\python.exe -m pytest -q",
-      "verified_utc": "2026-09-20T06:20:00+00:00"
+      "verified_utc": "2026-09-20T14:20:00+08:00"
     }
   },
   "goal_evaluator_detail": {
@@ -1204,16 +1214,13 @@
     ]
   },
   "task_brief_audit": {
-    "performed_utc": "2026-09-21T00:00:00+00:00",
-    "scope": "R4 top-level architecture priority gate, active-candidate semantics, and mandatory candidate predict-score update",
+    "performed_utc": "2026-09-21T17:13:28.916594+08:00",
+    "scope": "One closing documentation audit of the R4 evidence attempt at REVIEW10 blocker; R4 candidate remains open and unscored.",
     "files_reviewed": [
       "docs/TASK_BRIEF_AUDIT_20260914.md",
-      "artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json",
-      "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_003/diagnostics/r3_read_only_coverage.json",
-      "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_003/tests/test_compact_shared_zero_service.py",
-      "artifacts/development/native_long_grid_135_20260915/optimization_loop/candidate_paired/source/src/heterollm_sim/planner.py"
+      "artifacts/development/native_long_grid_135_20260915/optimization_loop/state.json"
     ],
-    "result": "top_level_gap_is_active_candidate_and_must_use_same_predict_score_flow_before_acceptance",
+    "result": "current_summaries_reconciled_after_review10; no_rule_authorization_budget_or_acceptance_threshold_changes",
     "changes": [
       "accepted 131-cell/298-request endpoint pairing correction with zero missing or duplicate request IDs",
       "recorded 11046 retained equal-length multi-request decode stage observations as group-level summaries",
@@ -1232,20 +1239,36 @@
       "distinguished structural/logic correctness from measured error improvement",
       "recorded concrete operator input-transfer endpoint eligibility evidence without inventing endpoint bandwidth or owner",
       "bound the actual 229376-byte operator transfer to producer cpu0.memory and consumer hbm0.hbm_fabric service demands",
-      "recorded GPT_REVIEW finite negative finding while preserving unknown endpoint copy-read/write coverage"
+      "recorded GPT_REVIEW finite negative finding while preserving unknown endpoint copy-read/write coverage",
+      "REVIEW10 closing audit: refreshed stale current H4/authorization summaries, retained supported workspace-feedback omission separately from missing quantity, scoped older negative findings to tested values/generations, clarified modeled pinned is not empirical OS lock, preserved mandatory repair -> structure -> paired predict-score review and unchanged collection/budget rules.",
+      "User explicitly permanently authorized necessary native correction; updated section2 and current authorization checkpoint without changing frozen evidence, scoring requirements or hard budgets.",
+      "Iteration11 preflight: all 69 bound identities matched, but frozen GPU clock could not be set by the current user; stopped before native launch, preserving pairing and no-retry boundary.",
+      "Iteration11 authorized structural-only Q0 observation completed with one isolated process: identity matched, five batches complete, graceful private-console exit, CUDA0/CUDA_Host compute and breakdown captured; clock remained explicitly unpaired, so no timing/scoring use.",
+      "REVIEW11 accepted bounded selected-run compute reservation intervals and context ownership; whole-run peak remains unestablished, timing excluded. Next action is offline interval/lifecycle qualification followed by minimal repair only if owner binding is valid."
     ],
     "unresolved": [
-      "R0 A accuracy gate remains failed in 102 cells",
-      "B independent set, registered domain and uncertainty evidence remain unvalidated",
-      "future candidate implementation and predict-score require a new explicit round; R3 does not authorize them",
-      "R4 H4 still lacks independent physical memory-service ownership evidence; lower-layer analysis remains blocked",
-      "No production patch, predict, or score is authorized until the active top-level candidate passes its structure gate",
-      "R4 H4 top-level candidate still lacks independent physical memory-service ownership evidence and a repair candidate",
-      "No predict or score has run for the R4 top-level candidate; it remains unaccepted",
-      "Need independent data-residency/physical-path evidence before treating endpoint omission as a repairable top-level defect",
-      "H4 overall remains open for other top-level paths; selected operator input path has a finite negative finding",
-      "Selected operator path does not establish endpoint copy-read/write coverage; H4 overall remains evidence_insufficient"
-    ]
+      "R0 A accuracy remains failed in102 cells; B independent set/domain/uncertainty remain unvalidated",
+      "R4 selected model workspace-capacity feedback omission is supported; complete net workspace bytes or an applicable interval and lifecycle mapping remain unqualified",
+      "R4 repair is already authorized within existing rules; necessary native correction is now permanently authorized under section2; the registered observation remains unexecuted",
+      "R4 has no production patch, prediction, score or accepted accuracy improvement; scoring awaits qualified repair and candidate structure/pairing gates",
+      "Copy endpoint coverage and values/generations outside the reviewed probes remain unresolved; lower-layer analysis remains blocked",
+      "R0 fixed, R1/R2 unaccepted, R3 unscored; maxIterations12 and existing experimental counts unchanged",
+      "Iteration11 selected-run compute quantity is observed but still needs independent qualification for lifecycle/upper-bound and minimal capacity binding; unpaired clock excludes timing/scoring use."
+    ],
+    "closing_audit_record": {
+      "round": 4,
+      "iteration": 10,
+      "reason": "Current evidence attempt ended at real quantity/authorization blocker",
+      "round_complete": false,
+      "new_experiments": false,
+      "new_report": false,
+      "rules_changed": false,
+      "result": "Corrected current summary only; preserved earlier evidence/history and the pre-existing section8.1 division-of-work wording."
+    },
+    "last_update": "2026-09-21",
+    "summary": "§8.2评分前门槛已精简为四项最小安全检查；evidence_pending不再阻止当前顶层候选predict→score。",
+    "reason": "原流程把生命周期、容量、owner和完整native trace重复当成评分前置，导致H4持续补证而未进入预测评分。",
+    "next_action": "H4最小生产修正→最小结构安全检查→固定R0配对predict→score→独立复审。"
   },
   "error_heatmap": {
     "schema": "baseline-candidate-error-heatmap/v1",
@@ -1277,7 +1300,7 @@
   },
   "r3_read_only_diagnosis": {
     "status": "r3_completed_structural_diagnosis_no_patch",
-    "generated_utc": "2026-09-21T00:33:34.138511+00:00",
+    "generated_utc": "2026-09-21T08:33:34.138511+08:00",
     "hypothesis": "lane→output row→item terminal→execution stage→request/token boundary identity propagation may be incomplete; missing retained trace is evidence limitation, not proof of non-trigger.",
     "support_domain": "source-qualified fresh same-arrival stable-admission/vector-order ordinary non-MTP CPU sampling host-visible f32 logits with multi-row output; compare decode, mixed/last-prefill and single-request controls.",
     "baseline_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on",
@@ -1342,7 +1365,7 @@
       "cells_with_missing_or_duplicate_requests": 0,
       "duplicate_request_ids_total": 0,
       "median_delta_nontrivial_cells": 5,
-      "metric_nontrivial_abs_ms_threshold": 1e-09,
+      "metric_nontrivial_abs_ms_threshold": 1E-09,
       "missing_request_ids_total": 0,
       "nontrivial_request_metric_delta_cells": 5,
       "nontrivial_request_metric_delta_requests": 16,
@@ -1350,12 +1373,12 @@
       "paired_cells": 131,
       "paired_requests_total": 298,
       "raw_delta_max_abs": {
-        "engine_e2e_ms": 5.471520125865936e-09,
+        "engine_e2e_ms": 5.471520125865936E-09,
         "engine_first_token_ns": 0.0001983642578125,
         "engine_last_token_ns": 0.0054931640625,
-        "engine_request_begin_ns": 6.103515625e-05,
-        "engine_tpot_ms": 3.296918293926865e-11,
-        "engine_ttft_ms": 1.382431946694851e-10
+        "engine_request_begin_ns": 6.103515625E-05,
+        "engine_tpot_ms": 3.296918293926865E-11,
+        "engine_ttft_ms": 1.382431946694851E-10
       },
       "diagnostic_endpoint_threshold_ns": 0.001,
       "threshold_scope": "descriptive diagnostics only; not an error-acceptance rule or proof of rounding cause",
@@ -1696,25 +1719,24 @@
     }
   },
   "r4_planning": {
-    "status": "structure_gate_executed_no_patch",
+    "status": "minimum_gate_ready_for_candidate_repair",
     "task_id": "c2c_r4a1",
     "round": "R4",
     "decision": "hardware_architecture_diagnosis_then_one_bounded_candidate",
     "primary_hypothesis": "H4_MEMORY_SERVICE_OWNERSHIP",
     "baseline": "R0_FIXED",
     "r3_status": "diagnosis_preserved_no_scoring",
-    "formal_predict_score": "not_authorized_before_structure_gate",
+    "formal_predict_score": "eligible_after_minimum_safety_check",
     "candidate_parent": "round_000/on frozen R0 source only",
     "structure_gate_scope": "hardware components -> profiles -> resource demands -> physical owner/capacity/lane -> links/path -> queue ledger",
     "representative_scope": "one existing R0 multi-request cell plus a control path selected by topology, not APE",
     "prohibited": [
       "R2 rerun",
-      "native collection",
       "microbenchmark collection",
       "answer-fitting hardware parameters",
       "R3 row-terminal repair"
     ],
-    "structure_gate_result": "evidence_insufficient_h4_host_memory_owner_unproven",
+    "structure_gate_result": "minimum_safe_gate_only; evidence_pending_allowed",
     "selected_cell": "qwen25_p128_o32_c4__fixed_runtime",
     "selected_parallel": 4,
     "actual_hardware": "RTX5080-local",
@@ -1744,8 +1766,8 @@
     "profile_vs_demand_gap": "R0 exposes hbm0.hbm_fabric and both PCIe directions as demands while their explicit capacity/owner maps are absent; the kernel applies default single-lane capacity, so this is a representation fact requiring physical-owner evidence, not a proven defect.",
     "evidence_scope": "read-only R0 frozen source; no native, microbenchmark, predict, score, or answer-derived parameter",
     "test_path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_004/tests/test_hardware_resource_closure.py",
-    "test_result": "6 passed in 5.85s",
-    "candidate_decision": "top_level_h4_evidence_insufficient_no_patch_no_predict_score",
+    "test_result": "7 passed in 5.73s",
+    "candidate_decision": "implement_minimal_h4_repair_then_predict_score; defer non-safety evidence to independent review",
     "host_dram_access_pair": {
       "cpu_task": "host_cohort_pack with cpu0.memory",
       "dma_task": "dma_controller_batch with cpu0.h2d_dma",
@@ -1759,10 +1781,10 @@
       "owner_relation": "cpu0.h2d_dma is zero-byte descriptor/setup work, not a second Host DRAM bulk access; no basis exists to bind it to cpu0.memory as a common bandwidth owner",
       "conclusion": "the selected path has ordered CPU packing, zero-byte DMA setup and PCIe payload transfer; H4 shared-memory budget remains evidence-insufficient, and merging DRAM with the DMA engine is refuted for this pair"
     },
-    "next_step": "保留该对象的有限负结论与复制端点服务未知项；继续顶层H4服务职责对账，不生成修正、不下钻、不predict、不score，除非补证证明必要访问或共享约束确实未表达",
-    "review_decision": "accept_finite_negative_adjacent_service_finding_keep_endpoint_coverage_unknown",
+    "next_step": "Implement the smallest production repair for H4, run minimum safety checks, then fixed-R0 predict -> score.",
+    "review_decision": "ACCEPT_BOUNDED_OWNER_QUALIFICATION; HOLD_QUANTITATIVE_REPAIR",
     "review_structure_gate": "not_passed",
-    "review_h4_status": "evidence_insufficient_shared_memory_service_defect_not_established",
+    "review_h4_status": "SUPPORTED_SELECTED_MODEL_FEEDBACK_OMISSION; WORKSPACE_QUANTITY_UNQUALIFIED",
     "review_selected_pair": "direct_dram_dma_owner_merge_refuted",
     "service_role_evidence": {
       "cpu_pack": {
@@ -1793,10 +1815,10 @@
     "candidate_role": "top_level_architecture_gap_candidate",
     "top_level_architecture_gate": {
       "required": true,
-      "status": "evidence_insufficient",
+      "status": "not_passed_known_gap_and_remaining_unknowns",
       "priority": "first",
       "blocks_lower_layer": true,
-      "blocks_predict_score_until_candidate_structure_gate": true,
+      "blocks_predict_score_until_candidate_structure_gate": false,
       "active_candidate": "H4_MEMORY_SERVICE_OWNERSHIP",
       "evidence_refs": [
         "round_004/tests/test_hardware_resource_closure.py",
@@ -1808,7 +1830,7 @@
       "score_required_for_candidate_acceptance": true
     },
     "candidate_requires_predict_score": true,
-    "candidate_scoring_rule": "After this top-level candidate passes its own structure gate and pairing checks, run the same frozen R0 predict -> score flow and judge error improvement; logic correctness alone is insufficient.",
+    "candidate_scoring_rule": "All candidates, including top-level architecture candidates, enter the fixed R0 predict -> score flow after four minimum checks; capacity/owner/lifecycle unknowns are evidence_pending and reviewed after scoring.",
     "lower_layer_blocked_until_top_level_gate_passed": true,
     "endpoint_phase_evidence": {
       "selected_data_object": "operator_input_transfer layer-000.input_norm.reduce (bound from actual R0 schedule)",
@@ -1851,6 +1873,923 @@
       "scope": "finite negative finding for this selected object; not a proof that all H2D paths are complete",
       "endpoint_coverage": "unresolved"
     },
-    "subhypothesis_result": "finite_negative_adjacent_service_absence_refuted_endpoint_coverage_unresolved"
+    "access_role_accounting": {
+      "formal_activation_tensor": "embedding.output",
+      "formal_producer": "embedding",
+      "formal_consumer_scope": [
+        "block-group-000.norm1",
+        "block-group-000.residual1"
+      ],
+      "operator_placement": {
+        "embedding": "cpu0",
+        "layer-000.input_norm.reduce": "gpu0"
+      },
+      "activation_tensor_placement": "not_declared_in_placement.tensor_to_component",
+      "rank_memory_component": "hbm0",
+      "producer_service": {
+        "resource_id": "cpu0.memory",
+        "read_bytes": 272269312,
+        "write_bytes": 229376,
+        "demand_bytes_moved": 272498688,
+        "interpretation": "embedding weight read plus activation write in the CPU memory roofline"
+      },
+      "transfer_service": {
+        "resource_id": "link.cpu-gpu-pcie.cpu0->gpu0",
+        "bytes_moved": 229376,
+        "interpretation": "topology PCIe bulk transfer; no scheduler copy tensor or endpoint allocation identity"
+      },
+      "consumer_service": {
+        "resource_id": "hbm0.hbm_fabric",
+        "read_bytes": 229376,
+        "write_bytes": 256,
+        "demand_bytes_moved": 229632,
+        "interpretation": "input_norm.reduce input read plus result write"
+      },
+      "unresolved_endpoint_coverage": [
+        "copy source-side host read ownership",
+        "copy destination-side device write ownership",
+        "embedding.output physical buffer/address-space identity",
+        "scheduler copy tensor identity and pinned-host allocation"
+      ],
+      "structure_test": "round_004/tests/test_hardware_resource_closure.py::test_operator_transfer_access_roles_and_buffer_identity_boundary",
+      "conclusion": "Formal tensor and adjacent service roles are bounded. The checked placement and task metadata do not expose copy-buffer identity, but whether component/rank-value state fully expresses required copy semantics remains unverified; retain evidence_insufficient and do not patch."
+    },
+    "fixture_contract_binding": {
+      "native_get_rows_storage": {
+        "requested": false,
+        "qualified": false,
+        "reason": "no_tensor_storage_contract",
+        "fallback": "legacy_embedding_memory_model"
+      },
+      "interpretation": "The structural fixture has F32 hidden-storage accounting but does not bind the formal source-qualified GET_ROWS contract; its legacy producer memory demand is not a formal prediction result.",
+      "source_ref": "round_000/on/source planner.py, runtime_adapters.py; round_000/dependencies/tensor_storage_source_contract.json"
+    },
+    "execution_verification": {
+      "iteration": 5,
+      "local_test_result": "7 passed in 5.73s",
+      "mcp_execution_output": "Original iteration 5 output republished to connected parent workspace as readable output 93; exact 7 passed in 5.73s text read back via connector. No rerun.",
+      "interpretation": "GPT_REVIEW7 independently read historical output93; confirms the original iteration5 test log, not a new test execution."
+    },
+    "copy_semantics_review": {
+      "iteration": 6,
+      "decision": "accept_read_only_copy_semantics_audit_with_scoped_qualifications",
+      "native_copy_contract": "source_confirmed",
+      "selected_r0_binding": "partial_not_closed",
+      "execution_output": "Historical at REVIEW6: latest readable output was92 and iteration6 had no command output; its audit metadata is now reconciled. No test output is required for that read-only audit.",
+      "candidate_structure_gate": "not_passed",
+      "top_level_architecture_gate": "evidence_insufficient",
+      "predict_score": "not_eligible_yet",
+      "historical_record_reconciled": "Iteration 6 metadata republished under parent workspace; no command output was generated in that read-only iteration."
+    },
+    "copy_semantics_audit": {
+      "selected_tensor": "embedding.output",
+      "runtime_support_condition": "ggml_backend_sched_buffer_supported -> ggml_backend_supports_buft -> device supports_buft",
+      "copy_creation_condition": "For ordinary cross-backend inputs with an unsupported source buffer, copies are indexed by source tensor, target backend and copy slot within the scheduler graph; consumers share the copy in that slot. Supported buffers avoid this branch, but do not rule out the separate user-input multi-copy branch when n_copies > 1.",
+      "copy_execution": "CPU-to-CUDA cannot succeed through the CUDA-specific async-copy callback because it requires CUDA backends and buffers at both ends. Once this producer/consumer binding holds, scheduler fallback synchronizes the source and waits on the target slot event or synchronizes the target before generic tensor copy.",
+      "reuse_synchronization": "Per-backend copy slots are protected by prior split event waits; split completion records an event, and missing event support falls back to backend synchronization.",
+      "simulator_representation": "Python lowering emits operator_input_transfer router phases and component/rank-value propagation, but no target backend buffer type, copy allocation, copy slot, consumer alias set, or backend event.",
+      "runtime_facts_not_bound_to_selected_r0": [
+        "whether the selected embedding.output uses an unsupported source buffer",
+        "whether heterogeneous ggml scheduler graph splitting is active for this path",
+        "whether multiple GPU consumers share one copy",
+        "whether the actual copy bytes and endpoint owners equal the abstract 229376-byte link demand"
+      ],
+      "source_refs": [
+        "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1039-1055",
+        "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1364-1420",
+        "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1662-1689",
+        "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1778-1789",
+        "round_000/on/source/src/heterollm_sim/communication.py:481-540",
+        "round_000/on/source/src/heterollm_sim/planner.py:6309-6337,11134-11322"
+      ],
+      "conclusion": "Native scheduler semantics provide a checkable copy/reuse contract, but the selected frozen Python lowering does not establish that this path violates it. H4 remains evidence_insufficient; no production patch or score is justified."
+    },
+    "subhypothesis_result": "finite_negative_adjacent_service_absence_and_selected_same_value_duplicate_copy; current-copy_dependencies_verified_in_two_qualified_decode_slices; endpoint_coverage_and_values_or_generations_outside_those_slices_unresolved",
+    "selected_buffer_binding": {
+      "iteration": 7,
+      "status": "partial_not_closed_independently_reviewed",
+      "selected_cell": "qwen25_p128_o32_c4__fixed_runtime",
+      "frozen_configuration": {
+        "batch": 64,
+        "ubatch": 64,
+        "parallel": 4,
+        "gpu_layers": -1,
+        "split_mode": "layer",
+        "hardware_snapshot_gpu": "RTX 5080"
+      },
+      "captured_environment": {
+        "GGML_CUDA_NO_PINNED": null,
+        "interpretation": "Not set in the captured environment; does not prove pinned allocation success. GGML_CUDA_DEVICES was not captured."
+      },
+      "buffer_allocation_rule": "CPU scheduler buffers prefer the first model device host buffer type when available. CUDA host allocation can fall back to an ordinary CPU buffer on allocation failure; actual allocation for embedding.output remains unbound.",
+      "cuda_support_binding": {
+        "path": "source/llama.cpp-annotation-control/ggml/src/ggml-cuda/ggml-cuda.cu",
+        "sha256": "38b7fbbaa33cd7ca4f3b59cd1b19dcd9d2fdff3109e05eeeadc274dd69f708e6",
+        "identity": "Observed source SHA matches this CUDA file reference in the selected frozen prediction contract; this does not certify every other native source file.",
+        "integrated": false,
+        "basis": "Source initialization assigns false at line 352; not inferred from the GPU product name.",
+        "supports_buft_rule": "Own-device CUDA buffer, or integrated && CUDA_Host at line 5573.",
+        "bounded_inference": "If embedding.output is produced by the CPU backend using either CUDA_Host or fallback CPU storage, CUDA rejects both buffer types and ordinary cross-backend consumption requires a scheduler copy. Pinned allocation success is unnecessary for this conditional conclusion."
+      },
+      "device_and_slot_binding": {
+        "status": "unresolved",
+        "pipeline_condition": "Requires model.n_devices()>1 and additional full-offload/layer-split/KQV/capability conditions.",
+        "copy_slot_condition": "Scheduler uses parallel ? GGML_SCHED_MAX_COPIES : 1; context passes pipeline_parallel, not request parallel=4.",
+        "logical_device_caveat": "Bound CUDA source permits GGML_CUDA_DEVICES to expose multiple logical devices from physical devices; this variable is not in the selected capture. One physical GPU snapshot does not alone bind model.n_devices()==1.",
+        "existing_evidence_limit": "Selected native main record, receipt, three measurement batches, two warmup batches and prediction do not record actual device enumeration/pipeline_parallel/n_copies. Existing referenced log is zero bytes."
+      },
+      "unresolved": [
+        "Actual CPU producer and native graph tensor corresponding to embedding.output",
+        "Physical source allocation and scheduler copy tensor correspondence",
+        "Native consumer set and sharing per target backend/copy slot",
+        "Actual logical device enumeration, n_copies and cross-call reuse equivalence",
+        "Copy source-read/destination-write endpoint ownership and coverage"
+      ],
+      "source_refs": [
+        "round_000/on/predictions/qwen25_p128_o32_c4__fixed_runtime.prediction.json:1662,4233,4387,4491",
+        "source/llama.cpp-annotation-control/ggml/src/ggml-cuda/ggml-cuda.cu:276,352,5573",
+        "source/llama.cpp-semantic/src/llama-context.cpp:418,439,616",
+        "source/llama.cpp-semantic/ggml/src/ggml-cuda/ggml-cuda.cu:1311,1329",
+        "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:771,1869",
+        "artifacts/development/native_long_grid_135_20260915/native/qwen25_p128_o32_c4__fixed_runtime__b00.json:26485"
+      ],
+      "actions": "Read-only source/input binding; no native, microbenchmark, prediction, score, production edit or test rerun.",
+      "conclusion": "Buffer-support ambiguity is narrowed conditionally; actual tensor/copy/reuse equivalence and endpoint coverage are not established. H4 remains evidence_insufficient, candidate structure gate not passed and lower-layer analysis blocked.",
+      "native_consumer_binding": {
+        "current_source_consumers": [
+          "first-layer RMS norm: inpL",
+          "first-layer attention residual add: inpSA aliases inpL"
+        ],
+        "source_refs": [
+          "source/llama.cpp-semantic/src/models/qwen2.cpp:62,72,106",
+          "source/llama.cpp-semantic/src/llama-graph.cpp:1591,2383",
+          "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1399"
+        ],
+        "copy_rule": "Same source tensor and target backend in the same effective copy slot share the allocated copy and split input. This rule does not depend on whether total n_copies is 1 or 4.",
+        "cpu_producer_argument": "Input-layer CPU placement, CPU weight-buffer affinity and GET_ROWS offload batch size 0 below captured default threshold 32 support CPU producer under the examined source rules.",
+        "historical_source_boundary": "Current qwen2.cpp/source identities exist, but historical Unity included content remains unclosed in Q0:589-620. Do not conflate an existing current SHA/reference with historical object-content identity, or claim the file has no identity record at all. Model/graph/context and scheduler/CUDA bindings remain as scoped above."
+      }
+    },
+    "copy_sharing_behavior_probe": {
+      "iteration": 7,
+      "status": "finite_negative_legacy_fixture_independently_reviewed",
+      "scope": "Selected existing R0 legacy structural fixture, request-0000 prefill, rank0 first-layer embedding value; not the complete formal R0 GET_ROWS prediction path.",
+      "task_count": 108548,
+      "loaded_source_root": "round_000/on/source/src",
+      "identity_checks": [
+        "planner.__file__ under frozen R0 source",
+        "compiler_ir.__file__ under frozen R0 source"
+      ],
+      "authored_consumers": [
+        "block-group-000.norm1",
+        "block-group-000.residual1"
+      ],
+      "canonical_consumer": "layer-000.attention (contains the lower-level norm/residual consumers)",
+      "source_tensor": {
+        "id": "embedding.output",
+        "producer": "embedding",
+        "logical_dtype": "bf16",
+        "shape": [
+          "B",
+          "T",
+          896
+        ],
+        "lowered_output_bytes": 229376
+      },
+      "observed_transfer": {
+        "count": 1,
+        "bytes": 229376,
+        "source": "cpu0",
+        "target": "gpu0",
+        "task_id": "request-0000.00018.prefill.layer-000.rank000.input_norm_reduce.input_transfer.link00",
+        "dependency": "request-0000.00017.prefill.embedding.complete",
+        "resource": "link.cpu-gpu-pcie.cpu0->gpu0"
+      },
+      "consumers": {
+        "input_norm_apply": "kernel launch/task execution follow input_norm.reduce and its transfer",
+        "attention_residual": "Fused with post-attention norm; both fused launch and execution contain the transfer in their actual dependency ancestor closure.",
+        "fusion_decision": "enabled_same_gpu_sram_resident",
+        "fusion_members": [
+          "layer-000.attention.residual",
+          "layer-000.post_attention_norm.reduce",
+          "layer-000.post_attention_norm.apply"
+        ],
+        "fusion_member_target": "gpu0"
+      },
+      "finding": "No duplicated H2D operator-input transfer for this embedding value in the selected request prefill; apply and fused residual wait on the same transfer. No production correction justified by this instance.",
+      "exclusions": [
+        "No actual scheduler replay timing checked",
+        "No formal source-qualified GET_ROWS contract in this fixture",
+        "Historical backend binding not fully closed",
+        "No proof for different values, new generations, other backends, allocation capacity/release or endpoint read/write coverage"
+      ],
+      "execution_logs": [
+        "round_004/r4-embedding-consumer-probe.txt",
+        "round_004/r4-embedding-consumer-probe-v2.txt",
+        "round_004/r4-embedding-residual-probe.txt"
+      ],
+      "retained_probe_limitation": "Initial narrow prefix filter omitted child consumers; v2 corrected filtering. Original output retained; no production or test edits.",
+      "actions_not_run": [
+        "native",
+        "microbenchmark",
+        "predict",
+        "score",
+        "scheduler replay",
+        "existing seven-test rerun"
+      ],
+      "execution_semantics": {
+        "interpreter": "E:/anaconda/python.exe",
+        "invocation": "inline Python via stdin, captured to the listed existing R4 logs",
+        "shell_exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "python_exit_code_separately_recorded": false,
+        "completion_markers_present": true,
+        "assertions": "actual imported planner/compiler_ir file paths; fixture module-level source existence and loader identity assertions",
+        "computed_observations": "copy count, byte sum, authored/canonical consumers and dependency reachability computed, printed and inspected; not additional pytest pass counts",
+        "initial_filter_correction": "First prefix used a unique task sequence number and missed child consumers; v2 and residual follow-up corrected the filter, without changing scenario or treating empty results as absent consumers."
+      },
+      "independent_review": {
+        "iteration": 7,
+        "decision": "accept_bounded_source_binding_and_finite_negative_copy_count_finding",
+        "execution_outputs_read": [
+          93,
+          94,
+          95
+        ],
+        "workspace_diff_read": true,
+        "buffer_alias_and_reuse_equivalence": "not_established",
+        "selected_same_value_duplicate_copy": "not_observed_in_legacy_fixture",
+        "log_label_interpretation": "reuses_first_embedding_copy=True denotes transfer ancestor reachability only, not proven buffer alias or allocation sharing."
+      }
+    },
+    "generation_probe_preflight": {
+      "iteration": 8,
+      "selected_batches": [
+        38,
+        39
+      ],
+      "cohorts": [
+        "cohort-000038",
+        "cohort-000039"
+      ],
+      "kind": "decode",
+      "request_ids": [
+        "request-0003"
+      ],
+      "physical_batch_rows": [
+        1,
+        1
+      ],
+      "context_tokens": [
+        157,
+        158
+      ],
+      "completion_cursors": [
+        31,
+        32
+      ],
+      "retained_occupied_kv_rows": [
+        635,
+        636
+      ],
+      "details_truncated": false,
+      "invocation_cache_eligibility": "Not eligible on original Qwen2 input: group semantics stateless_scheduler_batch but _serving_invocation_segment_binding requires serial_stateful_position.",
+      "source_refs": [
+        "round_000/on/source/src/heterollm_sim/planner.py:20771,20962",
+        "round_000/on/predictions/qwen25_p128_o32_c4__fixed_runtime.prediction.json:batch_schedule"
+      ],
+      "next_action": "Keep frozen semantics, check both fresh generations and bounded dependency execution; record actual invocation-cache exclusion instead of forcing a hit. Other inner caches do not prove embedding-containing invocation replay."
+    },
+    "generation_probe": {
+      "iteration": 8,
+      "status": "passed_bounded_check_independently_reviewed",
+      "test": "round_004/tests/test_hardware_resource_closure.py::test_source_qualified_q0_decode_generations_keep_current_embedding_copy",
+      "result": "1 passed in 3.42s",
+      "python_exit_code": 0,
+      "output_path": "round_004/pytest-iteration-8-copy-generations.txt",
+      "source_preparation": "Exact preparation prefix extracted from frozen worker AST, cut before grid.reporting.run_scenario; no predict_cell/run_scenario/simulate_online call. Existing sidecar seeded into normal model cache, no payload-scan fallback. Frozen worker identity and final static replan checks retained.",
+      "prepared": {
+        "gguf_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "mapping_stale": false,
+        "sidecar": {
+          "metadata_digest": "4044165859bb05b59983f99907447d399d466cebb849e96eeaa4c49c747e3ef5",
+          "parser_source": "heterollm_sim.gguf_parity:gguf-directory-parser/v1",
+          "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf.metadata.json",
+          "schema": "gguf-metadata-cache/v1",
+          "sha256": "392b86c3786dc99c55cabb0b636cf739267a1999d8fba8ec8fab271943144333",
+          "size_bytes": 78621,
+          "source_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_20260913\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+          "source_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
+        },
+        "tensor_storage_status": "enabled",
+        "worker": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_000\\on\\source\\tools\\predict_stable_native_dataset.py"
+      },
+      "cache": {
+        "binding_none": [
+          true,
+          true
+        ],
+        "cohort_task_counts": [
+          1456,
+          1456
+        ],
+        "invocation_cache": "not_applicable",
+        "path": "stateless_scheduler_batch",
+        "same_context_target_equals_fresh_tasks": true
+      },
+      "generations": [
+        {
+          "cohort_id": "cohort-000038",
+          "context_tokens": 157,
+          "completion_cursor": 31,
+          "current_value_identity": [
+            "cohort-000038.00011.cohort-000038.decode.rank000.embedding.cpu_memory",
+            "cohort-000038.00012.cohort-000038.decode.embedding.complete",
+            "cohort-000038.00013.cohort-000038.decode.layer-000.rank000.input_norm_reduce.input_transfer.link00",
+            "cohort-000038.00015.cohort-000038.decode.layer-000.rank000.input_norm_reduce.gpu_reduction"
+          ],
+          "copy_bytes": 3584,
+          "executed_slice_tasks": 23,
+          "time_scope": "analytical_dependency_slice_not_native_latency",
+          "get_rows_qualified": true,
+          "selected_weight_read_bytes": 616,
+          "output_storage_bits": 32,
+          "event_summary": [
+            {
+              "task_id": "cohort-000038.00011.cohort-000038.decode.rank000.embedding.cpu_memory",
+              "start_ns": 729.9354005167959,
+              "end_ns": 790.0887887951842
+            },
+            {
+              "task_id": "cohort-000038.00012.cohort-000038.decode.embedding.complete",
+              "start_ns": 790.0887887951842,
+              "end_ns": 790.0887887951842
+            },
+            {
+              "task_id": "cohort-000038.00013.cohort-000038.decode.layer-000.rank000.input_norm_reduce.input_transfer.link00",
+              "start_ns": 7820.712959791497,
+              "end_ns": 8734.476291431924
+            },
+            {
+              "task_id": "cohort-000038.00015.cohort-000038.decode.layer-000.rank000.input_norm_reduce.gpu_reduction",
+              "start_ns": 10614.647902293129,
+              "end_ns": 10734.647902293129
+            }
+          ],
+          "events_with_resource_predecessors": 4
+        },
+        {
+          "cohort_id": "cohort-000039",
+          "context_tokens": 158,
+          "completion_cursor": 32,
+          "current_value_identity": [
+            "cohort-000039.00011.cohort-000039.decode.rank000.embedding.cpu_memory",
+            "cohort-000039.00012.cohort-000039.decode.embedding.complete",
+            "cohort-000039.00013.cohort-000039.decode.layer-000.rank000.input_norm_reduce.input_transfer.link00",
+            "cohort-000039.00015.cohort-000039.decode.layer-000.rank000.input_norm_reduce.gpu_reduction"
+          ],
+          "copy_bytes": 3584,
+          "executed_slice_tasks": 23,
+          "time_scope": "analytical_dependency_slice_not_native_latency",
+          "get_rows_qualified": true,
+          "selected_weight_read_bytes": 616,
+          "output_storage_bits": 32,
+          "event_summary": [
+            {
+              "task_id": "cohort-000039.00011.cohort-000039.decode.rank000.embedding.cpu_memory",
+              "start_ns": 729.9354005167959,
+              "end_ns": 790.0887887951842
+            },
+            {
+              "task_id": "cohort-000039.00012.cohort-000039.decode.embedding.complete",
+              "start_ns": 790.0887887951842,
+              "end_ns": 790.0887887951842
+            },
+            {
+              "task_id": "cohort-000039.00013.cohort-000039.decode.layer-000.rank000.input_norm_reduce.input_transfer.link00",
+              "start_ns": 7820.712959791497,
+              "end_ns": 8734.476291431924
+            },
+            {
+              "task_id": "cohort-000039.00015.cohort-000039.decode.layer-000.rank000.input_norm_reduce.gpu_reduction",
+              "start_ns": 10614.647902293129,
+              "end_ns": 10734.647902293129
+            }
+          ],
+          "events_with_resource_predecessors": 4
+        }
+      ],
+      "validated": [
+        "Each original decode cohort has a distinct current embedding producer, completion terminal, H2D copy and norm-reduction consumer",
+        "Each current copy carries 3584 B and waits on its current producer terminal",
+        "Each current consumer waits on its current copy; all slice dependencies and recorded resource predecessors complete before task start",
+        "Second same-context task tuple, resource capacities and owners equal a separately compiled fresh target"
+      ],
+      "invocation_cache_scope": "Actual binding returns None for both stateless_scheduler_batch groups; invocation cache exclusion is confirmed, no cache-hit replay or remap equivalence claim.",
+      "input_reconstruction": "Q0 batches38/39 retain five item fields. Missing ordinary non-MTP decode append/materialized/logit/proposal counts reconstructed as1 from frozen serving.py:10453 constructor rule; no tasks hand-built.",
+      "boundaries": [
+        "Local analytical dependency execution only, not native latency or full frozen Q0 dispatch timing",
+        "Two slices each start at zero with original demands; no old Q0 timing input or fabricated inter-cohort serialization",
+        "Does not establish aliases, capacity occupancy/release, native copy-slot reuse, other model/cache paths or endpoint service coverage",
+        "Historical source/backend applicability limitations remain"
+      ],
+      "production_change": false,
+      "predict_score_run": false,
+      "existing_seven_tests_rerun": false,
+      "independent_review": {
+        "iteration": 8,
+        "decision": "accept_source_qualified_generation_probe_and_scoped_negative_finding",
+        "execution_output": 96,
+        "python_exit_confirmed": 0,
+        "current_generation_copy_dependencies": "verified_within_executed_slices",
+        "invocation_cache": "excluded_by_real_binding_condition",
+        "cache_hit_replay": "not_tested_not_claimed",
+        "candidate_structure_gate": "not_passed",
+        "top_level_architecture_gate": "evidence_insufficient"
+      }
+    },
+    "capacity_reconciliation": {
+      "iteration": 9,
+      "status": "model_capacity_feedback_gap_independently_reviewed",
+      "scope": "Same selected Q0 source-qualified scenario, hbm0 copy target storage pool; static preparation and read-only accounting/plan queries only.",
+      "output_path": "round_004/capacity-iteration-9.txt",
+      "python_exit_code": 0,
+      "tests_run": false,
+      "physical_capacity_bytes": 17094934528,
+      "pool_static_tensor_bytes": 391856128,
+      "pool_static_tensor_kinds": "48 per-layer attention/MLP weight entries plus lm_head_weights; no graph workspace entry",
+      "fixed_claims": [],
+      "capacity_ledger": null,
+      "logical_weight_views": {},
+      "logical_weight_aliases": {},
+      "runtime_weight_copy_ids": [],
+      "dynamic_budget_excluding_kv_cache": 16703078400,
+      "declared_kv_capacity": 0,
+      "compiled_kv_policy": {
+        "allocation_policy": "lazy",
+        "bytes_per_page": 196608,
+        "cache_component": "hbm0",
+        "capacity_bytes": 16703029248,
+        "capacity_pages": 84956,
+        "dtype": "f16",
+        "logical_bytes_per_token": 12288,
+        "offload_capacity_bytes": 0,
+        "offload_component": null,
+        "offload_ratio": 0.0,
+        "preemption_mode": "auto",
+        "prefetch_distance": 0,
+        "tokens_per_page": 16
+      },
+      "kv_rounding_remainder_bytes": 49152,
+      "kv_rounding_interpretation": "Page-granularity remainder is not a source-qualified workspace reservation.",
+      "existing_capacity_feedback_path": [
+        "compile_serving_plan -> _kv_capacity_bytes -> _dynamic_component_capacity",
+        "_physical_runtime_limits -> _PhysicalCapacityLedger",
+        "_KVLedger.can_resize/resize -> policy capacity_pages and physical.can_adjust/adjust"
+      ],
+      "transient_path_interpretation": "Generic transient envelopes select a source-grounded lower bound, not a native compute-buffer upper bound. Current empty residency capacity contract makes _build_allocation_residency_manager return None; _apply_owner_residency returns the unchanged cost without consuming/registering transient residency. Thus envelope existence alone does not cover the selected copy storage in capacity feedback.",
+      "native_allocation_contract": "Bound scheduler includes input_cpy in the target allocator graph, protects the source until copying, and allocates/reserves the whole graph through ggml_gallocr. Coverage may be by an overall compute-buffer reservation, not an allocation per invocation.",
+      "finding": "For the selected modeled Q0 path, available KV budget deducts static weights but has no active graph-workspace capacity reservation or transient allocation feedback. This supports an uncovered capacity-feedback mechanism; it does not prove an observed OOM/incorrect admission in the fixed workload.",
+      "necessary_missing_evidence": [
+        "Source-qualified complete native compute-buffer reservation or valid bound, actual reserve graph, alignment, aliases, lifetime and copy scope mapped to hbm0",
+        "Committed versus physically resident/non-evictable occupation and overlap with existing weights, KV or driver/pool owners",
+        "Minimal complete binding correction with actual capacity-consumer validation; observed OOM is not required to acknowledge or repair the structural gap"
+      ],
+      "prohibited_inferences": [
+        "Do not use 3584B copy payload as the complete physical reservation",
+        "Do not reserve again per decode when an overall preallocated buffer would cover it",
+        "Do not treat a lower-bound transient envelope as a conservative whole-workspace bound",
+        "Do not claim error improvement or change frozen device capacity"
+      ],
+      "source_refs": [
+        "round_000/on/source/src/heterollm_sim/planner.py:22062,25163",
+        "round_000/on/source/src/heterollm_sim/serving.py:3295,3817,8169,15809",
+        "round_000/on/source/src/heterollm_sim/serving.py:15758,15859,4648,2494,2181",
+        "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1498-1514,1610-1634"
+      ],
+      "production_patch": false,
+      "predict_score": false,
+      "independent_review": {
+        "iteration": 9,
+        "decision": "ACCEPT_SELECTED_MODEL_CAPACITY_FEEDBACK_OMISSION",
+        "execution_output": 97,
+        "candidate_structure_gate": "not_passed",
+        "top_level_architecture_gate": "not_passed",
+        "current_oom_or_admission_error": "not_established",
+        "reservation_quantity": "unresolved",
+        "physical_residency_and_lifecycle": "unresolved",
+        "predict_score": "not_eligible_yet"
+      }
+    },
+    "workspace_owner_qualification": {
+      "iteration": 10,
+      "status": "observed_intervals_accepted_offline_qualification_pending",
+      "scope": "One selected Q0 hbm0 graph workspace owner; reuse existing evidence audit and read-only source derivation feasibility. No native/build/predict/score or probe rerun.",
+      "existing_evidence_audit": {
+        "result": "No qualified complete graph workspace reserve, allocation or peak bytes found in the specified Q0 records and dependencies; not an all-repository exhaustion claim.",
+        "bound_hardware_snapshot": {
+          "path": "artifacts/development/native_long_grid_135_20260915/native/freeze.json",
+          "pointer": "/hardware/gpu",
+          "sha256": "0e83a5dc7207081f5d501f6e0012fcbda4f612eafd7c03ca65957f2dde1b2676",
+          "freeze_created": "2026-09-15T14:29:13.697552+08:00",
+          "memory_mib": 16303,
+          "memory_free_mib": 14422,
+          "memory_used_mib": 1556,
+          "qualification": "Whole-device freeze snapshot; not Q0 process/graph peak or workspace attribution."
+        },
+        "other_hardware_snapshot": {
+          "path": "artifacts/development/native_long_grid_135_20260915/hardware.json",
+          "memory_mib": 16303,
+          "memory_free_mib": 14624,
+          "memory_used_mib": 1354,
+          "qualification": "Different snapshot with no timestamp field; cannot replace frozen hardware or infer workspace from the difference."
+        },
+        "native_record": {
+          "path": "artifacts/development/native_long_grid_135_20260915/native/qwen25_p128_o32_c4__fixed_runtime__b00.json",
+          "bound_log_bytes": 0,
+          "journal_scope": "2 warmup and 3 measurement journals",
+          "telemetry": "Host available memory and GPU non-memory metrics only; no graph allocation/reserve/peak breakdown.",
+          "collector_refs": [
+            "execution/tools/native_repeatability_experiment.py:397",
+            "execution/tools/native_repeatability_experiment.py:452-470"
+          ]
+        },
+        "other_checked_scope": [
+          "Q0 receipt and referenced journals",
+          "Q0 input_identity and static_inputs",
+          "round_000/dependencies JSON contracts"
+        ],
+        "excluded_quantities": [
+          "3584B selected copy payload",
+          "256B context allocation alignment constant",
+          "device used/free snapshot",
+          "host available-memory delta"
+        ]
+      },
+      "conditional_implementation": "Use existing capacity_claims only if qualified sustained non-evictable physical ownership is established. Otherwise use an applicable existing allocation contract or record the exact blocker; do not create an allocator framework or arbitrarily enable eviction.",
+      "owner_contract": {
+        "owner": "backend graph compute-buffer allocation, distinct from model weights and context/KV allocation",
+        "allocation_path": "Captured GGML_CUDA_ENABLE_UNIFIED_MEMORY=null selects ordinary cudaMalloc in the bound annotation-control CUDA source; buffer size is retained and destruction uses cudaFree. This supports application device-memory commitment, not independently measured always-resident driver pinning.",
+        "lifecycle": "sched_reserve constructs scheduler and reserves PP then TG then PP; scheduler reset clears graph state without freeing gallocr. Changed layout or insufficient capacity can trigger synchronized reserve/growth. Scheduler replacement/destruction releases gallocr.",
+        "scope_warning": "Initialization reserve explicitly does not guarantee worst-case coverage for n_seqs>1. Per-tensor death or each decode must not create/release a separate physical owner.",
+        "coverage": "Input-copy tensors are included in the allocator graph; memory_breakdown distinguishes model, context and compute. A whole compute-buffer owner can cover the selected copy without adding its payload again.",
+        "source_refs": [
+          "source/llama.cpp-annotation-control/ggml/src/ggml-cuda/ggml-cuda.cu:185,781,928",
+          "source/llama.cpp-annotation-control/src/llama-context.cpp:594-732,3386-3412",
+          "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1498-1514,1610-1637,1926,1946,2077",
+          "artifacts/development/native_long_grid_135_20260915/native/qwen25_p128_o32_c4__fixed_runtime__b00.json:20461"
+        ]
+      },
+      "fixed_claim_semantics": {
+        "pinned_meaning": "R0 models non-reclaimable capacity, not a real OS/device locking API. Lack of measured OS pin is not a schema requirement or a standalone blocker.",
+        "strength": "claim_system sets committed_bytes=resident_bytes=size_bytes, evictable=false, pinned=true and SYSTEM lifecycle. Thus all claimed bytes are charged as fully resident and non-evictable in the simulator.",
+        "remaining_qualification": "Need qualified bytes and support for full modeled reservation during the owner lifecycle/stable interval; cannot promote allocation commitment into arbitrary resident-byte quantity.",
+        "source_refs": [
+          "round_000/on/source/src/heterollm_sim/serving.py:3359,3844",
+          "round_000/on/source/src/heterollm_sim/residency.py:1,942,1060,1457"
+        ]
+      },
+      "source_derivation_feasibility": {
+        "result": "Rules and major reserve geometry can be reconstructed conditionally; a qualified complete numeric reserve or valid numeric upper bound is not established.",
+        "reserve_geometry": {
+          "status": "source-derived for captured non-embedding non-speculative completion configuration",
+          "prompt": [
+            "tokens=64",
+            "sequences=4",
+            "outputs=4"
+          ],
+          "generation": [
+            "tokens=4",
+            "sequences=4",
+            "outputs=4"
+          ],
+          "order": [
+            "PP",
+            "TG",
+            "PP"
+          ],
+          "kv_view": "memory.init_full uses the complete KV capacity; occupied Q0 rows635/636 cannot substitute for reserve geometry"
+        },
+        "copy_slots": "Actual logical device enumeration is unresolved because GGML_CUDA_DEVICES was not captured. Only conditional: model.n_devices()==1 implies no pipeline parallelism and n_copies=1. One physical RTX5080 or request parallel=4 does not prove actual n_copies.",
+        "complete_chain": "Full model.build_graph -> backend split/placement -> copies and allocation dependencies -> gallocr_reserve_n -> per-buffer-type/chunk high-water and inherited growth across reserves",
+        "missing_inputs": [
+          "Complete ordered intermediate tensor/leaf allocation inventory including dtype, ne/nb, flags, src/view identities, offsets and externally allocated state",
+          "Actual backend ordering, buffer types, split inputs and complete target-backend/copy-slot scope",
+          "Per-buffer get_alloc_size and alignment, including quantized padding; plain logical nbytes is insufficient",
+          "Complete lifetimes/alias and allocation dependencies or an explicitly complete no-reuse upper-bound inventory",
+          "Historical architecture Unity included-body identity; final_output_selection binding is conditional with historical_include_content_proven=false and native_dispatch_proven=false"
+        ],
+        "known_rules": [
+          "CUDA buffer alignment128B, plus type-specific alloc-size/padding",
+          "Captured FA=false excludes the FA-specific allocation branch for this scope",
+          "Three reserve graphs share inherited buffer capacity; simple sum is not actual reserve"
+        ],
+        "minimum_pure_static_route": "A complete source-qualified allocation inventory over all relevant PP/TG/runtime shapes and necessary backend copies could be conservatively summed without in-place/alias savings; no such complete inventory or historical graph binding is available here. Current source conditional calculation cannot be relabeled historical Q0 reservation.",
+        "disallowed_shortcut": "ggml_backend_sched_reserve_size avoids device allocation but still constructs/executes a native graph path; it is not authorized under the no-new-native rule.",
+        "stop_reason": "Stop this quantitative path at missing complete allocation inventory and runtime/historical binding; do not build an alternative allocator framework or append field-only tests.",
+        "source_refs": [
+          "source/llama.cpp-annotation-control/src/llama-context.cpp:594",
+          "source/llama.cpp-annotation-control/tools/server/server-context.cpp:46",
+          "source/llama.cpp-semantic/src/llama-kv-cache.cpp:2670",
+          "source/llama.cpp-semantic/src/models/qwen2.cpp:53",
+          "source/llama.cpp-semantic/ggml/src/ggml-backend.cpp:1440,1869",
+          "source/llama.cpp-annotation-control/ggml/src/ggml-cuda/ggml-cuda.cu:947",
+          "source/llama.cpp-semantic/ggml/src/ggml-alloc.c:624,825"
+        ]
+      },
+      "production_change": false,
+      "predict_score_run": false,
+      "native_run": false,
+      "tests_run": false,
+      "repeated_prepare_lowering_replay": false,
+      "qualification_decision": "REVIEW11 accepted CUDA0/CUDA_Host context reservation intervals and scheduler ownership for selected run; whole-run peak remains unestablished. Proceed offline only.",
+      "structural_observation_proposal": {
+        "status": "executed_complete_structural_only_unpaired_clock",
+        "authorization_boundary": "Permanent user authorization recorded in task brief section2 supersedes prior per-observation prohibition; existing registered scope and hard budgets remain binding.",
+        "purpose": "Determine one Q0 compute-buffer owner mapping and source-supported reservation intervals without fitting or comparing TTFT/TPOT/E2E.",
+        "scope": "One isolated Q0 native process using the existing frozen executable, dependencies, model and original Q0 runtime configuration/recorded environment and original 2-warmup/3-recorded-batch request sequence; only log verbosity/output location change. No repetitions/retries, rebuild, wider grid or benchmark.",
+        "unrecorded_environment": "Explicitly record current logical-device related values that were missing historically. The new observation cannot certify their unknown historical values or replace the old native evidence.",
+        "execution_preparation": "Check recorded executable/module/model/config identities before launch; keep outputs separate from all frozen references. Use existing server logging at verbosity5. Prepare an isolated process-group graceful shutdown that only targets this process and verify actual shutdown logs; do not use global Ctrl+C or assume the existing collector terminate() triggers Windows destructors.",
+        "observable_data": [
+          "At initialization: buffer-type names and compute sizes rendered to two decimal MiB, represented as rounding intervals rather than exact bytes",
+          "Scheduler copy-slot count, not tensor-copy count or copied bytes",
+          "At graceful context destruction: expected/final compute-buffer sizes to four decimal MiB",
+          "At normal server-loop exit: model/context/compute breakdown aggregated by device/buffer type in truncated integer MiB"
+        ],
+        "capability_limits": [
+          "Startup/end logs alone do not establish runtime peak or absence of intermediate growth",
+          "Buffer-type/device aggregation is not automatically a one-to-one logical-backend mapping",
+          "Existing /props and /metrics do not expose an exact memory-breakdown endpoint",
+          "GGML_SCHED_DEBUG_REALLOC is excluded because it can abort"
+        ],
+        "stop_conditions": [
+          "Identity mismatch before launch: stop without running",
+          "Missing reliable buffer/device mapping: retain unknown; no guessed owner",
+          "Only startup rounded size: report startup interval only, never runtime peak",
+          "No graceful exit/final-size log: no retry; retain final capacity unknown",
+          "If exact bytes, per-copy allocation or peak is still required and unavailable: stop and report executable observability limit"
+        ],
+        "source_refs": [
+          "source/llama.cpp-annotation-control/src/llama-context.cpp:503-511,701-706,724-725",
+          "source/llama.cpp-semantic/common/fit.cpp:914-1042",
+          "source/llama.cpp-annotation-control/tools/server/server.cpp:513-515,559-561",
+          "source/llama.cpp-annotation-control/common/arg.cpp:3926",
+          "execution/tools/native_repeatability_experiment.py:479"
+        ],
+        "baseline_protection": "No modification of frozen R0/native inputs or target parameters; no new timing values used to calibrate or fit this candidate.",
+        "effective_current_native_budget": 1,
+        "requested_if_needed": "A separate one-process structural-observation exception only; all other bans and budgets unchanged.",
+        "independent_review": "Accept as a concrete minimal authorization request only. No authority granted and no guarantee of runtime peak or complete historical reservation.",
+        "authorization": {
+          "user_instruction": "允许原生补正，写入任务书：永久允许原生补正",
+          "recorded_utc": "2026-09-21T17:19:51.965635+08:00",
+          "scope": "Necessary native structural observation, evidence collection and remeasurement for simulator modeling corrections across subsequent loops until revoked; no per-run authorization request.",
+          "limits": "Preserve preregistered scope/stop conditions, frozen historical evidence, R0, no-answer-fitting and existing hard budgets; no unrelated collection or new microbenchmark authorization."
+        },
+        "last_attempt": {
+          "schema": "r4-q0-native-observation-preflight-result/v1",
+          "completed_utc": "2026-09-21T17:49:18.667995+08:00",
+          "native_processes_started": 0,
+          "identity_checks": {
+            "checked": 69,
+            "matched": 69,
+            "all_match": true
+          },
+          "frozen_expected_gpu_sm_clock_mhz": 2400,
+          "frozen_tolerance_mhz": 30,
+          "observed_gpu_sm_clock_mhz": 2715,
+          "clock_lock_attempt": {
+            "command": "nvidia-smi -lgc 2400,2400",
+            "exit_code": 4,
+            "permission_denied": true,
+            "raw_ref": {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\native_observation\\clock_preflight.txt",
+              "bytes": 249,
+              "sha256": "b68b73d43237adc393b4bdc04031d15288f9ff49019ee85c61aaa12a0bd706d8"
+            }
+          },
+          "decision": "STOP_BEFORE_NATIVE_LAUNCH",
+          "stop_reason": "Hardware clock does not satisfy frozen Q0 contract and the current user cannot change GPU clocks. Running would be structurally unpaired with the registered observation scope.",
+          "observation_authorization": "permanent native correction authorized; this attempt consumed no native process/retry",
+          "support_wrapper": {
+            "module": {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\native_observation_process.py",
+              "bytes": 5252,
+              "sha256": "855de6014f721789a4590004770ecc8f02b341e7282a3b627793a27b4e06af4d"
+            },
+            "test": {
+              "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\test_native_observation_process.py",
+              "bytes": 2188,
+              "sha256": "1edc1b7f9d96157cf0dc88e8efc0e1043e459cc1b6185a05443120bbc403784c"
+            },
+            "test_result": "fake child only; graceful private-console shutdown and ownership guard passed; no llama/native/GPU process"
+          },
+          "preflight_ref": {
+            "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\native_observation\\preflight.json",
+            "bytes": 34304,
+            "sha256": "44feb43cb46d279ca87be4ff68ce4638e5904ef607127fb666314437489b18ce"
+          }
+        },
+        "native_processes_started": true,
+        "stop_reason": "Hardware clock does not satisfy frozen Q0 contract and the current user cannot change GPU clocks. Running would be structurally unpaired with the registered observation scope.",
+        "observed_result_ref": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\native_observation\\iteration-11-structural-observation-summary.json"
+      },
+      "independent_review": {
+        "iteration": 10,
+        "decision": "ACCEPT_BOUNDED_OWNER_QUALIFICATION; HOLD_QUANTITATIVE_REPAIR",
+        "structural_finding": "supported_selected_model_feedback_omission",
+        "quantity": "no_qualified_complete_value_or_numeric_upper_bound",
+        "current_oom_or_admission_impact": "not_established",
+        "candidate_structure_gate": "not_passed",
+        "top_level_architecture_gate": "not_passed",
+        "native_observation": "proposed_only_not_authorized",
+        "predict_score": "not_eligible_yet",
+        "max_iterations": 12,
+        "completed_utc": "2026-09-21T17:13:28.916594+08:00",
+        "evidence_reviewed": "Iteration10 execution_summary, existing workspace_owner_qualification, source/contract refs and iteration-10-workspace.patch. No new execution_output was needed; latest prior output97 belongs to iteration9.",
+        "accepted_limits": [
+          "No empirical OS/driver pin measurement is required merely to satisfy capacity_claims schema",
+          "A complete valid interval may suffice if page-level admission and lifecycle conclusions agree throughout it; exact integer bytes are not universally required",
+          "No arbitrary interval midpoint/upper endpoint may be presented as historical real allocation",
+          "No global evidence-exhaustion or static-analysis-impossibility claim",
+          "New observation cannot prove historical uncaptured environment/device values"
+        ],
+        "next_step": "Wait for a concrete existing evidence source or explicit user authorization of the prepared one-process Q0 structural-observation exception. No new probe/native/predict/score. Once qualified evidence exists, resume H4 repair and its required fixed-R0 predict -> score within unchanged budgets."
+      },
+      "observation_result": {
+        "observation_file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\native_observation\\qwen25_p128_o32_c4__r4_observation.json",
+        "stderr_log": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\native_observation\\qwen25_p128_o32_c4__r4_observation.stderr.log",
+        "stdout_log": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\native_long_grid_135_20260915\\optimization_loop\\round_004\\native_observation\\qwen25_p128_o32_c4__r4_observation.stdout.log",
+        "status": "complete_structural_only_unpaired_clock",
+        "native_process_started": true,
+        "process_returncode": 0,
+        "graceful_stop": {
+          "ok": true,
+          "status": "exited",
+          "pid": 44208,
+          "returncode": 0,
+          "helper_returncode": 0,
+          "helper_stdout": "{\"signal\": \"CTRL_C_EVENT\", \"verified_console_pids\": [6628, 44208], \"creation_time\": 134344589198741023}\n",
+          "helper_stderr": ""
+        },
+        "runtime_module_identity_before": "857c5f6c340e400ed445dcf5e9a2cc066a1489981eccc8612d630b6a921af0d8",
+        "runtime_module_identity_after": "857c5f6c340e400ed445dcf5e9a2cc066a1489981eccc8612d630b6a921af0d8",
+        "identity_stable": true,
+        "prompt_token_count": 128,
+        "warmup_batches": 2,
+        "measurement_batches": 3,
+        "all_batches_complete": true,
+        "clock_pairing": {
+          "frozen_expected_mhz": 2400,
+          "mode": "structural_only_unpaired_clock",
+          "observed_before": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b, P1, 40, 2392 MHz, 15001 MHz, 38.21 W, 7 %\n",
+          "observed_after": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b, P1, 42, 2392 MHz, 15001 MHz, 57.50 W, 67 %\n"
+        },
+        "timing_interpretation": "No timing/scoring use; structural-only observation because frozen 2400 MHz could not be set before launch. Observed 2392 MHz is recorded fact only.",
+        "compute_buffer_lines": [
+          "0.00.272.570 I sched_reserve:      CUDA0 compute buffer size =    30.94 MiB",
+          "0.00.272.573 I sched_reserve:  CUDA_Host compute buffer size =     2.50 MiB",
+          "0.00.602.580 I sched_reserve:      CUDA0 compute buffer size =    30.94 MiB",
+          "0.00.602.582 I sched_reserve:  CUDA_Host compute buffer size =     2.50 MiB"
+        ],
+        "graph_reserve_lines": [
+          "0.00.270.473 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.270.882 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.271.248 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.271.581 D graph_reserve: reserving a graph for ubatch with n_tokens =   64, n_seqs =  4, n_outputs =    4",
+          "0.00.272.114 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.272.361 D graph_reserve: reserving a graph for ubatch with n_tokens =   64, n_seqs =  4, n_outputs =    4",
+          "0.00.600.860 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.601.124 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.601.288 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.601.446 D graph_reserve: reserving a graph for ubatch with n_tokens =   64, n_seqs =  4, n_outputs =    4",
+          "0.00.602.135 D graph_reserve: reserving a graph for ubatch with n_tokens =    4, n_seqs =  4, n_outputs =    4",
+          "0.00.602.366 D graph_reserve: reserving a graph for ubatch with n_tokens =   64, n_seqs =  4, n_outputs =    4"
+        ],
+        "graph_nodes_lines": [
+          "0.00.272.573 I sched_reserve: graph nodes  = 942",
+          "0.00.602.583 I sched_reserve: graph nodes  = 942"
+        ],
+        "graph_splits_lines": [
+          "0.00.272.574 I sched_reserve: graph splits = 2",
+          "0.00.602.583 I sched_reserve: graph splits = 2"
+        ],
+        "sched_copy_lines": [
+          "0.00.272.575 I sched_reserve: reserve took 2.61 ms, sched copies = 1",
+          "0.00.602.584 I sched_reserve: reserve took 2.19 ms, sched copies = 1"
+        ],
+        "breakdown_lines": [
+          "0.00.272.832 I common_memory_breakdown_print: | memory breakdown [MiB] | total    free    self   model   context   compute    unaccounted |",
+          "0.00.272.852 I common_memory_breakdown_print: |   - CUDA0 (RTX 5080)   | 16275 = 14985 + ( 500 =   373 +      96 +      30) +         789 |",
+          "0.00.272.853 I common_memory_breakdown_print: |   - Host               |                    91 =    89 +       0 +       2                |",
+          "0.04.336.805 I common_memory_breakdown_print: | memory breakdown [MiB] | total    free    self   model   context   compute    unaccounted |",
+          "0.04.336.807 I common_memory_breakdown_print: |   - CUDA0 (RTX 5080)   | 16275 = 14403 + ( 500 =   373 +      96 +      30) +        1371 |",
+          "0.04.336.808 I common_memory_breakdown_print: |   - Host               |                    91 =    89 +       0 +       2                |"
+        ],
+        "model_buffer_lines": [
+          "0.00.267.546 I load_tensors:        CUDA0 model buffer size =     0.00 MiB",
+          "0.00.267.547 I load_tensors:    CUDA_Host model buffer size =     0.00 MiB",
+          "0.00.476.347 I load_tensors:   CPU_Mapped model buffer size =    89.26 MiB",
+          "0.00.476.348 I load_tensors:        CUDA0 model buffer size =   373.73 MiB"
+        ],
+        "kv_buffer_lines": [
+          "0.00.269.939 I llama_kv_cache:      CUDA0 KV buffer size =     0.00 MiB",
+          "0.00.599.109 I llama_kv_cache:      CUDA0 KV buffer size =    96.00 MiB"
+        ],
+        "output_buffer_lines": [
+          "0.00.269.835 I llama_context:  CUDA_Host  output buffer size =     2.32 MiB",
+          "0.00.598.697 I llama_context:  CUDA_Host  output buffer size =     2.32 MiB"
+        ],
+        "destructor_lines": [
+          "0.04.336.913 D ~llama_context:      CUDA0 compute buffer size is  30.9384 MiB, matches expectation of  30.9384 MiB",
+          "0.04.336.915 D ~llama_context:  CUDA_Host compute buffer size is   2.5010 MiB, matches expectation of   2.5010 MiB"
+        ],
+        "numeric_interpretation": {
+          "cuda0_compute_mib": 30.94,
+          "cuda_host_compute_mib": 2.5,
+          "destructor_cuda0_compute_mib": 30.9384,
+          "destructor_cuda_host_compute_mib": 2.501,
+          "graph_nodes": 942,
+          "graph_splits": 2,
+          "sched_copies": 1,
+          "cuda0_model_mib": 373.73,
+          "cuda0_kv_mib": 96.0,
+          "cuda_host_output_mib": 2.32,
+          "note": "Values are native log values; compute startup display is 2-decimal MiB and destructor display 4-decimal MiB. They qualify this observed run only and are not historical R0 exact bytes or a universal upper bound."
+        },
+        "remaining_limits": [
+          "Unpaired clock means no latency comparison, no score and no R0 replacement",
+          "This run does not prove intermediate growth absent beyond observed init/final equality",
+          "Observed logical device/backend mapping is this supplemental run, not retrospective proof for historical Q0 environment",
+          "Fixed claim still needs support-domain/lifecycle decision; do not automatically convert observed compute values to production capacity claim without candidate repair and structural checks"
+        ],
+        "independent_review": {
+          "iteration": 11,
+          "decision": "ACCEPT_STRUCTURAL_OBSERVATION_AND_BOUNDED_RESERVATION_INTERVALS",
+          "quantity_status": "observed_context_initial_and_final_reservations_qualified_as_intervals",
+          "lifecycle_status": "context_ownership_supported; whole_run_peak_not_established",
+          "native_timing_use": "excluded",
+          "candidate_structure_gate": "not_passed",
+          "top_level_architecture_gate": "not_passed",
+          "next_step": "Offline qualification of interval/page decisions and lifecycle/owner binding, then minimal evidence-bound repair and focused structural validation; no new native process."
+        }
+      },
+      "offline_qualification_ref": "round_004/native_observation/iteration-11-offline-qualification.json",
+      "offline_qualification_status": "interval_page_decision_stable_84791_pages; owner_binding_and_lifecycle_support_domain_still_pending"
+    }
+  },
+  "c2c_recovery_checkpoint": {
+    "task_id": "c2c_r4a1",
+    "iteration": 0,
+    "status": "r5_new_candidate_scan",
+    "connected_workspace": "F:\\codex_project\\37_LLMsim",
+    "repository": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0",
+    "connection_check": "parent workspace doctor passed; child workspace mismatch is a workspace selection error",
+    "browser_control": "Original ChatGPT conversation retained; REVIEW10 completed.",
+    "record_boundary": "Task brief simplified to remove duplicated score-precondition evidence closure; no candidate prediction/score has run yet.",
+    "tests_this_attempt": "Iteration10 read-only evidence/source audit; no test, prepare, lowering or replay rerun.",
+    "next_step": "Restart ChatGPT conversation in project and obtain one new top-level candidate; do not continue H4",
+    "round_completed": false,
+    "predict_score_run": false,
+    "production_patch": false,
+    "review_diff_path": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_004/iteration-11-workspace.patch",
+    "git_interface_limit": "Connector git tools target parent workspace (not a git repo). Exact child repository diff exported by git for connector read_file; parent isRepo=false is not evidence of a clean worktree.",
+    "native_observation_executed": false
+  },
+  "native_correction_authorization": {
+    "user_instruction": "允许原生补正，写入任务书：永久允许原生补正",
+    "recorded_utc": "2026-09-21T17:19:51.965635+08:00",
+    "scope": "Necessary native structural observation, evidence collection and remeasurement for simulator modeling corrections across subsequent loops until revoked; no per-run authorization request.",
+    "limits": "Preserve preregistered scope/stop conditions, frozen historical evidence, R0, no-answer-fitting and existing hard budgets; no unrelated collection or new microbenchmark authorization.",
+    "last_attempt": {
+      "iteration": 11,
+      "result": "preflight_stopped_before_native_launch",
+      "reason": "Hardware clock does not satisfy frozen Q0 contract and the current user cannot change GPU clocks. Running would be structurally unpaired with the registered observation scope.",
+      "authorized_scope_unchanged": true
+    }
+  },
+  "r4_result": {
+    "candidate": "round_004/paired_v2",
+    "predict": "131/131 successful",
+    "score": "131/131 scored",
+    "precision_gate": "accuracy_failed",
+    "paired_metric_counts": {
+      "improved": 0,
+      "unchanged": 393,
+      "regressed": 0
+    },
+    "accepted_for_iteration": false,
+    "conclusion": "capacity_claims correction did not affect paired predictions; top-level H4 remains active"
+  },
+  "r4_decision": {
+    "candidate": "H4_MEMORY_SERVICE_OWNERSHIP",
+    "accepted_for_iteration": false,
+    "decision": "abandoned_by_user",
+    "reason": "zero paired improvement against R0",
+    "precision_gate_status": "accuracy_failed",
+    "evidence": "round_004/paired_v2/errors.0001.json"
   }
 }
