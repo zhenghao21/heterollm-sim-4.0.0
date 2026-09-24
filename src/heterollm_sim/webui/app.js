@@ -6296,7 +6296,13 @@ function fieldHelpMarkup(helpKey) {
 }
 
 function hydrateConceptHelpHeading(title) {
-  if (!title?.matches?.("h1, h2, h3, h4, h5, h6") || !title.parentNode?.insertBefore || !document?.createElement) return false;
+  if (
+    !title?.matches?.("h1, h2, h3, h4, h5, h6")
+    || title.classList?.contains?.("sr-only")
+    || title.closest?.(".sr-only")
+    || !title.parentNode?.insertBefore
+    || !document?.createElement
+  ) return false;
   const label = String(title.textContent || "").trim();
   const helpKey = String(title.dataset.conceptHelp || "");
   const id = `field-help-${fieldHelpSerial + 1}`;
@@ -6429,7 +6435,7 @@ function hydrateConceptHelp(root = document) {
     : [root];
   scopedRoots.forEach((scopeRoot) => {
     $$('h1, h2, h3, h4, th, dt, legend, summary strong, .control-section-title, .field > span, .inline-control > span, .workload-field-label > span, .readout > span, .subsection-title strong, .panel-meta, .metric-cell > :is(span, strong), .result-metric-label, .canvas-legend > span, .model-graph-legend > span, .trace-legend > span, .trace-fidelity-badge, .runtime-health-heading strong, .model-port-contract > :is(strong, span), .inspector-note, .runtime-stat dt, .preset-fact dt', scopeRoot).forEach((title) => {
-      if (title.hasAttribute?.("data-no-concept-help") || title.dataset.conceptHelp || title.dataset.conceptHelpBound === "true" || title.closest?.('[data-field-help]')) return;
+      if (title.hasAttribute?.("data-no-concept-help") || title.classList?.contains?.("sr-only") || title.closest?.(".sr-only") || title.dataset.conceptHelp || title.dataset.conceptHelpBound === "true" || title.closest?.('[data-field-help]')) return;
       const text = String(title.textContent || "").trim();
       const explicitKey = CONCEPT_HELP_LABEL_BINDING_MAP.get(normalizedConceptHelpLabel(text));
       const match = explicitKey ? [explicitKey] : CONCEPT_TERM_PATTERNS.find(([, pattern]) => pattern.test(text));
@@ -6437,7 +6443,7 @@ function hydrateConceptHelp(root = document) {
     });
   });
   $$('[data-concept-help]', root).forEach((title) => {
-    if (title.dataset.conceptHelpBound === "true" || !title.insertAdjacentHTML || title.closest?.('[data-field-help]')) return;
+    if (title.dataset.conceptHelpBound === "true" || title.classList?.contains?.("sr-only") || title.closest?.(".sr-only") || !title.insertAdjacentHTML || title.closest?.('[data-field-help]')) return;
     title.dataset.conceptHelpBound = "true";
     if (hydrateConceptHelpHeading(title)) return;
     title.classList.add("concept-help-title");

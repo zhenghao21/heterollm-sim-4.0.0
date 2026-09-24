@@ -163,7 +163,13 @@ function openingHeadingTagsWithConceptHelp() {
   );
 }
 
-function makeFakeElement(tagName, { text = "", dataset = {}, parent = null, allElements }) {
+function makeFakeElement(tagName, {
+  text = "",
+  dataset = {},
+  className = "",
+  parent = null,
+  allElements,
+}) {
   const classNames = new Set();
   const attributes = new Map();
   const insertions = [];
@@ -223,6 +229,7 @@ function makeFakeElement(tagName, { text = "", dataset = {}, parent = null, allE
     matches(selector) {
       const normalized = normalizeCss(selector);
       if (normalized === ".field-help-trigger") return classNames.has("field-help-trigger");
+      if (normalized === ".sr-only") return classNames.has("sr-only");
       if (normalized.includes("[data-field-help]")) return attributes.has("data-field-help");
       if (normalized.split(",").some((part) => part.trim() === tagName.toLowerCase())) return true;
       return false;
@@ -283,18 +290,28 @@ function makeFakeElement(tagName, { text = "", dataset = {}, parent = null, allE
       return `<${tagName} class="${Array.from(classNames).join(" ")}">`;
     },
   };
+  element.className = className;
   if (parent) parent.children.push(element);
   allElements.push(element);
   return element;
 }
 
-function fakeHydrationResult() {
+function fakeHydrationResult({
+  headingDataset = { conceptHelp: "model_graph" },
+  headingClass = "",
+  headingParentClass = "",
+} = {}) {
   const allElements = [];
   const root = makeFakeElement("section", { allElements });
-  const headingParent = makeFakeElement("div", { allElements, parent: root });
+  const headingParent = makeFakeElement("div", {
+    allElements,
+    className: headingParentClass,
+    parent: root,
+  });
   const heading = makeFakeElement("h2", {
     text: "模型语义组件图（Model Graph）",
-    dataset: { conceptHelp: "model_graph" },
+    dataset: headingDataset,
+    className: headingClass,
     parent: headingParent,
     allElements,
   });
@@ -312,7 +329,9 @@ function fakeHydrationResult() {
     },
   };
   const queryAll = (selector) => {
-    if (selector === "[data-concept-help]") return [heading, inlineTarget];
+    if (selector === "[data-concept-help]") {
+      return allElements.filter((item) => item.dataset.conceptHelp);
+    }
     if (selector.includes("h1, h2, h3")) return [heading, inlineTarget];
     if (selector.includes("[data-field-help]")) {
       return allElements.filter((item) => item.attributes.has("data-field-help"));
@@ -327,7 +346,10 @@ function fakeHydrationResult() {
     const $$ = queryAll;
     const CONCEPT_HELP = Object.freeze({ model_graph: "Model Graph", gpu: "GPU" });
     const CONCEPT_HELP_LABEL_BINDING_MAP = new Map();
-    const CONCEPT_TERM_PATTERNS = [];
+    const CONCEPT_TERM_PATTERNS = [
+      ["model_graph", /模型语义组件图|Model Graph/iu],
+      ["gpu", /\bGPU\b|图形处理器/iu],
+    ];
     let fieldHelpSerial = 0;
     let fieldHelpPortal = null;
     let activeFieldHelp = null;
@@ -389,6 +411,35 @@ test("concept-help headings keep native heading semantics and delegate the trigg
   const generatedTrigger = allElements.some((item) => item.classList.contains("concept-help-heading-trigger"))
     || /concept-help-heading-trigger/u.test(generatedMarkup);
   assert.ok(generatedTrigger, "hydration must delegate heading interactivity to .concept-help-heading-trigger");
+});
+
+test("automatic concept-help matching leaves an sr-only canvas title untouched", () => {
+  const { allElements, heading, headingParent } = fakeHydrationResult({
+    headingDataset: {},
+    headingClass: "sr-only",
+  });
+
+  assert.equal(heading.dataset.conceptHelp, undefined, "sr-only titles must not receive an inferred concept key");
+  assert.equal(heading.parentElement, headingParent, "automatic matching must preserve the original parent");
+  assert.ok(headingParent.children.includes(heading), "the original title must remain in its parent");
+  assert.equal(heading.attributes.has("data-field-help"), false);
+  assert.equal(heading.attributes.has("role"), false);
+  assert.equal(heading.classList.contains("field-help-trigger"), false);
+  assert.equal(allElements.some((item) => item.classList.contains("concept-help-heading-shell")), false);
+});
+
+test("explicit concept-help matching leaves a title inside an sr-only ancestor untouched", () => {
+  const { allElements, heading, headingParent } = fakeHydrationResult({
+    headingParentClass: "sr-only",
+  });
+
+  assert.equal(heading.dataset.conceptHelp, "model_graph", "explicit metadata must remain intact");
+  assert.equal(heading.parentElement, headingParent, "sr-only ancestors must preserve the original parent");
+  assert.ok(headingParent.children.includes(heading), "the original title must remain in its parent");
+  assert.equal(heading.attributes.has("data-field-help"), false);
+  assert.equal(heading.attributes.has("role"), false);
+  assert.equal(heading.classList.contains("field-help-trigger"), false);
+  assert.equal(allElements.some((item) => item.classList.contains("concept-help-heading-shell")), false);
 });
 
 test("<=1280 responsive rules stack cross-page headers and wrap action controls", () => {
