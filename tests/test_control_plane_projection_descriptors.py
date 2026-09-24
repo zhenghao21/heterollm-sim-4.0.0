@@ -239,7 +239,7 @@ class ControlPlaneProjectionDescriptorTests(unittest.TestCase):
             [36_044_800, 16_711_680, 16_711_680],
         )
 
-    def test_gpu_and_cpu_costs_use_gguf_bytes_but_cim_keeps_array_layout(self):
+    def test_gpu_and_cpu_use_gguf_bytes_but_packed_cim_requires_conversion(self):
         scenario = _scenario_for_layer(
             _full_layer(_full_attention_metadata())
         )
@@ -319,9 +319,13 @@ class ControlPlaneProjectionDescriptorTests(unittest.TestCase):
                 requirement.layer, dtype="int8", quantization="w4a8"
             ),
         )
-        padded = _cim_rank_padded_weight_bytes(
-            scenario, cim_requirement, rank, "cim0"
-        )
+        # A nominal int8/w4a8 label does not decode the packed GGUF layout.
+        # Array-padding tests use actual dense operands; this source must fail
+        # closed until a supported, explicit conversion contract is supplied.
+        with self.assertRaisesRegex(ValueError, "explicit decoded conversion contract"):
+            _cim_rank_padded_weight_bytes(
+                scenario, cim_requirement, rank, "cim0"
+            )
         backing_changed = replace(
             cim_requirement,
             matrices=tuple(
@@ -333,12 +337,10 @@ class ControlPlaneProjectionDescriptorTests(unittest.TestCase):
                 for matrix in requirement.matrices
             ),
         )
-        self.assertEqual(
+        with self.assertRaisesRegex(ValueError, "explicit decoded conversion contract"):
             _cim_rank_padded_weight_bytes(
                 scenario, backing_changed, rank, "cim0"
-            ),
-            padded,
-        )
+            )
 
     def test_dynamic_rhs_and_plain_w4a16_keep_legacy_cpu_schedule(self):
         described = _scenario_for_layer(

@@ -42,6 +42,8 @@ REQUIRED = {
     "hbm-pim",
     "gpu-nvme-gds",
     "gpu-hbf",
+    "soc-2x-dram-sram-cim",
+    "soc-2x-dram-sram-cim-shared-phy-noc",
 }
 
 PRIMARY_DOMAINS = {
@@ -69,6 +71,8 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
             "nvidia-gh200-nvl2-96gb-hbm3",
             "nvidia-gh200-superchip",
             "nvidia-gh200-superchip-144gb-hbm3e",
+            "soc-2x-dram-sram-cim",
+            "soc-2x-dram-sram-cim-shared-phy-noc",
         }
         actual = {
             item["id"]
@@ -97,7 +101,13 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
             self.assertGreater(item["link_count"], 0)
             self.assertGreater(item["group_count"], 0)
             self.assertTrue(item["capacity_display_value"] or item["capacity_bytes"] == 0)
-            self.assertTrue(item["sources"])
+            if item["id"] in {"soc-2x-dram-sram-cim", "soc-2x-dram-sram-cim-shared-phy-noc"}:
+                self.assertEqual(item["sources"], [])
+                self.assertEqual(item["support_level"], EXPERIMENTAL_REFERENCE)
+                hardware = get_architecture_preset(item["id"]).hardware
+                self.assertEqual(hardware.metadata["topology_evidence"]["scope"], "user_authored_analytical_topology")
+            else:
+                self.assertTrue(item["sources"])
             self.assertTrue(item["limitations"])
             compatibility = item["compatibility"]
             self.assertEqual(item["catalog_version"], CATALOG_VERSION)
@@ -768,3 +778,13 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_user_3d_dram_cim_presets_are_loadable_and_explicitly_uncalibrated():
+    from heterollm_sim.architecture_presets import materialize_architecture_payload
+    from heterollm_sim.config import hardware_from_dict
+    for name in ("soc-2x-dram-sram-cim", "soc-2x-dram-sram-cim-shared-phy-noc"):
+        hardware = hardware_from_dict(materialize_architecture_payload(name))
+        assert {c.component_id for c in hardware.components} >= {"soc0", "dram0", "dram1", "cim0"}
+        assert all(c.metadata.get("validation_status") != "CALIBRATED" for c in hardware.components)
+        assert hardware.metadata["phy_noc_mode"] in {"independent", "shared"}

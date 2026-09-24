@@ -21,7 +21,7 @@ const UI_THEMES = Object.freeze(["graphite", "bluegray", "black", "ivory", "mist
 const LIGHT_THEMES = new Set(["ivory", "mist", "softgray"]);
 const COMPONENT_KINDS = Object.freeze([
   "gpu", "generic_accelerator", "digital_sram_cim", "pim_accelerator",
-  "hbm", "hbm_stack", "host_memory", "cxl_memory", "hbf", "ssd", "high_io_ssd",
+  "hbm", "hbm_stack", "dram", "host_memory", "cxl_memory", "hbf", "ssd", "high_io_ssd",
   "cpu", "fabric_switch", "io_die",
 ]);
 const TRACE_PAGE_CACHE_LIMIT = 8;
@@ -1907,6 +1907,7 @@ function mappingImpactView(scenario) {
       hardware_name: placement.hardware_name ?? "",
       parallel: deepClone(asObject(placement.parallel)),
       kv_policy: deepClone(asObject(placement.kv_policy)),
+      linear_state_offload_mode: String(placement.metadata?.linear_state_offload_mode || "mirror"),
     },
     policy: deepClone(asObject(policy.options)),
   };
@@ -2785,7 +2786,7 @@ function ensureScenarioShape(scenario) {
   rejectLegacyComponentProfiles(scenario);
   materializeRequiredV4Profiles(scenario);
   for (const component of scenario.hardware.components) {
-    const profileKey = costProfileKeyForComponentKind(component.kind);
+    const profileKey = costProfileKeyForComponentKind(component);
     if (!profileKey) continue;
     const issue = componentProfileBindingIssue(component, scenario);
     if (issue) throw new Error(issue);
@@ -2861,6 +2862,67 @@ function setScenario(incoming, { dirty = false, message = "" } = {}) {
   if (message) toast(message, scenario.name, "success");
 }
 
+function captureRenderInteractionState() {
+  if (typeof document?.querySelectorAll !== "function") return null;
+  const active = document.activeElement;
+  const descriptor = active && active.dataset ? {
+    controlPlaneField: active.dataset.controlPlaneField || "",
+    placementField: active.dataset.placementField || "",
+    placementMetadataField: active.dataset.placementMetadataField || "",
+    costProfileKey: active.dataset.costProfileKey || "",
+    costProfileField: active.dataset.costProfileField || "",
+    hbfMediaField: active.dataset.hbfMediaField || "",
+    inspectorField: active.dataset.inspectorField || "",
+    inspectorMetadataField: active.dataset.inspectorMetadataField || "",
+    placementTargetMap: active.dataset.placementTargetMap || "",
+    placementTargetKeyInput: active.dataset.placementTargetKeyInput === "",
+    placementTargetKey: active.closest?.("[data-placement-target-row]")?.dataset.placementTargetKey || "",
+    selectionStart: typeof active.selectionStart === "number" ? active.selectionStart : null,
+    selectionEnd: typeof active.selectionEnd === "number" ? active.selectionEnd : null,
+  } : null;
+  const details = Array.from(document.querySelectorAll("details"), (detail) => detail.open);
+  const scrolls = ["#view-mapping", "#placementControls", "#inspectorContent"]
+    .map((selector) => {
+      const element = document.querySelector(selector);
+      return element ? { selector, top: element.scrollTop, left: element.scrollLeft } : null;
+    })
+    .filter(Boolean);
+  return { descriptor, details, scrolls };
+}
+
+function restoreRenderInteractionState(snapshot) {
+  if (!snapshot || typeof document?.querySelectorAll !== "function") return;
+  Array.from(document.querySelectorAll("details")).forEach((detail, index) => {
+    if (snapshot.details[index] !== undefined) detail.open = snapshot.details[index];
+  });
+  snapshot.scrolls.forEach(({ selector, top, left }) => {
+    const element = document.querySelector(selector);
+    if (element) {
+      element.scrollTop = top;
+      element.scrollLeft = left;
+    }
+  });
+  const wanted = snapshot.descriptor;
+  if (!wanted) return;
+  const candidate = Array.from(document.querySelectorAll("input, select, textarea")).find((element) => {
+    const data = element.dataset || {};
+    const rowKey = element.closest?.("[data-placement-target-row]")?.dataset.placementTargetKey || "";
+    return (wanted.controlPlaneField && data.controlPlaneField === wanted.controlPlaneField)
+      || (wanted.placementField && data.placementField === wanted.placementField)
+      || (wanted.placementMetadataField && data.placementMetadataField === wanted.placementMetadataField)
+      || (wanted.costProfileKey && data.costProfileKey === wanted.costProfileKey && data.costProfileField === wanted.costProfileField)
+      || (wanted.hbfMediaField && data.hbfMediaField === wanted.hbfMediaField)
+      || (wanted.inspectorField && data.inspectorField === wanted.inspectorField)
+      || (wanted.inspectorMetadataField && data.inspectorMetadataField === wanted.inspectorMetadataField)
+      || (wanted.placementTargetMap && data.placementTargetMap === wanted.placementTargetMap && wanted.placementTargetKeyInput && rowKey === wanted.placementTargetKey);
+  });
+  if (!candidate) return;
+  candidate.focus?.();
+  if (wanted.selectionStart != null && typeof candidate.setSelectionRange === "function") {
+    try { candidate.setSelectionRange(wanted.selectionStart, wanted.selectionEnd ?? wanted.selectionStart); } catch (_error) { /* number/select controls may reject ranges */ }
+  }
+}
+
 function markScenarioChanged(message = "", {
   mappingImpact = true,
   mappingReason = "影响映射的模型、拓扑、并行、驻留或结构性优化输入已修改。",
@@ -2881,7 +2943,9 @@ function markScenarioChanged(message = "", {
   resetTracePlaybackState();
   state.validation = { errors: [], warnings: [], information: [] };
   localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  const interactionState = captureRenderInteractionState();
   renderAll();
+  restoreRenderInteractionState(interactionState);
   if (message) toast("场景已更新", message, "info", 2600);
 }
 
@@ -3218,6 +3282,47 @@ function renderControlPlaneStatus() {
     return `<div><dt${helpAttribute}>${escapeHtml(label)}</dt><dd>${controlPlaneMetricValueMarkup(value, formatter)}</dd></div>`;
   }).join("");
   if (dom.controlPlaneStatusMetrics.querySelectorAll) hydrateConceptHelp(dom.controlPlaneStatusMetrics);
+  renderControlPlaneMemoryTiers();
+}
+
+function controlPlaneMemoryTierMaps(placement = state.scenario?.placement) {
+  if (placement === state.scenario?.placement && (state.reportStale || state.mappingStale)) return {};
+  const runtime = runtimePlacementForView(placement);
+  return asObject(runtime.memory_tiers ?? runtime.metadata?.memory_tiers
+    ?? runtime.control_plane?.memory_tiers ?? placement?.metadata?.memory_tiers);
+}
+
+function controlPlaneMemoryTierDetails(placement = state.scenario?.placement) {
+  return asObject(runtimePlacementForView(placement).memory_tier_details);
+}
+
+function renderControlPlaneMemoryTiers() {
+  if (!dom.controlPlaneMemoryTiers || !dom.controlPlaneMemoryTierBody) return;
+  const maps = controlPlaneMemoryTierMaps();
+  const details = controlPlaneMemoryTierDetails();
+  const groups = [
+    ["kv_layer_components", "kv_cache", uiText("KV 缓存层", "KV cache layers")],
+    ["linear_state_layer_components", "linear_state", uiText("线性状态层", "Linear-state layers")],
+  ].filter(([field]) => Object.keys(asObject(maps[field])).length);
+  dom.controlPlaneMemoryTiers.hidden = groups.length === 0;
+  const bytes = (value) => Number.isFinite(value) && value >= 0 ? formatBytes(value) : "—";
+  dom.controlPlaneMemoryTierBody.innerHTML = groups.map(([field, key, label]) => {
+    const rows = Object.entries(asObject(maps[field])).sort(([left], [right]) => left.localeCompare(right));
+    const policy = asObject(details[key]);
+    const quanta = asObject(policy[key === "kv_cache" ? "component_bytes_per_page" : "component_bytes_per_request"]);
+    const quantumLabel = key === "kv_cache" ? uiText("组件合计 / 页", "Component total / page") : uiText("组件合计 / 请求", "Component total / request");
+    const componentRows = Object.entries(quanta).map(([id, size]) => {
+      const component = state.scenario.hardware.components.find((item) => item.component_id === id);
+      const role = id === policy.cache_component ? uiText("默认活动层", "Default active tier") : uiText("分层活动内存", "Partitioned active memory");
+      return `<tr><td>${escapeHtml(id)}</td><td>${escapeHtml(role)}</td><td>${escapeHtml(bytes(size))}</td><td>${escapeHtml(bytes(component?.capacity_bytes))}</td><td>—</td></tr>`;
+    }).join("");
+    return `<section class="memory-tier-group"><header><strong>${escapeHtml(label)}</strong><span>${escapeHtml(uiText("{count} 层", "{count} layers", { count: rows.length }))}</span></header>
+      <p class="memory-tier-note">${escapeHtml(uiText("运行时生成的静态层分区，不代表动态迁移。容量是编译后的可分配预算，不是实时占用；预留不是当前运行时合同字段，显示—；共享组件的物理容量不得重复相加。", "Runtime-generated static layer partition, not dynamic migration. Capacity is a compiled allocatable budget, not live occupancy; reservation is not reported by the current runtime contract and is shown as —; do not sum shared physical capacity twice."))}</p>
+      <div class="table-shell" tabindex="0" aria-label="${escapeHtml(label)}"><table class="data-table compact-data-table"><thead><tr><th>${uiText("模型层", "Layer")}</th><th>${uiText("活动内存组件", "Active memory component")}</th><th>${uiText("分层角色", "Tier role")}</th></tr></thead><tbody>${rows.map(([layer, component]) => `<tr><td>${escapeHtml(layer)}</td><td>${escapeHtml(component)}</td><td>${escapeHtml(component === policy.cache_component ? uiText("默认活动层", "Default active tier") : uiText("分区活动内存", "Partitioned active memory"))}</td></tr>`).join("")}</tbody></table></div>
+      ${componentRows ? `<p class="memory-tier-note">${uiText("可分配容量", "Allocatable capacity")}: ${escapeHtml(bytes(policy.capacity_bytes))} · ${uiText("卸载目标", "Offload target")}: ${escapeHtml(policy.offload_component || uiText("无", "None"))}</p>
+      <div class="table-shell" tabindex="0" aria-label="${escapeHtml(quantumLabel)}"><table class="data-table compact-data-table"><thead><tr><th>${uiText("组件", "Component")}</th><th>${uiText("用途", "Role")}</th><th>${escapeHtml(quantumLabel)}</th><th>${uiText("物理容量（共享）", "Physical capacity (shared)")}</th><th>${uiText("预留", "Reservation")}</th></tr></thead><tbody>${componentRows}</tbody></table></div>` : ""}
+    </section>`;
+  }).join("");
 }
 
 async function loadReference({ quiet = false } = {}) {
@@ -4051,7 +4156,7 @@ function renderSteps() {
   const placementDecision = controlPlaneDecision(scenario.placement);
   const opMappings = Object.keys(asObject(placementDecision.operator_execution_targets)).length;
   const tensorMappings = Object.keys(asObject(placementDecision.rank_weight_shards)).length;
-  const requests = asArray(scenario.workload?.requests).length;
+  const requests = asArray(scenario.workload?.requests).length || Math.max(0, Number(scenario.workload?.request_count) || 0);
   const groups = asArray(state.topologyView?.groups).length;
   dom.architectureCount.textContent = `${components}/${links}`;
   dom.modelCount.textContent = layerSummary.count == null ? "—" : String(layerSummary.count);
@@ -4072,9 +4177,10 @@ function renderSteps() {
 }
 
 function componentKindClass(kind) {
-  const normalized = String(kind || "").toLowerCase().replaceAll("-", "_");
+  const component = kind && typeof kind === "object" ? kind : null;
+  const normalized = normalizedComponentKind(component ? component.kind : kind);
   if (normalized.includes("cim")) return "cim";
-  if (["hbm", "hbm_stack", "host_memory", "cxl_memory"].includes(normalized)) return "io";
+  if (isActiveMemoryComponent(kind)) return "io";
   if (["hbf", "ssd", "high_io_ssd"].includes(normalized)) return "storage";
   if (["gpu", "cpu", "generic_accelerator", "pim_accelerator"].includes(normalized) || normalized.includes("compute")) return "compute";
   if (["fabric_switch", "io_die"].includes(normalized)) return "transport";
@@ -4089,9 +4195,16 @@ function isDedicatedHbm(kind) {
   return ["hbm", "hbm_stack"].includes(normalizedComponentKind(kind));
 }
 
+function isActiveMemoryComponent(componentOrKind) {
+  const component = componentOrKind && typeof componentOrKind === "object" ? componentOrKind : null;
+  const kind = normalizedComponentKind(component ? component.kind : componentOrKind);
+  if (["hbm", "hbm_stack", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory", "memory", "sram", "shared_memory"].includes(kind)) return true;
+  return kind === "hbf" && asObject(component?.metadata).access_mode === "memory";
+}
+
 function isWritableActiveRankMemory(component) {
   const metadata = asObject(component?.metadata);
-  return isDedicatedHbm(component?.kind)
+  return isActiveMemoryComponent(component)
     && metadata.read_only !== true
     && metadata.writable !== false;
 }
@@ -4110,6 +4223,7 @@ function kindLabel(kind) {
     hbm: ["高带宽内存（HBM）", "High-Bandwidth Memory (HBM)"],
     hbm_stack: ["高带宽内存堆栈（HBM）", "HBM Stack"],
     hbf: ["高带宽闪存（HBF）", "High-Bandwidth Flash (HBF)"],
+    dram: ["堆叠 DRAM", "Stacked DRAM"],
     ssd: ["固态硬盘（SSD）", "Solid-State Drive (SSD)"],
     high_io_ssd: ["高 I/O 固态硬盘", "High-I/O SSD"],
     digital_sram_cim: ["数字 SRAM-CIM", "Digital SRAM-CIM"],
@@ -4476,7 +4590,7 @@ function updateTopologyNode(node, component) {
   const id = component.component_id;
   node.dataset.componentId = id;
   node.classList.remove("compute", "io", "storage", "cim");
-  node.classList.add(componentKindClass(component.kind));
+  node.classList.add(componentKindClass(component));
   node.setAttribute("aria-label", uiText(
     "组件 {id}，{kind}。Ctrl 或 Command 点击切换多选。",
     "Component {id}, {kind}. Ctrl or Command-click to toggle multi-selection.",
@@ -5854,6 +5968,7 @@ function addComponent(kind) {
     gpu: { capacity_bytes: 64 * 1024 * 1024, peak_ops_per_s: 120e12, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", read_latency_ns: 0, write_latency_ns: 0, transfer_granularity_bytes: 0, dma_latency_ns: 0 } },
     cpu: { capacity_bytes: 0, peak_ops_per_s: 100e9, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "editable-reference-default" } },
     hbm: { capacity_bytes: 16 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 4096, write_bandwidth_gbps: 4096, metadata: { evidence_status: "analytical", read_latency_ns: 40, write_latency_ns: 40, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
+    dram: { capacity_bytes: 32 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 2048, write_bandwidth_gbps: 2048, metadata: { evidence_status: "analytical", read_latency_ns: 60, write_latency_ns: 60, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
     host_memory: { capacity_bytes: 128 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 1600, write_bandwidth_gbps: 1600, metadata: { evidence_status: "analytical", source: "editable-reference-default", read_latency_ns: 100, write_latency_ns: 100, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
     hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 24000, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "official-reference-upper-bound", dma_parameter_basis: "editable analytical assumption bounded by the default UCIe path", reference_capacity: "512 GiB", reference_read_bandwidth: "approximately 3 TB/s", read_only: true, writable: false, read_latency_ns: 2500, write_latency_ns: 0, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 2048, dma_latency_ns: 800, dma_energy_pj_per_byte: 0 } },
     ssd: { capacity_bytes: 4 * 1024 ** 4, peak_ops_per_s: 0, read_bandwidth_gbps: 64, write_bandwidth_gbps: 48, metadata: { evidence_status: "analytical", source: "reference-default", dma_parameter_basis: "editable analytical storage-controller assumption", read_latency_ns: 80000, write_latency_ns: 100000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 64, dma_latency_ns: 2000, dma_energy_pj_per_byte: 0 } },
@@ -6314,7 +6429,7 @@ function hydrateConceptHelp(root = document) {
     : [root];
   scopedRoots.forEach((scopeRoot) => {
     $$('h1, h2, h3, h4, th, dt, legend, summary strong, .control-section-title, .field > span, .inline-control > span, .workload-field-label > span, .readout > span, .subsection-title strong, .panel-meta, .metric-cell > :is(span, strong), .result-metric-label, .canvas-legend > span, .model-graph-legend > span, .trace-legend > span, .trace-fidelity-badge, .runtime-health-heading strong, .model-port-contract > :is(strong, span), .inspector-note, .runtime-stat dt, .preset-fact dt', scopeRoot).forEach((title) => {
-      if (title.dataset.conceptHelp || title.dataset.conceptHelpBound === "true" || title.closest?.('[data-field-help]')) return;
+      if (title.hasAttribute?.("data-no-concept-help") || title.dataset.conceptHelp || title.dataset.conceptHelpBound === "true" || title.closest?.('[data-field-help]')) return;
       const text = String(title.textContent || "").trim();
       const explicitKey = CONCEPT_HELP_LABEL_BINDING_MAP.get(normalizedConceptHelpLabel(text));
       const match = explicitKey ? [explicitKey] : CONCEPT_TERM_PATTERNS.find(([, pattern]) => pattern.test(text));
@@ -6449,7 +6564,12 @@ const COST_PROFILE_FIELD_RULES = Object.freeze({
     special_function_energy_pj_per_op: "nonnegative", launch_energy_pj: "nonnegative",
     scalar_resource_id: "text", special_function_resource_id: "text", launch_resource_id: "text", name: "text",
   }),
-  hbm: Object.freeze({ bandwidth_gb_s: "positive", efficiency: "efficiency", energy_pj_per_byte: "nonnegative", resource_id: "text" }),
+  hbm: Object.freeze({
+    bandwidth_gb_s: "positive", efficiency: "efficiency", energy_pj_per_byte: "nonnegative", resource_id: "text",
+    read_bandwidth_gb_s: "optional_positive", write_bandwidth_gb_s: "optional_positive",
+    read_latency_ns: "nonnegative", write_latency_ns: "nonnegative",
+    transaction_bytes: "positive_integer", max_outstanding_requests: "positive_integer",
+  }),
   cpu: Object.freeze({
     "pipeline.core_count": "positive_integer", "pipeline.frequency_ghz": "positive",
     "pipeline.simd_width_bits": "positive_integer", "pipeline.decode_width": "positive_integer",
@@ -6465,7 +6585,12 @@ const COST_PROFILE_FIELD_RULES = Object.freeze({
     reduction_energy_pj_per_op: "nonnegative", special_function_energy_pj_per_op: "nonnegative",
     dispatch_energy_pj: "nonnegative", name: "text",
   }),
-  host_memory: Object.freeze({ bandwidth_gb_s: "positive", efficiency: "efficiency", energy_pj_per_byte: "nonnegative", resource_id: "text", name: "text" }),
+  host_memory: Object.freeze({
+    bandwidth_gb_s: "positive", efficiency: "efficiency", energy_pj_per_byte: "nonnegative", resource_id: "text", name: "text",
+    read_bandwidth_gb_s: "optional_positive", write_bandwidth_gb_s: "optional_positive",
+    read_latency_ns: "nonnegative", write_latency_ns: "nonnegative",
+    transaction_bytes: "positive_integer", max_outstanding_requests: "positive_integer",
+  }),
   cim: Object.freeze({
     array_count: "positive_integer", p_m: "positive_integer", p_k: "positive_integer", p_n: "positive_integer",
     frequency_ghz: "positive", input_parallel_bits: "positive_integer", weight_parallel_bits: "positive_integer",
@@ -6479,11 +6604,21 @@ const COST_PROFILE_FIELD_RULES = Object.freeze({
     accumulator_energy_pj_per_op: "nonnegative", peripheral_energy_pj_per_element: "nonnegative",
     array_resource_id: "text", load_resource_id: "text", activation_resource_id: "text", noc_resource_id: "text",
     accumulator_resource_id: "text", peripheral_resource_id: "text", name: "text",
+    arithmetic_mode: "enum", float_cycles_per_eval: "optional_positive",
+    float_accumulator_outputs_per_cycle: "optional_positive", float_contract_basis: "text",
+    weight_conversion_mode: "enum", weight_decode_elements_per_ns: "nonnegative",
+    conversion_scratch_capacity_bytes: "nonnegative_integer",
+    activation_fp32_to_fp16_elements_per_ns: "nonnegative",
+    conversion_contract_basis: "text", conversion_read_energy_pj_per_byte: "nonnegative",
+    conversion_write_energy_pj_per_byte: "nonnegative", tile_m: "positive_integer",
+    tile_k: "positive_integer", tile_n: "positive_integer",
   }),
 });
 
 function costProfileKeyForComponentKind(kindValue) {
-  const kind = normalizedComponentKind(kindValue);
+  const component = kindValue && typeof kindValue === "object" ? kindValue : null;
+  const kind = normalizedComponentKind(component ? component.kind : kindValue);
+  if (kind === "hbf" && asObject(component?.metadata).access_mode === "memory") return "host_memory";
   if (kind === "gpu") return "gpu";
   if (kind === "cpu") return "cpu";
   if (isDedicatedHbm(kind)) return "hbm";
@@ -6540,7 +6675,7 @@ function rejectLegacyComponentProfiles(scenario) {
 
 function componentProfileBindingIssue(component, scenario = state.scenario) {
   const componentId = String(component?.component_id || uiText("<未知>", "<unknown>"));
-  const profileKey = costProfileKeyForComponentKind(component?.kind);
+  const profileKey = costProfileKeyForComponentKind(component);
   if (!profileKey) return "";
   const profileId = String(component?.cost_profile_id || "").trim();
   if (!profileId) {
@@ -6675,8 +6810,8 @@ function costProfileProvenanceMarkup(profileKey, component) {
 
 function costProfileComponent(profileKey, selectedComponent, scenario = state.scenario) {
   const components = asArray(scenario?.hardware?.components);
-  if (costProfileKeyForComponentKind(selectedComponent?.kind) === profileKey) return selectedComponent;
-  return components.find((item) => costProfileKeyForComponentKind(item.kind) === profileKey) || null;
+  if (costProfileKeyForComponentKind(selectedComponent) === profileKey) return selectedComponent;
+  return components.find((item) => costProfileKeyForComponentKind(item) === profileKey) || null;
 }
 
 function costProfileDraft(profileKey, selectedComponent, scenario = state.scenario) {
@@ -6693,7 +6828,9 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
     ];
     const currentLevels = asArray(cacheHierarchy.levels);
     return {
+      ...deepClone(current),
       tensor_core: {
+        ...deepClone(tensorCore),
         sm_count: positiveProfileNumber(tensorCore.sm_count, 120),
         tensor_cores_per_sm: positiveProfileNumber(tensorCore.tensor_cores_per_sm, 4),
         frequency_ghz: positiveProfileNumber(tensorCore.frequency_ghz, 1.5),
@@ -6719,6 +6856,7 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
       special_function_units_per_sm: positiveProfileNumber(current.special_function_units_per_sm, 16),
       special_function_ops_per_cycle: positiveProfileNumber(current.special_function_ops_per_cycle, 1),
       host_gemm_offload: Object.keys(hostGemmOffload).length ? {
+        ...deepClone(hostGemmOffload),
         minimum_m: positiveProfileNumber(hostGemmOffload.minimum_m, 1),
         evidence: String(hostGemmOffload.evidence || ""),
       } : null,
@@ -6760,7 +6898,9 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
     ];
     const currentLevels = asArray(cacheHierarchy.levels);
     return {
+      ...deepClone(current),
       pipeline: {
+        ...deepClone(pipeline),
         core_count: positiveProfileNumber(pipeline.core_count, 16),
         frequency_ghz: positiveProfileNumber(pipeline.frequency_ghz, 3.2),
         simd_width_bits: positiveProfileNumber(pipeline.simd_width_bits, 512),
@@ -6813,6 +6953,7 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
   }
   if (profileKey === "cim") {
     return {
+      ...deepClone(current),
       array_count: positiveProfileNumber(current.array_count, 64),
       p_m: positiveProfileNumber(current.p_m, 1),
       p_k: positiveProfileNumber(current.p_k, 128),
@@ -6851,6 +6992,21 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
       accumulator_resource_id: String(current.accumulator_resource_id || `${componentId}.accumulator`),
       peripheral_resource_id: String(current.peripheral_resource_id || `${componentId}.peripheral`),
       name: String(current.name || `${componentId}-digital-sram-cim-profile`),
+      arithmetic_mode: String(current.arithmetic_mode || "integer_bit_slice"),
+      float_cycles_per_eval: current.float_cycles_per_eval == null ? null : positiveProfileNumber(current.float_cycles_per_eval, 1),
+      float_accumulator_outputs_per_cycle: current.float_accumulator_outputs_per_cycle == null ? null : positiveProfileNumber(current.float_accumulator_outputs_per_cycle, 1),
+      float_contract_basis: String(current.float_contract_basis || ""),
+      weight_conversion_mode: String(current.weight_conversion_mode || "disabled"),
+      weight_decode_elements_per_ns: nonnegativeProfileNumber(current.weight_decode_elements_per_ns),
+      conversion_scratch_capacity_bytes: Number.isSafeInteger(Number(current.conversion_scratch_capacity_bytes)) && Number(current.conversion_scratch_capacity_bytes) >= 0
+        ? Number(current.conversion_scratch_capacity_bytes) : 0,
+      activation_fp32_to_fp16_elements_per_ns: nonnegativeProfileNumber(current.activation_fp32_to_fp16_elements_per_ns),
+      conversion_contract_basis: String(current.conversion_contract_basis || ""),
+      conversion_read_energy_pj_per_byte: nonnegativeProfileNumber(current.conversion_read_energy_pj_per_byte),
+      conversion_write_energy_pj_per_byte: nonnegativeProfileNumber(current.conversion_write_energy_pj_per_byte),
+      ...(current.tile_m == null ? {} : { tile_m: Number(current.tile_m) }),
+      ...(current.tile_k == null ? {} : { tile_k: Number(current.tile_k) }),
+      ...(current.tile_n == null ? {} : { tile_n: Number(current.tile_n) }),
     };
   }
   return { ...current };
@@ -6950,7 +7106,7 @@ function materializeRequiredV4Profiles(scenario) {
   scenario.profiles = profiles;
   componentProfileRegistries(scenario, { create: true });
   for (const component of asArray(scenario.hardware?.components)) {
-    const profileKey = costProfileKeyForComponentKind(component?.kind);
+    const profileKey = costProfileKeyForComponentKind(component);
     if (!profileKey) continue;
     const registry = componentProfileRegistry(profileKey, scenario, { create: true });
     const requested = String(component.cost_profile_id || "").trim();
@@ -6993,7 +7149,7 @@ function materializeMissingCostProfiles(components, scenario = state.scenario) {
   componentProfileRegistries(scenario, { create: true });
   const created = [];
   for (const component of asArray(components)) {
-    const profileKey = costProfileKeyForComponentKind(component?.kind);
+    const profileKey = costProfileKeyForComponentKind(component);
     if (!profileKey) {
       delete component.cost_profile_id;
       continue;
@@ -7038,6 +7194,11 @@ function costProfileNumberField(label, profileKey, field, value, rule = "nonnega
 
 function costProfileTextField(label, profileKey, field, value) {
   return `<label class="field"><span>${escapeHtml(label)}</span><input type="text" data-cost-profile-key="${escapeHtml(profileKey)}" data-cost-profile-field="${escapeHtml(field)}" data-cost-profile-rule="text" value="${escapeHtml(value)}"></label>`;
+}
+
+function costProfileSelectField(label, profileKey, field, value, options) {
+  const optionMarkup = options.map(([option, optionLabel]) => `<option value="${escapeHtml(option)}"${String(option) === String(value) ? " selected" : ""}>${escapeHtml(optionLabel)}</option>`).join("");
+  return `<label class="field"><span>${escapeHtml(label)}</span><select data-cost-profile-key="${escapeHtml(profileKey)}" data-cost-profile-field="${escapeHtml(field)}" data-cost-profile-rule="enum" data-cost-profile-options="${escapeHtml(options.map(([option]) => option).join("|"))}">${optionMarkup}</select></label>`;
 }
 
 function cacheHierarchyCostProfileMarkup(profileKey, profile) {
@@ -7085,11 +7246,17 @@ function memoryCostProfileMarkup(profileKey, component) {
       ${costProfileNumberField("内存带宽（GB/s）", profileKey, "bandwidth_gb_s", profile.bandwidth_gb_s, "positive")}
     </div>
     <details class="inspector-advanced-profile">
-      <summary>内部内存分析参数（Optional analytical parameters）</summary>
-      <p class="muted">可达效率、能耗与资源标识用于仿真成本分解；它们通常需要本地校准或明确假设。</p>
+      <summary>方向性与内部分析参数（Directional / analytical parameters）</summary>
+      <p class="muted">读/写带宽为空时回退到上方标量带宽；不要把未知方向写成 0。事务粒度与并发上限会改变请求服务模型。</p>
       <div class="field-grid-2">
         ${costProfileNumberField("可达效率（0–1）", profileKey, "efficiency", profile.efficiency, "efficiency")}
         ${costProfileNumberField("内存能耗（pJ/B）", profileKey, "energy_pj_per_byte", profile.energy_pj_per_byte)}
+        ${costProfileNumberField("读取带宽（GB/s，可选）", profileKey, "read_bandwidth_gb_s", profile.read_bandwidth_gb_s, "optional_positive")}
+        ${costProfileNumberField("写入带宽（GB/s，可选）", profileKey, "write_bandwidth_gb_s", profile.write_bandwidth_gb_s, "optional_positive")}
+        ${costProfileNumberField("读取延迟（ns）", profileKey, "read_latency_ns", profile.read_latency_ns ?? 0, "nonnegative")}
+        ${costProfileNumberField("写入延迟（ns）", profileKey, "write_latency_ns", profile.write_latency_ns ?? 0, "nonnegative")}
+        ${costProfileNumberField("事务粒度（B）", profileKey, "transaction_bytes", profile.transaction_bytes ?? 256, "positive_integer")}
+        ${costProfileNumberField("最大并发请求（requests）", profileKey, "max_outstanding_requests", profile.max_outstanding_requests ?? 32, "positive_integer")}
         ${costProfileTextField("内存资源 ID", profileKey, "resource_id", profile.resource_id)}
         ${profileKey === "host_memory" ? costProfileTextField("Profile 名称", profileKey, "name", profile.name) : ""}
       </div>
@@ -7209,6 +7376,9 @@ function cpuCostProfileMarkup(component) {
 
 function cimCostProfileMarkup(component) {
   const profile = costProfileDraft("cim", component);
+  const conversionMode = String(profile.weight_conversion_mode || "disabled");
+  const arithmeticMode = String(profile.arithmetic_mode || "integer_bit_slice");
+  const conversionOpen = conversionMode !== "disabled" || arithmeticMode === "fp16_fp32_analytical";
   return `<section class="inspector-section cost-profile-section" data-profile-section="cim">
     <h3>Digital SRAM-CIM V4 执行成本 Profile</h3>
     <p class="muted">CIM 只承载 GEMM primitive；阵列、搬入、激活、NoC、累加与外围阶段分别计费。所有带宽均为 GB/s，延迟为 ns，能耗按字段标注。</p>
@@ -7250,6 +7420,30 @@ function cimCostProfileMarkup(component) {
       ${costProfileTextField("外围资源 ID", "cim", "peripheral_resource_id", profile.peripheral_resource_id)}
       ${costProfileTextField("Profile 名称", "cim", "name", profile.name)}
     </div>
+    <details class="inspector-advanced-profile cim-contract-profile" data-cim-contract-details ${conversionOpen ? "open" : ""}>
+      <summary>算术与权重转换契约（Arithmetic / tiled conversion）</summary>
+      <p class="muted">浮点与 packed 权重转换是分析假设，不会从模型格式自动推断硬件吞吐。启用 tiled cold conversion 时，tile_k 必须是 IQ3_S/IQ4_XS block size 256 的倍数。</p>
+      <div class="field-grid-2">
+        ${costProfileSelectField("算术模式", "cim", "arithmetic_mode", arithmeticMode, [["integer_bit_slice", "整数 bit-slice（Integer）"], ["fp16_fp32_analytical", "FP16 / FP32 分析模式（Analytical）"]])}
+        ${costProfileSelectField("权重转换模式", "cim", "weight_conversion_mode", conversionMode, [["disabled", "关闭（Disabled）"], ["packed_to_fp16_cold", "packed → FP16 cold"], ["packed_to_fp16_tiled_cold", "packed → FP16 tiled cold"]])}
+        ${costProfileNumberField("浮点评估周期（cycles/eval）", "cim", "float_cycles_per_eval", profile.float_cycles_per_eval, "optional_positive")}
+        ${costProfileNumberField("浮点累加吞吐（outputs/cycle）", "cim", "float_accumulator_outputs_per_cycle", profile.float_accumulator_outputs_per_cycle, "optional_positive")}
+        ${costProfileTextField("浮点契约依据（必填说明）", "cim", "float_contract_basis", profile.float_contract_basis)}
+        ${costProfileNumberField("权重解码吞吐（elements/ns）", "cim", "weight_decode_elements_per_ns", profile.weight_decode_elements_per_ns, "nonnegative")}
+        ${costProfileNumberField("转换 scratch 容量（B）", "cim", "conversion_scratch_capacity_bytes", profile.conversion_scratch_capacity_bytes, "nonnegative_integer")}
+        ${costProfileNumberField("激活 FP32→FP16 吞吐（elements/ns）", "cim", "activation_fp32_to_fp16_elements_per_ns", profile.activation_fp32_to_fp16_elements_per_ns, "nonnegative")}
+        ${costProfileTextField("转换契约依据（启用转换时必填）", "cim", "conversion_contract_basis", profile.conversion_contract_basis)}
+        ${costProfileNumberField("转换读取能耗（pJ/B）", "cim", "conversion_read_energy_pj_per_byte", profile.conversion_read_energy_pj_per_byte, "nonnegative")}
+        ${costProfileNumberField("转换写入能耗（pJ/B）", "cim", "conversion_write_energy_pj_per_byte", profile.conversion_write_energy_pj_per_byte, "nonnegative")}
+        ${conversionMode === "packed_to_fp16_tiled_cold" ? costProfileNumberField("Tile M（elements）", "cim", "tile_m", profile.tile_m, "positive_integer") : ""}
+        ${conversionMode === "packed_to_fp16_tiled_cold" ? costProfileNumberField("Tile K（elements，需为 256 倍数）", "cim", "tile_k", profile.tile_k, "positive_integer") : ""}
+        ${conversionMode === "packed_to_fp16_tiled_cold" ? costProfileNumberField("Tile N（elements）", "cim", "tile_n", profile.tile_n, "positive_integer") : ""}
+      </div>
+      <div class="profile-contract-callout ${conversionMode === "disabled" && arithmeticMode === "integer_bit_slice" ? "is-neutral" : "is-warning"}">
+        <strong>${conversionMode === "disabled" && arithmeticMode === "integer_bit_slice" ? "当前为整数基线" : "请补全硬件证据"}</strong>
+        <span>${conversionMode === "disabled" && arithmeticMode === "integer_bit_slice" ? "未启用 CIM 浮点或 packed 权重转换。" : "后端只接受显式吞吐、scratch、tile 与契约依据；缺失字段会在运行前拒绝。"}</span>
+      </div>
+    </details>
     <div class="readout"><span>支持激活位宽（bits）</span><strong>${escapeHtml(asArray(profile.supported_activation_bits).join(", "))}</strong></div>
     <div class="readout"><span>支持权重位宽（bits）</span><strong>${escapeHtml(asArray(profile.supported_weight_bits).join(", "))}</strong></div>
   </section>`;
@@ -7269,7 +7463,7 @@ function componentProfileBindingMarkup(profileKey, component) {
 
 function componentCostProfileMarkup(component) {
   const normalized = normalizedComponentKind(component?.kind);
-  const profileKey = costProfileKeyForComponentKind(normalized);
+  const profileKey = costProfileKeyForComponentKind(component);
   let markup = "";
   if (normalized === "gpu") markup = gpuCostProfileMarkup(component);
   else if (normalized === "cpu") markup = cpuCostProfileMarkup(component);
@@ -7295,23 +7489,40 @@ function setProfileValueAtPath(profile, path, value) {
   target[keys.at(-1)] = value;
 }
 
+function deleteProfileValueAtPath(profile, path) {
+  const keys = String(path).split(".");
+  let target = profile;
+  for (const key of keys.slice(0, -1)) {
+    if (!target || typeof target !== "object" || !Object.hasOwn(target, key)) return;
+    target = target[key];
+  }
+  if (target && typeof target === "object") delete target[keys.at(-1)];
+}
+
 function bindCostProfileFields(component) {
   $$('[data-cost-profile-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
     const profileKey = control.dataset.costProfileKey;
     const field = control.dataset.costProfileField;
     const rule = control.dataset.costProfileRule || COST_PROFILE_FIELD_RULES[profileKey]?.[field];
-    let value = control.value.trim();
+    const rawValue = control.value.trim();
+    let value = rawValue;
     let valid = Boolean(rule);
-    if (rule === "text") valid = Boolean(value);
+    if (rule === "enum") {
+      valid = control.dataset.costProfileOptions?.split("|").includes(value);
+    } else if (rule === "text") valid = Boolean(value);
+    else if (["optional_positive", "optional_nonnegative"].includes(rule) && !rawValue) {
+      value = null;
+      valid = true;
+    }
     else {
       value = Number(value);
       valid = Number.isFinite(value)
-        && (["positive", "positive_integer", "efficiency"].includes(rule) ? value > 0 : value >= 0)
+        && (["positive", "positive_integer", "efficiency", "optional_positive"].includes(rule) ? value > 0 : value >= 0)
         && (!["positive_integer", "nonnegative_integer"].includes(rule) || Number.isSafeInteger(value))
         && (rule !== "efficiency" || value <= 1);
     }
     if (!valid) {
-      toast("成本 Profile 值无效", rule === "efficiency" ? "效率必须大于 0 且不超过 1。" : rule === "positive" || rule === "positive_integer" ? "该字段必须是大于 0 的有限数；结构计数字段还必须是整数。" : rule === "text" ? "资源 ID 与 Profile 名称不能为空。" : "该字段必须是非负有限数。", "error", 6000);
+      toast("成本 Profile 值无效", rule === "enum" ? "请选择后端支持的枚举值。" : rule === "efficiency" ? "效率必须大于 0 且不超过 1。" : rule === "positive" || rule === "positive_integer" || rule === "optional_positive" ? "该字段必须是大于 0 的有限数；结构计数字段还必须是整数。" : rule === "text" ? "资源 ID 与 Profile 名称不能为空。" : "该字段必须是非负有限数。", "error", 6000);
       renderComponentInspector(component.component_id);
       return;
     }
@@ -7322,10 +7533,27 @@ function bindCostProfileFields(component) {
     if (Object.is(previousValue, value) || String(previousValue) === String(value)) return;
     const historyBefore = topologyHistorySnapshot();
     const next = costProfileDraft(profileKey, component);
-    setProfileValueAtPath(next, field, value);
+    if (value === null) deleteProfileValueAtPath(next, field);
+    else setProfileValueAtPath(next, field, value);
+    if (profileKey === "cim" && field === "weight_conversion_mode" && value === "disabled") {
+      ["tile_m", "tile_k", "tile_n"].forEach((tile) => deleteProfileValueAtPath(next, tile));
+    }
+    if (profileKey === "cim" && field === "arithmetic_mode" && value === "integer_bit_slice") {
+      next.weight_conversion_mode = "disabled";
+      ["tile_m", "tile_k", "tile_n"].forEach((tile) => deleteProfileValueAtPath(next, tile));
+    }
+    if (profileKey === "cim" && field === "weight_conversion_mode" && value !== "disabled") {
+      next.arithmetic_mode = "fp16_fp32_analytical";
+    }
     registry[profileId] = next;
     commitTopologyHistory(historyBefore, "编辑成本 Profile", { mappingImpact: true });
     markScenarioChanged("", { mappingImpact: true, mappingReason: `组件 ${component.component_id} 绑定的 ${profileKey} Profile 已修改，映射需要重新生成。` });
+    if (profileKey === "cim" && field === "arithmetic_mode" && value === "integer_bit_slice") {
+      toast("已关闭浮点权重转换", "整数 bit-slice 模式不接受 packed → FP16 转换；如需转换，请改回 fp16_fp32_analytical。", "info", 5200);
+    }
+    if (profileKey === "cim" && field === "weight_conversion_mode" && value !== "disabled") {
+      toast("已切换浮点分析模式", "packed 权重转换要求 fp16_fp32_analytical；请补全吞吐、scratch 与契约依据。", "warning", 6200);
+    }
   }));
 }
 
@@ -7390,7 +7618,7 @@ function componentInspectorProfile(kind, component = {}) {
   const cpu = normalized === "cpu";
   const transportOnly = ["fabric_switch", "io_die"].includes(normalized);
   const compute = ["gpu", "cpu", "generic_accelerator", "pim_accelerator", "digital_sram_cim"].includes(normalized);
-  const memory = ["hbm", "hbm_stack", "host_memory", "cxl_memory", "hbf", "ssd", "high_io_ssd"].includes(normalized);
+  const memory = isActiveMemoryComponent(component) || ["hbf", "ssd", "high_io_ssd"].includes(normalized);
   const cim = ["digital_sram_cim", "pim_accelerator"].includes(normalized);
   const known = transportOnly || compute || memory;
   return {
@@ -7437,6 +7665,79 @@ function componentCapacityNote(component) {
   return "";
 }
 
+const DEFAULT_HBF_MEDIA_CONTRACT = Object.freeze({
+  version: "cold_page_v1",
+  host_transaction_bytes: 64,
+  host_max_request_bytes: 4096,
+  media_page_bytes: 4096,
+  command_queue_depth: 256,
+  media_parallelism: 4,
+  page_read_latency_ns: 2500,
+  page_program_latency_ns: 5000,
+  access_pattern: "contiguous_page_aligned",
+});
+
+function hbfMediaMarkup(component) {
+  if (normalizedComponentKind(component?.kind) !== "hbf") return "";
+  const metadata = asObject(component.metadata);
+  const contract = asObject(metadata.hbf_media);
+  const enabled = Object.keys(contract).length > 0;
+  const value = (field) => contract[field] ?? DEFAULT_HBF_MEDIA_CONTRACT[field] ?? "";
+  const disabled = enabled ? "" : " disabled";
+  return `<details class="inspector-section hbf-media-section" ${enabled ? "open" : ""}>
+    <summary><span>HBF 媒体页模型（Cold-page media contract）</span><span class="section-summary-state ${enabled ? "is-active" : ""}">${enabled ? "已启用" : "未启用"}</span></summary>
+    <div class="inspector-section-body">
+      <label class="checkbox-field"><span><strong>启用 cold_page_v1 媒体模型</strong><small>启用后按媒体页、命令队列与 RMW 规则计费；关闭时保留 legacy endpoint 语义。</small></span><input type="checkbox" data-hbf-media-enabled ${enabled ? "checked" : ""}></label>
+      <div class="field-grid-2 hbf-media-fields">
+        <label class="field"><span>版本（固定）</span><input type="text" value="cold_page_v1" readonly aria-readonly="true"></label>
+        <label class="field"><span>Host 事务粒度（B，固定）</span><input type="number" value="64" readonly disabled aria-readonly="true"></label>
+        <label class="field"><span>媒体页大小（B，固定）</span><input type="number" value="4096" readonly disabled aria-readonly="true"></label>
+        <label class="field"><span>Host 最大请求（B）</span><input type="number" min="64" max="4096" step="64" data-hbf-media-field="host_max_request_bytes" value="${escapeHtml(value("host_max_request_bytes"))}"${disabled}></label>
+        <label class="field"><span>命令队列深度（2 的幂）</span><input type="number" min="256" max="16384" step="1" data-hbf-media-field="command_queue_depth" value="${escapeHtml(value("command_queue_depth"))}"${disabled}></label>
+        <label class="field"><span>媒体并行度（commands）</span><input type="number" min="1" step="1" data-hbf-media-field="media_parallelism" value="${escapeHtml(value("media_parallelism"))}"${disabled}></label>
+        <label class="field"><span>页读取延迟（ns）</span><input type="number" min="0" step="any" data-hbf-media-field="page_read_latency_ns" value="${escapeHtml(value("page_read_latency_ns"))}"${disabled}></label>
+        <label class="field"><span>页编程延迟（ns）</span><input type="number" min="0" step="any" data-hbf-media-field="page_program_latency_ns" value="${escapeHtml(value("page_program_latency_ns"))}"${disabled}></label>
+        <label class="field"><span>访问模式（Access pattern）</span><select data-hbf-media-field="access_pattern"${disabled}>${fixedOptions([["contiguous_page_aligned", "连续且页对齐"], ["unknown_alignment_conservative", "未知对齐（保守）"]], value("access_pattern"))}</select></label>
+        <label class="field"><span>物理 Plane 数（可选）</span><input type="number" min="1" step="1" data-hbf-media-field="physical_planes" placeholder="留空 = 不额外限制" value="${escapeHtml(contract.physical_planes ?? "")}"${disabled}></label>
+      </div>
+      <p class="muted">后端当前只接受 cold_page_v1、64 B Host transaction、4096 B media page；命令队列深度必须为 256–16384 的 2 的幂。写请求完成语义为 media program complete。</p>
+    </div>
+  </details>`;
+}
+
+function thermalOperatingPointMarkup(element) {
+  const point = asObject(state.scenario?.hardware?.metadata?.thermal_operating_point);
+  const metadata = asObject(element?.metadata);
+  const derating = asObject(metadata.thermal_derating);
+  if (!Object.keys(point).length && !Object.keys(derating).length && !metadata.thermal_domain_id) return "";
+  const domain = String(derating.domain_id || metadata.thermal_domain_id || "");
+  const sameDomain = Boolean(domain && domain === point.domain_id);
+  const enabled = (sameDomain && point.enabled === true && point.mode === "static_derating_only")
+    || Boolean(derating.domain_id && derating.mode === "static_operating_point");
+  const factors = sameDomain && enabled ? point : {};
+  const link = Boolean(element?.link_id);
+  const readout = (label, value) => `<div class="readout"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "—")}</strong></div>`;
+  const status = enabled ? uiText("已应用", "Applied") : !sameDomain ? uiText("未作用于此对象", "Not applied to this object") : uiText("未应用", "Not applied");
+  return `<details class="inspector-section thermal-operating-point">
+    <summary><span>${uiText(link ? "链路静态热降额（只读状态）" : "静态热工作点（只读状态）", link ? "Link static thermal derating (read-only)" : "Static thermal operating point (read-only)")}</span><span class="section-summary-state ${enabled ? "is-active" : ""}">${status}</span></summary>
+    <div class="inspector-section-body">
+      <p class="muted">${uiText("仅展示带有后端应用标记的静态降额。修改 JSON 中的 enabled 不会重新计算 Profile；必须从未降额基线应用工作点。此处不推导温度、功耗或动态节流。", "Shows static derating with a backend application marker only. Editing enabled in JSON does not recompute profiles; apply a point to the unmodified baseline. No temperature, power, or dynamic throttling is inferred.")}</p>
+      <div class="readout-grid">
+        ${readout(uiText("对象热域", "Object thermal domain"), domain || "—")}
+        ${readout(uiText("已应用", "Applied"), enabled ? "true" : "false")}
+        ${!link ? readout(uiText("频率比例", "Frequency scale"), factors.frequency_scale) + readout(uiText("内存带宽比例", "Memory bandwidth scale"), factors.memory_bandwidth_scale) : ""}
+        ${link ? readout(uiText("链路带宽比例", "Link bandwidth scale"), factors.link_bandwidth_scale) : ""}
+        ${readout(uiText("延迟比例", "Latency scale"), factors.latency_scale)}
+        ${readout(uiText("依据", "Evidence"), enabled ? derating.evidence || factors.evidence || "—" : "—")}
+      </div>
+    </div>
+  </details>`;
+}
+
+function thermalLinkMarkup(link) {
+  return thermalOperatingPointMarkup(link);
+}
+
 function renderComponentInspector(componentId) {
   const component = state.scenario.hardware.components.find((item) => item.component_id === componentId);
   if (!component) {
@@ -7453,9 +7754,10 @@ function renderComponentInspector(componentId) {
   const costProfileMarkup = componentCostProfileMarkup(component);
   const storageTransportProfile = ["hbf", "ssd", "high_io_ssd"].includes(normalizedComponentKind(component.kind));
   const capacityNote = componentCapacityNote(component);
-  const hbfReadOnlyNote = normalizedComponentKind(component.kind) === "hbf"
+  const hbfReadOnlyNote = normalizedComponentKind(component.kind) === "hbf" && !isActiveMemoryComponent(component)
     ? `<p class="muted"><strong>只读优先：</strong>HBF 是 High Bandwidth Flash 后备层，不是 HBM。写入带宽为 0 表示未知/未声明写能力，不表示零成本写入；没有显式可写证据与路径时，不应把它作为 KV Cache 或线性 state 的 offload 目标。</p>`
     : "";
+  const hbfMediaMarkupHtml = hbfMediaMarkup(component);
   const kindOptionLabels = Object.fromEntries(COMPONENT_KINDS.map((kind) => [kind, kindLabel(kind)]));
   const capabilityFields = [
     profile.capacity ? quantityField(componentCapacityFieldLabel(component), "capacity_bytes", component.capacity_bytes ?? 0, "bytes") : "",
@@ -7474,6 +7776,8 @@ function renderComponentInspector(componentId) {
     </section>
     ${capabilityFields ? `<section class="inspector-section"><h3>物理容量与传输能力（Physical Capacity & Transport Capability）</h3>${capabilityFields}${capacityNote ? `<p class="muted">${capacityNote}</p>` : ""}${hbfReadOnlyNote}</section>` : ""}
     ${costProfileMarkup}
+    ${hbfMediaMarkupHtml}
+    ${thermalOperatingPointMarkup(component)}
     ${profile.latencyDma ? `<section class="inspector-section">
       <h3>延迟与数据搬移（Latency & DMA）</h3>
       <div class="field-grid-2">
@@ -7501,6 +7805,7 @@ function renderComponentInspector(componentId) {
   bindCostProfileBindingControls(component);
   bindCostProfileFields(component);
   bindGpuDenseThroughputControl(component);
+  bindHbfMediaFields(component);
   hydrateConceptHelp(dom.inspectorContent);
   $$('[data-inspector-metadata-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
     component.metadata = asObject(component.metadata);
@@ -7554,6 +7859,59 @@ function bindInspectorPortFields(component) {
     });
     commitTopologyHistory(historyBefore, "编辑组件端口", { mappingImpact: true });
     markScenarioChanged("", { mappingImpact: true, mappingReason: "组件端口参数已修改，相关链路与映射需要重新校验。" });
+  }));
+}
+
+function bindHbfMediaFields(component) {
+  if (normalizedComponentKind(component?.kind) !== "hbf") return;
+  const enabled = $("[data-hbf-media-enabled]", dom.inspectorContent);
+  enabled?.addEventListener("change", () => {
+    component.metadata = asObject(component.metadata);
+    const historyBefore = topologyHistorySnapshot();
+    if (enabled.checked) component.metadata.hbf_media = { ...DEFAULT_HBF_MEDIA_CONTRACT };
+    else delete component.metadata.hbf_media;
+    commitTopologyHistory(historyBefore, "切换 HBF 媒体页模型", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "HBF 媒体页模型已修改，映射需要重新生成。" });
+  });
+  $$('[data-hbf-media-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
+    component.metadata = asObject(component.metadata);
+    const contract = { ...DEFAULT_HBF_MEDIA_CONTRACT, ...asObject(component.metadata.hbf_media) };
+    const field = control.dataset.hbfMediaField;
+    const raw = control.value.trim();
+    let value = control.tagName === "SELECT" ? raw : Number(raw);
+    const integerFields = ["host_max_request_bytes", "command_queue_depth", "media_parallelism", "physical_planes"];
+    const validNumber = Number.isFinite(value) && value > 0 && (!integerFields.includes(field) || Number.isSafeInteger(value));
+    let valid = control.tagName === "SELECT" ? ["contiguous_page_aligned", "unknown_alignment_conservative"].includes(value) : validNumber;
+    if (field === "page_read_latency_ns" || field === "page_program_latency_ns") valid = Number.isFinite(value) && value > 0;
+    if (field === "physical_planes" && raw === "") {
+      delete contract.physical_planes;
+      valid = true;
+    }
+    if (field === "host_max_request_bytes") {
+      valid = valid && value >= 64 && value <= 4096 && value % 64 === 0;
+    }
+    if (field === "command_queue_depth") {
+      valid = valid && value >= 256 && value <= 16384 && (value & (value - 1)) === 0;
+    }
+    if (!valid) {
+      toast("HBF 媒体参数无效", field === "command_queue_depth" ? "命令队列深度必须是 256–16384 的 2 的幂。" : field === "host_max_request_bytes" ? "Host 最大请求必须是 64 的倍数，且不超过 4096 B。" : "请输入符合后端契约的正数或正整数。", "error", 6200);
+      renderComponentInspector(component.component_id);
+      return;
+    }
+    if (field !== "physical_planes" || raw) contract[field] = value;
+    const historyBefore = topologyHistorySnapshot();
+    component.metadata.hbf_media = contract;
+    commitTopologyHistory(historyBefore, "编辑 HBF 媒体页模型", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "HBF media metadata 已修改，映射需要重新生成。" });
+  }));
+  // Some browser automation and IME paths commit number inputs on blur rather
+  // than dispatching a reliable change event. Reuse the same validator once
+  // when the visible value differs from the stored contract.
+  $$('[data-hbf-media-field]', dom.inspectorContent).forEach((control) => control.addEventListener("blur", () => {
+    const field = control.dataset.hbfMediaField;
+    const stored = asObject(component.metadata?.hbf_media)[field];
+    const raw = control.value.trim();
+    if (String(stored ?? "") !== raw) control.dispatchEvent(new Event("change", { bubbles: true }));
   }));
 }
 
@@ -7628,7 +7986,8 @@ function renderLinkInspector(linkId) {
       ${bandwidthField("带宽（Bandwidth, MB/s–TB/s）", "bandwidth_gbps", link.bandwidth_gbps ?? 0, { scope: "link" })}
       ${inputField("延迟（Latency, ns）", "latency_ns", link.latency_ns ?? 0, { scope: "link", type: "number", min: 0, step: "any", helpKey: "link_latency" })}
       <label class="checkbox-field"><span data-concept-help="bidirectional_link">双向传输（Bidirectional）</span><input type="checkbox" data-inspector-scope="link" data-inspector-field="bidirectional" ${link.bidirectional !== false ? "checked" : ""}></label>
-    </section>`;
+    </section>
+    ${thermalOperatingPointMarkup(link)}`;
   bindInspectorFields();
   hydrateConceptHelp(dom.inspectorContent);
 }
@@ -7677,11 +8036,11 @@ function bindInspectorFields() {
         }
       } else {
         const previousProfileKey = scope === "component" && field === "kind"
-          ? costProfileKeyForComponentKind(item.kind)
+          ? costProfileKeyForComponentKind(item)
           : "";
         item[field] = value;
         if (scope === "component" && field === "kind") {
-          const nextProfileKey = costProfileKeyForComponentKind(item.kind);
+          const nextProfileKey = costProfileKeyForComponentKind(item);
           if (previousProfileKey !== nextProfileKey) delete item.cost_profile_id;
           sanitizeV4ComponentCapabilities(item);
           materializeMissingCostProfiles([item]);
@@ -12666,18 +13025,246 @@ function reconcileParallelDegree(field, rawValue) {
   return true;
 }
 
+function controlPlanePolicyOptionsForPlacement(placement = state.scenario?.placement, { create = false } = {}) {
+  if (!placement || typeof placement !== "object" || Array.isArray(placement)) return {};
+  const metadata = asObject(placement.metadata);
+  const controlPlane = asObject(metadata.control_plane);
+  const policy = asObject(controlPlane.policy);
+  const options = asObject(policy.options);
+  if (create) {
+    placement.metadata = metadata;
+    metadata.control_plane = controlPlane;
+    controlPlane.policy = policy;
+    policy.options = options;
+  }
+  return options;
+}
+
+function controlPlaneTargetComponentFilter(targetType) {
+  if (targetType === "operator_targets") return (component) => componentCanHostOperator(component);
+  if (targetType === "weight_tensor_targets") return (component) => isActiveMemoryComponent(component)
+    || isFlashStorage(component.kind)
+    || componentKindClass(component.kind) === "cim";
+  if (targetType === "kv_cache_target" || targetType === "linear_state_target") return (component) => isWritableActiveRankMemory(component);
+  if (targetType === "linear_state_offload_target") {
+    return (component) => isWritableActiveRankMemory(component)
+      || (isFlashStorage(component.kind) && asObject(component.metadata).read_only !== true && asObject(component.metadata).writable !== false);
+  }
+  return null;
+}
+
+function controlPlaneTargetMapFilter(field) {
+  if (field === "operator_targets") return controlPlaneTargetComponentFilter("operator_targets");
+  if (field === "weight_tensor_targets") return controlPlaneTargetComponentFilter("weight_tensor_targets");
+  if (field === "kv_layer_targets") return controlPlaneTargetComponentFilter("kv_cache_target");
+  if (field === "linear_state_layer_targets") return controlPlaneTargetComponentFilter("linear_state_target");
+  return null;
+}
+
+function controlPlaneKnownKeys(kind, options) {
+  const decision = controlPlaneDecision(state.scenario?.placement);
+  if (kind === "operator_targets") {
+    return Array.from(new Set([
+      ...asArray(decision.generated_op_keys).map(String),
+      ...Object.keys(asObject(decision.operator_execution_targets)),
+      ...Object.keys(asObject(options.operator_targets)),
+    ])).filter(Boolean).sort();
+  }
+  if (kind === "weight_tensor_targets") {
+    return Array.from(new Set([
+      ...asArray(decision.generated_tensor_ids).map(String),
+      ...Object.keys(asObject(options.weight_tensor_targets)),
+    ])).filter(Boolean).sort();
+  }
+  let layers = [];
+  try {
+    layers = modelExecutionLayerSpecs(state.scenario?.model)
+      .filter((layer) => kind === "kv_layer_targets" ? layer.is_linear_attention !== true : kind === "linear_state_layer_targets" ? layer.is_linear_attention === true : true)
+      .map((layer) => String(layer.layer_id || ""))
+      .filter(Boolean);
+  } catch (_error) { /* model validation reports the real issue */ }
+  return Array.from(new Set([
+    ...layers,
+    ...Object.keys(asObject(options[kind])),
+  ])).filter(Boolean).sort();
+}
+
+function controlPlaneTargetMapMarkup(label, field, options, componentFilter = null) {
+  const map = asObject(options[field]);
+  const keyOptions = controlPlaneKnownKeys(field, options);
+  const datalistId = `control-plane-keys-${field}`;
+  const rows = Object.entries(map).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `
+    <div class="placement-target-row" data-placement-target-row="${escapeHtml(field)}" data-placement-target-key="${escapeHtml(key)}">
+      <label class="field"><span>逻辑键（Key）</span><input type="text" list="${datalistId}" data-placement-target-map="${escapeHtml(field)}" data-placement-target-key-input value="${escapeHtml(key)}"></label>
+      <label class="field"><span>目标组件（Target）</span><select data-placement-target-map="${escapeHtml(field)}" data-placement-target-value>${componentOptions(String(value), componentFilter)}</select></label>
+      <button type="button" class="danger-text-button placement-target-delete" data-placement-target-delete="${escapeHtml(field)}" data-placement-target-key="${escapeHtml(key)}" aria-label="删除 ${escapeHtml(key)}">删除</button>
+    </div>`).join("");
+  const knownOptions = keyOptions.map((key) => `<option value="${escapeHtml(key)}"></option>`).join("");
+  return `<section class="placement-target-map" data-placement-target-editor="${escapeHtml(field)}">
+    <header><div><strong>${escapeHtml(label)}</strong><small>${escapeHtml(uiText("可增删；key 不能为空，value 必须是当前拓扑组件。", "Add/remove entries; keys are required and values must be current topology components."))}</small></div><button type="button" class="text-button" data-placement-target-add="${escapeHtml(field)}">＋ 添加</button></header>
+    <datalist id="${datalistId}">${knownOptions}</datalist>
+    <div class="placement-target-list">${rows || `<p class="preset-empty">${escapeHtml(uiText("尚未声明目标约束。", "No target constraints declared."))}</p>`}</div>
+  </section>`;
+}
+
+function controlPlanePolicyMarkup(placement) {
+  const options = controlPlanePolicyOptionsForPlacement(placement);
+  const targetCount = ["operator_targets", "weight_tensor_targets", "kv_layer_targets", "linear_state_layer_targets"]
+    .reduce((total, field) => total + Object.keys(asObject(options[field])).length, 0);
+  const scalar = (field, label, value, { min = "", step = "any", optional = false } = {}) => `<label class="field"><span>${escapeHtml(label)}</span><input type="number" ${optional && value == null ? 'placeholder="未指定"' : ""} ${min !== "" ? `min="${min}"` : ""} step="${step}" data-control-plane-field="${escapeHtml(field)}" value="${escapeHtml(value ?? "")}"></label>`;
+  return `<details class="control-section control-plane-policy-section">
+    <summary><span><strong class="control-section-title" data-no-concept-help>运行时控制平面约束（Runtime placement policy）</strong><small>控制平面输入；运行后生成的 decision / memory tiers 仍为只读。</small></span><span class="section-summary-state ${targetCount ? "is-active" : ""}">${targetCount ? `${targetCount} 个目标约束` : "策略默认"}</span></summary>
+    <div class="control-section-body">
+      <p class="muted">只编辑 policy.options；更改后会立即标记映射过期，下一次运行由后端重新物化实际放置。</p>
+      <div class="field-grid-2">
+        <label class="field"><span>求解模式（Mode）</span><select data-control-plane-field="mode">${fixedOptions([["heuristic", "启发式（Heuristic）"], ["optimal", "最优搜索（Optimal）"]], options.mode || "heuristic")}</select></label>
+        <label class="field"><span>优化目标（Objective）</span><select data-control-plane-field="objective">${fixedOptions([["balanced", "平衡（Balanced）"], ["ttft", "首 Token 延迟（TTFT）"], ["tpot", "Token 间延迟（TPOT）"], ["throughput", "吞吐（Throughput）"]], options.objective || "balanced")}</select></label>
+        <label class="field"><span>求解器（Solver）</span><select data-control-plane-field="solver">${fixedOptions([["auto", "自动（Auto）"], ["builtin", "内置（Builtin）"], ["ortools", "OR-Tools"]], options.solver || "auto")}</select></label>
+        ${scalar("time_limit_s", "时间上限（s）", options.time_limit_s ?? 60, { min: "0.001" })}
+        ${scalar("design_prefill_tokens", "设计点 Prefill Tokens", options.design_prefill_tokens ?? 2048, { min: "1", step: "1" })}
+        ${scalar("design_decode_batch_size", "设计点 Decode Batch", options.design_decode_batch_size ?? 1, { min: "1", step: "1" })}
+        ${scalar("design_throughput_tokens", "设计点 Throughput Tokens", options.design_throughput_tokens ?? 4096, { min: "1", step: "1" })}
+        ${scalar("gpu_loadable_layers", "GPU 可加载层数（可选）", options.gpu_loadable_layers, { min: "0", step: "1", optional: true })}
+        <label class="field"><span>GPU 可加载顺序</span><select data-control-plane-field="gpu_loadable_order">${fixedOptions([["tail", "尾部（Tail）"], ["llama_tail", "LLaMA tail"]], options.gpu_loadable_order || "tail")}</select></label>
+      </div>
+      <label class="checkbox-field"><span><strong>允许 cold CIM streaming</strong><small>仅在权重转换/冷流式证据完整时启用。</small></span><input type="checkbox" data-control-plane-field="allow_cold_cim_streaming" ${options.allow_cold_cim_streaming === true ? "checked" : ""}></label>
+      <label class="checkbox-field"><span><strong>保留 tied weight runtime copies</strong><small>允许运行时复制 tied weight；会增加物理容量。</small></span><input type="checkbox" data-control-plane-field="tied_weight_runtime_copies" ${options.tied_weight_runtime_copies === true ? "checked" : ""}></label>
+      <details class="placement-target-constraints">
+        <summary>目标约束（Target constraints）</summary>
+        <div class="field-grid-2">
+          <label class="field"><span>KV Cache target</span><select data-control-plane-field="kv_cache_target"><option value="">未指定</option>${componentOptions(options.kv_cache_target || "", controlPlaneTargetComponentFilter("kv_cache_target"))}</select></label>
+          <label class="field"><span>Linear state target</span><select data-control-plane-field="linear_state_target"><option value="">未指定</option>${componentOptions(options.linear_state_target || "", controlPlaneTargetComponentFilter("linear_state_target"))}</select></label>
+          <label class="field"><span>Linear state offload target</span><select data-control-plane-field="linear_state_offload_target"><option value="">未指定</option>${componentOptions(options.linear_state_offload_target || "", controlPlaneTargetComponentFilter("linear_state_offload_target"))}</select></label>
+        </div>
+        ${controlPlaneTargetMapMarkup("Operator targets", "operator_targets", options, controlPlaneTargetMapFilter("operator_targets"))}
+        ${controlPlaneTargetMapMarkup("Weight tensor targets", "weight_tensor_targets", options, controlPlaneTargetMapFilter("weight_tensor_targets"))}
+        ${controlPlaneTargetMapMarkup("KV layer targets", "kv_layer_targets", options, controlPlaneTargetComponentFilter("kv_cache_target"))}
+        ${controlPlaneTargetMapMarkup("Linear-state layer targets", "linear_state_layer_targets", options, controlPlaneTargetComponentFilter("linear_state_target"))}
+      </details>
+    </div>
+  </details>`;
+}
+
+function updateControlPlanePolicy(placement, field, value) {
+  const options = controlPlanePolicyOptionsForPlacement(placement, { create: true });
+  if (value === null) delete options[field];
+  else options[field] = value;
+}
+
+function markControlPlanePolicyChanged(message = "运行时控制平面策略已修改。") {
+  markScenarioChanged("", { mappingImpact: true, mappingReason: message });
+}
+
+function bindControlPlanePolicyControls(placement) {
+  $$('[data-control-plane-field]', dom.placementControls).forEach((control) => control.addEventListener("change", () => {
+    const field = control.dataset.controlPlaneField;
+    let value;
+    if (control.type === "checkbox") value = control.checked;
+    else if (control.type === "number") {
+      const raw = control.value.trim();
+      if (!raw && field === "gpu_loadable_layers") value = null;
+      else value = Number(raw);
+    } else {
+      const nullableTarget = ["kv_cache_target", "linear_state_target", "linear_state_offload_target"].includes(field);
+      value = nullableTarget && control.value === "" ? null : control.value;
+    }
+    const integerFields = ["design_prefill_tokens", "design_decode_batch_size", "design_throughput_tokens", "gpu_loadable_layers"];
+    const valid = value === null
+      ? field === "gpu_loadable_layers" || ["kv_cache_target", "linear_state_target", "linear_state_offload_target"].includes(field)
+      : control.type === "checkbox"
+        ? ["allow_cold_cim_streaming", "tied_weight_runtime_copies"].includes(field)
+        : control.type === "number"
+        ? Number.isFinite(value) && value > (field === "gpu_loadable_layers" ? -1 : 0) && (!integerFields.includes(field) || Number.isSafeInteger(value))
+        : ["mode", "objective", "solver", "gpu_loadable_order", "kv_cache_target", "linear_state_target", "linear_state_offload_target"].includes(field)
+          && (field === "mode" ? ["heuristic", "optimal"].includes(value)
+            : field === "objective" ? ["balanced", "ttft", "tpot", "throughput"].includes(value)
+              : field === "solver" ? ["auto", "builtin", "ortools"].includes(value)
+                : field === "gpu_loadable_order" ? ["tail", "llama_tail"].includes(value)
+                  : true);
+    if (!valid) {
+      toast("控制平面策略无效", field === "gpu_loadable_layers" ? "GPU 可加载层数必须是非负整数，或留空。" : field === "time_limit_s" ? "时间上限必须是有限正数。" : "请选择或输入后端支持的值。", "error", 6200);
+      renderPlacementControls();
+      return;
+    }
+    const previous = controlPlanePolicyOptionsForPlacement(placement)[field];
+    if (String(previous ?? "") === String(value ?? "")) return;
+    updateControlPlanePolicy(placement, field, value);
+    markControlPlanePolicyChanged(`${field} 已修改，映射需要重新生成。`);
+  }));
+  $$('[data-placement-target-delete]', dom.placementControls).forEach((button) => button.addEventListener("click", () => {
+    const field = button.dataset.placementTargetDelete;
+    const key = button.dataset.placementTargetKey;
+    const options = controlPlanePolicyOptionsForPlacement(placement, { create: true });
+    const map = asObject(options[field]);
+    if (!Object.hasOwn(map, key)) return;
+    delete map[key];
+    options[field] = map;
+    markControlPlanePolicyChanged(`${field} 已删除 ${key}。`);
+  }));
+  $$('[data-placement-target-add]', dom.placementControls).forEach((button) => button.addEventListener("click", () => {
+    const field = button.dataset.placementTargetAdd;
+    const options = controlPlanePolicyOptionsForPlacement(placement, { create: true });
+    const map = asObject(options[field]);
+    let index = Object.keys(map).length + 1;
+    let key = `${field.replaceAll("_targets", "")}-${index}`;
+    while (Object.hasOwn(map, key)) key = `${field.replaceAll("_targets", "")}-${++index}`;
+    const firstComponent = asArray(state.scenario?.hardware?.components)
+      .find(controlPlaneTargetMapFilter(field) || (() => true))?.component_id;
+    if (!firstComponent) {
+      toast("无法添加目标约束", "当前拓扑还没有可选组件。", "error", 5200);
+      return;
+    }
+    map[key] = firstComponent;
+    options[field] = map;
+    markControlPlanePolicyChanged(`${field} 已新增 ${key}。`);
+  }));
+  $$('[data-placement-target-key-input]', dom.placementControls).forEach((control) => control.addEventListener("change", () => {
+    const row = control.closest?.("[data-placement-target-row]");
+    const field = row?.dataset.placementTargetRow;
+    const oldKey = row?.dataset.placementTargetKey;
+    const newKey = control.value.trim();
+    const options = controlPlanePolicyOptionsForPlacement(placement, { create: true });
+    const map = asObject(options[field]);
+    if (!field || !oldKey || !Object.hasOwn(map, oldKey) || !newKey || (newKey !== oldKey && Object.hasOwn(map, newKey))) {
+      toast("目标约束 key 无效", "key 不能为空，且不能与同一组中已有 key 重复。", "error", 5600);
+      renderPlacementControls();
+      return;
+    }
+    if (newKey === oldKey) return;
+    const value = map[oldKey];
+    delete map[oldKey];
+    map[newKey] = value;
+    options[field] = map;
+    markControlPlanePolicyChanged(`${field} 的 key 已修改。`);
+  }));
+  $$('[data-placement-target-value]', dom.placementControls).forEach((control) => control.addEventListener("change", () => {
+    const row = control.closest?.("[data-placement-target-row]");
+    const field = row?.dataset.placementTargetRow;
+    const key = row?.dataset.placementTargetKey;
+    const value = control.value;
+    if (!field || !key || !value) return;
+    const options = controlPlanePolicyOptionsForPlacement(placement, { create: true });
+    const map = asObject(options[field]);
+    if (!Object.hasOwn(map, key) || map[key] === value) return;
+    map[key] = value;
+    options[field] = map;
+    markControlPlanePolicyChanged(`${field}.${key} 的目标组件已修改。`);
+  }));
+}
+
 function renderPlacementControls() {
   const placement = state.scenario.placement;
   const parallel = asObject(placement.parallel);
   const kvPolicy = asObject(placement.kv_policy);
-  const hbmFilter = (component) => isDedicatedHbm(component.kind);
+  const placementMetadata = asObject(placement.metadata);
+  const activeMemoryFilter = (component) => isWritableActiveRankMemory(component);
   const backingPlannerExplanation = uiText(
     "HBF 走 UCIe；SSD 和高 I/O SSD 走 PCIe / CXL。",
     "HBF uses UCIe; SSD and high-I/O SSD use PCIe/CXL.",
   );
   const rankMappingExplanation = uiText(
-    "更改 TP/PP/EP 会清空旧 Rank 映射；更改 PP 还会清空层到阶段映射。开启同址开关后，界面只使用当前 eligible GPU 及其直接相连的 HBM/CIM 生成完整笛卡尔积映射。",
-    "Changing TP/PP/EP clears the old Rank mapping; changing PP also clears the layer-to-stage mapping. With colocation enabled, the interface builds the complete Cartesian mapping only from eligible GPUs and their directly connected HBM/CIM components.",
+    "更改 TP/PP/EP 会清空旧 Rank 映射；更改 PP 还会清空层到阶段映射。开启同址开关后，界面只使用当前 eligible GPU 及其直接相连的活动内存（包括 DRAM/HBM）与 CIM 生成完整笛卡尔积映射。",
+    "Changing TP/PP/EP clears the old Rank mapping; changing PP also clears the layer-to-stage mapping. With colocation enabled, the interface builds the complete Cartesian mapping only from eligible GPUs and their directly connected active memory (including DRAM/HBM) and CIM components.",
   );
   dom.placementControls.innerHTML = `
     <section class="control-section" aria-labelledby="parallelControlsTitle">
@@ -12697,11 +13284,13 @@ function renderPlacementControls() {
     <section class="control-section" aria-labelledby="kvControlsTitle">
       <strong class="control-section-title" id="kvControlsTitle" data-concept-help="kv_residency_policy">${escapeHtml(uiText("KV 驻留策略", "KV residency strategy"))}</strong>
       <div class="kv-grid">
-         <label class="field"><span data-concept-help="kv_cache_component">${escapeHtml(uiText("缓存组件", "Cache Component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("未指定", "Unspecified"))}</option>${componentOptions(kvPolicy.cache_component || "", hbmFilter)}</select></label>
+         <label class="field"><span data-concept-help="kv_cache_component">${escapeHtml(uiText("缓存组件", "Cache Component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("未指定", "Unspecified"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>
          <label class="field"><span data-concept-help="kv_offload_component">${escapeHtml(uiText("卸载组件", "Offload Component"))}</span><select data-placement-group="kv_policy" data-placement-field="offload_component"><option value="">${escapeHtml(uiText("不卸载", "No Offload"))}</option>${componentOptions(kvPolicy.offload_component || "")}</select></label>
          ${placementNumberField(uiText("每页 Token 数（Tokens per Page）", "Tokens per Page"), "tokens_per_page", kvPolicy.tokens_per_page, "kv_policy", "page_size")}
+         <label class="field"><span>${escapeHtml(uiText("Linear state 卸载模式", "Linear-state offload mode"))}</span><select data-placement-metadata-field="linear_state_offload_mode">${fixedOptions([["mirror", "镜像（Mirror）"], ["pressure", "压力触发（Pressure）"]], placementMetadata.linear_state_offload_mode || "mirror")}</select><small class="field-hint">mirror 保持镜像状态；pressure 仅在内存压力下触发卸载。后端仅支持这两个值。</small></label>
       </div>
     </section>
+    ${controlPlanePolicyMarkup(placement)}
     <p class="muted" data-concept-help="model_weights_backing">${escapeHtml(backingPlannerExplanation)}</p>
     <label class="checkbox-field"><span data-concept-help="weights_resident"><strong>${escapeHtml(uiText("权重常驻", "Weights Resident"))}</strong><small>${escapeHtml(uiText("勾选 = preloaded_resident；取消 = cold_stream_per_use。冷流式读取不按 batch、Token 或 MTP 候选重复。", "Checked = preloaded_resident; unchecked = cold_stream_per_use. Cold-stream reads are not multiplied by batch items, Tokens, or MTP candidates."))}</small></span><input type="checkbox" data-scenario-field="weights_resident" ${state.scenario.weights_resident ? "checked" : ""}></label>`;
   hydrateConceptHelp(dom.placementControls);
@@ -12717,6 +13306,20 @@ function renderPlacementControls() {
     target[field] = value;
     markScenarioChanged("", { mappingImpact: true, mappingReason: group === "kv_policy" ? "KV 策略已修改。" : "并行策略已修改。" });
   }));
+  $$('[data-placement-metadata-field]', dom.placementControls).forEach((control) => control.addEventListener("change", () => {
+    const field = control.dataset.placementMetadataField;
+    const value = control.value;
+    if (!["mirror", "pressure"].includes(value)) {
+      toast("Linear state 卸载模式无效", "后端仅支持 mirror 或 pressure。", "error", 5200);
+      renderPlacementControls();
+      return;
+    }
+    placement.metadata = asObject(placement.metadata);
+    if (placement.metadata[field] === value) return;
+    placement.metadata[field] = value;
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "Linear state 卸载模式已修改。" });
+  }));
+  bindControlPlanePolicyControls(placement);
   $("#allowColocatedRanksInput", dom.placementControls).addEventListener("change", (event) => {
     setAllowColocatedRanks(event.target.checked, placement);
     parallel.rank_mapping = event.target.checked ? buildColocatedRankMapping(parallel) : [];
@@ -15229,7 +15832,7 @@ function renderTraceTopology() {
     const title = memorySummary ? `${kindText}${uiText("。", ". ")}${memorySummary}` : "";
     const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
     const memoryAttribute = memorySummary ? ` data-trace-memory-summary="${escapeHtml(memorySummary)}"` : "";
-    return `<div class="trace-node ${componentKindClass(component.kind)} ${roles.join(" ")}" role="listitem" tabindex="0" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home End" aria-describedby="traceTopologyKeyboardHelp" aria-label="${escapeHtml(ariaLabel)}"${titleAttribute}${memoryAttribute} data-trace-component="${escapeHtml(componentId)}" style="left:${position.x}px;top:${position.y}px;width:${size.width}px;height:${size.height}px">
+    return `<div class="trace-node ${componentKindClass(component)} ${roles.join(" ")}" role="listitem" tabindex="0" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home End" aria-describedby="traceTopologyKeyboardHelp" aria-label="${escapeHtml(ariaLabel)}"${titleAttribute}${memoryAttribute} data-trace-component="${escapeHtml(componentId)}" style="left:${position.x}px;top:${position.y}px;width:${size.width}px;height:${size.height}px">
       <span class="trace-node-accent"></span>
       <span class="trace-node-copy"><strong>${escapeHtml(componentId)}</strong>${traceNodeMemoryMarkup(componentId)}</span>
     </div>`;
@@ -16786,7 +17389,7 @@ function cacheDom() {
     "connectionHint", "topologySelectionStatus", "topologyRouteStatus", "undoTopologyButton", "redoTopologyButton", "createGroupButton", "setGroupRootButton", "toggleGroupButton", "releaseGroupButton", "copyTopologyButton", "pasteTopologyButton",
     "topologyZoomValue", "fitCanvasButton", "topologyCanvas", "topologyWorld", "linkLayer", "groupLayer", "nodeLayer", "topologyLinkTooltip", "topologyMarquee", "canvasEmpty", "inspectorTitle", "deleteSelectionButton",
     "inspectorContent", "modelMetaForm", "modelPresetsButton", "modelGraphBackButton", "modelGraphConnectButton", "modelGraphAutoLayoutButton", "modelGraphFitButton", "modelGraphZoomOutButton", "modelGraphZoomValue", "modelGraphZoomInButton", "modelGraphUndoButton", "modelGraphRedoButton", "modelGraphStatus", "modelGraphCanvas", "modelGraphWorld", "modelGraphEdgeLayer", "modelGraphGroupLayer", "modelGraphNodeLayer", "modelGraphInspectorTitle", "modelGraphInspectorContent", "modelGraphDiagnostics",
-    "placementControls", "controlPlaneStatus", "controlPlaneStatusBadge", "controlPlaneStatusSummary", "controlPlaneStatusMetrics", "effectiveMappingMeta", "effectiveMappingSummary", "effectiveMappingFilterForm", "effectiveMappingSearchInput", "effectiveMappingRankFilter", "effectiveMappingComponentFilter", "resetEffectiveMappingFiltersButton", "effectiveOpMappingMeta", "effectiveOpMappingBody", "effectiveOpPreviousButton", "effectiveOpNextButton", "effectiveOpPageStatus", "effectiveTensorShardMeta", "effectiveTensorShardBody", "effectiveTensorPreviousButton", "effectiveTensorNextButton", "effectiveTensorPageStatus", "workloadMetaForm", "addRequestButton", "requestTableBody", "compareButton", "rerunButton",
+    "placementControls", "controlPlaneStatus", "controlPlaneStatusBadge", "controlPlaneStatusSummary", "controlPlaneStatusMetrics", "controlPlaneMemoryTiers", "controlPlaneMemoryTierBody", "effectiveMappingMeta", "effectiveMappingSummary", "effectiveMappingFilterForm", "effectiveMappingSearchInput", "effectiveMappingRankFilter", "effectiveMappingComponentFilter", "resetEffectiveMappingFiltersButton", "effectiveOpMappingMeta", "effectiveOpMappingBody", "effectiveOpPreviousButton", "effectiveOpNextButton", "effectiveOpPageStatus", "effectiveTensorShardMeta", "effectiveTensorShardBody", "effectiveTensorPreviousButton", "effectiveTensorNextButton", "effectiveTensorPageStatus", "workloadMetaForm", "addRequestButton", "requestTableBody", "compareButton", "rerunButton",
     "playbackFidelity", "traceEmpty", "traceRunButton", "traceContent", "traceResetButton", "tracePreviousButton", "tracePlayButton", "traceNextButton", "traceTimeline", "playbackTime", "traceRequestFilter", "traceBatchFilter", "traceRankFilter", "tracePlaybackMeta", "traceEventMeta", "tracePageBar", "tracePageStatus", "tracePagePreviousButton", "tracePageNextButton", "traceNarrativeState", "traceNarrativePrimary", "traceNarrativeSecondary", "traceTopologyPanel", "traceTopologyCanvas", "traceTopologyWorld", "traceGroupLayer", "traceLinkLayer", "traceParticleLayer", "traceNodeLayer", "traceLinkTooltip", "traceProtocolLegend", "traceLocateActiveButton", "traceEventDrawer", "traceDrawerCloseButton", "traceDrawerOpenButton", "traceArrangeFitButton", "traceAutoLayoutButton", "traceFitButton", "traceZoomOutButton", "traceZoomValue", "traceZoomInButton", "traceFullscreenButton", "traceEventDetails", "traceDiagnosticCopyButton", "traceEventStreamDisclosure", "traceEventKeywordFilter", "traceEventCategoryFilter", "traceEventPhaseFilter", "traceEventTemporalFilter", "traceEventPreviousPageButton", "traceEventNextPageButton", "traceEventPageStatus", "traceEventBody", "traceLimitations",
     "resultsEmpty", "emptyRunButton", "resultsContent", "runManifestBar", "comparisonStrip", "metricGrid", "componentTimeseriesPanel", "componentTimeseriesFidelity", "componentTimeseriesFilterForm", "addTimeseriesChartButton", "timeseriesPointMeta", "componentTimeseriesCharts", "runtimeModeMeta", "runtimeSummary", "bottleneckMeta", "utilizationList",
     "categoryList", "requestResultMeta", "requestResultBody", "jsonDialog", "jsonEditor", "jsonStatus", "canonicalExportDialogButton", "copyJsonButton", "applyJsonButton",

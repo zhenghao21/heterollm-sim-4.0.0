@@ -5538,6 +5538,18 @@ def online_summary_dict(result: OnlineScenarioResult) -> Dict[str, Any]:
     return {"summary": core.summary, "requests": core.requests}
 
 
+def _runtime_memory_tier_details(scenario: ScenarioConfig) -> Dict[str, Any]:
+    """Report compiled capacity policy, not measured occupancy or per-layer bytes."""
+
+    if not scenario.placement.metadata.get("memory_tiers"):
+        return {}
+    plan = compile_serving_plan(scenario)
+    return {
+        "kv_cache": to_primitive(plan.kv_policy),
+        "linear_state": to_primitive(plan.linear_state_policy),
+    }
+
+
 def _runtime_placement_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
     """Read-only runtime outputs, separate from V4 editable authoring fields."""
 
@@ -5545,6 +5557,10 @@ def _runtime_placement_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
         "schema_version": "runtime-placement/v1",
         "read_only": True,
         "parallel": to_primitive(scenario.placement.parallel),
+        "memory_tiers": to_primitive(
+            scenario.placement.metadata.get("memory_tiers", {})
+        ),
+        "memory_tier_details": to_primitive(_runtime_memory_tier_details(scenario)),
         "control_plane": to_primitive(
             scenario.placement.metadata.get("control_plane", {})
         ),

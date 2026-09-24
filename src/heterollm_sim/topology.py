@@ -248,6 +248,81 @@ def _validate_protocol_rules(
             )
 
 
+
+def _validate_stack_metadata(hardware: HardwareSpec, errors: List[ValidationIssue]) -> None:
+    """Check opt-in 3D annotations without imposing a layout on legacy graphs.
+
+    Several functional blocks can share one die/layer (SoC compute and CIM).
+    A vertical link describes an end-to-end path; it need not stop at every die.
+    """
+
+    def add(code: str, message: str, *, component_id=None, link_id=None) -> None:
+        errors.append(ValidationIssue(code=code, message=message, message_en=message, component_id=component_id, link_id=link_id))
+
+    components = hardware.component_map()
+    links = {link.link_id: link for link in hardware.links}
+    layers = {}
+    dies = {}
+    packages = {}
+    for component in hardware.components:
+        metadata = component.metadata
+        for key in ("stack_id", "thermal_domain_id"):
+            if key in metadata and (not isinstance(metadata[key], str) or not metadata[key].strip()):
+                add("invalid_" + key, key + " must be non-empty text", component_id=component.component_id)
+        if "stack_id" in metadata or "stack_layer" in metadata:
+            stack, layer = metadata.get("stack_id"), metadata.get("stack_layer")
+            if not isinstance(stack, str) or not stack.strip() or isinstance(layer, bool) or not isinstance(layer, int) or layer < 0:
+                add("invalid_stack_location", "stack_id and a non-negative integer stack_layer are required together", component_id=component.component_id)
+            elif not component.package_id or not component.die_id:
+                add("stack_identity_missing", "stacked components require package_id and die_id", component_id=component.component_id)
+            else:
+                if packages.setdefault(stack, component.package_id) != component.package_id:
+                    add("stack_cross_package", "one stack_id cannot span packages", component_id=component.component_id)
+                if layers.setdefault((stack, layer), component.die_id) != component.die_id:
+                    add("stack_layer_collision", "different dies cannot occupy the same stack layer", component_id=component.component_id)
+                if dies.setdefault((component.package_id, component.die_id), (stack, layer)) != (stack, layer):
+                    add("stack_die_location_conflict", "blocks on one die must agree on stack_id and stack_layer", component_id=component.component_id)
+        if "vertical_link_id" in metadata:
+            link_id = metadata["vertical_link_id"]
+            link = links.get(link_id) if isinstance(link_id, str) else None
+            if link is None or component.component_id not in (link.source_component, link.target_component) or link.metadata.get("vertical_link") is not True:
+                add("invalid_vertical_link_reference", "vertical_link_id must reference an incident vertical link", component_id=component.component_id)
+
+    for link in hardware.links:
+        metadata = link.metadata
+        domain = metadata.get("thermal_domain_id")
+        if "thermal_domain_id" in metadata and (not isinstance(domain, str) or not domain.strip()):
+            add("invalid_thermal_domain_id", "thermal_domain_id must be non-empty text", link_id=link.link_id)
+        for flag in ("vertical_link", "on_die"):
+            if flag in metadata and not isinstance(metadata[flag], bool):
+                add("invalid_" + flag, flag + " must be boolean", link_id=link.link_id)
+        source, target = components.get(link.source_component), components.get(link.target_component)
+        if source is None or target is None:
+            continue  # The main validator reports missing endpoints.
+        if metadata.get("on_die") is True:
+            if not source.die_id or not source.package_id or (source.package_id, source.die_id) != (target.package_id, target.die_id):
+                add("on_die_link_cross_die", "an on_die link must remain on the same package and die", link_id=link.link_id)
+        if metadata.get("vertical_link") is not True:
+            continue
+        if _protocol(link.protocol) not in {"tsv", "hybridbonding", "hybrid_bonding"}:
+            add("vertical_link_protocol", "vertical links must explicitly use TSV or HybridBonding, not UCIe", link_id=link.link_id)
+        stack = metadata.get("stack_id")
+        if not isinstance(stack, str) or not stack.strip() or stack != source.metadata.get("stack_id") or stack != target.metadata.get("stack_id"):
+            add("vertical_link_stack_mismatch", "vertical link and both endpoints must share a stack_id", link_id=link.link_id)
+        if not source.package_id or source.package_id != target.package_id or not source.die_id or not target.die_id or source.die_id == target.die_id:
+            add("vertical_link_die_mismatch", "vertical links must connect distinct dies in the same package", link_id=link.link_id)
+        first, last = source.metadata.get("stack_layer"), target.metadata.get("stack_layer")
+        if any(isinstance(layer, bool) or not isinstance(layer, int) or layer < 0 for layer in (first, last)) or first == last:
+            add("vertical_link_layers", "vertical endpoints must declare different non-negative stack layers", link_id=link.link_id)
+        if not link.bidirectional:
+            add("vertical_link_directions", "this vertical-path contract requires bidirectional read/write connectivity", link_id=link.link_id)
+        for key, path in (("read_path", [link.target_component, link.source_component]),
+                          ("write_path", [link.source_component, link.target_component])):
+            declared = metadata.get(key)
+            if not isinstance(declared, (tuple, list)) or list(declared) != path:
+                add("vertical_link_" + key, key + " must explicitly match the link endpoints and direction", link_id=link.link_id)
+
+
 def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
     """Return every discoverable static topology error in one report."""
 
@@ -540,6 +615,7 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
                 ),
             )
 
+    _validate_stack_metadata(hardware, errors)
     return TopologyValidationReport(errors=tuple(errors), warnings=tuple(warnings))
 
 

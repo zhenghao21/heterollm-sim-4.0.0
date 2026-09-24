@@ -415,7 +415,7 @@ class ScenarioConfig:
                     "host output target must be CPU-visible memory or a CPU"
                 )
         for component in self.hardware.components:
-            profile_kind = normalize_cost_profile_kind(component.normalized_kind)
+            profile_kind = self.component_profile_kind(component)
             if profile_kind is None:
                 if component.cost_profile_id is not None:
                     raise ValueError(
@@ -461,6 +461,24 @@ class ScenarioConfig:
         ):
             raise ValueError("assumptions must be a tuple of non-empty strings")
 
+    def component_profile_kind(self, component: ComponentSpec) -> Optional[str]:
+        """Resolve HBF's opt-in interface without reclassifying Flash by kind."""
+
+        if component.normalized_kind == "hbf" and component.is_active_memory:
+            if component.cost_profile_id is None:
+                raise ValueError("HBF memory requires an explicit cost_profile_id")
+            matches = [
+                kind for kind in ("host_memory", "hbm")
+                if component.cost_profile_id in self.component_profiles.get(kind, {})
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    "HBF memory cost_profile_id must identify exactly one "
+                    "host_memory or hbm profile"
+                )
+            return matches[0]
+        return normalize_cost_profile_kind(component.normalized_kind)
+
     def resolve_component_profile(
         self,
         component: Union[ComponentSpec, str],
@@ -472,7 +490,7 @@ class ScenarioConfig:
             component = self.hardware.get_component(component)
         if not isinstance(component, ComponentSpec):
             raise TypeError("component must be a ComponentSpec or component_id")
-        profile_kind = normalize_cost_profile_kind(component.normalized_kind)
+        profile_kind = self.component_profile_kind(component)
         if profile_kind is None:
             raise ValueError(
                 "component {} kind {} has no typed cost-profile registry".format(
@@ -499,6 +517,35 @@ class ScenarioConfig:
                     component.component_id, profile_id, required_type.__name__
                 )
             )
+        if component.normalized_kind == "hbf" and component.is_active_memory:
+            for name in ("read_latency_ns", "write_latency_ns",
+                         "transaction_bytes", "max_outstanding_requests"):
+                value = getattr(profile, name, None)
+                if (isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(float(value)) or value <= 0):
+                    raise ValueError(
+                        "HBF memory profile requires explicit positive {}".format(name)
+                    )
+            if component.metadata.get("memory_service_owner") != profile.resource_id:
+                raise ValueError("HBF memory_service_owner must equal profile.resource_id")
+            for media_name, profile_name in (
+                ("transfer_granularity_bytes", "transaction_bytes"),
+                ("max_outstanding_requests", "max_outstanding_requests"),
+                ("read_latency_ns", "read_latency_ns"),
+                ("write_latency_ns", "write_latency_ns"),
+            ):
+                value = component.metadata.get(media_name)
+                if isinstance(value, bool) or value != getattr(profile, profile_name):
+                    raise ValueError("HBF metadata.{} must equal profile.{}".format(media_name, profile_name))
+            for direction in ("read", "write"):
+                media_cap = getattr(component, direction + "_bandwidth_gbps")
+                effective = getattr(profile, "effective_" + direction + "_bandwidth_gb_s",
+                                    profile.effective_bandwidth_gb_s)
+                if media_cap <= 0 or effective * 8 > media_cap * (1 + 1e-12):
+                    raise ValueError(
+                        "HBF memory profile bandwidth must not exceed either explicit "
+                        "read/write media bandwidth (direction={})".format(direction)
+                    )
         if expected_type is not None and not isinstance(profile, expected_type):
             raise ValueError(
                 "component {} profile {} is {}, expected {}".format(
@@ -921,6 +968,8 @@ def placement_from_dict(data: Mapping[str, Any]) -> PlacementSpec:
     kv_policy = kv_policy_from_dict(_mapping(kv_raw, "kv_policy"))
 
     metadata = _mapping(data.get("metadata", {}), "placement metadata")
+    if metadata.get("linear_state_offload_mode", "mirror") not in ("mirror", "pressure"):
+        raise ValueError("linear_state_offload_mode must be mirror or pressure")
     if "auto_mapping" in metadata:
         raise ValueError(
             "V4 placement.metadata.auto_mapping is retired; run the explicit V3-to-V4 importer"
@@ -983,8 +1032,26 @@ def placement_from_dict(data: Mapping[str, Any]) -> PlacementSpec:
                 "gpu_loadable_layers",
                 "gpu_loadable_order",
                 "tied_weight_runtime_copies",
+                "operator_targets",
+                "weight_tensor_targets",
+                "kv_cache_target",
+                "linear_state_target",
+                "linear_state_offload_target",
+                "kv_layer_targets",
+                "linear_state_layer_targets",
             ),
         )
+        for name in ("operator_targets", "weight_tensor_targets", "kv_layer_targets", "linear_state_layer_targets"):
+            if name in options:
+                targets = _mapping(options[name], name)
+                if any(not isinstance(key, str) or not key.strip()
+                       or not isinstance(value, str) or not value.strip()
+                       for key, value in targets.items()):
+                    raise ValueError("{} must map non-empty names to component IDs".format(name))
+        for name in ("kv_cache_target", "linear_state_target", "linear_state_offload_target"):
+            if name in options and options[name] is not None:
+                if not isinstance(options[name], str) or not options[name].strip():
+                    raise ValueError("{} must be a non-empty component ID".format(name))
         if "tied_weight_runtime_copies" in options:
             _boolean(options["tied_weight_runtime_copies"], "tied_weight_runtime_copies")
         evidence = _mapping(
@@ -1741,11 +1808,18 @@ def _fusion_policy_from_dict(data: Mapping[str, Any]) -> FusionPolicy:
 def _hbm_profile_from_dict(data: Mapping[str, Any]) -> HBMProfile:
     values = dict(data)
     _reject_dataclass_unknown_fields(values, "component HBM profile", HBMProfile)
-    for field_name in ("bandwidth_gb_s", "efficiency", "energy_pj_per_byte"):
+    for field_name in ("bandwidth_gb_s", "efficiency", "energy_pj_per_byte",
+                       "read_latency_ns", "write_latency_ns"):
         if field_name in values:
             values[field_name] = _number(
                 values[field_name], "HBM profile {}".format(field_name)
             )
+    for field_name in ("transaction_bytes", "max_outstanding_requests"):
+        if field_name in values:
+            values[field_name] = _integer(values[field_name], "HBM profile {}".format(field_name))
+    for field_name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
+        if field_name in values and values[field_name] is not None:
+            values[field_name] = _number(values[field_name], "HBM profile {}".format(field_name))
     return HBMProfile(**values)
 
 
@@ -1756,12 +1830,19 @@ def _host_memory_profile_from_dict(
     _reject_dataclass_unknown_fields(
         values, "component host-memory profile", HostMemoryProfile
     )
-    for field_name in ("bandwidth_gb_s", "efficiency", "energy_pj_per_byte"):
+    for field_name in ("bandwidth_gb_s", "efficiency", "energy_pj_per_byte",
+                       "read_latency_ns", "write_latency_ns"):
         if field_name in values:
             values[field_name] = _number(
                 values[field_name],
                 "host-memory profile {}".format(field_name),
             )
+    for field_name in ("transaction_bytes", "max_outstanding_requests"):
+        if field_name in values:
+            values[field_name] = _integer(values[field_name], "host-memory profile {}".format(field_name))
+    for field_name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
+        if field_name in values and values[field_name] is not None:
+            values[field_name] = _number(values[field_name], "host-memory profile {}".format(field_name))
     return HostMemoryProfile(**values)
 
 
@@ -1773,6 +1854,10 @@ def _cim_profile_from_dict(
         values, "component CIM profile", DigitalSramCimProfile
     )
     integer_fields = {
+        "conversion_scratch_capacity_bytes",
+        "tile_m",
+        "tile_k",
+        "tile_n",
         "array_count",
         "p_m",
         "p_k",
@@ -1787,12 +1872,18 @@ def _cim_profile_from_dict(
         "accumulator_guard_bits",
     }
     numeric_fields = {
+        "weight_decode_elements_per_ns",
+        "activation_fp32_to_fp16_elements_per_ns",
+        "conversion_read_energy_pj_per_byte",
+        "conversion_write_energy_pj_per_byte",
         "frequency_ghz",
         "load_bandwidth_gb_s",
         "activation_bandwidth_gb_s",
         "output_bandwidth_gb_s",
         "noc_bandwidth_gb_s",
         "accumulator_outputs_per_cycle",
+        "float_cycles_per_eval",
+        "float_accumulator_outputs_per_cycle",
         "peripheral_elements_per_cycle",
         "load_latency_ns",
         "noc_hop_latency_ns",
@@ -1810,6 +1901,8 @@ def _cim_profile_from_dict(
             values[field_name], "CIM profile {}".format(field_name)
         )
     for field_name in numeric_fields.intersection(values):
+        if field_name in ("float_cycles_per_eval", "float_accumulator_outputs_per_cycle") and values[field_name] is None:
+            continue
         values[field_name] = _number(
             values[field_name], "CIM profile {}".format(field_name)
         )

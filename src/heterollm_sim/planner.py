@@ -15,7 +15,7 @@ from collections import OrderedDict, deque
 from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from functools import lru_cache
 from graphlib import CycleError, TopologicalSorter
 from typing import Callable, Dict, FrozenSet, Hashable, Iterator, List, Optional, Sequence, Set, Tuple
@@ -1780,7 +1780,7 @@ def _validate_scenario_uncached(
         kv_component = components.get(kv_component_id)
         if kv_component is None:
             errors.append("KV cache references unknown component {}".format(kv_component_id))
-        elif _kind(kv_component) not in ACTIVE_MEMORY_COMPONENT_KINDS:
+        elif not kv_component.is_active_memory:
             errors.append(
                 "KV cache must target writable active memory; {} is {} storage".format(
                     kv_component_id,
@@ -1833,7 +1833,7 @@ def _validate_scenario_uncached(
                     linear_state_component_id
                 )
             )
-        elif _kind(state_component) not in ACTIVE_MEMORY_COMPONENT_KINDS:
+        elif not state_component.is_active_memory:
             errors.append("linear state must target writable active memory")
         elif not _is_writable_storage(state_component):
             errors.append("linear state cache component is read-only")
@@ -2052,7 +2052,7 @@ def _validate_scenario_uncached(
         else:
             if (
                 scenario.weights_resident
-                and _kind(weight_component) in ACTIVE_MEMORY_COMPONENT_KINDS
+                and weight_component.is_active_memory
                 and not weight_component.is_writable
             ):
                 errors.append(
@@ -2070,7 +2070,7 @@ def _validate_scenario_uncached(
                     router.route(weight_component_id, gpu_component.component_id, 1)
                 except ValueError as exc:
                     errors.append("model weight route: {}".format(exc))
-            if _kind(weight_component) in OFFLOAD_STORAGE_COMPONENT_KINDS:
+            if weight_component.memory_class == "offload":
                 if scenario.weights_resident:
                     warnings.append(
                         "preloaded resident weights use {} {} as capacity-checked "
@@ -2418,7 +2418,7 @@ def _validate_scenario_uncached(
         scenario.weights_resident
         and weight_component_id
         and weight_component is not None
-        and _kind(weight_component) in ACTIVE_MEMORY_COMPONENT_KINDS
+        and weight_component.is_active_memory
         and mapped_weight_bytes > 0
         and declared_weight_bytes > 0
         and rank_local_logical_total >= declared_weight_bytes
@@ -2596,7 +2596,7 @@ def _validate_scenario_uncached(
         if (
             component is not None
             and byte_count > 0
-            and _kind(component) in OFFLOAD_STORAGE_COMPONENT_KINDS
+            and component.memory_class == "offload"
             and component.capacity_bytes <= 0
         ):
             errors.append(
@@ -2608,7 +2608,7 @@ def _validate_scenario_uncached(
         elif (
             component is not None
             and byte_count > 0
-            and _kind(component) in ACTIVE_MEMORY_COMPONENT_KINDS
+            and component.is_active_memory
             and component.capacity_bytes <= 0
         ):
             errors.append(
@@ -2681,8 +2681,7 @@ def _validate_scenario_uncached(
                 cache_component = components.get(cache_component_id)
                 if (
                     cache_component is None
-                    or _kind(cache_component)
-                    not in ACTIVE_MEMORY_COMPONENT_KINDS
+                    or not cache_component.is_active_memory
                     or not _is_writable_storage(cache_component)
                 ):
                     # The global placement and parallel-plan checks emit the
@@ -2875,7 +2874,7 @@ def _validate_scenario_uncached(
             aggregate_active_bytes = (
                 min(mapped_weight_bytes, declared_weight_bytes)
                 if weight_component is not None
-                and _kind(weight_component) in ACTIVE_MEMORY_COMPONENT_KINDS
+                and weight_component.is_active_memory
                 and weight_component.is_writable
                 else 0
             )
@@ -3345,6 +3344,102 @@ def _request_modalities(request: RequestSpec) -> Tuple[str, ...]:
     return normalized or ("text",)
 
 
+def _resident_memory_paths(scenario: ScenarioConfig):
+    """Bind opt-in active-memory kernel service to actual transport resources."""
+    result = {}
+    for rank in _parallel_plan(scenario).ranks:
+        if not rank.memory_component_id:
+            continue
+        memory = _component(scenario, rank.memory_component_id)
+        mode = memory.metadata.get("resident_access_path")
+        if mode is None:
+            continue
+        if mode != "topology":
+            raise ValueError("resident_access_path must be topology when supplied")
+        router = _topology_router(scenario)
+        key = (_rank_memory_resource(scenario, rank), rank.rank)
+        result[key] = (
+            memory.component_id, rank.component_id,
+            router.route(memory.component_id, rank.component_id, 1),
+            router.route(rank.component_id, memory.component_id, 1),
+        )
+    return result
+
+
+def _route_resident_memory_demands(demands, metadata):
+    """Add link contention to opt-in resident memory, without an extra copy.
+
+    Media and routed links overlap within the existing kernel cost phase.
+    This is a pipelined service envelope, not packet/DRAM command simulation.
+    Metadata counts per-hop payload separately from logical operand bytes.
+    """
+    context = _COMPILATION_CONTEXT.get()
+    if context is None or not demands or metadata.get("resident_memory_paths"):
+        return tuple(demands), metadata
+    paths = context.invariant(("resident_memory_paths",), lambda: _resident_memory_paths(context.scenario))
+    if not paths:
+        return tuple(demands), metadata
+    output = list(demands)
+    audit = []
+    cache = metadata.get("cache", metadata.get("phase_metadata", {}).get("cache", {}))
+    for demand in demands:
+        binding = paths.get((demand.resource_id, metadata.get("rank")))
+        if binding is None:
+            matches = [value for (resource, _rank), value in paths.items() if resource == demand.resource_id]
+            if matches and all(value == matches[0] for value in matches):
+                binding = matches[0]
+            elif matches and demand.bytes_moved > 0:
+                raise ValueError("shared resident memory requires an unambiguous task rank")
+        if binding is None or demand.bytes_moved <= 0:
+            continue
+        memory_id, compute_id, inward, outward = binding
+        reads, writes = 0, 0
+        if isinstance(cache, Mapping):
+            reads = cache.get("physical_read_bytes", cache.get("backing_read_bytes", 0))
+            writes = cache.get("physical_write_bytes", cache.get("backing_write_bytes", 0))
+        direction_known = (type(reads) is int and type(writes) is int
+                           and reads >= 0 and writes >= 0 and reads + writes == demand.bytes_moved)
+        if not direction_known:
+            # Keep every byte; no read/write split or duplex gain is invented.
+            reads = 0 if metadata.get("memory_direction") == "write" else demand.bytes_moved
+            writes = demand.bytes_moved - reads
+        hops_audit = []
+        for count, route, direction in ((reads, inward, "read"), (writes, outward, "write")):
+            if count == 0:
+                continue
+            startup_ns = sum(hop.latency_ns for hop in route)
+            for hop in route:
+                # One path startup plus the bottleneck's payload service.
+                # All stages are a conservative whole-span reservation.
+                output.append(ResourceDemand(
+                    hop.resource_id, startup_ns + 8.0 * count / hop.bandwidth_gbps,
+                    bytes_moved=count, energy_pj=count * hop.energy_pj_per_byte,
+                ))
+                hops_audit.append({"resource_id": hop.resource_id, "link_id": hop.link_id,
+                    "direction": direction, "bytes": count, "path_startup_ns": startup_ns})
+        audit.append({"memory_component": memory_id, "compute_component": compute_id,
+            "logical_bytes": demand.bytes_moved, "read_bytes": reads, "write_bytes": writes,
+            "direction_evidence": "resolved_backing_traffic" if direction_known else "combined_payload_no_duplex_claim",
+            "timing_model": "pipelined_whole_span_resource_envelope", "evidence": "ANALYTICAL",
+            "hops": hops_audit})
+    if not audit:
+        return tuple(demands), metadata
+    # Alias resources can traverse one physical PHY repeatedly. Sum the
+    # occupancy, not max(), while retaining per-hop logical facts above.
+    owners = _topology_router(context.scenario).resource_owners
+    merged = {}
+    for demand in output:
+        owner = owners.get(demand.resource_id, demand.resource_id)
+        previous = merged.get(owner)
+        merged[owner] = demand if previous is None else ResourceDemand(
+            previous.resource_id, previous.service_ns + demand.service_ns,
+            previous.bytes_moved + demand.bytes_moved, previous.energy_pj + demand.energy_pj,
+            previous.work_units + demand.work_units,
+        )
+    return tuple(merged.values()), {**metadata, "resident_memory_paths": audit}
+
+
+
 class _TaskBuilder:
     def __init__(self, request: RequestSpec) -> None:
         self.request = request
@@ -3426,6 +3521,7 @@ class _TaskBuilder:
         else:
             predecessor = self.previous if dependency is None else dependency
             dependency_ids = (predecessor,) if predecessor else ()
+        demands, bound_metadata = _route_resident_memory_demands(demands, dict(metadata or {}))
         self.tasks.append(
             TaskSpec(
                 task_id=task_id,
@@ -3437,7 +3533,7 @@ class _TaskBuilder:
                 earliest_start_ns=earliest_start_ns,
                 marker=marker,
                 token_index=token_index,
-                metadata=dict(metadata or {}),
+                metadata=bound_metadata,
             )
         )
         inherited: Dict[int, str] = {}
@@ -5818,7 +5914,7 @@ def _weight_backing_read_gate(
     source_kind = (
         _kind(source_component) if source_component is not None else "missing"
     )
-    source_is_offload = source_kind in OFFLOAD_STORAGE_COMPONENT_KINDS
+    source_is_offload = bool(source_component and source_component.memory_class == "offload")
     source_is_remote = bool(source and source != str(target_component_id))
     source_is_compute_local = _weight_source_is_compute_local_backing(
         scenario,
@@ -8114,7 +8210,11 @@ def _gpu_profiles(
         selected_memory = memory_component_id
         if selected_memory is not None:
             memory_component = _component(scenario, selected_memory)
-            if _kind(memory_component) != "hbm":
+            if not memory_component.is_active_memory or not memory_component.is_writable:
+                raise ValueError("rank memory must be writable active memory: " + selected_memory)
+            if memory_component.cost_profile_id is None and _kind(memory_component) in {"sram", "shared_memory", "memory"}:
+                # Compatibility: these legacy scratch endpoints have no typed
+                # backing profile; GPU kernel traffic still uses attached HBM.
                 selected_memory = None
         if selected_memory is None:
             selected_memory = _nearest_profile_component_id(
@@ -8122,13 +8222,22 @@ def _gpu_profiles(
             )
         if selected_memory is None:
             raise ValueError(
-                "GPU component {} has no reachable HBM profile target".format(
-                    gpu_component_id
-                )
+                "GPU component {} has no reachable HBM profile target; "
+                "select an explicit active DRAM/HBF rank memory".format(gpu_component_id)
             )
-        hbm_profile = _resolve_component_profile(
-            scenario, selected_memory, HBMProfile
-        )
+        profile = _resolve_component_profile(scenario, selected_memory)
+        if isinstance(profile, HBMProfile):
+            hbm_profile = profile
+        elif isinstance(profile, HostMemoryProfile):
+            # DRAM and explicitly memory-addressable HBF use the same GPU
+            # backing-service interface, not an unrelated nearby HBM profile.
+            # The physical kind, capacity and routed accesses remain unchanged.
+            hbm_profile = HBMProfile(**{
+                item.name: getattr(profile, item.name)
+                for item in fields(HBMProfile) if hasattr(profile, item.name)
+            })
+        else:
+            raise ValueError("active accelerator memory needs a memory profile: " + selected_memory)
         return gpu_profile, hbm_profile
 
     context = _active_compilation_context(scenario)
@@ -8231,6 +8340,16 @@ def _compute_local_runtime_memory_component_id(
                 target_component_id, target.kind
             )
         )
+    if target_kind == "gpu":
+        declared = {rank.memory_component_id for rank in _parallel_plan(scenario).ranks
+                    if rank.component_id == target_component_id and rank.memory_component_id}
+        if len(declared) == 1:
+            selected = next(iter(declared))
+            memory = _component(scenario, selected)
+            if memory.is_active_memory and memory.cost_profile_id is not None:
+                return selected
+        if len(declared) > 1:
+            raise ValueError("runtime memory target needs an explicit rank for multiple memory backends")
     memory_component_id = _nearest_profile_component_id(
         scenario,
         target_component_id,
@@ -9732,6 +9851,65 @@ def _execution_phase_from_name(name: object) -> Optional[str]:
     return None
 
 
+def _coalesce_cim_conversion_lifetime(builder, start, last, profile, hardware):
+    """Atomically schedule incoming transfers through final output consumption.
+
+    ponytail: one scratch slot, all participating resources held for the whole
+    serial call; finer-grained overlapping needs a real allocation scheduler.
+    No runtime reserve/release state exists to leak on validation failure.
+    """
+    tasks = tuple(builder.tasks[start:])
+    conversion = next((t.metadata.get("phase_metadata", {}).get("weight_conversion")
+                       for t in tasks if t.metadata.get("phase_metadata", {}).get("weight_conversion")), None)
+    if conversion is None:
+        return last
+    from .communication import declared_resource_owners
+    owners = declared_resource_owners(hardware)
+    internal = {t.task_id for t in tasks}
+    dependencies = tuple(dict.fromkeys(d for t in tasks for d in t.dependencies if d not in internal))
+    duration = sum(max((d.service_ns for d in t.demands), default=0.0) for t in tasks)
+    resources = {}
+    for task in tasks:
+        for demand in task.demands:
+            owner = owners.get(demand.resource_id, demand.resource_id)
+            old = resources.get(owner)
+            resources[owner] = replace(demand, resource_id=owner, service_ns=duration,
+                bytes_moved=demand.bytes_moved + (old.bytes_moved if old else 0),
+                energy_pj=demand.energy_pj + (old.energy_pj if old else 0),
+                work_units=demand.work_units + (old.work_units if old else 0))
+    slot = profile.load_resource_id + ".conversion_scratch_slot"
+    resources[slot] = ResourceDemand(slot, duration)
+    lifecycle = {
+        "scratch_resource_id": slot, "slots": 1,
+        "scratch_peak_bytes": conversion["scratch_peak_bytes"],
+        "capacity_bytes": profile.conversion_scratch_capacity_bytes,
+        "acquire": "before_incoming_activation_and_weight",
+        "release": "after_output_transfer_last_consumer",
+        "wait_audit": "kernel_queue_wait_ns_and_resource_predecessors",
+        "reservation_policy": "atomic_whole_call_all_resources_conservative",
+        "ordered_tasks": tuple({"name": t.name,
+            "service_ns": max((d.service_ns for d in t.demands), default=0.0)} for t in tasks),
+        "calibrated": False,
+    }
+    atomic_id = tasks[-1].task_id + ".scratch_lifetime"
+    atomic = replace(tasks[-1], task_id=atomic_id, name=tasks[-1].name + ".scratch_lifetime",
+        dependencies=dependencies, demands=tuple(resources.values()), category=TaskCategory.COMPUTE,
+        earliest_start_ns=max(t.earliest_start_ns for t in tasks), marker=None,
+        metadata={"cim_scratch_lifecycle": lifecycle, "atomic_cim_conversion": True})
+    # Preserve every original ID and semantic marker for residency/traffic
+    # observers. They retire after the atomic call; only the atomic task charges
+    # resources. Thus no dangling builder.previous or rank-value references.
+    markers = []
+    prior = atomic_id
+    for task in tasks:
+        markers.append(replace(task, dependencies=(prior,), demands=(),
+            metadata={**task.metadata, "cim_atomic_parent": atomic_id,
+                      "resource_accounting": "included_in_atomic_cim_call"}))
+        prior = task.task_id
+    builder.tasks[start:] = [atomic, *markers]
+    return last
+
+
 def _add_rank_gemm(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
@@ -9754,6 +9932,7 @@ def _add_rank_gemm(
         _DynamicAttentionCostTaskReplayPayload
     ] = None,
 ) -> str:
+    invocation_task_start = len(builder.tasks)
     placement_component_id = str(target_component_id)
     prior = tuple(dependencies)
     activation_source = (
@@ -10096,6 +10275,23 @@ def _add_rank_gemm(
             ),
         )
     if _is_cim(target):
+        # A storage width is not a floating arithmetic capability. Preserve the
+        # original packed descriptors so the CIM estimator fails closed rather
+        # than treating IQ/Q blocks as integer bit planes.
+        layer = _layer_for_gemm_operation(scenario, name, operation_metadata)
+        if layer is not None and workload.activation_bits >= 16:
+            dtype = canonical_dtype(layer.dtype)
+            if dtype in ("fp16", "float16", "f16", "fp32", "float32", "f32"):
+                workload = replace(workload, cim_arithmetic="fp16")
+            elif dtype in ("bf16", "bfloat16", "fp32", "float32", "f32"):
+                raise ValueError("CIM floating path currently supports only explicit FP16 operands")
+        if cim_profile.weight_conversion_mode != "disabled":
+            if (scenario.placement.parallel.tp_degree != 1
+                    or scenario.placement.parallel.ep_degree != 1
+                    or scenario.placement.parallel.pp_degree != 1):
+                raise ValueError("CIM conversion currently requires TP=EP=PP=1")
+            if target.capacity_bytes < cim_profile.weight_capacity_bytes + cim_profile.conversion_scratch_capacity_bytes:
+                raise ValueError("CIM component capacity must cover reserved array plus conversion scratch")
         weights_resident = scenario.weights_resident and model_weight_read
         estimate = _memoized_cost_estimate(
             scenario,
@@ -10629,6 +10825,9 @@ def _add_rank_gemm(
         output_component_id = rank.component_id
     else:
         output_component_id = target_component_id
+    if _is_cim(target) and cim_profile.weight_conversion_mode != "disabled":
+        last = _coalesce_cim_conversion_lifetime(
+            builder, invocation_task_start, last, cim_profile, scenario.hardware)
     builder.record_rank_value(last, rank.rank, output_component_id)
     return last
 
@@ -11357,7 +11556,7 @@ def _discard_side_branch_rank_value(
 def _linear_state_components(
     scenario: ScenarioConfig,
     rank: LogicalRank,
-    target_component_id: Optional[str] = None,
+    target_component_id: Optional[str] = None,    layer: Optional[LayerSpec] = None,
 ) -> Tuple[str, Optional[str], float]:
     configured_active = (
         scenario.placement.tensor_to_component.get("linear_state")
@@ -11371,11 +11570,21 @@ def _linear_state_components(
         target_component_id,
         str(configured_active),
     )
+    tier_map = scenario.placement.metadata.get("memory_tiers", {}).get("linear_state_layer_components", {})
+    if layer is not None and layer.layer_id in tier_map:
+        active = str(tier_map[layer.layer_id])
     if active is None:
         raise ValueError("linear state has no active runtime-memory placement")
     offload = scenario.placement.tensor_to_component.get("linear_state_offload")
     raw_ratio = scenario.placement.metadata.get("linear_state_offload_ratio", 1.0)
     ratio = min(1.0, max(0.0, float(raw_ratio)))
+    mode = scenario.placement.metadata.get("linear_state_offload_mode", "mirror")
+    if mode not in {"mirror", "pressure"}:
+        raise ValueError("linear_state_offload_mode must be mirror or pressure")
+    if mode == "pressure":
+        # Serving owns swap-out/in under pressure. Do not also mirror every
+        # operator's recurrent state to the backing store on every token.
+        ratio = 0.0
     return str(active), (str(offload) if offload else None), ratio
 
 
@@ -11608,6 +11817,7 @@ def _host_recurrent_offload_decision(
                     scenario,
                     rank,
                     placement_component_id,
+                    layer,
                 )
             )
         except (AttributeError, KeyError, TypeError, ValueError):
@@ -11701,6 +11911,7 @@ def _add_linear_state_read(
         scenario,
         rank,
         storage_owner_component_id or state_target,
+        layer,
     )
     byte_count = _linear_state_bytes(
         layer,
@@ -11788,6 +11999,7 @@ def _add_linear_state_write(
         scenario,
         rank,
         storage_owner_component_id or target_component_id,
+        layer,
     )
     byte_count = _linear_state_bytes(
         layer,
@@ -11873,6 +12085,7 @@ def _add_linear_state_materialize(
         scenario,
         rank,
         storage_owner_component_id or target_component_id,
+        layer,
     )
     byte_count = _linear_state_bytes(layer, plan.tp_degree)
     materialized = _add_transfer_tasks(
@@ -11962,6 +12175,9 @@ def _kv_components(
         target_component_id,
         str(configured_cache) if configured_cache else None,
     )
+    tier_map = scenario.placement.metadata.get("memory_tiers", {}).get("kv_layer_components", {})
+    if layer is not None and layer.layer_id in tier_map:
+        cache = str(tier_map[layer.layer_id])
     offload = policy.offload_component
     ratio = float(policy.offload_ratio)
     return (str(cache) if cache else None, str(offload) if offload else None, ratio)
@@ -12297,6 +12513,10 @@ def _task_segment_dynamic_task_overrides(
     guard before mutating a builder, then run the original analytical estimator
     and namespace every demand in the same order as uncached lowering.
     """
+
+    if any(component.metadata.get("resident_access_path") == "topology"
+           for component in replay.scenario.hardware.components):
+        return None  # Recompile exact context-shaped link traffic; never replay stale bytes.
 
     context_tokens = int(replay.context_tokens)
     kv_read_tokens = int(replay.kv_read_tokens)
@@ -24143,6 +24363,53 @@ def compile_serving_cohort_schedule(
         return _lower_serving_cohort(scenario, cohort).schedule
 
 
+def _summarize_cim_weight_conversion(tasks):
+    rows = [task.metadata.get("phase_metadata", {}).get("weight_conversion")
+            for task in tasks if task.metadata.get("phase") == "weight_load"]
+    rows = [row for row in rows if row]
+    summary = {"conversions": len(rows), "loads": len(rows),
+        "packed_read_bytes": sum(row.get("packed_read_bytes", 0) for row in rows),
+        "dense_padded_bytes": sum(row.get("dense_padded_bytes", 0) for row in rows),
+        "scratch_peak_bytes": max((row.get("scratch_peak_bytes", 0) for row in rows), default=0),
+        "lifecycle": "cold_per_call_no_cross_call_reuse",
+        "scratch_lifetime": "incoming_through_output_atomic_scratch_slot",
+        "admission_scope": "multiple_requests_tp_ep_pp_1",
+        "incoming_transfer_safety": "atomic_call_includes_incoming_transfers",
+        "evidence": "analytical", "calibrated": False,
+        "numerical_equivalence_verified": False}
+    if not rows:
+        return summary
+    # Preserve the bounded tiled conversion audit instead of reducing it to
+    # the legacy full-matrix counters. Numeric byte/op counters are additive;
+    # tile footprints and contract flags are envelope properties.
+    additive = (
+        "packed_weight_payload_read_bytes", "packed_weight_metadata_read_bytes",
+        "dense_weight_scratch_write_bytes", "dense_weight_array_read_bytes",
+        "transfer_input_bytes", "transfer_weight_bytes", "transfer_output_bytes",
+        "transfer_partial_read_bytes", "transfer_partial_write_bytes",
+        "partial_accumulation_ops", "partial_accumulation_extra_compute_ops",
+        "decode_elements", "conversion_count", "tile_count", "tiles_total",
+    )
+    for key in additive:
+        if any(key in row for row in rows):
+            summary[key] = sum(row.get(key, 0) for row in rows)
+    for key in ("array_peak_bytes", "array_storage_bytes"):
+        if any(key in row for row in rows):
+            summary[key] = max(row.get(key, 0) for row in rows)
+    modes = {row.get("mode") for row in rows if row.get("mode")}
+    if modes:
+        summary["mode"] = next(iter(modes)) if len(modes) == 1 else "mixed"
+    for key in ("ordered_stream_model", "lifecycle", "no_free_traffic", "transfer_byte_convention"):
+        values = [row.get(key) for row in rows if key in row]
+        if values:
+            summary[key] = values[0] if all(value == values[0] for value in values) else "mixed"
+    if any("tile_shape_counts" in row for row in rows):
+        summary["tile_shape_counts"] = tuple(
+            shape for row in rows for shape in row.get("tile_shape_counts", ())
+        )
+    return summary
+
+
 def _estimate_serving_cohort_cost(
     scenario: ScenarioConfig,
     cohort: object,
@@ -24246,7 +24513,13 @@ def _estimate_serving_cohort_cost(
                 int(task.metadata.get("submission_count", 0))
                 for task in host_orchestration_tasks
             ),
+            "cim_weight_conversion": _summarize_cim_weight_conversion(lowering.schedule.tasks),
             "execution_stages": execution_stages,
+            **({"resource_demands": tuple(
+                {"resource_id": demand.resource_id, "service_ns": demand.service_ns,
+                 "bytes_moved": demand.bytes_moved, "energy_pj": demand.energy_pj}
+                for task in lowering.schedule.tasks for demand in task.demands
+            )} if not execution_stages else {}),
             "execution_stages_include_host_orchestration": (
                 execution_stages_include_host_orchestration
             ),
@@ -25376,7 +25649,7 @@ def _shared_transfer_demands(
     return (
         ResourceDemand(
             _rank_memory_resource(scenario, rank),
-            byte_count / hbm_profile.effective_bandwidth_gb_s,
+            float(hbm_profile.memory_service(byte_count)["service_ns"]),
             bytes_moved=byte_count,
             energy_pj=byte_count * hbm_profile.energy_pj_per_byte,
         ),
@@ -26629,7 +26902,7 @@ def _is_writable_storage(component: ComponentSpec) -> bool:
 
 def _is_active_resident_weight_storage(component: ComponentSpec) -> bool:
     return component.is_writable and (
-        _is_cim(component) or _kind(component) in ACTIVE_MEMORY_COMPONENT_KINDS
+        _is_cim(component) or component.is_active_memory
     )
 
 

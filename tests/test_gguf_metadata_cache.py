@@ -60,7 +60,12 @@ def test_source_identity_and_strict_hash_reject_changes(tmp_path):
     source = tmp_path / "model.gguf"
     source.write_bytes(_fixture())
     sidecar = write_gguf_metadata_cache(source)
+    before = source.stat()
     source.write_bytes(_fixture(b"changed"))
+    # A same-size rewrite can share the filesystem's clock tick. This test
+    # exercises stat invalidation; the strict-mode test below covers changed
+    # payload with exactly the same stat identity.
+    os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
     with pytest.raises(GGUFError, match="source identity mismatch"):
         read_gguf_metadata_cache(source, sidecar)
 
@@ -130,7 +135,9 @@ def test_cache_build_binds_pre_and_post_source_stat(tmp_path, monkeypatch):
 
     def mutate_after_read(path):
         metadata = original(path)
+        before = source.stat()
         source.write_bytes(_fixture(b"mutated"))
+        os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
         return metadata
 
     monkeypatch.setattr(gguf_parity, "read_gguf_metadata", mutate_after_read)

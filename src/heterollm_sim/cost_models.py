@@ -2300,14 +2300,31 @@ class DigitalSramCimProfile:
     conversion_contract_basis: str = ""
     conversion_read_energy_pj_per_byte: float = 0.0
     conversion_write_energy_pj_per_byte: float = 0.0
+    tile_m: Optional[int] = field(default=None, metadata={"omit_none": True})
+    tile_k: Optional[int] = field(default=None, metadata={"omit_none": True})
+    tile_n: Optional[int] = field(default=None, metadata={"omit_none": True})
 
     def __post_init__(self) -> None:
-        if self.weight_conversion_mode not in ("disabled", "packed_to_fp16_cold"):
+        if self.weight_conversion_mode not in (
+            "disabled", "packed_to_fp16_cold", "packed_to_fp16_tiled_cold"
+        ):
             raise ValueError("unsupported CIM weight_conversion_mode")
         for key in ("weight_decode_elements_per_ns", "activation_fp32_to_fp16_elements_per_ns",
                     "conversion_read_energy_pj_per_byte", "conversion_write_energy_pj_per_byte"):
             _require_non_negative(key, getattr(self, key))
         _require_non_negative_int("conversion_scratch_capacity_bytes", self.conversion_scratch_capacity_bytes)
+        tile_values = (self.tile_m, self.tile_k, self.tile_n)
+        if self.weight_conversion_mode == "packed_to_fp16_tiled_cold":
+            for field_name, value in zip(("tile_m", "tile_k", "tile_n"), tile_values):
+                if value is None:
+                    raise ValueError(
+                        "packed_to_fp16_tiled_cold requires explicit " + field_name
+                    )
+                _require_positive_int(field_name, value)
+            if self.tile_k % 256:
+                raise ValueError("tile_k must be a multiple of the IQ3_S/IQ4_XS block size 256")
+        elif any(value is not None for value in tile_values):
+            raise ValueError("tile_m/tile_k/tile_n require packed_to_fp16_tiled_cold")
         if self.weight_conversion_mode != "disabled":
             if self.arithmetic_mode != "fp16_fp32_analytical":
                 raise ValueError("weight conversion requires floating CIM")
@@ -5182,6 +5199,525 @@ def _required_accumulator_bits(workload: GemmWorkload, guard_bits: int) -> int:
     )
 
 
+
+_CIM_TILED_QUANT_SPECS = {
+    # (quantization block K, packed payload bytes, packed metadata bytes).
+    "IQ3_S": (256, 96, 14),
+    "IQ4_XS": (256, 128, 8),
+}
+
+
+def _cim_tiled_axis_groups(length: int, tile: int) -> Tuple[Tuple[str, int, int], ...]:
+    """Return at most two extent/count groups; never materialize every tile."""
+    full_count, tail = divmod(length, tile)
+    groups = []
+    if full_count:
+        groups.append(("full", tile, full_count))
+    if tail:
+        groups.append(("tail", tail, 1))
+    return tuple(groups)
+
+
+def _cim_tiled_weight_segments(workload: GemmWorkload):
+    """Validate and return bounded ``(format, columns)`` packed segments."""
+    formats = tuple(fmt.strip().upper() for fmt in workload.packed_weight_formats)
+    if not formats or not set(formats) <= set(_CIM_TILED_QUANT_SPECS):
+        raise ValueError("tiled CIM conversion supports only IQ3_S/IQ4_XS")
+    if workload.packed_weight_format_segments:
+        segments = []
+        for segment in workload.packed_weight_format_segments:
+            fmt, local_n, _operations = segment
+            fmt = fmt.strip().upper()
+            if fmt not in formats or fmt not in _CIM_TILED_QUANT_SPECS:
+                raise ValueError("tiled CIM packed segments must use declared IQ3_S/IQ4_XS formats")
+            segments.append((fmt, local_n))
+        if sum(local_n for _, local_n in segments) != workload.n:
+            raise ValueError("tiled CIM packed segments must cover the complete N dimension")
+        if set(fmt for fmt, _ in segments) != set(formats):
+            raise ValueError("tiled CIM packed segments must cover every declared format")
+    elif len(formats) == 1:
+        segments = [(formats[0], workload.n)]
+    else:
+        raise ValueError(
+            "tiled CIM mixed IQ3_S/IQ4_XS weights require packed_weight_format_segments"
+        )
+
+    blocks_per_column = _ceil_div(workload.k, 256)
+    expected_payload = 0
+    expected_metadata = 0
+    for fmt, local_n in segments:
+        _block_size, payload, metadata = _CIM_TILED_QUANT_SPECS[fmt]
+        expected_payload += local_n * blocks_per_column * payload
+        expected_metadata += local_n * blocks_per_column * metadata
+    if workload.weight_storage_bytes != expected_payload:
+        raise ValueError(
+            "tiled CIM requires authoritative packed payload bytes matching "
+            "IQ3_S/IQ4_XS block layout"
+        )
+    if workload.weight_metadata_bytes != expected_metadata:
+        raise ValueError(
+            "tiled CIM requires authoritative packed metadata bytes matching "
+            "IQ3_S/IQ4_XS block layout"
+        )
+    return tuple(segments), expected_payload, expected_metadata
+
+
+def _cim_tiled_segment_ranges(segments):
+    offset = 0
+    for fmt, width in segments:
+        yield fmt, offset, offset + width
+        offset += width
+
+
+def _cim_tiled_range_bytes(segments, start: int, end: int, component: int, blocks: int) -> int:
+    total = 0
+    for fmt, segment_start, segment_end in _cim_tiled_segment_ranges(segments):
+        overlap = max(0, min(end, segment_end) - max(start, segment_start))
+        total += overlap * blocks * _CIM_TILED_QUANT_SPECS[fmt][component]
+    return total
+
+
+def _cim_tiled_max_packed_tile_bytes(segments, n: int, tile_n: int, blocks: int) -> int:
+    """Find the largest real N tile using only format-boundary candidates."""
+    tile_n = min(tile_n, n)
+    max_start = max(0, n - tile_n)
+    boundaries = [0, n]
+    boundaries.extend(boundary for _, boundary, _ in _cim_tiled_segment_ranges(segments))
+    candidates = {0, max_start}
+    for boundary in boundaries:
+        floor_start = (boundary // tile_n) * tile_n
+        ceil_start = _ceil_div(boundary, tile_n) * tile_n
+        for candidate in (floor_start, ceil_start, floor_start - tile_n, ceil_start - tile_n):
+            if candidate == max_start or (candidate >= 0 and candidate < n and candidate % tile_n == 0):
+                candidates.add(candidate)
+    return max(
+        _cim_tiled_range_bytes(segments, start, min(n, start + tile_n), 1, blocks)
+        + _cim_tiled_range_bytes(segments, start, min(n, start + tile_n), 2, blocks)
+        for start in candidates
+    )
+
+
+def _estimate_cim_tiled_converted(profile, workload, weights_resident):
+    """Cold packed-to-FP16 conversion with bounded, single-buffer tile streams."""
+    if weights_resident:
+        raise ValueError(
+            "packed_to_fp16_tiled_cold requires cold per-call loading; warm residency unsupported"
+        )
+    if profile.max_m_replication != 1:
+        raise ValueError("packed_to_fp16_tiled_cold does not support M replication")
+    if workload.cim_arithmetic != "fp16" or workload.activation_bits not in (16, 32):
+        raise ValueError("tiled CIM conversion requires explicit FP16/FP32 input arithmetic")
+    if (
+        workload.weight_bits not in (3, 4)
+        or workload.output_bits not in (16, 32)
+        or workload.accumulator_bits != 32
+    ):
+        raise ValueError(
+            "tiled CIM conversion requires IQ3/IQ4 packed weights, FP16/FP32 output and FP32 accumulation"
+        )
+    if workload.activation_bytes not in (
+        2 * workload.m * workload.k, 4 * workload.m * workload.k
+    ):
+        raise ValueError("tiled CIM conversion requires dense FP16/FP32 input storage")
+    if workload.output_bytes != _storage_bytes(workload.m * workload.n, workload.output_bits):
+        raise ValueError("tiled CIM conversion requires dense FP16/FP32 output storage")
+    fp32_input = workload.activation_bytes == 4 * workload.m * workload.k
+    if fp32_input and profile.activation_fp32_to_fp16_elements_per_ns <= 0:
+        raise ValueError("FP32 input requires explicit activation_fp32_to_fp16_elements_per_ns")
+
+    tile_m, tile_k, tile_n = profile.tile_m, profile.tile_k, profile.tile_n
+    # Profile validation guarantees these in the opt-in mode; the local checks
+    # keep this function safe if called directly by a future lowering path.
+    if tile_m is None or tile_k is None or tile_n is None or tile_k % 256:
+        raise ValueError("tiled CIM conversion requires tile_m/tile_n and tile_k multiple of 256")
+    segments, packed_payload_full, packed_metadata_full = _cim_tiled_weight_segments(workload)
+    m_groups = _cim_tiled_axis_groups(workload.m, tile_m)
+    k_groups = _cim_tiled_axis_groups(workload.k, tile_k)
+    n_groups = _cim_tiled_axis_groups(workload.n, tile_n)
+    m_tile_count = sum(count for _, _, count in m_groups)
+    k_tile_count = sum(count for _, _, count in k_groups)
+    n_tile_count = sum(count for _, _, count in n_groups)
+    tile_count = m_tile_count * k_tile_count * n_tile_count
+    if not tile_count:
+        raise ValueError("tiled CIM conversion requires a non-empty GEMM")
+
+    tile_shape_counts = []
+    for m_kind, m_extent, m_count in m_groups:
+        for n_kind, n_extent, n_count in n_groups:
+            for k_kind, k_extent, k_count in k_groups:
+                tile_shape_counts.append({
+                    "m": m_extent,
+                    "k": k_extent,
+                    "n": n_extent,
+                    "m_kind": m_kind,
+                    "k_kind": k_kind,
+                    "n_kind": n_kind,
+                    "count": m_count * k_count * n_count,
+                })
+
+    source_element_bytes = 4 if fp32_input else 2
+    padded_work_elements = 0
+    logical_evaluations = 0
+    array_cycles = 0.0
+    activation_source_read_bytes = 0
+    activation_fp16_read_bytes = 0
+    activation_fp16_scratch_write_bytes = 0
+    activation_broadcast_bytes = 0
+    dense_weight_scratch_write_bytes = 0
+    dense_weight_array_read_bytes = 0
+    decode_elements = 0
+    for _m_kind, m_extent, m_count in m_groups:
+        for _n_kind, n_extent, n_count in n_groups:
+            for _k_kind, k_extent, k_count in k_groups:
+                count = m_count * n_count * k_count
+                padded_m = _ceil_div(m_extent, profile.p_m) * profile.p_m
+                padded_k = _ceil_div(k_extent, profile.p_k) * profile.p_k
+                padded_n = _ceil_div(n_extent, profile.p_n) * profile.p_n
+                placements = _ceil_div(k_extent, profile.p_k) * _ceil_div(n_extent, profile.p_n)
+                a_eff = min(profile.array_count, placements)
+                waves = _ceil_div(_ceil_div(m_extent, profile.p_m) * placements, a_eff)
+                logical_evaluations += count * _ceil_div(m_extent, profile.p_m) * placements
+                array_cycles += count * waves * float(profile.float_cycles_per_eval)
+                padded_work_elements += count * padded_m * padded_k * padded_n
+                activation_tile_fp16 = m_extent * k_extent * 2
+                activation_fp16_read_bytes += count * activation_tile_fp16
+                activation_source_read_bytes += count * activation_tile_fp16 // 2 * source_element_bytes
+                activation_fp16_scratch_write_bytes += (
+                    count * activation_tile_fp16 if fp32_input else 0
+                )
+                activation_broadcast_bytes += count * activation_tile_fp16 * max(
+                    0, _ceil_div(n_extent, profile.p_n) - 1
+                )
+                dense_tile = 2 * padded_k * padded_n
+                dense_weight_scratch_write_bytes += count * dense_tile
+                dense_weight_array_read_bytes += count * dense_tile
+                decode_elements += count * n_extent * _ceil_div(k_extent, 256) * 256
+
+    output_bytes = 0
+    output_elements = 0
+    peripheral_compute_ns = 0.0
+    peripheral_service_ns = 0.0
+    output_tile_count = 0
+    for _m_kind, m_extent, m_count in m_groups:
+        for _n_kind, n_extent, n_count in n_groups:
+            count = m_count * n_count
+            tile_output_bytes = _storage_bytes(m_extent * n_extent, workload.output_bits)
+            tile_output_elements = m_extent * n_extent
+            tile_cycles = math.ceil(
+                tile_output_elements / profile.peripheral_elements_per_cycle
+            )
+            tile_compute_ns = tile_cycles / profile.frequency_ghz
+            output_bytes += count * tile_output_bytes
+            output_elements += count * tile_output_elements
+            output_tile_count += count
+            peripheral_compute_ns += count * tile_compute_ns
+            peripheral_service_ns += count * (
+                profile.peripheral_latency_ns
+                + max(tile_compute_ns, tile_output_bytes / profile.output_bandwidth_gb_s)
+            )
+
+    partial_accumulation_ops = 0
+    partial_read_bytes = 0
+    partial_write_bytes = 0
+    partial_storage_peak_bytes = 0
+    partial_events = 0
+    for _m_kind, m_extent, m_count in m_groups:
+        for _n_kind, n_extent, n_count in n_groups:
+            count = m_count * n_count
+            tile_elements = m_extent * n_extent
+            partial_accumulation_ops += count * tile_elements * max(0, k_tile_count - 1)
+            partial_read_bytes += count * tile_elements * max(0, k_tile_count - 1) * 4
+            partial_write_bytes += count * tile_elements * max(0, k_tile_count - 1) * 4
+            partial_events += count * max(0, k_tile_count - 1)
+            if k_tile_count > 1:
+                partial_storage_peak_bytes = max(partial_storage_peak_bytes, tile_elements * 4)
+
+    packed_payload_read_bytes = m_tile_count * packed_payload_full
+    packed_metadata_read_bytes = m_tile_count * packed_metadata_full
+    packed_weight_read_bytes = packed_payload_read_bytes + packed_metadata_read_bytes
+    max_k_blocks = max(_ceil_div(extent, 256) for _, extent, _ in k_groups)
+    max_packed_tile_bytes = _cim_tiled_max_packed_tile_bytes(
+        segments, workload.n, tile_n, max_k_blocks
+    )
+    max_m_extent = max(extent for _, extent, _ in m_groups)
+    max_k_extent = max(extent for _, extent, _ in k_groups)
+    max_n_extent = max(extent for _, extent, _ in n_groups)
+    array_peak_bytes = (
+        2
+        * _ceil_div(max_k_extent, profile.p_k)
+        * profile.p_k
+        * _ceil_div(max_n_extent, profile.p_n)
+        * profile.p_n
+    )
+    max_activation_source_tile_bytes = max_m_extent * max_k_extent * source_element_bytes
+    max_activation_fp16_tile_bytes = max_m_extent * max_k_extent * 2
+    max_output_tile_bytes = _storage_bytes(max_m_extent * max_n_extent, workload.output_bits)
+    scratch_result_bytes = max(max_output_tile_bytes, partial_storage_peak_bytes)
+    scratch_peak_bytes = (
+        max_packed_tile_bytes
+        + array_peak_bytes
+        + max_activation_source_tile_bytes
+        + (max_activation_fp16_tile_bytes if fp32_input else 0)
+        + scratch_result_bytes
+    )
+    if array_peak_bytes > profile.weight_capacity_bytes:
+        raise ValueError(
+            "tiled CIM array capacity insufficient: needs %d bytes, capacity %d bytes"
+            % (array_peak_bytes, profile.weight_capacity_bytes)
+        )
+    if scratch_peak_bytes > profile.conversion_scratch_capacity_bytes:
+        raise ValueError(
+            "tiled CIM scratch capacity insufficient: needs %d bytes, capacity %d bytes"
+            % (scratch_peak_bytes, profile.conversion_scratch_capacity_bytes)
+        )
+
+    array_service_ns = array_cycles / profile.frequency_ghz
+    weight_load_service_ns = (
+        tile_count * profile.load_latency_ns
+        + packed_weight_read_bytes / profile.load_bandwidth_gb_s
+    )
+    decode_service_ns = max(
+        decode_elements / profile.weight_decode_elements_per_ns,
+        (packed_weight_read_bytes + dense_weight_scratch_write_bytes)
+        / profile.load_bandwidth_gb_s,
+    )
+    program_service_ns = (
+        tile_count * profile.load_latency_ns
+        + dense_weight_array_read_bytes / profile.load_bandwidth_gb_s
+    )
+    activation_convert_service_ns = 0.0
+    if fp32_input:
+        activation_convert_service_ns = max(
+            activation_fp16_scratch_write_bytes / 2
+            / profile.activation_fp32_to_fp16_elements_per_ns,
+            (
+                activation_source_read_bytes
+                + activation_fp16_scratch_write_bytes
+            ) / profile.activation_bandwidth_gb_s,
+        )
+    activation_array_service_ns = (
+        activation_fp16_read_bytes / profile.activation_bandwidth_gb_s
+    )
+    noc_partial_bytes = partial_read_bytes + partial_write_bytes
+    noc_service_ns = (
+        (
+            activation_broadcast_bytes
+            + noc_partial_bytes
+        ) / profile.noc_bandwidth_gb_s
+        + (activation_broadcast_bytes > 0 or partial_events > 0)
+        * (profile.noc_hop_latency_ns)
+    )
+    partial_accumulator_service_ns = 0.0
+    if partial_accumulation_ops:
+        partial_accumulator_service_ns = math.ceil(
+            partial_accumulation_ops / float(profile.float_accumulator_outputs_per_cycle)
+        ) / profile.frequency_ghz
+
+    read_energy = profile.conversion_read_energy_pj_per_byte
+    write_energy = profile.conversion_write_energy_pj_per_byte
+    load_energy = packed_weight_read_bytes * profile.load_energy_pj_per_byte
+    decode_energy = packed_weight_read_bytes * read_energy + dense_weight_scratch_write_bytes * write_energy
+    program_energy = dense_weight_array_read_bytes * (read_energy + profile.load_energy_pj_per_byte)
+    activation_energy = (
+        activation_source_read_bytes * read_energy
+        + activation_fp16_scratch_write_bytes * write_energy
+        + activation_fp16_read_bytes * profile.activation_energy_pj_per_byte
+    )
+    array_energy = logical_evaluations * profile.eval_energy_pj
+    noc_energy = (activation_broadcast_bytes + noc_partial_bytes) * profile.noc_energy_pj_per_byte
+    partial_energy = partial_accumulation_ops * profile.accumulator_energy_pj_per_op
+    peripheral_energy = (
+        output_elements * profile.peripheral_energy_pj_per_element
+        + output_bytes * profile.output_energy_pj_per_byte
+    )
+    duration = (
+        weight_load_service_ns
+        + decode_service_ns
+        + activation_convert_service_ns
+        + program_service_ns
+        + array_service_ns
+        + activation_array_service_ns
+        + noc_service_ns
+        + partial_accumulator_service_ns
+        + peripheral_service_ns
+    )
+
+    arithmetic_contract = {
+        "arithmetic_mode": profile.arithmetic_mode,
+        "operand_arithmetic": workload.cim_arithmetic,
+        "accumulation_model": "fp32_rounded_partial_sums",
+        "accumulator_width_interpretation": "FP32_format_not_exact_sum_proof",
+        "evidence": EvidenceStatus.ANALYTICAL.value,
+        "calibrated": False,
+        "numerical_equivalence_verified": False,
+        "bit_slice_model_applied": False,
+        "contract_basis": profile.float_contract_basis,
+        "float_cycles_per_eval": profile.float_cycles_per_eval,
+        "float_accumulator_outputs_per_cycle": profile.float_accumulator_outputs_per_cycle,
+        "timing_completeness": "analytical_hardware_assumption",
+        "unmodeled_terms": (
+            "rounding_overflow_subnormals_and_reduction_order",
+            "floating_output_conversion_uses_generic_peripheral_proxy",
+            "floating_energy_uses_unvalidated_profile_coefficients",
+        ),
+    }
+    audit = {
+        "mode": profile.weight_conversion_mode,
+        "formats": tuple(sorted(set(fmt for fmt, _ in segments))),
+        "tile_m": tile_m,
+        "tile_k": tile_k,
+        "tile_n": tile_n,
+        "tiles_total": tile_count,
+        "tile_count": tile_count,
+        "tile_shape_counts": tuple(tile_shape_counts),
+        "m_tile_count": m_tile_count,
+        "k_tile_count": k_tile_count,
+        "n_tile_count": n_tile_count,
+        "packed_read_bytes": packed_weight_read_bytes,
+        "packed_weight_payload_read_bytes": packed_payload_read_bytes,
+        "packed_weight_metadata_read_bytes": packed_metadata_read_bytes,
+        "dense_padded_bytes": dense_weight_scratch_write_bytes,
+        "dense_weight_scratch_write_bytes": dense_weight_scratch_write_bytes,
+        "dense_weight_array_read_bytes": dense_weight_array_read_bytes,
+        "scratch_peak_bytes": scratch_peak_bytes,
+        "array_peak_bytes": array_peak_bytes,
+        "array_storage_bytes": array_peak_bytes,
+        "input_storage_bits": 32 if fp32_input else 16,
+        "fp32_input_conversion": fp32_input,
+        "loads_per_invocation": tile_count,
+        "conversions_per_invocation": tile_count,
+        "conversion_count": tile_count,
+        "weight_decode_elements": decode_elements,
+        "partial_accumulation_ops": partial_accumulation_ops,
+        "partial_accumulation_extra_compute_ops": partial_accumulation_ops,
+        "transfer_input_bytes": activation_source_read_bytes,
+        "transfer_weight_bytes": packed_weight_read_bytes,
+        "transfer_output_bytes": output_bytes,
+        "transfer_partial_read_bytes": partial_read_bytes,
+        "transfer_partial_write_bytes": partial_write_bytes,
+        "transfer_byte_convention": {
+            "transfer_input_bytes": "source activation reads, repeated per N/K tile",
+            "transfer_weight_bytes": "packed payload plus quantization metadata reads, repeated per M tile",
+            "transfer_output_bytes": "final output write once per M/N tile",
+            "transfer_partial_read_bytes": "FP32 partial-sum backing reads between K tiles",
+            "transfer_partial_write_bytes": "FP32 partial-sum backing writes between K tiles",
+        },
+        "ordered_stream_model": "serial_M_then_N_then_K_tile_stream",
+        "lifecycle": "cold_per_call_single_tile_buffer_no_cross_call_reuse_no_double_buffer",
+        "scratch_lifetime": "one_tile_packed_dense_activation_result_buffers",
+        "incoming_transfer_safety": "planner_must_include_input_weight_partial_and_output_transfers",
+        "array_replication": 1,
+        "array_storage_separate_from_scratch": True,
+        "calibrated": False,
+        "numerical_equivalence_verified": False,
+        "contract_basis": profile.conversion_contract_basis,
+        "weight_decode_elements_per_ns": profile.weight_decode_elements_per_ns,
+        "activation_fp32_to_fp16_elements_per_ns": profile.activation_fp32_to_fp16_elements_per_ns,
+        "energy_coefficients_unvalidated": True,
+        "no_free_traffic": True,
+        "stage_service_ns": {
+            "weight_load": weight_load_service_ns,
+            "weight_decode": decode_service_ns,
+            "activation_fp32_to_fp16": activation_convert_service_ns,
+            "dense_weight_program": program_service_ns,
+            "activation_load": activation_array_service_ns,
+            "array_eval": array_service_ns,
+            "partial_transfer": noc_service_ns,
+            "partial_accumulate": partial_accumulator_service_ns,
+            "output": peripheral_service_ns,
+        },
+    }
+
+    demands = [
+        ResourceDemand(
+            resource_id=profile.load_resource_id,
+            service_ns=duration,
+            bytes_moved=(
+                packed_weight_read_bytes * 2
+                + dense_weight_scratch_write_bytes
+                + dense_weight_array_read_bytes
+            ),
+            energy_pj=load_energy + decode_energy + program_energy,
+        ),
+        ResourceDemand(
+            resource_id=profile.array_resource_id,
+            service_ns=array_service_ns,
+            energy_pj=array_energy,
+            work_units=float(logical_evaluations),
+        ),
+        ResourceDemand(
+            resource_id=profile.activation_resource_id,
+            service_ns=activation_convert_service_ns + activation_array_service_ns,
+            bytes_moved=(
+                activation_source_read_bytes
+                + activation_fp16_scratch_write_bytes
+                + activation_fp16_read_bytes
+            ),
+            energy_pj=activation_energy,
+        ),
+        ResourceDemand(
+            resource_id=profile.noc_resource_id,
+            service_ns=noc_service_ns,
+            bytes_moved=activation_broadcast_bytes + noc_partial_bytes,
+            energy_pj=noc_energy,
+        ),
+        ResourceDemand(
+            resource_id=profile.accumulator_resource_id,
+            service_ns=partial_accumulator_service_ns,
+            bytes_moved=noc_partial_bytes,
+            energy_pj=partial_energy,
+            work_units=float(partial_accumulation_ops),
+        ),
+        ResourceDemand(
+            resource_id=profile.peripheral_resource_id,
+            service_ns=peripheral_service_ns,
+            bytes_moved=output_bytes,
+            energy_pj=peripheral_energy,
+            work_units=float(output_elements),
+        ),
+    ]
+    phase = CostPhase(
+        name="weight_load",
+        category=TaskCategory.COMPUTE,
+        demands=tuple(demands),
+        metadata={
+            "weight_conversion": audit,
+            "arithmetic_contract": arithmetic_contract,
+        },
+    )
+    return CostEstimate(
+        phases=(phase,),
+        useful_ops=workload.operations,
+        utilization=min(1.0, workload.m * workload.k * workload.n / float(padded_work_elements)),
+        metadata={
+            "model": "digital_sram_cim",
+            "arithmetic_contract": arithmetic_contract,
+            "profile": profile.name,
+            "weights_resident": False,
+            "n_m": _ceil_div(workload.m, profile.p_m),
+            "n_k": _ceil_div(workload.k, profile.p_k),
+            "n_n": _ceil_div(workload.n, profile.p_n),
+            "tile_m": tile_m,
+            "tile_k": tile_k,
+            "tile_n": tile_n,
+            "tile_count": tile_count,
+            "weight_replication": 1,
+            "resident_weight_bytes": 0,
+            "array_storage_bytes": array_peak_bytes,
+            "transfer_input_bytes": activation_source_read_bytes,
+            "transfer_weight_bytes": packed_weight_read_bytes,
+            "transfer_output_bytes": output_bytes,
+            "transfer_partial_read_bytes": partial_read_bytes,
+            "transfer_partial_write_bytes": partial_write_bytes,
+            "required_accumulator_bits": 32,
+            "array_cycles": array_cycles,
+            "array_service_ns": array_service_ns,
+            "reduce_service_ns": partial_accumulator_service_ns,
+            "weight_conversion": audit,
+        },
+    )
+
+
 def _estimate_cim_converted(profile, workload, weights_resident):
     """Cold, full-matrix conversion in dedicated CIM-local scratch; no reuse claim."""
     if weights_resident:
@@ -5280,6 +5816,8 @@ def estimate_cim_gemm(
 
     if workload.mmq_work is not None or workload.mmvq_work is not None:
         raise ValueError("MMQ/MMVQ source work is GPU-only")
+    if profile.weight_conversion_mode == "packed_to_fp16_tiled_cold":
+        return _estimate_cim_tiled_converted(profile, workload, weights_resident)
     if profile.weight_conversion_mode == "packed_to_fp16_cold" and workload.packed_weight_formats:
         return _estimate_cim_converted(profile, workload, weights_resident)
     floating = workload.cim_arithmetic == "fp16"

@@ -222,6 +222,9 @@ def mapping_input_payload(
             "hardware_name": scenario.placement.hardware_name,
             "parallel": to_primitive(scenario.placement.parallel),
             "kv_policy": kv_policy,
+            "linear_state_offload_mode": scenario.placement.metadata.get(
+                "linear_state_offload_mode", "mirror"
+            ),
             "aggregate_weight_backing": (
                 scenario.placement.tensor_to_component.get("model_weights")
             ),

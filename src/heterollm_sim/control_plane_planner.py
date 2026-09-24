@@ -100,8 +100,28 @@ class PlacementPolicy:
     gpu_loadable_layers: Optional[int] = None
     gpu_loadable_order: str = "tail"
     tied_weight_runtime_copies: bool = False
+    operator_targets: Mapping[str, str] = field(default_factory=dict)
+    weight_tensor_targets: Mapping[str, str] = field(default_factory=dict)
+    kv_cache_target: Optional[str] = None
+    linear_state_target: Optional[str] = None
+    linear_state_offload_target: Optional[str] = None
+    kv_layer_targets: Mapping[str, str] = field(default_factory=dict)
+    linear_state_layer_targets: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        for name in ("operator_targets", "weight_tensor_targets", "kv_layer_targets", "linear_state_layer_targets"):
+            targets = getattr(self, name)
+            if not isinstance(targets, Mapping) or any(
+                not isinstance(key, str) or not key.strip()
+                or not isinstance(value, str) or not value.strip()
+                for key, value in targets.items()
+            ):
+                raise ValueError("{} must map non-empty names to component IDs".format(name))
+            object.__setattr__(self, name, dict(targets))
+        for name in ("kv_cache_target", "linear_state_target", "linear_state_offload_target"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise ValueError("{} must be a non-empty component ID".format(name))
         mode = _normalized(self.mode)
         objective = _normalized(self.objective)
         solver = _normalized(self.solver)
@@ -919,6 +939,14 @@ def plan_runtime_placement(
         execution_view,
         split_tied_runtime_copies=split_tied_runtime_copies,
     )
+    requirements = _constrain_memory_targets(scenario, options, requirements, execution_view)
+    known_op_keys = {r.mapping_key for r in requirements if r.mapping_key and not r.state_tensor}
+    unknown_op_keys = set(options.operator_targets) - known_op_keys
+    if unknown_op_keys:
+        raise ValueError("operator_targets has unknown operator keys: " + ", ".join(sorted(unknown_op_keys)))
+    unknown_op_components = set(options.operator_targets.values()) - set(scenario.hardware.component_map())
+    if unknown_op_components:
+        raise ValueError("operator_targets has unknown components: " + ", ".join(sorted(unknown_op_components)))
     run_context = replace(
         run_context,
         load_policy_targets=_load_policy_targets(options, requirements),
@@ -939,7 +967,7 @@ def plan_runtime_placement(
     for component in scenario.hardware.components:
         if (
             component.capacity_bytes == 0
-            and _kind(component) in OFFLOAD_STORAGE_COMPONENT_KINDS
+            and component.memory_class == "offload"
         ):
             warnings.append(
                 "卸载存储 {} 的 capacity_bytes=0（容量未知）；控制平面不会将其作为无限容量，"
@@ -947,7 +975,7 @@ def plan_runtime_placement(
             )
         elif (
             component.capacity_bytes == 0
-            and _kind(component) in ACTIVE_MEMORY_COMPONENT_KINDS
+            and component.is_active_memory
         ):
             warnings.append(
                 "V4 控制平面将活动内存 {} 的 capacity_bytes=0（容量未知）"
@@ -1012,6 +1040,12 @@ def plan_runtime_placement(
             rejection_reasons.extend([(timeout_reason,)] * remaining)
             warnings.append(timeout_reason)
             break
+        operator_target = options.operator_targets.get(requirement.mapping_key)
+        if operator_target is not None:
+            candidates = tuple(c for c in candidates if c.component_id == operator_target)
+            if not candidates:
+                rejected = tuple(rejected) + ("operator_targets excludes all legal candidates for "
+                    + str(requirement.mapping_key) + " -> " + operator_target,)
         candidate_lists.append(candidates)
         rejection_reasons.append(rejected)
 
@@ -1097,6 +1131,7 @@ def plan_runtime_placement(
     generated_op_keys: List[str] = []
     generated_tensor_ids: List[str] = []
     cold_cim_backing_components: Dict[str, str] = {}
+    cold_cim_backing_bytes: Dict[str, int] = {}
     for index, (requirement, candidate) in enumerate(
         zip(requirements, solve.assignment)
     ):
@@ -1156,6 +1191,9 @@ def plan_runtime_placement(
                 cold_cim_backing_components[requirement.tensor_id] = (
                     candidate.streaming_backing_component_id
                 )
+                cold_cim_backing_bytes[requirement.tensor_id] = (
+                    _packed_backing_bytes(requirement)
+                )
         decisions.append(
             PlacementAction(
                 item_id=requirement.item_id,
@@ -1193,6 +1231,13 @@ def plan_runtime_placement(
             ):
                 cold_cim_streaming_tensors[decision.tensor_id] = decision.tensor_bytes
                 tensor_bytes.pop(decision.tensor_id, None)
+                # The CIM mapping is transient; the packed source is not.
+                # Give it its own generated storage entry so validation and
+                # later replanning use the same capacity as the solver.
+                backing_id = decision.tensor_id + "#cold_backing"
+                tensor_mapping[backing_id] = cold_cim_backing_components[decision.tensor_id]
+                tensor_bytes[backing_id] = cold_cim_backing_bytes[decision.tensor_id]
+                generated_tensor_ids.append(backing_id)
     for decision in decisions:
         if decision.padded_weight_bytes and decision.tensor_id:
             targets = decision.physical_tensor_component_ids or (
@@ -1267,6 +1312,10 @@ def plan_runtime_placement(
                 else None
             ),
             "backing_component_id": cold_cim_backing_components.get(tensor_id),
+            "backing_storage_tensor_id": (
+                tensor_id + "#cold_backing"
+                if tensor_id in cold_cim_streaming_tensors else None
+            ),
             "residency": residency,
             "shard_policy": (
                 "tp_ep_expert_shard"
@@ -1325,6 +1374,11 @@ def plan_runtime_placement(
         )
     placement_metadata = dict(scenario.placement.metadata)
     options_payload = to_primitive(options)
+    for name in ("operator_targets", "weight_tensor_targets", "kv_cache_target", "linear_state_target",
+                 "linear_state_offload_target",
+                 "kv_layer_targets", "linear_state_layer_targets"):
+        if not options_payload.get(name):
+            options_payload.pop(name, None)
     if not options.tied_weight_runtime_copies:
         options_payload.pop("tied_weight_runtime_copies", None)
     rank_weight_shards: Dict[str, List[Dict[str, Any]]] = {}
@@ -1371,6 +1425,21 @@ def plan_runtime_placement(
                 }
             )
         rank_weight_shards[decision.tensor_id] = entries
+    for tensor_id, component_id in cold_cim_backing_components.items():
+        backing_id = tensor_id + "#cold_backing"
+        byte_count = cold_cim_backing_bytes[tensor_id]
+        # One shared packed source, not a dense copy per CIM execution rank.
+        rank_weight_shards[backing_id] = [{
+            **rank_weight_shards[tensor_id][0],
+            "component_id": component_id,
+            "storage_component_id": component_id,
+            "shard_id": backing_id,
+            "replica_id": backing_id,
+            "logical_bytes": byte_count,
+            "physical_bytes": byte_count,
+            "shard_kind": "packed_backing",
+            "residency": "resident_storage",
+        }]
     policy_metadata = {
         "options": options_payload,
     }
@@ -1433,6 +1502,22 @@ def plan_runtime_placement(
         "decision": decision_metadata,
         "evidence": evidence_metadata,
     }
+    # Generated layer maps are replaced on every solve, never treated as locks.
+    tier_maps = {}
+    for tensor in ("kv_cache", "linear_state"):
+        layer_map = {
+            r.layer.layer_id: tensor_mapping[r.tensor_id]
+            for r in requirements
+            if r.state_tensor and r.layer is not None
+            and r.tensor_id == "{}.{}".format(r.layer.layer_id, tensor)
+            and r.tensor_id in generated_tensor_ids
+        }
+        if layer_map:
+            tier_maps["kv_layer_components" if tensor == "kv_cache" else "linear_state_layer_components"] = layer_map
+    if tier_maps:
+        placement_metadata["memory_tiers"] = tier_maps
+    else:
+        placement_metadata.pop("memory_tiers", None)
     placement_metadata["control_plane"] = control_plane_metadata
     placement_metadata["logical_weight_aliases"] = dict(logical_aliases)
     placement_metadata.pop("auto_mapping", None)
@@ -2287,6 +2372,86 @@ def _derive_requirements(
     return tuple(requirements)
 
 
+def _constrain_memory_targets(
+    scenario: ScenarioConfig,
+    options: PlacementPolicy,
+    requirements: Sequence[_Requirement],
+    execution_view: ModelGraphExecutionView,
+) -> Tuple[_Requirement, ...]:
+    """Constrain candidates, never accept authored placement as solver output."""
+
+    components = scenario.hardware.component_map()
+    weights = {r.tensor_id for r in requirements if r.tensor_id and not r.state_tensor}
+    unknown = set(options.weight_tensor_targets) - weights
+    if unknown:
+        raise ValueError("weight_tensor_targets names unknown weight tensors: {}".format(sorted(unknown)))
+    layers = {item.layer.layer_id: item.layer for item in execution_view.layer_instances}
+    state_targets = {"kv_cache": options.kv_cache_target, "linear_state": options.linear_state_target}
+    existing_states = {r.tensor_id for r in requirements if r.state_tensor}
+    for tensor, target in state_targets.items():
+        if target and tensor not in existing_states:
+            raise ValueError("{} target requires that state in the model".format(tensor))
+    result = []
+    for requirement in requirements:
+        target = (state_targets.get(requirement.tensor_id) if requirement.state_tensor
+                  else options.weight_tensor_targets.get(requirement.tensor_id))
+        if target:
+            if requirement.fixed_component and requirement.fixed_component != target:
+                raise ValueError("{} target conflicts with kv_policy.cache_component".format(requirement.tensor_id))
+            requirement = replace(requirement, fixed_component=target)
+        result.append(requirement)
+    if options.linear_state_offload_target:
+        if "linear_state" not in existing_states:
+            raise ValueError("linear_state_offload_target requires linear state in the model")
+        if options.kv_layer_targets or options.linear_state_layer_targets:
+            raise ValueError("linear_state_offload_target cannot migrate a static layer partition")
+        # Minimum one-request footprint is model geometry, not current workload.
+        # Serving remains the sole owner of live/reserved state accounting.
+        from .serving import _linear_state_bytes_per_request
+
+        result.append(_Requirement(
+            item_id="linear_state_offload", kind="state_tensor", mapping_key=None,
+            tensor_id="linear_state_offload", tensor_bytes=_linear_state_bytes_per_request(scenario),
+            state_tensor=True, fixed_component=options.linear_state_offload_target,
+            operator_class=OperatorClass.MEMORY,
+        ))
+    for tensor, targets in (("kv_cache", options.kv_layer_targets),
+                            ("linear_state", options.linear_state_layer_targets)):
+        for layer_id, target in sorted(targets.items()):
+            layer = layers.get(layer_id)
+            if layer is None or layer.is_linear_attention != (tensor == "linear_state"):
+                raise ValueError("{} layer target {} has no matching state".format(tensor, layer_id))
+            native = scenario.placement.metadata.get("llama_cpp_kv_layer_components", {})
+            if tensor == "kv_cache" and isinstance(native, Mapping) and native.get(layer_id) not in (None, target):
+                raise ValueError("KV layer target conflicts with native llama.cpp placement")
+            tensor_id = "{}.{}".format(layer_id, tensor)
+            result.append(_Requirement(
+                item_id=tensor_id, kind="state_tensor", mapping_key=None,
+                tensor_id=tensor_id, tensor_bytes=0, layer=layer,
+                state_tensor=True, fixed_component=target, operator_class=OperatorClass.MEMORY,
+            ))
+    for requirement in result:
+        target = requirement.fixed_component
+        if target is None:
+            continue
+        component = components.get(target)
+        if component is None:
+            raise ValueError("memory target {} does not exist".format(target))
+        if requirement.tensor_id == "linear_state_offload":
+            if not component.is_storage or not component.is_writable:
+                raise ValueError("linear_state_offload requires writable storage")
+            if component.capacity_bytes < requirement.tensor_bytes:
+                raise ValueError("linear_state_offload target lacks one-request state capacity")
+            if options.linear_state_target == target:
+                raise ValueError("linear state cache and offload components must be distinct")
+        elif requirement.state_tensor:
+            if not component.is_active_memory or not component.is_writable:
+                raise ValueError("{} requires writable active memory, not {}".format(requirement.tensor_id, target))
+        elif not component.is_storage and not _is_cim(component):
+            raise ValueError("weight target {} must be storage or CIM".format(target))
+    return tuple(result)
+
+
 def _state_tensor_sizes(
     scenario: ScenarioConfig,
     execution_view: Optional[ModelGraphExecutionView] = None,
@@ -2468,7 +2633,7 @@ def _rank_local_store_pools(
             explicit = components.get(rank.memory_component_id)
             if (
                 explicit is not None
-                and _kind(explicit) in ACTIVE_MEMORY_COMPONENT_KINDS
+                and explicit.is_active_memory
                 and _writable(explicit)
             ):
                 try:
@@ -2490,7 +2655,7 @@ def _rank_local_store_pools(
         direct_ids = adjacent.get(rank.component_id, set())
         for store in stores:
             kind = _kind(store)
-            if kind not in ACTIVE_MEMORY_COMPONENT_KINDS or not _writable(store):
+            if not store.is_active_memory or not _writable(store):
                 continue
             try:
                 route_cost = _route_cost(
@@ -2519,6 +2684,19 @@ def _rank_local_store_pools(
     return tuple(result)
 
 
+def _packed_backing_bytes(requirement: _Requirement) -> int:
+    """Persistent source format, excluding dense CIM padding and scratch."""
+    if requirement.matrices and all(
+        matrix.weight_storage_bytes is not None for matrix in requirement.matrices
+    ):
+        return sum(
+            (matrix.weight_storage_bytes + matrix.weight_metadata_bytes)
+            * matrix.resident_count
+            for matrix in requirement.matrices
+        )
+    return requirement.tensor_bytes
+
+
 def _rank_local_weight_candidates(
     scenario: ScenarioConfig,
     requirement: _Requirement,
@@ -2543,9 +2721,20 @@ def _rank_local_weight_candidates(
     ep_degree = max(1, parallel.ep_degree)
     shard_degree = tp_degree * ep_degree if requirement.kind == "experts" else tp_degree
     nominal_shard_bytes = _ceil_div(requirement.tensor_bytes, shard_degree)
-    pools = _rank_local_store_pools(
-        scenario, router, ranks, stores, nominal_shard_bytes
-    )
+    if requirement.fixed_component:
+        selected = tuple(store for store in stores if store.component_id == requirement.fixed_component)
+        if not selected:
+            return ()
+        try:
+            for rank in ranks:
+                _route_cost(router, selected[0].component_id, rank.component_id, max(1, nominal_shard_bytes))
+        except ValueError:
+            return ()
+        pools = tuple(selected for _ in ranks)
+    else:
+        pools = _rank_local_store_pools(
+            scenario, router, ranks, stores, nominal_shard_bytes
+        )
     if any(not pool for pool in pools):
         return ()
     alternatives = max(len(pool) for pool in pools)
@@ -2569,6 +2758,26 @@ def _rank_local_weight_candidates(
             # Each EP group owns another dense TP replica.  Expert shards use
             # a unique TP×EP index and therefore are not replicated here.
             physical_bytes = logical_bytes
+            if requirement.matrices and all(
+                matrix.weight_storage_bytes is not None
+                for matrix in requirement.matrices
+            ):
+                physical_bytes = 0
+                for matrix in requirement.matrices:
+                    projection = materialize_weight_projection(
+                        requirement.layer.metadata,
+                        matrix.projection_id,
+                        tp_degree=tp_degree,
+                        tp_rank=rank.tp_rank,
+                        allow_padding=parallel.allow_padding,
+                    )
+                    count = matrix.resident_count
+                    if requirement.kind == "experts":
+                        count, remainder = divmod(count, ep_degree)
+                        count += int(rank.ep_rank < remainder)
+                    physical_bytes += (
+                        projection.weight_storage_bytes + projection.weight_metadata_bytes
+                    ) * count
             primary_offset = requirement_index % len(pool)
             store = pool[(primary_offset + alternative) % len(pool)]
             shard = RuntimeTensorShard(
@@ -2660,9 +2869,18 @@ def _cim_rank_padded_weight_bytes(
         raise ValueError("缺少 CIM profile 或层定义")
     activation_bits = _activation_bits(layer)
     weight_bits = _weight_bits(layer)
-    if activation_bits not in profile.supported_activation_bits:
+    if profile.weight_conversion_mode != "disabled":
+        if (scenario.placement.parallel.tp_degree != 1
+                or scenario.placement.parallel.ep_degree != 1
+                or scenario.placement.parallel.pp_degree != 1):
+            raise ValueError("CIM conversion currently requires TP=EP=PP=1")
+        component = scenario.hardware.get_component(cim_component_id)
+        if component.capacity_bytes < profile.weight_capacity_bytes + profile.conversion_scratch_capacity_bytes:
+            raise ValueError("CIM component capacity must cover reserved array plus conversion scratch")
+    if (activation_bits not in profile.supported_activation_bits
+            and not (profile.weight_conversion_mode != "disabled" and activation_bits == 32)):
         raise ValueError("不支持的 CIM 激活位宽 {}".format(activation_bits))
-    if weight_bits not in profile.supported_weight_bits:
+    if weight_bits not in profile.supported_weight_bits and profile.weight_conversion_mode == "disabled":
         raise ValueError("不支持的 CIM 权重位宽 {}".format(weight_bits))
     parallel = _run_parallel_plan(scenario, run_context)
     total = 0
@@ -2675,25 +2893,29 @@ def _cim_rank_padded_weight_bytes(
                 resident_count += 1
         if resident_count <= 0:
             continue
-        required_accumulator = (
-            activation_bits
-            + weight_bits
-            + int(math.ceil(math.log(max(1, matrix.k), 2)))
-            + profile.accumulator_guard_bits
-        )
-        if min(32, profile.accumulator_bits) < required_accumulator:
-            raise ValueError(
-                "累加器位宽 {} 小于所需位宽 {}".format(
-                    min(32, profile.accumulator_bits), required_accumulator
-                )
-            )
+        # Validate the exact arithmetic/storage contract using execution's
+        # estimator. FP16/FP32 is an explicit hardware assumption, not an
+        # inference from the integer exact-accumulation width formula.
+        estimate = estimate_cim_gemm(profile, GemmWorkload(
+            m=1, k=matrix.k, n=local_n,
+            activation_bits=activation_bits,
+            weight_bits=matrix.weight_bits if matrix.weight_bits is not None else weight_bits,
+            output_bits=max(16, activation_bits), accumulator_bits=32,
+            cim_arithmetic=_cim_operand_arithmetic(layer),
+            packed_weight_formats=matrix.packed_weight_formats,
+            packed_weight_transform_operations=matrix.packed_weight_transform_operations,
+            weight_metadata_bytes=matrix.weight_metadata_bytes,
+            weight_storage_bytes=(
+                matrix.weight_storage_bytes if parallel.tp_degree == 1 else None
+            ),
+        ), weights_resident=scenario.weights_resident)
         padded_elements = (
             _ceil_div(matrix.k, profile.p_k)
             * profile.p_k
             * _ceil_div(local_n, profile.p_n)
             * profile.p_n
         )
-        matrix_bytes = _storage_bytes(padded_elements, weight_bits)
+        matrix_bytes = int(estimate.metadata["resident_weight_bytes"])
         if matrix_bytes > profile.weight_capacity_bytes:
             raise ValueError(
                 "单个 rank-local 填充矩阵需要 {} 字节，但 profile 容量只有 {} 字节".format(
@@ -2834,7 +3056,7 @@ def _candidates_for_requirement(
         )
         for store in state_stores:
             _check_mapping_deadline(run_context)
-            if _kind(store) not in ACTIVE_MEMORY_COMPONENT_KINDS:
+            if not store.is_active_memory and requirement.tensor_id != "linear_state_offload":
                 rejected.append(
                     "{} 不是活动内存".format(store.component_id)
                 )
@@ -2842,11 +3064,18 @@ def _candidates_for_requirement(
             if not _writable(store):
                 rejected.append("{} 不是可写的活动内存".format(store.component_id))
                 continue
+            if requirement.tensor_id == "linear_state" and options.linear_state_offload_target:
+                offload = options.linear_state_offload_target
+                if (store.component_id == offload
+                        or not _has_route(router, store.component_id, offload)
+                        or not _has_route(router, offload, store.component_id)):
+                    rejected.append("linear state active/offload require distinct bidirectionally reachable targets")
+                    continue
             usage = requirement.tensor_bytes
             if base_usage.get(store.component_id, 0) + usage > capacities[store.component_id]:
                 if (
                     store.capacity_bytes <= 0
-                    and _kind(store) in ACTIVE_MEMORY_COMPONENT_KINDS
+                    and store.is_active_memory
                 ):
                     rejected.append(
                         "V4 控制平面将活动内存 {} 的 capacity_bytes=0（容量未知）"
@@ -2933,6 +3162,10 @@ def _candidates_for_requirement(
     for compute in compute_candidates:
         _check_mapping_deadline(run_context)
         is_cim = _is_cim(compute)
+        if requirement.fixed_component:
+            fixed = components[requirement.fixed_component]
+            if (is_cim and compute.component_id != fixed.component_id) or (not is_cim and _is_cim(fixed)):
+                continue
         padded_bytes = 0
         if is_cim:
             if not requirement.cim_eligible or requirement.layer is None:
@@ -2965,6 +3198,11 @@ def _candidates_for_requirement(
                     shard.storage_component_id for shard in rank_shards
                 )
             )
+            if requirement.fixed_component and any(
+                target != requirement.fixed_component for target in physical_targets
+            ):
+                rejected.append("fixed weight target conflicts with replicated CIM ownership")
+                continue
             cold_cim_streaming = (
                 options.allow_cold_cim_streaming
                 and not scenario.weights_resident
@@ -2983,7 +3221,7 @@ def _candidates_for_requirement(
                 failed_component = components[capacity_failure[0]]
                 if (
                     failed_component.capacity_bytes <= 0
-                    and _kind(failed_component) in ACTIVE_MEMORY_COMPONENT_KINDS
+                    and failed_component.is_active_memory
                 ):
                     rejected.append(
                         "V4 控制平面将活动内存 {} 的 capacity_bytes=0（容量未知）"
@@ -3041,7 +3279,10 @@ def _candidates_for_requirement(
                     continue
             else:
                 backing = None
-            usage = () if cold_cim_streaming else resident_usage
+            usage = (
+                ((backing.component_id, _packed_backing_bytes(requirement)),)
+                if cold_cim_streaming else resident_usage
+            )
             cost = _operator_cost(
                 scenario,
                 options.objective,
@@ -3067,7 +3308,7 @@ def _candidates_for_requirement(
                     reason=(
                         (
                             "CIM GEMM 使用经路由的冷加载和临时阵列驻留"
-                            if not usage and requirement.tensor_id
+                            if cold_cim_streaming and requirement.tensor_id
                             else "符合条件的 GEMM 权重按 TP/EP rank 分片并常驻于对应 CIM 目标"
                         )
                         + _logical_alias_reason(requirement)
@@ -3182,8 +3423,7 @@ def _candidates_for_requirement(
                 if capacity_failure is not None:
                     failed_component = components[capacity_failure[0]]
                     if (
-                        _kind(failed_component)
-                        in OFFLOAD_STORAGE_COMPONENT_KINDS
+                        failed_component.memory_class == "offload"
                         and failed_component.capacity_bytes <= 0
                     ):
                         rejected.append(
@@ -3193,8 +3433,7 @@ def _candidates_for_requirement(
                             )
                         )
                     elif (
-                        _kind(failed_component)
-                        in ACTIVE_MEMORY_COMPONENT_KINDS
+                        failed_component.is_active_memory
                         and failed_component.capacity_bytes <= 0
                     ):
                         rejected.append(
@@ -3369,24 +3608,11 @@ def _operator_cost(
         gpu_component_id: str,
         memory_component_id: Optional[str] = None,
     ) -> Tuple[GPUProfile, HBMProfile]:
-        gpu_profile = scenario.resolve_component_profile(
-            gpu_component_id, GPUProfile
-        )
-        selected_memory = memory_component_id
-        if selected_memory is not None:
-            memory_component = scenario.hardware.get_component(
-                selected_memory
-            )
-            if _kind(memory_component) != "hbm":
-                selected_memory = None
-        if selected_memory is None:
-            selected_memory = nearest_profile_component_id(
-                gpu_component_id, "hbm"
-            )
-        memory_profile = scenario.resolve_component_profile(
-            selected_memory, HBMProfile
-        )
-        return gpu_profile, memory_profile
+        # Use the same explicit DRAM/HBF binding as execution lowering. A
+        # surrogate must not silently replace a selected tier with nearby HBM.
+        from .planner import _gpu_profiles
+
+        return _gpu_profiles(scenario, gpu_component_id, memory_component_id)
 
     def typed_workload(m: int) -> object:
         activation_bits = _activation_bits(layer)
@@ -3569,7 +3795,6 @@ def _operator_cost(
             descriptor_backing = (
                 matrix.weight_storage_bytes is not None
                 and not requirement.dynamic_rhs
-                and not _is_cim(compute)
             )
             weight_storage_bytes = (
                 matrix.weight_storage_bytes
@@ -3621,6 +3846,7 @@ def _operator_cost(
                 ),
                 output_bits=max(16, _activation_bits(layer)),
                 accumulator_bits=32,
+                cim_arithmetic=(_cim_operand_arithmetic(layer) if _is_cim(compute) else "integer"),
                 packed_weight_formats=(
                     matrix.packed_weight_formats
                     if descriptor_backing
@@ -3641,6 +3867,14 @@ def _operator_cost(
                 cim_profile = scenario.resolve_component_profile(
                     compute, DigitalSramCimProfile
                 )
+                if cim_profile.weight_conversion_mode != "disabled":
+                    # Generic mapping probes may use M=2048 even for a two-token
+                    # workload. Scratch admission must use a realizable cohort.
+                    scheduler = scenario.workload.scheduler
+                    max_m = sum(max(1, r.prompt_tokens) for r in scenario.workload.requests)
+                    if scheduler is not None:
+                        max_m = min(max_m, scheduler.max_num_batched_tokens)
+                    workload = replace(workload, m=min(workload.m, max(1, max_m)))
                 total += estimate_cim_gemm(
                     cim_profile,
                     workload,
@@ -4819,6 +5053,8 @@ def _component_capacities(scenario: ScenarioConfig) -> Dict[str, int]:
             cim_profile = scenario.resolve_component_profile(
                 component, DigitalSramCimProfile
             )
+            if cim_profile.weight_conversion_mode != "disabled":
+                physical = max(0, component.capacity_bytes - cim_profile.conversion_scratch_capacity_bytes)
             physical = min(physical, cim_profile.weight_capacity_bytes)
         capacities[component.component_id] = physical
     return capacities
@@ -4850,6 +5086,20 @@ def _attention_head_dim(layer: LayerSpec) -> int:
     if value > 0:
         return value
     return int(math.ceil(layer.hidden_size / float(layer.attention_heads)))
+
+
+def _cim_operand_arithmetic(layer: LayerSpec) -> str:
+    from .precision import canonical_dtype
+
+    if _activation_bits(layer) >= 16:
+        dtype = canonical_dtype(layer.dtype)
+        if dtype in ("fp16", "float16", "f16"):
+            return "fp16"
+        if dtype in ("fp32", "float32", "f32"):
+            return "fp16"  # Estimator requires explicit conversion contract/rate.
+        if dtype in ("bf16", "bfloat16"):
+            raise ValueError("CIM floating path currently supports only explicit FP16 operands")
+    return "integer"
 
 
 def _activation_bits(layer: LayerSpec) -> int:
@@ -4964,6 +5214,13 @@ def _validate_v4_planner_boundary(scenario: ScenarioConfig) -> None:
         "gpu_loadable_layers",
         "gpu_loadable_order",
         "tied_weight_runtime_copies",
+        "operator_targets",
+        "weight_tensor_targets",
+        "kv_cache_target",
+        "linear_state_target",
+        "linear_state_offload_target",
+        "kv_layer_targets",
+        "linear_state_layer_targets",
     }
     unknown_options = sorted(set(raw_options) - public_options)
     if unknown_options:
@@ -5112,7 +5369,7 @@ def _requirement_stage(
     run_context: Optional[_MappingRunContext] = None,
 ) -> Optional[int]:
     plan = _run_parallel_plan(scenario, run_context)
-    if requirement.state_tensor:
+    if requirement.state_tensor and requirement.layer is None:
         return None
     if requirement.kind in {
         "lm_head",
@@ -5290,7 +5547,7 @@ def _select_cold_cim_backing_component(
     if not physical_targets:
         return None
     required_backing_bytes = max(
-        requirement.tensor_bytes,
+        _packed_backing_bytes(requirement),
         scenario.model.total_declared_weight_bytes,
     )
     target_bytes = _cold_cim_streaming_bytes_by_target(

@@ -316,12 +316,12 @@ def build_parallel_plan(
             memory_component = components[rank.memory_component_id]
             memory_kind = normalize_component_kind(memory_component.kind)
             if (
-                memory_kind not in ACTIVE_MEMORY_COMPONENT_KINDS
+                not memory_component.is_active_memory
                 or not memory_component.is_writable
             ):
                 reason = (
                     memory_kind
-                    if memory_kind not in ACTIVE_MEMORY_COMPONENT_KINDS
+                    if not memory_component.is_active_memory
                     else "read-only {}".format(memory_kind)
                 )
                 raise ValueError(

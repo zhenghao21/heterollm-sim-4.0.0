@@ -236,6 +236,7 @@ class KVCachePolicy:
     capacity_bytes: int
     capacity_pages: int
     offload_capacity_bytes: int
+    component_bytes_per_page: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -247,6 +248,7 @@ class LinearStatePolicy:
     capacity_requests: int
     offload_capacity_bytes: int
     offload_ratio: float = 1.0
+    component_bytes_per_request: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1875,6 +1877,10 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     state_offload_component = _optional_str(
         scenario.placement.tensor_to_component.get("linear_state_offload")
     )
+    # Access mirroring is a lowering policy; pressure mode does not disable
+    # the existing capacity reservation or boundary swap/restore machinery.
+    if scenario.placement.metadata.get("linear_state_offload_mode", "mirror") not in ("mirror", "pressure"):
+        raise ValueError("linear_state_offload_mode must be mirror or pressure")
     state_offload_ratio = float(
         scenario.placement.metadata.get("linear_state_offload_ratio", 1.0)
     )
@@ -2046,6 +2052,55 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     capacity_pages = capacity_bytes // bytes_per_page if bytes_per_page else 0
     state_offload_capacity = normalized_capacities["linear_state_offload"]
     offload_capacity = normalized_capacities["kv_offload"]
+    kv_component_bytes, state_component_bytes = _tier_state_layout(
+        scenario, cache_component, state_cache_component, page_tokens, kv_dtype
+    )
+    if kv_component_bytes or state_component_bytes:
+        # Static layer partitioning only: do not pretend a one-endpoint swap
+        # or native allocator knows how to migrate a distributed page/state.
+        resource_policy = _serving_resource_policy(scenario)
+        if (offload_component or state_offload_component
+                or kv_spec.preemption_mode == "swap"
+                or scheduler.preemption_policy == "swap"
+                or resource_policy.enabled
+                or (resource_policy.prompt_cache and resource_policy.prompt_cache.enabled)
+                or _scenario_runtime_allocation_contract(scenario)
+                or state_contract):
+            raise ValueError(
+                "memory_tiers supports static layer partitioning only; "
+                "swap/offload, managed residency and native allocation contracts "
+                "require distributed migration lowering"
+            )
+        if scenario.workload.mtp is not None and scenario.workload.mtp.candidate_tokens > 0:
+            raise ValueError("memory_tiers layer partitioning does not yet support MTP scratch-state capacity")
+        # Include unpartitioned state in the same per-component capacity proof.
+        if not kv_component_bytes and bytes_per_page and cache_component:
+            kv_component_bytes = {cache_component: bytes_per_page}
+        if not state_component_bytes and linear_state_bytes and state_cache_component:
+            state_component_bytes = {state_cache_component: linear_state_bytes}
+        dynamic_ids = {"kv_cache", "linear_state"} | {
+            "{}.{}".format(layer.layer_id, "linear_state" if layer.is_linear_attention else "kv_cache")
+            for layer in _execution_layers(scenario)
+        }
+        budgets = {
+            component: _dynamic_component_capacity(scenario, component, dynamic_ids)
+            for component in set(kv_component_bytes) | set(state_component_bytes)
+        }
+        state_capacity_requests = min(
+            [scheduler.max_num_seqs] + [budgets[c] // n for c, n in state_component_bytes.items() if n]
+        ) if state_component_bytes else 0
+        if explicit_state_capacity and linear_state_bytes:
+            state_capacity_requests = min(state_capacity_requests, declared_state_capacity // linear_state_bytes)
+        state_capacity = state_capacity_requests * linear_state_bytes
+        capacity_pages = min(
+            (max(0, budgets[c] - state_capacity_requests * state_component_bytes.get(c, 0)) // n
+             for c, n in kv_component_bytes.items() if n),
+            default=0,
+        )
+        if explicit_kv_capacity and bytes_per_page:
+            capacity_pages = min(capacity_pages, capacity_bytes // bytes_per_page)
+        capacity_bytes = capacity_pages * bytes_per_page
+        state_offload_capacity = offload_capacity = 0
     linear_state_policy = LinearStatePolicy(
         cache_component=state_cache_component,
         offload_component=state_offload_component,
@@ -2054,6 +2109,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         capacity_requests=state_capacity_requests,
         offload_capacity_bytes=state_offload_capacity,
         offload_ratio=state_offload_ratio,
+        component_bytes_per_request=state_component_bytes,
     )
     kv_policy = KVCachePolicy(
         cache_component=cache_component,
@@ -2069,6 +2125,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         capacity_bytes=capacity_pages * bytes_per_page,
         capacity_pages=capacity_pages,
         offload_capacity_bytes=offload_capacity,
+        component_bytes_per_page=kv_component_bytes,
     )
     if kv_policy.allocation_policy not in ("lazy", "eager"):
         raise ValueError("KV allocation_policy must be lazy or eager")
@@ -2192,9 +2249,21 @@ def _request_admission_reason(
             plan.kv_policy.capacity_pages,
         )
 
+    if plan.kv_policy.component_bytes_per_page or plan.linear_state_policy.component_bytes_per_request:
+        for component, capacity in _physical_runtime_limits(plan).items():
+            required = (
+                required_pages * plan.kv_policy.component_bytes_per_page.get(component, 0)
+                + plan.linear_state_policy.component_bytes_per_request.get(component, 0)
+            )
+            if required > capacity:
+                return "request {} partition on {} requires {} bytes, exceeding {} bytes".format(
+                    request.request_id, component, required, capacity
+                )
     shared_component = plan.kv_policy.cache_component
     if (
         shared_component
+        and not plan.kv_policy.component_bytes_per_page
+        and not plan.linear_state_policy.component_bytes_per_request
         and shared_component == plan.linear_state_policy.cache_component
     ):
         shared_required = (
@@ -2391,6 +2460,19 @@ class _PhysicalCapacityLedger:
         self.used_bytes[component] = updated
         return True
 
+    def can_adjust_many(self, deltas: Mapping[str, int]) -> bool:
+        return all(self.can_adjust(component, delta) for component, delta in deltas.items())
+
+    def adjust_many(self, deltas: Mapping[str, int]) -> bool:
+        if not self.can_adjust_many(deltas):
+            return False
+        for component, delta in deltas.items():
+            if component in self.limits and self.used_bytes.get(component, 0) + delta < 0:
+                raise RuntimeError("physical capacity ledger underflow on {}".format(component))
+        for component, delta in deltas.items():
+            self.adjust(component, delta)
+        return True
+
     def can_transfer(
         self,
         source_component: Optional[str],
@@ -2486,6 +2568,14 @@ class _KVLedger:
         self.offload_used_bytes = 0
         self.offload_peak_bytes = 0
 
+    def _active_deltas(self, byte_count: int) -> Mapping[str, int]:
+        if not self.policy.component_bytes_per_page:
+            return {self.policy.cache_component: byte_count} if self.policy.cache_component else {}
+        if not self.policy.bytes_per_page or byte_count % self.policy.bytes_per_page:
+            raise ValueError("partitioned KV allocation must use whole pages")
+        pages = byte_count // self.policy.bytes_per_page
+        return {component: pages * n for component, n in self.policy.component_bytes_per_page.items()}
+
     def pages_for_tokens(self, token_count: int) -> int:
         if token_count <= 0 or self.policy.bytes_per_page <= 0:
             return 0
@@ -2495,19 +2585,14 @@ class _KVLedger:
         delta_bytes = (pages - request.kv_pages) * self.policy.bytes_per_page
         return (
             self.used_pages + pages - request.kv_pages <= self.policy.capacity_pages
-            and self.physical.can_adjust(
-                self.policy.cache_component, delta_bytes
-            )
+            and self.physical.can_adjust_many(self._active_deltas(delta_bytes))
         )
 
     def resize(self, request: _MutableRequest, pages: int) -> bool:
         if pages < 0 or not self.can_resize(request, pages):
             return False
         delta = pages - request.kv_pages
-        if not self.physical.adjust(
-            self.policy.cache_component,
-            delta * self.policy.bytes_per_page,
-        ):
+        if not self.physical.adjust_many(self._active_deltas(delta * self.policy.bytes_per_page)):
             return False
         self.used_pages += delta
         self.persistent_used_pages += delta
@@ -2536,14 +2621,10 @@ class _KVLedger:
         delta_bytes = temporary_pages * self.policy.bytes_per_page
         if (
             self.used_pages + temporary_pages > self.policy.capacity_pages
-            or not self.physical.can_adjust(
-                self.policy.cache_component, delta_bytes
-            )
+            or not self.physical.can_adjust_many(self._active_deltas(delta_bytes))
         ):
             return False
-        if not self.physical.adjust(
-            self.policy.cache_component, delta_bytes
-        ):
+        if not self.physical.adjust_many(self._active_deltas(delta_bytes)):
             return False
         request.temporary_kv_pages = temporary_pages
         self.used_pages += temporary_pages
@@ -2561,13 +2642,15 @@ class _KVLedger:
         if temporary_pages <= 0:
             return
         byte_count = temporary_pages * self.policy.bytes_per_page
-        self.physical.adjust(self.policy.cache_component, -byte_count)
+        self.physical.adjust_many(self._active_deltas(-byte_count))
         self.used_pages -= temporary_pages
         self.temporary_used_pages -= temporary_pages
         request.temporary_kv_pages = 0
         self.temporary_releases += 1
 
     def offload(self, request: _MutableRequest) -> bool:
+        if self.policy.component_bytes_per_page:
+            return False
         pages = max(0, int(request.kv_pages))
         byte_count = pages * self.policy.bytes_per_page
         if pages <= 0:
@@ -2671,14 +2754,17 @@ class _LinearStateLedger:
         self.offload_peak_bytes = 0
         self.restore_events = 0
 
+    def _active_deltas(self, sign: int) -> Mapping[str, int]:
+        if self.policy.component_bytes_per_request:
+            return {component: sign * n for component, n in self.policy.component_bytes_per_request.items()}
+        return {self.policy.cache_component: sign * self.policy.bytes_per_request} if self.policy.cache_component else {}
+
     def allocate(self, request: _MutableRequest) -> bool:
         if self.policy.bytes_per_request <= 0 or request.linear_state_resident:
             return True
         if self.used_requests >= self.policy.capacity_requests:
             return False
-        if not self.physical.adjust(
-            self.policy.cache_component, self.policy.bytes_per_request
-        ):
+        if not self.physical.adjust_many(self._active_deltas(1)):
             return False
         self.used_requests += 1
         self.peak_requests = max(self.peak_requests, self.used_requests)
@@ -2690,13 +2776,13 @@ class _LinearStateLedger:
         if not request.linear_state_resident:
             return
         self.used_requests -= 1
-        self.physical.adjust(
-            self.policy.cache_component, -self.policy.bytes_per_request
-        )
+        self.physical.adjust_many(self._active_deltas(-1))
         self.releases += 1
         request.linear_state_resident = False
 
     def offload(self, request: _MutableRequest) -> bool:
+        if self.policy.component_bytes_per_request:
+            return False
         if not request.linear_state_resident:
             return True
         byte_count = self.policy.bytes_per_request
@@ -10612,6 +10698,10 @@ class _OnlineRuntime:
         target_pages: int,
         protected_request_ids: Sequence[str] = (),
     ) -> bool:
+        if self.plan.kv_policy.allocation_policy == "eager":
+            # A prefill/decode prefix must not release the generation headroom
+            # reserved at admission. Completion/preemption release explicitly.
+            target_pages = max(target_pages, owner.kv_pages)
         self.prompt_cache.ensure_capacity(
             max(0, int(target_pages) - int(owner.kv_pages))
             * max(0, int(self.plan.kv_policy.bytes_per_page))
@@ -15555,6 +15645,50 @@ def _kv_bytes_for_layer(
     return ((logical_bits + 7) // 8, (physical_bits + 7) // 8)
 
 
+def _tier_state_layout(
+    scenario: ScenarioConfig,
+    kv_default: Optional[str],
+    state_default: Optional[str],
+    page_tokens: int,
+    dtype: Optional[str],
+) -> Tuple[Dict[str, int], Dict[str, int]]:
+    tiers = scenario.placement.metadata.get("memory_tiers", {})
+    if not isinstance(tiers, Mapping):
+        raise ValueError("memory_tiers must be a mapping")
+    result: List[Dict[str, int]] = []
+    layers = {layer.layer_id: layer for layer in _execution_layers(scenario)}
+    for tensor, key, default in (
+        ("kv_cache", "kv_layer_components", kv_default),
+        ("linear_state", "linear_state_layer_components", state_default),
+    ):
+        layer_map = tiers.get(key, {})
+        if not isinstance(layer_map, Mapping):
+            raise ValueError("memory_tiers.{} must be a mapping".format(key))
+        amounts: Dict[str, int] = {}
+        if layer_map:
+            for layer_id, target in layer_map.items():
+                layer = layers.get(layer_id)
+                tensor_id = "{}.{}".format(layer_id, tensor)
+                if (layer is None or layer.is_linear_attention != (tensor == "linear_state")
+                        or not is_control_plane_generated_tensor(scenario, tensor_id)
+                        or scenario.placement.tensor_to_component.get(tensor_id) != target):
+                    raise ValueError("memory_tiers layer targets must be matching V4 generated state placement")
+            for layer in layers.values():
+                if layer.is_linear_attention != (tensor == "linear_state"):
+                    continue
+                target = layer_map.get(layer.layer_id, default)
+                if not target:
+                    raise ValueError("partitioned state requires a target for every layer")
+                component = scenario.hardware.get_component(target)
+                if not component.is_active_memory or not component.is_writable:
+                    raise ValueError("partitioned state requires writable active memory")
+                byte_count = (_linear_state_bytes_per_layer(layer) if tensor == "linear_state"
+                              else page_tokens * _kv_bytes_for_layer(scenario, layer, dtype)[1])
+                amounts[target] = amounts.get(target, 0) + byte_count
+        result.append(amounts)
+    return result[0], result[1]
+
+
 def _logical_kv_bytes_per_token(
     scenario: ScenarioConfig, override_dtype: Optional[str]
 ) -> int:
@@ -15723,6 +15857,14 @@ def _physical_runtime_limits(plan: ServingPlan) -> Mapping[str, int]:
     # Validate the authoritative fixed owners even when a referenced storage
     # component has unknown capacity and no dynamic budget can be derived.
     _physical_capacity_claims(plan.scenario)
+    if plan.kv_policy.component_bytes_per_page or plan.linear_state_policy.component_bytes_per_request:
+        components = set(plan.kv_policy.component_bytes_per_page) | set(plan.linear_state_policy.component_bytes_per_request)
+        dynamic_ids = {"kv_cache", "linear_state"} | {
+            "{}.{}".format(layer.layer_id, "linear_state" if layer.is_linear_attention else "kv_cache")
+            for layer in _execution_layers(plan.scenario)
+        }
+        return {component: _dynamic_component_capacity(plan.scenario, component, dynamic_ids)
+                for component in components}
     roles = (
         (
             plan.kv_policy.cache_component,

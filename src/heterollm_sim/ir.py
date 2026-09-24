@@ -24,8 +24,8 @@ SCHEMA_VERSION = AUTHORING_SCHEMA_VERSION
 
 
 # Component-kind vocabulary shared by topology and planning.  HBF is NAND
-# flash and must never be folded into the HBM/DRAM active-memory class.  The
-# normalization below only canonicalizes punctuation and equivalent spelling.
+# flash: an explicit component access_mode may expose memory semantics without
+# changing its physical kind. Normalization only canonicalizes spelling.
 ACTIVE_MEMORY_COMPONENT_KINDS = frozenset(
     {
         "hbm",
@@ -1862,6 +1862,25 @@ class ComponentSpec:
         _require_number(self.write_bandwidth_gbps, "write_bandwidth_gbps")
         _require_mapping(self.metadata, "metadata")
         _require_schema_version(self.schema_version)
+        if self.normalized_kind == "hbf":
+            access_mode = self.metadata.get("access_mode", "remote_flash")
+            if access_mode not in ("remote_flash", "memory"):
+                raise ValueError("HBF access_mode must be remote_flash or memory")
+            if access_mode == "memory":
+                # Buffered acknowledgement requires a separately timed drain path.
+                # Until that exists, Flash writes complete at program completion.
+                buffer_bytes = self.metadata.get("write_buffer_bytes")
+                if (isinstance(buffer_bytes, bool)
+                        or not isinstance(buffer_bytes, int) or buffer_bytes != 0):
+                    raise ValueError(
+                        "HBF memory requires explicit write_buffer_bytes=0 "
+                        "(write-through); buffered writes are not modeled"
+                    )
+            if self.metadata.get("hbf_media") is not None:
+                # Keep the page contract opt-in and fail closed at IR load, not
+                # after a long scenario has already been compiled.
+                from .hbf_media import validate_hbf_media
+                validate_hbf_media(self)
         if self.package_id:
             _require_name(self.package_id, "package_id")
         if self.die_id:
@@ -1878,6 +1897,9 @@ class ComponentSpec:
     def memory_class(self) -> Optional[str]:
         """Classify memory-like components as ``active`` or ``offload``."""
 
+        if (self.normalized_kind == "hbf"
+                and self.metadata.get("access_mode") == "memory"):
+            return "active"
         if self.normalized_kind in ACTIVE_MEMORY_COMPONENT_KINDS:
             return "active"
         if self.normalized_kind in OFFLOAD_STORAGE_COMPONENT_KINDS:

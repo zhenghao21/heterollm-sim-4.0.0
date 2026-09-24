@@ -9,7 +9,7 @@ that a useful system model is not mistaken for undisclosed physical wiring.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from .ir import ComponentSpec, HardwareSpec, LinkSpec, PortSpec
@@ -56,6 +56,7 @@ _DEFAULT_COST_PROFILE_IDS: Mapping[str, str] = {
     "hbm": "legacy-hbm",
     "cpu": "legacy-cpu",
     "host_memory": "legacy-host-memory",
+    "dram": "legacy-host-memory",
     "cim": "legacy-cim",
 }
 
@@ -1589,6 +1590,138 @@ def _gpu_hbf() -> ArchitecturePresetDefinition:
     return _definition("gpu-hbf", "GPU + High Bandwidth Flash", "Open Compute Project", "HBF", "storage_offload", "near_package", EXPERIMENTAL_REFERENCE, components, links, groups, {"gpu0": {"x": 80.0, "y": 160.0}, "hbf0": {"x": 440.0, "y": 160.0}}, (OCP_HBF, UCIE_SPEC), limitations, "面向权重与冷数据近封装读取的实验参考。", ("gpu", "hbf", "ucie", "flash"))
 
 
+
+def _soc_2x_dram_sram_cim(*, shared_phy_noc: bool = False) -> ArchitecturePresetDefinition:
+    """User-authored 3D topology, not a calibrated SoC or a UCIe proxy.
+
+    Default rates/capacities are replaceable analytical sweep coordinates.
+    The upper DRAM has a dedicated through-stack path, not a forwarding DRAM.
+    An auxiliary host supplies the existing V4 CPU orchestration contract.
+    """
+
+    preset_id = "soc-2x-dram-sram-cim" + ("-shared-phy-noc" if shared_phy_noc else "")
+    name = "SoC + 2× stacked DRAM + SRAM-CIM" + (" (shared PHY/NoC)" if shared_phy_noc else " (independent controllers)")
+    package, stack, domain = "soc_package0", "stack0", "stack0.thermal"
+    bandwidth = 2048.0  # Analytical 256 GB/s one-way interface, not a device specification.
+    assumptions = {
+        "value_status": "uncalibrated_analytical_scaffold",
+        "calibrated": False,
+        "parameter_basis": {
+            "capacity_bytes": "user-replaceable analytical capacity, not measured silicon",
+            "bandwidth_gbps": "user-replaceable one-way analytical operating point",
+            "latency_ns": "user-replaceable analytical service time; not a measured timing",
+            "cost_profile_id": "reference registry scaffold; replace with domain-specific profiles before prediction",
+        },
+    }
+    stack_metadata = {**assumptions, "stack_id": stack, "thermal_domain_id": domain}
+    components = [
+        _component(
+            "soc0", "gpu",
+            tuple(_port("dram{}".format(i), "TSV", "controller", bandwidth_gbps=bandwidth) for i in range(2))
+            + (_port("cim", "NoC", "endpoint", bandwidth_gbps=bandwidth),
+               _port("host", "PCIe", "endpoint", version="5.0", lanes=16, bandwidth_gbps=504.0, payload="coherent_dma")),
+            package_id=package, die_id="soc_die0", peak_ops_per_s=512e12,
+            role="analytical_soc_compute_proxy", model="GPU cost-model proxy for uncalibrated SoC compute",
+            approximation="kind=gpu 仅复用已有执行器；不代表真实 SoC kernel 映射或已校准性能。",
+            extra_metadata={**stack_metadata, "stack_layer": 0, "performance_model": "analytical_gpu_proxy",
+                            "kernel_mapping_status": "unknown_requires_measurement"},
+        ),
+    ]
+    links = []
+    owners = {}
+    for index in range(2):
+        dram_id, link_id = "dram{}".format(index), "vertical_dram{}".format(index)
+        controller = dram_id + ".controller"
+        components.append(_component(
+            dram_id, "dram", (_port("soc", "TSV", "device", bandwidth_gbps=bandwidth),),
+            package_id=package, die_id=dram_id + "_die", capacity_bytes=32 * 1024**3,
+            read_bandwidth_gbps=bandwidth, write_bandwidth_gbps=bandwidth,
+            role="active_memory", model="Analytical stacked DRAM die",
+            extra_metadata={**stack_metadata, "stack_layer": index + 1, "memory_service_owner": controller,
+                            "controller_id": controller, "vertical_link_id": link_id,
+                            "resident_access_path": "topology",
+                            "read_latency_ns": 60.0, "write_latency_ns": 60.0,
+                            "profile_resource_id_required": controller},
+        ))
+        phy_owner = "stack0.shared_phy_noc" if shared_phy_noc else "stack0.phy{}".format(index)
+        links.append(_link(
+            link_id, "soc0", dram_id, dram_id, "soc", "TSV",
+            bandwidth_gbps=bandwidth, latency_ns=10.0,
+            approximation="分析用垂直通路；不是 UCIe，也不表示实测 bump/TSV 布线。",
+            metadata={**assumptions, "vertical_link": True, "stack_id": stack,
+                      "thermal_domain_id": domain, "physical_technology": "TSV",
+                      "read_path": [dram_id, "soc0"], "write_path": ["soc0", dram_id],
+                      "pass_through_layers": list(range(1, index + 1)),
+                      "forwarding_model": "dedicated_through_stack_no_dram_forwarding",
+                      "shared_bidirectional": True, "physical_resource_owner": phy_owner},
+        ))
+        owners["link." + link_id] = phy_owner
+    components.extend((
+        _component(
+            "cim0", "digital_sram_cim", (_port("soc", "NoC", "endpoint", bandwidth_gbps=bandwidth),),
+            package_id=package, die_id="soc_die0", capacity_bytes=512 * 1024**2,
+            peak_ops_per_s=512e12, read_bandwidth_gbps=bandwidth, write_bandwidth_gbps=bandwidth,
+            role="on_die_sram_cim", model="Uncalibrated digital SRAM-CIM reference tile",
+            extra_metadata={**stack_metadata, "stack_layer": 0, "memory_service_owner": "cim0.sram",
+                            "weight_residency_policy": "placement_and_capacity_must_be_declared"},
+        ),
+        _component(
+            "cpu0", "cpu",
+            (_port("soc", "PCIe", "root", version="5.0", lanes=16, bandwidth_gbps=504.0, payload="coherent_dma"),
+             _port("memory", "DDR", "controller", bandwidth_gbps=3276.8)),
+            package_id="host_package0", die_id="host_cpu_die0", role="reference_host_orchestration",
+            model="Auxiliary reference host, outside the 3D stack", extra_metadata=assumptions,
+        ),
+        _component(
+            "host_memory0", "host_memory", (_port("cpu", "DDR", "device", bandwidth_gbps=3276.8),),
+            package_id="host_memory_package0", die_id="host_memory_die0", capacity_bytes=64 * 1024**3,
+            read_bandwidth_gbps=3276.8, write_bandwidth_gbps=3276.8,
+            role="reference_host_memory", model="Auxiliary host memory, not a third stacked DRAM",
+            extra_metadata={**assumptions, "memory_service_owner": "host_memory0.controller"},
+        ),
+    ))
+    noc_owner = "stack0.shared_phy_noc" if shared_phy_noc else "soc0.noc"
+    owners["link.soc_cim_noc"] = noc_owner
+    links.extend((
+        _link("soc_cim_noc", "soc0", "cim", "cim0", "soc", "NoC",
+              bandwidth_gbps=bandwidth, latency_ns=2.0,
+              metadata={**assumptions, "on_die": True, "thermal_domain_id": domain,
+                        "shared_bidirectional": True, "physical_resource_owner": noc_owner}),
+        _link("host_soc", "cpu0", "soc", "soc0", "host", "PCIe", version="5.0", lanes=16,
+              bandwidth_gbps=504.0, latency_ns=800.0, payload="coherent_dma", metadata=assumptions),
+        _link("host_memory", "cpu0", "memory", "host_memory0", "cpu", "DDR",
+              bandwidth_gbps=3276.8, latency_ns=60.0, metadata={**assumptions, "shared_bidirectional": True}),
+    ))
+    limitations = (
+        "用户指定结构的分析预设；容量、带宽、延迟与参考 profile 都不是实测或校准 SoC 数据。",
+        "soc0 的 kind=gpu 是执行模型代理；真实 SoC kernel 支持、精度、缓存和算力需另行测量。",
+        "dram1 通过独立穿层 TSV 通路接到 SoC，不经 dram0 存储控制器转发；不宣称所有 3D 封装都如此。",
+        "两片 DRAM 控制器独立；共享版本将垂直通路与 CIM NoC 串行化到同一分析用 PHY/NoC owner，不自动增加峰值带宽。",
+        "必须为两片 DRAM 分配独立 profile/resource_id；legacy-host-memory 只是载入 scaffold，不能当作两片器件的校准值。",
+        "cpu0/host_memory0 是栈外辅助主控参考；热参数默认关闭，仅支持显式给定的静态热工作点降额，不模拟动态温升。",
+    )
+    result = _definition(
+        preset_id, name, "User-defined", "3D DRAM + SRAM-CIM", "stacked_dram_soc", "single_package_with_reference_host",
+        EXPERIMENTAL_REFERENCE, components, links,
+        (_group("stack", "3D stack: SoC + DRAM", ("soc0", "dram0", "dram1", "cim0"), "soc0"),
+         _group("host", "Reference host (outside stack)", ("cpu0", "host_memory0"), "cpu0")),
+        {"soc0": {"x": 400.0, "y": 400.0}, "cim0": {"x": 700.0, "y": 400.0},
+         "dram0": {"x": 400.0, "y": 220.0}, "dram1": {"x": 400.0, "y": 40.0},
+         "cpu0": {"x": 0.0, "y": 400.0}, "host_memory0": {"x": 0.0, "y": 180.0}},
+        (), limitations, "未校准的、可审计的 3D DRAM / SRAM-CIM 参数扫描起点。",
+        ("3d", "dram", "sram-cim", "noc", "tsv", "analytical", "shared-phy" if shared_phy_noc else "independent-phy"),
+    )
+    metadata = {**result.hardware.metadata,
+                "physical_resource_owners": owners,
+                "controller_mode": "independent",
+                "phy_noc_mode": "shared" if shared_phy_noc else "independent",
+                "thermal_operating_point": {"enabled": False, "mode": "static_derating_only", "calibrated": False},
+                "topology_evidence": {**result.hardware.metadata["topology_evidence"],
+                                      "scope": "user_authored_analytical_topology",
+                                      "source_scope": "user design brief only; no vendor or calibration evidence"}}
+    return replace(result, hardware=replace(result.hardware, metadata=metadata))
+
+
 _PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
     _hbm_accelerator_cluster(preset_id="nvidia-h100-sxm-8-nvswitch", name="8× NVIDIA H100 SXM + NVSwitch", gpu_model="H100 SXM", memory_kind="HBM3", memory_capacity_gb=80, memory_bandwidth_gbps=26800.0, peak_ops_per_s=989_500_000_000_000.0, count=8, fabric_protocol="NVLink", fabric_version="4.0", fabric_bandwidth_gbps=3600.0, fabric_lanes=18, vendor="NVIDIA", family="Hopper", sources=(NVIDIA_HOPPER,), support_level=ANALYTICAL_APPROXIMATION, memory_physical_unit_count=5, memory_count_status="vendor_documented_active_stacks", memory_component_preset_id="hbm3-16gb-0_670tbs-h100-slice"),
     _hbm_accelerator_cluster(preset_id="nvidia-h200-sxm-8-nvswitch", name="8× NVIDIA H200 SXM + NVSwitch", gpu_model="H200 SXM", memory_kind="HBM3E", memory_capacity_gb=141, memory_bandwidth_gbps=38400.0, peak_ops_per_s=989_500_000_000_000.0, count=8, fabric_protocol="NVLink", fabric_version="4.0", fabric_bandwidth_gbps=3600.0, fabric_lanes=18, vendor="NVIDIA", family="Hopper", sources=(NVIDIA_H200,), support_level=ANALYTICAL_APPROXIMATION, memory_physical_unit_count=6, memory_count_status="derived_from_product_total_and_24GB_stack_class", memory_raw_capacity_gb=144.0, memory_count_formula="144 GB raw product capacity / 24 GB HBM3E stack class = 6; 141 GB is product-visible capacity", memory_source_basis="NVIDIA H200 141 GB visible aggregate plus six 24 GB raw HBM3E stack-class derivation", memory_component_preset_id="hbm3e-24gb-0_800tbs-h200-slice"),
@@ -1629,6 +1762,8 @@ _PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
     _hbm_pim(),
     _gds(),
     _gpu_hbf(),
+    _soc_2x_dram_sram_cim(),
+    _soc_2x_dram_sram_cim(shared_phy_noc=True),
 )
 
 
@@ -1668,6 +1803,10 @@ def _compatibility(item: ArchitecturePresetDefinition) -> Dict[str, Any]:
         model_classes = ["memory_capacity_bound", "long_context"]
         parallelism = ["single_rank", "host_partitioning"]
         storage_roles = ["cxl_memory_expansion", "weight_capacity", "kv_cache_capacity"]
+    elif item.topology_class == "stacked_dram_soc":
+        model_classes = ["dense_transformer", "hybrid_transformer", "long_context", "operator_offload"]
+        parallelism = ["single_rank", "operator_offload"]
+        storage_roles = ["active_memory", "resident_weights", "kv_cache_capacity", "linear_state"]
     elif item.topology_class == "near_memory_compute":
         model_classes = ["mlp_heavy", "moe_transformer", "operator_offload"]
         parallelism = ["single_rank", "operator_offload", "ep_for_moe"]
@@ -1690,6 +1829,8 @@ def _compatibility(item: ArchitecturePresetDefinition) -> Dict[str, Any]:
         "protocol_reachability_required",
         "capacity_must_fit_selected_mapping",
     ]
+    if item.topology_class == "stacked_dram_soc":
+        constraints.extend(("uncalibrated_soc_gpu_proxy", "per_dram_controller_profile_binding_required", "thermal_disabled_without_explicit_operating_point"))
     if "ep_for_moe" in parallelism:
         constraints.append("ep_requires_moe")
     if gpu_count:

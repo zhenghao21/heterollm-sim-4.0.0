@@ -51,6 +51,11 @@ function helpers() {
     materializeMissingCostProfiles,
     resetArchitectureDependentProfiles,
     hostOrchestrationReferenceIssue,
+    componentKindClass,
+    isActiveMemoryComponent,
+    isWritableActiveRankMemory,
+    kindLabel,
+    componentInspectorProfile,
     applyArchitecturePresetDetail,
     travelTopologyHistory,
     configure() {
@@ -63,6 +68,32 @@ function helpers() {
   };`, context, { filename: path.join(webui, "app.js") });
   return context.__architecturePresets;
 }
+
+test("new active-memory component kinds are visible and usable by V4 placement UI", () => {
+  const ui = helpers();
+  const dram = {
+    component_id: "dram0",
+    kind: "dram",
+    capacity_bytes: 32 * 1024 ** 3,
+    read_bandwidth_gbps: 2048,
+    write_bandwidth_gbps: 2048,
+    metadata: { memory_service_owner: "dram0.controller" },
+  };
+  assert.equal(ui.componentKindClass(dram), "io");
+  assert.equal(ui.isActiveMemoryComponent(dram), true);
+  assert.equal(ui.isWritableActiveRankMemory(dram), true);
+  assert.equal(ui.kindLabel("dram"), "堆叠 DRAM");
+  assert.equal(ui.componentInspectorProfile("dram", dram).latencyDma, true);
+
+  const hbfMemory = {
+    component_id: "hbf0",
+    kind: "hbf",
+    metadata: { access_mode: "memory", write_buffer_bytes: 0 },
+  };
+  assert.equal(ui.isActiveMemoryComponent(hbfMemory), true);
+  assert.equal(ui.isWritableActiveRankMemory(hbfMemory), true);
+  assert.equal(ui.componentKindClass(hbfMemory), "io");
+});
 
 function scenario() {
   const model = {

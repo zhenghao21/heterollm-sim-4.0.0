@@ -791,6 +791,47 @@ class TopologyRouter:
                 )
             return None
         direction = "read" if read else "write"
+        # Opt-in OCP-style cold-page accounting.  The link still carries the
+        # host-visible request bytes; this endpoint demand charges the
+        # physical page traffic and media latency separately.  We intentionally
+        # keep one logical endpoint demand: a shared physical owner cannot
+        # accept two demands from the same task, and the diagnostic metadata
+        # retains RMW read bytes for write requests.
+        if component.normalized_kind == "hbf" and component.metadata.get("hbf_media") is not None:
+            if byte_count == 0:
+                return None
+            from .hbf_media import hbf_media_service
+            media = hbf_media_service(component, byte_count, read)
+            physical_bytes = media["physical_read_bytes"] if read else media["physical_bytes"]
+            return TransferPhase(
+                name="{}.{}.{}.cold_page".format(name, component.component_id, direction),
+                demands=(ResourceDemand(
+                    resource_id="component.{}.{}".format(component.component_id, direction),
+                    service_ns=media["service_ns"],
+                    bytes_moved=physical_bytes,
+                    energy_pj=media["energy_pj"],
+                ),),
+                metadata={
+                    "event_kind": "memory_{}".format(direction),
+                    "component_id": component.component_id,
+                    "bytes": byte_count,
+                    "transferred_bytes": media["host_transfer_bytes"],
+                    "physical_bytes": media["physical_bytes"],
+                    "hbf_media": media,
+                    "transfer_granularity_bytes": media["media_page_bytes"],
+                    "transactions": media["command_count"],
+                    "max_outstanding_requests": media["command_queue_depth"],
+                    "latency_ns": (media["page_read_latency_ns"] if read
+                                   else media["page_program_latency_ns"]),
+                    "latency_batches": media["media_waves"],
+                    "bandwidth_service_ns": media["host_service_ns"],
+                    "latency_service_ns": media["media_read_service_ns"] if read else media["service_ns"],
+                    "physical_kind": component.normalized_kind,
+                    "access_mode": component.metadata.get("access_mode", "default"),
+                    "memory_service_model": "cold_page_v1",
+                    "timing_evidence": "ANALYTICAL",
+                },
+            )
         latency = _metadata_non_negative_number(
             component.metadata,
             "{}_latency_ns".format(direction),
@@ -836,6 +877,18 @@ class TopologyRouter:
             if transaction_count
             else 0
         )
+        # Preserve the legacy conservative serialized endpoint model.  An
+        # explicitly memory-addressable/pipelined controller can instead use
+        # the same bandwidth/MLP envelope as active memory.  This never turns
+        # flash pages into DRAM cache lines: granularity rounding stays above.
+        service_model = component.metadata.get("memory_service_model", "serialized")
+        if service_model not in {"serialized", "overlapped"}:
+            raise ValueError("memory_service_model must be serialized or overlapped")
+        bandwidth_ns = (8.0 * transferred_bytes) / bandwidth
+        latency_ns = latency_batches * latency
+        service_ns = latency_ns + bandwidth_ns
+        if service_model == "overlapped":
+            service_ns = max(latency_ns, bandwidth_ns)
         energy_key = "{}_energy_pj_per_byte".format(direction)
         energy = _metadata_non_negative_number(
             component.metadata,
@@ -848,10 +901,7 @@ class TopologyRouter:
             demands=(
                 ResourceDemand(
                     resource_id="component.{}.{}".format(component.component_id, direction),
-                    service_ns=(
-                        latency_batches * latency
-                        + (8.0 * transferred_bytes) / bandwidth
-                    ),
+                    service_ns=service_ns,
                     bytes_moved=transferred_bytes,
                     energy_pj=transferred_bytes * energy,
                 ),
@@ -866,6 +916,12 @@ class TopologyRouter:
                 "max_outstanding_requests": max_outstanding,
                 "latency_batches": latency_batches,
                 "latency_ns": latency,
+                "physical_kind": component.normalized_kind,
+                "access_mode": component.metadata.get("access_mode", "default"),
+                "memory_service_model": service_model,
+                "bandwidth_service_ns": bandwidth_ns,
+                "latency_service_ns": latency_ns,
+                "timing_evidence": "ANALYTICAL",
             },
         )
 
