@@ -154,3 +154,10 @@ def test_layer_compatibility_and_cross_machine_boundary_are_explicit():
                 KvPoolComponent("hbm1", 16, machine_id="host-b"),
             ]
         )
+
+
+def test_resize_accepts_logical_token_target():
+    pool = DynamicKVPool([KvPoolComponent("hbm0", 64)], tokens_per_page=4, page_bytes=4)
+    assert pool.resize("tokens", target_tokens=9)
+    assert len(pool.request_pages("tokens")) == 3
+    assert pool.request_pages("tokens")[-1].token_end == 9

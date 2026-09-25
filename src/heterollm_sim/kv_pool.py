@@ -656,7 +656,7 @@ class DynamicKVPool:
             self._last_error = str(exc)
             return KvPoolResizeResult(False, request_id, current_count, error=self._last_error)
 
-    def resize(self, request_id: str, target_pages: int, **kwargs: Any) -> bool:
+    def resize(self, request_id: str, target_pages: Optional[int] = None, **kwargs: Any) -> bool:
         """Resize and return only success, matching the legacy ledger API."""
 
         return self.resize_detailed(request_id, target_pages, **kwargs).success
