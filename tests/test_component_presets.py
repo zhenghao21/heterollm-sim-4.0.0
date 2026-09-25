@@ -12,6 +12,7 @@ from heterollm_sim.component_presets import (
     materialize_component_payload,
 )
 from heterollm_sim.config import hardware_from_dict
+from heterollm_sim.config import _component_profile_registries_from_dict
 from heterollm_sim.topology import validate_topology
 from heterollm_sim.web import build_server
 
@@ -49,6 +50,91 @@ REQUIRED_BUNDLES = {
 
 
 class ComponentPresetCatalogTests(unittest.TestCase):
+    def test_runtime_profile_templates_are_complete_and_parseable(self):
+        """A newly imported preset must not fall back to a legacy profile."""
+
+        cases = {
+            "jedec-hbm3-24gb-6_4": "hbm",
+            "hbm3e-36gb-9_2": "hbm",
+            "nvidia-grace-cpu-gb200": "cpu",
+            "nvidia-h100-sxm-gpu": "gpu",
+            "lpddr5x-gb200-480gb-512gbs-aggregate": "host_memory",
+            "digital-sram-cim-analysis": "cim",
+        }
+        registry = {kind: {} for kind in set(cases.values())}
+        for preset_id, expected_kind in cases.items():
+            component = materialize_component_payload(preset_id)
+            metadata = component["metadata"]
+            self.assertEqual(metadata["cost_profile_key"], expected_kind)
+            template = metadata["cost_profile_template"]
+            basis = metadata["cost_profile_parameter_basis"]
+            self.assertIsInstance(template, dict)
+            self.assertIsInstance(basis, dict)
+            self.assertTrue(template)
+            self.assertTrue(basis)
+            registry[expected_kind][preset_id] = template
+
+        parsed = _component_profile_registries_from_dict(registry)
+        self.assertEqual(set(parsed), set(registry))
+        self.assertEqual(
+            set(parsed["hbm"]),
+            {"jedec-hbm3-24gb-6_4", "hbm3e-36gb-9_2"},
+        )
+        self.assertGreater(
+            parsed["hbm"]["jedec-hbm3-24gb-6_4"].read_latency_ns,
+            0.0,
+        )
+        self.assertEqual(parsed["cpu"]["nvidia-grace-cpu-gb200"].pipeline.core_count, 72)
+        self.assertEqual(parsed["cpu"]["nvidia-grace-cpu-gb200"].pipeline.simd_width_bits, 128)
+        self.assertAlmostEqual(
+            parsed["gpu"]["nvidia-h100-sxm-gpu"].tensor_core.peak_tops("bf16"),
+            989.5,
+            places=3,
+        )
+        self.assertAlmostEqual(
+            parsed["gpu"]["nvidia-h100-sxm-gpu"].tensor_core.peak_tops("fp16"),
+            989.5,
+            places=3,
+        )
+        self.assertAlmostEqual(
+            parsed["gpu"]["nvidia-h100-sxm-gpu"].tensor_core.peak_tops("int8"),
+            1979.0,
+            places=3,
+        )
+        self.assertEqual(
+            parsed["cpu"]["nvidia-grace-cpu-gb200"].cache_hierarchy.levels[0].capacity_bytes,
+            72 * 64 * 1024,
+        )
+
+    def test_every_hbm_and_memory_preset_exposes_latency_and_profile_basis(self):
+        for item in list_component_presets():
+            if item["component_kind"] not in {"hbm", "host_memory"}:
+                continue
+            component = materialize_component_payload(item["id"])
+            metadata = component["metadata"]
+            self.assertGreater(metadata["read_latency_ns"], 0.0)
+            self.assertGreater(metadata["write_latency_ns"], 0.0)
+            self.assertGreater(metadata["transfer_granularity_bytes"], 0)
+            self.assertGreater(metadata["max_outstanding_requests"], 0)
+            self.assertIn("read_latency_ns", metadata["cost_profile_parameter_basis"])
+            self.assertIn("write_latency_ns", metadata["cost_profile_parameter_basis"])
+
+    def test_bundle_components_carry_the_same_runtime_template_contract(self):
+        for preset_id in REQUIRED_BUNDLES:
+            detail = component_preset_detail(preset_id)
+            for component in detail["components"]:
+                metadata = component["metadata"]
+                if component["kind"] not in {"gpu", "hbm"}:
+                    continue
+                self.assertIn("cost_profile_template", metadata)
+                self.assertIn("cost_profile_parameter_basis", metadata)
+                self.assertEqual(
+                    metadata["cost_profile_key"],
+                    "gpu" if component["kind"] == "gpu" else "hbm",
+                )
+                if component["kind"] == "hbm":
+                    self.assertGreater(metadata["read_latency_ns"], 0.0)
+
     def test_catalog_contains_required_metadata_without_full_components(self):
         presets = list_component_presets()
         ids = [item["id"] for item in presets]

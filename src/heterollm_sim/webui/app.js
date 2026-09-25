@@ -1532,6 +1532,7 @@ const state = {
   connectMode: false,
   connectSource: null,
   validation: { errors: [], warnings: [], information: [] },
+  validationNavigation: null,
   report: null,
   comparison: null,
   componentTimeseriesView: {
@@ -2833,6 +2834,9 @@ function setScenario(incoming, { dirty = false, message = "" } = {}) {
   };
   state.connectSource = null;
   state.validation = { errors: [], warnings: [], information: [] };
+  if (state.validationNavigation?.recheckTimer) clearTimeout(state.validationNavigation.recheckTimer);
+  state.validationNavigation = null;
+  clearValidationFocus();
   state.report = null;
   state.comparison = null;
   state.runEstimate = null;
@@ -3338,13 +3342,51 @@ async function loadReference({ quiet = false } = {}) {
   }
 }
 
+function inferValidationIssueFields(text) {
+  const source = String(text || "");
+  const lower = source.toLowerCase();
+  const result = {};
+  const components = asArray(state.scenario?.hardware?.components);
+  const links = asArray(state.scenario?.hardware?.links);
+  const requests = asArray(state.scenario?.workload?.requests);
+  const findId = (items, key) => items.map((item) => String(item?.[key] || "")).filter(Boolean)
+    .sort((left, right) => right.length - left.length).find((id) => source.includes(id));
+  const componentId = findId(components, "component_id");
+  const linkId = findId(links, "link_id");
+  const requestId = findId(requests, "request_id");
+  if (componentId) result.component_id = componentId;
+  if (linkId) result.link_id = linkId;
+  if (requestId) result.request_id = requestId;
+  const pathMatch = source.match(/(?:hardware|model|placement|workload|profiles)[./][A-Za-z0-9_./-]+/i);
+  if (pathMatch) result.field_path = pathMatch[0].replace(/[\]})>,.;:]+$/, "");
+  const fields = [
+    ["capacity_bytes", /capacity|容量/],
+    ["write_bandwidth_gbps", /write.?bandwidth|写入带宽/],
+    ["read_bandwidth_gbps", /read.?bandwidth|读取带宽|带宽/],
+    ["read_latency_ns", /read.?latency|读取延迟/],
+    ["write_latency_ns", /write.?latency|写入延迟/],
+    ["offload_component", /offload|卸载/],
+    ["cache_component", /cache(?: component)?|缓存(?:组件|目标)/],
+    ["parallelism", /parallel|并行/],
+    ["prompt_tokens", /prompt.?token|提示 token/],
+    ["output_tokens", /output.?token|输出 token/],
+    ["weights_resident", /weights.?resident|权重常驻/],
+    ["cost_profile_id", /cost.?profile|成本 profile/],
+  ];
+  const match = fields.find(([, pattern]) => pattern.test(lower) || pattern.test(source));
+  if (match && !result.field_path) result.field = match[0];
+  return result;
+}
+
 function normalizeIssue(issue, source, severity) {
   if (typeof issue === "string") {
+    const inferred = inferValidationIssueFields(issue);
     return {
       severity, source, code: source, location: "",
       message_zh: hasChineseText(issue) ? issue : "",
       message_en: hasChineseText(issue) ? "" : issue,
       message: issue,
+      ...inferred,
     };
   }
   const value = asObject(issue);
@@ -3365,6 +3407,23 @@ function normalizeIssue(issue, source, severity) {
     message: value.message || value.detail || value.reason || "",
     location,
   };
+  Object.entries(inferValidationIssueFields([
+    normalized.message_zh, normalized.message_en, normalized.message,
+  ].filter(Boolean).join(" "))).forEach(([key, value]) => {
+    if (!Object.hasOwn(normalized, key)) normalized[key] = value;
+  });
+  // Keep machine-readable targets so the UI can take the user to the exact
+  // editor control after a run gate failure. Backends may use JSON pointers,
+  // dotted paths, or explicit IDs; accepting all three keeps this compatible
+  // with older validation responses.
+  for (const key of [
+    "field_path", "field_path_zh", "field_path_en", "path", "path_zh", "path_en",
+    "json_pointer", "pointer", "field", "field_name", "component_id", "link_id", "port_id",
+    "operator_id", "sub_operator_id", "request_id", "rank_id", "tensor_id",
+  ]) {
+    if (Object.hasOwn(structured, key)) normalized[key] = structured[key];
+  }
+  if ((structured.field_path || structured.path || structured.json_pointer) && !structured.field && !structured.field_name) delete normalized.field;
   for (const key of [
     "stage",
     "operator_id",
@@ -3454,7 +3513,227 @@ function normalizeValidation(payload) {
   return { valid, errors, warnings, information };
 }
 
-async function validateScenario({ quiet = false } = {}) {
+function validationIssueTarget(issue) {
+  const item = asObject(issue);
+  const path = [
+    item.field_path, item.path, item.json_pointer, item.pointer, item.field, item.field_name,
+    item.field_path_zh, item.field_path_en,
+  ].find((value) => value !== undefined && value !== null && String(value).trim());
+  const normalizedPath = String(path || item.location || "").trim();
+  const parts = normalizedPath
+    .replace(/^\$\.?/, "")
+    .replace(/^\//, "")
+    .split(/[./[\]]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const profileField = parts[0] === "profiles" && parts[1] === "components" && parts.length > 4
+    ? parts.slice(4).join(".")
+    : "";
+  const field = String(item.field || item.field_name || profileField || parts.at(-1) || "").trim();
+  const partAfter = (name) => {
+    const index = parts.indexOf(name);
+    return index >= 0 ? parts[index + 1] || "" : "";
+  };
+  const componentPart = parts[0] === "profiles" ? "" : partAfter("components");
+  const linkPart = partAfter("links");
+  const requestPart = partAfter("requests");
+  const profileComponent = parts[0] === "profiles" && parts[1] === "components"
+    ? asArray(state.scenario?.hardware?.components).find((component) => component.cost_profile_id === parts[3])
+    : null;
+  const componentId = item.component_id || profileComponent?.component_id || (/^\d+$/.test(componentPart)
+    ? state.scenario?.hardware?.components?.[Number(componentPart)]?.component_id
+    : componentPart);
+  const linkId = item.link_id || (/^\d+$/.test(linkPart)
+    ? state.scenario?.hardware?.links?.[Number(linkPart)]?.link_id
+    : linkPart);
+  const requestId = item.request_id || (/^\d+$/.test(requestPart)
+    ? state.scenario?.workload?.requests?.[Number(requestPart)]?.request_id
+    : requestPart);
+  return {
+    path: normalizedPath,
+    field,
+    componentId: String(componentId || "").trim(),
+    linkId: String(linkId || "").trim(),
+    portId: String(item.port_id || partAfter("ports")).trim(),
+    operatorId: String(item.operator_id || item.sub_operator_id || partAfter("operators")).trim(),
+    requestId: String(requestId || "").trim(),
+    rankId: String(item.rank_id || partAfter("rank_mapping")).trim(),
+  };
+}
+
+function validationIssueSignature(issue) {
+  const target = validationIssueTarget(issue);
+  return [issue.code, target.path, target.componentId, target.linkId, target.operatorId, target.requestId, target.rankId, target.field, issue.message_en || issue.message].join("|");
+}
+
+function validationControlFieldMatches(control, field, path = "") {
+  if (!control || !field) return false;
+  const wanted = String(field).toLowerCase();
+  const data = control.dataset || {};
+  const values = [
+    data.inspectorField, data.inspectorMetadataField, data.inspectorQuantityField,
+    data.costProfileField, data.costProfileBinding, data.hbfMediaField, data.inspectorPortField,
+    data.controlPlaneField, data.placementField, data.placementMetadataField,
+    data.workloadField, data.schedulerField, data.mtpField, data.requestField,
+    data.modelParam, data.modelTemplateParam, data.modelPortField, data.scenarioField,
+  ].filter(Boolean).map((value) => String(value).toLowerCase());
+  const aliases = {
+    cache_component: ["kv_cache_target", "kv_cache_component", "linear_state_target", "linear_state_cache"],
+    offload_component: ["kv_offload_target", "linear_state_offload_target", "offload_component"],
+    parallelism: ["tp_degree", "pp_degree", "ep_degree"],
+  };
+  if (wanted === "cost_profile_id" && data.costProfileBinding) return true;
+  if (aliases[wanted]?.some((alias) => values.includes(alias))) return true;
+  if (values.some((value) => value === wanted || value.endsWith(`.${wanted}`))) return true;
+  const pathText = String(path || "").toLowerCase();
+  return pathText && values.some((value) => pathText.endsWith(value) || pathText.includes(`.${value}`));
+}
+
+function validationFindControl(target, roots = [document]) {
+  const isVisible = (control) => {
+    for (let node = control; node; node = node.parentElement) {
+      if (node.hidden || node.getAttribute?.("aria-hidden") === "true") return false;
+    }
+    return true;
+  };
+  for (const root of roots) {
+    if (!root) continue;
+    const controls = $$('input, select, textarea, button', root).filter((control) => !control.disabled && !control.readOnly && isVisible(control));
+    if (target.portId) {
+      const component = asArray(state.scenario?.hardware?.components).find((item) => item.component_id === target.componentId);
+      const portIndex = asArray(component?.ports).findIndex((port) => port.port_id === target.portId);
+      const portControl = controls.find((control) => (
+        String(control.dataset.inspectorPortIndex) === String(portIndex)
+        || control.dataset.modelPortId === target.portId
+      ) && validationControlFieldMatches(control, target.field, target.path));
+      if (portControl) return portControl;
+    }
+    const match = controls.find((control) => validationControlFieldMatches(control, target.field, target.path));
+    if (match) return match;
+  }
+  return null;
+}
+
+function clearValidationFocus() {
+  $$('.validation-focus').forEach((element) => {
+    element.classList.remove("validation-focus");
+    element.removeAttribute("aria-invalid");
+    if (!element.matches?.("input, select, textarea")) element.removeAttribute("tabindex");
+  });
+}
+
+function focusValidationIssue(issue, { announce = true } = {}) {
+  const target = validationIssueTarget(issue);
+  const context = [target.path, issue.source, issue.message_en, issue.message].filter(Boolean).join(" ").toLowerCase();
+  clearValidationFocus();
+  let control = null;
+  if (/placement|control_plane|kv (?:cache|offload)|linear state|并行策略/.test(context) && !context.includes("capacity")) {
+    switchView("mapping");
+    control = validationFindControl(target, [dom.placementControls]) || dom.placementControls;
+  } else if (target.linkId && state.scenario?.hardware?.links?.some((item) => String(item.link_id) === target.linkId)) {
+    switchView("architecture");
+    selectItem("link", target.linkId);
+    control = validationFindControl(target, [dom.inspectorContent]) || dom.inspectorContent;
+  } else if (target.componentId && state.scenario?.hardware?.components?.some((item) => String(item.component_id) === target.componentId)) {
+    switchView("architecture");
+    setComponentSelection([target.componentId], target.componentId);
+    control = validationFindControl(target, [dom.inspectorContent]) || dom.inspectorContent;
+  } else if (target.operatorId) {
+    switchView("model");
+    const node = $$('[data-model-select-operator], [data-model-operator]', dom.modelGraphNodeLayer)
+      .find((element) => String(element.dataset.modelSelectOperator || element.dataset.modelOperator) === target.operatorId);
+    if (node) {
+      selectModelGraphOperatorElement(node);
+      control = validationFindControl(target, [dom.modelGraphInspectorContent]);
+    }
+  } else if (target.path.toLowerCase().includes("placement") || target.path.toLowerCase().includes("control_plane")) {
+    switchView("mapping");
+    control = validationFindControl(target, [dom.placementControls]) || dom.placementControls;
+  } else if (target.requestId || /workload|request|scheduler|负载|请求/.test(context)) {
+    switchView("workload");
+    const requestIndex = asArray(state.scenario?.workload?.requests).findIndex((request) => request.request_id === target.requestId);
+    const row = requestIndex >= 0 ? dom.requestTableBody?.querySelector(`[data-request-index="${requestIndex}"]`) : null;
+    control = validationFindControl(target, row ? [row] : [dom.workloadMetaForm, dom.requestTableBody]) || dom.addRequestButton || dom.workloadMetaForm;
+  } else {
+    control = validationFindControl(target);
+  }
+  if (!control && /hardware|topology|component|profile|gpu|hbm|拓扑|硬件|组件/.test(context)) {
+    switchView("architecture");
+    const paletteKind = context.match(/\b(gpu|cpu|hbm|ram|hbf|ssd|cim)\b/i)?.[1]?.toLowerCase();
+    control = paletteKind ? document.querySelector?.(`[data-add-kind="${paletteKind === "ram" ? "host_memory" : paletteKind}"]`) : null;
+    control ||= dom.topologyCanvas || dom.diagnosticPanel;
+  }
+  if (!control) {
+    openDiagnostics();
+    control = dom.diagnosticPanel;
+  }
+  if (!control) return false;
+  for (let detail = control.closest?.("details"); detail; detail = detail.parentElement?.closest?.("details")) detail.open = true;
+  control.classList.add("validation-focus");
+  if (control.matches?.("input, select, textarea")) control.setAttribute("aria-invalid", "true");
+  else control.setAttribute("tabindex", "-1");
+  control.scrollIntoView?.({ behavior: state.settings.reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" });
+  requestAnimationFrame(() => control.focus?.({ preventScroll: true }));
+  if (announce) toast(uiText("请完善高亮字段", "Complete the highlighted field"), localizedIssueMessage(issue), "warning", 5200);
+  return true;
+}
+
+function beginValidationNavigation(errors) {
+  state.validationNavigation = {
+    active: errors.length > 0,
+    errors: errors.slice(),
+    index: 0,
+    signature: errors.length ? validationIssueSignature(errors[0]) : "",
+  };
+  if (errors.length) focusValidationIssue(errors[0]);
+}
+
+function advanceValidationNavigation(errors) {
+  const navigation = state.validationNavigation;
+  if (!navigation?.active) return;
+  const previousIndex = Math.max(0, Number(navigation.index) || 0);
+  const previousSignature = navigation.signature;
+  const currentIndex = previousSignature
+    ? errors.findIndex((issue) => validationIssueSignature(issue) === previousSignature)
+    : -1;
+  // A corrected current issue advances to the next one. If it is still
+  // present, keep focus there so a change event cannot steal focus mid-edit.
+  const nextIndex = currentIndex >= 0
+    ? currentIndex
+    : Math.min(Math.max(previousIndex, 0), Math.max(errors.length - 1, 0));
+  navigation.errors = errors.slice();
+  navigation.index = nextIndex;
+  navigation.signature = errors.length ? validationIssueSignature(errors[nextIndex]) : "";
+  if (errors.length) focusValidationIssue(errors[nextIndex]);
+  else {
+    navigation.active = false;
+    clearValidationFocus();
+    toast(uiText("所有校验错误已处理", "All validation errors are fixed"), uiText("请再次点击运行仿真开始执行。", "Click Run simulation again to start."), "success", 5200);
+  }
+}
+
+function scheduleValidationNavigationRecheck() {
+  if (!state.validationNavigation?.active) return;
+  const generation = state.scenarioGeneration;
+  if (state.busy) {
+    state.validationNavigation.pendingGeneration = generation;
+    return;
+  }
+  if (state.validationNavigation.recheckTimer) clearTimeout(state.validationNavigation.recheckTimer);
+  state.validationNavigation.recheckTimer = setTimeout(() => {
+    state.validationNavigation.recheckTimer = null;
+    if (state.scenarioGeneration !== generation) {
+      state.validationNavigation.pendingGeneration = state.scenarioGeneration;
+    }
+    if (state.validationNavigation.pendingGeneration && state.validationNavigation.pendingGeneration !== generation) {
+      scheduleValidationNavigationRecheck();
+      return;
+    }
+    void validateScenario({ quiet: true, navigation: true });
+  }, 80);
+}
+
+async function validateScenario({ quiet = false, navigation = false } = {}) {
   if (!state.scenario) return null;
   const requestGeneration = ++validationRequestGeneration;
   const requestSnapshot = scenarioRequestSnapshot();
@@ -3478,6 +3757,12 @@ async function validateScenario({ quiet = false } = {}) {
     reconcileMappingFingerprint(payload);
     const validation = normalizeValidation(payload);
     state.validation = { errors: validation.errors, warnings: validation.warnings, information: validation.information };
+    if (!validation.valid && navigation) {
+      if (state.validationNavigation?.active) advanceValidationNavigation(validation.errors);
+      else beginValidationNavigation(validation.errors);
+    } else if (validation.valid && state.validationNavigation?.active) {
+      advanceValidationNavigation([]);
+    }
     renderSteps();
     renderDiagnostics();
     if (!quiet || !validation.valid) openDiagnostics();
@@ -3502,9 +3787,17 @@ async function validateScenario({ quiet = false } = {}) {
   } catch (error) {
     if (requestGeneration !== validationRequestGeneration || !scenarioRequestIsCurrent(requestSnapshot)) return null;
     showOperationError(uiText("校验请求失败", "Validation request failed"), error);
+    if (navigation && state.validation.errors.length) {
+      if (state.validationNavigation?.active) advanceValidationNavigation(state.validation.errors);
+      else beginValidationNavigation(state.validation.errors);
+    }
     return null;
   } finally {
     if (requestGeneration === validationRequestGeneration) setBusy(false);
+    if (requestGeneration === validationRequestGeneration && !state.busy && state.validationNavigation?.active && state.validationNavigation.pendingGeneration === state.scenarioGeneration) {
+      state.validationNavigation.pendingGeneration = 0;
+      scheduleValidationNavigationRecheck();
+    }
   }
 }
 
@@ -3869,7 +4162,7 @@ async function runScenario(event = null) {
   }
   const readiness = mappingRunReadiness();
   if (!readiness.ready) return blockRunForMapping(readiness, "运行");
-  const validation = await validateScenario({ quiet: true });
+  const validation = await validateScenario({ quiet: true, navigation: true });
   if (!validation?.valid) {
     if (validation) {
       toast(
@@ -6668,6 +6961,34 @@ function nextCostProfileId(profileKey, component, registry) {
   return candidate;
 }
 
+function presetCostProfileTemplate(component) {
+  const metadata = asObject(component?.metadata);
+  if (metadata.cost_profile_key !== costProfileKeyForComponentKind(component)) return null;
+  const template = asObject(metadata.cost_profile_template);
+  return Object.keys(template).length ? template : null;
+}
+
+function remapPresetProfileResources(profile, componentId) {
+  const root = deepClone(profile);
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    Object.entries(value).forEach(([key, item]) => {
+      if (/resource_id$/i.test(key) && typeof item === "string") {
+        const suffix = item.includes(".") ? item.slice(item.indexOf(".")) : `.${slug(key.replace(/_?resource_id$/i, "resource"))}`;
+        value[key] = `${componentId}${suffix}`;
+      } else {
+        visit(item);
+      }
+    });
+  };
+  visit(root);
+  return root;
+}
+
 function rejectLegacyComponentProfiles(scenario) {
   scenario.profiles = asObject(scenario.profiles);
   const profiles = scenario.profiles;
@@ -7163,6 +7484,17 @@ function materializeMissingCostProfiles(components, scenario = state.scenario) {
     const registry = componentProfileRegistry(profileKey, scenario, { create: true });
     const requested = String(component.cost_profile_id || "").trim();
     if (requested && Object.hasOwn(registry, requested)) continue;
+    const presetTemplate = presetCostProfileTemplate(component);
+    if (presetTemplate) {
+      // A catalog template describes this physical part. Give each materialized
+      // instance its own profile so it cannot silently inherit legacy or
+      // another component's calibration.
+      const profileId = nextCostProfileId(profileKey, component, registry);
+      component.cost_profile_id = profileId;
+      registry[profileId] = remapPresetProfileResources(presetTemplate, String(component.component_id));
+      created.push(`${profileKey}.${profileId}`);
+      continue;
+    }
     if (requested) delete component.cost_profile_id;
     const ids = Object.keys(registry);
     if (ids.length === 1) {
@@ -8430,6 +8762,7 @@ function componentPresetDetailsMarkup(preset) {
   const derived = preset?.derived ?? preset?.derivations ?? preset?.inferences ?? provenance.derived ?? {
     measurement_basis: componentMetadata.measurement_basis,
     derived_formula: componentMetadata.derived_formula,
+    cost_profile_parameter_basis: componentMetadata.cost_profile_parameter_basis,
   };
   const assumptions = preset?.assumptions ?? provenance.assumptions ?? componentMetadata.conditions ?? preset?.notes;
   const limitations = preset?.limitations ?? preset?.limits ?? provenance.limitations;
@@ -8546,8 +8879,9 @@ function uniqueComponentPresetId(kind) {
 }
 
 function materializeComponentPreset(preset) {
-  const source = componentPresetSpec(preset);
+  const source = deepClone(componentPresetSpec(preset));
   requireScenarioSchemaV4(source, "component preset");
+  if (presetCostProfileTemplate(source)) delete source.cost_profile_id;
   const kind = normalizedComponentKind(source.kind ?? preset?.kind ?? preset?.component_kind);
   if (!kind || kind === "unknown") throw new Error("组件预设缺少可识别的组件类型（kind），当前拓扑未修改。");
   const componentId = uniqueComponentPresetId(kind);
@@ -8625,6 +8959,7 @@ function materializeTopologyBundle(preset) {
   const components = sourceComponents.map((source) => {
     const component = deepClone(source);
     requireScenarioSchemaV4(component, "topology bundle component", { inherited: true });
+    if (presetCostProfileTemplate(component)) delete component.cost_profile_id;
     const componentId = idMap.get(String(source.component_id));
     component.component_id = componentId;
     component.package_id = packageId;
@@ -17439,6 +17774,13 @@ function bindStaticEvents() {
   dom.rerunButton.addEventListener("click", runScenario);
   dom.emptyRunButton.addEventListener("click", runScenario);
   dom.traceRunButton.addEventListener("click", runScenario);
+  // Revalidate only after a committed control edit (change), never on every
+  // keystroke. The active navigation cursor then moves to the next remaining
+  // backend error and preserves the user's editing flow.
+  document.addEventListener("change", (event) => {
+    if (!state.validationNavigation?.active || !event.target?.closest?.("input, select, textarea")) return;
+    scheduleValidationNavigationRecheck();
+  }, true);
   dom.compareButton.addEventListener("click", compareScenario);
   dom.runArchitectureScanButton.addEventListener("click", () => { void runArchitectureScan(); });
   dom.closeArchitectureScanButton.addEventListener("click", () => dom.architectureScanDialog.close("close"));

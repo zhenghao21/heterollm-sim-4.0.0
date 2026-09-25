@@ -641,6 +641,40 @@ class ParallelPlanTests(unittest.TestCase):
             )
         )
 
+    def test_implicit_rank_memory_uses_reachable_hbm_not_compute_capacity(self):
+        scenario = _two_gpu_nvlink_scenario(ParallelSpec(tp_degree=2))
+        hardware = replace(
+            scenario.hardware,
+            components=tuple(
+                replace(component, capacity_bytes=0)
+                if component.kind == "gpu"
+                else component
+                for component in scenario.hardware.components
+            ),
+        )
+        placement = replace(
+            scenario.placement,
+            tensor_to_component={
+                key: value
+                for key, value in scenario.placement.tensor_to_component.items()
+                if "weight" not in key
+            },
+            tensor_bytes={
+                key: value
+                for key, value in scenario.placement.tensor_bytes.items()
+                if "weight" not in key
+            },
+        )
+
+        report = validate_scenario(
+            replace(scenario, hardware=hardware, placement=placement)
+        )
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertFalse(
+            any("capacity is unknown for gpu" in error for error in report.errors)
+        )
+
     def test_impossible_resident_weight_capacity_is_rejected(self):
         scenario = build_reference_scenario()
         hardware = replace(

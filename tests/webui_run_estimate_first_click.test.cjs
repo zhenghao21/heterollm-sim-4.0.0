@@ -257,6 +257,12 @@ function loadRunHarness(fetchImpl) {
       scenarioPayloadForTransport,
       controlPlaneDecision,
       controlPlaneEvidence,
+      validationIssueTarget,
+      inferValidationIssueFields,
+      normalizeIssue,
+      beginValidationNavigation,
+      advanceValidationNavigation,
+      setScenario,
       acceptRuntimePlacement,
       effectiveParallelRanks,
       bindModalDialogLifecycle,
@@ -272,6 +278,7 @@ function loadRunHarness(fetchImpl) {
     "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount",
     "runProgressBar", "runProgressMessage", "dismissRunJobButton",
     "cancelRunJobButton", "startRunJobButton",
+    "inspectorContent", "inspectorTitle", "deleteSelectionButton", "nodeLayer", "linkLayer", "topologyCanvas",
   ];
   ids.forEach((id) => {
     ui.dom[id] = new FakeHTMLElement(id);
@@ -407,7 +414,7 @@ test("V4 stale or incomplete previous placement never blocks a new validated run
       decision: { fully_placed: false, generated_op_keys: ["old-op"] },
       evidence: { input_fingerprint: "old" },
     },
-  };
+};
   await ui.runScenario();
   assert.equal(ui.dom.runJobDialog.open, true);
   await ui.startRunJob();
@@ -515,6 +522,36 @@ test("comparison ignores obsolete responses after scenario edits", async () => {
   assert.equal(ui.state.report, null);
   assert.equal(ui.state.comparison, null);
   assert.equal(ui.state.busy, false);
+});
+
+test("validation navigation resolves structured paths and plain backend messages", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  const structured = ui.validationIssueTarget({ field_path: "hardware.components[1].metadata.read_latency_ns" });
+  assert.equal(structured.componentId, "hbm0");
+  assert.equal(structured.field, "read_latency_ns");
+  const inferred = ui.validationIssueTarget(ui.normalizeIssue?.("component gpu0 capacity is missing", "scenario", "error") || {
+    message: "component gpu0 capacity is missing",
+  });
+  assert.equal(inferred.componentId, "gpu0");
+  assert.equal(inferred.field, "capacity_bytes");
+});
+
+test("validation cursor advances after the current error disappears", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  const first = { code: "first", field_path: "hardware.components[0].capacity_bytes", message: "first" };
+  const second = { code: "second", field_path: "hardware.components[1].read_bandwidth_gbps", message: "second" };
+  ui.beginValidationNavigation([first, second]);
+  assert.equal(ui.state.validationNavigation.index, 0);
+  ui.advanceValidationNavigation([second]);
+  assert.equal(ui.state.validationNavigation.index, 0);
+  assert.equal(ui.state.validationNavigation.signature.includes("second"), true);
+});
+
+test("loading a new scenario retires the old validation cursor", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  ui.state.validationNavigation = { active: true, errors: [{ code: "old" }], index: 0, signature: "old" };
+  ui.setScenario?.(scenario(), { dirty: false });
+  assert.equal(ui.state.validationNavigation, null);
 });
 
 

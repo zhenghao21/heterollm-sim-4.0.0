@@ -49,6 +49,9 @@ function helpers() {
     collisionSafeArchitectureTopologyView,
     resetPlacementForArchitecturePreset,
     materializeMissingCostProfiles,
+    materializeComponentPreset,
+    materializeTopologyBundle,
+    costProfileDraft,
     resetArchitectureDependentProfiles,
     hostOrchestrationReferenceIssue,
     componentKindClass,
@@ -93,6 +96,59 @@ test("new active-memory component kinds are visible and usable by V4 placement U
   assert.equal(ui.isActiveMemoryComponent(hbfMemory), true);
   assert.equal(ui.isWritableActiveRankMemory(hbfMemory), true);
   assert.equal(ui.componentKindClass(hbfMemory), "io");
+});
+
+test("single component preset templates become an instance profile instead of reusing legacy calibration", () => {
+  const ui = helpers();
+  const scenario = {
+    hardware: { components: [], links: [] },
+    profiles: { components: { hbm: { "legacy-hbm": { bandwidth_gb_s: 1 } } } },
+  };
+  ui.state.scenario = scenario;
+  const catalogComponent = {
+    schema_version: "4.0.0",
+    component_id: "jedec_hbm3",
+    kind: "hbm",
+    cost_profile_id: "legacy-hbm",
+    read_bandwidth_gbps: 6553.6,
+    metadata: {
+      cost_profile_key: "hbm",
+      cost_profile_template: {
+        bandwidth_gb_s: 819.2,
+        efficiency: 1,
+        energy_pj_per_byte: 4,
+        resource_id: "jedec_hbm3.hbm_fabric",
+        read_latency_ns: 40,
+        write_latency_ns: 40,
+        transaction_bytes: 256,
+        max_outstanding_requests: 32,
+        read_bandwidth_gb_s: 819.2,
+        write_bandwidth_gb_s: 819.2,
+      },
+    },
+  };
+  const component = ui.materializeComponentPreset({ id: "jedec-hbm3", component: catalogComponent });
+  scenario.hardware.components.push(component);
+  ui.materializeMissingCostProfiles([component], scenario);
+  assert.notEqual(component.cost_profile_id, "legacy-hbm");
+  const profile = ui.costProfileDraft("hbm", component);
+  assert.equal(profile.read_latency_ns, 40);
+  assert.equal(profile.bandwidth_gb_s, 819.2);
+  assert.equal(profile.resource_id, "hbm0.hbm_fabric");
+  const second = ui.materializeComponentPreset({ id: "jedec-hbm3", component: catalogComponent });
+  scenario.hardware.components.push(second);
+  ui.materializeMissingCostProfiles([second], scenario);
+  assert.notEqual(second.cost_profile_id, component.cost_profile_id);
+  assert.equal(ui.costProfileDraft("hbm", second).resource_id, "hbm1.hbm_fabric");
+  scenario.profiles.components.hbm[component.cost_profile_id].read_latency_ns = 53;
+  ui.materializeMissingCostProfiles([component], scenario);
+  assert.equal(ui.costProfileDraft("hbm", component).read_latency_ns, 53, "repeat reconciliation preserves edits");
+  assert.equal(ui.costProfileDraft("hbm", second).read_latency_ns, 40, "instances are independent");
+  assert.equal(catalogComponent.cost_profile_id, "legacy-hbm");
+  assert.equal(catalogComponent.metadata.cost_profile_template.read_latency_ns, 40);
+  assert.equal(scenario.profiles.components.hbm["legacy-hbm"].bandwidth_gb_s, 1);
+  component.metadata.cost_profile_template.read_latency_ns = 99;
+  assert.equal(catalogComponent.metadata.cost_profile_template.read_latency_ns, 40, "catalog metadata is deeply cloned");
 });
 
 function scenario() {

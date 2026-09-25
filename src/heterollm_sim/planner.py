@@ -6168,10 +6168,44 @@ def _resident_weight_components(
     """Return unique physical stores participating in a warm resident plan."""
 
     components = _component_map(scenario)
-    resident = {
-        str(rank.memory_component_id or rank.component_id)
-        for rank in plan.ranks
-    }
+    resident = set()
+    router = _topology_router(scenario)
+    neighbors = {}
+    for link in scenario.hardware.links:
+        neighbors.setdefault(link.source_component, set()).add(
+            link.target_component
+        )
+        neighbors.setdefault(link.target_component, set()).add(
+            link.source_component
+        )
+    for rank in plan.ranks:
+        if rank.memory_component_id:
+            resident.add(str(rank.memory_component_id))
+            continue
+        # An omitted rank memory means "let the runtime control plane choose"
+        # rather than "store weights on the compute GPU".  Mirror its local
+        # active-memory preference so the authoring validator does not demand
+        # capacity_bytes from a compute component such as hopper0.
+        candidates = []
+        for component in components.values():
+            if not component.is_active_memory or not component.is_writable:
+                continue
+            try:
+                router.route(component.component_id, rank.component_id, 1)
+                router.route(rank.component_id, component.component_id, 1)
+            except (KeyError, TypeError, ValueError):
+                continue
+            locality = 0 if component.component_id in neighbors.get(
+                rank.component_id, set()
+            ) else 1
+            candidates.append((locality, component.component_id))
+        if candidates:
+            best_locality = min(item[0] for item in candidates)
+            resident.update(
+                component_id
+                for locality, component_id in candidates
+                if locality == best_locality
+            )
     resident.update(_configured_cim_targets(scenario, plan))
     backing = _weight_storage_component(scenario)
     if (

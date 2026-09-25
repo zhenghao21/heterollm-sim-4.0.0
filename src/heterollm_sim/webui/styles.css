@@ -3409,6 +3409,24 @@ sup {
 
 .diagnostic-item:last-child { border-bottom: 0; }
 
+/* Run-gate navigation target: keep the field visible while it is being
+   repaired, including after a panel switch or inspector re-render. */
+.validation-focus {
+  outline: 2px solid var(--warning);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 24%, transparent), 0 0 18px color-mix(in srgb, var(--warning) 36%, transparent);
+  animation: validation-focus-pulse 1.35s ease-in-out infinite;
+}
+
+@keyframes validation-focus-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent), 0 0 10px color-mix(in srgb, var(--warning) 28%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--warning) 32%, transparent), 0 0 22px color-mix(in srgb, var(--warning) 48%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .validation-focus { animation: none; }
+}
+
 .icon-button {
   width: calc(30px * var(--layout-scale));
   height: calc(30px * var(--layout-scale));

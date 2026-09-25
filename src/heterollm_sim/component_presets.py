@@ -234,6 +234,348 @@ def _component_metadata(
     return metadata
 
 
+# Runtime profiles are deliberately kept as plain JSON-compatible objects here.
+# The web UI can copy one into ``profiles.components`` and remap resource IDs
+# without importing the Python cost-model classes.  ``*_parameter_basis`` is a
+# field-level audit trail: public product/standard values are separated from
+# editable analytical defaults (especially latency and efficiency).
+def _hbm_cost_profile_template(
+    component_id: str,
+    bandwidth_gbps: float,
+    *,
+    read_latency_ns: float = 40.0,
+    write_latency_ns: float = 40.0,
+    transaction_bytes: int = 256,
+    max_outstanding_requests: int = 32,
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    bandwidth_gb_s = bandwidth_gbps / 8.0
+    profile = {
+        "bandwidth_gb_s": bandwidth_gb_s,
+        "efficiency": 1.0,
+        "energy_pj_per_byte": 4.0,
+        "resource_id": "{}.hbm_fabric".format(component_id),
+        "read_latency_ns": read_latency_ns,
+        "write_latency_ns": write_latency_ns,
+        "transaction_bytes": transaction_bytes,
+        "max_outstanding_requests": max_outstanding_requests,
+        "read_bandwidth_gb_s": bandwidth_gb_s,
+        "write_bandwidth_gb_s": bandwidth_gb_s,
+    }
+    basis = {
+        "bandwidth_gb_s": "component.read_bandwidth_gbps / 8; public interface speed and width",
+        "read_bandwidth_gb_s": "component.read_bandwidth_gbps / 8; symmetric peak envelope",
+        "write_bandwidth_gb_s": "component.write_bandwidth_gbps / 8; symmetric peak envelope",
+        "efficiency": "A_ANALYTICAL editable derating default; no vendor workload efficiency claimed",
+        "energy_pj_per_byte": "A_ANALYTICAL editable energy default; no product measurement claimed",
+        "resource_id": "derived from the materialized component ID",
+        "read_latency_ns": "A_ANALYTICAL editable HBM service-latency default; JEDEC does not specify end-to-end controller latency",
+        "write_latency_ns": "A_ANALYTICAL editable HBM service-latency default; JEDEC does not specify end-to-end controller latency",
+        "transaction_bytes": "A_ANALYTICAL simulator transaction granularity",
+        "max_outstanding_requests": "A_ANALYTICAL simulator queue-overlap default",
+    }
+    return profile, basis
+
+
+def _host_memory_cost_profile_template(
+    component_id: str,
+    bandwidth_gbps: float,
+    *,
+    name: str,
+    read_latency_ns: float = 100.0,
+    write_latency_ns: float = 100.0,
+    transaction_bytes: int = 256,
+    max_outstanding_requests: int = 32,
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    bandwidth_gb_s = bandwidth_gbps / 8.0
+    profile = {
+        "bandwidth_gb_s": bandwidth_gb_s,
+        "efficiency": 1.0,
+        "energy_pj_per_byte": 12.0,
+        "resource_id": "{}.memory".format(component_id),
+        "name": name,
+        "read_latency_ns": read_latency_ns,
+        "write_latency_ns": write_latency_ns,
+        "transaction_bytes": transaction_bytes,
+        "max_outstanding_requests": max_outstanding_requests,
+        "read_bandwidth_gb_s": bandwidth_gb_s,
+        "write_bandwidth_gb_s": bandwidth_gb_s,
+    }
+    basis = {
+        "bandwidth_gb_s": "component.read_bandwidth_gbps / 8; vendor per-Grace aggregate",
+        "read_bandwidth_gb_s": "component.read_bandwidth_gbps / 8; symmetric analytical envelope",
+        "write_bandwidth_gb_s": "component.write_bandwidth_gbps / 8; symmetric analytical envelope",
+        "efficiency": "A_ANALYTICAL editable memory-controller derating default",
+        "energy_pj_per_byte": "A_ANALYTICAL editable host-memory energy default",
+        "resource_id": "derived from the materialized component ID",
+        "name": "derived from product family",
+        "read_latency_ns": "A_ANALYTICAL editable CPU-visible LPDDR service-latency default; product page does not publish end-to-end latency",
+        "write_latency_ns": "A_ANALYTICAL editable CPU-visible LPDDR service-latency default; product page does not publish end-to-end latency",
+        "transaction_bytes": "A_ANALYTICAL simulator transaction granularity",
+        "max_outstanding_requests": "A_ANALYTICAL simulator queue-overlap default",
+    }
+    return profile, basis
+
+
+def _gpu_cost_profile_template(
+    component_id: str,
+    *,
+    sm_count: int = 132,
+    frequency_ghz: float = 1.98,
+    peak_bf16_tflops: float = 989.5,
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    # The structural tensor-core cycle value is calibrated to the published
+    # dense BF16 peak, while the other issue/cache quantities remain editable
+    # analytical defaults.  It is not a claim about a vendor's microcode.
+    operations_per_mma = 2 * 16 * 16 * 16
+    cycles_per_mma = (
+        sm_count * 4 * frequency_ghz * operations_per_mma
+        / (peak_bf16_tflops * 1000.0)
+    )
+    profile = {
+        "tensor_core": {
+            "sm_count": sm_count,
+            "tensor_cores_per_sm": 4,
+            "frequency_ghz": frequency_ghz,
+            "mma_m": 16,
+            "mma_n": 16,
+            "mma_k": 16,
+            "cycles_per_mma": cycles_per_mma,
+            "supported_dtypes": ["fp16", "bf16", "int8"],
+            # peak_bf16_tflops is the dense BF16 baseline; Hopper's dense
+            # FP16 rate is equal and dense INT8 is 2x that baseline.
+            "dtype_throughput_scale": {"fp16": 1.0, "bf16": 1.0, "int8": 2.0},
+            "resource_id": "{}.tensor_core".format(component_id),
+        },
+        "cache_hierarchy": {
+            "levels": [
+                {
+                    "name": "l1_shared",
+                    "capacity_bytes": 30 * 1024 * 1024,
+                    "line_bytes": 128,
+                    "hit_latency_ns": 20.0,
+                    "bandwidth_gb_s": 24000.0,
+                    "associativity": 16,
+                    "banks": sm_count * 32,
+                    "read_ports": 2,
+                    "write_ports": 1,
+                    "max_outstanding": 32,
+                    "energy_pj_per_byte": 0.15,
+                    "resource_id": "{}.l1_shared".format(component_id),
+                },
+                {
+                    "name": "l2",
+                    "capacity_bytes": 50 * 1024 * 1024,
+                    "line_bytes": 128,
+                    "hit_latency_ns": 120.0,
+                    "bandwidth_gb_s": 12000.0,
+                    "associativity": 16,
+                    "banks": 128,
+                    "read_ports": 2,
+                    "write_ports": 1,
+                    "max_outstanding": 128,
+                    "energy_pj_per_byte": 0.6,
+                    "resource_id": "{}.l2".format(component_id),
+                },
+            ],
+            "write_back": True,
+            "write_allocate": True,
+        },
+        "scalar_lanes_per_sm": 128,
+        "scalar_ops_per_cycle": 1.0,
+        "reduction_ops_per_cycle_per_sm": 64.0,
+        "special_function_units_per_sm": 16,
+        "special_function_ops_per_cycle": 1.0,
+        "host_gemm_offload": None,
+        "host_recurrent_offload": None,
+        "quantized_matmul_capabilities": [],
+        "occupancy": 0.85,
+        "attainable_efficiency": 0.65,
+        "kernel_launch_ns": 1000.0,
+        "tensor_energy_pj_per_op": 0.2,
+        "scalar_energy_pj_per_op": 0.35,
+        "special_function_energy_pj_per_op": 1.2,
+        "launch_energy_pj": 10000.0,
+        "scalar_resource_id": "{}.scalar".format(component_id),
+        "special_function_resource_id": "{}.sfu".format(component_id),
+        "launch_resource_id": "{}.frontend".format(component_id),
+        "default_tensor_dtype": "bf16",
+        "name": "{}-gpu-profile".format(component_id),
+    }
+    basis = {
+        "tensor_core.sm_count": "S2 public Hopper implementation reference; verify active SM count for the exact SKU",
+        "tensor_core.frequency_ghz": "A_ANALYTICAL editable clock reference; the cited product pages do not guarantee one boost clock",
+        "tensor_core.cycles_per_mma": "derived to reproduce published dense BF16 peak; analytical structural calibration",
+        "tensor_core.tensor_cores_per_sm": "S2_VENDOR_DECLARED architecture-level count",
+        "tensor_core.supported_dtypes": "S2_VENDOR_DECLARED architecture capability",
+        "cache_hierarchy": "A_ANALYTICAL editable cache/issue defaults; product pages do not publish all simulator fields",
+        "occupancy": "A_ANALYTICAL editable scheduler default",
+        "attainable_efficiency": "A_ANALYTICAL editable workload efficiency default",
+        "kernel_launch_ns": "A_ANALYTICAL editable launch-latency default",
+        "*_energy": "A_ANALYTICAL editable energy defaults; no application measurement claimed",
+        "resource_id": "derived from the materialized component ID",
+    }
+    return profile, basis
+
+
+def _cpu_cost_profile_template(
+    component_id: str,
+    *,
+    core_count: int = 72,
+    frequency_ghz: float = 3.0,
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    profile = {
+        "pipeline": {
+            "core_count": core_count,
+            "frequency_ghz": frequency_ghz,
+            "simd_width_bits": 128,
+            "decode_width": 4,
+            "issue_width": 8,
+            "retire_width": 8,
+            "vector_fma_units_per_core": 4,
+            "vector_alu_units_per_core": 4,
+            "load_units_per_core": 2,
+            "store_units_per_core": 1,
+            "branch_units_per_core": 2,
+            "special_function_units_per_core": 1,
+            "special_function_cycles_per_vector": 12.0,
+            "reorder_buffer_entries": 256,
+            "load_store_queue_entries": 96,
+            "memory_level_parallelism": 16,
+            "branch_mispredict_ns": 5.0,
+            "resource_id": "{}.pipeline".format(component_id),
+        },
+        "cache_hierarchy": {
+            "levels": [
+                {
+                    "name": "l1d",
+                    "capacity_bytes": core_count * 64 * 1024,
+                    "line_bytes": 64,
+                    "hit_latency_ns": 1.0,
+                    "bandwidth_gb_s": 3000.0,
+                    "associativity": 4,
+                    "banks": core_count * 8,
+                    "read_ports": 2,
+                    "write_ports": 1,
+                    "max_outstanding": 16,
+                    "energy_pj_per_byte": 0.2,
+                    "resource_id": "{}.l1d".format(component_id),
+                },
+                {
+                    "name": "l2",
+                    "capacity_bytes": core_count * 1 * 1024 * 1024,
+                    "line_bytes": 64,
+                    "hit_latency_ns": 4.0,
+                    "bandwidth_gb_s": 1500.0,
+                    "associativity": 16,
+                    "banks": core_count * 8,
+                    "read_ports": 2,
+                    "write_ports": 1,
+                    "max_outstanding": 32,
+                    "energy_pj_per_byte": 0.8,
+                    "resource_id": "{}.l2".format(component_id),
+                },
+                {
+                    "name": "l3",
+                    "capacity_bytes": 117 * 1024 * 1024,
+                    "line_bytes": 64,
+                    "hit_latency_ns": 18.0,
+                    "bandwidth_gb_s": 800.0,
+                    "associativity": 16,
+                    "banks": 64,
+                    "read_ports": 2,
+                    "write_ports": 1,
+                    "max_outstanding": 64,
+                    "energy_pj_per_byte": 2.0,
+                    "resource_id": "{}.l3".format(component_id),
+                },
+            ],
+            "write_back": True,
+            "write_allocate": True,
+        },
+        "quantized_dot_capabilities": [],
+        "attainable_efficiency": 0.72,
+        "dispatch_ns": 80.0,
+        "gemm_energy_pj_per_op": 1.5,
+        "elementwise_energy_pj_per_op": 1.0,
+        "reduction_energy_pj_per_op": 1.2,
+        "special_function_energy_pj_per_op": 4.0,
+        "dispatch_energy_pj": 800.0,
+        "name": "{}-cpu-profile".format(component_id),
+    }
+    basis = {
+        "pipeline.core_count": "S2_VENDOR_DECLARED NVIDIA Grace Arm Neoverse V2 core count",
+        "pipeline.frequency_ghz": "A_ANALYTICAL editable clock assumption; the cited Grace public pages do not guarantee one SKU-wide frequency",
+        "pipeline.simd_width_bits": "S2_VENDOR_DECLARED 128-bit SVE2",
+        "pipeline.vector_fma_units_per_core": "S2 architecture fact (4 × 128-bit SVE2 units/core) mapped to an editable analytical FMA-unit assumption",
+        "pipeline.vector_alu_units_per_core": "S2 architecture fact (4 × 128-bit SVE2 units/core) mapped to an editable analytical ALU-unit assumption",
+        "pipeline.*": "A_ANALYTICAL editable issue/queue defaults; product pages do not publish all simulator fields",
+        "cache_hierarchy.levels[0].capacity_bytes": "S2_VENDOR_DECLARED/architecture reference L1D class",
+        "cache_hierarchy.levels[1].capacity_bytes": "S2_VENDOR_DECLARED/architecture reference private L2 class",
+        "cache_hierarchy.levels[2].capacity_bytes": "S2_VENDOR_DECLARED Grace system-cache capacity",
+        "cache_hierarchy": "A_ANALYTICAL editable latency/bandwidth/port defaults where exact implementation detail is not public",
+        "*_energy": "A_ANALYTICAL editable energy defaults; no application measurement claimed",
+        "resource_id": "derived from the materialized component ID",
+    }
+    return profile, basis
+
+
+def _cim_cost_profile_template(component_id: str) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    profile = {
+        "array_count": 512,
+        "p_m": 1,
+        "p_k": 128,
+        "p_n": 128,
+        "frequency_ghz": 1.0,
+        "input_parallel_bits": 4,
+        "weight_parallel_bits": 4,
+        "cycles_per_eval": 1,
+        "weight_capacity_bytes": 512 * 1024 * 1024,
+        "max_m_replication": 4,
+        "load_bandwidth_gb_s": 512.0,
+        "activation_bandwidth_gb_s": 1024.0,
+        "output_bandwidth_gb_s": 1024.0,
+        "noc_bandwidth_gb_s": 2048.0,
+        "accumulator_outputs_per_cycle": 4096.0,
+        "peripheral_elements_per_cycle": 4096.0,
+        "load_latency_ns": 20.0,
+        "noc_hop_latency_ns": 2.0,
+        "noc_reduce_fan_in": 4,
+        "peripheral_latency_ns": 5.0,
+        "accumulator_bits": 32,
+        "accumulator_guard_bits": 0,
+        "supported_activation_bits": [1, 2, 4, 8, 16],
+        "supported_weight_bits": [1, 2, 4, 8, 16],
+        "eval_energy_pj": 1.0,
+        "load_energy_pj_per_byte": 0.5,
+        "activation_energy_pj_per_byte": 0.2,
+        "output_energy_pj_per_byte": 0.2,
+        "noc_energy_pj_per_byte": 0.1,
+        "accumulator_energy_pj_per_op": 0.05,
+        "peripheral_energy_pj_per_element": 0.1,
+        "array_resource_id": "{}.array".format(component_id),
+        "load_resource_id": "{}.load".format(component_id),
+        "activation_resource_id": "{}.activation".format(component_id),
+        "noc_resource_id": "{}.noc".format(component_id),
+        "accumulator_resource_id": "{}.accumulator".format(component_id),
+        "peripheral_resource_id": "{}.peripheral".format(component_id),
+        "name": "{}-digital-sram-cim-profile".format(component_id),
+        "arithmetic_mode": "integer_bit_slice",
+        "weight_conversion_mode": "disabled",
+        "weight_decode_elements_per_ns": 0.0,
+        "conversion_scratch_capacity_bytes": 0,
+        "activation_fp32_to_fp16_elements_per_ns": 0.0,
+        "conversion_contract_basis": "",
+        "conversion_read_energy_pj_per_byte": 0.0,
+        "conversion_write_energy_pj_per_byte": 0.0,
+    }
+    basis = {
+        "*": "A_ANALYTICAL internal simulator reference; not a fabricated product specification",
+        "weight_capacity_bytes": "component capacity_bytes and internal analysis reference",
+        "resource_id": "derived from the materialized component ID",
+    }
+    return profile, basis
+
+
 def _hbm_ports(
     *,
     generation: str,
@@ -268,6 +610,11 @@ def _hbm_preset(
     notes: str,
     sources: Sequence[ComponentSource],
 ) -> ComponentPresetDefinition:
+    component_id = preset_id.replace("-", "_")
+    cost_profile_template, cost_profile_parameter_basis = _hbm_cost_profile_template(
+        component_id,
+        bandwidth_gbps,
+    )
     technology = {
         "generation": generation,
         "pin_speed_gbps": pin_speed_gbps,
@@ -277,7 +624,7 @@ def _hbm_preset(
         "kind_policy": "HBM 代际只写入 metadata；ComponentSpec.kind 固定保持为 hbm。",
     }
     component = ComponentSpec(
-        component_id=preset_id.replace("-", "_"),
+        component_id=component_id,
         kind="hbm",
         cost_profile_id=_default_cost_profile_id("hbm"),
         ports=_hbm_ports(
@@ -308,6 +655,13 @@ def _hbm_preset(
                 ],
                 "derived_formula": "公开速度档乘以接口宽度，结果写入 IR 带宽字段",
                 "expires_at": "2027-08-22",
+                "read_latency_ns": cost_profile_template["read_latency_ns"],
+                "write_latency_ns": cost_profile_template["write_latency_ns"],
+                "transfer_granularity_bytes": cost_profile_template["transaction_bytes"],
+                "max_outstanding_requests": cost_profile_template["max_outstanding_requests"],
+                "cost_profile_template": cost_profile_template,
+                "cost_profile_parameter_basis": cost_profile_parameter_basis,
+                "cost_profile_key": "hbm",
             },
         ),
     )
@@ -353,8 +707,13 @@ def _hbm_product_slice_preset(
     source_basis = "{} product aggregate and stack-count provenance".format(
         product_family
     )
+    component_id = preset_id.replace("-", "_")
+    cost_profile_template, cost_profile_parameter_basis = _hbm_cost_profile_template(
+        component_id,
+        bandwidth_gbps,
+    )
     component = ComponentSpec(
-        component_id=preset_id.replace("-", "_"),
+        component_id=component_id,
         kind="hbm",
         cost_profile_id=_default_cost_profile_id("hbm"),
         ports=(
@@ -446,6 +805,13 @@ def _hbm_product_slice_preset(
                     "unit_count_status": unit_count_status,
                     "source_basis": source_basis,
                 },
+                "read_latency_ns": cost_profile_template["read_latency_ns"],
+                "write_latency_ns": cost_profile_template["write_latency_ns"],
+                "transfer_granularity_bytes": cost_profile_template["transaction_bytes"],
+                "max_outstanding_requests": cost_profile_template["max_outstanding_requests"],
+                "cost_profile_template": cost_profile_template,
+                "cost_profile_parameter_basis": cost_profile_parameter_basis,
+                "cost_profile_key": "hbm",
                 "expires_at": "2027-08-23",
             },
         ),
@@ -541,8 +907,13 @@ def _gpu_preset(
         "L2/片上容量未在该页面完整建模，capacity_bytes 仅保留为计算侧本地缓存占位。",
     )
     notes = "NVIDIA Hopper SXM 计算侧模板；如果拓扑需要显式内存节点，请另外添加 HBM 堆叠预设。"
+    component_id = preset_id.replace("-", "_")
+    cost_profile_template, cost_profile_parameter_basis = _gpu_cost_profile_template(
+        component_id,
+        peak_bf16_tflops=bf16_dense_tflops,
+    )
     component = ComponentSpec(
-        component_id=preset_id.replace("-", "_"),
+        component_id=component_id,
         kind="gpu",
         cost_profile_id=_default_cost_profile_id("gpu"),
         ports=_gpu_hbm_controller_ports(
@@ -585,6 +956,9 @@ def _gpu_preset(
                 ],
                 "derived_formula": "公开 GB/s 或 TB/s 峰值乘以 8，写入 IR 带宽字段",
                 "expires_at": "2027-08-22",
+                "cost_profile_template": cost_profile_template,
+                "cost_profile_parameter_basis": cost_profile_parameter_basis,
+                "cost_profile_key": "gpu",
             },
         ),
     )
@@ -846,8 +1220,14 @@ def _grace_lpddr_preset(
         "物理 DRAM 数量未可靠披露，因此保持 unknown/null，不进行人为拆分。",
     )
     bandwidth_gb_per_s = bandwidth_gbps / 8.0
+    component_id = preset_id.replace("-", "_")
+    cost_profile_template, cost_profile_parameter_basis = _host_memory_cost_profile_template(
+        component_id,
+        bandwidth_gbps,
+        name="{}-memory-profile".format(component_id),
+    )
     component = ComponentSpec(
-        component_id=preset_id.replace("-", "_"),
+        component_id=component_id,
         kind="host_memory",
         cost_profile_id=_default_cost_profile_id("host_memory"),
         ports=(
@@ -909,6 +1289,13 @@ def _grace_lpddr_preset(
                     bandwidth_gb_per_s, bandwidth_gbps
                 ),
                 "expires_at": "2027-08-27",
+                "read_latency_ns": cost_profile_template["read_latency_ns"],
+                "write_latency_ns": cost_profile_template["write_latency_ns"],
+                "transfer_granularity_bytes": cost_profile_template["transaction_bytes"],
+                "max_outstanding_requests": cost_profile_template["max_outstanding_requests"],
+                "cost_profile_template": cost_profile_template,
+                "cost_profile_parameter_basis": cost_profile_parameter_basis,
+                "cost_profile_key": "host_memory",
             },
         ),
     )
@@ -938,6 +1325,10 @@ def _grace_cpu_preset(
         "厂商未声明可跨工作负载使用的 CPU 推理峰值，因此 peak_ops_per_s 保持 0.0 unknown sentinel；执行成本只认该组件经 cost_profile_id 显式绑定的 profiles.components.cpu registry 条目。",
         "CPU 节点不内嵌 LPDDR5X 容量；主机内存必须使用独立 host_memory 组件和显式链路。",
     )
+    component_id = preset_id.replace("-", "_")
+    cost_profile_template, cost_profile_parameter_basis = _cpu_cost_profile_template(
+        component_id,
+    )
     ports = tuple(
         PortSpec(
             port_id="gpu{}".format(index),
@@ -966,7 +1357,7 @@ def _grace_cpu_preset(
         ),
     )
     component = ComponentSpec(
-        component_id=preset_id.replace("-", "_"),
+        component_id=component_id,
         kind="cpu",
         cost_profile_id=_default_cost_profile_id("cpu"),
         ports=ports,
@@ -1004,6 +1395,9 @@ def _grace_cpu_preset(
                 ],
                 "derived_formula": "450 GB/s × 8 = 3600 Gb/s；LPDDR5X GB/s × 8 写入 IR",
                 "expires_at": "2027-08-27",
+                "cost_profile_template": cost_profile_template,
+                "cost_profile_parameter_basis": cost_profile_parameter_basis,
+                "cost_profile_key": "cpu",
             },
         ),
     )
@@ -1495,6 +1889,13 @@ _PRESETS: Tuple[ComponentPresetDefinition, ...] = (
                     ],
                     "derived_formula": "256 GB/s 乘以 8，写入 IR 带宽字段",
                     "expires_at": "2027-08-22",
+                    "cost_profile_template": _cim_cost_profile_template(
+                        "digital_sram_cim_analysis"
+                    )[0],
+                    "cost_profile_parameter_basis": _cim_cost_profile_template(
+                        "digital_sram_cim_analysis"
+                    )[1],
+                    "cost_profile_key": "cim",
                 },
             ),
         ),
@@ -1638,6 +2039,19 @@ def _hopper_sxm_bundle(
                     "等分不代表厂商公开了每个物理堆叠的独立容量或带宽。",
                     "未扣除 ECC、控制器、封装、刷新或热限制。",
                 ],
+                "read_latency_ns": 40.0,
+                "write_latency_ns": 40.0,
+                "transfer_granularity_bytes": 256,
+                "max_outstanding_requests": 32,
+                "cost_profile_template": _hbm_cost_profile_template(
+                    "hbm{}".format(index),
+                    per_stack_bandwidth_gbps,
+                )[0],
+                "cost_profile_parameter_basis": _hbm_cost_profile_template(
+                    "hbm{}".format(index),
+                    per_stack_bandwidth_gbps,
+                )[1],
+                "cost_profile_key": "hbm",
             },
         )
         for index in range(hbm_stack_count)
