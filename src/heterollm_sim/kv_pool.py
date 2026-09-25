@@ -375,6 +375,28 @@ class DynamicKVPool:
         return self._last_error
 
     @property
+    def ledger(self) -> Any:
+        """Return the shared physical ledger object used for accounting."""
+
+        return self._ledger.ledger
+
+    @property
+    def physical_ledger(self) -> Any:
+        return self._ledger.ledger
+
+    @property
+    def capacity_bytes_by_component(self) -> Mapping[str, int]:
+        return {component_id: int(component.capacity_bytes) for component_id, component in self.components.items()}
+
+    @property
+    def used_bytes_by_component(self) -> Mapping[str, int]:
+        return {component_id: int(self._component_used(component_id)) for component_id in self.components}
+
+    @property
+    def page_owners(self) -> Mapping[int, str]:
+        return {page_id: page.owner_component for page_id, page in self._pages.items()}
+
+    @property
     def events(self) -> Tuple[KvPoolTransfer, ...]:
         return tuple(self._events)
 
