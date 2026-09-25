@@ -876,10 +876,12 @@ class DynamicKVPool:
 KvPool = DynamicKVPool
 PagedKVPool = DynamicKVPool
 KVPage = KvPage
+KVPoolComponent = KvPoolComponent
 
 
 __all__ = [
     "DynamicKVPool",
+    "KVPoolComponent",
     "KVPage",
     "KvPage",
     "KvPool",
