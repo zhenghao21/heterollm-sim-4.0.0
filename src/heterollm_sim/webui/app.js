@@ -2735,6 +2735,9 @@ function ensureScenarioShape(scenario) {
   scenario.placement.metadata.ui.allow_colocated_logical_ranks ??= false;
   scenario.placement.kv_policy = asObject(scenario.placement.kv_policy);
   const kvPolicy = scenario.placement.kv_policy;
+  kvPolicy.layout_mode ??= "auto";
+  kvPolicy.pool_components = asArray(kvPolicy.pool_components).map(String).filter(Boolean);
+  kvPolicy.kv_unified ??= true;
   kvPolicy.cache_component ??= null;
   kvPolicy.offload_component ??= null;
   kvPolicy.tokens_per_page ??= 16;
@@ -13018,12 +13021,13 @@ function modelSummaryFact(label, field, value, helpKey = "") {
 }
 
 function componentOptions(selected, filter = null) {
+  const selectedValues = new Set(Array.isArray(selected) ? selected : [selected]);
   let components = state.scenario.hardware.components;
   if (filter) components = components.filter(filter);
-  if (selected && !components.some((item) => item.component_id === selected)) {
-    components = [{ component_id: selected, kind: "unknown" }, ...components];
+  for (const value of selectedValues) if (value && !components.some((item) => item.component_id === value)) {
+    components = [{ component_id: value, kind: "unknown" }, ...components];
   }
-  return components.map((component) => `<option value="${escapeHtml(component.component_id)}" ${component.component_id === selected ? "selected" : ""}>${escapeHtml(component.component_id)} · ${escapeHtml(kindLabel(component.kind))}</option>`).join("");
+  return components.map((component) => `<option value="${escapeHtml(component.component_id)}" ${selectedValues.has(component.component_id) ? "selected" : ""}>${escapeHtml(component.component_id)} · ${escapeHtml(kindLabel(component.kind))}</option>`).join("");
 }
 
 function renderMapping() {
@@ -13597,6 +13601,9 @@ function renderPlacementControls() {
   const placement = state.scenario.placement;
   const parallel = asObject(placement.parallel);
   const kvPolicy = asObject(placement.kv_policy);
+  kvPolicy.layout_mode ??= "auto";
+  kvPolicy.pool_components = asArray(kvPolicy.pool_components).map(String).filter(Boolean);
+  kvPolicy.kv_unified ??= true;
   const placementMetadata = asObject(placement.metadata);
   const activeMemoryFilter = (component) => isWritableActiveRankMemory(component);
   const backingPlannerExplanation = uiText(
@@ -13625,7 +13632,11 @@ function renderPlacementControls() {
     <section class="control-section" aria-labelledby="kvControlsTitle">
       <strong class="control-section-title" id="kvControlsTitle" data-concept-help="kv_residency_policy">${escapeHtml(uiText("KV 驻留策略", "KV residency strategy"))}</strong>
       <div class="kv-grid">
-         <label class="field"><span data-concept-help="kv_cache_component">${escapeHtml(uiText("缓存组件", "Cache Component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("未指定", "Unspecified"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>
+         <label class="field"><span>${escapeHtml(uiText("KV 驻留模式", "KV residency mode"))}</span><select data-placement-group="kv_policy" data-placement-field="layout_mode" aria-describedby="kvLayoutModeHelp">${fixedOptions([["auto", uiText("跟随 llama.cpp layer placement", "Follow llama.cpp layer placement")], ["fixed", uiText("固定单组件", "Fixed single component")], ["manual", uiText("手动按 layer 指定", "Manual per-layer mapping")], ["paged_pool", uiText("动态 KV Pool（实验性）", "Dynamic KV Pool (experimental)")]], kvPolicy.layout_mode)}</select><small id="kvLayoutModeHelp" class="field-hint">${escapeHtml(uiText("默认模式按 split/layer 自动决定 KV 所属组件；动态 Pool 只有后端明确支持时才可用。", "Auto mode follows split/layer placement; Dynamic Pool is only meaningful when the backend supports it."))}</small></label>
+         ${kvPolicy.layout_mode === "auto" ? `<label class="field"><span>${escapeHtml(uiText("默认活动组件 / fallback", "Default active / fallback component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("自动决定", "Auto"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>` : ""}
+         ${kvPolicy.layout_mode === "paged_pool" ? `<label class="field"><span>${escapeHtml(uiText("Pool 组件（实验性）", "Pool components (experimental)"))}</span><select multiple size="3" data-placement-group="kv_policy" data-placement-field="pool_components">${componentOptions(kvPolicy.pool_components, activeMemoryFilter)}</select></label>` : ""}
+         ${kvPolicy.layout_mode === "fixed" ? `<label class="field"><span data-concept-help="kv_cache_component">${escapeHtml(uiText("缓存组件", "Cache Component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("未指定", "Unspecified"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>` : ""}
+         ${kvPolicy.layout_mode === "manual" ? `<div class="span-all kv-layer-mapping-editor"><strong>${escapeHtml(uiText("手动 layer -> 组件映射", "Manual layer → component mapping"))}</strong><p class="muted">${escapeHtml(uiText("请在控制平面 KV layer targets 中指定；此模式不会把多个组件自动合并成统一容量池。", "Set mappings in Control-plane KV layer targets; components are not silently merged into one pool."))}</p></div>` : ""}
          <label class="field"><span data-concept-help="kv_offload_component">${escapeHtml(uiText("卸载组件", "Offload Component"))}</span><select data-placement-group="kv_policy" data-placement-field="offload_component"><option value="">${escapeHtml(uiText("不卸载", "No Offload"))}</option>${componentOptions(kvPolicy.offload_component || "")}</select></label>
          ${placementNumberField(uiText("每页 Token 数（Tokens per Page）", "Tokens per Page"), "tokens_per_page", kvPolicy.tokens_per_page, "kv_policy", "page_size")}
          <label class="field"><span>${escapeHtml(uiText("Linear state 卸载模式", "Linear-state offload mode"))}</span><select data-placement-metadata-field="linear_state_offload_mode">${fixedOptions([["mirror", "镜像（Mirror）"], ["pressure", "压力触发（Pressure）"]], placementMetadata.linear_state_offload_mode || "mirror")}</select><small class="field-hint">mirror 保持镜像状态；pressure 仅在内存压力下触发卸载。后端仅支持这两个值。</small></label>
@@ -13639,7 +13650,7 @@ function renderPlacementControls() {
     const group = control.dataset.placementGroup;
     const field = control.dataset.placementField;
     const target = group === "parallel" ? parallel : kvPolicy;
-    const value = control.type === "number" ? Number(control.value) : control.value || null;
+    const value = control.multiple ? [...control.selectedOptions].map((option) => option.value) : control.type === "number" ? Number(control.value) : control.value || null;
     if (group === "parallel" && ["tp_degree", "pp_degree", "ep_degree"].includes(field)) {
       reconcileParallelDegree(field, value);
       return;
@@ -16782,6 +16793,23 @@ function renderRuntime(report) {
   const scenarioParallel = asObject(state.scenario?.placement?.parallel);
   const scheduler = asObject(report.scheduler);
   const kv = asObject(report.kv_cache);
+  const kvRoot = { ...asObject(summary), ...asObject(report), ...kv };
+  const kvComponentCapacity = asObject(kvRoot.kv_capacity_bytes_by_component);
+  const kvComponentUsed = asObject(kvRoot.kv_used_bytes_by_component);
+  const kvComponentPeak = asObject(kvRoot.kv_peak_bytes_by_component);
+  const kvComponentLayers = asObject(kvRoot.kv_component_owner_layers);
+  const kvLayerOwner = asObject(kvRoot.kv_layer_components || kvRoot.kv_layer_owner);
+  const kvLayerBpt = asObject(kvRoot.kv_layer_bytes_per_token);
+  const kvLayerBpp = asObject(kvRoot.kv_layer_bytes_per_page);
+  const kvComponentRows = Object.keys({ ...kvComponentCapacity, ...kvComponentUsed, ...kvComponentPeak, ...kvComponentLayers }).map((component) => {
+    const cap = Number(kvComponentCapacity[component]);
+    const used = Number(kvComponentUsed[component]);
+    const free = Number.isFinite(cap) && Number.isFinite(used) ? cap - used : null;
+    const layers = asArray(kvComponentLayers[component]).join(", ") || "—";
+    return `<tr><th>${escapeHtml(component)}</th><td>${formatResultBytes(kvComponentCapacity[component]).html}</td><td>${formatResultBytes(kvComponentUsed[component]).html}</td><td>${free == null ? "—" : formatResultBytes(free).html}</td><td>${escapeHtml(layers)}</td></tr>`;
+  }).join("");
+  const kvLayerRows = Object.keys(kvLayerOwner).map((layer) => `<tr><th>${escapeHtml(layer)}</th><td>${escapeHtml(kvLayerOwner[layer])}</td><td>${formatResultBytes(kvLayerBpt[layer]).html}</td><td>${formatResultBytes(kvLayerBpp[layer]).html}</td></tr>`).join("");
+  const kvAnalysisMarkup = (kvComponentRows || kvLayerRows || Object.hasOwn(kvRoot, "kv_layout_mode")) ? `<section class="runtime-kv-analysis" data-runtime-section="kv-analysis"><h3>${escapeHtml(uiText("KV 容量与放置分析", "KV capacity and placement analysis"))}</h3><dl class="technical-facts"><div><dt>${escapeHtml(uiText("驻留模式", "Layout mode"))}</dt><dd>${escapeHtml(String(kvRoot.kv_layout_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("Split 模式", "Split mode"))}</dt><dd>${escapeHtml(String(kvRoot.split_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("统一 KV", "Unified KV"))}</dt><dd>${escapeHtml(String(kvRoot.kv_unified ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("有效物理容量", "Effective physical capacity"))}</dt><dd>${formatResultBytes(kvRoot.effective_physical_capacity).html}</dd></div><div><dt>${escapeHtml(uiText("瓶颈组件", "Bottleneck component"))}</dt><dd>${escapeHtml(String(kvRoot.kv_bottleneck_component ?? "—"))}</dd></div></dl>${kvComponentRows ? `<h4>${escapeHtml(uiText("按组件", "By component"))}</h4><div class="table-shell"><table class="data-table compact-data-table"><thead><tr><th>${escapeHtml(uiText("组件", "Component"))}</th><th>${escapeHtml(uiText("容量", "Capacity"))}</th><th>${escapeHtml(uiText("已用", "Used"))}</th><th>${escapeHtml(uiText("空闲", "Free"))}</th><th>${escapeHtml(uiText("所属层", "Owned layers"))}</th></tr></thead><tbody>${kvComponentRows}</tbody></table></div>` : ""}${kvLayerRows ? `<h4>${escapeHtml(uiText("按 layer", "By layer"))}</h4><div class="table-shell"><table class="data-table compact-data-table"><thead><tr><th>Layer</th><th>Owner</th><th>Bytes/token</th><th>Bytes/page</th></tr></thead><tbody>${kvLayerRows}</tbody></table></div>` : ""}<p class="muted">${escapeHtml(uiText("运行事件：batch retry {retry}；context shift {shift}；idle slot cleanup {idle}；容量失败 {failure}。", "Runtime events: batch retry {retry}; context shift {shift}; idle slot cleanup {idle}; capacity failure {failure}.", { retry: String(kvRoot.kv_batch_retry_count ?? 0), shift: String(kvRoot.kv_context_shift_count ?? 0), idle: String(kvRoot.kv_idle_slots_cleared ?? 0), failure: kvRoot.kv_capacity_failure_count ?? kvRoot.kv_capacity_failure ?? 0 } ))}</p></section>` : "";
   const mtp = asObject(summary.mtp);
   const goodput = asObject(summary.goodput);
   const machineMode = String(report.execution_mode || (state.scenario?.workload?.scheduler?.mode === "continuous" ? "continuous_batching" : "static"));
@@ -16859,6 +16887,7 @@ function renderRuntime(report) {
       [uiText("交换", "Swap"), swap, "kv_swap_summary"],
       [uiText("页容量", "Capacity Pages"), runtimeValue(kv, "capacity_pages"), "kv_capacity_pages"],
     ], "is-kv", "kv_cache"),
+    kvAnalysisMarkup,
     runtimeGroup(uiText("KV 读写流量", "KV Traffic"), [
       [uiText("预填读取", "Prefill Read"), kvBytePair("logical_prefill_read_bytes", "physical_prefill_read_bytes"), "kv_prefill_read_traffic"],
       [uiText("预填写入", "Prefill Write"), kvBytePair("logical_prefill_write_bytes", "physical_prefill_write_bytes"), "kv_prefill_write_traffic"],

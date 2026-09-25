@@ -87,6 +87,7 @@ from .planner import (
     TopologyAwareBatchCostProvider,
 )
 from .precision import dtype_bits
+from .kv_pool import DynamicKVPool, KvPoolComponent
 from .residency import (
     AccessOperation,
     AllocationLifecycle,
@@ -237,6 +238,19 @@ class KVCachePolicy:
     capacity_pages: int
     offload_capacity_bytes: int
     component_bytes_per_page: Mapping[str, int] = field(default_factory=dict)
+    # Read-only placement/capacity projection.  The aggregate fields above
+    # remain the compatibility path for legacy single-component scenarios.
+    layout_mode: str = "legacy_single"
+    kv_unified: bool = True
+    pool_components: Tuple[str, ...] = ()
+    logical_context_tokens: int = 0
+    n_seq_max: int = 0
+    kv_layer_components: Mapping[str, str] = field(default_factory=dict)
+    kv_layer_bytes_per_token: Mapping[str, int] = field(default_factory=dict)
+    kv_layer_bytes_per_page: Mapping[str, int] = field(default_factory=dict)
+    kv_layer_component_shards: Mapping[str, Tuple[str, ...]] = field(default_factory=dict)
+    capacity_bytes_by_component: Mapping[str, int] = field(default_factory=dict)
+    bottleneck_component: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -351,6 +365,34 @@ class ServingPlan:
     kv_policy: KVCachePolicy
     linear_state_policy: LinearStatePolicy
     mtp: MTPPolicy
+
+    @property
+    def kv_layer_components(self) -> Mapping[str, str]:
+        return self.kv_policy.kv_layer_components
+
+    @property
+    def kv_component_bytes_per_token(self) -> Mapping[str, int]:
+        by_component: Dict[str, int] = {}
+        for layer, owner in self.kv_policy.kv_layer_components.items():
+            owners = self.kv_policy.kv_layer_component_shards.get(layer, (owner,))
+            bytes_per_owner = int(
+                self.kv_policy.kv_layer_bytes_per_token.get(layer, 0)
+            ) // max(1, len(owners))
+            for component in owners:
+                by_component[component] = by_component.get(component, 0) + bytes_per_owner
+        return by_component
+
+    @property
+    def kv_component_bytes_per_page(self) -> Mapping[str, int]:
+        return self.kv_policy.component_bytes_per_page
+
+    @property
+    def kv_capacity_bytes_by_component(self) -> Mapping[str, int]:
+        return self.kv_policy.capacity_bytes_by_component
+
+    @property
+    def kv_bottleneck_component(self) -> Optional[str]:
+        return self.kv_policy.bottleneck_component
 
 
 @dataclass(frozen=True)
@@ -1576,6 +1618,27 @@ class KVCacheMetrics:
     physical_mtp_temporary_write_bytes: int = 0
     logical_mtp_verification_read_bytes: int = 0
     physical_mtp_verification_read_bytes: int = 0
+    layout_mode: str = "legacy_single"
+    split_mode: Optional[str] = None
+    kv_unified: bool = True
+    logical_context_tokens: int = 0
+    n_seq_max: int = 0
+    capacity_bytes_by_component: Mapping[str, int] = field(default_factory=dict)
+    used_bytes_by_component: Mapping[str, int] = field(default_factory=dict)
+    peak_bytes_by_component: Mapping[str, int] = field(default_factory=dict)
+    layer_owner: Mapping[str, str] = field(default_factory=dict)
+    layer_bytes_per_token: Mapping[str, int] = field(default_factory=dict)
+    layer_bytes_per_page: Mapping[str, int] = field(default_factory=dict)
+    layer_component_shards: Mapping[str, Tuple[str, ...]] = field(default_factory=dict)
+    component_owner_layers: Mapping[str, Tuple[str, ...]] = field(default_factory=dict)
+    bottleneck_component: Optional[str] = None
+    effective_physical_capacity_bytes: int = 0
+    batch_retry_count: int = 0
+    batch_reduced: bool = False
+    idle_slots_cleared: int = 0
+    context_shift_count: int = 0
+    capacity_failure_count: int = 0
+    capacity_failure_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -1861,6 +1924,120 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     physical_bytes_per_token = _kv_bytes_per_token(scenario, kv_dtype)
     logical_bytes_per_token = _logical_kv_bytes_per_token(scenario, kv_dtype)
     bytes_per_page = physical_bytes_per_token * page_tokens
+    # Resolve UI aliases and the native adapter's authoritative layer map.
+    # Old scenarios have neither and stay on the legacy single-component path.
+    native_layer_map = scenario.placement.metadata.get(
+        "llama_cpp_kv_layer_components", {}
+    )
+    if not isinstance(native_layer_map, _ABCMapping):
+        native_layer_map = {}
+    memory_tiers = scenario.placement.metadata.get("memory_tiers", {})
+    tier_layer_map = (
+        memory_tiers.get("kv_layer_components", {})
+        if isinstance(memory_tiers, _ABCMapping)
+        else {}
+    )
+    if not isinstance(tier_layer_map, _ABCMapping):
+        tier_layer_map = {}
+    requested_layout = str(getattr(kv_spec, "layout_mode", "legacy_single")).lower()
+    if requested_layout == "auto":
+        layout_mode = (
+            "llama_static_layer"
+            if native_layer_map or tier_layer_map
+            else "legacy_single"
+        )
+    elif requested_layout == "fixed":
+        layout_mode = "legacy_single"
+    elif requested_layout == "manual":
+        layout_mode = "llama_static_layer"
+    else:
+        layout_mode = requested_layout
+    layer_map = dict(native_layer_map or tier_layer_map)
+    if requested_layout == "manual" and not layer_map:
+        raise ValueError(
+            "manual KV layout requires a generated kv_layer_components mapping"
+        )
+    layer_bytes_per_token: Dict[str, int] = {}
+    layer_bytes_per_page: Dict[str, int] = {}
+    layer_component_shards: Dict[str, Tuple[str, ...]] = {}
+    layer_component_bytes: Dict[str, int] = {}
+    if layout_mode == "llama_static_layer" and layer_map:
+        layer_ids = {
+            layer.layer_id
+            for layer in _execution_layers(scenario)
+            if not layer.is_linear_attention
+        }
+        unknown = sorted(set(layer_map).difference(layer_ids))
+        if unknown and not native_layer_map:
+            raise ValueError(
+                "KV layer mapping contains unknown layers: {}".format(
+                    ", ".join(map(str, unknown))
+                )
+            )
+        if unknown and native_layer_map:
+            # Native llama.cpp placement may describe every transformer block;
+            # only attention-bearing blocks own persistent KV storage.
+            layer_map = {
+                str(layer_id): target
+                for layer_id, target in layer_map.items()
+                if layer_id in layer_ids
+            }
+        for layer in _execution_layers(scenario):
+            if layer.is_linear_attention:
+                continue
+            owner = layer_map.get(layer.layer_id)
+            if not owner:
+                raise ValueError(
+                    "KV layer mapping must specify owner for {}".format(layer.layer_id)
+                )
+            _logical_layer_bytes, physical_layer_bytes = _kv_bytes_for_layer(
+                scenario, layer, kv_dtype
+            )
+            layer_bytes_per_token[layer.layer_id] = physical_layer_bytes
+            layer_bytes_per_page[layer.layer_id] = physical_layer_bytes * page_tokens
+            parallel = _parallel_plan(scenario)
+            rank_components = (
+                (str(owner),)
+                if tier_layer_map and not native_layer_map
+                else tuple(
+                    dict.fromkeys(
+                        str(rank.memory_component_id)
+                        for rank in parallel.ranks_for_layer(layer)
+                        if rank.memory_component_id
+                    )
+                )
+            )
+            if not rank_components:
+                rank_components = (str(owner),)
+            layer_component_shards[layer.layer_id] = rank_components
+            shard_bytes = (
+                physical_layer_bytes // len(rank_components)
+                if len(rank_components) > 1
+                else physical_layer_bytes
+            )
+            for component_id in rank_components:
+                layer_component_bytes[component_id] = (
+                    layer_component_bytes.get(component_id, 0)
+                    + shard_bytes * page_tokens
+                )
+        layer_map = {str(key): str(value) for key, value in layer_map.items()}
+    kv_unified = bool(getattr(kv_spec, "kv_unified", True))
+    logical_context_tokens = 0
+    n_seq_max = max_num_seqs
+    capacity_contract = scenario.workload.metadata.get(
+        "llama_cpp_kv_capacity_contract", {}
+    )
+    if isinstance(capacity_contract, _ABCMapping):
+        logical_context_tokens = max(
+            0, int(capacity_contract.get("logical_context_tokens", 0) or 0)
+        )
+        n_seq_max = max(
+            1, int(capacity_contract.get("n_seq_max", max_num_seqs) or max_num_seqs)
+        )
+        if "kv_unified" in capacity_contract:
+            kv_unified = bool(capacity_contract["kv_unified"])
+    if logical_context_tokens <= 0:
+        logical_context_tokens = max(0, int(scenario.model.max_sequence_length))
     logical_linear_state_bytes = _linear_state_bytes_per_request(scenario)
     state_contract = _linear_state_runtime_contract(scenario)
     contract_linear_state_bytes = _linear_state_contract_live_bytes(
@@ -1926,6 +2103,28 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     )
     state_capacity = state_capacity_requests * linear_state_bytes
     capacity_bytes = _kv_capacity_bytes(scenario, cache_component)
+    if layout_mode == "paged_pool":
+        pool_components = tuple(getattr(kv_spec, "pool_components", ()))
+        if not pool_components:
+            raise ValueError("paged_pool requires pool_components")
+        if offload_component:
+            raise ValueError(
+                "paged_pool serving does not yet lower request swap/offload; "
+                "use DynamicKVPool.offload_page explicitly"
+            )
+        for component_id in pool_components:
+            component = scenario.hardware.get_component(str(component_id))
+            if not component.is_active_memory or not component.is_writable:
+                raise ValueError(
+                    "paged_pool requires writable active memory: {}".format(
+                        component_id
+                    )
+                )
+        cache_component = cache_component or str(pool_components[0])
+        capacity_bytes = sum(
+            _dynamic_component_capacity(scenario, str(component_id), ("kv_cache",))
+            for component_id in pool_components
+        )
     explicit_kv_capacity = (
         _declared_runtime_tensor_capacity(scenario, "kv_cache") > 0
     )
@@ -2055,11 +2254,16 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     kv_component_bytes, state_component_bytes = _tier_state_layout(
         scenario, cache_component, state_cache_component, page_tokens, kv_dtype
     )
+    if layout_mode == "llama_static_layer" and layer_component_bytes:
+        # Native adapter placement is authoritative even when no V4
+        # memory_tiers authoring block exists.  The per-component map is the
+        # only capacity ledger input; no components are summed as one pool.
+        kv_component_bytes = dict(layer_component_bytes)
     if kv_component_bytes or state_component_bytes:
         # Static layer partitioning only: do not pretend a one-endpoint swap
         # or native allocator knows how to migrate a distributed page/state.
         resource_policy = _serving_resource_policy(scenario)
-        if (offload_component or state_offload_component
+        if ((offload_component and not native_layer_map) or state_offload_component
                 or kv_spec.preemption_mode == "swap"
                 or scheduler.preemption_policy == "swap"
                 or resource_policy.enabled
@@ -2101,6 +2305,58 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
             capacity_pages = min(capacity_pages, capacity_bytes // bytes_per_page)
         capacity_bytes = capacity_pages * bytes_per_page
         state_offload_capacity = offload_capacity = 0
+    # llama.cpp non-unified KV allocates an independent context window per
+    # sequence.  Keep the physical buffer bound and the logical per-slot
+    # bound separate, then apply the product only to the aggregate page cap.
+    if not kv_unified and bytes_per_page and logical_context_tokens > 0:
+        per_slot_pages = (logical_context_tokens + page_tokens - 1) // page_tokens
+        capacity_pages = min(capacity_pages, per_slot_pages * max(1, n_seq_max))
+        capacity_bytes = capacity_pages * bytes_per_page
+    component_capacity_bytes: Dict[str, int] = {}
+    if kv_component_bytes:
+        dynamic_ids = {"kv_cache", "linear_state"} | {
+            "{}.{}".format(layer.layer_id, "linear_state" if layer.is_linear_attention else "kv_cache")
+            for layer in _execution_layers(scenario)
+        }
+        component_capacity_bytes = {
+            str(component): max(
+                0, _dynamic_component_capacity(scenario, component, dynamic_ids)
+            )
+            for component in kv_component_bytes
+        }
+        if not kv_unified:
+            per_slot_pages = (logical_context_tokens + page_tokens - 1) // page_tokens
+            component_capacity_bytes = {
+                component: min(
+                    value,
+                    max(1, n_seq_max)
+                    * per_slot_pages
+                    * int(kv_component_bytes[component]),
+                )
+                for component, value in component_capacity_bytes.items()
+            }
+    elif layout_mode == "paged_pool":
+        component_capacity_bytes = {
+            str(component): max(
+                0,
+                _dynamic_component_capacity(
+                    scenario, str(component), ("kv_cache",)
+                ),
+            )
+            for component in getattr(kv_spec, "pool_components", ())
+        }
+    elif cache_component:
+        component_capacity_bytes = {str(cache_component): max(0, int(capacity_bytes))}
+    bottleneck_component = None
+    if kv_component_bytes:
+        bottleneck_component = min(
+            kv_component_bytes,
+            key=lambda component: (
+                component_capacity_bytes.get(component, 0)
+                / max(1, int(kv_component_bytes[component])),
+                str(component),
+            ),
+        )
     linear_state_policy = LinearStatePolicy(
         cache_component=state_cache_component,
         offload_component=state_offload_component,
@@ -2126,6 +2382,17 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         capacity_pages=capacity_pages,
         offload_capacity_bytes=offload_capacity,
         component_bytes_per_page=kv_component_bytes,
+        layout_mode=layout_mode,
+        kv_unified=kv_unified,
+        pool_components=tuple(getattr(kv_spec, "pool_components", ())),
+        logical_context_tokens=logical_context_tokens,
+        n_seq_max=n_seq_max,
+        kv_layer_components=layer_map,
+        kv_layer_bytes_per_token=layer_bytes_per_token,
+        kv_layer_bytes_per_page=layer_bytes_per_page,
+        kv_layer_component_shards=layer_component_shards,
+        capacity_bytes_by_component=component_capacity_bytes,
+        bottleneck_component=bottleneck_component,
     )
     if kv_policy.allocation_policy not in ("lazy", "eager"):
         raise ValueError("KV allocation_policy must be lazy or eager")
@@ -2236,6 +2503,25 @@ def _request_admission_reason(
         else 0
     )
     required_bytes = required_pages * plan.kv_policy.bytes_per_page
+    logical_limit = max(0, int(plan.kv_policy.logical_context_tokens))
+    if logical_limit and required_tokens > logical_limit:
+        return (
+            "request {} logical context {} exceeds llama.cpp per-slot context "
+            "limit {}".format(request.request_id, required_tokens, logical_limit)
+        )
+    if (
+        not plan.kv_policy.kv_unified
+        and plan.kv_policy.n_seq_max > 0
+        and required_pages
+        > max(0, plan.kv_policy.capacity_pages // plan.kv_policy.n_seq_max)
+    ):
+        return (
+            "request {} KV working set exceeds its non-unified slot reservation "
+            "({} pages)".format(
+                request.request_id,
+                max(0, plan.kv_policy.capacity_pages // plan.kv_policy.n_seq_max),
+            )
+        )
     if required_pages > plan.kv_policy.capacity_pages:
         return (
             "request {} KV working set requires {} bytes ({} pages for {} "
@@ -2436,6 +2722,7 @@ class _PhysicalCapacityLedger:
     def __init__(self, limits: Mapping[str, int]) -> None:
         self.limits = {str(key): max(0, int(value)) for key, value in limits.items()}
         self.used_bytes: Dict[str, int] = {key: 0 for key in self.limits}
+        self.peak_used_bytes: Dict[str, int] = {key: 0 for key in self.limits}
 
     def can_adjust(self, component_id: Optional[str], delta_bytes: int) -> bool:
         if not component_id or delta_bytes <= 0:
@@ -2458,6 +2745,9 @@ class _PhysicalCapacityLedger:
         if updated < 0:
             raise RuntimeError("physical capacity ledger underflow on {}".format(component))
         self.used_bytes[component] = updated
+        self.peak_used_bytes[component] = max(
+            self.peak_used_bytes.get(component, 0), updated
+        )
         return True
 
     def can_adjust_many(self, deltas: Mapping[str, int]) -> bool:
@@ -2567,6 +2857,28 @@ class _KVLedger:
         self.releases = 0
         self.offload_used_bytes = 0
         self.offload_peak_bytes = 0
+        self.paged_pool: Optional[DynamicKVPool] = None
+
+    def configure_paged_pool(self, scenario: ScenarioConfig) -> None:
+        """Attach the experimental page owner allocator to this ledger."""
+
+        if self.policy.layout_mode != "paged_pool":
+            return
+        requested = tuple(self.policy.pool_components)
+        component_map = scenario.hardware.component_map()
+        descriptors = []
+        for component_id in requested:
+            component = component_map.get(str(component_id))
+            if component is None:
+                raise ValueError("unknown paged KV pool component: {}".format(component_id))
+            descriptors.append(KvPoolComponent.from_component(component))
+        self.paged_pool = DynamicKVPool(
+            descriptors,
+            tokens_per_page=self.policy.tokens_per_page,
+            page_bytes=max(1, int(self.policy.bytes_per_page)),
+            ledger=self.physical,
+            offload_components=(),
+        )
 
     def _active_deltas(self, byte_count: int) -> Mapping[str, int]:
         if not self.policy.component_bytes_per_page:
@@ -2582,6 +2894,21 @@ class _KVLedger:
         return (token_count + self.policy.tokens_per_page - 1) // self.policy.tokens_per_page
 
     def can_resize(self, request: _MutableRequest, pages: int) -> bool:
+        if self.paged_pool is not None:
+            if pages < 0:
+                return False
+            if pages == request.kv_pages:
+                return True
+            # ``resize_detailed`` is atomic and does not mutate on failure;
+            # use the real allocator for all page-owner decisions.
+            result = self.paged_pool.resize_detailed(
+                request.spec.request_id, pages
+            )
+            if result.success:
+                # Undo the probe immediately.  A subsequent resize performs
+                # the actual allocation; this preserves the legacy can_* API.
+                self.paged_pool.resize(request.spec.request_id, request.kv_pages)
+            return result.success
         delta_bytes = (pages - request.kv_pages) * self.policy.bytes_per_page
         return (
             self.used_pages + pages - request.kv_pages <= self.policy.capacity_pages
@@ -2589,6 +2916,30 @@ class _KVLedger:
         )
 
     def resize(self, request: _MutableRequest, pages: int) -> bool:
+        if self.paged_pool is not None:
+            if pages < 0:
+                return False
+            if pages == request.kv_pages:
+                return True
+            result = self.paged_pool.resize_detailed(
+                request.spec.request_id, pages
+            )
+            if not result.success:
+                return False
+            delta = pages - request.kv_pages
+            self.used_pages += delta
+            self.persistent_used_pages += delta
+            request.kv_pages = pages
+            request.peak_kv_pages = max(request.peak_kv_pages, pages)
+            self.peak_pages = max(self.peak_pages, self.used_pages)
+            self.persistent_peak_pages = max(
+                self.persistent_peak_pages, self.persistent_used_pages
+            )
+            if delta > 0:
+                self.allocations += 1
+            elif delta < 0:
+                self.releases += 1
+            return True
         if pages < 0 or not self.can_resize(request, pages):
             return False
         delta = pages - request.kv_pages
@@ -2618,6 +2969,22 @@ class _KVLedger:
         if request.temporary_kv_pages:
             raise RuntimeError("temporary KV reservation already active")
         temporary_pages = max(0, target_total_pages - request.kv_pages)
+        if self.paged_pool is not None:
+            result = self.paged_pool.resize_detailed(
+                request.spec.request_id, target_total_pages
+            )
+            if not result.success:
+                return False
+            request.temporary_kv_pages = temporary_pages
+            self.used_pages += temporary_pages
+            self.temporary_used_pages += temporary_pages
+            self.peak_pages = max(self.peak_pages, self.used_pages)
+            self.temporary_peak_pages = max(
+                self.temporary_peak_pages, self.temporary_used_pages
+            )
+            if temporary_pages > 0:
+                self.temporary_allocations += 1
+            return True
         delta_bytes = temporary_pages * self.policy.bytes_per_page
         if (
             self.used_pages + temporary_pages > self.policy.capacity_pages
@@ -2642,6 +3009,13 @@ class _KVLedger:
         if temporary_pages <= 0:
             return
         byte_count = temporary_pages * self.policy.bytes_per_page
+        if self.paged_pool is not None:
+            self.paged_pool.resize(request.spec.request_id, request.kv_pages)
+            self.used_pages -= temporary_pages
+            self.temporary_used_pages -= temporary_pages
+            request.temporary_kv_pages = 0
+            self.temporary_releases += 1
+            return
         self.physical.adjust_many(self._active_deltas(-byte_count))
         self.used_pages -= temporary_pages
         self.temporary_used_pages -= temporary_pages
@@ -4737,6 +5111,7 @@ class _OnlineRuntime:
         )
         self.physical_ledger = _PhysicalCapacityLedger(physical_limits)
         self.ledger = _KVLedger(plan.kv_policy, self.physical_ledger)
+        self.ledger.configure_paged_pool(plan.scenario)
         self.state_ledger = _LinearStateLedger(
             plan.linear_state_policy, self.physical_ledger
         )
@@ -9020,6 +9395,18 @@ class _OnlineRuntime:
                 self._set_status(state, RequestStatus.REJECTED)
                 state.finished_ns = request.arrival_ns
                 state.rejection_reason = reason
+                self.events.append(
+                    ServingEvent(
+                        request.arrival_ns,
+                        "kv_capacity_failure",
+                        request.request_id,
+                        details={
+                            "reason": reason,
+                            "bottleneck_component": self.plan.kv_policy.bottleneck_component,
+                            "layout_mode": self.plan.kv_policy.layout_mode,
+                        },
+                    )
+                )
                 self.events.append(
                     ServingEvent(request.arrival_ns, "request_rejected", request.request_id, details={"reason": reason})
                 )
@@ -14291,6 +14678,22 @@ class _OnlineRuntime:
             self._set_status(state, RequestStatus.REJECTED)
             state.finished_ns = self.now
             state.rejection_reason = reason
+            if (
+                self.ledger.used_pages >= self.plan.kv_policy.capacity_pages
+                or self.plan.kv_policy.bottleneck_component is not None
+            ):
+                self.events.append(
+                    ServingEvent(
+                        self.now,
+                        "kv_capacity_failure",
+                        state.spec.request_id,
+                        details={
+                            "reason": reason,
+                            "bottleneck_component": self.plan.kv_policy.bottleneck_component,
+                            "layout_mode": self.plan.kv_policy.layout_mode,
+                        },
+                    )
+                )
             self.events.append(ServingEvent(self.now, "request_rejected", state.spec.request_id, details={"reason": reason}))
         return False
 
@@ -14424,6 +14827,83 @@ class _OnlineRuntime:
             ),
             physical_mtp_verification_read_bytes=(
                 self.physical_mtp_verification_read_bytes
+            ),
+            layout_mode=self.plan.kv_policy.layout_mode,
+            split_mode=(
+                str(
+                    self.plan.scenario.workload.metadata.get(
+                        "llama_cpp_runtime", {}
+                    ).get("split_mode")
+                )
+                if isinstance(
+                    self.plan.scenario.workload.metadata.get(
+                        "llama_cpp_runtime", {}
+                    ),
+                    _ABCMapping,
+                )
+                else None
+            ),
+            kv_unified=self.plan.kv_policy.kv_unified,
+            logical_context_tokens=self.plan.kv_policy.logical_context_tokens,
+            n_seq_max=self.plan.kv_policy.n_seq_max,
+            capacity_bytes_by_component=dict(
+                self.plan.kv_policy.capacity_bytes_by_component
+            ),
+            used_bytes_by_component={
+                component: max(0, int(self.physical_ledger.used_bytes.get(component, 0)))
+                for component in self.plan.kv_policy.capacity_bytes_by_component
+            },
+            peak_bytes_by_component={
+                component: max(0, int(self.physical_ledger.peak_used_bytes.get(component, 0)))
+                for component in self.plan.kv_policy.capacity_bytes_by_component
+            },
+            layer_owner=dict(self.plan.kv_policy.kv_layer_components),
+            layer_bytes_per_token=dict(self.plan.kv_policy.kv_layer_bytes_per_token),
+            layer_bytes_per_page=dict(self.plan.kv_policy.kv_layer_bytes_per_page),
+            layer_component_shards=dict(
+                self.plan.kv_policy.kv_layer_component_shards
+            ),
+            component_owner_layers={
+                component: tuple(
+                    sorted(
+                        layer
+                        for layer, owners in self.plan.kv_policy.kv_layer_component_shards.items()
+                        if component in owners
+                    )
+                )
+                for component in self.plan.kv_policy.capacity_bytes_by_component
+            },
+            bottleneck_component=self.plan.kv_policy.bottleneck_component,
+            effective_physical_capacity_bytes=self.plan.kv_policy.capacity_bytes,
+            batch_retry_count=sum(
+                1
+                for event in self.events
+                if event.event_type in {"batch_retry", "kv_batch_retry"}
+            ),
+            batch_reduced=any(
+                event.event_type == "batch_reduced" for event in self.events
+            ),
+            idle_slots_cleared=sum(
+                int(event.details.get("cleared_slots", 1) or 0)
+                for event in self.events
+                if event.event_type in {"idle_slot_cleanup", "kv_idle_slot_cleanup"}
+            ),
+            context_shift_count=sum(
+                1 for event in self.events if event.event_type == "context_shift"
+            ),
+            capacity_failure_count=sum(
+                1
+                for event in self.events
+                if event.event_type in {"kv_capacity_failure", "capacity_failure"}
+            ),
+            capacity_failure_reason=next(
+                (
+                    str(event.details.get("reason"))
+                    for event in self.events
+                    if event.event_type in {"kv_capacity_failure", "capacity_failure"}
+                    and event.details.get("reason")
+                ),
+                None,
             ),
         )
         linear_state_metrics = LinearStateMetrics(
@@ -15760,6 +16240,7 @@ _EVENT_TYPE_ORDER = {
     "request_resumed": 6,
     "engine_request_begin": 7,
     "batch_start": 8,
+    "kv_capacity_failure": 9,
     "request_rejected": 9,
 }
 
@@ -15857,6 +16338,14 @@ def _physical_runtime_limits(plan: ServingPlan) -> Mapping[str, int]:
     # Validate the authoritative fixed owners even when a referenced storage
     # component has unknown capacity and no dynamic budget can be derived.
     _physical_capacity_claims(plan.scenario)
+    if plan.kv_policy.layout_mode == "paged_pool":
+        dynamic_ids = ("kv_cache",)
+        return {
+            str(component): _dynamic_component_capacity(
+                plan.scenario, str(component), dynamic_ids
+            )
+            for component in plan.scenario.placement.kv_policy.pool_components
+        }
     if plan.kv_policy.component_bytes_per_page or plan.linear_state_policy.component_bytes_per_request:
         components = set(plan.kv_policy.component_bytes_per_page) | set(plan.linear_state_policy.component_bytes_per_request)
         dynamic_ids = {"kv_cache", "linear_state"} | {

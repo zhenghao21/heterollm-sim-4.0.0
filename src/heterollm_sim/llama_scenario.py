@@ -14,6 +14,7 @@ from .config import ScenarioConfig
 from .control_plane_planner import PlacementPolicy, plan_runtime_placement
 from .ir import KVCachePolicy, PlacementSpec, SchedulerSpec, model_graph_execution_view
 from .runtime_adapters import LlamaCppRuntimeConfig, LLAMA_HYBRID_BATCH_SCHEMA, LLAMA_SLOT_ORDER_SCHEMA
+from .parallel import build_parallel_plan
 
 
 def _llama_mixed_batching_contract(
@@ -162,6 +163,60 @@ def _llama_slot_order_qualification(
         "preserves_engine_start_definition": True, "accuracy_validated": False}
 
 
+
+def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntimeConfig) -> Mapping[str, Any]:
+    """Return authoritative llama.cpp layer -> KV owner mapping."""
+    view = model_graph_execution_view(scenario.model.graph, schema_version=scenario.model.schema_version)
+    layers = tuple(item.layer for item in view.layer_instances if not item.layer.is_linear_attention)
+    components = scenario.hardware.component_map()
+    host = next((c.component_id for c in scenario.hardware.components if c.normalized_kind in {"host_memory", "dram", "ddr", "ddr_memory"} and c.is_active_memory and c.is_writable), None)
+    if not config.offload_kqv:
+        if host is None: raise ValueError("llama.cpp --no-kv-offload requires writable host memory")
+        owner = {layer.layer_id: host for layer in layers}
+    else:
+        plan = build_parallel_plan(scenario, view)
+        gpu_ranks = [r for r in plan.ranks if r.memory_component_id and r.memory_component_id in components]
+        if not gpu_ranks:
+            fallback = scenario.placement.kv_policy.cache_component
+            if not fallback: raise ValueError("llama.cpp KV placement requires rank memory or cache component")
+            owner = {layer.layer_id: fallback for layer in layers}
+        elif config.split_mode == "layer":
+            owner = {
+                layer.layer_id: plan.ranks_for_layer(layer)[0].memory_component_id
+                for layer in layers
+            }
+        else:
+            main = next(
+                (
+                    r
+                    for r in gpu_ranks
+                    if r.pp_rank == 0 and r.tp_rank == config.main_gpu
+                ),
+                None,
+            ) or gpu_ranks[min(config.main_gpu, len(gpu_ranks) - 1)]
+            owner = {layer.layer_id: main.memory_component_id for layer in layers}
+        # llama.cpp's ``-ngl N`` keeps the earliest repeating blocks on host
+        # and places the last N loadable layers on GPU.  The output layer is
+        # handled by the existing final-norm binding and is not a KV layer.
+        if config.gpu_layers >= 0 and host is not None:
+            gpu_start = max(0, len(layers) - int(config.gpu_layers))
+            for index, layer in enumerate(layers):
+                if index < gpu_start:
+                    owner[layer.layer_id] = host
+    for layer_id, component_id in owner.items():
+        component = components.get(component_id)
+        if component is None or not component.is_active_memory or not component.is_writable: raise ValueError(f"KV layer {layer_id} owner {component_id} must be writable active memory")
+    plan = build_parallel_plan(scenario, view)
+    ranks = {
+        layer.layer_id: (
+            [r.rank for r in plan.ranks_for_layer(layer)]
+            if owner[layer.layer_id] != host
+            else []
+        )
+        for layer in layers
+    }
+    return {"kv_layer_components": owner, "kv_layer_ranks": ranks, "split_mode": config.split_mode, "kv_unified": config.kv_unified, "offload_kqv": config.offload_kqv}
+
 def llama_final_norm_static_binding(scenario: ScenarioConfig, config: LlamaCppRuntimeConfig) -> Mapping[str, Any]:
     """Bind the norm's own tensor; output-layer placement is only a candidate.
 
@@ -295,6 +350,7 @@ def apply_llama_runtime_config(
             "llama_cpp_final_norm_static": llama_final_norm_static_binding(scenario, config),
             "llama_cpp_mixed_phase_batching": mixed_batching,
             "context_limit_semantics": "per_slot_runtime_limit",
+            "llama_cpp_kv_capacity_contract": config.kv_capacity_contract(),
         },
     )
     kv = scenario.placement.kv_policy
@@ -315,8 +371,21 @@ def apply_llama_runtime_config(
         cache_component=kv_cache_component,
         tokens_per_page=max(1, kv.tokens_per_page),
         dtype=config.kv_type_k or config.kv_type_v or kv.dtype,
+        kv_unified=config.kv_unified,
+        # A runtime adapter invocation opts into native static layer
+        # placement by default.  ``fixed`` and the explicit experimental pool
+        # remain user-selected escape hatches.
+        layout_mode=(
+            "llama_static_layer"
+            if kv.layout_mode not in {"fixed", "paged_pool"}
+            else kv.layout_mode
+        ),
     )
     placement_metadata = dict(scenario.placement.metadata)
+    native_kv = llama_cpp_kv_layer_mapping(scenario, config)
+    placement_metadata["llama_cpp_kv_layer_components"] = dict(native_kv["kv_layer_components"])
+    placement_metadata["llama_cpp_kv_layer_ranks"] = dict(native_kv["kv_layer_ranks"])
+    placement_metadata["llama_cpp_kv_contract"] = native_kv
     control = dict(placement_metadata.get("control_plane", {}))
     policy = dict(control.get("policy", {}))
     options = dict(policy.get("options", {}))
@@ -369,4 +438,4 @@ def apply_llama_runtime_config(
     return lowered
 
 
-__all__ = ["apply_llama_runtime_config", "llama_final_norm_static_binding"]
+__all__ = ["apply_llama_runtime_config", "llama_final_norm_static_binding", "llama_cpp_kv_layer_mapping"]

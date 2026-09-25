@@ -921,6 +921,9 @@ def kv_policy_from_dict(data: Mapping[str, Any]) -> KVCachePolicy:
             "allocation_policy",
             "preemption_mode",
             "prefetch_distance",
+            "layout_mode",
+            "kv_unified",
+            "pool_components",
         ),
     )
     return KVCachePolicy(
@@ -936,6 +939,12 @@ def kv_policy_from_dict(data: Mapping[str, Any]) -> KVCachePolicy:
         preemption_mode=str(data.get("preemption_mode", "auto")),
         prefetch_distance=_integer(
             data.get("prefetch_distance", 0), "kv_policy prefetch_distance"
+        ),
+        layout_mode=str(data.get("layout_mode", "legacy_single")),
+        kv_unified=_boolean(data.get("kv_unified", True), "kv_policy kv_unified"),
+        pool_components=tuple(
+            str(item)
+            for item in _array(data.get("pool_components", ()), "kv_policy pool_components")
         ),
     )
 

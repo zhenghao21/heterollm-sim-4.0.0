@@ -5391,6 +5391,40 @@ def _online_report_dict(
         "owner_residency": to_primitive(serving.owner_residency_metrics),
         "kv_cache": {
             **to_primitive(serving.kv_metrics),
+            # Stable, UI-facing names keep the analysis independent from the
+            # internal dataclass field spelling and remain additive for old
+            # consumers.
+            "kv_layout_mode": serving.kv_metrics.layout_mode,
+            "split_mode": serving.kv_metrics.split_mode,
+            "kv_unified": serving.kv_metrics.kv_unified,
+            "kv_capacity_bytes_by_component": dict(
+                serving.kv_metrics.capacity_bytes_by_component
+            ),
+            "kv_used_bytes_by_component": dict(
+                serving.kv_metrics.used_bytes_by_component
+            ),
+            "kv_peak_bytes_by_component": dict(
+                serving.kv_metrics.peak_bytes_by_component
+            ),
+            "kv_layer_owner": dict(serving.kv_metrics.layer_owner),
+            "kv_layer_components": dict(serving.kv_metrics.layer_owner),
+            "kv_layer_bytes_per_token": dict(
+                serving.kv_metrics.layer_bytes_per_token
+            ),
+            "kv_layer_bytes_per_page": dict(
+                serving.kv_metrics.layer_bytes_per_page
+            ),
+            "kv_layer_component_shards": {
+                layer: list(components)
+                for layer, components in serving.kv_metrics.layer_component_shards.items()
+            },
+            "kv_component_owner_layers": {
+                component: list(layers)
+                for component, layers in serving.kv_metrics.component_owner_layers.items()
+            },
+            "kv_bottleneck_component": serving.kv_metrics.bottleneck_component,
+            "effective_physical_capacity": serving.kv_metrics.effective_physical_capacity_bytes,
+            "kv_idle_slots_cleared": serving.kv_metrics.idle_slots_cleared,
             "prefetch_distance_modeled": False,
             "prefetch_distance_semantics": _prefetch_semantics(result.scenario),
             "modeling_limits": [
@@ -5478,6 +5512,38 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
     def phase_value(phase: str, event: str, semantics: str) -> int:
         return phase_bytes.get((phase, event, semantics), 0)
 
+    runtime = workload.metadata.get("llama_cpp_runtime", {})
+    split_mode = (
+        runtime.get("split_mode")
+        if isinstance(runtime, Mapping)
+        else None
+    )
+
+    # Keep the static report compatible with lightweight plan doubles used by
+    # callers that only provide the legacy KV fields.  ``Mock`` attributes are
+    # intentionally ignored here instead of being coerced with ``dict()``.
+    kv_policy = plan.kv_policy
+    component_capacity = getattr(kv_policy, "capacity_bytes_by_component", {})
+    component_capacity = (
+        component_capacity if isinstance(component_capacity, Mapping) else {}
+    )
+    component_bytes = getattr(kv_policy, "component_bytes_per_page", {})
+    component_bytes = component_bytes if isinstance(component_bytes, Mapping) else {}
+    layer_components = getattr(kv_policy, "kv_layer_components", {})
+    layer_components = layer_components if isinstance(layer_components, Mapping) else {}
+    layer_bytes_per_token = getattr(kv_policy, "kv_layer_bytes_per_token", {})
+    layer_bytes_per_token = (
+        layer_bytes_per_token
+        if isinstance(layer_bytes_per_token, Mapping)
+        else {}
+    )
+    layer_bytes_per_page = getattr(kv_policy, "kv_layer_bytes_per_page", {})
+    layer_bytes_per_page = (
+        layer_bytes_per_page if isinstance(layer_bytes_per_page, Mapping) else {}
+    )
+    layer_shards = getattr(kv_policy, "kv_layer_component_shards", {})
+    layer_shards = layer_shards if isinstance(layer_shards, Mapping) else {}
+
     return {
         "mode": "static",
         "policy": to_primitive(result.scenario.placement.kv_policy),
@@ -5488,6 +5554,32 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
         // max(1, int(plan.kv_policy.tokens_per_page)),
         "capacity_pages": int(plan.kv_policy.capacity_pages),
         "capacity_bytes": int(plan.kv_policy.capacity_bytes),
+        "kv_layout_mode": getattr(plan.kv_policy, "layout_mode", "legacy_single"),
+        "split_mode": split_mode,
+        "kv_unified": getattr(plan.kv_policy, "kv_unified", True),
+        "logical_context_tokens": getattr(plan.kv_policy, "logical_context_tokens", 0),
+        "n_seq_max": getattr(plan.kv_policy, "n_seq_max", 0),
+        "kv_capacity_bytes_by_component": dict(component_capacity),
+        "kv_used_bytes_by_component": {
+            component: int(peak_pages * bytes_per_page)
+            for component, bytes_per_page in component_bytes.items()
+        },
+        "kv_peak_bytes_by_component": {
+            component: int(peak_pages * bytes_per_page)
+            for component, bytes_per_page in component_bytes.items()
+        },
+        "kv_layer_owner": dict(layer_components),
+        "kv_layer_bytes_per_token": dict(layer_bytes_per_token),
+        "kv_layer_bytes_per_page": dict(layer_bytes_per_page),
+        "kv_component_owner_layers": {
+            component: [
+                layer
+                for layer, owners in layer_shards.items()
+                if component in owners
+            ]
+            for component in component_capacity
+        },
+        "effective_physical_capacity": int(plan.kv_policy.capacity_bytes),
         "peak_used_pages": peak_pages,
         "peak_used_bytes": peak_pages * int(plan.kv_policy.bytes_per_page),
         "peak_semantics": "conservative_all_materialized_requests_prompt_plus_output_minus_one",

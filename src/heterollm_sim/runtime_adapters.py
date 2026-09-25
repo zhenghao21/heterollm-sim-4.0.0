@@ -128,6 +128,30 @@ class LlamaCppRuntimeConfig:
 
     # Read-only aliases retain the terminology used by the original adapter.
     @property
+    def n_ctx(self) -> int:
+        """llama.cpp naming for the per-request logical context limit."""
+        return self.context
+
+    @property
+    def n_ctx_seq(self) -> int:
+        """Context reservation per sequence in non-unified mode."""
+        return self.context
+
+    def kv_capacity_contract(self) -> dict[str, Any]:
+        """Describe logical versus physical KV slot semantics without guessing bytes."""
+        return {
+            "logical_context_tokens": self.context,
+            "n_seq_max": self.parallel,
+            "kv_unified": self.kv_unified,
+            "physical_capacity_formula": (
+                "shared_pool_capacity_tokens" if self.kv_unified
+                else "n_seq_max * per_slot_capacity_tokens"
+            ),
+            "per_slot_context_limit": self.context,
+            "offload_kqv": self.offload_kqv,
+        }
+
+    @property
     def batch_size(self) -> int:
         return self.batch
 

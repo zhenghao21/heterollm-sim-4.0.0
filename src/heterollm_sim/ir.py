@@ -2116,6 +2116,13 @@ class KVCachePolicy:
     allocation_policy: str = "lazy"
     preemption_mode: str = "auto"
     prefetch_distance: int = 0
+    # KV residency contract.  ``legacy_single`` preserves the original
+    # cache_component/offload_component behaviour; ``llama_static_layer``
+    # follows the native llama.cpp layer owner map.  ``paged_pool`` is an
+    # explicit experimental allocator and is never implied by old JSON.
+    layout_mode: str = "legacy_single"
+    kv_unified: bool = True
+    pool_components: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_optional_name(self.cache_component, "cache_component")
@@ -2128,6 +2135,25 @@ class KVCachePolicy:
         _require_name(self.allocation_policy, "allocation_policy")
         _require_name(self.preemption_mode, "preemption_mode")
         _require_int(self.prefetch_distance, "prefetch_distance")
+        _require_name(self.layout_mode, "layout_mode")
+        if self.layout_mode not in {
+            "legacy_single", "llama_static_layer", "paged_pool",
+            # UI aliases; compile_serving_plan resolves these to a concrete
+            # execution layout without changing the serialized input.
+            "auto", "fixed", "manual",
+        }:
+            raise ValueError(
+                "layout_mode must be legacy_single, llama_static_layer, paged_pool, auto, fixed, or manual"
+            )
+        if not isinstance(self.kv_unified, bool):
+            raise ValueError("kv_unified must be boolean")
+        _require_tuple(self.pool_components, "pool_components")
+        if any(not isinstance(item, str) or not item.strip() for item in self.pool_components):
+            raise ValueError("pool_components must contain non-empty component IDs")
+        if len(set(self.pool_components)) != len(self.pool_components):
+            raise ValueError("pool_components must not contain duplicates")
+        if self.layout_mode == "paged_pool" and not self.pool_components:
+            raise ValueError("paged_pool requires at least one pool_components entry")
         if self.allocation_policy not in {"lazy", "eager"}:
             raise ValueError("allocation_policy must be lazy or eager")
         if self.preemption_mode not in {"auto", "swap", "recompute"}:
