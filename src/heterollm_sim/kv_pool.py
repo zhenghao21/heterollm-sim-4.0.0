@@ -781,6 +781,11 @@ class DynamicKVPool:
             raise KvPoolUnsupported("migrate_page target must be active memory; use offload_page for backing tiers")
         return self._move(page, str(target_component), kind="migration")
 
+    def migrate(self, logical_page_id: int, target_component: str) -> bool:
+        """Short alias used by migration/event integrations."""
+
+        return self.migrate_page(logical_page_id, target_component)
+
     def offload_page(self, logical_page_id: int, target_component: Optional[str] = None) -> bool:
         page = self.page(logical_page_id)
         targets = [str(target_component)] if target_component is not None else sorted(self.offload_components)
@@ -791,6 +796,9 @@ class DynamicKVPool:
                 return True
         self._last_error = self._last_error or "no writable offload component has capacity"
         return False
+
+    def offload(self, logical_page_id: int, target_component: Optional[str] = None) -> bool:
+        return self.offload_page(logical_page_id, target_component)
 
     def restore_page(self, logical_page_id: int, target_component: Optional[str] = None) -> bool:
         page = self.page(logical_page_id)
@@ -806,6 +814,9 @@ class DynamicKVPool:
                 return True
         self._last_error = self._last_error or "no active component has capacity for restore"
         return False
+
+    def restore(self, logical_page_id: int, target_component: Optional[str] = None) -> bool:
+        return self.restore_page(logical_page_id, target_component)
 
     def component_stats(self) -> Mapping[str, Mapping[str, int | str]]:
         page_counts: Dict[str, int] = defaultdict(int)
