@@ -85,6 +85,34 @@ class ProtocolPresetCatalogTests(unittest.TestCase):
             self.assertIsNone(bandwidth["effective_one_way_gbps"])
             self.assertEqual(bandwidth["aggregate_bidirectional_gbps"], 2 * bandwidth["raw_gbps"])
 
+    def test_every_catalog_bandwidth_preserves_one_way_and_aggregate_invariants(self):
+        """Guard the complete catalog against bit/byte and direction regressions."""
+
+        for preset_id in (item["id"] for item in list_protocol_presets()):
+            with self.subTest(preset_id=preset_id):
+                detail = protocol_preset_detail(preset_id)
+                bandwidth = detail["preset"]["bandwidth"]
+                defaults = detail["simulation_defaults"]
+                one_way = bandwidth["effective_one_way_gbps"]
+                raw = bandwidth["raw_gbps"]
+                aggregate = bandwidth["aggregate_bidirectional_gbps"]
+
+                self.assertGreater(defaults["link"]["bandwidth_gbps"], 0.0)
+                self.assertEqual(
+                    defaults["link"]["bandwidth_gbps"],
+                    defaults["source_port"]["bandwidth_gbps"],
+                )
+                self.assertEqual(
+                    defaults["link"]["bandwidth_gbps"],
+                    defaults["target_port"]["bandwidth_gbps"],
+                )
+                if one_way is not None and aggregate is not None:
+                    self.assertAlmostEqual(aggregate, 2.0 * one_way)
+                elif raw is not None and aggregate is not None:
+                    self.assertAlmostEqual(aggregate, 2.0 * raw)
+                if one_way is not None:
+                    self.assertLessEqual(defaults["link"]["bandwidth_gbps"], one_way)
+
     def test_simulation_defaults_create_valid_ports_and_links(self):
         for preset_id in REQUIRED:
             with self.subTest(preset_id=preset_id):

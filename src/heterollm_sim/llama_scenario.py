@@ -13,7 +13,12 @@ from typing import Any, Mapping
 from .config import ScenarioConfig
 from .control_plane_planner import PlacementPolicy, plan_runtime_placement
 from .ir import KVCachePolicy, PlacementSpec, SchedulerSpec, model_graph_execution_view
-from .runtime_adapters import LlamaCppRuntimeConfig, LLAMA_HYBRID_BATCH_SCHEMA, LLAMA_SLOT_ORDER_SCHEMA
+from .runtime_adapters import (
+    LlamaCppRuntimeConfig,
+    LLAMA_HYBRID_BATCH_SCHEMA,
+    LLAMA_SLOT_ORDER_SCHEMA,
+    normalize_llama_runtime_identity,
+)
 from .parallel import build_parallel_plan
 
 
@@ -127,6 +132,10 @@ def _llama_slot_order_qualification(
         reasons.append("priority_or_deadline_order_unproven")
     if scenario.workload.arrival_rate_rps != 0:
         reasons.append("arrival_stream_unproven")
+    # Qualification describes the authored cohort as evidence.  The resolved
+    # scheduler may still lower native defaults, but an explicit authored
+    # aging/preemption/chunk override must remain visible as an unproven
+    # source contract instead of being silently erased.
     if scheduler.policy != "decode_first":
         reasons.append("priority_aging_unproven")
     if scheduler.preemption_enabled:
@@ -161,6 +170,82 @@ def _llama_slot_order_qualification(
                    "isolation_basis": "complete explicit workload with at most one initial request per slot; no arrival stream/preemption/reuse"},
         "source_contract": dict(proof), "scope": proof.get("scope"),
         "preserves_engine_start_definition": True, "accuracy_validated": False}
+
+
+def _resolve_llama_scheduler_policy(
+    scenario: ScenarioConfig,
+    config: LlamaCppRuntimeConfig,
+    slot_order: Mapping[str, Any],
+    mixed_batching: Mapping[str, Any],
+) -> tuple[SchedulerSpec, Mapping[str, Any]]:
+    """Resolve the complete serving policy once, without inherited fields.
+
+    The native server's prompt fill is bounded by its logical ``n_batch``
+    budget; the physical ``n_ubatch`` split is applied later by the graph
+    lowerer.  Keeping those two limits separate prevents a microbatch size
+    from silently becoming a second scheduling round.
+    """
+    authored = scenario.workload.scheduler
+    profile = config.policy
+    if profile == "llama_cpp":
+        if config.preemption_enabled:
+            raise ValueError(
+                "llama.cpp alignment rejects preemption_enabled=True; "
+                "use policy='generic' or policy='experimental' for that behavior"
+            )
+        policy = "decode_first"
+        preemption_enabled = False
+        prefill_chunk_tokens = config.prefill_chunk_tokens or config.batch
+        source = (
+            "source_bound_explicit_prefill_chunk"
+            if config.prefill_chunk_tokens is not None
+            else "source_bound_native_n_batch_prompt_fill"
+        )
+    elif profile == "generic":
+        policy = authored.policy
+        preemption_enabled = authored.preemption_enabled
+        prefill_chunk_tokens = authored.prefill_chunk_tokens
+        source = "authored_research_policy"
+    else:
+        policy = authored.policy
+        preemption_enabled = config.preemption_enabled
+        prefill_chunk_tokens = (
+            config.prefill_chunk_tokens
+            if config.prefill_chunk_tokens is not None
+            else authored.prefill_chunk_tokens
+        )
+        source = "explicit_experimental_policy"
+    resolved = replace(
+        authored,
+        max_num_seqs=config.parallel,
+        max_num_batched_tokens=config.batch,
+        max_num_ubatch_tokens=config.ubatch,
+        mode="continuous" if config.cont_batching else "static",
+        mixed_phase_batching=mixed_batching["status"] == "enabled",
+        policy=policy,
+        preemption_enabled=preemption_enabled,
+        prefill_chunk_tokens=prefill_chunk_tokens,
+        phase_candidate_order=slot_order["phase_candidate_order"],
+    )
+    return resolved, {
+        "schema": "llama.cpp.effective-scheduler-policy/v1",
+        "profile": profile,
+        "source": source,
+        "logical_batch_tokens": config.batch,
+        "physical_ubatch_tokens": config.ubatch,
+        "prefill_chunk_tokens": prefill_chunk_tokens,
+        "policy": policy,
+        "preemption_enabled": preemption_enabled,
+        "continuous_batching": config.cont_batching,
+        "mixed_phase_batching": resolved.mixed_phase_batching,
+        "phase_candidate_order": resolved.phase_candidate_order,
+        "evidence_status": {
+            "implemented": True,
+            "source_derived": profile == "llama_cpp",
+            "native_trace_validated": False,
+            "timing_validated": False,
+        },
+    }
 
 
 
@@ -287,12 +372,18 @@ def apply_llama_runtime_config(
     materialize_placement: bool = True,
     recurrent_batching_contract: Mapping[str, Any] | None = None,
     slot_order_contract: Mapping[str, Any] | None = None,
+    runtime_identity: Mapping[str, Any] | None = None,
 ) -> ScenarioConfig:
     """Return ``scenario`` with llama.cpp semantics lowered into typed fields."""
     if not isinstance(scenario, ScenarioConfig):
         raise TypeError("scenario must be a ScenarioConfig")
     if not isinstance(config, LlamaCppRuntimeConfig):
         raise TypeError("config must be a LlamaCppRuntimeConfig")
+    identity = normalize_llama_runtime_identity(
+        runtime_identity
+        if runtime_identity is not None
+        else scenario.workload.metadata.get("llama_cpp_runtime_identity")
+    )
     if config.kv_type_k is not None and config.kv_type_v is not None and config.kv_type_k.casefold() != config.kv_type_v.casefold():
         raise ValueError("simulator currently requires identical llama.cpp K/V cache dtypes")
     for request in scenario.workload.requests:
@@ -329,16 +420,30 @@ def apply_llama_runtime_config(
     slot_metadata = {"llama_cpp_slot_order": slot_order}
     if isinstance(slot_proof, Mapping):
         slot_metadata["llama_cpp_slot_order_contract"] = dict(slot_proof)
-    scheduler = scenario.workload.scheduler
-    scheduler = replace(
-        scheduler,
-        max_num_seqs=config.parallel,
-        max_num_batched_tokens=config.batch,
-        max_num_ubatch_tokens=config.ubatch,
-        mode="continuous" if config.cont_batching else "static",
-        mixed_phase_batching=mixed_batching["status"] == "enabled",
-        phase_candidate_order=slot_order["phase_candidate_order"],
+    scheduler, effective_policy = _resolve_llama_scheduler_policy(
+        scenario, config, slot_order, mixed_batching
     )
+    capabilities = {
+        "runtime_config": {
+            "implemented": True,
+            "source_derived": identity["status"] == "bound",
+            "native_trace_validated": bool(identity.get("native_trace_validated")),
+            "timing_validated": bool(identity.get("timing_validated")),
+        },
+        "scheduler_policy": dict(effective_policy["evidence_status"]),
+        "slot_order": {
+            "implemented": True,
+            "source_derived": slot_order.get("status") == "enabled",
+            "native_trace_validated": False,
+            "timing_validated": False,
+        },
+        "physical_batch_lowering": {
+            "implemented": True,
+            "source_derived": mixed_batching.get("status") == "enabled",
+            "native_trace_validated": False,
+            "timing_validated": False,
+        },
+    }
     workload = replace(
         scenario.workload,
         scheduler=scheduler,
@@ -347,8 +452,11 @@ def apply_llama_runtime_config(
             **hybrid_capabilities,
             **slot_metadata,
             "llama_cpp_runtime": config.to_dict(),
+            "llama_cpp_runtime_identity": identity,
             "llama_cpp_final_norm_static": llama_final_norm_static_binding(scenario, config),
             "llama_cpp_mixed_phase_batching": mixed_batching,
+            "llama_cpp_effective_scheduler_policy": effective_policy,
+            "llama_cpp_capabilities": capabilities,
             "context_limit_semantics": "per_slot_runtime_limit",
             "llama_cpp_kv_capacity_contract": config.kv_capacity_contract(),
         },
@@ -405,10 +513,12 @@ def apply_llama_runtime_config(
     evidence = dict(control.get("evidence", {}))
     evidence["llama_cpp_runtime"] = config.to_dict()
     evidence["llama_cpp_runtime_fingerprint"] = config.fingerprint
+    evidence["llama_cpp_runtime_identity"] = identity
     control["evidence"] = evidence
     placement_metadata["control_plane"] = control
     placement_metadata["llama_cpp_runtime"] = config.to_dict()
     placement_metadata["llama_cpp_runtime_fingerprint"] = config.fingerprint
+    placement_metadata["llama_cpp_runtime_identity"] = identity
     placement = replace(scenario.placement, kv_policy=kv, metadata=placement_metadata)
     lowered = replace(
         scenario,
@@ -432,7 +542,11 @@ def apply_llama_runtime_config(
         metadata = dict(lowered.placement.metadata)
         cp = dict(metadata.get("control_plane", {}))
         ev = dict(cp.get("evidence", {}))
-        ev.update({"llama_cpp_runtime": config.to_dict(), "llama_cpp_runtime_fingerprint": config.fingerprint})
+        ev.update({
+            "llama_cpp_runtime": config.to_dict(),
+            "llama_cpp_runtime_fingerprint": config.fingerprint,
+            "llama_cpp_runtime_identity": identity,
+        })
         cp["evidence"] = ev
         lowered = replace(lowered, placement=replace(lowered.placement, metadata={**metadata, "control_plane": cp}))
     return lowered

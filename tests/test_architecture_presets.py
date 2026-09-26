@@ -16,7 +16,7 @@ from heterollm_sim.architecture_presets import (
     list_architecture_presets,
     materialize_architecture_payload,
 )
-from heterollm_sim.config import hardware_from_dict
+from heterollm_sim.config import hardware_from_dict, _component_profile_registries_from_dict
 from heterollm_sim.component_presets import get_component_preset
 from heterollm_sim.protocol_presets import protocol_preset_detail
 from heterollm_sim.topology import validate_topology
@@ -72,6 +72,7 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
             "nvidia-gh200-nvl2-96gb-hbm3",
             "nvidia-gh200-superchip",
             "nvidia-gh200-superchip-144gb-hbm3e",
+            "nvidia-b200-1gpu-2hbf-2hbm",
             "soc-2x-dram-sram-cim",
             "soc-2x-dram-sram-cim-shared-phy-noc",
         }
@@ -210,6 +211,29 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
                     preset_id=preset_id, component_id=component["component_id"]
                 ):
                     composition = component["metadata"]["physical_composition"]
+                    if preset_id == "nvidia-b200-1gpu-2hbf-2hbm":
+                        self.assertEqual(
+                            composition["simulator_representation"],
+                            "analytical_endpoint_node",
+                        )
+                        self.assertEqual(composition["physical_unit_count"], None)
+                        self.assertEqual(
+                            composition["physical_unit_count_status"],
+                            "not_reliably_disclosed",
+                        )
+                        self.assertTrue(composition["known_multiple"])
+                        self.assertEqual(composition["unit_count_in_product"], None)
+                        self.assertEqual(
+                            composition["unit_index_semantics"],
+                            "analytical_endpoint_index_not_physical_stack_index",
+                        )
+                        self.assertEqual(
+                            composition["unit_count_status"],
+                            "analytical_two_modeled_hbm_nodes",
+                        )
+                        self.assertIn("analytical_endpoint_split", component["metadata"]["provenance"]["value_status"])
+                        self.assertIn("parameter_basis", component["metadata"])
+                        continue
                     self.assertEqual(
                         composition["simulator_representation"],
                         "single_physical_unit_node",
@@ -276,7 +300,7 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
     def test_b200_user_requested_two_hbm_and_two_hbf_endpoints(self):
         detail = architecture_preset_detail("nvidia-b200-1gpu-2hbf-2hbm")
         components = {item["component_id"]: item for item in detail["components"]}
-        self.assertEqual(set(components), {"gpu0", "hbm0", "hbm1", "hbf0", "hbf1"})
+        self.assertEqual(set(components), {"gpu0", "hbm0", "hbm1", "hbf0", "hbf1", "cpu0", "hostmem0"})
         self.assertEqual(components["gpu0"]["metadata"]["model"], "NVIDIA B200 SXM 180GB")
         self.assertEqual(components["gpu0"]["peak_ops_per_s"], 2_200_000_000_000_000.0)
         hbm = [components["hbm0"], components["hbm1"]]
@@ -293,8 +317,45 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
             {link["link_id"] for link in detail["links"] if link["protocol"] == "UCIe"},
             {"gpu_hbf0", "gpu_hbf1"},
         )
+        self.assertEqual(
+            {link["link_id"] for link in detail["links"] if link["protocol"] == "PCIe"},
+            {"cpu_gpu_pcie"},
+        )
+        self.assertEqual(
+            {item["component_id"] for item in detail["components"] if item["kind"] == "cpu"},
+            {"cpu0"},
+        )
+        self.assertEqual(
+            {item["component_id"] for item in detail["components"] if item["kind"] == "host_memory"},
+            {"hostmem0"},
+        )
+        self.assertEqual(
+            {item["metadata"]["cost_profile_key"] for item in detail["components"] if item["kind"] in {"gpu", "hbm", "cpu", "host_memory"}},
+            {"gpu", "hbm", "cpu", "host_memory"},
+        )
         self.assertEqual(detail["preset"]["sources"][0]["url"], "https://www.nvidia.com/en-us/data-center/dgx-b200/")
         self.assertTrue(any("两个 HBM 节点" in limitation for limitation in detail["preset"]["limitations"]))
+
+    def test_b200_typed_profiles_hydrate_with_independent_resources(self):
+        detail = architecture_preset_detail("nvidia-b200-1gpu-2hbf-2hbm")
+        hardware = hardware_from_dict(detail["hardware"])
+        self.assertTrue(validate_topology(hardware).is_valid)
+        registries = {"gpu": {}, "hbm": {}, "cpu": {}, "host_memory": {}}
+        for component in detail["components"]:
+            profile_key = component["metadata"].get("cost_profile_key")
+            if not profile_key:
+                continue
+            profile = component["metadata"].get("cost_profile_template")
+            self.assertIsInstance(profile, dict)
+            profile_id = "{}-{}".format(component["component_id"], profile_key)
+            registries[profile_key][profile_id] = profile
+        parsed = _component_profile_registries_from_dict(registries)
+        self.assertEqual(set(parsed["gpu"]), {"gpu0-gpu"})
+        self.assertEqual(set(parsed["hbm"]), {"hbm0-hbm", "hbm1-hbm"})
+        self.assertEqual(set(parsed["cpu"]), {"cpu0-cpu"})
+        self.assertEqual(set(parsed["host_memory"]), {"hostmem0-host_memory"})
+        self.assertEqual(parsed["gpu"]["gpu0-gpu"].tensor_core.sm_count, 160)
+        self.assertAlmostEqual(parsed["hbm"]["hbm0-hbm"].bandwidth_gb_s, 4_000.0)
 
     def test_hbm_group_membership_roots_and_collapse_policy(self):
         cases = {

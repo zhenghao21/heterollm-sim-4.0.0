@@ -6,6 +6,12 @@ from unittest.mock import patch
 from heterollm_sim import control_plane_planner as control_plane_planner_module
 from heterollm_sim import planner as planner_module
 from heterollm_sim import serving as serving_module
+from heterollm_sim.architecture_presets import materialize_architecture_payload
+from heterollm_sim.config import (
+    _component_profile_registries_from_dict,
+    hardware_from_dict,
+    model_from_dict,
+)
 from heterollm_sim.control_plane_planner import (
     PlacementPolicy,
     _Candidate,
@@ -32,6 +38,7 @@ from heterollm_sim.control_plane_state import mapping_fingerprint_status
 from heterollm_sim.parallel import build_parallel_plan
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.planner import compile_scenario
+from heterollm_sim.model_presets import materialize_model_payload
 from tests.model_helpers import model_from_layer_specs
 
 
@@ -44,6 +51,67 @@ def _replace_component_profile(scenario, kind, profile_id, **changes):
         registries[kind][profile_id], **changes
     )
     return replace(scenario, component_profiles=registries)
+
+
+def _b200_qwen38_unmaterialized_scenario():
+    """Build the authoring state produced by the two selected UI presets."""
+
+    base = build_reference_scenario()
+    hardware_payload = materialize_architecture_payload(
+        "nvidia-b200-1gpu-2hbf-2hbm"
+    )
+    model_payload = materialize_model_payload("qwen3_8-27b")
+    registries = {"gpu": {}, "hbm": {}, "cpu": {}, "host_memory": {}, "cim": {}}
+    for component in hardware_payload["components"]:
+        profile_kind = component.get("metadata", {}).get("cost_profile_key")
+        profile_template = component.get("metadata", {}).get(
+            "cost_profile_template"
+        )
+        if not profile_kind or not profile_template:
+            continue
+        profile_id = "{}-{}".format(component["component_id"], profile_kind)
+        component["cost_profile_id"] = profile_id
+        registries[profile_kind][profile_id] = profile_template
+
+    hardware = hardware_from_dict(hardware_payload)
+    model = model_from_dict(model_payload)
+    component_profiles = _component_profile_registries_from_dict(registries)
+    placement = replace(
+        base.placement,
+        model_name=model.name,
+        hardware_name=hardware.name,
+        op_to_component={},
+        tensor_to_component={},
+        tensor_bytes={},
+        parallel=replace(
+            base.placement.parallel,
+            rank_mapping=(),
+            layer_to_stage={},
+        ),
+        kv_policy=replace(
+            base.placement.kv_policy,
+            cache_component=None,
+            offload_component=None,
+        ),
+    )
+    host_orchestration = replace(
+        base.host_orchestration_profile,
+        cpu_component_id="cpu0",
+        gpu_component_id="gpu0",
+        scheduler_resource_id="cpu0.scheduler",
+        pack_resource_id="cpu0.pack",
+        dma_resource_id="cpu0.h2d_dma",
+        submission_resource_id="gpu0.command_queue",
+    )
+    return replace(
+        base,
+        name="b200-qwen38-unmaterialized",
+        hardware=hardware,
+        model=model,
+        placement=placement,
+        component_profiles=component_profiles,
+        host_orchestration_profile=host_orchestration,
+    )
 
 
 def _with_weight_logical_bytes(scenario, logical_bytes_by_tensor):
@@ -269,6 +337,18 @@ def _two_gpu_direct_hbf_candidate_scenario():
 
 
 class ControlPlanePlannerTests(unittest.TestCase):
+    def test_b200_hbf_hbm_qwen38_authoring_validates_before_runtime_mapping(self):
+        scenario = _b200_qwen38_unmaterialized_scenario()
+
+        # Loading either UI preset intentionally leaves runtime placement empty;
+        # validation must not require a hand-authored KV target in that state.
+        report = planner_module.validate_scenario(scenario)
+        self.assertTrue(report.is_valid, report.errors_en)
+
+        result = plan_runtime_placement(scenario)
+        self.assertTrue(result.fully_placed, result.unplaced)
+        self.assertEqual(result.status, "feasible")
+
     def test_options_and_result_contract_are_json_serializable(self):
         with self.assertRaisesRegex(ValueError, "mode"):
             PlacementPolicy(mode="unknown")

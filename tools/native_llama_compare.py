@@ -905,8 +905,45 @@ def _pcie_one_way_bandwidth(snapshot: Mapping[str, object], generation: int, wid
     if per_lane is None:
         raise ValueError(f"unsupported PCIe generation in hardware snapshot: {generation}")
     # The simulator's ``bandwidth_gbps`` contract is decimal gigabits/s;
-    # the table above is effective gigabytes/s per lane.
+    # the table above is effective gigabytes/s per lane.  Keep the explicit
+    # GB/s value in link metadata so reports cannot confuse the two units.
     return per_lane * width * 8.0
+
+
+def _merge_hardware_input(base: Mapping[str, object], overlay: Mapping[str, object]) -> dict[str, object]:
+    """Merge a public hardware config over an optional measured snapshot."""
+    result: dict[str, object] = dict(base)
+    for key, value in overlay.items():
+        previous = result.get(key)
+        if isinstance(previous, Mapping) and isinstance(value, Mapping):
+            result[key] = _merge_hardware_input(previous, value)
+        else:
+            result[key] = value
+    return result
+
+
+def load_hardware_input(path: str | Path) -> dict[str, object]:
+    """Load an explicit hardware input JSON, optionally anchored to a snapshot."""
+    config_path = Path(path).expanduser().resolve()
+    try:
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"hardware input is not valid JSON: {config_path}: {exc}") from exc
+    if not isinstance(raw, Mapping):
+        raise ValueError("hardware input root must be a JSON object")
+    snapshot_ref = raw.get("measured_snapshot")
+    if not snapshot_ref:
+        return dict(raw)
+    snapshot_path = Path(str(snapshot_ref))
+    if not snapshot_path.is_absolute():
+        snapshot_path = (ROOT / snapshot_path).resolve()
+    try:
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"measured_snapshot is not readable JSON: {snapshot_path}: {exc}") from exc
+    if not isinstance(snapshot, Mapping):
+        raise ValueError("measured_snapshot root must be a JSON object")
+    return _merge_hardware_input(snapshot, raw)
 
 
 def _hardware_inputs(hardware_snapshot: Mapping[str, object] | None) -> dict[str, object]:
@@ -920,7 +957,8 @@ def _hardware_inputs(hardware_snapshot: Mapping[str, object] | None) -> dict[str
             "gpu": {"name": "NVIDIA GeForce RTX 5080", "memory_mib": 16303,
                      "pcie": {"gen_current": 5, "gen_max": 5, "width_current": 8, "width_max": 16},
                      "bandwidth_gbps_one_way": 256.0},
-            "host_memory_bytes": 134_939_398_144, "source": "legacy-reference-default",
+            "host_memory_bytes": 134_939_398_144, "host_memory_bandwidth_gb_s": 89.6,
+            "analysis_input_basis": "legacy_fallback", "source": "legacy-reference-default",
         }
     if not isinstance(hardware_snapshot, Mapping):
         raise TypeError("hardware_snapshot must be a mapping returned by probe_hardware")
@@ -929,9 +967,24 @@ def _hardware_inputs(hardware_snapshot: Mapping[str, object] | None) -> dict[str
     topology = hardware_snapshot.get("cpu_topology")
     if isinstance(topology, Mapping):
         cpu.update({key: value for key, value in topology.items() if key not in cpu or not cpu[key]})
-    cpu.setdefault("physical_cores", hardware_snapshot.get("cpu_cores"))
-    cpu.setdefault("logical_processors", hardware_snapshot.get("cpu_threads"))
+    if not cpu.get("physical_cores"):
+        cpu["physical_cores"] = hardware_snapshot.get("cpu_cores")
+    if not cpu.get("logical_processors"):
+        cpu["logical_processors"] = hardware_snapshot.get("cpu_threads")
     cpu_name = str(cpu.get("name", cpu.get("model")) or "").strip()
+    cpu_public_specs = hardware_snapshot.get("cpu_public_specs", {})
+    if not isinstance(cpu_public_specs, Mapping):
+        cpu_public_specs = {}
+    if not cpu.get("physical_cores"):
+        cpu["physical_cores"] = cpu_public_specs.get("physical_cores")
+    if not cpu.get("logical_processors"):
+        cpu["logical_processors"] = cpu_public_specs.get("logical_processors")
+    host_raw = hardware_snapshot.get("host_memory") or {}
+    if not isinstance(host_raw, Mapping):
+        host_raw = {}
+    host_public_specs = host_raw.get("public_specs", {})
+    if not isinstance(host_public_specs, Mapping):
+        host_public_specs = {}
     gpu_raw = hardware_snapshot.get("gpu")
     if not isinstance(gpu_raw, Mapping):
         raise ValueError("hardware_snapshot.gpu must be a mapping with name, VRAM, and PCIe data")
@@ -947,7 +1000,6 @@ def _hardware_inputs(hardware_snapshot: Mapping[str, object] | None) -> dict[str
         raise ValueError("hardware_snapshot.gpu.pcie is required for a measured scenario")
     try:
         memory_mib = int(gpu_raw.get("memory_mib", gpu_raw.get("memory_total_mib", gpu_raw.get("vram_mib"))))
-        host_raw = hardware_snapshot.get("host_memory") or {}
         host_memory_bytes = int(host_raw.get("total_bytes", host_raw.get("total_memory_bytes")))
         # Active negotiated state drives the service link.  Max capability is
         # retained separately for the stable identity fingerprint.
@@ -957,11 +1009,56 @@ def _hardware_inputs(hardware_snapshot: Mapping[str, object] | None) -> dict[str
         raise ValueError("hardware snapshot must declare positive GPU VRAM, host memory, and PCIe values") from None
     if memory_mib <= 0 or host_memory_bytes <= 0 or generation <= 0 or width <= 0:
         raise ValueError("hardware snapshot must declare positive GPU VRAM, host memory, and PCIe values")
+    gpu_public_specs = gpu_raw.get("public_specs", {})
+    if not isinstance(gpu_public_specs, Mapping):
+        gpu_public_specs = {}
+    memory_specs = gpu_public_specs.get("memory", {})
+    if not isinstance(memory_specs, Mapping):
+        memory_specs = {}
+    cache_specs = gpu_public_specs.get("cache", {})
+    if not isinstance(cache_specs, Mapping):
+        cache_specs = {}
+    host_memory_bandwidth = host_public_specs.get("bandwidth_gb_s")
+    if host_memory_bandwidth is None:
+        host_memory_bandwidth = (
+            cpu_public_specs.get("memory", {})
+            if isinstance(cpu_public_specs.get("memory", {}), Mapping)
+            else {}
+        ).get("theoretical_bandwidth_gb_s")
+    public_specs_complete = all(
+        value is not None
+        for value in (
+            gpu_public_specs.get("sm_count"),
+            gpu_public_specs.get("tensor_cores_per_sm"),
+            gpu_public_specs.get("boost_clock_mhz"),
+            gpu_public_specs.get("bf16_dense_tflops"),
+            memory_specs.get("bandwidth_gb_s"),
+            cache_specs.get("l2_mib"),
+            host_memory_bandwidth,
+        )
+    )
+    policy = hardware_snapshot.get("policy", {})
+    if not isinstance(policy, Mapping):
+        policy = {}
+    if (
+        policy.get("use_public_specs_for_analysis_profiles") is True
+        and policy.get("unknown_values") == "fail_closed_when_required"
+        and not public_specs_complete
+    ):
+        raise ValueError(
+            "hardware input requires complete public analysis specs: "
+            "GPU SM/tensor/clock/peak, GPU memory bandwidth, GPU L2, and host memory bandwidth"
+        )
     return {
         "cpu_name": cpu_name,
         "physical_cores": int(cpu.get("physical_cores", cpu.get("core_count")) or 0) or None,
         "logical_processors": int(cpu.get("logical_processors", cpu.get("thread_count")) or 0) or None,
         "gpu_name": gpu_name, "gpu": gpu_raw, "host_memory_bytes": host_memory_bytes,
+        "gpu_public_specs": gpu_public_specs,
+        "cpu_public_specs": cpu_public_specs,
+        "host_memory_public_specs": host_public_specs,
+        "host_memory_bandwidth_gb_s": float(host_memory_bandwidth) if host_memory_bandwidth is not None else 89.6,
+        "analysis_input_basis": "public_spec" if public_specs_complete else "legacy_fallback",
         "pcie": pcie,
         "pcie_bandwidth_basis": "measured_one_way_microbenchmark" if gpu_raw.get("bandwidth_gbps_one_way") else "active_link_spec_fallback",
         "pcie_bandwidth_gbps": _pcie_one_way_bandwidth({**gpu_raw, **pcie}, generation, width),
@@ -1103,10 +1200,11 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
                             runtime_environment: Mapping[str, str | None] | None = None,
                             cuda_backend_available: bool | None = None,
                             sampling_policy: SamplingPolicy | None = None):
-    """Build a parity scenario using measured physical host inputs.
+    """Build a parity scenario using explicit hardware inputs.
 
-    The optional snapshot keeps legacy callers working while allowing the
-    matrix runner to bind VRAM, host memory, and negotiated PCIe facts.  Cost
+    Public vendor specifications drive analytical profiles when present.  The
+    optional snapshot keeps legacy callers working while allowing the matrix
+    runner to bind VRAM, host memory, and negotiated PCIe facts.  Cost
     efficiencies stay analytical and are never inferred from timing errors.
     """
     if sampling_policy is not None and not isinstance(sampling_policy, SamplingPolicy):
@@ -1141,32 +1239,67 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     pcie_bandwidth = float(measured.get("pcie_bandwidth_gbps", gpu_raw.get("bandwidth_gbps_one_way", 256.0)))
     vram_bytes = int(gpu_raw.get("memory_mib", 16303)) * 1024**2
     host_memory_bytes = int(measured["host_memory_bytes"])
+    gpu_specs = measured.get("gpu_public_specs", {})
+    if not isinstance(gpu_specs, Mapping):
+        gpu_specs = {}
+    gpu_memory_specs = gpu_specs.get("memory", {})
+    if not isinstance(gpu_memory_specs, Mapping):
+        gpu_memory_specs = {}
+    gpu_cache_specs = gpu_specs.get("cache", {})
+    if not isinstance(gpu_cache_specs, Mapping):
+        gpu_cache_specs = {}
+    cpu_specs = measured.get("cpu_public_specs", {})
+    if not isinstance(cpu_specs, Mapping):
+        cpu_specs = {}
+    sm_count = int(gpu_specs.get("sm_count", 84))
+    tensor_cores_per_sm = int(gpu_specs.get("tensor_cores_per_sm", 4))
+    gpu_frequency_ghz = float(gpu_specs.get("boost_clock_mhz", 2617)) / 1000.0
+    bf16_dense_tflops = float(gpu_specs.get("bf16_dense_tflops", 112.6))
+    gpu_memory_bandwidth_gb_s = float(gpu_memory_specs.get("bandwidth_gb_s", 960.0))
+    gpu_memory_type = str(gpu_memory_specs.get("type", "GDDR7"))
+    l1_shared_cache_bytes = int(float(gpu_cache_specs.get("l1_shared_kib_per_sm", 128)) * sm_count * 1024)
+    l2_cache_bytes = int(float(gpu_cache_specs.get("l2_mib", 64)) * 1024**2)
+    host_memory_bandwidth_gb_s = float(measured.get("host_memory_bandwidth_gb_s", 89.6))
+    cpu_frequency_ghz = float(cpu_specs.get("base_clock_mhz", 4300)) / 1000.0
+    gpu_memory_link_bandwidth_gbps = gpu_memory_bandwidth_gb_s * 8.0
+    host_memory_link_bandwidth_gbps = host_memory_bandwidth_gb_s * 8.0
+    peak_ops_per_s = bf16_dense_tflops * 1e12
+    if min(sm_count, tensor_cores_per_sm, gpu_frequency_ghz, bf16_dense_tflops,
+           gpu_memory_bandwidth_gb_s, l1_shared_cache_bytes, l2_cache_bytes,
+           host_memory_bandwidth_gb_s) <= 0:
+        raise ValueError("public hardware specs must be positive")
     components = []
     for component in base.hardware.components:
         if component.component_id == "gpu0":
             ports = tuple(
-                replace(port, bandwidth_gbps=7680.0) if port.port_id == "hbm0" else
+                replace(port, bandwidth_gbps=gpu_memory_link_bandwidth_gbps) if port.port_id == "hbm0" else
                 replace(port, lanes=pcie_width, bandwidth_gbps=pcie_bandwidth) if port.port_id == "pcie0" else port
                 for port in component.ports
             )
-            components.append(replace(component, ports=ports, capacity_bytes=50 * 1024**2, peak_ops_per_s=112_600_000_000_000.0, metadata={
+            components.append(replace(component, ports=ports, capacity_bytes=l2_cache_bytes, peak_ops_per_s=peak_ops_per_s, metadata={
                 **component.metadata, "measured_gpu": measured["gpu_name"], "gpu_uuid": gpu_raw.get("uuid"),
                 "driver": gpu_raw.get("driver"), "clocks": gpu_raw.get("clocks", {}),
                 "pcie_generation_max": pcie_generation, "pcie_width_max": pcie_width,
                 "pcie_generation_current": pcie.get("gen_current"), "pcie_width_current": pcie.get("width_current"),
                 "pcie_bandwidth_basis": measured.get("pcie_bandwidth_basis"),
+                "analysis_input_basis": measured.get("analysis_input_basis"),
+                "public_specs": dict(gpu_specs), "memory_type": gpu_memory_type,
             }))
         elif component.component_id == "hostmem0":
             components.append(replace(component, ports=tuple(
-                replace(port, bandwidth_gbps=716.8) if port.port_id == "ddr0" else port
+                replace(port, bandwidth_gbps=host_memory_link_bandwidth_gbps) if port.port_id == "ddr0" else port
                 for port in component.ports
             ), capacity_bytes=host_memory_bytes))
         elif component.component_id == "hbm0":
-            components.append(replace(component, ports=tuple(replace(port, bandwidth_gbps=7680.0) for port in component.ports), capacity_bytes=vram_bytes))
+            components.append(replace(component, ports=tuple(replace(port, bandwidth_gbps=gpu_memory_link_bandwidth_gbps) for port in component.ports), capacity_bytes=vram_bytes, metadata={
+                **component.metadata, "memory_type": gpu_memory_type,
+                "analysis_input_basis": measured.get("analysis_input_basis"),
+                "public_specs": dict(gpu_memory_specs),
+            }))
         elif component.component_id == "cpu0":
             components.append(replace(component, ports=tuple(
                 replace(port, lanes=pcie_width, bandwidth_gbps=pcie_bandwidth) if port.port_id == "pcie0" else
-                replace(port, bandwidth_gbps=716.8) if port.port_id == "ddr0" else port
+                replace(port, bandwidth_gbps=host_memory_link_bandwidth_gbps) if port.port_id == "ddr0" else port
                 for port in component.ports
             )))
     hardware = replace(
@@ -1174,12 +1307,12 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
         name="RTX5080-local",
         components=tuple(components),
         links=tuple(
-            replace(l, bandwidth_gbps=7680.0) if l.link_id == "gpu-hbm0" else
-            replace(l, lanes=pcie_width, bandwidth_gbps=pcie_bandwidth, metadata={**l.metadata, "gen_current": pcie_generation, "width_current": pcie_width}) if l.link_id == "cpu-gpu-pcie" else
-            replace(l, bandwidth_gbps=716.8) if l.link_id == "cpu-hostmem-ddr" else l
+            replace(l, bandwidth_gbps=gpu_memory_link_bandwidth_gbps, metadata={**l.metadata, "memory_type": gpu_memory_type}) if l.link_id == "gpu-hbm0" else
+            replace(l, lanes=pcie_width, bandwidth_gbps=pcie_bandwidth, metadata={**l.metadata, "gen_current": pcie_generation, "width_current": pcie_width, "bandwidth_gbps": pcie_bandwidth, "bandwidth_gb_s": pcie_bandwidth / 8.0, "bandwidth_basis": measured.get("pcie_bandwidth_basis")}) if l.link_id == "cpu-gpu-pcie" else
+            replace(l, bandwidth_gbps=host_memory_link_bandwidth_gbps) if l.link_id == "cpu-hostmem-ddr" else l
             for l in base.hardware.links if l.link_id in {"cpu-gpu-pcie", "cpu-hostmem-ddr", "gpu-hbm0"}
         ),
-        metadata={**base.hardware.metadata, "measured_host": measured["cpu_name"], "measured_gpu": measured["gpu_name"], "gpu_vram_mib": vram_bytes // 1024**2, "gpu_uuid": gpu_raw.get("uuid"), "gpu_driver": gpu_raw.get("driver"), "gpu_clocks": gpu_raw.get("clocks", {}), "pcie_link_gen_current": pcie_generation, "pcie_link_width_current": pcie_width, "pcie_link_bandwidth_gbps_one_way": pcie_bandwidth, "host_memory_total_bytes": host_memory_bytes, "hardware_snapshot_source": measured["source"], "llama_cpp_gpu_layers": gpu_layers},
+        metadata={**base.hardware.metadata, "measured_host": measured["cpu_name"], "measured_gpu": measured["gpu_name"], "gpu_vram_mib": vram_bytes // 1024**2, "gpu_uuid": gpu_raw.get("uuid"), "gpu_driver": gpu_raw.get("driver"), "gpu_clocks": gpu_raw.get("clocks", {}), "pcie_link_gen_current": pcie_generation, "pcie_link_width_current": pcie_width, "pcie_link_bandwidth_gbps_one_way": pcie_bandwidth, "pcie_link_bandwidth_gb_s_one_way": pcie_bandwidth / 8.0, "host_memory_total_bytes": host_memory_bytes, "host_memory_bandwidth_gb_s": host_memory_bandwidth_gb_s, "gpu_memory_bandwidth_gb_s": gpu_memory_bandwidth_gb_s, "gpu_memory_type": gpu_memory_type, "hardware_snapshot_source": measured["source"], "analysis_input_basis": measured.get("analysis_input_basis"), "gpu_public_specs": dict(gpu_specs), "cpu_public_specs": dict(cpu_specs), "llama_cpp_gpu_layers": gpu_layers},
     )
     # Qwen3.8's hybrid CPU graph lowers an 8-token prefill into two physical
     # 4-token graph invocations even when llama-server is launched with
@@ -1281,20 +1414,25 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     profiles = {kind: dict(values) for kind, values in base.component_profiles.items()}
     gpu_profile = profiles["gpu"]["legacy-gpu"]
     tensor = gpu_profile.tensor_core
-    # Dense BF16 peak = 112.6 TFLOP/s at the declared 84 SM / 2.617 GHz.
-    cycles = 84 * 4 * 2.617e9 * (2 * tensor.mma_m * tensor.mma_n * tensor.mma_k) * 0.5 / 112.6e12
-    profiles["gpu"]["legacy-gpu"] = replace(gpu_profile, name="RTX5080-analytical", tensor_core=replace(tensor, sm_count=84, frequency_ghz=2.617, cycles_per_mma=cycles))
-    profiles["hbm"]["legacy-hbm"] = replace(profiles["hbm"]["legacy-hbm"], bandwidth_gb_s=960.0)
-    profiles["host_memory"]["legacy-host-memory"] = replace(profiles["host_memory"]["legacy-host-memory"], name="DDR5-5600-dual-channel", bandwidth_gb_s=89.6)
+    # Dense BF16 peak and memory service are explicit hardware inputs.  They
+    # are public theoretical limits, never fitted from native latency.
+    cycles = sm_count * tensor_cores_per_sm * gpu_frequency_ghz * 1e9 * (2 * tensor.mma_m * tensor.mma_n * tensor.mma_k) * 0.5 / peak_ops_per_s
+    profiles["gpu"]["legacy-gpu"] = replace(gpu_profile, name="RTX5080-analytical", tensor_core=replace(tensor, sm_count=sm_count, tensor_cores_per_sm=tensor_cores_per_sm, frequency_ghz=gpu_frequency_ghz, cycles_per_mma=cycles), cache_hierarchy=replace(gpu_profile.cache_hierarchy, levels=tuple(
+        replace(level, capacity_bytes=l1_shared_cache_bytes) if level.name.casefold() in {"l1", "l1_shared"} else
+        replace(level, capacity_bytes=l2_cache_bytes) if level.name.casefold() == "l2" else level
+        for level in gpu_profile.cache_hierarchy.levels
+    )))
+    profiles["hbm"]["legacy-hbm"] = replace(profiles["hbm"]["legacy-hbm"], bandwidth_gb_s=gpu_memory_bandwidth_gb_s)
+    profiles["host_memory"]["legacy-host-memory"] = replace(profiles["host_memory"]["legacy-host-memory"], name="DDR5-5600-dual-channel", bandwidth_gb_s=host_memory_bandwidth_gb_s)
     cpu_profile = profiles["cpu"]["legacy-cpu"]
-    profiles["cpu"]["legacy-cpu"] = replace(cpu_profile, name="Ryzen9950X3D-analytical", pipeline=replace(cpu_profile.pipeline, core_count=threads, frequency_ghz=4.3))
+    profiles["cpu"]["legacy-cpu"] = replace(cpu_profile, name="Ryzen9950X3D-analytical", pipeline=replace(cpu_profile.pipeline, core_count=threads, frequency_ghz=cpu_frequency_ghz))
     runtime_config = LlamaCppRuntimeConfig(
         threads=threads, threads_batch=threads, batch=batch, ubatch=ubatch,
         context=ctx, parallel=parallel, gpu_layers=gpu_layers,
         flash_attn=False, kv_type_k="f16", kv_type_v="f16",
         kv_unified=True, cont_batching=True, warmup=True, seed=seed,
         mmap=True, mlock=False, offload_kqv=True, op_offload=op_offload,
-        split_mode="layer", main_gpu=0,
+        split_mode="layer", main_gpu=0, prefill_chunk_tokens=prefill_chunk_tokens,
     )
     placement_risks = []
     logical_processors = measured.get("logical_processors")
@@ -1426,6 +1564,8 @@ def main() -> int:
     ap.add_argument("--request-timing", choices=("stream", "prompt_eval", "none"), default="stream",
                     help="请求边界计时来源；stream 测量 request-to-first-token，prompt_eval 仅保留旧阶段诊断")
     ap.add_argument("--coherent-dma-mode", choices=("pipelined", "strict_serialized"), default="pipelined")
+    ap.add_argument("--hardware-input", type=Path, default=None,
+                    help="explicit hardware input JSON; public specs drive analytical profiles")
     ap.add_argument("--raw-trace-artifact", action="append", type=Path, default=[],
                     help="可选原始 NVTX/CUPTI/NSYS 文件；只记录路径与 SHA，不把大文件嵌入 payload")
     ap.add_argument("--extractor-output-artifact", action="append", type=Path, default=[],
@@ -1473,7 +1613,10 @@ def main() -> int:
     prompt_tokenization = tokenize_prompt(args.model, args.prompt, tokenizer_exe=Path(args.exe).with_name("llama-tokenize.exe"))
     prompt_tokens = int(prompt_tokenization["count"])
     predicted_output_tokens = int(args.predict)
-    hardware = probe_hardware()
+    try:
+        hardware = load_hardware_input(args.hardware_input) if args.hardware_input else probe_hardware()
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     sim_scenario = build_matching_scenario(prompt_tokens, predicted_output_tokens, ctx=args.ctx, parallel=args.parallel,
                                            batch=args.batch, ubatch=args.ubatch, threads=args.threads, gpu_layers=args.gpu_layers,
                                            runtime_binary=args.exe,

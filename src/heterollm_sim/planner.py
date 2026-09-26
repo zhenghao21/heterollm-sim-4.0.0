@@ -2658,6 +2658,24 @@ def _validate_scenario_uncached(
         except ValueError as exc:
             errors.append("layer {}: {}".format(layer.layer_id, exc))
 
+    # V4 authoring deliberately leaves runtime placement empty. The control
+    # plane chooses rank-local weight and KV targets from the current topology
+    # when the scenario is run. Do not reject that authoring state merely
+    # because no rank-level KV target has been materialized yet; once any
+    # runtime operator/tensor ledger exists, the checks below remain strict.
+    placement_unmaterialized = (
+        not any(
+            (
+                scenario.placement.op_to_component,
+                scenario.placement.tensor_to_component,
+                scenario.placement.tensor_bytes,
+            )
+        )
+        and not scenario.placement.parallel.rank_mapping
+        and not kv_policy.cache_component
+        and not bool(control_plane_decision(scenario))
+    )
+
     parallel_plan: Optional[ParallelPlan] = None
     try:
         parallel_plan = _parallel_plan(scenario)
@@ -2665,7 +2683,7 @@ def _validate_scenario_uncached(
         if any(
             not layer.is_linear_attention
             for layer in execution_layers
-        ):
+        ) and not placement_unmaterialized:
             for rank in parallel_plan.ranks:
                 cache_component_id, _offload, _ratio = _kv_components(
                     scenario, rank
@@ -3141,7 +3159,7 @@ def _validate_scenario_uncached(
     # Admission always uses the current workload.  Auto-generated runtime-state
     # tensor sizes are estimates from the mapping run, not capacity declarations;
     # the serving planner derives their budgets from physical placement instead.
-    if requests and not any(
+    if requests and not placement_unmaterialized and not any(
         "does not support non-zero prefetch_distance" in error
         for error in errors
     ):

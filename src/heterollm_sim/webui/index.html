@@ -40,11 +40,15 @@ PLACEHOLDERS / BOUNDARIES
         <button type="button" class="button button-quiet" id="importButton">导入 JSON</button>
         <input type="file" id="fileInput" accept="application/json,.json" hidden>
         <button type="button" class="button button-quiet" id="exportButton">导出 JSON</button>
+        <button type="button" class="button button-quiet" id="importHardwareButton">导入硬件参数</button>
+        <input type="file" id="hardwareFileInput" accept="application/json,.json" hidden>
+        <button type="button" class="button button-quiet" id="exportHardwareButton">导出硬件参数</button>
         <button type="button" class="button button-quiet" id="canonicalExportButton">导出标准 IR</button>
         <button type="button" class="button button-quiet" id="jsonButton">查看 JSON</button>
         <button type="button" class="button button-quiet top-settings-button" id="settingsButton" aria-haspopup="dialog" aria-controls="settingsDialog">设置</button>
         <span class="action-divider" aria-hidden="true"></span>
         <button type="button" class="button button-secondary" id="validateButton">校验</button>
+        <button type="button" class="button button-quiet" id="openDirectScoreButton">Native 评分</button>
         <button type="button" class="button button-primary" id="runButton">运行仿真</button>
       </div>
     </header>
@@ -800,6 +804,25 @@ PLACEHOLDERS / BOUNDARIES
     </div>
   </dialog>
 
+  <dialog class="run-job-dialog" id="directScoreDialog" aria-labelledby="directScoreTitle">
+    <div class="run-job-shell">
+      <header class="dialog-head"><div><h2 id="directScoreTitle">Native 评分</h2><p>对当前场景执行仿真并比较 Native 实测时延；调度与映射作为候选方案参与评估，结构差异单独展示。</p></div><button type="button" class="icon-button" id="closeDirectScoreButton" aria-label="关闭 Native 评分">×</button></header>
+      <section class="run-estimate-card">
+        <label class="field run-native-reference-field" for="runNativeReferenceInput">
+          <span>Native 参考结果（JSON，用于本次对比）</span>
+          <textarea id="runNativeReferenceInput" rows="4" spellcheck="false" placeholder='{"requests":{"request-0000":{"ttft_ns":...,"tpot_ns":...,"e2e_ns":...}}}'></textarea>
+        </label>
+        <label class="field run-native-reference-field" for="r0ReferenceInput">
+          <span>R0 参考结果（可选 JSON；只比较 R0 误差和结构）</span>
+          <textarea id="r0ReferenceInput" rows="3" spellcheck="false" placeholder='{"requests":{"request-0000":{"ttft_ns":...,"tpot_ns":...,"e2e_ns":...}},"scheduler":{},"mapping":{}}'></textarea>
+        </label>
+      </section>
+      <footer class="run-job-footer">
+        <button type="button" class="button button-quiet" id="directScoreButton">直接仿真评分（Direct score）</button>
+      </footer>
+    </div>
+  </dialog>
+
   <dialog class="run-job-dialog" id="runJobDialog" aria-labelledby="runJobDialogTitle" aria-describedby="runJobDialogDescription">
     <div class="run-job-shell">
       <header class="dialog-head">
@@ -816,6 +839,7 @@ PLACEHOLDERS / BOUNDARIES
         </div>
         <dl class="run-estimate-summary" id="runEstimateSummary"></dl>
         <div class="run-estimate-warnings" id="runEstimateWarnings"></div>
+
       </section>
       <section class="run-progress-card" id="runJobProgressPanel" aria-labelledby="runProgressTitle" aria-live="polite" hidden>
         <div class="run-job-section-head">
@@ -829,6 +853,7 @@ PLACEHOLDERS / BOUNDARIES
       <footer class="run-job-footer">
         <button type="button" class="button button-quiet" id="dismissRunJobButton">关闭</button>
         <button type="button" class="button button-danger" id="cancelRunJobButton" hidden>取消仿真（Cancel）</button>
+
         <button type="button" class="button button-primary" id="startRunJobButton">开始后台仿真（Start）</button>
       </footer>
     </div>

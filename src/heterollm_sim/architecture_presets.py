@@ -13,6 +13,12 @@ from dataclasses import dataclass, replace
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from .ir import ComponentSpec, HardwareSpec, LinkSpec, PortSpec
+from .component_presets import (
+    _cpu_cost_profile_template,
+    _gpu_cost_profile_template,
+    _hbm_cost_profile_template,
+    _host_memory_cost_profile_template,
+)
 from .serde import to_primitive
 from .topology import validate_topology
 
@@ -1603,302 +1609,192 @@ def _gpu_hbf() -> ArchitecturePresetDefinition:
 
 
 def _b200_hbf_hbm() -> ArchitecturePresetDefinition:
-    """One B200 with two modeled HBM endpoints and two HBF endpoints.
-
-    NVIDIA publishes DGX B200 aggregate figures (eight GPUs, 1,440 GB and
-    64 TB/s HBM3E bandwidth).  The two HBM nodes are an explicit simulation
-    split of one B200's 180 GB / 8 TB/s aggregate, not a claim about the
-    undisclosed physical stack count.  HBF values retain the OCP reference
-    envelope and are independent storage endpoints.
-    """
+    """B200 accelerator package plus a reference host for execution."""
 
     package = "b200_package0"
-    hbm_total_bandwidth_gbps = 64_000.0  # 8 TB/s per B200, decimal bytes -> bits
     hbm_total_capacity_bytes = _gb(180.0)
+    hbm_total_bandwidth_gbps = 64_000.0  # 8 TB/s per B200, decimal bytes -> bits
     hbm_preset_id = "nvidia-b200-hbm3e-90gb-4tbps-analysis"
-    gpu_ports = _hbm_controller_ports(
-        2,
-        "HBM3E",
-        hbm_total_bandwidth_gbps,
-    ) + (
-        _port(
-            "hbf0",
-            "UCIe",
-            "endpoint",
-            version="2.0",
-            lanes=64,
-            bandwidth_gbps=2_048.0,
-            payload="streaming",
-        ),
-        _port(
-            "hbf1",
-            "UCIe",
-            "endpoint",
-            version="2.0",
-            lanes=64,
-            bandwidth_gbps=2_048.0,
-            payload="streaming",
-        ),
+    pcie_gbps = 504.12307692307695  # PCIe 5.0 x16 decoded 128b/130b envelope
+
+    # The component peak is vendor-derived; all microarchitectural fields in
+    # the execution profile remain explicit analytical assumptions.
+    gpu_profile, gpu_profile_basis = _gpu_cost_profile_template(
+        "gpu0",
+        sm_count=160,
+        frequency_ghz=1.8,
+        peak_bf16_tflops=2_200.0,
+    )
+    gpu_profile_basis.update(
+        {
+            "tensor_core.sm_count": "A_ANALYTICAL B200 SM-count assumption; exact active SM count is SKU/firmware dependent",
+            "tensor_core.frequency_ghz": "A_ANALYTICAL B200 operating-clock assumption; vendor page does not guarantee one fixed clock",
+            "tensor_core.cycles_per_mma": "derived to reproduce NVIDIA Blackwell Technical Overview Table 3 dense 2.2 PFLOPS BF16/FP16 peak",
+            "cache_hierarchy": "A_ANALYTICAL B200 cache/issue defaults; exact cache timing and ports are not public",
+            "occupancy": "A_ANALYTICAL scheduler default; no workload calibration claimed",
+            "attainable_efficiency": "A_ANALYTICAL workload efficiency default; no benchmark calibration claimed",
+            "*_energy": "A_ANALYTICAL energy defaults; no B200 application measurement claimed",
+        }
+    )
+    hbm_ports = _hbm_controller_ports(2, "HBM3E", hbm_total_bandwidth_gbps)
+    gpu_ports = hbm_ports + (
+        _port("hbf0", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2_048.0, payload="streaming"),
+        _port("hbf1", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2_048.0, payload="streaming"),
+        _port("pcie0", "PCIe", "endpoint", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, payload="coherent_dma"),
     )
     components = [
         _component(
-            "gpu0",
-            "gpu",
-            gpu_ports,
-            package_id=package,
-            die_id="b200_die",
+            "gpu0", "gpu", gpu_ports, package_id=package, die_id="b200_die",
             peak_ops_per_s=2_200_000_000_000_000.0,
-            role="blackwell_accelerator",
-            model="NVIDIA B200 SXM 180GB",
+            role="blackwell_accelerator", model="NVIDIA B200 SXM 180GB",
             peak_ops_basis=_peak_ops_basis(
                 "BF16_tensor_dense",
-                source_basis=(
-                    "NVIDIA Blackwell Technical Overview Table 3; HGX B200 "
-                    "dense FP16/BF16 tensor peak (2.2 PFLOPS)"
-                ),
+                source_basis="NVIDIA Blackwell Technical Overview Table 3; HGX B200 dense FP16/BF16 tensor peak (2.2 PFLOPS)",
             ),
             parameter_basis={
                 "capacity_bytes": "NVIDIA DGX B200 1,440 GB total / 8 GPUs = 180 GB per B200",
-                "peak_ops_per_s": "NVIDIA Blackwell Technical Overview Table 3 dense FP16/BF16 tensor peak = 2.2 PFLOPS; SKU clock and thermal operating point are not modeled",
+                "peak_ops_per_s": "NVIDIA Blackwell Technical Overview Table 3 dense FP16/BF16 tensor peak = 2.2 PFLOPS",
                 "peak_ops_source_url": "https://resources.nvidia.com/en-us-blackwell-architecture/blackwell-architecture-technical-brief",
                 "hbm_bandwidth_gbps": "NVIDIA DGX B200 64 TB/s aggregate / 8 GPUs = 8 TB/s per B200, converted to decimal Gb/s",
             },
             extra_metadata={
-                "architecture": "Blackwell",
-                "memory_product": "HBM3E",
-                "memory_total_bandwidth_tb_per_s": 8.0,
-                "memory_total_capacity_gb": 180.0,
+                "architecture": "Blackwell", "memory_product": "HBM3E",
+                "memory_total_bandwidth_tb_per_s": 8.0, "memory_total_capacity_gb": 180.0,
                 "hbm_node_split": "two equal analytical HBM endpoints; physical stack count intentionally unspecified",
-                "provenance": {
-                    "value_status": "vendor_aggregate_derived_and_public_product_specification",
-                    "source_basis": "NVIDIA DGX B200 public aggregate system specification and Blackwell Technical Overview Table 3",
-                },
+                "cost_profile_key": "gpu", "cost_profile_template": gpu_profile,
+                "cost_profile_parameter_basis": gpu_profile_basis,
+                "provenance": {"value_status": "vendor_aggregate_derived_and_public_product_specification", "source_basis": "NVIDIA DGX B200 aggregate system specification and Blackwell Technical Overview Table 3"},
             },
-        ),
-        _component(
-            "hbf0",
-            "hbf",
-            (
-                _port(
-                    "host",
-                    "UCIe",
-                    "endpoint",
-                    version="2.0",
-                    lanes=64,
-                    bandwidth_gbps=2_048.0,
-                    payload="streaming",
-                    metadata={"media_bandwidth_modeled_separately": True},
-                ),
-            ),
-            package_id=package,
-            die_id="hbf0_die",
-            capacity_bytes=_gb(512.0),
-            read_bandwidth_gbps=24_000.0,
-            write_bandwidth_gbps=0.0,
-            role="near_package_flash",
-            model="OCP HBF analysis device 0",
-            physical_composition={
-                "simulator_representation": "single_physical_unit_node",
-                "simulator_node_count": 1,
-                "physical_unit_kind": "HBF_stack",
-                "physical_unit_count": 1,
-                "physical_unit_count_status": "explicit_reference_node",
-                "known_multiple": False,
-                "unit_index": 0,
-                "unit_count_in_product": 1,
-                "unit_count_status": "experimental_reference_scope",
-                "unit_count_formula": "one HBF reference node per user-requested endpoint",
-                "unit_capacity_bytes": _gb(512.0),
-                "product_total_capacity_bytes": _gb(512.0),
-                "source_basis": "OCP HBF preproduction up-to envelope",
-            },
-            parameter_basis={
-                "capacity_bytes": "up_to_512_GB_reference_capacity",
-                "read_bandwidth_gbps": "grade3_up_to_3TB_per_s converted to 24,000 Gb/s",
-                "write_bandwidth_gbps": "unknown_kept_zero",
-                "interface_bandwidth_gbps": "analytical UCIe x64 32 GT/s envelope",
-            },
-            extra_metadata={
-                "capacity_scope": "up_to_512GB",
-                "bandwidth_scope": "grade3_up_to_3TB_per_s",
-                "read_latency_ns": 2_500.0,
-                "write_latency_ns": 0.0,
-                "transfer_granularity_bytes": 4_096,
-                "max_outstanding_requests": 32,
-                "dma_bandwidth_gbps": 2_048.0,
-                "dma_latency_ns": 800.0,
-                "dma_energy_pj_per_byte": 0.0,
-                "unknown_value_sentinels": {
-                    "write_bandwidth_gbps": "0.0 means unknown/not declared, not physical zero",
-                    "write_latency_ns": "0.0 means unknown/not declared, not zero latency",
-                    "dma_energy_pj_per_byte": "0.0 means unknown/not declared, not zero energy",
-                },
-                "storage_transport_parameter_basis": "editable analytical HBF controller defaults bounded by the declared UCIe path",
-                "internal_nand_composition": {
-                    "dies_per_stack": "8-high_or_16-high",
-                    "correlation_status": "not_reliably_disclosed",
-                },
-            },
-        ),
-        _component(
-            "hbf1",
-            "hbf",
-            (
-                _port(
-                    "host",
-                    "UCIe",
-                    "endpoint",
-                    version="2.0",
-                    lanes=64,
-                    bandwidth_gbps=2_048.0,
-                    payload="streaming",
-                    metadata={"media_bandwidth_modeled_separately": True},
-                ),
-            ),
-            package_id=package,
-            die_id="hbf1_die",
-            capacity_bytes=_gb(512.0),
-            read_bandwidth_gbps=24_000.0,
-            write_bandwidth_gbps=0.0,
-            role="near_package_flash",
-            model="OCP HBF analysis device 1",
-            physical_composition={
-                "simulator_representation": "single_physical_unit_node",
-                "simulator_node_count": 1,
-                "physical_unit_kind": "HBF_stack",
-                "physical_unit_count": 1,
-                "physical_unit_count_status": "explicit_reference_node",
-                "known_multiple": False,
-                "unit_index": 1,
-                "unit_count_in_product": 1,
-                "unit_count_status": "experimental_reference_scope",
-                "unit_count_formula": "one HBF reference node per user-requested endpoint",
-                "unit_capacity_bytes": _gb(512.0),
-                "product_total_capacity_bytes": _gb(512.0),
-                "source_basis": "OCP HBF preproduction up-to envelope",
-            },
-            parameter_basis={
-                "capacity_bytes": "up_to_512_GB_reference_capacity",
-                "read_bandwidth_gbps": "grade3_up_to_3TB_per_s converted to 24,000 Gb/s",
-                "write_bandwidth_gbps": "unknown_kept_zero",
-                "interface_bandwidth_gbps": "analytical UCIe x64 32 GT/s envelope",
-            },
-            extra_metadata={
-                "capacity_scope": "up_to_512GB",
-                "bandwidth_scope": "grade3_up_to_3TB_per_s",
-                "read_latency_ns": 2_500.0,
-                "write_latency_ns": 0.0,
-                "transfer_granularity_bytes": 4_096,
-                "max_outstanding_requests": 32,
-                "dma_bandwidth_gbps": 2_048.0,
-                "dma_latency_ns": 800.0,
-                "dma_energy_pj_per_byte": 0.0,
-                "unknown_value_sentinels": {
-                    "write_bandwidth_gbps": "0.0 means unknown/not declared, not physical zero",
-                    "write_latency_ns": "0.0 means unknown/not declared, not zero latency",
-                    "dma_energy_pj_per_byte": "0.0 means unknown/not declared, not zero energy",
-                },
-                "storage_transport_parameter_basis": "editable analytical HBF controller defaults bounded by the declared UCIe path",
-                "internal_nand_composition": {
-                    "dies_per_stack": "8-high_or_16-high",
-                    "correlation_status": "not_reliably_disclosed",
-                },
-            },
-        ),
+        )
     ]
+
+    hbf_physical = lambda index: {
+        "simulator_representation": "single_reference_endpoint",
+        "simulator_node_count": 1,
+        "physical_unit_kind": "HBF_endpoint",
+        "physical_unit_count": 1,
+        "physical_unit_count_status": "explicit_reference_node",
+        "known_multiple": False,
+        "unit_index": index,
+        "unit_count_in_product": 1,
+        "unit_count_status": "experimental_reference_scope",
+        "unit_count_formula": "one HBF reference endpoint per user-requested node",
+        "unit_capacity_bytes": _gb(512.0),
+        "product_total_capacity_bytes": _gb(512.0),
+        "source_basis": "OCP HBF preproduction up-to envelope",
+    }
+    def hbf_component(index: int) -> ComponentSpec:
+        return _component(
+            "hbf{}".format(index), "hbf",
+            (_port("host", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2_048.0, payload="streaming", metadata={"media_bandwidth_modeled_separately": True}),),
+            package_id=package, die_id="hbf{}_die".format(index), capacity_bytes=_gb(512.0),
+            read_bandwidth_gbps=24_000.0, write_bandwidth_gbps=0.0,
+            role="near_package_flash", model="OCP HBF analysis device {}".format(index),
+            physical_composition=hbf_physical(index),
+            parameter_basis={
+                "capacity_bytes": "up_to_512_GB_reference_capacity",
+                "read_bandwidth_gbps": "grade3_up_to_3TB_per_s converted to 24,000 Gb/s",
+                "write_bandwidth_gbps": "unknown_kept_zero",
+                "interface_bandwidth_gbps": "analytical UCIe x64 32 GT/s envelope",
+            },
+            extra_metadata={
+                "capacity_scope": "up_to_512GB", "bandwidth_scope": "grade3_up_to_3TB_per_s",
+                "read_latency_ns": 2_500.0, "write_latency_ns": 0.0,
+                "transfer_granularity_bytes": 4_096, "max_outstanding_requests": 32,
+                "dma_bandwidth_gbps": 2_048.0, "dma_latency_ns": 800.0, "dma_energy_pj_per_byte": 0.0,
+                "unknown_value_sentinels": {"write_bandwidth_gbps": "0.0 means unknown/not declared, not physical zero", "write_latency_ns": "0.0 means unknown/not declared, not zero latency", "dma_energy_pj_per_byte": "0.0 means unknown/not declared, not zero energy"},
+                "storage_transport_parameter_basis": "editable analytical HBF controller defaults bounded by the declared UCIe path",
+                "internal_nand_composition": {"dies_per_stack": "8-high_or_16-high", "correlation_status": "not_reliably_disclosed"},
+            },
+        )
+    components.extend(hbf_component(index) for index in range(2))
+
+    # The HBM nodes are analytical endpoints.  Keep the product class in the
+    # metadata, but do not claim that either endpoint is a disclosed physical
+    # B200 stack or that the product has two physical stacks.
     hbm_components, hbm_links = _physical_hbm_stacks(
-        root_component_id="gpu0",
-        root_port_prefix="hbm",
-        stack_id_prefix="hbm",
-        link_id_prefix="gpu_hbm",
-        package_id=package,
-        generation="HBM3E",
-        stack_count=2,
+        root_component_id="gpu0", root_port_prefix="hbm", stack_id_prefix="hbm", link_id_prefix="gpu_hbm",
+        package_id=package, generation="HBM3E", stack_count=2,
         product_total_capacity_bytes=hbm_total_capacity_bytes,
         product_total_bandwidth_gbps=hbm_total_bandwidth_gbps,
-        role="local_accelerator_memory",
-        product_model="NVIDIA B200 SXM 180GB",
+        role="local_accelerator_memory", product_model="NVIDIA B200 SXM 180GB",
         unit_count_status="analytical_two_modeled_hbm_nodes",
-        unit_count_formula=(
-            "user-requested 2 HBM nodes; 180 GB / 2 = 90 GB and "
-            "8 TB/s / 2 = 4 TB/s per modeled endpoint; physical stack count unspecified"
-        ),
-        source_basis=(
-            "NVIDIA DGX B200 aggregate 1,440 GB and 64 TB/s across 8 GPUs "
-            "-> 180 GB and 8 TB/s per B200; equal analytical split"
-        ),
+        unit_count_formula=("user-requested 2 HBM nodes; 180 GB / 2 = 90 GB and 8 TB/s / 2 = 4 TB/s per modeled endpoint; physical stack count unspecified"),
+        source_basis=("NVIDIA DGX B200 aggregate 1,440 GB and 64 TB/s across 8 GPUs -> 180 GB and 8 TB/s per B200; equal analytical split"),
         component_preset_id=hbm_preset_id,
     )
-    components.extend(hbm_components)
-    links = list(hbm_links) + [
-        _link(
-            "gpu_hbf0",
-            "gpu0",
-            "hbf0",
-            "hbf0",
-            "host",
-            "UCIe",
-            version="2.0",
-            lanes=64,
-            bandwidth_gbps=2_048.0,
-            latency_ns=30.0,
-            payload="streaming",
+    transformed_hbm_components = []
+    for component in hbm_components:
+        profile, basis = _hbm_cost_profile_template(component.component_id, component.read_bandwidth_gbps)
+        metadata = dict(component.metadata)
+        physical = dict(metadata["physical_composition"])
+        physical.update({
+            "simulator_representation": "analytical_endpoint_node",
+            "physical_unit_count": None,
+            "physical_unit_count_status": "not_reliably_disclosed",
+            "unit_count_in_product": None,
+            "unit_index_semantics": "analytical_endpoint_index_not_physical_stack_index",
+            "component_preset_status": "catalog_reference_analytical_endpoint",
+        })
+        metadata["physical_composition"] = physical
+        metadata["model"] = "NVIDIA B200 HBM3E analytical endpoint {} of 2".format(physical["unit_index"] + 1)
+        metadata["cost_profile_key"] = "hbm"
+        metadata["cost_profile_template"] = profile
+        metadata["cost_profile_parameter_basis"] = basis
+        metadata["provenance"] = {"value_status": "analytical_endpoint_split", "unit_count_status": "analytical_two_modeled_hbm_nodes", "source_basis": physical["source_basis"]}
+        port = component.ports[0]
+        port_metadata = dict(port.metadata)
+        port_metadata.update({"physical_unit_kind": "HBM_stack_class", "unit_count_in_product": None, "unit_count_status": "not_reliably_disclosed", "unit_index_semantics": "analytical_endpoint_index_not_physical_stack_index"})
+        transformed_hbm_components.append(replace(component, ports=(replace(port, metadata=port_metadata),), metadata=metadata))
+    # Remove the original unprofiled HBM instances and keep the transformed ones.
+    components = [component for component in components if component.component_id not in {"hbm0", "hbm1"}]
+    components.extend(transformed_hbm_components)
+
+    cpu_profile, cpu_basis = _cpu_cost_profile_template("cpu0", core_count=72, frequency_ghz=3.0)
+    host_profile, host_basis = _host_memory_cost_profile_template("hostmem0", 3_276.8, name="hostmem0-reference-memory-profile", read_latency_ns=60.0, write_latency_ns=60.0)
+    components.extend((
+        _component(
+            "cpu0", "cpu",
+            (_port("pcie0", "PCIe", "root", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, payload="coherent_dma"), _port("ddr0", "DDR", "controller", version="5.0", lanes=64, bandwidth_gbps=3_276.8)),
+            package_id="host0", die_id="cpu_die", role="auxiliary_host_cpu", model="Reference Grace-class host CPU",
+            extra_metadata={"auxiliary_host": True, "cost_profile_key": "cpu", "cost_profile_template": cpu_profile, "cost_profile_parameter_basis": cpu_basis, "cpu_profile_required": True},
         ),
-        _link(
-            "gpu_hbf1",
-            "gpu0",
-            "hbf1",
-            "hbf1",
-            "host",
-            "UCIe",
-            version="2.0",
-            lanes=64,
-            bandwidth_gbps=2_048.0,
-            latency_ns=30.0,
-            payload="streaming",
+        _component(
+            "hostmem0", "host_memory",
+            (_port("ddr0", "DDR", "device", version="5.0", lanes=64, bandwidth_gbps=3_276.8),),
+            package_id="host0", die_id="ddr_die", capacity_bytes=256 * 1024**3,
+            read_bandwidth_gbps=3_276.8, write_bandwidth_gbps=3_276.8,
+            role="auxiliary_host_memory", model="Reference host memory",
+            extra_metadata={"auxiliary_host": True, "cost_profile_key": "host_memory", "cost_profile_template": host_profile, "cost_profile_parameter_basis": host_basis},
         ),
-    ]
+    ))
+    links = list(hbm_links)
+    for index in range(2):
+        links.append(_link("gpu_hbf{}".format(index), "gpu0", "hbf{}".format(index), "hbf{}".format(index), "host", "UCIe", version="2.0", lanes=64, bandwidth_gbps=2_048.0, latency_ns=30.0, payload="streaming"))
+    links.extend((
+        _link("cpu_gpu_pcie", "cpu0", "pcie0", "gpu0", "pcie0", "PCIe", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, latency_ns=800.0, payload="coherent_dma"),
+        _link("cpu_hostmem_ddr", "cpu0", "ddr0", "hostmem0", "ddr0", "DDR", version="5.0", lanes=64, bandwidth_gbps=3_276.8, latency_ns=80.0),
+    ))
     groups = (
-        _group(
-            "b200_package",
-            "NVIDIA B200 with 2×HBM3E + 2×HBF",
-            ("gpu0", "hbm0", "hbm1", "hbf0", "hbf1"),
-            "gpu0",
-        ),
+        _group("b200_package", "NVIDIA B200 with 2×HBM3E + 2×HBF", ("gpu0", "hbm0", "hbm1", "hbf0", "hbf1"), "gpu0"),
+        _group("reference_host", "Auxiliary host CPU and memory", ("cpu0", "hostmem0"), "cpu0"),
     )
     limitations = (
         "NVIDIA DGX B200 页面公开的是 8-GPU 系统聚合值（1,440 GB、64 TB/s）；本预设按 8 除法得到单 B200 的 180 GB 与 8 TB/s。",
-        "两个 HBM 节点是用户要求的两个分析端点，均分产品聚合值，不宣称 B200 的物理 HBM 堆叠数量为 2。",
-        "B200 峰值采用 NVIDIA Blackwell Technical Overview Table 3 的 HGX B200 dense FP16/BF16 tensor 2.2 PFLOPS；未建模时钟、TDP、稀疏性、热降额或 MIG。",
+        "两个 HBM 节点是用户要求的分析端点，均分产品聚合值；物理 HBM 堆叠数量未公开，也没有在本预设中指定为 2。",
+        "B200 峰值采用 NVIDIA Blackwell Technical Overview Table 3 的 HGX B200 dense FP16/BF16 tensor 2.2 PFLOPS；SM 数、时钟、缓存、效率、时序和能耗字段均为可编辑分析假设。",
         "HBF 容量和媒体读带宽沿用 OCP HBF 预生产上限参考；写带宽没有可靠通用公开值，因此保持 0。",
-        "UCIe 链路是可运行的分析端点，端到端 HBF 吞吐由 UCIe 链路、媒体带宽和控制器开销共同限制。",
-        "预设不含 CPU/主机控制器；参考规划器使用前必须由用户补充 CPU 连接和运行时控制器。",
+        "cpu0/hostmem0 仅为使仿真执行器具备 host orchestration 路径的栈外辅助参考，不改变 1 GPU + 2 HBM + 2 HBF 加速器组成；其 CPU、DDR 时序和效率 profile 均为分析默认。",
     )
     return _definition(
-        "nvidia-b200-1gpu-2hbf-2hbm",
-        "NVIDIA B200 + 2×HBF + 2×HBM3E",
-        "NVIDIA",
-        "Blackwell",
-        "accelerator_memory_storage",
-        "single_package",
-        ANALYTICAL_APPROXIMATION,
-        components,
-        links,
-        groups,
-        {
-            "gpu0": {"x": 80.0, "y": 180.0},
-            "hbm0": {"x": 420.0, "y": 40.0},
-            "hbm1": {"x": 660.0, "y": 40.0},
-            "hbf0": {"x": 420.0, "y": 300.0},
-            "hbf1": {"x": 660.0, "y": 300.0},
-        },
-        (NVIDIA_B200, NVIDIA_BLACKWELL, OCP_HBF, UCIE_SPEC),
-        limitations,
-        "用户指定的单 B200、双 HBM 和双 HBF 统一封装分析预设；B200 聚合规格可审计，HBM 拆分与 HBF 参数保持显式分析口径。",
+        "nvidia-b200-1gpu-2hbf-2hbm", "NVIDIA B200 + 2×HBF + 2×HBM3E", "NVIDIA", "Blackwell",
+        "storage_offload", "single_package", ANALYTICAL_APPROXIMATION,
+        components, links, groups,
+        {"gpu0": {"x": 260.0, "y": 180.0}, "hbm0": {"x": 560.0, "y": 40.0}, "hbm1": {"x": 780.0, "y": 40.0}, "hbf0": {"x": 560.0, "y": 300.0}, "hbf1": {"x": 780.0, "y": 300.0}, "cpu0": {"x": 0.0, "y": 140.0}, "hostmem0": {"x": 0.0, "y": 360.0}},
+        (NVIDIA_B200, NVIDIA_BLACKWELL, NVIDIA_GH200, OCP_HBF, UCIE_SPEC), limitations,
+        "用户指定的单 B200、双 HBM 和双 HBF 统一封装分析预设，并附带不计入加速器数量的辅助主机执行路径。",
         ("nvidia", "b200", "blackwell", "hbm3e", "hbf", "ucie", "flash"),
     )
-
-
 
 def _soc_2x_dram_sram_cim(*, shared_phy_noc: bool = False) -> ArchitecturePresetDefinition:
     """User-authored 3D topology, not a calibrated SoC or a UCIe proxy.

@@ -16,6 +16,7 @@ from enum import Enum
 import heapq
 import inspect
 import math
+import copy
 from typing import (
     Any,
     Callable,
@@ -1532,6 +1533,7 @@ class ServingRequestState:
     recomputes: int
     rejection_reason: Optional[str] = None
     engine_start_ns: Optional[float] = None
+    slot_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -1779,6 +1781,15 @@ class ServingResult:
     owner_residency_metrics: OwnerResidencyMetrics = field(
         default_factory=OwnerResidencyMetrics
     )
+    # Ordered, JSON-safe scheduler observations.  ``events`` remains the
+    # low-level timeline; this view records the decision boundary and the
+    # logical-to-physical work selected at that boundary.
+    schedule_trace: Tuple[Mapping[str, Any], ...] = ()
+
+    @property
+    def scheduler_trace(self) -> Tuple[Mapping[str, Any], ...]:
+        """Compatibility alias for callers that call the trace scheduler trace."""
+        return self.schedule_trace
     runtime_kernel_metrics: Mapping[str, object] = field(default_factory=dict)
 
     @property
@@ -2671,6 +2682,7 @@ def simulate_online(
 class _MutableRequest:
     spec: ServingRequest
     status: RequestStatus = RequestStatus.ARRIVALS
+    slot_id: Optional[int] = None
     prefill_cursor: int = 0
     committed: int = 0
     proposed: int = 0
@@ -5105,6 +5117,15 @@ class _OnlineRuntime:
         self._terminal_count = 0
         self._finished_count = 0
         self._rejected_count = 0
+        # Native server slots are distinct from residency-manager slots.  A
+        # request keeps its slot while running; a swap/rejection/finish
+        # releases it so the next admission observes explicit reuse.
+        self._free_slot_ids: List[int] = list(
+            range(max(0, int(plan.scheduler.max_num_seqs)))
+        )
+        self._slot_bindings: Dict[int, str] = {}
+        self._schedule_trace: List[Mapping[str, Any]] = []
+        self._decision_sequence = 0
         physical_limits = dict(_physical_runtime_limits(plan))
         _add_prompt_cache_runtime_limits(
             plan, self.resource_policy.prompt_cache, physical_limits
@@ -5112,6 +5133,7 @@ class _OnlineRuntime:
         self.physical_ledger = _PhysicalCapacityLedger(physical_limits)
         self.ledger = _KVLedger(plan.kv_policy, self.physical_ledger)
         self.ledger.configure_paged_pool(plan.scenario)
+        self._paged_pool_event_cursor = 0
         self.state_ledger = _LinearStateLedger(
             plan.linear_state_policy, self.physical_ledger
         )
@@ -5339,6 +5361,84 @@ class _OnlineRuntime:
         self._resource_kv_host_backed_pages = 0
         self._resource_state_host_backed_allocations = 0
 
+    def _state_trace(self, state: _MutableRequest) -> Mapping[str, Any]:
+        return {
+            "request_id": state.spec.request_id,
+            "status": state.status.value,
+            "slot_id": state.slot_id,
+            "prefill_cursor": int(state.prefill_cursor),
+            "committed_tokens": int(state.committed),
+            "cached_tokens": int(state.cached_tokens),
+            "kv_pages": int(state.kv_pages),
+            "recompute_cursor": int(state.recompute_cursor),
+            "recompute_target": int(state.recompute_target),
+        }
+
+    def _record_schedule_trace(
+        self,
+        kind: str,
+        *,
+        selected: Optional[BatchCohort] = None,
+        batch: Optional[ServingBatch] = None,
+        request_id: Optional[str] = None,
+        details: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        """Append a deterministic, source-independent scheduler observation."""
+        row: Dict[str, Any] = {
+            "schema": "heterollm.scheduler-trace/v1",
+            "sequence": len(self._schedule_trace),
+            "decision_sequence": self._decision_sequence,
+            "kind": str(kind),
+            "time_ns": float(self.now),
+        }
+        if request_id is not None:
+            row["request_id"] = str(request_id)
+        if selected is not None:
+            row["logical_batch"] = {
+                "cohort_id": selected.cohort_id,
+                "kind": selected.kind,
+                "start_ns": float(selected.start_ns),
+                "rows": tuple({
+                    "request_id": item.request_id,
+                    "slot_id": self.states[item.request_id].slot_id,
+                    "phase": item.phase,
+                    "token_count": int(item.token_count),
+                    "context_tokens": int(item.context_tokens),
+                    "logit_tokens": item.logit_tokens,
+                    "completion_cursor": item.completion_cursor,
+                } for item in selected.items),
+            }
+        if batch is not None:
+            plan = batch.metadata.get("execution_plan")
+            if isinstance(plan, Mapping):
+                row["execution_plan"] = plan
+            row["completion_ns"] = float(batch.end_ns)
+        if details:
+            row["details"] = dict(details)
+        row["states"] = tuple(
+            self._state_trace(state)
+            for state in sorted(self._state_values, key=lambda item: item.spec.request_id)
+        )
+        self._schedule_trace.append(row)
+        self._decision_sequence += 1
+
+    def _assign_slot(self, request_id: str) -> int:
+        if not self._free_slot_ids:
+            raise RuntimeError("llama.cpp slot pool is exhausted")
+        slot_id = self._free_slot_ids.pop(0)
+        self._slot_bindings[slot_id] = str(request_id)
+        return slot_id
+
+    def _release_slot(self, state: _MutableRequest) -> None:
+        slot_id = state.slot_id
+        if slot_id is None:
+            return
+        self._slot_bindings.pop(slot_id, None)
+        if slot_id not in self._free_slot_ids:
+            self._free_slot_ids.append(slot_id)
+            self._free_slot_ids.sort()
+        state.slot_id = None
+
     def _capture_residency_interval_peak(self) -> None:
         """Record current physical residency for this replay interval.
 
@@ -5357,6 +5457,32 @@ class _OnlineRuntime:
         self._residency_interval_peak_bytes = (
             current if previous is None else max(previous, current)
         )
+
+    def _sync_paged_pool_events(self) -> None:
+        """Expose experimental-pool transfers before the next decision."""
+        pool = self.ledger.paged_pool
+        if pool is None:
+            return
+        transfers = pool.events
+        for transfer in transfers[self._paged_pool_event_cursor:]:
+            start = self.now
+            duration = max(0.0, float(transfer.duration_ns))
+            end = start + duration
+            details = {
+                "kind": transfer.kind,
+                "logical_page_id": transfer.logical_page_id,
+                "source_component": transfer.source_component,
+                "target_component": transfer.target_component,
+                "bytes": int(transfer.bytes),
+                "duration_ns": duration,
+                "feedback_boundary": "pool_transfer_complete",
+            }
+            self.events.append(ServingEvent(start, "kv_pool_transfer_start", details=details))
+            self.events.append(ServingEvent(end, "kv_pool_transfer_complete", details=details))
+            self.now = end
+            self._host_available_ns = max(self._host_available_ns, end)
+            self._gpu_available_ns = max(self._gpu_available_ns, end)
+        self._paged_pool_event_cursor = len(transfers)
 
     @staticmethod
     def _residency_consumer_task_ids(
@@ -9270,6 +9396,8 @@ class _OnlineRuntime:
     ) -> None:
         if state.status == status:
             return
+        previous_status = state.status
+        previous_slot_id = state.slot_id
         if self._retained_kv_state is not None:
             if status == RequestStatus.RUNNING:
                 self._retained_kv_state.admit(state.spec.request_id)
@@ -9278,7 +9406,11 @@ class _OnlineRuntime:
             ):
                 self._retained_kv_state.invalidate(status.value)
         if status == RequestStatus.RUNNING:
+            if state.slot_id is None:
+                state.slot_id = self._assign_slot(state.spec.request_id)
             self._assign_residency_slot(state.spec.request_id)
+        elif previous_status == RequestStatus.RUNNING or status in _TERMINAL_STATUSES:
+            self._release_slot(state)
         if state.status == RequestStatus.RUNNING:
             self._running_count -= 1
         elif state.status == RequestStatus.FINISHED:
@@ -9298,6 +9430,16 @@ class _OnlineRuntime:
             self._terminal_count += 1
         if status in _TERMINAL_STATUSES:
             self._release_residency_slot(state.spec.request_id)
+        self._record_schedule_trace(
+            "state_transition",
+            request_id=state.spec.request_id,
+            details={
+                "from": previous_status.value,
+                "to": status.value,
+                "slot_id": state.slot_id,
+                "previous_slot_id": previous_slot_id,
+            },
+        )
 
     def _append_batch(self, batch: ServingBatch) -> None:
         self.batches.append(batch)
@@ -9334,9 +9476,12 @@ class _OnlineRuntime:
             if self.rounds > safety_limit:
                 raise RuntimeError("online scheduler made no progress")
             self._stabilize_boundary()
+            self._sync_paged_pool_events()
             cohort = self._select_cohort()
             if cohort is not None:
+                self._record_schedule_trace("decision", selected=cohort)
                 self._execute(cohort)
+                self._sync_paged_pool_events()
                 self.execution_control.report(
                     "serving_cohorts",
                     len(self.batches),
@@ -9488,6 +9633,8 @@ class _OnlineRuntime:
 
     def _fill_slots(self) -> None:
         while self._running_count < self.plan.scheduler.max_num_seqs:
+            if not self._free_slot_ids:
+                return
             candidates = [
                 state for state in self._state_values
                 if state.status in (RequestStatus.WAITING, RequestStatus.SWAPPED)
@@ -9561,7 +9708,12 @@ class _OnlineRuntime:
                     self._admission_sequence += 1
                 state.queued_since_ns = self.now
                 event_type = "request_admitted" if state.preemption_strategy is None else "request_resumed"
-                self.events.append(ServingEvent(self.now, event_type, state.spec.request_id))
+                self.events.append(ServingEvent(
+                    self.now,
+                    event_type,
+                    state.spec.request_id,
+                    details={"slot_id": state.slot_id, "admission_sequence": state.admission_sequence},
+                ))
                 state.preemption_strategy = None
                 admitted = True
                 break
@@ -14020,12 +14172,171 @@ class _OnlineRuntime:
             **({"llama_cpp_kv_scan_phase": "prefill_rectangular"} if prefill_scan else {}),
         })
 
+    @staticmethod
+    def _execution_plan_for(
+        cohort: BatchCohort,
+        metadata: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Project the actual lowerer input into an auditable execution plan."""
+        raw_groups = metadata.get("operator_invocation_groups", ())
+        groups = raw_groups if isinstance(raw_groups, _ABCSequence) and not isinstance(
+            raw_groups, (str, bytes, _ABCMapping)
+        ) else ()
+        physical = []
+        for index, raw in enumerate(groups):
+            if not isinstance(raw, _ABCMapping):
+                continue
+            lanes = raw.get("lanes", ())
+            lanes = lanes if isinstance(lanes, _ABCSequence) and not isinstance(
+                lanes, (str, bytes, _ABCMapping)
+            ) else ()
+            physical.append({
+                "group_id": str(raw.get("group_id", "ubatch-{:04d}".format(index))),
+                "index": index,
+                "rows": int(raw.get("physical_ubatch_rows", raw.get("token_batch", len(lanes))) or 0),
+                "token_batch": int(raw.get("token_batch", len(lanes)) or 0),
+                "logit_rows": int(raw.get("logit_token_batch", sum(
+                    1 for lane in lanes
+                    if isinstance(lane, _ABCMapping) and lane.get("requires_logits") is True
+                )) or 0),
+                "batching_semantics": raw.get("batching_semantics"),
+                "lanes": tuple(dict(lane) for lane in lanes if isinstance(lane, _ABCMapping)),
+            })
+        raw_stages = metadata.get("execution_stages", ())
+        stages = raw_stages if isinstance(raw_stages, _ABCSequence) and not isinstance(
+            raw_stages, (str, bytes, _ABCMapping)
+        ) else ()
+        dependencies = tuple({
+            "stage_id": str(stage.get("stage_id", "")),
+            "component_id": stage.get("component_id"),
+            "group_id": stage.get("group_id"),
+            "dependencies": tuple(str(item) for item in stage.get("dependencies", ())),
+            "request_ids": tuple(str(item) for item in stage.get("request_ids", ())),
+            "resource_ids": tuple(str(item) for item in stage.get("resource_ids", ())),
+        } for stage in stages if isinstance(stage, _ABCMapping))
+        logical = tuple({
+            "request_id": item.request_id,
+            "phase": item.phase,
+            "token_count": int(item.token_count),
+            "context_tokens": int(item.context_tokens),
+            "logit_tokens": item.logit_tokens,
+            "kv_append_tokens": _batch_item_kv_append_tokens(item),
+        } for item in cohort.items)
+        return {
+            "schema": "heterollm.execution-plan/v1",
+            "cohort_id": cohort.cohort_id,
+            "kind": cohort.kind,
+            "logical_batch": logical,
+            "physical_ubatches": tuple(physical),
+            "operator_invocation_group_count": len(physical),
+            "kv_ranges": tuple({
+                "group_id": group["group_id"],
+                "read_tokens": group.get("kv_read_tokens", 0),
+                "append_tokens": group.get("kv_append_tokens", 0),
+                "materialized_tokens": group.get("kv_materialized_tokens", 0),
+            } for group in groups if isinstance(group, _ABCMapping)),
+            "operator_work": {
+                "physical_batch_rows": metadata.get("physical_batch_rows"),
+                "logit_rows": metadata.get("target_logit_rows"),
+                "dtype": metadata.get("model_graph_logits_dtype", metadata.get("host_contract_logits_dtype")),
+                "device_components": tuple(dict.fromkeys(
+                    str(stage.get("component_id")) for stage in stages
+                    if isinstance(stage, _ABCMapping) and stage.get("component_id")
+                )),
+                "shape_status": "partial_source_metadata",
+            },
+            "execution_dependencies": dependencies,
+            "cost_input": "same_cohort_lowerer_metadata",
+        }
+
     def _execute(self, cohort: BatchCohort) -> None:
         retained = self._retained_kv_state
+        state_snapshot = {
+            state.spec.request_id: copy.deepcopy(state.__dict__)
+            for state in self._state_values
+        }
+        ledger_snapshot = copy.deepcopy({
+            key: value for key, value in self.ledger.__dict__.items()
+            if key not in {"paged_pool", "physical", "policy"}
+        })
+        paged_pool = self.ledger.paged_pool
+        paged_pool_snapshot = None
+        if paged_pool is not None:
+            paged_pool_snapshot = {
+                key: copy.deepcopy(getattr(paged_pool, key))
+                for key in (
+                    "_pages", "_requests", "_request_components", "_prefixes",
+                    "_bindings", "_owned_bytes", "_page_counter", "_clock",
+                    "_events", "_last_error",
+                )
+            }
+        physical_snapshot = copy.deepcopy(self.physical_ledger.__dict__)
+        lifecycle_snapshot = {
+            key: getattr(self, key)
+            for key in (
+                "_running_count", "_terminal_count", "_finished_count",
+                "_rejected_count", "_service_sequence", "_host_available_ns",
+                "_gpu_available_ns", "_last_gpu_start_ns",
+                "_last_serial_device_end_ns", "now",
+            )
+        }
+        slot_snapshot = (list(self._free_slot_ids), dict(self._slot_bindings))
+        accounting_snapshot = {
+            "_batch_kind_counts": dict(self._batch_kind_counts),
+            "_batch_phase_counts": dict(self._batch_phase_counts),
+            "_max_batch_sequences": self._max_batch_sequences,
+            "_max_batch_tokens": self._max_batch_tokens,
+            "_request_device_ready_ns": dict(self._request_device_ready_ns),
+            "_last_kv_allocation_request_id": self._last_kv_allocation_request_id,
+            "_last_prompt_cache_allocation_request_id": self._last_prompt_cache_allocation_request_id,
+        }
         try:
             self._execute_cohort(cohort)
         except BaseException as error:
             self._llama_graph_runtime.failed(cohort.cohort_id, error)
+            # Lowering can reserve KV before a provider or graph validation
+            # fails.  Restore the reservation boundary so a diagnostic failure
+            # cannot leak capacity into a later replay.
+            for state in self._state_values:
+                self.ledger.release_temporary(state)
+            self.ledger.__dict__.update(copy.deepcopy(ledger_snapshot))
+            self.physical_ledger.__dict__.clear()
+            self.physical_ledger.__dict__.update(copy.deepcopy(physical_snapshot))
+            if paged_pool is not None and paged_pool_snapshot is not None:
+                for key, value in paged_pool_snapshot.items():
+                    setattr(paged_pool, key, copy.deepcopy(value))
+            for request_id, state in self.states.items():
+                state.__dict__.clear()
+                state.__dict__.update(copy.deepcopy(state_snapshot[request_id]))
+            for key, value in lifecycle_snapshot.items():
+                setattr(self, key, value)
+            self._free_slot_ids[:] = slot_snapshot[0]
+            self._slot_bindings.clear()
+            self._slot_bindings.update(slot_snapshot[1])
+            self._batch_kind_counts.clear()
+            self._batch_kind_counts.update(accounting_snapshot["_batch_kind_counts"])
+            self._batch_phase_counts.clear()
+            self._batch_phase_counts.update(accounting_snapshot["_batch_phase_counts"])
+            self._max_batch_sequences = accounting_snapshot["_max_batch_sequences"]
+            self._max_batch_tokens = accounting_snapshot["_max_batch_tokens"]
+            self._request_device_ready_ns.clear()
+            self._request_device_ready_ns.update(accounting_snapshot["_request_device_ready_ns"])
+            self._last_kv_allocation_request_id = accounting_snapshot["_last_kv_allocation_request_id"]
+            self._last_prompt_cache_allocation_request_id = accounting_snapshot[
+                "_last_prompt_cache_allocation_request_id"
+            ]
+            self.batches[:] = [
+                batch for batch in self.batches if batch.cohort_id != cohort.cohort_id
+            ]
+            self._record_schedule_trace(
+                "execution_failed",
+                selected=cohort,
+                details={
+                    "error_type": type(error).__name__,
+                    "state_commit": "not_committed",
+                    "kv_rollback": "restored_to_decision_boundary",
+                },
+            )
             # An execution or commit may have partially changed native state.
             # Keep diagnostic rows, but never reuse them as a valid bound after
             # failure/cancellation. This is fail-stop, not an error recovery model.
@@ -14036,6 +14347,12 @@ class _OnlineRuntime:
     def _execute_cohort(self, cohort: BatchCohort) -> None:
         cohort = self._with_kv_scan_lower_bound(cohort)
         cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+        execution_plan = self._execution_plan_for(cohort, cost.metadata)
+        cost = BatchCost(
+            cost.duration_ns,
+            cost.energy_pj,
+            {**dict(cost.metadata), "execution_plan": execution_plan},
+        )
         # Diagnose each realized ubatch even when the cost provider reused a
         # template. Preparation is pure; timing and the task DAG are unchanged.
         graph_transition = self._llama_graph_runtime.prepare(cohort, cost.metadata)
@@ -14424,6 +14741,14 @@ class _OnlineRuntime:
                 },
             )
         )
+        batch_metadata = {
+            **dict(cohort.metadata),
+            "execution_plan": cost.metadata.get("execution_plan", {}),
+            "slot_bindings": tuple(
+                (item.request_id, self.states[item.request_id].slot_id)
+                for item in cohort.items
+            ),
+        }
         self._append_batch(
             ServingBatch(
                 cohort.cohort_id,
@@ -14435,8 +14760,22 @@ class _OnlineRuntime:
                 cost,
                 cohort.items,
                 cohort.proposal_cost_scale,
-                cohort.metadata,
+                batch_metadata,
             )
+        )
+        self._record_schedule_trace(
+            "execution_complete",
+            selected=cohort,
+            batch=self.batches[-1],
+            details={
+                "logical_token_count": cohort.token_count,
+                "physical_ubatch_count": len(
+                    cost.metadata.get("operator_invocation_groups", ())
+                    if isinstance(cost.metadata.get("operator_invocation_groups", ()), _ABCSequence)
+                    else ()
+                ),
+                "kv_state_committed_at": "item_terminal_boundary",
+            },
         )
         self._record_prompt_cache_ranges(cohort, cost)
         for item_index, item in enumerate(cohort.items):
@@ -14581,6 +14920,12 @@ class _OnlineRuntime:
             state.last_service_sequence = self._service_sequence
             state.queued_since_ns = item_end_ns
             self._request_device_ready_ns[item.request_id] = item_end_ns
+        self._record_schedule_trace(
+            "state_commit",
+            selected=cohort,
+            batch=self.batches[-1],
+            details={"state_commit": "post_terminal_boundary"},
+        )
         self.events.append(ServingEvent(end_ns, "batch_end", cohort_id=cohort.cohort_id, details={"kind": cohort.kind}))
         self.now = end_ns
         self._llama_graph_runtime.commit(graph_transition)
@@ -14711,6 +15056,7 @@ class _OnlineRuntime:
                 state.preemptions, state.swaps, state.recomputes,
                 state.rejection_reason,
                 engine_start_ns=state.engine_start_ns,
+                slot_id=state.slot_id,
             )
             queue_delay = state.started_ns - spec.arrival_ns if state.started_ns is not None else None
             ttft = state.first_token_ns - spec.arrival_ns if state.first_token_ns is not None else None
@@ -15039,9 +15385,15 @@ class _OnlineRuntime:
             makespan,
             prompt_cache_metrics=self.prompt_cache.metrics(),
             owner_residency_metrics=owner_residency_metrics,
+            schedule_trace=tuple(self._schedule_trace),
             runtime_kernel_metrics={
                 **dict(self._execution_resource_kernel.metrics),
                 "llama_cpu_graph_lifecycle": self._llama_graph_runtime.summary(),
+                "paged_kv_pool": (
+                    self.ledger.paged_pool.snapshot()
+                    if self.ledger.paged_pool is not None
+                    else None
+                ),
             },
         )
 

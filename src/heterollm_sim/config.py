@@ -66,6 +66,17 @@ _COMPONENT_PROFILE_TYPES: Mapping[str, Type[Any]] = {
     "cim": DigitalSramCimProfile,
 }
 
+# A hardware input owns the physical graph plus every profile that describes
+# its components and control fabric.  Model, workload, placement, mapping,
+# sampling, and llama.cpp request controls remain scenario inputs.
+_HARDWARE_INPUT_PROFILE_FIELDS = (
+    "components",
+    "host_orchestration",
+    "fusion",
+    "cim_interconnect",
+    "runtime",
+)
+
 
 def normalize_cost_profile_kind(component_kind: str) -> Optional[str]:
     """Map a hardware component kind to its typed cost-profile registry."""
@@ -1338,6 +1349,121 @@ def _required_profile(
     return _mapping(profiles[name], "{} profile".format(name))
 
 
+def _scenario_with_hardware_input(data: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Make the explicit hardware input the authority for hardware sections."""
+    hardware_input = data.get("hardware_input")
+    if hardware_input is None:
+        return data
+    raw = _mapping(hardware_input, "hardware_input")
+    allowed = ("schema_version", "kind", "contract_version", "hardware", "metadata")
+    _reject_unknown_fields(raw, "hardware_input", allowed)
+    kind = str(raw.get("kind", "hardware_input"))
+    if kind != "hardware_input":
+        raise ValueError("hardware_input.kind must be hardware_input")
+    version = str(raw.get("schema_version", SCHEMA_VERSION))
+    if version not in {SCHEMA_VERSION, "4.0"}:
+        raise ValueError("hardware_input schema_version must be 4.0 or 4.0.0")
+    hardware = dict(_mapping(raw.get("hardware"), "hardware_input.hardware"))
+    contract_version = str(raw.get("contract_version", ""))
+    if contract_version != "2":
+        raise ValueError("hardware_input.contract_version must be 2")
+    parameters = _mapping(
+        hardware.pop("parameters", None), "hardware_input.hardware.parameters"
+    )
+    input_profiles = dict(parameters)
+    for required in ("host_orchestration", "fusion", "runtime"):
+        if required not in input_profiles or input_profiles[required] is None:
+            raise ValueError(
+                "hardware_input.hardware.parameters.{} is required; refusing to regenerate hardware defaults".format(required)
+            )
+    gpu_ids = {
+        str(item.get("component_id"))
+        for item in _array(hardware.get("components", []), "hardware_input.hardware.components")
+        if isinstance(item, Mapping)
+        and normalize_cost_profile_kind(str(item.get("kind", ""))) == "gpu"
+    }
+    runtime_raw = _mapping(input_profiles["runtime"], "hardware_input.hardware.parameters.runtime")
+    controller_ids = set(_mapping(runtime_raw.get("gpu_controllers"), "runtime.gpu_controllers"))
+    if controller_ids != gpu_ids:
+        raise ValueError(
+            "hardware_input runtime.gpu_controllers must exactly match GPU component IDs"
+        )
+    inline_registries: Dict[str, Dict[str, Any]] = {
+        kind: {} for kind in _COMPONENT_PROFILE_TYPES
+    }
+    raw_components = _array(hardware.get("components", []), "hardware_input.hardware.components")
+    normalized_components = []
+    for index, raw_component in enumerate(raw_components):
+        component = dict(_mapping(raw_component, "hardware input component"))
+        inline = component.pop("execution_profile", None)
+        if inline is None:
+            component_kind = str(component.get("kind", "")).lower()
+            component_metadata = component.get("metadata", {})
+            hbf_is_active_memory = (
+                component_kind == "hbf"
+                and isinstance(component_metadata, Mapping)
+                and component_metadata.get("access_mode") == "memory"
+            )
+            if normalize_cost_profile_kind(component_kind) is None and not hbf_is_active_memory:
+                normalized_components.append(component)
+                continue
+            raise ValueError(
+                "hardware_input.hardware.components[{}].execution_profile is required".format(index)
+            )
+        inline_object = _mapping(inline, "execution_profile")
+        profile_id = str(inline_object.get("profile_id", "")).strip()
+        profile_kind = str(inline_object.get("profile_kind", "")).strip()
+        profile_data = inline_object.get("parameters")
+        if not profile_id or not profile_kind or not isinstance(profile_data, Mapping):
+            raise ValueError(
+                "hardware_input execution_profile requires profile_id, profile_kind, and parameters"
+            )
+        normalized_kind = normalize_cost_profile_kind(str(component.get("kind", "")))
+        if not profile_kind:
+            profile_kind = normalized_kind or profile_kind
+        if normalized_kind is not None and normalized_kind != profile_kind:
+            raise ValueError(
+                "hardware_input execution_profile kind does not match component {}".format(
+                    component.get("component_id", index)
+                )
+            )
+        if profile_kind is None and str(component.get("kind", "")).lower() == "hbf":
+            profile_kind = "host_memory"
+        if profile_kind not in _COMPONENT_PROFILE_TYPES:
+            raise ValueError(
+                "hardware input component {} has no typed execution profile kind".format(
+                    component.get("component_id", index)
+                )
+            )
+        component["cost_profile_id"] = profile_id
+        profile_data = dict(profile_data)
+        existing = inline_registries[profile_kind].get(profile_id)
+        if existing is not None and existing != profile_data:
+            raise ValueError(
+                "hardware_input execution_profile {}.{} is inconsistent across components".format(
+                    profile_kind, profile_id
+                )
+            )
+        inline_registries[profile_kind][profile_id] = profile_data
+        normalized_components.append(component)
+    hardware["components"] = normalized_components
+    input_profiles["components"] = inline_registries
+    scenario = dict(data)
+    scenario.pop("hardware_input", None)
+    scenario["hardware"] = dict(hardware)
+    raw_scenario_profiles = scenario.get("profiles")
+    profiles = (
+        dict(_mapping(raw_scenario_profiles, "profiles"))
+        if raw_scenario_profiles is not None
+        else {}
+    )
+    for field_name in _HARDWARE_INPUT_PROFILE_FIELDS:
+        if field_name in input_profiles:
+            profiles[field_name] = input_profiles[field_name]
+    scenario["profiles"] = profiles
+    return scenario
+
+
 def _cache_level_profile_from_dict(
     data: Mapping[str, Any], field_name: str
 ) -> CacheLevelProfile:
@@ -2058,6 +2184,7 @@ def _llama_cpp_config_from_dict(data: Mapping[str, Any]) -> LlamaCppRuntimeConfi
 
 
 def scenario_from_dict(data: Mapping[str, Any]) -> ScenarioConfig:
+    data = _scenario_with_hardware_input(data)
     _reject_training_fields(data, "scenario")
     _reject_unknown_fields(
         data,

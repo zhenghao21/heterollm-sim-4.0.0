@@ -53,6 +53,13 @@ class LlamaCppRuntimeConfig:
     cpu_range: str | None = None
     cpu_range_batch: str | None = None
     numa: str | None = None
+    # Scheduling is a runtime contract as well as a set of numeric limits.
+    # ``llama_cpp`` is the source-bound mode; ``generic`` preserves authored
+    # research policy and ``experimental`` is explicitly outside native
+    # llama.cpp alignment claims.
+    policy: str = "llama_cpp"
+    preemption_enabled: bool = False
+    prefill_chunk_tokens: int | None = None
 
     def __post_init__(self) -> None:
         for name in ("threads", "threads_batch"):
@@ -92,6 +99,15 @@ class LlamaCppRuntimeConfig:
             raise ValueError("llama.cpp ubatch must not exceed batch")
         if self.parallel > self.context:
             raise ValueError("llama.cpp parallel must not exceed context")
+        if self.policy not in {"llama_cpp", "generic", "experimental"}:
+            raise ValueError("llama.cpp policy must be llama_cpp, generic, or experimental")
+        if not isinstance(self.preemption_enabled, bool):
+            raise ValueError("llama.cpp preemption_enabled must be boolean")
+        if self.prefill_chunk_tokens is not None:
+            if (isinstance(self.prefill_chunk_tokens, bool)
+                    or not isinstance(self.prefill_chunk_tokens, int)
+                    or self.prefill_chunk_tokens < 1):
+                raise ValueError("llama.cpp prefill_chunk_tokens must be a positive integer or None")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -120,6 +136,9 @@ class LlamaCppRuntimeConfig:
             "cpu_range": self.cpu_range,
             "cpu_range_batch": self.cpu_range_batch,
             "numa": self.numa,
+            "policy": self.policy,
+            "preemption_enabled": self.preemption_enabled,
+            "prefill_chunk_tokens": self.prefill_chunk_tokens,
         }
 
     @property
@@ -173,6 +192,60 @@ class LlamaCppRuntimeConfig:
 
 
 LLAMA_CUDA_OP_OFFLOAD_SCHEMA = "llama.cpp.cuda.host-weight-op-offload/v1"
+LLAMA_RUNTIME_IDENTITY_SCHEMA = "llama.cpp.runtime-identity/v1"
+
+
+def normalize_llama_runtime_identity(
+    identity: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Normalize optional build/runtime evidence without claiming verification.
+
+    Binary/source verification stays in the existing source-binding tools.  The
+    scenario only records whether that evidence is absent, partial, or bound,
+    so a missing executable identity cannot be mistaken for native alignment.
+    """
+    if identity is None:
+        return {
+            "schema": LLAMA_RUNTIME_IDENTITY_SCHEMA,
+            "status": "unbound",
+            "evidence_status": "evidence_pending",
+            "source_derived": False,
+            "native_trace_validated": False,
+            "timing_validated": False,
+        }
+    if not isinstance(identity, Mapping):
+        raise TypeError("llama runtime identity must be a mapping or None")
+    value = dict(identity)
+    required = ("version", "source_sha256", "binary_sha256", "build_options")
+    present = {
+        key for key in required
+        if value.get(key) and (
+            key == "version" or isinstance(value.get(key), Mapping)
+        )
+    }
+    source_sha256 = dict(value.get("source_sha256", {})) if isinstance(value.get("source_sha256", {}), Mapping) else {}
+    binary_sha256 = dict(value.get("binary_sha256", {})) if isinstance(value.get("binary_sha256", {}), Mapping) else {}
+    build_options = dict(value.get("build_options", {})) if isinstance(value.get("build_options", {}), Mapping) else {}
+    status = "bound" if len(present) == len(required) else "partial"
+    return {
+        "schema": LLAMA_RUNTIME_IDENTITY_SCHEMA,
+        "status": status,
+        "evidence_status": "source_and_binary_bound" if status == "bound" else "evidence_pending",
+        "version": value.get("version"),
+        "executable": value.get("executable"),
+        "modules": dict(value.get("modules", {})) if isinstance(value.get("modules", {}), Mapping) else {},
+        "source_sha256": source_sha256,
+        "binary_sha256": binary_sha256,
+        "build_options": build_options,
+        "native_trace_validated": bool(value.get("native_trace_validated", False)),
+        "timing_validated": bool(value.get("timing_validated", False)),
+        "fingerprint": stable_hash({
+            "version": value.get("version"),
+            "source_sha256": source_sha256,
+            "binary_sha256": binary_sha256,
+            "build_options": build_options,
+        }),
+    }
 
 
 def _source_function(text: str, signature: str) -> str:
@@ -594,11 +667,15 @@ class LlamaCppAdapter:
               warmup: bool | None = None, seed: int | None = None,
               cache_type_k: str | None = None, cache_type_v: str | None = None,
               kv_unified: bool | None = None,
-              op_offload: bool | None = None) -> RuntimeExecutionPlan:
+              op_offload: bool | None = None,
+              policy: str | None = None,
+              preemption_enabled: bool | None = None,
+              prefill_chunk_tokens: int | None = None) -> RuntimeExecutionPlan:
         if config is not None and any(value is not None for value in (
             batch_size, ubatch_size, parallel, gpu_layers, context_length,
             threads, threads_batch, flash_attn, cont_batching, warmup, seed,
-            cache_type_k, cache_type_v, kv_unified, op_offload)):
+            cache_type_k, cache_type_v, kv_unified, op_offload, policy,
+            preemption_enabled, prefill_chunk_tokens)):
             raise ValueError("provide either config or individual llama.cpp options, not both")
         if config is None:
             config = LlamaCppRuntimeConfig(
@@ -617,6 +694,9 @@ class LlamaCppAdapter:
                 warmup=True if warmup is None else warmup,
                 seed=0 if seed is None else seed,
                 op_offload=True if op_offload is None else bool(op_offload),
+                policy="llama_cpp" if policy is None else policy,
+                preemption_enabled=False if preemption_enabled is None else preemption_enabled,
+                prefill_chunk_tokens=prefill_chunk_tokens,
             )
         effective_batch = min(config.batch, config.context)
         effective_ubatch = min(config.ubatch, effective_batch)
@@ -652,6 +732,9 @@ class LlamaCppAdapter:
             "cpu_range": config.cpu_range,
             "cpu_range_batch": config.cpu_range_batch,
             "numa": config.numa,
+            "policy": config.policy,
+            "preemption_enabled": config.preemption_enabled,
+            "prefill_chunk_tokens": config.prefill_chunk_tokens,
         }
         return _plan(self.runtime, tasks, semantics)
 
@@ -687,4 +770,5 @@ class VLLMAdapter:
 
 
 __all__ = ["LlamaCppAdapter", "LlamaCppRuntimeConfig", "RuntimeExecutionPlan", "VLLMAdapter",
-           "derive_llama_cuda_op_offload_contract", "apply_llama_cuda_op_offload"]
+           "derive_llama_cuda_op_offload_contract", "apply_llama_cuda_op_offload",
+           "normalize_llama_runtime_identity", "LLAMA_RUNTIME_IDENTITY_SCHEMA"]

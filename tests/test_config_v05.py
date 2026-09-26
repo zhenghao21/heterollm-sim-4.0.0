@@ -1,5 +1,6 @@
 from dataclasses import replace
 import unittest
+from copy import deepcopy
 
 from heterollm_sim.config import ScenarioConfig, scenario_from_dict
 from heterollm_sim.cost_models import (
@@ -13,6 +14,7 @@ from heterollm_sim.cost_models import (
 from heterollm_sim.ir import SCHEMA_VERSION
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.serde import to_primitive
+from heterollm_sim.web import hardware_input_payload
 
 
 def reference_payload():
@@ -22,6 +24,7 @@ def reference_payload():
         "host_orchestration": to_primitive(scenario.host_orchestration_profile),
         "fusion": to_primitive(scenario.fusion_policy),
         "cim_interconnect": to_primitive(scenario.cim_interconnect),
+        "runtime": to_primitive(scenario.runtime_profile),
     }
     return {
         "schema_version": scenario.schema_version,
@@ -73,6 +76,26 @@ def gpu_quantized_matmul_capability_payload():
 
 
 class ScenarioProfileSchemaV400Tests(unittest.TestCase):
+    def test_hardware_input_is_authoritative_over_legacy_scenario_mirrors(self):
+        payload = reference_payload()
+        hardware_input = hardware_input_payload(build_reference_scenario())
+        self.assertEqual(hardware_input["contract_version"], "2")
+        self.assertNotIn("profiles", hardware_input)
+        self.assertIn("execution_profile", hardware_input["hardware"]["components"][0])
+        hardware_input["hardware"]["name"] = "authoritative-hardware"
+        payload["hardware"]["name"] = "stale-legacy-mirror"
+        payload["hardware_input"] = hardware_input
+        scenario = scenario_from_dict(payload)
+        self.assertEqual(scenario.hardware.name, "authoritative-hardware")
+
+    def test_hardware_input_rejects_unknown_kind_and_version(self):
+        for field, value in (("kind", "scenario"), ("schema_version", "3.0")):
+            payload = reference_payload()
+            payload["hardware_input"] = hardware_input_payload(build_reference_scenario())
+            payload["hardware_input"][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                scenario_from_dict(payload)
+
     def test_tied_weight_runtime_copy_policy_is_explicit_boolean(self):
         payload = reference_payload()
         payload["placement"]["metadata"]["control_plane"] = {

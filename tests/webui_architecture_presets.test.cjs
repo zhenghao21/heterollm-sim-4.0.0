@@ -53,6 +53,10 @@ function helpers() {
     materializeTopologyBundle,
     costProfileDraft,
     resetArchitectureDependentProfiles,
+    rebuildRuntimeGpuControllers,
+    runtimeGpuControllerIssue,
+    stableMappingEqual,
+    renameComponent,
     hostOrchestrationReferenceIssue,
     componentKindClass,
     isActiveMemoryComponent,
@@ -149,6 +153,59 @@ test("single component preset templates become an instance profile instead of re
   assert.equal(scenario.profiles.components.hbm["legacy-hbm"].bandwidth_gb_s, 1);
   component.metadata.cost_profile_template.read_latency_ns = 99;
   assert.equal(catalogComponent.metadata.cost_profile_template.read_latency_ns, 40, "catalog metadata is deeply cloned");
+});
+
+test("runtime GPU controller keys follow an architecture replacement without cloning across cardinalities", () => {
+  const ui = helpers();
+  const scenario = {
+    hardware: { components: [{ component_id: "new-gpu", kind: "gpu" }] },
+    profiles: { runtime: { gpu_controllers: { "old-gpu": { marker: "preserve" } } } },
+  };
+  assert.equal(ui.rebuildRuntimeGpuControllers(scenario), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(scenario.profiles.runtime.gpu_controllers)), { "new-gpu": { marker: "preserve" } });
+  assert.equal(ui.runtimeGpuControllerIssue(scenario), "");
+
+  scenario.hardware.components.push({ component_id: "second-gpu", kind: "gpu" });
+  assert.equal(ui.rebuildRuntimeGpuControllers(scenario), false, "cardinality changes stay visible for explicit user repair");
+  assert.match(ui.runtimeGpuControllerIssue(scenario), /second-gpu/u);
+});
+
+test("runtime controller rebuild reserves unchanged GPU IDs before mapping unmatched IDs", () => {
+  const ui = helpers();
+  const scenario = {
+    hardware: { components: [{ component_id: "B", kind: "gpu" }, { component_id: "C", kind: "gpu" }] },
+    profiles: { runtime: { gpu_controllers: { A: { marker: "A-controller" }, B: { marker: "B-controller" } } } },
+  };
+  assert.equal(ui.rebuildRuntimeGpuControllers(scenario), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(scenario.profiles.runtime.gpu_controllers)), {
+    B: { marker: "B-controller" }, C: { marker: "A-controller" },
+  });
+});
+
+test("runtime controller validation rejects missing runtime and uses canonical profile equality", () => {
+  const ui = helpers();
+  assert.equal(ui.stableMappingEqual({ a: 1, b: { c: 2 } }, { b: { c: 2 }, a: 1 }), true);
+  const scenario = { hardware: { components: [{ component_id: "gpu0", kind: "gpu" }] }, profiles: {} };
+  assert.match(ui.runtimeGpuControllerIssue(scenario), /profiles\.runtime/u);
+  scenario.profiles.runtime = { gpu_controllers: { wrong: {} } };
+  assert.match(ui.runtimeGpuControllerIssue(scenario), /gpu0/u);
+});
+
+test("renaming a GPU migrates its runtime controller key", () => {
+  const ui = helpers();
+  ui.state.scenario = {
+    hardware: { components: [{ component_id: "gpu0", kind: "gpu" }], links: [] },
+    profiles: { runtime: { gpu_controllers: { gpu0: { marker: "keep" } } }, host_orchestration: {} },
+    placement: { kv_policy: {}, parallel: { rank_mapping: [] } },
+  };
+  ui.state.nodePositions = {};
+  ui.state.nodeSizes = {};
+  ui.state.topologyView = { groups: [], layout: { positions: {} } };
+  ui.state.selectedComponents = new Set();
+  ui.state.selected = { id: "gpu0" };
+  ui.renameComponent(ui.state.scenario.hardware.components[0], "b200");
+  assert.deepEqual(ui.state.scenario.profiles.runtime.gpu_controllers, { b200: { marker: "keep" } });
+  assert.equal(ui.state.selected.id, "b200");
 });
 
 function scenario() {
@@ -609,11 +666,13 @@ test("GPU-only architecture invalidates orchestration until a real CPU is attach
 test("V4 transport rejects removed flat KV fields and preserves nested policy", () => {
   const ui = helpers();
   const nested = scenario();
+  nested.profiles.runtime = { gpu_controllers: { "old-gpu": {} } };
   nested.placement.kv_policy.cache_component = "old-hbm";
   const payload = ui.scenarioPayloadForTransport(nested);
   assert.equal(payload.placement.kv_policy.cache_component, "old-hbm");
   assert.equal(Object.hasOwn(payload.placement, "kv_cache_component"), false);
   const removed = scenario();
+  removed.profiles.runtime = { gpu_controllers: { "old-gpu": {} } };
   removed.placement.kv_cache_component = "old-hbm";
   assert.throws(() => ui.scenarioPayloadForTransport(removed), /已从 V4 schema 删除/);
 });

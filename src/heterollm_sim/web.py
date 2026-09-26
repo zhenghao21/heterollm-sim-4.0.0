@@ -42,7 +42,7 @@ from .runtime_diagnostics import (
     health_payload,
     record_unexpected_exception,
 )
-from .serde import canonical_json, to_primitive
+from .serde import canonical_json, stable_hash, to_primitive
 from .topology import ValidationIssue, validate_topology
 
 
@@ -327,6 +327,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             if path in {
                 "/api/validate",
                 "/api/run",
+                "/api/simulate-score",
                 "/api/run-estimate",
                 "/api/run-jobs",
                 "/api/canonical-ir",
@@ -373,6 +374,27 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     200,
                     report_dict(run_scenario(scenario), **trace_options),
+                )
+                return
+            if path == "/api/simulate-score":
+                payload = self._read_json_object()
+                scenario, native_reference, threshold_pct, r0_reference = _ui_score_request(payload)
+                # run_scenario rebuilds runtime placement, then validates it.
+                result = run_scenario(scenario)
+                report = report_dict(result)
+                self._send_json(
+                    200,
+                    {
+                        "schema": "heterollm.ui-simulation-score/v1",
+                        "report": report,
+                        "simulation_score": simulation_score_payload(
+                            report,
+                            scenario,
+                            native_reference=native_reference,
+                            threshold_pct=threshold_pct,
+                            r0_reference=r0_reference,
+                        ),
+                    },
                 )
                 return
             if path == "/api/run-estimate":
@@ -818,11 +840,48 @@ def _scenario_parse_messages(exc: BaseException) -> Tuple[str, str]:
     return "场景 JSON 解析失败：字段值或结构不符合配置约束", detail
 
 
+def hardware_input_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
+    """Serialize the hardware-only source file used by every UI run."""
+    hardware = to_primitive(scenario.hardware)
+    components = []
+    for component in scenario.hardware.components:
+        item = dict(to_primitive(component))
+        item.pop("cost_profile_id", None)
+        metadata = dict(item.get("metadata", {}))
+        metadata.pop("cost_profile_template", None)
+        item["metadata"] = metadata
+        profile_kind = scenario.component_profile_kind(component)
+        if profile_kind is not None:
+            item["execution_profile"] = {
+                "profile_id": component.cost_profile_id,
+                "profile_kind": profile_kind,
+                "parameters": to_primitive(scenario.resolve_component_profile(component)),
+            }
+        components.append(item)
+    hardware["components"] = components
+    hardware["parameters"] = {
+        "host_orchestration": to_primitive(scenario.host_orchestration_profile),
+        "fusion": to_primitive(scenario.fusion_policy),
+        "cim_interconnect": to_primitive(scenario.cim_interconnect),
+        "runtime": to_primitive(scenario.runtime_profile),
+    }
+    return {
+        "schema_version": "4.0",
+        "kind": "hardware_input",
+        "contract_version": "2",
+        "hardware": hardware,
+    }
+
+
 def scenario_to_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
     profiles: Dict[str, Any] = {
         "components": to_primitive(scenario.component_profiles),
         "host_orchestration": to_primitive(scenario.host_orchestration_profile),
         "fusion": to_primitive(scenario.fusion_policy),
+        # Controller parameters are hardware-side defaults and must travel
+        # with the exported hardware input instead of being regenerated from
+        # architecture_default on the next import.
+        "runtime": to_primitive(scenario.runtime_profile),
     }
     if scenario.llama_cpp_config is not None:
         profiles["llama_cpp"] = to_primitive(scenario.llama_cpp_config)
@@ -832,7 +891,7 @@ def scenario_to_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
         profiles["sampling"] = to_primitive(scenario.sampling_policy)
     if scenario.cim_interconnect is not None:
         profiles["cim_interconnect"] = to_primitive(scenario.cim_interconnect)
-    return {
+    payload = {
         "schema_version": scenario.schema_version,
         "name": scenario.name,
         "weights_resident": scenario.weights_resident,
@@ -843,6 +902,10 @@ def scenario_to_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
         "workload": to_primitive(scenario.workload),
         "profiles": profiles,
     }
+    # The complete scenario keeps its typed execution registry for the
+    # simulator internals; hardware_input is the single user-facing source.
+    payload["hardware_input"] = hardware_input_payload(scenario)
+    return payload
 
 
 def validation_payload_for_scenario(scenario: ScenarioConfig) -> Dict[str, Any]:
@@ -977,6 +1040,60 @@ def _run_job_request(
     return scenario, retention_policy
 
 
+def _ui_score_request(
+    payload: Mapping[str, Any],
+) -> Tuple[ScenarioConfig, Mapping[str, Any], Optional[float], Optional[Mapping[str, Any]]]:
+    """Parse the unconstrained UI scenario plus its explicit native reference."""
+    unexpected = sorted(
+        set(payload)
+        - {"scenario", "native", "native_report", "r0", "r0_reference", "threshold_pct"}
+    )
+    if unexpected:
+        raise HttpError(
+            400,
+            "unknown_fields",
+            "直接评分请求包含未知字段：{}".format(", ".join(unexpected)),
+            message_en="direct score request contains unknown fields: {}".format(
+                ", ".join(unexpected)
+            ),
+        )
+    scenario_payload = payload.get("scenario")
+    if not isinstance(scenario_payload, Mapping):
+        raise HttpError(
+            400,
+            "missing_scenario",
+            "直接评分请求需要完整的 UI 场景输入",
+            message_en="direct score request requires the complete UI scenario input",
+        )
+    native = payload.get("native", payload.get("native_report"))
+    if not isinstance(native, Mapping):
+        raise HttpError(
+            400,
+            "missing_native_reference",
+            "直接评分请求需要显式 native 参考结果",
+            message_en="direct score request requires an explicit native reference",
+        )
+    threshold = payload.get("threshold_pct")
+    if threshold is not None:
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or threshold <= 0:
+            raise HttpError(
+                400,
+                "invalid_threshold",
+                "threshold_pct 必须是正数",
+                message_en="threshold_pct must be a positive number",
+            )
+        threshold = float(threshold)
+    r0 = payload.get("r0", payload.get("r0_reference"))
+    if r0 is not None and not isinstance(r0, Mapping):
+        raise HttpError(
+            400,
+            "invalid_r0_reference",
+            "R0 参考结果必须是 JSON 对象",
+            message_en="R0 reference must be a JSON object",
+        )
+    return scenario_or_http_error(scenario_payload), native, threshold, r0
+
+
 def _architecture_scan_request(
     payload: Mapping[str, Any],
 ) -> Tuple[ScenarioConfig, str, int]:
@@ -1027,6 +1144,246 @@ def ensure_valid_or_http_error(scenario: ScenarioConfig) -> None:
             payload,
             "scenario validation failed",
         )
+
+
+def simulation_score_payload(
+    report: Mapping[str, Any],
+    scenario: ScenarioConfig,
+    *,
+    native_reference: Mapping[str, Any],
+    threshold_pct: Optional[float] = None,
+    r0_reference: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Return a UI-facing analytical score from one explicit scenario run.
+
+    The native reference is supplied with the same UI request. This keeps
+    comparison tied to the current hardware/model/workload/scheduler/mapping
+    input while leaving the fixed-dataset workflow separate.
+    """
+    summary = report.get("summary", {}) if isinstance(report, Mapping) else {}
+    requests = report.get("requests", {}) if isinstance(report, Mapping) else {}
+    if not isinstance(summary, Mapping):
+        summary = {}
+    if not isinstance(requests, Mapping):
+        requests = {}
+    throughput = summary.get("throughput", {})
+    runtime_mapping = report.get("runtime_placement")
+    effective_mapping = (
+        runtime_mapping
+        if isinstance(runtime_mapping, Mapping)
+        else scenario.placement
+    )
+    score = {
+        "schema": "heterollm.ui-simulation-score/v1",
+        "status": "simulated",
+        "comparison": "native_explicit_input",
+        "evidence": "analytical",
+        "scenario": report.get("scenario"),
+        "input_fingerprint": stable_hash(to_primitive(scenario)),
+        "input_scope": (
+            "hardware_model_workload_scheduler_mapping"
+        ),
+        "external_input_scope": "hardware_model_workload",
+        "candidate_dimensions": ["scheduler", "mapping"],
+        "scheduler": to_primitive(scenario.workload.scheduler),
+        "mapping": {
+            "placement": to_primitive(scenario.placement),
+            "runtime_placement": to_primitive(runtime_mapping),
+        },
+        "run_id": (report.get("manifest", {}) or {}).get("run_id"),
+        "completed_requests": sum(
+            1 for item in requests.values()
+            if isinstance(item, Mapping) and str(item.get("status", "")) == "finished"
+        ),
+        "request_count": len(requests),
+        "rejected_requests": sum(
+            1 for item in requests.values()
+            if isinstance(item, Mapping) and str(item.get("status", "")) == "rejected"
+        ),
+        "metrics": {
+            "makespan_ns": summary.get("makespan_ns"),
+            "ttft_p50_ns": (summary.get("ttft_ns", {}) or {}).get("p50"),
+            "tpot_p50_ns": (summary.get("tpot_ns", {}) or {}).get("p50"),
+            "e2e_p50_ns": (summary.get("e2e_ns", {}) or {}).get("p50"),
+            "throughput_requests_per_s": (throughput or {}).get("requests_per_s"),
+            "throughput_tokens_per_s": (throughput or {}).get("visible_output_tokens_per_s"),
+            "total_energy_pj": summary.get("total_energy_pj"),
+            "resource_accounted_bytes": summary.get("resource_accounted_bytes"),
+        },
+        "request_metrics": {
+            str(request_id): {
+                key: item.get(key)
+                for key in ("status", "ttft_ns", "tpot_ns", "e2e_ns", "prompt_tokens", "visible_output_tokens")
+                if key in item
+            }
+            for request_id, item in requests.items()
+            if isinstance(item, Mapping)
+        },
+    }
+    score["native_input_fingerprint"] = stable_hash(to_primitive(native_reference))
+    hardware_input = hardware_input_payload(scenario)
+    score["hardware_input_fingerprint"] = stable_hash(hardware_input)
+    score["hardware_input_schema"] = hardware_input["schema_version"]
+    score["candidate_scheduler_fingerprint"] = stable_hash(
+        to_primitive(scenario.workload.scheduler)
+    )
+    score["candidate_mapping_fingerprint"] = stable_hash(
+        to_primitive(effective_mapping)
+    )
+    score["candidate_requested_mapping_fingerprint"] = stable_hash(
+        to_primitive(scenario.placement)
+    )
+    comparison = _compare_ui_simulation_to_native(
+        score["request_metrics"],
+        native_reference,
+        threshold_pct,
+        scheduler=scenario.workload.scheduler,
+        mapping=effective_mapping,
+    )
+    score["native_comparison"] = comparison
+    if isinstance(r0_reference, Mapping):
+        normalized_r0 = _normalize_r0_reference(r0_reference)
+        r0_requests = normalized_r0["requests"]
+        r0_scheduler = r0_reference.get("scheduler")
+        r0_mapping = r0_reference.get("mapping", r0_reference.get("placement"))
+        score["r0_reference_fingerprint"] = stable_hash(to_primitive(r0_reference))
+        r0_logic = {
+            key: r0_reference[key]
+            for key in (
+                "scheduler_logic_source",
+                "mapping_logic_source",
+                "logic_provenance",
+            )
+            if key in r0_reference
+        }
+        if r0_logic:
+            score["r0_logic"] = to_primitive(r0_logic)
+        score["r0_comparison"] = _compare_ui_simulation_to_native(
+            r0_requests,
+            native_reference,
+            threshold_pct,
+            scheduler=r0_scheduler,
+            mapping=r0_mapping,
+        )
+    score["status"] = comparison["status"]
+    return score
+
+
+def _normalize_r0_reference(reference: Mapping[str, Any]) -> Dict[str, Any]:
+    """Accept either the compact UI form or a saved R0 prediction artifact."""
+
+    requests = reference.get("requests", {})
+    if isinstance(requests, Mapping):
+        return {"requests": requests}
+    if not isinstance(requests, (list, tuple)):
+        return {"requests": {}}
+    normalized: Dict[str, Any] = {}
+    for index, item in enumerate(requests):
+        if not isinstance(item, Mapping):
+            continue
+        request_id = str(item.get("request_id") or "request-{:04d}".format(index))
+        metrics = {}
+        for target, source in (
+            ("ttft_ns", "engine_ttft_ms"),
+            ("tpot_ns", "engine_tpot_ms"),
+            ("e2e_ns", "engine_e2e_ms"),
+        ):
+            value = item.get(target)
+            if value is None:
+                value = item.get(source)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    value = float(value) * 1_000_000.0
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                metrics[target] = value
+        normalized[request_id] = metrics
+    return {"requests": normalized}
+
+
+def _compare_ui_simulation_to_native(
+    simulated_requests: Mapping[str, Any],
+    native_reference: Mapping[str, Any],
+    threshold_pct: Optional[float],
+    *,
+    scheduler: Any,
+    mapping: Any,
+) -> Dict[str, Any]:
+    """Compare the submitted scenario against submitted native measurements."""
+    native_requests = native_reference.get("requests", {})
+    if not isinstance(native_requests, Mapping):
+        native_requests = {}
+    metric_names = ("ttft_ns", "tpot_ns", "e2e_ns")
+    rows = []
+    for request_id, simulated in simulated_requests.items():
+        native = native_requests.get(request_id)
+        if not isinstance(native, Mapping):
+            continue
+        metrics = {}
+        for metric in metric_names:
+            sim_value = simulated.get(metric)
+            native_value = native.get(metric)
+            if isinstance(sim_value, (int, float)) and isinstance(native_value, (int, float)) and native_value > 0:
+                ape = abs(float(sim_value) - float(native_value)) / float(native_value) * 100.0
+                metrics[metric] = {
+                    "simulated_ns": sim_value,
+                    "native_ns": native_value,
+                    "absolute_percentage_error_pct": ape,
+                    **({"passed": ape < threshold_pct} if threshold_pct is not None else {}),
+                }
+        if metrics:
+            rows.append({"request_id": request_id, "metrics": metrics})
+    if not rows:
+        return {
+            "status": "insufficient_native_reference",
+            "matched_requests": 0,
+            "metrics": {},
+            "threshold_pct": threshold_pct,
+        }
+    metric_values = {
+        metric: [row["metrics"][metric]["absolute_percentage_error_pct"] for row in rows if metric in row["metrics"]]
+        for metric in metric_names
+    }
+    aggregate = {
+        metric: {
+            "matched": len(values),
+            "mean_absolute_percentage_error_pct": sum(values) / len(values),
+            "max_absolute_percentage_error_pct": max(values),
+        }
+        for metric, values in metric_values.items()
+        if values
+    }
+    passed = None
+    if threshold_pct is not None and aggregate:
+        passed = all(item["max_absolute_percentage_error_pct"] < threshold_pct for item in aggregate.values())
+    native_scheduler = native_reference.get("scheduler")
+    native_mapping = native_reference.get("mapping", native_reference.get("placement"))
+    structural = {}
+    for name, candidate, native in (
+        ("scheduler", scheduler, native_scheduler),
+        ("mapping", mapping, native_mapping),
+    ):
+        if not isinstance(native, Mapping):
+            structural[name] = {
+                "status": "native_not_provided",
+                "candidate_fingerprint": stable_hash(to_primitive(candidate)),
+            }
+            continue
+        candidate_fingerprint = stable_hash(to_primitive(candidate))
+        native_fingerprint = stable_hash(to_primitive(native))
+        structural[name] = {
+            "status": "compared",
+            "candidate_fingerprint": candidate_fingerprint,
+            "native_fingerprint": native_fingerprint,
+            "changed": candidate_fingerprint != native_fingerprint,
+        }
+    return {
+        "status": "compared",
+        "matched_requests": len(rows),
+        "threshold_pct": threshold_pct,
+        "passed": passed,
+        "metrics": aggregate,
+        "requests": rows,
+        "structural_dimensions": structural,
+    }
 
 
 def static_asset(request_path: str) -> Optional[Tuple[bytes, str]]:

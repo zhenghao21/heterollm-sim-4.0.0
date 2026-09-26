@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import pytest
 
 from tools.native_llama_compare import build_matching_scenario, probe_hardware, _hardware_fingerprint
@@ -17,6 +19,65 @@ def _snapshot():
     }
 
 
+def _snapshot_with_public_specs():
+    """Return a measured snapshot with explicit vendor-published inputs.
+
+    The measured values intentionally remain separate from the public values:
+    the snapshot clocks describe this machine at capture time, while the
+    public profile supplies the analytical RTX 5080/9950X3D specifications.
+    """
+    snapshot = _snapshot()
+    snapshot["cpu_public_specs"] = {
+        "model": "AMD Ryzen 9 9950X3D",
+        "physical_cores": 16,
+        "logical_processors": 32,
+        "base_clock_mhz": 4300,
+        "boost_clock_mhz": 5700,
+        "memory": {
+            "type": "DDR5",
+            "channels": 2,
+            "data_rate_mt_s": 5600,
+            "theoretical_bandwidth_gb_s": 89.6,
+        },
+    }
+    snapshot["gpu"]["public_specs"] = {
+        "model": "NVIDIA GeForce RTX 5080",
+        "architecture": "Blackwell",
+        "sm_count": 84,
+        "cuda_cores_per_sm": 128,
+        "tensor_cores_per_sm": 4,
+        "tensor_core_generation": 5,
+        "base_clock_mhz": 2300,
+        "boost_clock_mhz": 2617,
+        "bf16_dense_tflops": 112.6,
+        "memory": {
+            "type": "GDDR7",
+            "capacity_gib": 16,
+            "data_rate_gbps": 30,
+            "bus_width_bits": 256,
+            "bandwidth_gb_s": 960.0,
+        },
+        "cache": {
+            "l1_shared_kib_per_sm": 128,
+            "l2_mib": 64,
+        },
+    }
+    snapshot["host_memory"]["public_specs"] = {
+        "type": "DDR5",
+        "channels": 2,
+        "data_rate_mt_s": 5600,
+        "bandwidth_gb_s": 89.6,
+    }
+    return snapshot
+
+
+def _matching_scenario(snapshot):
+    return build_matching_scenario(
+        8, 2, ctx=64, parallel=1, batch=8, ubatch=8, threads=16,
+        gpu_layers=0, hardware_snapshot=snapshot,
+    )
+
+
 def test_matching_scenario_binds_snapshot_physical_facts_and_resolves_auto_threads():
     scenario = build_matching_scenario(
         8, 2, ctx=64, parallel=1, batch=8, ubatch=8, threads=-1,
@@ -28,7 +89,74 @@ def test_matching_scenario_binds_snapshot_physical_facts_and_resolves_auto_threa
     pcie = next(link for link in scenario.hardware.links if link.link_id == "cpu-gpu-pcie")
     assert (pcie.lanes, pcie.bandwidth_gbps) == (8, pytest.approx(252.032))
     assert scenario.hardware.metadata["gpu_uuid"] == "GPU-test"
+    assert scenario.hardware.metadata["analysis_input_basis"] == "legacy_fallback"
     assert "zero_gpu_weight_layers_op_offload_possible" in scenario.placement.metadata["placement_risks"]
+
+
+def test_matching_scenario_uses_public_specs_for_analysis_profiles_and_links():
+    snapshot = _snapshot_with_public_specs()
+    scenario = _matching_scenario(snapshot)
+
+    gpu_component = scenario.hardware.get_component("gpu0")
+    assert gpu_component.peak_ops_per_s == pytest.approx(112.6e12)
+    assert gpu_component.capacity_bytes == 64 * 1024**2
+    gpu_profile = scenario.component_profiles["gpu"]["legacy-gpu"]
+    assert gpu_profile.tensor_core.sm_count == 84
+    assert gpu_profile.tensor_core.tensor_cores_per_sm == 4
+    assert gpu_profile.tensor_core.frequency_ghz == pytest.approx(2.617)
+
+    hbm_port = next(port for port in gpu_component.ports if port.port_id == "hbm0")
+    assert hbm_port.bandwidth_gbps == pytest.approx(960.0 * 8.0)
+    hbm = scenario.hardware.get_component("hbm0")
+    assert next(port for port in hbm.ports if port.port_id == "host").bandwidth_gbps == pytest.approx(960.0 * 8.0)
+    assert scenario.component_profiles["hbm"]["legacy-hbm"].bandwidth_gb_s == pytest.approx(960.0)
+
+    hostmem = scenario.hardware.get_component("hostmem0")
+    ddr_port = next(port for port in hostmem.ports if port.port_id == "ddr0")
+    assert ddr_port.bandwidth_gbps == pytest.approx(89.6 * 8.0)
+    assert scenario.component_profiles["host_memory"]["legacy-host-memory"].bandwidth_gb_s == pytest.approx(89.6)
+    assert scenario.hardware.metadata["analysis_input_basis"] == "public_spec"
+
+
+def test_public_specs_changes_are_reflected_without_fitting_native_latency():
+    baseline = _snapshot_with_public_specs()
+    changed = deepcopy(baseline)
+    changed["gpu"]["public_specs"].update({
+        "sm_count": 42,
+        "tensor_cores_per_sm": 2,
+        "boost_clock_mhz": 2000,
+        "bf16_dense_tflops": 50.0,
+    })
+    changed["gpu"]["public_specs"]["memory"]["bandwidth_gb_s"] = 500.0
+    changed["gpu"]["public_specs"]["cache"]["l2_mib"] = 32
+    changed["host_memory"]["public_specs"]["bandwidth_gb_s"] = 64.0
+
+    reference = _matching_scenario(baseline)
+    variant = _matching_scenario(changed)
+    reference_gpu = reference.hardware.get_component("gpu0")
+    variant_gpu = variant.hardware.get_component("gpu0")
+    assert variant_gpu.peak_ops_per_s == pytest.approx(50.0e12)
+    assert variant_gpu.capacity_bytes == 32 * 1024**2
+    assert variant_gpu.peak_ops_per_s != reference_gpu.peak_ops_per_s
+    variant_tensor = variant.component_profiles["gpu"]["legacy-gpu"].tensor_core
+    assert (variant_tensor.sm_count, variant_tensor.tensor_cores_per_sm) == (42, 2)
+    assert variant_tensor.frequency_ghz == pytest.approx(2.0)
+    assert variant_tensor.cycles_per_mma != reference.component_profiles["gpu"]["legacy-gpu"].tensor_core.cycles_per_mma
+
+    variant_hbm_port = next(port for port in variant_gpu.ports if port.port_id == "hbm0")
+    assert variant_hbm_port.bandwidth_gbps == pytest.approx(500.0 * 8.0)
+    variant_hbm_link = next(link for link in variant.hardware.links if link.link_id == "gpu-hbm0")
+    assert variant_hbm_link.bandwidth_gbps == pytest.approx(500.0 * 8.0)
+    variant_ddr_link = next(link for link in variant.hardware.links if link.link_id == "cpu-hostmem-ddr")
+    assert variant_ddr_link.bandwidth_gbps == pytest.approx(64.0 * 8.0)
+
+
+def test_pcie_link_records_gbps_and_gb_per_second_units():
+    scenario = _matching_scenario(_snapshot_with_public_specs())
+    pcie = next(link for link in scenario.hardware.links if link.link_id == "cpu-gpu-pcie")
+    assert pcie.bandwidth_gbps == pytest.approx(252.032)
+    assert pcie.metadata["bandwidth_gbps"] == pytest.approx(252.032)
+    assert pcie.metadata["bandwidth_gb_s"] == pytest.approx(31.504)
 
 
 def test_matching_scenario_keeps_legacy_call_and_rejects_unknown_identity():

@@ -1,0 +1,147 @@
+{
+  "schema": "heterollm.hardware-input/v1",
+  "name": "rtx5080_9950x3d_public",
+  "measured_snapshot": "artifacts/development/native_long_grid_135_20260915/hardware.json",
+  "cpu_name": "AMD Ryzen 9 9950X3D 16-Core Processor",
+  "cpu_topology": {
+    "physical_cores": 16,
+    "logical_processors": 32,
+    "max_clock_mhz": 4300,
+    "current_clock_mhz": 4300
+  },
+  "cpu_public_specs": {
+    "model": "AMD Ryzen 9 9950X3D",
+    "physical_cores": 16,
+    "logical_processors": 32,
+    "base_clock_mhz": 4300,
+    "boost_clock_mhz": 5700,
+    "memory": {
+      "type": "DDR5",
+      "channels": 2,
+      "data_rate_mt_s": 5600,
+      "theoretical_bandwidth_gb_s": 89.6,
+      "active_configuration": "DDR5-5600",
+      "note": "AMD lists DDR5-5600 for two DIMMs; four-DIMM configurations have a lower official rate envelope.",
+      "installed_dimm_count": 4,
+      "configured_data_rate_mt_s": 5600,
+      "theoretical_bandwidth_basis": "configured_data_rate_mt_s x 8 bytes x channels; analytical peak, not sustained workload bandwidth",
+      "official_two_dimm_rate_mt_s": 5600,
+      "official_four_dimm_rate_mt_s": null,
+      "official_four_dimm_rate_status": "not encoded as a guaranteed value; verify motherboard/BIOS memory training",
+      "parameter_basis": "public_cpu_model_plus_observed_configured_memory_rate"
+    },
+    "sources": [
+      "https://www.amd.com/en/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x3d.html"
+    ]
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5080",
+    "uuid": "GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b",
+    "memory_mib": 16303,
+    "driver": "616.64",
+    "compute_capability": "12.0",
+    "clocks": {
+      "graphics_mhz": 2707,
+      "memory_mhz": 15201,
+      "sm_mhz": 2707
+    },
+    "pcie": {
+      "gen_current": 5,
+      "gen_max": 5,
+      "width_current": 8,
+      "width_max": 16
+    },
+    "public_specs": {
+      "model": "NVIDIA GeForce RTX 5080",
+      "architecture": "Blackwell",
+      "sm_count": 84,
+      "cuda_cores_per_sm": 128,
+      "tensor_cores_per_sm": 4,
+      "tensor_core_generation": 5,
+      "base_clock_mhz": 2300,
+      "boost_clock_mhz": 2617,
+      "bf16_dense_tflops": 112.6,
+      "memory": {
+        "type": "GDDR7",
+        "capacity_gib": 16,
+        "data_rate_gbps": 30,
+        "bus_width_bits": 256,
+        "bandwidth_gb_s": 960.0
+      },
+      "cache": {
+        "l1_shared_kib_per_sm": 128,
+        "l2_mib": 64
+      },
+      "pcie": {
+        "generation": 5,
+        "width": 16,
+        "active_width_from_snapshot": 8
+      },
+      "sources": [
+        "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5080/",
+        "https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf"
+      ],
+      "source_notes": {
+        "bf16_dense_tflops": "Dense BF16 Tensor Core peak with FP32 accumulation at boost clock; not sustained application throughput.",
+        "memory_bandwidth_gb_s": "30 Gbps x 256-bit / 8.",
+        "pcie_width": "The product specification supports x16; the measured machine negotiated x8 and the simulator uses the active snapshot width for service bandwidth."
+      }
+    }
+  },
+  "host_memory": {
+    "total_bytes": 134939398144,
+    "modules": [
+      {
+        "Capacity": 34359738368,
+        "Speed": 5600,
+        "ConfiguredClockSpeed": 5600
+      },
+      {
+        "Capacity": 34359738368,
+        "Speed": 4800,
+        "ConfiguredClockSpeed": 5600
+      },
+      {
+        "Capacity": 34359738368,
+        "Speed": 5600,
+        "ConfiguredClockSpeed": 5600
+      },
+      {
+        "Capacity": 34359738368,
+        "Speed": 4800,
+        "ConfiguredClockSpeed": 5600
+      }
+    ],
+    "public_specs": {
+      "type": "DDR5",
+      "channels": 2,
+      "data_rate_mt_s": 5600,
+      "bandwidth_gb_s": 89.6,
+      "sources": [
+        "https://www.amd.com/en/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x3d.html"
+      ],
+      "installed_dimm_count": 4,
+      "configured_data_rate_mt_s": 5600,
+      "theoretical_bandwidth_basis": "configured_data_rate_mt_s x 8 bytes x channels; analytical peak, not sustained workload bandwidth",
+      "official_two_dimm_rate_mt_s": 5600,
+      "official_four_dimm_rate_mt_s": null,
+      "official_four_dimm_rate_status": "not encoded as a guaranteed value; verify motherboard/BIOS memory training",
+      "parameter_basis": "public_cpu_model_plus_observed_configured_memory_rate"
+    }
+  },
+  "policy": {
+    "use_public_specs_for_analysis_profiles": true,
+    "do_not_fit_from_native_latency": true,
+    "unknown_values": "fail_closed_when_required"
+  },
+  "parameter_provenance": {
+    "cpu_name": "measured_snapshot_and_public_product_page",
+    "cpu_topology": "measured_snapshot",
+    "cpu_public_specs": "public_product_page; derived memory bandwidth explicitly marked analytical",
+    "gpu_identity_and_runtime_state": "measured_snapshot",
+    "gpu_public_specs": "public_product_page_and_architecture_whitepaper",
+    "host_memory_inventory": "measured_snapshot",
+    "host_memory_public_specs": "public_product_page; configured rate is observed and bandwidth is derived",
+    "analysis_rule": "all simulator inputs must be materialized from this file; native latency is comparison-only"
+  }
+}

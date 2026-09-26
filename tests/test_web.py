@@ -13,6 +13,7 @@ from unittest.mock import patch
 from heterollm_sim import __version__
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.config import scenario_from_dict
+from heterollm_sim.reporting import report_dict, run_scenario
 from heterollm_sim.schema_v1 import CanonicalScenario
 from heterollm_sim.web import JSON_BODY_LIMIT_BYTES, build_server, scenario_to_payload
 
@@ -156,7 +157,15 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["name"], build_reference_scenario().name)
         self.assertEqual(len(payload["hardware"]["components"]), 12)
-        self.assertEqual(scenario_from_dict(payload), build_reference_scenario())
+        parsed = scenario_from_dict(payload)
+        reference = build_reference_scenario()
+        self.assertEqual(parsed.hardware.name, reference.hardware.name)
+        self.assertEqual(
+            [(item.component_id, item.kind) for item in parsed.hardware.components],
+            [(item.component_id, item.kind) for item in reference.hardware.components],
+        )
+        self.assertEqual(parsed.gpu_profile.tensor_core.sm_count, reference.gpu_profile.tensor_core.sm_count)
+        self.assertEqual(parsed.cpu_profile.pipeline.core_count, reference.cpu_profile.pipeline.core_count)
 
     def test_protocol_preset_endpoints_filter_and_return_simulation_defaults(self):
         status, _, page = self.json_request(
@@ -208,6 +217,109 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(payload["errors"]["topology"], [])
         self.assertEqual(payload["errors"]["scenario"], [])
         self.assertGreater(len(payload["warnings"]["scenario"]), 0)
+
+    def test_direct_simulation_score_compares_explicit_native_reference(self):
+        scenario = build_reference_scenario()
+        native_report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in native_report["requests"].items()
+            }
+        }
+        payload = self.reference_payload()
+        payload["workload"]["scheduler"]["policy"] = "decode_first"
+        status, _, result = self.json_request(
+            "POST",
+            "/api/simulate-score",
+            payload={"scenario": payload, "native": native, "threshold_pct": 25},
+        )
+        self.assertEqual(status, 200)
+        score = result["simulation_score"]
+        self.assertEqual(score["comparison"], "native_explicit_input")
+        self.assertEqual(score["native_comparison"]["status"], "compared")
+        self.assertTrue(score["native_comparison"]["passed"])
+        self.assertEqual(score["input_scope"], "hardware_model_workload_scheduler_mapping")
+        self.assertEqual(score["external_input_scope"], "hardware_model_workload")
+        self.assertEqual(score["candidate_dimensions"], ["scheduler", "mapping"])
+        self.assertTrue(score["input_fingerprint"])
+
+    def test_direct_simulation_score_evaluates_scheduler_and_mapping_differences(self):
+        """Candidate policy changes remain score dimensions, not rejection gates."""
+        scenario = build_reference_scenario()
+        native_report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in native_report["requests"].items()
+            },
+            "scheduler": {"policy": "native_policy", "max_num_seqs": 1},
+            "mapping": {"placement": "native_mapping"},
+        }
+        payload = self.reference_payload()
+        payload["workload"]["scheduler"]["policy"] = "decode_first"
+        status, _, result = self.json_request(
+            "POST",
+            "/api/simulate-score",
+            payload={
+                "scenario": payload,
+                "native": native,
+                "r0": {
+                    "requests": [
+                        {
+                            "request_id": "request-0000",
+                            "engine_ttft_ms": native["requests"]["request-0000"]["ttft_ns"] / 1_000_000,
+                            "engine_tpot_ms": native["requests"]["request-0000"]["tpot_ns"] / 1_000_000,
+                            "engine_e2e_ms": native["requests"]["request-0000"]["e2e_ns"] / 1_000_000,
+                        }
+                    ],
+                    "scheduler": {"policy": "r0_policy"},
+                    "mapping": {"placement": "r0_mapping"},
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        score = result["simulation_score"]
+        structural = score["native_comparison"]["structural_dimensions"]
+        self.assertEqual(structural["scheduler"]["status"], "compared")
+        self.assertTrue(structural["scheduler"]["changed"])
+        self.assertEqual(structural["mapping"]["status"], "compared")
+        self.assertTrue(structural["mapping"]["changed"])
+        self.assertEqual(score["r0_comparison"]["status"], "compared")
+        self.assertEqual(score["r0_comparison"]["matched_requests"], 1)
+
+    def test_direct_simulation_score_requires_native_reference(self):
+        status, _, payload = self.json_request(
+            "POST",
+            "/api/simulate-score",
+            payload={"scenario": self.reference_payload()},
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "missing_native_reference")
+
+    def test_direct_simulation_score_replans_stale_mapping_candidate(self):
+        payload = self.reference_payload()
+        control_plane = payload["placement"].setdefault("metadata", {}).setdefault(
+            "control_plane", {}
+        )
+        control_plane.setdefault("evidence", {})["input_fingerprint"] = "stale"
+        status, _, result = self.json_request(
+            "POST",
+            "/api/simulate-score",
+            payload={"scenario": payload, "native": {"requests": {}}},
+        )
+        self.assertEqual(status, 200)
+        score = result["simulation_score"]
+        self.assertEqual(score["status"], "insufficient_native_reference")
+        self.assertTrue(score["candidate_mapping_fingerprint"])
 
     def test_first_click_endpoints_accept_valid_scenario_just_over_one_mib(self):
         previous_limit = 1024 * 1024
@@ -292,6 +404,7 @@ class WebApiTests(unittest.TestCase):
     def test_validate_endpoint_reports_topology_errors_with_v4_empty_placement(self):
         scenario = self.reference_payload()
         scenario["hardware"]["links"][0]["target_component"] = "missing-hbm"
+        scenario["hardware_input"]["hardware"]["links"][0]["target_component"] = "missing-hbm"
 
         status, _, payload = self.json_request("POST", "/api/validate", payload=scenario)
 

@@ -36,6 +36,9 @@ def __getattr__(name):
     if name == "apply_llama_runtime_config":
         from .llama_scenario import apply_llama_runtime_config
         return apply_llama_runtime_config
+    if name == "diff_scheduler_traces":
+        from .llama_trace_diff import diff_scheduler_traces
+        return diff_scheduler_traces
     if name in {"NativeCalibrationProfile", "load_native_calibration", "apply_native_calibration"}:
         from .calibration import NativeCalibrationProfile, load_native_calibration, apply_native_calibration
         return {"NativeCalibrationProfile": NativeCalibrationProfile, "load_native_calibration": load_native_calibration, "apply_native_calibration": apply_native_calibration}[name]
@@ -84,6 +87,7 @@ __all__ = [
     "LlamaCppAdapter",
     "LlamaCppRuntimeConfig",
     "apply_llama_runtime_config",
+    "diff_scheduler_traces",
     "NativeCalibrationProfile",
     "load_native_calibration",
     "apply_native_calibration",

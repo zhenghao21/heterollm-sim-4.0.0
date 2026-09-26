@@ -1535,6 +1535,7 @@ const state = {
   validationNavigation: null,
   report: null,
   comparison: null,
+  simulationScore: null,
   componentTimeseriesView: {
     reportRef: null,
     slots: [],
@@ -1885,6 +1886,10 @@ function stableMappingString(value) {
   return JSON.stringify(stableMappingValue(value));
 }
 
+function stableMappingEqual(left, right) {
+  return stableMappingString(left) === stableMappingString(right);
+}
+
 function mappingImpactView(scenario) {
   const source = asObject(scenario);
   const hardware = deepClone(asObject(source.hardware));
@@ -2126,6 +2131,127 @@ function sanitizeV4ScenarioCapabilities(scenario) {
   return scenario;
 }
 
+function gpuComponentIds(scenario = state.scenario) {
+  return asArray(scenario?.hardware?.components)
+    .filter((component) => normalizedComponentKind(component?.kind) === "gpu")
+    .map((component) => String(component.component_id || "").trim())
+    .filter(Boolean)
+    .sort();
+}
+
+function runtimeGpuControllerIssue(scenario = state.scenario) {
+  const profiles = asObject(scenario?.profiles);
+  const runtime = profiles.runtime;
+  if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+    return "统一硬件参数缺少 profiles.runtime；请先载入完整场景或补齐运行时参数。";
+  }
+  const controllers = runtime.gpu_controllers;
+  if (!controllers || typeof controllers !== "object" || Array.isArray(controllers)) {
+    return "统一硬件参数缺少 profiles.runtime.gpu_controllers；请为每个 GPU 补齐控制器参数。";
+  }
+  const gpuIds = gpuComponentIds(scenario);
+  const controllerIds = Object.keys(controllers).sort();
+  if (!gpuIds.length) {
+    return "当前硬件没有可绑定的 GPU，无法生成运行时 gpu_controllers。";
+  }
+  if (!stableMappingEqual(gpuIds, controllerIds)) {
+    const missing = gpuIds.filter((id) => !Object.hasOwn(controllers, id));
+    const extra = controllerIds.filter((id) => !gpuIds.includes(id));
+    const details = [
+      missing.length ? `缺少 ${missing.join(", ")}` : "",
+      extra.length ? `多余 ${extra.join(", ")}` : "",
+    ].filter(Boolean).join("；");
+    return `profiles.runtime.gpu_controllers 必须与当前 GPU 组件 ID 完全一致${details ? `（${details}）` : ""}。`;
+  }
+  const invalid = gpuIds.filter((id) => {
+    const controller = controllers[id];
+    return !controller || typeof controller !== "object" || Array.isArray(controller);
+  });
+  if (invalid.length) {
+    return `profiles.runtime.gpu_controllers.${invalid[0]} 必须是对象，请补齐控制器参数。`;
+  }
+  return "";
+}
+
+// Architecture replacement keeps generic controller calibration only when the
+// GPU cardinality is unchanged. A changed cardinality leaves the mismatch
+// visible so export/transport reports the exact missing IDs instead of
+// silently cloning a controller onto unrelated hardware.
+function rebuildRuntimeGpuControllers(scenario = state.scenario) {
+  const runtime = asObject(scenario?.profiles?.runtime);
+  if (!scenario?.profiles || !Object.hasOwn(scenario.profiles, "runtime")) return false;
+  if (!runtime || !Object.hasOwn(runtime, "gpu_controllers")) return false;
+  const current = asObject(runtime.gpu_controllers);
+  const nextIds = gpuComponentIds(scenario);
+  const currentIds = Object.keys(current).sort();
+  if (stableMappingEqual(currentIds, nextIds)) return false;
+  if (currentIds.length !== nextIds.length) return false;
+  const unmatchedIds = currentIds.filter((id) => !nextIds.includes(id));
+  const next = {};
+  nextIds.forEach((id) => {
+    const sourceId = Object.hasOwn(current, id) ? id : unmatchedIds.shift();
+    if (Object.hasOwn(current, sourceId)) next[id] = deepClone(current[sourceId]);
+  });
+  runtime.gpu_controllers = next;
+  scenario.profiles.runtime = runtime;
+  return true;
+}
+
+// Hardware is authored as one portable document. Every transport call derives
+// it from the current component topology and execution profiles so stale
+// serialized values cannot overwrite edits made in the inspector.
+function hardwareInputForScenario(scenario = state.scenario) {
+  if (!scenario) return null;
+  const source = asObject(scenario.profiles);
+  for (const field of ["components", "host_orchestration", "fusion"]) {
+    if (!Object.hasOwn(source, field) || source[field] == null) {
+      throw new Error(`统一硬件参数缺少 profiles.${field}；请先载入完整场景或补齐硬件参数。`);
+    }
+  }
+  const runtimeIssue = runtimeGpuControllerIssue(scenario);
+  if (runtimeIssue) throw new Error(runtimeIssue);
+  const hardware = deepClone(asObject(scenario.hardware));
+  const registries = asObject(source.components);
+  hardware.components = asArray(hardware.components).map((rawComponent) => {
+    const component = deepClone(rawComponent);
+    const profileKey = costProfileKeyForComponentKind(component);
+    const profileId = String(component.cost_profile_id || "").trim();
+    const profile = asObject(asObject(registries)[profileKey])[profileId];
+    if (!profileKey) {
+      delete component.cost_profile_id;
+      if (component.metadata && typeof component.metadata === "object") {
+        delete component.metadata.cost_profile_template;
+      }
+      return component;
+    }
+    if (!profileKey || !profileId || !profile || typeof profile !== "object") {
+      throw new Error(`组件 ${component.component_id || "—"} 缺少内嵌 execution_profile，拒绝生成硬件文件。`);
+    }
+    delete component.cost_profile_id;
+    if (component.metadata && typeof component.metadata === "object") {
+      delete component.metadata.cost_profile_template;
+    }
+    component.execution_profile = {
+      profile_id: profileId,
+      profile_kind: profileKey,
+      parameters: deepClone(profile),
+    };
+    return component;
+  });
+  hardware.parameters = {
+    host_orchestration: deepClone(source.host_orchestration),
+    fusion: deepClone(source.fusion),
+    cim_interconnect: deepClone(source.cim_interconnect ?? null),
+    runtime: deepClone(source.runtime),
+  };
+  return {
+    schema_version: "4.0",
+    kind: "hardware_input",
+    contract_version: "2",
+    hardware,
+  };
+}
+
 function scenarioPayloadForTransport(scenario = state.scenario) {
   if (!scenario) return null;
   const payload = ensureScenarioShape(deepClone(scenario));
@@ -2138,6 +2264,7 @@ function scenarioPayloadForTransport(scenario = state.scenario) {
   }
   const orchestrationIssue = hostOrchestrationReferenceIssue(payload);
   if (orchestrationIssue) throw new Error(orchestrationIssue);
+  payload.hardware_input = hardwareInputForScenario(payload);
   return payload;
 }
 
@@ -2301,7 +2428,7 @@ function setBusy(active, title = "正在运行分析模型", detail = "正在编
   dom.busyOverlay.hidden = !active;
   dom.busyTitle.textContent = title;
   dom.busyDetail.textContent = detail;
-  [dom.runButton, dom.rerunButton, dom.emptyRunButton, dom.compareButton, dom.validateButton, dom.loadReferenceButton, dom.canonicalExportButton, dom.canonicalExportDialogButton]
+  [dom.runButton, dom.rerunButton, dom.emptyRunButton, dom.compareButton, dom.validateButton, dom.loadReferenceButton, dom.canonicalExportButton, dom.canonicalExportDialogButton, dom.directScoreButton, dom.openDirectScoreButton]
     .filter(Boolean)
     .forEach((button) => { button.disabled = active; });
   syncRunButtons();
@@ -2509,6 +2636,7 @@ function modalDialogs() {
     dom.protocolPresetsDialog,
     dom.settingsDialog,
     dom.architectureScanDialog,
+    dom.directScoreDialog,
     dom.runJobDialog,
   ].filter(Boolean);
 }
@@ -2842,6 +2970,7 @@ function setScenario(incoming, { dirty = false, message = "" } = {}) {
   clearValidationFocus();
   state.report = null;
   state.comparison = null;
+  state.simulationScore = null;
   state.runEstimate = null;
   state.runEstimateScenarioGeneration = null;
   state.runEstimateMappingGeneration = null;
@@ -2943,6 +3072,7 @@ function markScenarioChanged(message = "", {
   state.reportStale = state.reportStale || Boolean(state.report);
   state.report = null;
   state.comparison = null;
+  state.simulationScore = null;
   state.runEstimate = null;
   state.runEstimateScenarioGeneration = null;
   state.runEstimateMappingGeneration = null;
@@ -4011,6 +4141,7 @@ function finishRunJob(snapshot) {
     if (!scenarioChanged) reconcileMappingFingerprint(report);
     state.report = report;
     state.comparison = null;
+    state.simulationScore = null;
     state.reportStale = scenarioChanged;
     if (!scenarioChanged) {
       acceptRuntimePlacement(report);
@@ -4155,6 +4286,93 @@ async function cancelRunJob() {
   }
 }
 
+function openDirectScoreDialog() {
+  if (!state.scenario || state.busy) return;
+  showModalDialog(dom.directScoreDialog, dom.openDirectScoreButton, dom.runNativeReferenceInput);
+}
+
+async function runDirectSimulationScore() {
+  if (!state.scenario || state.busy) return;
+  if (runJobIsActive() || state.runJobSubmitting) {
+    toast(uiText("仿真仍在运行", "Simulation still running"), uiText("请等待后台仿真完成或取消后再评分。", "Wait for the background simulation to finish or cancel it before scoring."), "info");
+    return;
+  }
+  let nativeReference;
+  let r0Reference = null;
+  try {
+    const raw = String(dom.runNativeReferenceInput?.value || "").trim();
+    if (!raw) throw new Error("请粘贴本次场景对应的 Native 参考结果 JSON。\nPlease provide the Native reference JSON for this scenario.");
+    nativeReference = JSON.parse(raw);
+    if (!nativeReference || typeof nativeReference !== "object" || Array.isArray(nativeReference)) {
+      throw new Error("Native 参考结果必须是 JSON 对象。\nThe Native reference must be a JSON object.");
+    }
+    if (!nativeReference.requests || typeof nativeReference.requests !== "object" || Array.isArray(nativeReference.requests)) {
+      throw new Error("Native 参考结果至少需要 requests 对象。\nThe Native reference must include a requests object.");
+    }
+    const r0Raw = String(dom.r0ReferenceInput?.value || "").trim();
+    if (r0Raw) {
+      r0Reference = JSON.parse(r0Raw);
+      if (!r0Reference || typeof r0Reference !== "object" || Array.isArray(r0Reference)) {
+        throw new Error("R0 参考结果必须是 JSON 对象。\nThe R0 reference must be a JSON object.");
+      }
+      if (!r0Reference.requests || typeof r0Reference.requests !== "object" || Array.isArray(r0Reference.requests)) {
+        throw new Error("R0 参考结果至少需要 requests 对象。\nThe R0 reference must include a requests object.");
+      }
+    }
+  } catch (error) {
+    showOperationError(uiText("Native 参考结果无效", "Invalid Native reference"), error);
+    return;
+  }
+  const requestSnapshot = scenarioRequestSnapshot();
+  setBusy(
+    true,
+    uiText("正在执行直接仿真评分", "Running direct simulation score"),
+    uiText("按当前 UI 中的硬件、模型、负载、调度与映射执行仿真，并与 Native 参考比较…", "Simulating the current UI hardware, model, workload, scheduler, and mapping, then comparing with Native…"),
+  );
+  try {
+    const payload = await apiRequest("/simulate-score", {
+      method: "POST",
+      body: JSON.stringify({
+        scenario: scenarioPayloadForTransport(),
+        native: nativeReference,
+        ...(r0Reference ? { r0: r0Reference } : {}),
+      }),
+    });
+    if (!scenarioRequestIsCurrent(requestSnapshot)) {
+      toast(uiText("已忽略过期评分结果", "Stale score ignored"), uiText("场景在评分期间发生变化，请对当前场景重新评分。", "The scenario changed during scoring; score the current scenario again."), "info");
+      return;
+    }
+    state.report = asObject(payload).report || null;
+    state.simulationScore = asObject(payload).simulation_score || null;
+    acceptRuntimePlacement(state.report);
+    state.validation = {
+      errors: [],
+      warnings: asArray(asObject(state.report).validation_warnings).map((item) => normalizeIssue(item, "scenario", "warning")),
+      information: asArray(asObject(state.report).validation_information).map((item) => normalizeIssue(item, "scenario", "information")),
+    };
+    state.comparison = null;
+    state.reportStale = false;
+    state.dirty = false;
+    state.runJob = null;
+    renderAll();
+    switchView("results");
+    const score = asObject(state.simulationScore);
+    const comparison = asObject(score.native_comparison);
+    const matched = comparison.matched_requests ?? 0;
+    toast(
+      uiText("Native 直接评分完成", "Direct Native score completed"),
+      uiText("已比较 {count} 个请求；调度与映射差异已作为评估结果保留。", "Compared {count} requests; scheduler and mapping differences are retained as evaluation results.", { count: matched }),
+      comparison.passed === false ? "warning" : "success",
+      6500,
+    );
+    if (dom.directScoreDialog.open) dom.directScoreDialog.close("direct-score");
+  } catch (error) {
+    showOperationError(uiText("直接仿真评分失败", "Direct simulation score failed"), error);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function runScenario(event = null) {
   if (!state.scenario || state.busy) return;
   if (runJobIsActive() || state.runJobSubmitting) {
@@ -4244,6 +4462,7 @@ async function compareScenario() {
     }
     reconcileMappingFingerprint(payload);
     state.comparison = payload;
+    state.simulationScore = null;
     state.report = payload.candidate;
     state.runJob = null;
     state.runJobScenarioGeneration = null;
@@ -4692,7 +4911,7 @@ async function runArchitectureScan() {
     // Architecture scan uses the same complete ScenarioConfig contract as the
     // backend validator; sanitize only the transport copy's inapplicable
     // component capabilities.
-    const requestPayload = sanitizeV4ScenarioCapabilities(deepClone(scenarioReference));
+    const requestPayload = sanitizeV4ScenarioCapabilities(scenarioPayloadForTransport(scenarioReference));
     const result = await apiRequest("/architecture-scan", {
       method: "POST",
       body: JSON.stringify({ scenario: requestPayload, backend, top_n: topN }),
@@ -7520,10 +7739,12 @@ function resetArchitectureDependentProfiles(scenario = state.scenario) {
     delete scenario.profiles[profileKey];
   }
   asArray(scenario.hardware?.components).forEach((component) => { delete component.cost_profile_id; });
-  return materializeMissingCostProfiles(
+  const created = materializeMissingCostProfiles(
     asArray(scenario.hardware?.components),
     scenario,
   );
+  if (rebuildRuntimeGpuControllers(scenario)) created.push("runtime.gpu_controllers");
+  return created;
 }
 
 function costProfileNumberField(label, profileKey, field, value, rule = "nonnegative", helpKey = "") {
@@ -8411,6 +8632,7 @@ function synchronizeLinkPortField(link, field, value) {
 
 function renameComponent(component, nextId) {
   const previousId = component.component_id;
+  const normalizedKind = normalizedComponentKind(component.kind);
   component.component_id = nextId;
   state.scenario.hardware.links.forEach((link) => {
     if (link.source_component === previousId) link.source_component = nextId;
@@ -8423,6 +8645,16 @@ function renameComponent(component, nextId) {
   const orchestration = asObject(state.scenario.profiles?.host_orchestration);
   if (orchestration.cpu_component_id === previousId) orchestration.cpu_component_id = nextId;
   if (orchestration.gpu_component_id === previousId) orchestration.gpu_component_id = nextId;
+  if (normalizedKind === "gpu") {
+    const runtime = asObject(state.scenario.profiles?.runtime);
+    const controllers = asObject(runtime.gpu_controllers);
+    if (Object.hasOwn(controllers, previousId)) {
+      if (!Object.hasOwn(controllers, nextId)) controllers[nextId] = controllers[previousId];
+      delete controllers[previousId];
+      runtime.gpu_controllers = controllers;
+      state.scenario.profiles.runtime = runtime;
+    }
+  }
   asArray(placement.parallel?.rank_mapping).forEach((rank) => {
     for (const field of ["component_id", "memory_component_id", "cim_component_id"]) {
       if (rank[field] === previousId) rank[field] = nextId;
@@ -17548,6 +17780,10 @@ function renderResults() {
 }
 
 function renderComparison() {
+  if (state.simulationScore) {
+    renderSimulationScore(state.simulationScore);
+    return;
+  }
   const payload = state.comparison;
   dom.comparisonStrip.hidden = !payload;
   if (!payload) return;
@@ -17568,6 +17804,50 @@ function renderComparison() {
     ${item(uiText("能耗比（候选 / 基线）", "Energy Ratio (Candidate / Baseline)"), energy, energy == null ? null : energy < 1)}
     <span class="comparison-item">${escapeHtml(uiText("候选", "Candidate"))}<strong>${candidate.html}</strong></span>
     <span class="comparison-item">${escapeHtml(uiText("基线", "Baseline"))}<strong>${baseline.html}</strong></span>`;
+}
+
+function renderSimulationScore(score) {
+  const comparison = asObject(score.native_comparison);
+  dom.comparisonStrip.hidden = false;
+  const status = String(comparison.status || score.status || "—");
+  const statusLabel = status === "compared"
+    ? (comparison.passed === true ? uiText("通过阈值", "Within threshold") : comparison.passed === false ? uiText("超出阈值", "Over threshold") : uiText("已完成对比", "Compared"))
+    : uiText("参考不足", "Insufficient reference");
+  const metricLabels = { ttft_ns: "TTFT", tpot_ns: "TPOT", e2e_ns: "E2E" };
+  const metricItems = Object.entries(asObject(comparison.metrics)).map(([metric, values]) => {
+    const mean = Number(values?.mean_absolute_percentage_error_pct);
+    const max = Number(values?.max_absolute_percentage_error_pct);
+    const meanText = Number.isFinite(mean) ? `${formatResultNumber(mean).text}%` : "—";
+    const maxText = Number.isFinite(max) ? `${formatResultNumber(max).text}%` : "—";
+    return `<span class="comparison-item"><span>${escapeHtml(metricLabels[metric] || metric)}</span><strong>${escapeHtml(meanText)} <small>(max ${escapeHtml(maxText)})</small></strong></span>`;
+  }).join("");
+  const structural = asObject(comparison.structural_dimensions);
+  const structureItems = ["scheduler", "mapping"].map((name) => {
+    const item = asObject(structural[name]);
+    const itemStatus = String(item.status || "native_not_provided");
+    const changed = item.changed === true;
+    const label = name === "scheduler" ? uiText("调度", "Scheduler") : uiText("映射", "Mapping");
+    const value = itemStatus === "compared"
+      ? (changed ? uiText("结构不同", "Structure differs") : uiText("一致", "Same"))
+      : uiText("Native 未提供", "Native not provided");
+    return `<span class="comparison-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></span>`;
+  }).join("");
+  const r0Comparison = asObject(score.r0_comparison);
+  const r0MetricItems = Object.entries(asObject(r0Comparison.metrics)).map(([metric, values]) => {
+    const mean = Number(values?.mean_absolute_percentage_error_pct);
+    const label = metricLabels[metric] || metric;
+    return `<span class="comparison-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(Number.isFinite(mean) ? `${formatResultNumber(mean).text}%` : "—")}</strong></span>`;
+  }).join("");
+  const r0Markup = score.r0_comparison
+    ? `<span class="comparison-label">${escapeHtml(uiText("R0 对照", "R0 Reference"))}<small>${escapeHtml(r0Comparison.status === "compared" ? uiText("同一 Native 参考", "Same Native reference") : uiText("R0 参考不足", "Insufficient R0 reference"))}</small></span>${r0MetricItems || `<span class="comparison-item"><strong>${escapeHtml(uiText("没有可比较的 R0 时延指标", "No comparable R0 latency metrics"))}</strong></span>`}`
+    : "";
+  const threshold = comparison.threshold_pct == null ? NaN : Number(comparison.threshold_pct);
+  const thresholdText = Number.isFinite(threshold) ? ` · ${escapeHtml(uiText("阈值", "Threshold"))} ${escapeHtml(formatResultNumber(threshold).text)}%` : "";
+  dom.comparisonStrip.innerHTML = `
+    <span class="comparison-label">${escapeHtml(uiText("Native 直接评分", "Direct Native Score"))}<small>${escapeHtml(statusLabel)}${thresholdText}</small></span>
+    <span class="comparison-item"><span>${escapeHtml(uiText("匹配请求", "Matched requests"))}</span><strong>${escapeHtml(String(comparison.matched_requests ?? "—"))}</strong></span>
+    ${metricItems || `<span class="comparison-item"><strong>${escapeHtml(uiText("没有可比较的时延指标", "No comparable latency metrics"))}</strong></span>`}
+    ${structureItems}${r0Markup}`;
 }
 
 function renderUtilization(report) {
@@ -17706,6 +17986,18 @@ function exportScenario() {
   toast("JSON 已导出", anchor.download, "success");
 }
 
+function exportHardwareInput() {
+  if (!state.scenario) return;
+  const text = `${JSON.stringify(hardwareInputForScenario(state.scenario), null, 2)}\n`;
+  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${slug(state.scenario.hardware?.name || state.scenario.name || "hardware")}-hardware-input.json`;
+  document.body.append(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+  toast("统一硬件参数文件已导出", anchor.download, "success");
+}
+
 async function exportCanonicalIr() {
   if (!state.scenario || state.busy) return;
   setBusy(true, "正在编译标准 IR", "正在把当前架构、模型、映射与推理负载编译为 Canonical Schema 1.1…");
@@ -17737,8 +18029,64 @@ async function importScenarioFile(file) {
   try {
     const text = await file.text();
     const value = JSON.parse(text);
-    ensureScenarioShape(value);
-    setScenario(value, { dirty: true, message: "JSON 已导入" });
+    if (value?.kind === "hardware_input" && value.hardware) {
+      if (String(value.contract_version || "") !== "2") {
+        throw new Error("统一硬件参数必须使用 contract_version=2。旧的双表格式已移除。");
+      }
+      const importedHardware = deepClone(value.hardware);
+      const parameters = asObject(importedHardware.parameters);
+      for (const field of ["host_orchestration", "fusion", "runtime"]) {
+        if (!Object.hasOwn(parameters, field) || parameters[field] == null) {
+          throw new Error(`统一硬件参数缺少 hardware.parameters.${field}，拒绝导入以避免使用隐式默认值。`);
+        }
+      }
+      const importedComponents = asArray(importedHardware.components);
+      const componentProfiles = {};
+      importedHardware.components = importedComponents.map((rawComponent) => {
+        const component = deepClone(rawComponent);
+        const profile = component.execution_profile;
+        const profileKey = costProfileKeyForComponentKind(component);
+        if (!profileKey) {
+          delete component.execution_profile;
+          return component;
+        }
+        if (!profile || typeof profile !== "object" || Array.isArray(profile)
+            || !profile.parameters || !profile.profile_id || !profile.profile_kind) {
+          throw new Error(`组件 ${component.component_id || "—"} 的 execution_profile 格式不完整。`);
+        }
+        const profileId = String(profile.profile_id);
+        component.cost_profile_id = profileId;
+        componentProfiles[profileKey] = asObject(componentProfiles[profileKey]);
+        if (Object.hasOwn(componentProfiles[profileKey], profileId)
+            && !stableMappingEqual(componentProfiles[profileKey][profileId], profile.parameters)) {
+          throw new Error(`共享 execution_profile ${profileKey}.${profileId} 的参数不一致。`);
+        }
+        componentProfiles[profileKey][profileId] = profile.parameters;
+        delete component.execution_profile;
+        return component;
+      });
+      delete importedHardware.parameters;
+      const next = deepClone(state.scenario || {});
+      next.hardware = importedHardware;
+      next.profiles = {
+        ...asObject(next.profiles),
+        components: componentProfiles,
+        host_orchestration: deepClone(parameters.host_orchestration),
+        fusion: deepClone(parameters.fusion),
+        cim_interconnect: deepClone(parameters.cim_interconnect ?? null),
+        runtime: deepClone(parameters.runtime),
+      };
+      const runtimeIssue = runtimeGpuControllerIssue(next);
+      if (runtimeIssue) throw new Error(runtimeIssue);
+      ensureScenarioShape(next);
+      // Hardware replacement invalidates hardware-bound placement/KV targets;
+      // keep model, workload, and scheduler inputs for the next candidate run.
+      resetPlacementForArchitecturePreset(next.placement, next.hardware.name);
+      setScenario(next, { dirty: true, message: "统一硬件参数文件已导入；旧硬件映射已清空" });
+    } else {
+      ensureScenarioShape(value);
+      setScenario(value, { dirty: true, message: "JSON 已导入" });
+    }
   } catch (error) {
     const message = "导入文件不是有效的场景 JSON，或者场景结构不完整。";
     state.validation = { errors: [normalizeIssue({ code: "import_error", message_zh: message }, "json", "error")], warnings: [], information: [] };
@@ -17747,12 +18095,13 @@ async function importScenarioFile(file) {
     toast("导入失败", message, "error", 6500);
   } finally {
     dom.fileInput.value = "";
+    if (dom.hardwareFileInput) dom.hardwareFileInput.value = "";
   }
 }
 
 function cacheDom() {
   const ids = [
-    "connectionState", "dirtyMark", "loadReferenceButton", "importButton", "fileInput", "exportButton", "canonicalExportButton", "jsonButton", "settingsButton",
+    "connectionState", "dirtyMark", "loadReferenceButton", "importButton", "fileInput", "exportButton", "importHardwareButton", "hardwareFileInput", "exportHardwareButton", "canonicalExportButton", "jsonButton", "settingsButton",
     "validateButton", "runButton", "architectureStatus", "architectureCount", "modelStatus", "modelCount", "mappingStatus", "mappingCount",
     "workloadStatus", "workloadCount", "playbackStatus", "playbackCount", "resultsStatus", "resultsCount", "errorCount", "warningCount", "diagnosticToggle", "diagnosticPanel",
     "diagnosticContent", "closeDiagnosticsButton", "hardwareName", "topologySummary", "hardwarePresetsButton", "topologyEditMenuButton", "topologyGroupMenuButton", "topologyConnectMenuButton", "selectModeButton", "connectModeButton", "protocolSelect", "protocolCatalogButton", "protocolVersionInput", "protocolUnitsInput", "protocolBandwidthInput", "protocolLatencyInput", "protocolPayloadInput", "protocolPresetSelection",
@@ -17771,7 +18120,7 @@ function cacheDom() {
     "settingsDialog", "settingsDialogForm", "uiLanguageInput", "fontScaleInput", "fontScaleNumberInput", "fontScaleValue", "resetFontScaleButton", "runtimeHealthPanel", "runtimeHealthRefreshButton",
     "customWorkspaceEnabled", "workspaceBackgroundInput", "compactLayoutInput", "topologyGridInput", "reduceMotionInput", "resetSettingsButton",
     "architectureScanButton", "architectureScanDialog", "closeArchitectureScanButton", "architectureScanBackend", "architectureScanTopN", "runArchitectureScanButton", "architectureScanStatus", "architectureScanSummary", "architectureScanBody", "architectureScanDiagnostics",
-    "runJobDialog", "closeRunJobDialogButton", "runEstimateRisk", "runEstimateSummary", "runEstimateWarnings", "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount", "runProgressBar", "runProgressMessage", "dismissRunJobButton", "cancelRunJobButton", "startRunJobButton",
+    "runJobDialog", "closeRunJobDialogButton", "runEstimateRisk", "runEstimateSummary", "runEstimateWarnings", "runNativeReferenceInput", "r0ReferenceInput", "directScoreButton", "openDirectScoreButton", "directScoreDialog", "closeDirectScoreButton", "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount", "runProgressBar", "runProgressMessage", "dismissRunJobButton", "cancelRunJobButton", "startRunJobButton",
     "toastRegion", "busyOverlay", "busyTitle", "busyDetail",
   ];
   ids.forEach((id) => { dom[id] = document.getElementById(id); });
@@ -17791,6 +18140,9 @@ function bindStaticEvents() {
   dom.loadReferenceButton.addEventListener("click", () => loadReference());
   dom.importButton.addEventListener("click", () => dom.fileInput.click());
   dom.fileInput.addEventListener("change", () => importScenarioFile(dom.fileInput.files?.[0]));
+  dom.importHardwareButton.addEventListener("click", () => dom.hardwareFileInput.click());
+  dom.hardwareFileInput.addEventListener("change", () => importScenarioFile(dom.hardwareFileInput.files?.[0]));
+  dom.exportHardwareButton.addEventListener("click", exportHardwareInput);
   dom.exportButton.addEventListener("click", exportScenario);
   dom.canonicalExportButton.addEventListener("click", () => { void exportCanonicalIr(); });
   dom.jsonButton.addEventListener("click", openJsonDialog);
@@ -17814,6 +18166,9 @@ function bindStaticEvents() {
   dom.runArchitectureScanButton.addEventListener("click", () => { void runArchitectureScan(); });
   dom.closeArchitectureScanButton.addEventListener("click", () => dom.architectureScanDialog.close("close"));
   dom.startRunJobButton.addEventListener("click", () => { void startRunJob(); });
+  dom.openDirectScoreButton.addEventListener("click", openDirectScoreDialog);
+  dom.closeDirectScoreButton.addEventListener("click", () => dom.directScoreDialog.close("close"));
+  dom.directScoreButton.addEventListener("click", () => { void runDirectSimulationScore(); });
   dom.cancelRunJobButton.addEventListener("click", () => { void cancelRunJob(); });
   dom.closeRunJobDialogButton.addEventListener("click", () => dom.runJobDialog.close("close"));
   dom.dismissRunJobButton.addEventListener("click", () => dom.runJobDialog.close(runJobIsActive() ? "background" : "close"));

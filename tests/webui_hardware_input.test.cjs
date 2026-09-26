@@ -1,0 +1,14 @@
+const fs = require('fs');
+const assert = require('assert');
+const app = fs.readFileSync('src/heterollm_sim/webui/app.js','utf8');
+const html = fs.readFileSync('src/heterollm_sim/webui/index.html','utf8');
+assert(app.includes('function hardwareInputForScenario'));
+assert(app.includes('payload.hardware_input = hardwareInputForScenario(payload)'));
+assert(app.includes('contract_version: "2"'));
+assert(app.includes('execution_profile'));
+assert(app.includes('value?.kind === "hardware_input"'));
+assert(app.includes('dom.importHardwareButton'));
+assert(app.includes('scenarioPayloadForTransport(scenarioReference)'));
+assert(html.includes('id="importHardwareButton"'));
+assert(html.includes('id="exportHardwareButton"'));
+console.log('hardware input UI contract: ok');

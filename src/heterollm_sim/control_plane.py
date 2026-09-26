@@ -879,6 +879,31 @@ def _runtime_profile(
     return profile
 
 
+def _control_plane_evidence_equal(left: object, right: object) -> bool:
+    """Refresh only when the identity-bound evidence changed."""
+
+    def evidence(placement: object) -> object:
+        metadata = getattr(placement, "metadata", {})
+        control_plane = (
+            metadata.get("control_plane", {})
+            if isinstance(metadata, Mapping)
+            else {}
+        )
+        evidence = (
+            control_plane.get("evidence", {})
+            if isinstance(control_plane, Mapping)
+            else {}
+        )
+        if not isinstance(evidence, Mapping):
+            return (None, None)
+        return (
+            evidence.get("input_fingerprint"),
+            evidence.get("fingerprint_schema"),
+        )
+
+    return evidence(left) == evidence(right)
+
+
 def bootstrap_control_plane(
     scenario: ScenarioConfig,
     policy: Optional[PlacementPolicy] = None,
@@ -907,6 +932,7 @@ def bootstrap_control_plane(
     mapped = (
         scenario
         if _runtime_placement_equal(scenario.placement, candidate.placement)
+        and _control_plane_evidence_equal(scenario.placement, candidate.placement)
         else candidate
     )
     weight_bytes = _declared_weight_load_bytes(mapped)

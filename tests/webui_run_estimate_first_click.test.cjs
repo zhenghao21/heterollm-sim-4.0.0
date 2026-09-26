@@ -176,6 +176,7 @@ function scenario() {
         dma_resource_id: "cpu0.dma",
         submission_resource_id: "gpu0.queue",
       },
+      runtime: { gpu_controllers: { gpu0: {} } },
     },
   };
 }
