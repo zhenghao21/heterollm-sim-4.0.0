@@ -42,6 +42,7 @@ REQUIRED = {
     "hbm-pim",
     "gpu-nvme-gds",
     "gpu-hbf",
+    "nvidia-b200-1gpu-2hbf-2hbm",
     "soc-2x-dram-sram-cim",
     "soc-2x-dram-sram-cim-shared-phy-noc",
 }
@@ -271,6 +272,29 @@ class ArchitecturePresetCatalogTests(unittest.TestCase):
                 sum(link["bandwidth_gbps"] for link in hbm_links),
                 bandwidth,
             )
+
+    def test_b200_user_requested_two_hbm_and_two_hbf_endpoints(self):
+        detail = architecture_preset_detail("nvidia-b200-1gpu-2hbf-2hbm")
+        components = {item["component_id"]: item for item in detail["components"]}
+        self.assertEqual(set(components), {"gpu0", "hbm0", "hbm1", "hbf0", "hbf1"})
+        self.assertEqual(components["gpu0"]["metadata"]["model"], "NVIDIA B200 SXM 180GB")
+        self.assertEqual(components["gpu0"]["peak_ops_per_s"], 2_200_000_000_000_000.0)
+        hbm = [components["hbm0"], components["hbm1"]]
+        self.assertEqual(sum(item["capacity_bytes"] for item in hbm), 180_000_000_000)
+        self.assertAlmostEqual(sum(item["read_bandwidth_gbps"] for item in hbm), 64_000.0)
+        self.assertEqual(
+            {item["metadata"]["physical_composition"]["component_preset_id"] for item in hbm},
+            {"nvidia-b200-hbm3e-90gb-4tbps-analysis"},
+        )
+        hbf = [components["hbf0"], components["hbf1"]]
+        self.assertEqual(len(hbf), 2)
+        self.assertEqual(sum(item["capacity_bytes"] for item in hbf), 1_024_000_000_000)
+        self.assertEqual(
+            {link["link_id"] for link in detail["links"] if link["protocol"] == "UCIe"},
+            {"gpu_hbf0", "gpu_hbf1"},
+        )
+        self.assertEqual(detail["preset"]["sources"][0]["url"], "https://www.nvidia.com/en-us/data-center/dgx-b200/")
+        self.assertTrue(any("两个 HBM 节点" in limitation for limitation in detail["preset"]["limitations"]))
 
     def test_hbm_group_membership_roots_and_collapse_policy(self):
         cases = {

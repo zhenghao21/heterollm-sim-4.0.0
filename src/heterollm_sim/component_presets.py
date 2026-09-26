@@ -1142,6 +1142,18 @@ NVIDIA_GB200_SOURCE = _source(
     S2_VENDOR_DECLARED,
     publisher="NVIDIA",
 )
+NVIDIA_B200_SOURCE = _source(
+    "NVIDIA DGX B200 system specifications",
+    "https://www.nvidia.com/en-us/data-center/dgx-b200/",
+    S2_VENDOR_DECLARED,
+    publisher="NVIDIA",
+)
+NVIDIA_BLACKWELL_SOURCE = _source(
+    "NVIDIA Blackwell Architecture",
+    "https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/",
+    S2_VENDOR_DECLARED,
+    publisher="NVIDIA",
+)
 AMD_MI300A_SOURCE = _source(
     "AMD Instinct MI300A product specifications",
     "https://www.amd.com/en/products/accelerators/instinct/mi300/mi300a.html",
@@ -1538,6 +1550,23 @@ _PRESETS: Tuple[ComponentPresetDefinition, ...] = (
         unit_count_formula="8 stack sites per GPU; 186 GB visible / 8 = 23.25 GB; 8 TB/s / 8 = 1 TB/s",
         product_family="NVIDIA GB200",
         sources=(NVIDIA_GB200_SOURCE, SAMSUNG_HBM3E_SOURCE),
+    ),
+    _hbm_product_slice_preset(
+        "nvidia-b200-hbm3e-90gb-4tbps-analysis",
+        "NVIDIA B200 HBM3E 90GB 4TB/s Analytical Endpoint",
+        generation="HBM3E",
+        visible_capacity_gb=90.0,
+        raw_capacity_gb=90.0,
+        bandwidth_gbps=32_000.0,
+        product_stack_count=2,
+        unit_count_status="analytical_two_modeled_hbm_nodes",
+        unit_count_formula=(
+            "NVIDIA DGX B200 1,440 GB / 8 GPUs = 180 GB and 64 TB/s / 8 GPUs = "
+            "8 TB/s per B200; user-requested two modeled endpoints split equally"
+        ),
+        product_family="NVIDIA B200 SXM 180GB",
+        sources=(NVIDIA_B200_SOURCE, NVIDIA_BLACKWELL_SOURCE, SAMSUNG_HBM3E_SOURCE),
+        evidence_level=A_ANALYTICAL,
     ),
     _hbm_product_slice_preset(
         "hbm2e-16gb-0_4625tbs-gaudi3-slice",
