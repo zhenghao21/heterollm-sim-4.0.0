@@ -28,6 +28,8 @@ from heterollm_sim.cost_models import (
     _dma_setup_service,
     break_even_reuse,
     mma_output_tile_wave_proxy,
+    quantized_dispatch_candidate,
+    quantized_dequant_work_by_format,
     estimate_cim_gemm,
     estimate_cpu_elementwise,
     estimate_cpu_gemm,
@@ -323,6 +325,19 @@ class TileWaveProxyTests(unittest.TestCase):
 
 
 class GPUCostModelTests(unittest.TestCase):
+    def test_quantized_dispatch_and_dequant_ledgers_are_format_aware(self):
+        workload = GemmWorkload(
+            m=1, k=256, n=128, activation_bits=16, weight_bits=4,
+            packed_weight_formats=("IQ4_XS",),
+            packed_weight_transform_operations=8192,
+            packed_weight_format_segments=(("IQ4_XS", 128, 8192),),
+        )
+        self.assertEqual(quantized_dispatch_candidate(workload), "cuda_mmvq_candidate")
+        self.assertEqual(quantized_dequant_work_by_format(workload), {"IQ4_XS": 8192})
+
+        matrix = replace(workload, m=64)
+        self.assertEqual(quantized_dispatch_candidate(matrix), "cuda_mmq_candidate")
+
     def test_shared_gemm_counts_packed_conversion_on_scalar_resource_once(self):
         gpu = replace(gpu_profile(), scalar_energy_pj_per_op=3.0)
         hbm = HBMProfile(bandwidth_gb_s=1.0e12)

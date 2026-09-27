@@ -22,7 +22,7 @@ from .contracts import (
     ResourceDemand,
     TaskCategory,
 )
-from .mmq_work import MMQWork
+from .mmq_work import MMVQ_MAX_BATCH_SIZE, MMQWork
 from .mmvq_work import (
     MMVQWork, MMVQSourceContract, SOURCE_SHA256 as MMVQ_SOURCE_SHA256,
     UnsupportedMMVQ, derive_mmvq_work,
@@ -2802,6 +2802,139 @@ def mma_output_tile_wave_contract() -> Mapping[str, object]:
     }
 
 
+def quantized_shape_efficiency(
+    workload: GemmWorkload,
+    gpu: GPUProfile,
+    tile_wave: Mapping[str, object],
+) -> Mapping[str, object]:
+    """Derive a source-geometry shape factor for packed GPU GEMMs.
+
+    The factor is a dispatch/occupancy proxy, not a measured throughput
+    coefficient.  MMQ and MMVQ use their typed source launch geometry when it
+    is available; otherwise the common MMA output-wave proxy supplies the
+    conservative fallback.  Keeping the components separate makes it clear
+    which part of a prediction came from padding, K tails, CTA waves, or lane
+    utilization.
+    """
+
+    if not workload.packed_weight_formats:
+        return {
+            "model": "not_quantized",
+            "effective": 1.0,
+            "applied_to_compute": False,
+        }
+
+    def ratio(numerator: float, denominator: float) -> float:
+        if denominator <= 0.0:
+            return 1.0
+        return max(1.0e-9, min(1.0, numerator / denominator))
+
+    if workload.mmq_work is not None:
+        work = workload.mmq_work
+        output_m = ratio(work.m, work.x_tiles * work.j)
+        output_n = ratio(work.n, work.y_tiles * work.i)
+        output = output_m * output_n
+        k_tail = ratio(work.k, work.k_execution)
+        wave = ratio(
+            work.block_count,
+            math.ceil(work.block_count / gpu.sm_count) * gpu.sm_count,
+        )
+        # MMQ executes a complete final K iteration, so a logical K tail is
+        # already paid by ``k_execution`` in the issued work.  Keep the tail
+        # ratio as evidence, but do not discount the same execution twice.
+        effective = min(output, wave)
+        return {
+            "model": "source_mmq_geometry_shape_efficiency_v1",
+            "effective": effective,
+            "applied_to_compute": True,
+            "output_m_utilization": output_m,
+            "output_n_utilization": output_n,
+            "k_tail_utilization": k_tail,
+            "cta_wave_utilization": wave,
+            "j": work.j,
+            "i": work.i,
+            "block_count": work.block_count,
+            "fixup_valid_elements": work.fixup_valid_elements,
+            "fixup_fraction": work.fixup_valid_elements / max(1, work.m * work.n),
+        }
+
+    if workload.mmvq_work is not None:
+        work = workload.mmvq_work
+        output = ratio(work.n, math.ceil(work.n / work.rows_per_cta) * work.rows_per_cta)
+        cta_wave = ratio(
+            work.cta_count,
+            math.ceil(work.cta_count / gpu.sm_count) * gpu.sm_count,
+        )
+        max_iterations = max(1, work.maximum_thread_k_iterations)
+        lane = ratio(
+            sum(work.loop_iterations_by_thread),
+            len(work.loop_iterations_by_thread) * max_iterations,
+        )
+        effective = min(output, cta_wave, lane)
+        return {
+            "model": "source_mmvq_geometry_shape_efficiency_v1",
+            "effective": effective,
+            "applied_to_compute": True,
+            "output_utilization": output,
+            "cta_wave_utilization": cta_wave,
+            "active_k_lane_utilization": lane,
+            "cta_count": work.cta_count,
+            "warps_per_cta": work.warps_per_cta,
+            "rows_per_cta": work.rows_per_cta,
+            "maximum_thread_k_iterations": max_iterations,
+        }
+
+    output = ratio(
+        float(tile_wave.get("output_tile_wave_utilization", 1.0)), 1.0
+    )
+    return {
+        "model": "mma_output_tile_wave_quantized_fallback_v1",
+        "effective": output,
+        "applied_to_compute": True,
+        "output_tile_wave_utilization": output,
+        "source_geometry": "missing_mmq_mmvq_work",
+    }
+
+
+def quantized_dequant_work_by_format(
+    workload: GemmWorkload,
+) -> Mapping[str, int]:
+    """Return the physical unpack/dequant work ledger grouped by format."""
+
+    totals: dict[str, int] = {}
+    for format_name, _local_n, operations in workload.packed_weight_format_segments:
+        key = str(format_name).strip().upper()
+        totals[key] = totals.get(key, 0) + int(operations)
+    if not totals and workload.packed_weight_formats:
+        # Legacy callers may only provide a format tuple and aggregate work.
+        # Preserve that work without pretending it can be attributed to one of
+        # several mixed formats.
+        key = str(workload.packed_weight_formats[0]).strip().upper()
+        if len(workload.packed_weight_formats) == 1:
+            totals[key] = int(workload.packed_weight_transform_operations)
+        else:
+            totals["MIXED_UNATTRIBUTED"] = int(
+                workload.packed_weight_transform_operations
+            )
+    return totals
+
+
+def quantized_dispatch_candidate(workload: GemmWorkload) -> str:
+    """Classify the source dispatch candidate without claiming qualification."""
+
+    if workload.mmvq_work is not None:
+        return "cuda_mmvq_vector_source_geometry"
+    if workload.mmq_work is not None:
+        return "cuda_mmq_matrix_source_geometry"
+    formats = tuple(str(value).strip().upper() for value in workload.packed_weight_formats)
+    if len(formats) != 1:
+        return "mixed_format_dispatch_unresolved"
+    limit = MMVQ_MAX_BATCH_SIZE.get(formats[0])
+    if limit is None:
+        return "format_dispatch_unresolved"
+    return "cuda_mmvq_candidate" if workload.m <= limit else "cuda_mmq_candidate"
+
+
 def _gemm_tensor_dtype(workload: GemmWorkload) -> str:
     if workload.activation_bits <= 8 and workload.weight_bits <= 8:
         return "int8"
@@ -2970,12 +3103,16 @@ def estimate_gpu_gemm(
             "kernel_family": (
                 quantized_capability.kernel_family
                 if quantized_capability is not None
-                else "unresolved_quantized_matmul"
+                else quantized_dispatch_candidate(workload)
             ),
+            "dispatch_candidate": quantized_dispatch_candidate(workload),
             "weight_formats": tuple(workload.packed_weight_formats),
             "shape": {"m": workload.m, "n": workload.n, "k": workload.k},
             "prefill_decode_phase": phase,
             "dequant_work_units": workload.packed_weight_transform_operations,
+            "dequant_work_by_format": dict(
+                quantized_dequant_work_by_format(workload)
+            ),
             "source_evidence": (
                 quantized_capability.evidence
                 if quantized_capability is not None
@@ -3061,8 +3198,36 @@ def estimate_gpu_gemm(
         if quantized_capability is not None
         else {}
     )
+    shape_efficiency = quantized_shape_efficiency(workload, gpu, tile_wave)
+    reported_shape_efficiency = {
+        **dict(shape_efficiency),
+        "applied_to_compute": bool(
+            shape_efficiency["applied_to_compute"] and vector_bound is None
+        ),
+        **(
+            {"application_blocked_reason": "qualified_vector_issue_bound"}
+            if vector_bound is not None else {}
+        ),
+    }
+    if workload.packed_weight_formats:
+        mmq_metadata["quantized_kernel_contract"] = {
+            **dict(mmq_metadata.get("quantized_kernel_contract", {})),
+            "shape_efficiency": reported_shape_efficiency,
+            "shape_efficiency_applied_to_compute": bool(
+                reported_shape_efficiency["applied_to_compute"]
+            ),
+            "dequant_work_by_format": dict(
+                quantized_dequant_work_by_format(workload)
+            ),
+        }
+        quantized_path_metadata = {
+            **quantized_path_metadata,
+            "quantized_shape_efficiency": reported_shape_efficiency,
+        }
     compute_ns = (vector_bound["service_ns"] if vector_bound is not None
                   else issued_operations / (attainable_tops * 1000.0))
+    if vector_bound is None and shape_efficiency["applied_to_compute"]:
+        compute_ns /= float(shape_efficiency["effective"])
     epilogue_scalar_ns = (
         workload.epilogue_operations / gpu.elementwise_gops
         if workload.epilogue_operations > 0
@@ -4955,8 +5120,9 @@ def estimate_cpu_gemm(
             "kernel_family": (
                 quantized_dot_capability.name
                 if quantized_dot_capability is not None
-                else "unresolved_cpu_quantized_dot"
+                else "cpu_quantized_dot_candidate"
             ),
+            "dispatch_candidate": "cpu_quantized_dot_candidate",
             "weight_formats": tuple(workload.packed_weight_formats),
             "shape": {"m": workload.m, "n": workload.n, "k": workload.k},
             "prefill_decode_phase": (
@@ -4965,6 +5131,9 @@ def estimate_cpu_gemm(
                 else "unbound_at_gemm_cost_boundary"
             ),
             "dequant_work_units": workload.packed_weight_transform_operations,
+            "dequant_work_by_format": dict(
+                quantized_dequant_work_by_format(workload)
+            ),
             "source_evidence": (
                 quantized_dot_capability.evidence
                 if quantized_dot_capability is not None
@@ -6292,6 +6461,9 @@ __all__ = [
     "break_even_reuse",
     "mma_output_tile_wave_contract",
     "mma_output_tile_wave_proxy",
+    "quantized_dequant_work_by_format",
+    "quantized_dispatch_candidate",
+    "quantized_shape_efficiency",
     "estimate_cim_gemm",
     "estimate_cpu_elementwise",
     "estimate_cpu_gemm",
