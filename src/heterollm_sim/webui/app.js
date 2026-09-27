@@ -414,10 +414,10 @@ const CONCEPT_HELP_ZH = Object.freeze({
   bandwidth_utilization: "Bandwidth Utilization 以区间传输字节数相对于声明带宽估算；读、写、存储 I/O 与链路带宽分开呈现。",
   storage_occupancy: "Storage Occupancy 表示 SSD/HBF 等存储层的逻辑占用容量；它不同于 I/O 带宽利用率。",
   run_manifest: "Run Manifest 记录运行标识、后端、模型版本、证据、限制和任务规模，用于判断报告能否复现及其适用边界。",
-  ttft: "TTFT（Time to First Token）是请求到达后首个可见输出 Token 的延迟。",
+  ttft: "TTFT（Time to First Token）是 engine_request_begin 到首个可见输出 Token 的延迟，与 Native 口径一致。",
   tbt: "TBT（Time Between Tokens）是相邻可见输出 Token 的时间间隔；p50/p95 表示分位数。",
   tpot: "TPOT（Time Per Output Token）是输出阶段的平均每 Token 时间，口径可能与逐 Token TBT 分位数不同。",
-  e2e: "E2E（End-to-End Latency）从请求到达到完成的总延迟，包括排队、Prefill、Decode、传输与调度开销。",
+  e2e: "E2E（End-to-End Latency）是 engine_request_begin 到完成的总延迟，与 Native 口径一致。",
   throughput: "吞吐量表示单位时间完成的请求或生成的 Token；必须结合批次、延迟和拒绝率一起解释。",
   request_throughput: "请求吞吐是单位时间完成的全部请求数，单位 req/s；它与 Token 吞吐和满足资格条件的 Goodput 请求率不同。",
   token_throughput: "Token 吞吐是单位时间产生的全部可见输出 Token 数，单位 tok/s；它与请求吞吐和 Goodput Token 率不同。",
@@ -665,10 +665,10 @@ const CONCEPT_HELP_EN = Object.freeze({
   bandwidth_utilization: "Bandwidth Utilization estimates interval bytes against declared bandwidth, keeping reads, writes, storage I/O, and links separate.",
   storage_occupancy: "Storage Occupancy is logical used capacity in SSD/HBF tiers and differs from I/O bandwidth utilization.",
   run_manifest: "Run Manifest records run identity, backend, model version, evidence, limitations, and scale for reproducibility and scope assessment.",
-  ttft: "Time to First Token is the delay from request arrival to the first visible output Token.",
+  ttft: "Time to First Token runs from engine_request_begin to the first visible output Token, matching the Native boundary.",
   tbt: "Time Between Tokens is the interval between adjacent visible output Tokens; p50 and p95 are sample percentiles.",
   tpot: "Time Per Output Token is the mean output-stage time per Token and may use a different scope from per-Token TBT percentiles.",
-  e2e: "End-to-End Latency runs from request arrival to completion, including queueing, Prefill, Decode, transfer, and scheduling overhead.",
+  e2e: "End-to-End Latency runs from engine_request_begin to completion, matching the Native boundary.",
   throughput: "Throughput is completed requests or generated Tokens per unit time and must be interpreted with latency, batching, and rejection rate.",
   request_throughput: "Request Throughput is all completed requests per second in req/s; it differs from Token Throughput and qualified Goodput Request Rate.",
   token_throughput: "Token Throughput is all visible output Tokens per second in tok/s; it differs from Request Throughput and qualified Goodput Token Rate.",
@@ -1180,8 +1180,8 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: category_time_ns and critical_path_category_ns.|Read-only total and critical-path time by category.|Raw unit: ns, formatted as duration.|It locates phase cost and critical-path contribution.|Category totals may overlap and need not sum to Makespan.",
   ),
   request_metrics: conceptHelp220Detail(
-    "来源是 report.requests。｜逐请求只读显示状态、拒绝、Arrival、TTFT、TBT、TPOT、E2E 和 Visible Tokens。｜延迟为 ns，Token 为计数。｜它揭示汇总分位数背后的离散样本。｜缺失请求行不会由 summary 反推。",
-    "Source: report.requests.|Read-only status, rejection, Arrival, TTFT, TBT, TPOT, E2E, and Visible Tokens per request.|Latency uses ns and Tokens are counts.|It exposes discrete samples behind aggregate percentiles.|Missing request rows are never reconstructed from summary values.",
+    "来源是 report.requests。｜逐请求只读显示状态、拒绝、Arrival、Native 同口径 TTFT、TBT、TPOT、E2E 和 Visible Tokens。｜TTFT/E2E 从 engine_request_begin 计时，TPOT 使用首尾 Token 间隔除以输出 Token 数减一。｜延迟为 ns，Token 为计数。｜缺失请求行不会由 summary 反推。",
+    "Source: report.requests.|Read-only status, rejection, Arrival, Native-boundary TTFT, TBT, TPOT, E2E, and Visible Tokens per request.|TTFT and E2E start at engine_request_begin; TPOT uses the first-to-last Token interval divided by output Tokens minus one.|Latency uses ns and Tokens are counts.|Missing request rows are never reconstructed from summary values.",
   ),
   visible_tokens: conceptHelp220Detail(
     "来源是每请求 visible_output_tokens。｜只读显示最终对用户可见的实际输出数。｜单位是 Tokens，取非负整数或 NA。｜它参与 Token Throughput 与 Goodput 计算。｜它不是配置的最大 Output Tokens，也不是 MTP Proposed。",
@@ -18299,15 +18299,16 @@ function renderResults() {
   const throughput = asObject(summary.throughput);
   const requests = asObject(report.requests);
   const requestRows = Object.entries(requests);
-  const requestTpot = requestRows.map(([, request]) => request.tpot_ns).filter((value) => value != null);
+  const requestTpot = requestRows.map(([, request]) => request.engine_tpot_ns ?? request.tpot_ns).filter((value) => value != null);
   const tpotP50 = percentile(requestTpot, 0.5);
+  const engineSummary = asObject(summary.engine_ttft_ns).p50 != null || asObject(summary.engine_e2e_ns).p50 != null;
   dom.runManifestBar.innerHTML = runManifestMarkup(report);
   dom.metricGrid.innerHTML = [
     metricCell({ text: uiText("总历时（Makespan）", "Makespan") }, formatResultDurationNs(summary.makespan_ns), resultWithUnit(summary.makespan_ns, "ns"), "is-accent"),
-    metricCell({ text: uiText("首 Token 延迟（TTFT）", "Time to First Token (TTFT)"), percentile: 50 }, formatResultDurationNs(summary.ttft_ns?.p50), resultWithUnit(summary.ttft_ns?.p50, "ns")),
+    metricCell({ text: uiText("首 Token 延迟（TTFT）", "Time to First Token (TTFT)"), percentile: 50 }, formatResultDurationNs(engineSummary ? summary.engine_ttft_ns?.p50 : summary.ttft_ns?.p50), resultWithUnit(engineSummary ? summary.engine_ttft_ns?.p50 : summary.ttft_ns?.p50, "ns")),
     metricCell({ text: uiText("Token 间延迟（TBT）", "Time Between Tokens (TBT)"), percentile: 50 }, formatResultDurationNs(summary.tbt_ns?.p50), resultWithUnit(summary.tbt_ns?.p50, "ns")),
-    metricCell({ text: uiText("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)"), percentile: 50 }, formatResultDurationNs(tpotP50), tpotP50 == null ? uiText("无可用 Token 间隔", "No Token interval available") : resultWithUnit(tpotP50, "ns")),
-    metricCell({ text: uiText("端到端延迟（E2E）", "End-to-End Latency (E2E)"), percentile: 50 }, formatResultDurationNs(summary.e2e_ns?.p50), resultWithUnit(summary.e2e_ns?.p50, "ns")),
+    metricCell({ text: uiText("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)"), percentile: 50 }, formatResultDurationNs(engineSummary ? summary.engine_tpot_ns?.p50 : tpotP50), (engineSummary ? summary.engine_tpot_ns?.p50 : tpotP50) == null ? uiText("无可用 Token 间隔", "No Token interval available") : resultWithUnit(engineSummary ? summary.engine_tpot_ns?.p50 : tpotP50, "ns")),
+    metricCell({ text: uiText("端到端延迟（E2E）", "End-to-End Latency (E2E)"), percentile: 50 }, formatResultDurationNs(engineSummary ? summary.engine_e2e_ns?.p50 : summary.e2e_ns?.p50), resultWithUnit(engineSummary ? summary.engine_e2e_ns?.p50 : summary.e2e_ns?.p50, "ns")),
     metricCell({ text: uiText("Token 吞吐（Token Throughput）", "Token Throughput") }, formatResultRate(throughput.visible_output_tokens_per_s, "tok/s"), resultWithUnit(throughput.visible_output_tokens_per_s, "tokens/s"), "is-io"),
     metricCell({ text: uiText("请求吞吐（Request Throughput）", "Request Throughput") }, formatResultRate(throughput.requests_per_s, "req/s"), resultWithUnit(throughput.requests_per_s, "requests/s"), "is-io"),
     metricCell({ text: uiText("总能耗（Total Energy）", "Total Energy") }, formatResultEnergyPj(summary.total_energy_pj), resultWithUnit(summary.total_energy_pj, "pJ"), "is-accent"),
@@ -18453,11 +18454,14 @@ function renderRequestResults(requests) {
     const tbtP50 = percentile(tbt, 0.5);
     const tbtP95 = percentile(tbt, 0.95);
     const arrival = formatResultDurationNs(request.arrival_ns);
-    const ttft = formatResultDurationNs(request.ttft_ns);
+    const ttftValue = request.engine_ttft_ns ?? request.ttft_ns;
+    const tpotValue = request.engine_tpot_ns ?? request.tpot_ns;
+    const e2eValue = request.engine_e2e_ns ?? request.e2e_ns;
+    const ttft = formatResultDurationNs(ttftValue);
     const tbt50 = formatResultDurationNs(tbtP50);
     const tbt95 = formatResultDurationNs(tbtP95);
-    const tpot = formatResultDurationNs(request.tpot_ns);
-    const e2e = formatResultDurationNs(request.e2e_ns);
+    const tpot = formatResultDurationNs(tpotValue);
+    const e2e = formatResultDurationNs(e2eValue);
     const status = String(request.status ?? request.request_status ?? (request.rejected === true ? "rejected" : "—"));
     const rejectionReason = request.rejection_reason ?? request.reason ?? request.reject_reason ?? request.rejection?.reason ?? "—";
     const statusClass = slug(status);
@@ -18466,10 +18470,10 @@ function renderRequestResults(requests) {
       <td${dataLabel("状态（Status）", "Status")}><span class="request-status is-${escapeHtml(statusClass)}">${escapeHtml(status)}</span></td>
       <td${dataLabel("拒绝原因（Rejection Reason）", "Rejection Reason")} class="request-rejection-reason" title="${escapeHtml(rejectionReason)}">${escapeHtml(rejectionReason)}</td>
       <td${dataLabel("到达时间（Arrival）", "Arrival")} title="${escapeHtml(resultWithUnit(request.arrival_ns, "ns").text)}">${arrival.html}</td>
-      <td${dataLabel("首 Token 延迟（TTFT）", "Time to First Token (TTFT)")} title="${escapeHtml(resultWithUnit(request.ttft_ns, "ns").text)}">${ttft.html}</td>
+      <td${dataLabel("首 Token 延迟（TTFT）", "Time to First Token (TTFT)")} title="${escapeHtml(resultWithUnit(ttftValue, "ns").text)}">${ttft.html}</td>
       <td${dataLabel("Token 间延迟（TBT）p50 / p95", "Time Between Tokens (TBT) p50 / p95")} title="${escapeHtml(uiText("原始 tbt_ns 数组含 {count} 项", "Raw tbt_ns array contains {count} items", { count: formatResultNumber(tbt.length).text }))}">${tbt50.html} / ${tbt95.html}</td>
-      <td${dataLabel("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)")} title="${escapeHtml(resultWithUnit(request.tpot_ns, "ns").text)}">${tpot.html}</td>
-      <td${dataLabel("端到端延迟（E2E）", "End-to-End Latency (E2E)")} title="${escapeHtml(resultWithUnit(request.e2e_ns, "ns").text)}">${e2e.html}</td>
+      <td${dataLabel("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)")} title="${escapeHtml(resultWithUnit(tpotValue, "ns").text)}">${tpot.html}</td>
+      <td${dataLabel("端到端延迟（E2E）", "End-to-End Latency (E2E)")} title="${escapeHtml(resultWithUnit(e2eValue, "ns").text)}">${e2e.html}</td>
       <td${dataLabel("可见 Token 数（Visible Tokens）", "Visible Tokens")}>${formatResultNumber(request.visible_output_tokens).html}</td>
     </tr>`;
   }).join("") : `<tr class="empty-row"><td data-label="${escapeHtml(uiText("请求指标", "Request metrics"))}" colspan="9">${escapeHtml(uiText("报告没有请求级指标。", "The report contains no request-level metrics."))}</td></tr>`;

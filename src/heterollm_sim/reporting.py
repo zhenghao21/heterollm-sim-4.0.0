@@ -1793,6 +1793,16 @@ def _online_result_semantics(
         ),
         "deadline": _deadline_semantics(result.scenario, online=True),
         "trace": _trace_semantics(result),
+        "latency": {
+            "primary_boundary": "engine",
+            "engine_start_event": "engine_request_begin",
+            "first_token_boundary": "first visible committed token",
+            "last_token_boundary": "last visible committed token",
+            "ttft": "engine_request_begin_to_first_token",
+            "tpot": "(last_token-first_token)/(visible_output_tokens-1)",
+            "e2e": "engine_request_begin_to_last_token",
+            "arrival_metrics_preserved_as": "arrival_ttft_ns/arrival_tpot_ns/arrival_e2e_ns",
+        },
         "throughput": {
             "primary_window": "wall_clock",
             "primary_window_ns": list(windows_ns["wall_clock"]),
@@ -5067,6 +5077,12 @@ def _online_report_core(
     all_tbt: List[float] = []
     all_tpot: List[float] = []
     all_e2e: List[float] = []
+    # Engine-boundary timings mirror the native evidence contract.  Keep the
+    # arrival-boundary metrics above for scheduler/SLO diagnostics, but expose
+    # these separately for UI comparison and request detail.
+    all_engine_ttft: List[float] = []
+    all_engine_tpot: List[float] = []
+    all_engine_e2e: List[float] = []
     committed_total = 0
     completed = 0
     good_requests = 0
@@ -5090,6 +5106,29 @@ def _online_report_core(
             if metric.finish_ns is not None
             else None
         )
+        engine_start = metric.engine_start_ns
+        engine_ttft = (
+            metric.first_token_ns - engine_start
+            if engine_start is not None and metric.first_token_ns is not None
+            else None
+        )
+        # Native's last boundary is the timestamp of the last committed
+        # output token, rather than the request-finished marker.  In the
+        # normal continuous-batching path these coincide, but keeping the
+        # token timestamp explicit prevents a hidden tail from changing E2E.
+        engine_last_token = times[-1] if times else None
+        engine_e2e = (
+            engine_last_token - engine_start
+            if engine_start is not None and engine_last_token is not None
+            else None
+        )
+        engine_tpot = (
+            (engine_last_token - metric.first_token_ns) / (metric.visible_output_tokens - 1)
+            if metric.first_token_ns is not None
+            and engine_last_token is not None
+            and metric.visible_output_tokens > 1
+            else None
+        )
         row = {
             "request_id": request_id,
             "status": metric.status.value,
@@ -5098,10 +5137,20 @@ def _online_report_core(
             "arrival_ns": metric.arrival_ns,
             "first_token_ns": metric.first_token_ns,
             "done_ns": metric.finish_ns,
-            "ttft_ns": metric.ttft_ns,
+            # Keep the arrival-boundary values available for diagnostics, but
+            # expose engine-boundary values as the canonical request metrics so
+            # the UI and Native references use one latency definition.
+            "arrival_ttft_ns": metric.ttft_ns,
+            "arrival_tpot_ns": metric.tpot_ns,
+            "arrival_e2e_ns": e2e,
+            "ttft_ns": engine_ttft if engine_ttft is not None else metric.ttft_ns,
             "tbt_ns": tbt,
-            "tpot_ns": metric.tpot_ns,
-            "e2e_ns": e2e,
+            "tpot_ns": engine_tpot if engine_tpot is not None else metric.tpot_ns,
+            "e2e_ns": engine_e2e if engine_e2e is not None else e2e,
+            "engine_request_begin_ns": engine_start,
+            "engine_ttft_ns": engine_ttft,
+            "engine_tpot_ns": engine_tpot,
+            "engine_e2e_ns": engine_e2e,
             "visible_output_tokens": metric.visible_output_tokens,
             "proposed_tokens": metric.proposed_tokens,
             "accepted_tokens": metric.accepted_tokens,
@@ -5148,13 +5197,25 @@ def _online_report_core(
         committed_total += metric.visible_output_tokens
         if metric.status == RequestStatus.FINISHED:
             completed += 1
-            if metric.ttft_ns is not None:
+            if engine_ttft is not None:
+                all_ttft.append(engine_ttft)
+            elif metric.ttft_ns is not None:
                 all_ttft.append(metric.ttft_ns)
             all_tbt.extend(tbt)
-            if metric.tpot_ns is not None:
+            if engine_tpot is not None:
+                all_tpot.append(engine_tpot)
+            elif metric.tpot_ns is not None:
                 all_tpot.append(metric.tpot_ns)
-            if e2e is not None:
+            if engine_e2e is not None:
+                all_e2e.append(engine_e2e)
+            elif e2e is not None:
                 all_e2e.append(e2e)
+            if engine_ttft is not None:
+                all_engine_ttft.append(engine_ttft)
+            if engine_tpot is not None:
+                all_engine_tpot.append(engine_tpot)
+            if engine_e2e is not None:
+                all_engine_e2e.append(engine_e2e)
             meets = metric.deadline_met is not False
             if scheduler.slo_ttft_ns is not None:
                 meets = meets and metric.ttft_ns is not None and metric.ttft_ns <= scheduler.slo_ttft_ns
@@ -5289,6 +5350,9 @@ def _online_report_core(
         "tbt_ns": _percentiles(all_tbt),
         "tpot_ns": _percentiles(all_tpot),
         "e2e_ns": _percentiles(all_e2e),
+        "engine_ttft_ns": _percentiles(all_engine_ttft),
+        "engine_tpot_ns": _percentiles(all_engine_tpot),
+        "engine_e2e_ns": _percentiles(all_engine_e2e),
         "bottleneck_resource": (
             {"resource_id": bottleneck[0], "utilization": bottleneck[1]}
             if bottleneck

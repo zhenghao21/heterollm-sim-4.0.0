@@ -1300,9 +1300,9 @@ def simulation_score_payload(
         ),
         "metrics": {
             "makespan_ns": summary.get("makespan_ns"),
-            "ttft_p50_ns": (summary.get("ttft_ns", {}) or {}).get("p50"),
-            "tpot_p50_ns": (summary.get("tpot_ns", {}) or {}).get("p50"),
-            "e2e_p50_ns": (summary.get("e2e_ns", {}) or {}).get("p50"),
+            "ttft_p50_ns": (summary.get("engine_ttft_ns", summary.get("ttft_ns", {})) or {}).get("p50"),
+            "tpot_p50_ns": (summary.get("engine_tpot_ns", summary.get("tpot_ns", {})) or {}).get("p50"),
+            "e2e_p50_ns": (summary.get("engine_e2e_ns", summary.get("e2e_ns", {})) or {}).get("p50"),
             "throughput_requests_per_s": (throughput or {}).get("requests_per_s"),
             "throughput_tokens_per_s": (throughput or {}).get("visible_output_tokens_per_s"),
             "total_energy_pj": summary.get("total_energy_pj"),
@@ -1310,9 +1310,16 @@ def simulation_score_payload(
         },
         "request_metrics": {
             str(request_id): {
-                key: item.get(key)
-                for key in ("status", "ttft_ns", "tpot_ns", "e2e_ns", "prompt_tokens", "visible_output_tokens")
-                if key in item
+                **{
+                    key: item.get(key)
+                    for key in ("status", "prompt_tokens", "visible_output_tokens")
+                    if key in item
+                },
+                # Keep the score schema stable while sourcing latency from the
+                # same engine boundary as native evidence.
+                "ttft_ns": item.get("engine_ttft_ns") if item.get("engine_ttft_ns") is not None else item.get("ttft_ns"),
+                "tpot_ns": item.get("engine_tpot_ns") if item.get("engine_tpot_ns") is not None else item.get("tpot_ns"),
+                "e2e_ns": item.get("engine_e2e_ns") if item.get("engine_e2e_ns") is not None else item.get("e2e_ns"),
             }
             for request_id, item in requests.items()
             if isinstance(item, Mapping)

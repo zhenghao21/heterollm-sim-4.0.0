@@ -248,6 +248,26 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(score["candidate_dimensions"], ["scheduler", "mapping"])
         self.assertTrue(score["input_fingerprint"])
 
+    def test_continuous_request_details_use_native_engine_boundary(self):
+        payload = self.reference_payload()
+        payload["workload"]["metadata"]["llama_cpp_runtime"] = {
+            "engine_boundary": True,
+        }
+        scenario = scenario_from_dict(payload)
+        report = report_dict(run_scenario(scenario))
+
+        self.assertEqual(report["execution_mode"], "continuous_batching")
+        request = report["requests"]["request-0000"]
+        self.assertIsNotNone(request["engine_request_begin_ns"])
+        self.assertEqual(request["ttft_ns"], request["engine_ttft_ns"])
+        self.assertEqual(request["tpot_ns"], request["engine_tpot_ns"])
+        self.assertEqual(request["e2e_ns"], request["engine_e2e_ns"])
+        self.assertNotEqual(request["arrival_ttft_ns"], request["ttft_ns"])
+        self.assertEqual(
+            report["summary"]["ttft_ns"]["p50"],
+            report["summary"]["engine_ttft_ns"]["p50"],
+        )
+
     def test_direct_simulation_score_evaluates_scheduler_and_mapping_differences(self):
         """Candidate policy changes remain score dimensions, not rejection gates."""
         scenario = build_reference_scenario()
