@@ -162,13 +162,13 @@ test("Results dynamic renderers emit complete English UI copy and preserve raw v
     runtime.dom.requestResultBody.innerHTML,
   ].join("\n");
   assert.doesNotMatch(english, CJK);
-  assert.match(english, /Logical 32 KiB \/ Physical 32 KiB/u);
+  assert.match(english, /Logical 32\.77 KB \/ Physical 32\.77 KB/u);
   assert.match(english, /Not explicitly modeled \(policy metadata only\)/u);
   assert.match(english, /backend-raw-reason/u);
 
   setLanguage(runtime, "zh-CN");
   runtime.renderRuntime(report);
-  assert.match(runtime.dom.runtimeSummary.innerHTML, /逻辑 32 KiB \/ 物理 32 KiB/u);
+  assert.match(runtime.dom.runtimeSummary.innerHTML, /逻辑 32\.77 KB \/ 物理 32\.77 KB/u);
 });
 
 test("playback and time-series helpers use complete bilingual phrases", () => {

@@ -165,6 +165,20 @@ class ArchitectureScanTests(unittest.TestCase):
         )
         self.assertNotEqual(cim.kernel_launch_ns, 999.0)
 
+    def test_gpu_memory_bandwidth_comes_from_explicit_memory_links(self):
+        scenario = build_reference_scenario()
+        gpu = next(component for component in scenario.hardware.components if component.component_id == "gpu0")
+        baseline = architecture_scan._gpu_memory_bandwidth_gb_s(scenario, gpu)
+        inflated_gpu = replace(gpu, read_bandwidth_gbps=999_999.0, write_bandwidth_gbps=999_999.0)
+        scenario = replace(
+            scenario,
+            hardware=replace(
+                scenario.hardware,
+                components=tuple(inflated_gpu if item.component_id == "gpu0" else item for item in scenario.hardware.components),
+            ),
+        )
+        self.assertEqual(architecture_scan._gpu_memory_bandwidth_gb_s(scenario, inflated_gpu), baseline)
+
     def test_invalid_public_options_fail_with_chinese_diagnostics(self):
         scenario = build_reference_scenario()
         with self.assertRaisesRegex(ValueError, "top_n"):

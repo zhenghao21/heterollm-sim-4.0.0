@@ -21,6 +21,7 @@ from .ir import (
     HardwareSpec,
     LinkSpec,
 )
+from .memory_service import realtime_memory_metrics
 
 
 def _non_negative_integer(value: object, name: str) -> int:
@@ -896,6 +897,24 @@ class TopologyRouter:
             0.0,
             component.component_id,
         )
+        if service_model == "overlapped":
+            bottleneck = "latency" if latency_ns > bandwidth_ns else "bandwidth"
+            if latency_ns == bandwidth_ns:
+                bottleneck = "bandwidth_and_latency"
+        else:
+            bottleneck = "serialized_bandwidth_and_latency"
+        throughput_metrics = realtime_memory_metrics(
+            byte_count,
+            service_ns,
+            physical_bytes=transferred_bytes,
+            # Component fields are Gbit/s; the shared helper reports GB/s.
+            bandwidth_ceiling_gb_s=bandwidth / 8.0,
+            queue_wait_ns=max(0.0, latency_ns * (latency_batches - 1)),
+            request_window_utilization=min(
+                1.0, transaction_count / float(max_outstanding)
+            ) if transaction_count else 0.0,
+            bottleneck=bottleneck,
+        )
         return TransferPhase(
             name="{}.{}.{}".format(name, component.component_id, direction),
             demands=(
@@ -921,6 +940,7 @@ class TopologyRouter:
                 "memory_service_model": service_model,
                 "bandwidth_service_ns": bandwidth_ns,
                 "latency_service_ns": latency_ns,
+                **throughput_metrics,
                 "timing_evidence": "ANALYTICAL",
             },
         )

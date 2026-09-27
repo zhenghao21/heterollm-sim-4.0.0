@@ -404,7 +404,7 @@ test("architecture component details render physical counts, per-unit capacity, 
     compatibility: { loadable: true },
   });
   assert.match(markup, /5 × HBM 堆栈/);
-  assert.match(markup, /每物理单元容量：16 GiB（仿真组件总容量 ÷ 5）/);
+  assert.match(markup, /每物理单元容量：17\.18 GB（仿真组件总容量 ÷ 5）/);
   assert.match(markup, /数量依据：厂商文档明确有效堆栈数/);
   assert.match(markup, /来源与推导/);
   assert.match(markup, /测量依据（Measurement Basis）: 厂商整卡可见容量/);
@@ -449,11 +449,11 @@ test("physical HBM nodes disclose stable unit metadata and cross-check flat-grou
   });
   assert.match(markup, /当前仿真节点对应一颗物理单元/);
   assert.match(markup, /产品内第 1 \/ 2 颗/);
-  assert.match(markup, /每物理单元容量：16 GiB/);
+  assert.match(markup, /每物理单元容量：17\.18 GB/);
   assert.match(markup, /当前分组含 2 个 HBM 物理组件，与产品单元总数一致/);
   assert.match(markup, /单元数量状态（Unit Count Status）: 厂商文档明确堆栈数/);
   assert.match(markup, /单元数量公式（Unit Count Formula）: vendor-documented product stack count = 2/);
-  assert.match(markup, /产品总容量（Product Total Capacity, B\/KiB…PiB）: 32 GiB/);
+  assert.match(markup, /产品总容量（Product Total Capacity, B\/KB…PB）: 34\.36 GB/);
   assert.match(markup, /无精确的单颗堆栈组件预设/);
   assert.match(markup, /数值状态（Value Status）: 按物理堆栈推导/);
 });

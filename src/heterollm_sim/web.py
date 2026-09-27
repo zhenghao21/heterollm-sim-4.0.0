@@ -20,7 +20,10 @@ from .architecture_presets import (
     architecture_preset_page,
 )
 from .architecture_scan import scan_architecture_candidates
-from .component_presets import component_preset_detail, component_preset_page
+from .component_presets import (
+    ComponentPresetCatalog,
+    ComponentPresetMutationError,
+)
 from .compiler_ir import compile_canonical_scenario
 from .config import ScenarioConfig, scenario_from_dict
 from .contracts import (
@@ -33,7 +36,7 @@ from .control_plane_state import mapping_fingerprint_status
 from .model_catalog import CatalogError, HuggingFaceClient, ModelCatalog
 from .planner import validate_scenario
 from .protocol_presets import protocol_preset_detail, protocol_preset_page
-from .reference import build_reference_scenario
+from .reference import build_llama_default_scenario, build_reference_scenario
 from .reporting import compare_with_gpu_baseline, report_dict, run_scenario
 from .run_estimation import estimate_scenario
 from .run_jobs import RunJobCapacityError, RunJobManager, RunJobTraceError
@@ -44,6 +47,7 @@ from .runtime_diagnostics import (
 )
 from .serde import canonical_json, stable_hash, to_primitive
 from .topology import ValidationIssue, validate_topology
+from .workload_presets import workload_preset_detail, workload_preset_page
 
 
 # Explicit placement/control-plane metadata can legitimately exceed the old
@@ -93,7 +97,42 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(200, health_payload(__version__))
                 return
             if path == "/api/reference":
-                self._send_json(200, scenario_to_payload(build_reference_scenario()))
+                self._send_json(200, scenario_to_payload(build_llama_default_scenario()))
+                return
+            if path == "/api/workload-presets":
+                params = parse_qs(split.query, keep_blank_values=True)
+                unknown_keys = sorted(set(params) - {"query"})
+                if unknown_keys:
+                    raise HttpError(
+                        400,
+                        "unknown_query_fields",
+                        "负载预设查询包含未知字段：{}".format(", ".join(unknown_keys)),
+                        message_en="workload-preset query contains unknown fields: {}".format(", ".join(unknown_keys)),
+                    )
+                self._send_json(
+                    200,
+                    workload_preset_page(query=_query_value(params, "query") or ""),
+                )
+                return
+            if path.startswith("/api/workload-presets/"):
+                preset_id = unquote(path[len("/api/workload-presets/") :]).strip("/")
+                if not preset_id or "/" in preset_id:
+                    raise HttpError(
+                        404,
+                        "not_found",
+                        "未找到指定的负载预设",
+                        message_en="unknown workload preset",
+                    )
+                try:
+                    detail = workload_preset_detail(preset_id)
+                except KeyError as exc:
+                    raise HttpError(
+                        404,
+                        "not_found",
+                        "未找到指定的负载预设",
+                        message_en="unknown workload preset",
+                    ) from exc
+                self._send_json(200, detail)
                 return
             if path == "/api/model-presets":
                 params = parse_qs(split.query, keep_blank_values=True)
@@ -171,7 +210,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(
                     200,
-                    component_preset_page(
+                    self._component_catalog().page(
                         query=_query_value(params, "query") or "",
                         family=_query_value(params, "family") or "",
                         component_kind=component_kind,
@@ -183,7 +222,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             if path.startswith("/api/component-presets/"):
                 preset_id = unquote(path[len("/api/component-presets/") :])
                 try:
-                    detail = component_preset_detail(preset_id)
+                    detail = self._component_catalog().detail(preset_id)
                 except KeyError as exc:
                     raise HttpError(
                         404,
@@ -235,7 +274,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                         message_en="unknown architecture topology preset",
                     )
                 try:
-                    detail = architecture_preset_detail(preset_id)
+                    detail = architecture_preset_detail(preset_id, component_catalog=self._component_catalog())
                 except KeyError as exc:
                     raise HttpError(
                         404,
@@ -490,17 +529,23 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(200, detail)
                 return
+            if path == "/api/component-presets":
+                detail = self._component_catalog().create(self._read_json_object())
+                self._send_json(201, detail)
+                return
             if (
                 path
                 in {
                     "/api/health",
                     "/api/reference",
+                    "/api/workload-presets",
                     "/api/model-presets",
                     "/api/component-presets",
                     "/api/architecture-presets",
                     "/api/protocol-presets",
                 }
                 or path.startswith("/api/model-presets/")
+                or path.startswith("/api/workload-presets/")
                 or path.startswith("/api/component-presets/")
                 or path.startswith("/api/architecture-presets/")
                 or path.startswith("/api/protocol-presets/")
@@ -516,6 +561,8 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             raise HttpError(404, "not_found", "未知端点", message_en="unknown endpoint")
         except HttpError as exc:
             self._send_error(exc)
+        except ComponentPresetMutationError as exc:
+            self._send_error(HttpError(exc.status, exc.code, str(exc), message_en=str(exc)))
         except CatalogError as exc:
             self._send_error(
                 HttpError(
@@ -534,6 +581,51 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                     message_en=None if re.search(r"[\u3400-\u9fff]", str(exc)) else str(exc),
                 )
             )
+        except Exception as exc:
+            self._send_unexpected_error(exc)
+
+    def do_PUT(self) -> None:  # noqa: N802 - stdlib API name
+        """Update one component preset in the process-local overlay."""
+
+        path = urlsplit(self.path).path
+        try:
+            self._require_same_origin()
+            prefix = "/api/component-presets/"
+            preset_id = unquote(path[len(prefix):]).strip("/") if path.startswith(prefix) else ""
+            if not preset_id or "/" in preset_id:
+                raise HttpError(404, "not_found", "未找到指定的组件预设", message_en="unknown component preset")
+            self._send_json(200, self._component_catalog().update(preset_id, self._read_json_object()))
+        except HttpError as exc:
+            self._send_error(exc)
+        except ComponentPresetMutationError as exc:
+            self._send_error(HttpError(exc.status, exc.code, str(exc), message_en=str(exc)))
+        except KeyError:
+            self._send_error(HttpError(404, "not_found", "未找到指定的组件预设", message_en="unknown component preset"))
+        except (OSError, ValueError, TypeError) as exc:
+            self._send_error(HttpError(400, "invalid_component_preset", str(exc), message_en=str(exc)))
+        except Exception as exc:
+            self._send_unexpected_error(exc)
+
+    def do_DELETE(self) -> None:  # noqa: N802 - stdlib API name
+        """Hide one component preset in the process-local overlay."""
+
+        path = urlsplit(self.path).path
+        try:
+            self._require_same_origin()
+            prefix = "/api/component-presets/"
+            preset_id = unquote(path[len(prefix):]).strip("/") if path.startswith(prefix) else ""
+            if not preset_id or "/" in preset_id:
+                raise HttpError(404, "not_found", "未找到指定的组件预设", message_en="unknown component preset")
+            self._component_catalog().delete(preset_id)
+            self._send_json(200, {"deleted": preset_id, "catalog": {"version": "runtime"}})
+        except HttpError as exc:
+            self._send_error(exc)
+        except ComponentPresetMutationError as exc:
+            self._send_error(HttpError(exc.status, exc.code, str(exc), message_en=str(exc)))
+        except KeyError:
+            self._send_error(HttpError(404, "not_found", "未找到指定的组件预设", message_en="unknown component preset"))
+        except (OSError, ValueError, TypeError) as exc:
+            self._send_error(HttpError(400, "invalid_component_preset", str(exc), message_en=str(exc)))
         except Exception as exc:
             self._send_unexpected_error(exc)
 
@@ -633,6 +725,12 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
         catalog = getattr(self.server, "model_catalog", None)
         if not isinstance(catalog, ModelCatalog):
             raise HttpError(500, "catalog_unavailable", "模型目录当前不可用", message_en="model catalog is unavailable")
+        return catalog
+
+    def _component_catalog(self) -> ComponentPresetCatalog:
+        catalog = getattr(self.server, "component_preset_catalog", None)
+        if not isinstance(catalog, ComponentPresetCatalog):
+            raise HttpError(500, "catalog_unavailable", "硬件预设目录当前不可用", message_en="component preset catalog is unavailable")
         return catalog
 
     def _run_job_manager(self) -> RunJobManager:
@@ -1419,6 +1517,7 @@ def build_server(
     port: int = 8765,
     *,
     catalog_cache_dir: Optional[Any] = None,
+    component_preset_cache_dir: Optional[Any] = None,
     hf_client: Optional[HuggingFaceClient] = None,
     model_catalog: Optional[ModelCatalog] = None,
     diagnostic_log_path: Optional[Any] = None,
@@ -1429,6 +1528,7 @@ def build_server(
         catalog_cache_dir,
         hf_client=hf_client,
     )
+    server.component_preset_catalog = ComponentPresetCatalog(component_preset_cache_dir)  # type: ignore[attr-defined]
     server.diagnostic_log_path = diagnostic_log_path  # type: ignore[attr-defined]
     server.run_job_manager = run_job_manager or RunJobManager(  # type: ignore[attr-defined]
         max_workers=2,

@@ -242,7 +242,7 @@ if (!Number.isFinite(baseline) || !Number.isFinite(recoveredCycles)
             'uiText("缓存组件", "Cache Component")',
             "首 Token 延迟（TTFT）",
             "读取延迟（Read Latency, ns）",
-            "传输粒度（Transfer Granularity, B/KiB…PiB）",
+            "传输粒度（Transfer Granularity, B/KB…PB）",
             "DMA 延迟（DMA Latency, ns）",
             "请求 ID（Request ID）",
             "目标端点（Target）",

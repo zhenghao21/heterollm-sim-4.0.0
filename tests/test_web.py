@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from heterollm_sim import __version__
-from heterollm_sim.reference import build_reference_scenario
+from heterollm_sim.reference import build_llama_default_scenario, build_reference_scenario
 from heterollm_sim.config import scenario_from_dict
 from heterollm_sim.reporting import report_dict, run_scenario
 from heterollm_sim.schema_v1 import CanonicalScenario
@@ -127,7 +127,7 @@ class WebApiTests(unittest.TestCase):
             terminal = StringIO()
             try:
                 with patch(
-                    "heterollm_sim.web.build_reference_scenario",
+                    "heterollm_sim.web.build_llama_default_scenario",
                     side_effect=RuntimeError("secret D:/private/runtime-path"),
                 ), redirect_stderr(terminal):
                     status, _, payload = self.json_request("GET", "/api/reference")
@@ -155,7 +155,7 @@ class WebApiTests(unittest.TestCase):
         status, _, payload = self.json_request("GET", "/api/reference")
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["name"], build_reference_scenario().name)
+        self.assertEqual(payload["name"], build_llama_default_scenario().name)
         self.assertEqual(len(payload["hardware"]["components"]), 12)
         parsed = scenario_from_dict(payload)
         reference = build_reference_scenario()

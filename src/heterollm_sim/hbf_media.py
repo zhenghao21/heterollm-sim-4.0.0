@@ -3,6 +3,8 @@ import math
 from numbers import Real
 from collections.abc import Mapping
 
+from .memory_service import realtime_memory_metrics
+
 _REQ = {"version", "host_transaction_bytes", "host_max_request_bytes", "media_page_bytes", "command_queue_depth", "media_parallelism", "page_read_latency_ns", "page_program_latency_ns", "access_pattern"}
 _ALLOWED = _REQ | {"physical_planes"}
 _PATTERNS = {"contiguous_page_aligned", "unknown_alignment_conservative"}
@@ -108,6 +110,51 @@ def hbf_media_service(component, byte_count, read: bool) -> dict:
     write_energy = physical_write * write_energy_rate
     energy = read_energy + write_energy
 
+    if media_ns > host_ns:
+        bottleneck = "media"
+    elif host_ns > media_ns:
+        bottleneck = "host_endpoint"
+    elif media_ns or host_ns:
+        bottleneck = "host_and_media"
+    else:
+        bottleneck = "none"
+    overall_metrics = realtime_memory_metrics(
+        byte_count,
+        media_ns + host_ns,
+        physical_bytes=physical_read + physical_write,
+        bandwidth_ceiling_gb_s=(
+            host_bytes / host_ns if host_ns > 0 else 0.0
+        ),
+        request_window_utilization=(
+            min(1.0, host_command_count / float(c["command_queue_depth"]))
+            if host_command_count else 0.0
+        ),
+        bottleneck=bottleneck,
+    )
+    host_metrics = realtime_memory_metrics(
+        host_bytes,
+        host_ns,
+        physical_bytes=host_bytes,
+        bandwidth_ceiling_gb_s=(host_bytes / host_ns if host_ns > 0 else 0.0),
+        request_window_utilization=(
+            min(1.0, host_command_count / float(c["command_queue_depth"]))
+            if host_command_count else 0.0
+        ),
+        bottleneck="host_endpoint" if host_ns else "none",
+    )
+    media_metrics = realtime_memory_metrics(
+        byte_count,
+        media_ns,
+        physical_bytes=physical_read + physical_write,
+        # Component fields are Gbit/s; the shared helper reports GB/s.
+        bandwidth_ceiling_gb_s=(rbw if read else wbw) / 8.0,
+        request_window_utilization=(
+            min(1.0, media_command_count / float(parallel))
+            if media_command_count else 0.0
+        ),
+        bottleneck="media" if media_ns else "none",
+    )
+
     return {
         "version": "cold_page_v1",
         "host_transaction_bytes": 64,
@@ -136,6 +183,13 @@ def hbf_media_service(component, byte_count, read: bool) -> dict:
         "host_service_ns": host_ns,
         # Deliberately serialized: no cache, GC, or early-ack overlap is assumed.
         "service_ns": media_ns + host_ns,
+        **overall_metrics,
+        "host_realtime_throughput_gb_s": host_metrics["realtime_throughput_gb_s"],
+        "host_bandwidth_ceiling_gb_s": host_metrics["bandwidth_ceiling_gb_s"],
+        "host_bandwidth_utilization": host_metrics["bandwidth_utilization"],
+        "media_realtime_throughput_gb_s": media_metrics["physical_realtime_throughput_gb_s"],
+        "media_bandwidth_utilization": media_metrics["bandwidth_utilization"],
+        "media_bandwidth_ceiling_gb_s": media_metrics["bandwidth_ceiling_gb_s"],
         "read_energy_pj": read_energy,
         "write_energy_pj": write_energy,
         "energy_pj": energy,

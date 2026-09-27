@@ -38,7 +38,7 @@ test("1.9 concept help is structured, bilingual, and covers explicit latency and
   }
   assert.match(app, /function metadataField\([^)]*helpKey = ""/);
   assert.match(app, /metadataField\("读取延迟（Read Latency, ns）"[\s\S]*?helpKey: "read_latency"/);
-  assert.match(app, /quantityField\("传输粒度（Transfer Granularity, B\/KiB…PiB）"[\s\S]*?helpKey: "transfer_granularity"/);
+  assert.match(app, /quantityField\("传输粒度（Transfer Granularity, B\/KB…PB）"[\s\S]*?helpKey: "transfer_granularity"/);
   assert.match(app, /data-concept-help="kv_residency_policy"/);
   assert.match(app, /data-concept-help="model_weights_backing"/);
 });

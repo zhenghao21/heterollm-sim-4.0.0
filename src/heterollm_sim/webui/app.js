@@ -119,6 +119,128 @@ const RUN_PROGRESS_MESSAGE_TEXT = Object.freeze({
 });
 const EFFECTIVE_MAPPING_PAGE_SIZE = 6;
 
+// Workload shapes are planning presets, not measured performance claims. The
+// application rows are condensed from 35_llm_deployment_audit's v6.2 typical
+// workload table; the llama baseline uses the local typed runtime defaults.
+const WORKLOAD_PRESET_SOURCE = "35_llm_deployment_audit/48场景典型负载与速度要求_v6.2.json";
+const WORKLOAD_PRESETS = Object.freeze([
+  Object.freeze({
+    id: "llama_cpp_default",
+    label: ["llama.cpp 对齐基线", "llama.cpp aligned baseline"],
+    description: ["单请求 512 输入 / 128 输出；continuous、B=1、无抢占、无 MTP。", "One request with 512 input / 128 output; continuous, B=1, no preemption, no MTP."],
+    source: "llama.cpp runtime config defaults + explicit smoke shape",
+    sourceId: "llama-default",
+    promptTokens: 512,
+    outputTokens: 128,
+    batch: 1,
+    batchTokens: 512,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "personal_assistant",
+    label: ["个人 AI 助手（C01）", "Personal AI assistant (C01)"],
+    description: ["长会话、检索与工具调用：4,096 输入 / 1,024 输出 / B=12。", "Long conversation with retrieval and tools: 4,096 input / 1,024 output / B=12."],
+    sourceId: "C01",
+    promptTokens: 4096,
+    outputTokens: 1024,
+    batch: 12,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "enterprise_office",
+    label: ["企业 AI 办公（C02）", "Enterprise AI office (C02)"],
+    description: ["长文档与多租户办公：16,384 输入 / 2,048 输出 / B=8。", "Long documents and multi-tenant office work: 16,384 input / 2,048 output / B=8."],
+    sourceId: "C02",
+    promptTokens: 16384,
+    outputTokens: 2048,
+    batch: 8,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "customer_service",
+    label: ["智能客服（C03）", "Customer service (C03)"],
+    description: ["知识库问答与工单转接：2,048 输入 / 256 输出 / B=16。", "Knowledge-base Q&A and ticket handoff: 2,048 input / 256 output / B=16."],
+    sourceId: "C03",
+    promptTokens: 2048,
+    outputTokens: 256,
+    batch: 16,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "education",
+    label: ["AI 教育（C04）", "AI education (C04)"],
+    description: ["课程材料、习题与讲解：8,192 输入 / 1,536 输出 / B=8。", "Course material, exercises, and explanations: 8,192 input / 1,536 output / B=8."],
+    sourceId: "C04",
+    promptTokens: 8192,
+    outputTokens: 1536,
+    batch: 8,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "content_creation",
+    label: ["AI 内容创作（C05）", "AI content creation (C05)"],
+    description: ["长篇创作与多媒体脚本：3,072 输入 / 8,192 输出 / B=16。", "Long-form creation and multimedia scripts: 3,072 input / 8,192 output / B=16."],
+    sourceId: "C05",
+    promptTokens: 3072,
+    outputTokens: 8192,
+    batch: 16,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "software_development",
+    label: ["AI 软件开发（C06）", "AI software development (C06)"],
+    description: ["代码库理解、补全与验证：默认模型安全截面 24,576 输入 / 4,096 输出 / B=16。", "Codebase understanding, completion, and verification: a safe 24,576 input / 4,096 output / B=16 slice for the default model."],
+    sourceId: "C06",
+    promptTokens: 24576,
+    outputTokens: 4096,
+    batch: 16,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "search_platform",
+    label: ["AI 搜索平台（C07）", "AI search platform (C07)"],
+    description: ["网页与企业资料聚合检索：12,288 输入 / 768 输出 / B=12。", "Web and enterprise-document retrieval: 12,288 input / 768 output / B=12."],
+    sourceId: "C07",
+    promptTokens: 12288,
+    outputTokens: 768,
+    batch: 12,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "conversational_commerce",
+    label: ["对话式电商（C09）", "Conversational commerce (C09)"],
+    description: ["商品比较、推荐与订单确认：3,584 输入 / 512 输出 / B=16。", "Product comparison, recommendations, and order confirmation: 3,584 input / 512 output / B=16."],
+    sourceId: "C09",
+    promptTokens: 3584,
+    outputTokens: 512,
+    batch: 16,
+    batchTokens: 2048,
+    prefillChunkTokens: 512,
+  }),
+  Object.freeze({
+    id: "edge_personal_assistant",
+    label: ["端侧个人助手（T01）", "Edge personal assistant (T01)"],
+    description: ["手机语音、日程与本地资料：1,024 输入 / 512 输出 / B=1。", "Mobile voice, calendar, and local documents: 1,024 input / 512 output / B=1."],
+    sourceId: "T01",
+    promptTokens: 1024,
+    outputTokens: 512,
+    batch: 1,
+    batchTokens: 512,
+    prefillChunkTokens: 512,
+  }),
+]);
+// The bundled catalog keeps the editor usable while the local API is starting
+// or when an older server is serving this static bundle.  bootstrap() refreshes
+// it from GET /api/workload-presets when the endpoint is available.
+let workloadPresetCatalog = WORKLOAD_PRESETS;
+
 function uiText(zh, en, parameters = {}) {
   if (globalThis.UiI18n?.pair) return globalThis.UiI18n.pair(zh, en, parameters);
   return String(zh ?? "").replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => (
@@ -235,7 +357,7 @@ const CONCEPT_HELP_ZH = Object.freeze({
   backing_component: "后备存储组件是内部控制平面为 cold_stream_per_use 权重物化的实际来源组件；尚未物化时只显示未指定。",
   model_weight_capacity: "模型权重容量展示控制平面为 Rank 分片物化的逻辑或物理字节数；它用于解释当前容量证据，不等同于活动 HBM 权重占用。",
   weights_resident: "Weights Resident 明确权重生命周期：勾选为 preloaded_resident（运行前预加载到活动 HBM/CIM，运行图无 HBF/SSD 后备读取）；取消为 cold_stream_per_use（每个物理 Rank 每次静态 RHS GEMM 从已解析后备流式读取一次，不按 batch、Token 或 MTP 候选重复）。",
-  capacity: "容量支持 B、KiB、MiB、GiB、TiB、PiB；界面使用二进制容量单位，场景 JSON 保留精确字节数。",
+  capacity: "容量支持 B、KB、MB、GB、TB、PB；界面使用十进制容量单位，场景 JSON 保留精确字节数。",
   // In V4, each cost-bearing component binds a Profile registry entry.
   peak_ops: "峰值运算率是组件级分析与报告镜像，并非实测应用吞吐。CPU 执行以 cost_profile_id 绑定的 profiles.components.cpu Profile 为权威；fabric 与 I/O die 不执行算子。",
   gemm_throughput: "GEMM 吞吐是矩阵乘法 [M,K]×[K,N]→[M,N] 的分类计算能力；GPU/CPU 均从当前组件绑定的成本 Profile 推导。",
@@ -487,7 +609,7 @@ const CONCEPT_HELP_EN = Object.freeze({
   backing_component: "The Backing Component is the source materialized by the internal control plane for cold_stream_per_use weights; an unmaterialized decision is shown as Unspecified.",
   model_weight_capacity: "Model Weight Capacity shows logical or physical bytes materialized for Rank shards by the control plane; it explains current capacity evidence and is not active-HBM weight occupancy.",
   weights_resident: "Weights Resident fixes the weight lifecycle: checked means preloaded_resident (weights are loaded into active HBM/CIM before execution and the run graph has no HBF/SSD backing reads); unchecked means cold_stream_per_use (each physical Rank reads once from the resolved backing for each static RHS GEMM use, without multiplying by batch items, Tokens, or MTP candidate Tokens).",
-  capacity: "Capacity accepts B, KiB, MiB, GiB, TiB, and PiB. The UI uses binary units while scenario JSON preserves exact bytes.",
+  capacity: "Capacity accepts B, KB, MB, GB, TB, and PB. The UI uses decimal units while scenario JSON preserves exact bytes.",
   peak_ops: "Peak operations rate is a component-level analytical and reporting mirror, not measured application throughput. CPU execution is authoritative in the Profile selected by cost_profile_id; fabric and I/O dies do not execute operators.",
   gemm_throughput: "GEMM throughput is the categorized compute rate for matrix multiplication [M,K]×[K,N]→[M,N], derived from the target GPU or CPU component's bound cost Profile.",
   elementwise_throughput: "Element-wise throughput (GOP/s) is the categorized compute rate for activation, gating, and other non-matrix-multiply work; GPU and CPU keep it independent from GEMM throughput.",
@@ -723,14 +845,14 @@ const CONCEPT_HELP_DETAIL_PROFILES = Object.freeze({
     "zh-CN": Object.freeze([
       "硬件与协议字段进入容量、算力和可达路径约束；模拟器只使用当前组件、端口、链路与证据中显式声明的值。",
       "可编辑检查器接受组件能力、协议版本、lane、载荷、延迟与带宽；标准名和预设说明是只读，预设应用仍需确认或校验。",
-      "容量使用 B/KiB…PiB，带宽显示 MB/s、GB/s、TB/s，时延使用 ns，运算率使用 OPS/s；0、空值与 auto 仅在对应控件明确允许时有效。",
+      "容量使用 B/KB…PB，带宽显示 MB/s、GB/s、TB/s，时延使用 ns，运算率使用 OPS/s；0、空值与 auto 仅在对应控件明确允许时有效。",
       "修改能力或互连参数会使映射过期，并可改变容量门禁、路由、传输时间、瓶颈和能耗估算。",
       "不建模未声明的缓存、队列或协议效率。例如端口峰值不会自动成为端到端应用吞吐。",
     ]),
     en: Object.freeze([
       "Hardware and protocol fields feed capacity, compute, and reachability constraints; the simulator uses only values explicitly declared by current components, ports, links, and evidence.",
       "Editable inspectors accept component capabilities, protocol version, lanes, payload, latency, and bandwidth. Standard names and preset notes are read-only, and applying a preset still requires confirmation or validation.",
-      "Capacity uses B/KiB through PiB, bandwidth uses MB/s, GB/s, or TB/s, latency uses ns, and compute rate uses OPS/s. Zero, empty, and auto are valid only where the control explicitly allows them.",
+      "Capacity uses B/KB through PB, bandwidth uses MB/s, GB/s, or TB/s, latency uses ns, and compute rate uses OPS/s. Zero, empty, and auto are valid only where the control explicitly allows them.",
       "Changing capability or interconnect values invalidates placement and can alter capacity gates, routes, transfer time, bottlenecks, and energy estimates.",
       "Undeclared caches, queues, and protocol efficiency are not modeled. For example, port peak rate does not automatically become end-to-end application throughput.",
     ]),
@@ -826,16 +948,16 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: hardware CPU components and their cost_profile_id-bound profiles.components.cpu entries.|Configure categorized GEMM, element-wise, reduction, efficiency, and cache costs.|Units are stated on each field.|It can host eligible operators and participate in roofline cost.|A CPU never inherits a GPU Profile, and fabric/I/O dies do not become executors.",
   ),
   link_bandwidth: conceptHelp220Detail(
-    "来源是当前物理链路的 bandwidth_gbps。｜填写指定方向的正有限传输上限。｜场景边界为 Gbps，界面按 MB/s–TB/s 显示。｜它限制经过该 hop 的传输时间与利用率。｜它不是组件介质带宽、端口峰值或应用吞吐。",
-    "Source: bandwidth_gbps on the current physical link.|Enter a positive finite transfer ceiling for the stated direction.|Scenario boundary: Gbps; UI: MB/s through TB/s.|It limits transfer time and utilization on that hop.|It is not media bandwidth, port peak, or application throughput.",
+    "来源是当前物理链路的 bandwidth_gbps。｜填写指定方向的正有限传输上限。｜场景边界为 Gb/s，界面按 MB/s–TB/s 显示。｜它限制经过该 hop 的传输时间与利用率。｜它不是组件介质带宽、端口峰值或应用吞吐。",
+    "Source: bandwidth_gbps on the current physical link.|Enter a positive finite transfer ceiling for the stated direction.|Scenario boundary: Gb/s; UI: MB/s through TB/s.|It limits transfer time and utilization on that hop.|It is not media bandwidth, port peak, or application throughput.",
   ),
   operator_targets: conceptHelp220Detail(
     "来源是内部控制平面的 operator rank mapping。｜显示算子组、逻辑 Rank 与目标执行组件，只读。｜数量按算子组和 Rank 计，不使用字节单位。｜映射或并行度变化会重建这些行。｜它不描述权重的字节分片；同一算子可有多个目标。",
     "Source: the internal control plane's operator Rank mapping.|Displays operator group, logical Rank, and execution component; read-only.|Counts operator groups and Ranks, with no byte unit.|Placement or parallel-degree changes rebuild these rows.|It does not describe weight-byte shards; one operator may have several targets.",
   ),
   weight_tensor_shards: conceptHelp220Detail(
-    "来源是内部控制平面的 weight tensor shard ledger。｜显示张量键、Rank、组件与分片范围，只读。｜容量按 B/KiB…PiB 解释，Rank 为非负整数。｜分片变化会改变逐组件权重容量与可执行性。｜它不代表算子执行位置；复制权重与切分权重必须区分。",
-    "Source: the internal control plane's weight-tensor shard ledger.|Displays tensor key, Rank, component, and shard range; read-only.|Capacity uses B/KiB through PiB and Rank is a non-negative integer.|Shard changes alter per-component weight capacity and executability.|It is not operator execution placement; replicated and partitioned weights must remain distinct.",
+    "来源是内部控制平面的 weight tensor shard ledger。｜显示张量键、Rank、组件与分片范围，只读。｜容量按 B/KB…PB 解释，Rank 为非负整数。｜分片变化会改变逐组件权重容量与可执行性。｜它不代表算子执行位置；复制权重与切分权重必须区分。",
+    "Source: the internal control plane's weight-tensor shard ledger.|Displays tensor key, Rank, component, and shard range; read-only.|Capacity uses B/KB through PB and Rank is a non-negative integer.|Shard changes alter per-component weight capacity and executability.|It is not operator execution placement; replicated and partitioned weights must remain distinct.",
   ),
   tp_degree: conceptHelp220Detail(
     "来源是 placement.parallel.tp_degree，报告可镜像实际值。｜填写大于等于 1 的整数。｜单位是逻辑 TP Rank 数，无时间单位。｜增大它会增加张量分片与集合通信范围。｜TP Degree 不是 TPOT；例如 4 表示四路张量并行。",
@@ -878,8 +1000,8 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: storage_component_id in placement.metadata.control_plane.decision.rank_weight_shards.|Read-only view of the source component materialized by the internal control plane for cold_stream_per_use weights; an unmaterialized decision is shown as Unspecified.|Value: component ID, with no numeric unit.|It is a runtime decision from the current model, hardware, and parallel constraints, not a client placement input.|Several Ranks may share one backing component, but each shard still records its own capacity and source.",
   ),
   model_weight_capacity: conceptHelp220Detail(
-    "来源是 placement.metadata.control_plane.decision.rank_weight_shards 的 physical_bytes / logical_bytes。｜只读显示内部控制平面为 Rank 分片物化的容量证据。｜单位支持 B/KiB…PiB。｜它用于解释当前 cold 权重分片容量，不可直接写入场景，也不等于活动 HBM/CIM 中的权重占用。｜容量证据不会反向创建客户端放置字段。",
-    "Source: physical_bytes / logical_bytes in placement.metadata.control_plane.decision.rank_weight_shards.|Read-only capacity evidence materialized for Rank shards by the internal control plane.|Units: B/KiB through PiB.|It explains current cold-weight shard capacity, cannot be written directly to the scenario, and is not weight occupancy in active HBM/CIM.|Capacity evidence never writes back into client-authored placement fields.",
+    "来源是 placement.metadata.control_plane.decision.rank_weight_shards 的 physical_bytes / logical_bytes。｜只读显示内部控制平面为 Rank 分片物化的容量证据。｜单位支持 B/KB…PB。｜它用于解释当前 cold 权重分片容量，不可直接写入场景，也不等于活动 HBM/CIM 中的权重占用。｜容量证据不会反向创建客户端放置字段。",
+    "Source: physical_bytes / logical_bytes in placement.metadata.control_plane.decision.rank_weight_shards.|Read-only capacity evidence materialized for Rank shards by the internal control plane.|Units: B/KB through PB.|It explains current cold-weight shard capacity, cannot be written directly to the scenario, and is not weight occupancy in active HBM/CIM.|Capacity evidence never writes back into client-authored placement fields.",
   ),
   explicit_requests: conceptHelp220Detail(
     "来源是 workload.requests 数组。｜逐行填写请求 ID、到达、Token、优先级与截止时间。｜时间为 ns，Token 为非负整数。｜只要数组非空，它就覆盖合成请求生成。｜删除全部显式行后才会回退到有效 synthetic workload。",
@@ -922,8 +1044,8 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: report parallel, scheduler, kv_cache, mtp, and goodput objects.|Read-only grouped runtime statistics.|Each item retains events, Tokens, bytes, ns, or rate units.|It juxtaposes configuration outcomes with actual scheduling behavior.|Missing fields show NA or — and are never inferred from neighbors.",
   ),
   kv_traffic_summary: conceptHelp220Detail(
-    "来源是 report.kv_cache 的 Prefill/Decode logical 与 physical byte 字段。｜只读汇总四类读写流量卡。｜所有流量使用 bytes 并按 B/KiB…PiB 格式化。｜它揭示阶段读写与页粒度放大。｜该组不包含 Offload、Prefetch、Migration 或 Recompute。",
-    "Source: Prefill/Decode logical and physical byte fields in report.kv_cache.|Read-only summary of four read/write traffic cards.|Every traffic value uses bytes formatted as B/KiB through PiB.|It exposes phase I/O and page-granularity amplification.|This group excludes Offload, Prefetch, Migration, and Recompute.",
+    "来源是 report.kv_cache 的 Prefill/Decode logical 与 physical byte 字段。｜只读汇总四类读写流量卡。｜所有流量使用 bytes 并按 B/KB…PB 格式化。｜它揭示阶段读写与页粒度放大。｜该组不包含 Offload、Prefetch、Migration 或 Recompute。",
+    "Source: Prefill/Decode logical and physical byte fields in report.kv_cache.|Read-only summary of four read/write traffic cards.|Every traffic value uses bytes formatted as B/KB through PB.|It exposes phase I/O and page-granularity amplification.|This group excludes Offload, Prefetch, Migration, and Recompute.",
   ),
   kv_movement_summary: conceptHelp220Detail(
     "来源是 report.kv_cache 的迁移、重计算、交换时间与预取建模字段。｜只读汇总六类 KV 移动与限制统计。｜成员分别使用 events、bytes、Tokens、ns 或布尔状态。｜它揭示容量压力的缓解方式与代价。｜该组不重复 Prefill/Decode 逻辑物理读写流量。",
@@ -950,36 +1072,36 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: priority_preemptions and memory_preemptions.|Read-only paired priority and memory trigger counts.|Both values use events.|It separates policy competition from capacity pressure.|When absent, values are NA and must not be inferred from total preemptions.",
   ),
   kv_peak_occupancy: conceptHelp220Detail(
-    "来源是 report.kv_cache.peak_used_bytes。｜只读显示运行期 KV 使用字节峰值。｜单位按 B/KiB…PiB 格式化。｜它用于判断活动缓存容量余量。｜它不是硬件 Capacity，也不是 Capacity Pages。",
-    "Source: report.kv_cache.peak_used_bytes.|Read-only maximum KV bytes used during the run.|Formatted in B/KiB through PiB.|It indicates active-cache capacity headroom.|It is neither hardware Capacity nor Capacity Pages.",
+    "来源是 report.kv_cache.peak_used_bytes。｜只读显示运行期 KV 使用字节峰值。｜单位按 B/KB…PB 格式化。｜它用于判断活动缓存容量余量。｜它不是硬件 Capacity，也不是 Capacity Pages。",
+    "Source: report.kv_cache.peak_used_bytes.|Read-only maximum KV bytes used during the run.|Formatted in B/KB through PB.|It indicates active-cache capacity headroom.|It is neither hardware Capacity nor Capacity Pages.",
   ),
   kv_max_live_tokens: conceptHelp220Detail(
     "来源是 max_live_tokens_per_request。｜只读显示任一请求的最大同时存活 Token。｜单位是 Tokens/request。｜它连接请求行为与 KV 峰值压力。｜它不是配置的 Context Length 上限。",
     "Source: max_live_tokens_per_request.|Read-only maximum simultaneously live Tokens for any request.|Unit: Tokens/request.|It connects request behavior to KV peak pressure.|It is not the configured Context Length limit.",
   ),
   kv_swap_summary: conceptHelp220Detail(
-    "来源是 kv.swap_events 与 kv.swap_bytes。｜只读合并事件数和搬移字节数。｜单位是 events 与 B/KiB…PiB。｜它量化交换频率与流量。｜它不包含 Swap Transfer 的累计时间。",
-    "Source: kv.swap_events and kv.swap_bytes.|Read-only combined event and moved-byte display.|Units: events and B/KiB through PiB.|It quantifies swap frequency and traffic.|It excludes accumulated Swap Transfer Time.",
+    "来源是 kv.swap_events 与 kv.swap_bytes。｜只读合并事件数和搬移字节数。｜单位是 events 与 B/KB…PB。｜它量化交换频率与流量。｜它不包含 Swap Transfer 的累计时间。",
+    "Source: kv.swap_events and kv.swap_bytes.|Read-only combined event and moved-byte display.|Units: events and B/KB through PB.|It quantifies swap frequency and traffic.|It excludes accumulated Swap Transfer Time.",
   ),
   kv_capacity_pages: conceptHelp220Detail(
     "来源是 report.kv_cache.capacity_pages。｜只读显示活动 KV 缓存可容纳的总页数。｜单位是 pages，取非负整数或 NA。｜它限制并发驻留并触发 offload/recompute。｜它不是 Tokens per Page；两者相乘才参与总量解释。",
     "Source: report.kv_cache.capacity_pages.|Read-only total pages held by active KV cache.|Unit: pages; non-negative integer or NA.|It limits concurrent residency and can trigger offload or recompute.|It is not Tokens per Page; both are needed to interpret total capacity.",
   ),
   kv_prefill_read_traffic: conceptHelp220Detail(
-    "来源是 logical/physical_prefill_read_bytes。｜只读成对显示 Prefill 逻辑与物理读取。｜单位是字节并按二进制容量格式化。｜逻辑物理差值揭示页粒度放大。｜它不包含 Prefill 写入或 Decode 流量。",
-    "Source: logical/physical_prefill_read_bytes.|Read-only logical and physical Prefill reads.|Unit: bytes formatted in binary capacity units.|The logical/physical gap exposes page-granularity amplification.|It excludes Prefill writes and all Decode traffic.",
+    "来源是 logical/physical_prefill_read_bytes。｜只读成对显示 Prefill 逻辑与物理读取。｜单位是字节并按十进制容量格式化。｜逻辑物理差值揭示页粒度放大。｜它不包含 Prefill 写入或 Decode 流量。",
+    "Source: logical/physical_prefill_read_bytes.|Read-only logical and physical Prefill reads.|Unit: bytes formatted in decimal capacity units.|The logical/physical gap exposes page-granularity amplification.|It excludes Prefill writes and all Decode traffic.",
   ),
   kv_prefill_write_traffic: conceptHelp220Detail(
-    "来源是 logical/physical_prefill_write_bytes。｜只读成对显示 Prefill 逻辑与物理写入。｜单位是字节并按二进制容量格式化。｜它反映初始 KV 建立的写流量。｜它不包含 Prefill 读取或 Decode Append。",
-    "Source: logical/physical_prefill_write_bytes.|Read-only logical and physical Prefill writes.|Unit: bytes formatted in binary capacity units.|It represents write traffic for initial KV construction.|It excludes Prefill reads and Decode Append.",
+    "来源是 logical/physical_prefill_write_bytes。｜只读成对显示 Prefill 逻辑与物理写入。｜单位是字节并按十进制容量格式化。｜它反映初始 KV 建立的写流量。｜它不包含 Prefill 读取或 Decode Append。",
+    "Source: logical/physical_prefill_write_bytes.|Read-only logical and physical Prefill writes.|Unit: bytes formatted in decimal capacity units.|It represents write traffic for initial KV construction.|It excludes Prefill reads and Decode Append.",
   ),
   kv_decode_read_traffic: conceptHelp220Detail(
-    "来源是 logical/physical_decode_read_bytes。｜只读成对显示 Decode KV 读取。｜单位是字节并按二进制容量格式化。｜它通常随存活上下文增长并影响 TPOT。｜它不包含 Decode Append 写入。",
-    "Source: logical/physical_decode_read_bytes.|Read-only logical and physical Decode KV reads.|Unit: bytes formatted in binary capacity units.|It usually grows with live context and can affect TPOT.|It excludes Decode Append writes.",
+    "来源是 logical/physical_decode_read_bytes。｜只读成对显示 Decode KV 读取。｜单位是字节并按十进制容量格式化。｜它通常随存活上下文增长并影响 TPOT。｜它不包含 Decode Append 写入。",
+    "Source: logical/physical_decode_read_bytes.|Read-only logical and physical Decode KV reads.|Unit: bytes formatted in decimal capacity units.|It usually grows with live context and can affect TPOT.|It excludes Decode Append writes.",
   ),
   kv_decode_append_traffic: conceptHelp220Detail(
-    "来源是 logical/physical_decode_append_bytes。｜只读成对显示 Decode 新 KV 追加写入。｜单位是字节并按二进制容量格式化。｜它推动 KV 占用增长与写带宽。｜它不是 Decode Read，也不是已提交 Token 计数。",
-    "Source: logical/physical_decode_append_bytes.|Read-only logical and physical bytes appended by Decode.|Unit: bytes formatted in binary capacity units.|It grows KV occupancy and write-bandwidth demand.|It is neither Decode Read nor committed-Token count.",
+    "来源是 logical/physical_decode_append_bytes。｜只读成对显示 Decode 新 KV 追加写入。｜单位是字节并按十进制容量格式化。｜它推动 KV 占用增长与写带宽。｜它不是 Decode Read，也不是已提交 Token 计数。",
+    "Source: logical/physical_decode_append_bytes.|Read-only logical and physical bytes appended by Decode.|Unit: bytes formatted in decimal capacity units.|It grows KV occupancy and write-bandwidth demand.|It is neither Decode Read nor committed-Token count.",
   ),
   kv_offload_total: conceptHelp220Detail(
     "来源是 offload_events 与 offload_bytes。｜只读合并移出活动缓存的次数和字节。｜单位是 events 与 bytes。｜它反映容量压力造成的外移成本。｜不包含反向 Prefetch，也不等于 Migration Total。",
@@ -1143,17 +1265,17 @@ const CONCEPT_HELP_DETAIL_OVERRIDES = Object.freeze({
   transfer_granularity: Object.freeze({
     "zh-CN": Object.freeze([
       "模拟器用它将数据搬移向最小块大小取整，避免把任意小负载当作零成本传输。",
-      "填写带二进制容量单位的非负值，例如 64 B、4 KiB；0 表示不额外按块取整。",
-      "支持 B、KiB、MiB、GiB、TiB、PiB；界面默认 0 B，保存为精确字节数。",
+      "填写带十进制容量单位的非负值，例如 64 B、4 KB；0 表示不额外按块取整。",
+      "支持 B、KB、MB、GB、TB、PB；界面默认 0 B，保存为精确字节数。",
       "较大的粒度会放大小张量或尾块的有效传输字节数，从而增加带宽占用和 DMA 时间。",
-      "它不是协议 MTU、缓存行或 NAND 页的自动推断。例如 4 KiB 粒度下，1 KiB 搬移按 4 KiB 计。",
+      "它不是协议 MTU、缓存行或 NAND 页的自动推断。例如 4 KB 粒度下，1 KB 搬移按 4 KB 计。",
     ]),
     en: Object.freeze([
       "The simulator rounds data movement to this minimum block so arbitrarily small payloads are not treated as cost-free transfers.",
-      "Enter a non-negative binary capacity such as 64 B or 4 KiB. Zero disables additional block rounding.",
-      "Supported units: B, KiB, MiB, GiB, TiB, PiB. UI default: 0 B; the scenario stores exact bytes.",
+      "Enter a non-negative decimal capacity such as 64 B or 4 KB. Zero disables additional block rounding.",
+      "Supported units: B, KB, MB, GB, TB, PB. UI default: 0 B; the scenario stores exact bytes.",
       "A larger granularity amplifies effective bytes for small tensors or tail blocks, increasing bandwidth occupancy and DMA time.",
-      "It is not an inferred protocol MTU, cache line, or NAND page. At 4 KiB granularity, for example, a 1 KiB move is charged as 4 KiB.",
+      "It is not an inferred protocol MTU, cache line, or NAND page. At 4 KB granularity, for example, a 1 KB move is charged as 4 KB.",
     ]),
   }),
   dma_latency: Object.freeze({
@@ -1192,14 +1314,14 @@ const CONCEPT_HELP_DETAIL_OVERRIDES = Object.freeze({
     "zh-CN": Object.freeze([
       "映射器和运行时用它确定 cold_stream_per_use 权重的来源组件、可用容量以及加载权重所走的协议路径。",
       "仅当“权重常驻”关闭时，内部控制平面才会从当前拓扑选择 HBF / SSD / 高 I/O SSD 作为运行时读取来源；勾选时运行图不读取后备。冷流式来源与容量由物化的 Rank 分片证据说明。",
-      "容量支持 B、KiB、MiB、GiB、TiB、PiB；空组件是特殊值“未指定”，容量字段随之禁用。",
+      "容量支持 B、KB、MB、GB、TB、PB；空组件是特殊值“未指定”，容量字段随之禁用。",
       "它会影响冷流式权重的容量校验、每次静态 RHS GEMM 的装载、TTFT 和存储 / 链路流量；修改后映射会过期。",
       "HBF 仅按显式 UCIe 路径，SSD 类仅按显式 PCIe / CXL 路径建模。例如选择 HBF0 但没有 UCIe 路径会在校验中失败。",
     ]),
     en: Object.freeze([
       "Placement and runtime use it to identify the source component, available capacity, and protocol path for cold_stream_per_use weights.",
       "Only unchecked Weights Resident allows the internal control plane to choose HBF, SSD, or high-I/O SSD in the current topology as a runtime source; checked runs do not read backing. Materialized Rank-shard evidence describes the cold source and capacity.",
-      "Capacity units: B, KiB, MiB, GiB, TiB, PiB. An empty component is the special Unspecified value and disables the capacity field.",
+      "Capacity units: B, KB, MB, GB, TB, PB. An empty component is the special Unspecified value and disables the capacity field.",
       "It affects cold-weight capacity validation, one load per static RHS GEMM use, TTFT, and storage/link traffic; changing it invalidates placement.",
       "HBF is modeled only over explicit UCIe paths, and SSD-class storage only over explicit PCIe/CXL paths. Selecting HBF0 without UCIe fails validation.",
     ]),
@@ -1629,6 +1751,7 @@ const state = {
   componentPresetsLoading: false,
   componentPresetDetails: new Map(),
   selectedComponentPresetId: null,
+  editingComponentPresetId: null,
   architecturePresets: [],
   architecturePresetsLoaded: false,
   architecturePresetsLoading: false,
@@ -2633,6 +2756,7 @@ function modalDialogs() {
     dom.jsonDialog,
     dom.modelPresetsDialog,
     dom.hardwarePresetsDialog,
+    dom.componentPresetEditorDialog,
     dom.protocolPresetsDialog,
     dom.settingsDialog,
     dom.architectureScanDialog,
@@ -2888,18 +3012,19 @@ function ensureScenarioShape(scenario) {
     { inherited: true },
   ));
   scenario.workload.request_count ??= 1;
-  scenario.workload.prompt_tokens ??= 0;
-  scenario.workload.output_tokens ??= 0;
+  scenario.workload.prompt_tokens ??= 512;
+  scenario.workload.output_tokens ??= 128;
   scenario.workload.random_seed ??= 0;
   scenario.workload.scheduler = asObject(scenario.workload.scheduler);
   const scheduler = scenario.workload.scheduler;
-  scheduler.mode ??= "static";
+  scheduler.mode ??= "continuous";
   scheduler.max_num_seqs ??= 1;
-  scheduler.max_num_batched_tokens ??= 2048;
+  scheduler.max_num_batched_tokens ??= 512;
+  scheduler.max_num_ubatch_tokens ??= 512;
   scheduler.prefill_chunk_tokens ??= 512;
   scheduler.policy ??= "decode_first";
   scheduler.starvation_ns ??= 5_000_000;
-  scheduler.preemption_enabled ??= true;
+  scheduler.preemption_enabled ??= false;
   scheduler.preemption_granularity ??= "boundary";
   scheduler.preemption_policy ??= "auto";
   if (scenario.workload.mtp === undefined) scenario.workload.mtp = null;
@@ -4315,8 +4440,8 @@ async function runDirectSimulationScore() {
       if (!r0Reference || typeof r0Reference !== "object" || Array.isArray(r0Reference)) {
         throw new Error("R0 参考结果必须是 JSON 对象。\nThe R0 reference must be a JSON object.");
       }
-      if (!r0Reference.requests || typeof r0Reference.requests !== "object" || Array.isArray(r0Reference.requests)) {
-        throw new Error("R0 参考结果至少需要 requests 对象。\nThe R0 reference must include a requests object.");
+      if (!r0Reference.requests || typeof r0Reference.requests !== "object") {
+        throw new Error("R0 参考结果至少需要 requests 集合。\nThe R0 reference must include a requests collection.");
       }
     }
   } catch (error) {
@@ -4755,7 +4880,7 @@ function kindLabel(kind) {
   return String(kind || "COMPONENT").toUpperCase();
 }
 
-const BYTE_UNITS = Object.freeze(["B", "KiB", "MiB", "GiB", "TiB", "PiB"]);
+const BYTE_UNITS = Object.freeze(["B", "KB", "MB", "GB", "TB", "PB"]);
 const OPS_UNITS = Object.freeze(["OPS", "KOPS", "MOPS", "GOPS", "TOPS", "POPS"]);
 const BANDWIDTH_UNITS = Object.freeze(["MB/s", "GB/s", "TB/s"]);
 
@@ -4773,7 +4898,7 @@ function formatScaledQuantity(value, units, radix) {
 }
 
 function formatBytes(value) {
-  return formatScaledQuantity(value, BYTE_UNITS, 1024);
+  return formatScaledQuantity(value, BYTE_UNITS, 1000);
 }
 
 function formatOps(value) {
@@ -4797,7 +4922,7 @@ function parseScaledQuantity(value, units, radix) {
 }
 
 function parseBytes(value) {
-  const parsed = parseScaledQuantity(value, BYTE_UNITS, 1024);
+  const parsed = parseScaledQuantity(value, BYTE_UNITS, 1000);
   if (parsed == null) return null;
   const rounded = Math.round(parsed);
   return Number.isSafeInteger(rounded) ? rounded : null;
@@ -4814,6 +4939,20 @@ function formatBandwidthGbps(value) {
   const absolute = Math.abs(bytesPerSecond);
   const unitIndex = absolute >= 1_000_000_000_000 ? 2 : absolute >= 1_000_000_000 ? 1 : 0;
   return `${formatNumber(bytesPerSecond / [1_000_000, 1_000_000_000, 1_000_000_000_000][unitIndex], 4)} ${BANDWIDTH_UNITS[unitIndex]}`;
+}
+
+function unknownComponentField(component, field) {
+  const metadata = asObject(component?.metadata);
+  const current = field.endsWith("_ns") ? metadata[field] : component?.[field];
+  if (Number.isFinite(Number(current)) && Number(current) > 0) return false;
+  const sentinels = asObject(metadata.unknown_value_sentinels);
+  if (Object.hasOwn(sentinels, field)) return true;
+  const provenance = asObject(metadata.vendor_parameter_provenance);
+  return String(asObject(provenance[field]).status || "").toLowerCase() === "not_published";
+}
+
+function componentFieldValue(component, field, formatter) {
+  return unknownComponentField(component, field) ? "未公开" : formatter(component?.[field]);
 }
 
 function parseBandwidthToGbps(value) {
@@ -4839,6 +4978,17 @@ function formatNumber(value, significantDigits = 4) {
     return `${compactCoefficient}e${Number(exponent)}`;
   }
   return new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: precision }).format(number);
+}
+
+function formatUnit(value, unit, { scale = 1, significantDigits = 4 } = {}) {
+  const numeric = Number(value);
+  const suffix = String(unit || "").trim();
+  if (!Number.isFinite(numeric) || !suffix) return "—";
+  return `${formatNumber(numeric * scale, significantDigits)} ${suffix}`;
+}
+
+function formatRatioPercent(value) {
+  return formatUnit(value, "%", { scale: 100 });
 }
 
 function renderArchitectureScan() {
@@ -6485,7 +6635,7 @@ function addComponent(kind) {
     hbm: { capacity_bytes: 16 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 4096, write_bandwidth_gbps: 4096, metadata: { evidence_status: "analytical", read_latency_ns: 40, write_latency_ns: 40, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
     dram: { capacity_bytes: 32 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 2048, write_bandwidth_gbps: 2048, metadata: { evidence_status: "analytical", read_latency_ns: 60, write_latency_ns: 60, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
     host_memory: { capacity_bytes: 128 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 1600, write_bandwidth_gbps: 1600, metadata: { evidence_status: "analytical", source: "editable-reference-default", read_latency_ns: 100, write_latency_ns: 100, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
-    hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 24000, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "official-reference-upper-bound", dma_parameter_basis: "editable analytical assumption bounded by the default UCIe path", reference_capacity: "512 GiB", reference_read_bandwidth: "approximately 3 TB/s", read_only: true, writable: false, read_latency_ns: 2500, write_latency_ns: 0, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 2048, dma_latency_ns: 800, dma_energy_pj_per_byte: 0 } },
+    hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 24000, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "official-reference-upper-bound", dma_parameter_basis: "editable analytical assumption bounded by the default UCIe path", reference_capacity: "512 GB", reference_read_bandwidth: "approximately 3 TB/s", read_only: true, writable: false, read_latency_ns: 2500, write_latency_ns: 0, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 2048, dma_latency_ns: 800, dma_energy_pj_per_byte: 0 } },
     ssd: { capacity_bytes: 4 * 1024 ** 4, peak_ops_per_s: 0, read_bandwidth_gbps: 64, write_bandwidth_gbps: 48, metadata: { evidence_status: "analytical", source: "reference-default", dma_parameter_basis: "editable analytical storage-controller assumption", read_latency_ns: 80000, write_latency_ns: 100000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 64, dma_latency_ns: 2000, dma_energy_pj_per_byte: 0 } },
     high_io_ssd: { capacity_bytes: 8 * 1024 ** 4, peak_ops_per_s: 0, read_bandwidth_gbps: 448, write_bandwidth_gbps: 224, metadata: { evidence_status: "analytical", source: "reference-default", dma_parameter_basis: "editable analytical high-I/O controller assumption", read_latency_ns: 25000, write_latency_ns: 40000, transfer_granularity_bytes: 4096, max_outstanding_requests: 64, dma_bandwidth_gbps: 448, dma_latency_ns: 1200, dma_energy_pj_per_byte: 0 } },
     digital_sram_cim: { capacity_bytes: 512 * 1024 * 1024, peak_ops_per_s: 0, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", read_latency_ns: 5, write_latency_ns: 5, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
@@ -6708,7 +6858,7 @@ function renderGroupInspector(groupId) {
   if (dom.inspectorContent?.querySelectorAll) hydrateConceptHelp(dom.inspectorContent);
 }
 
-function inputField(label, field, value, { type = "text", min = "", step = "", options = null, optionLabels = {}, scope = "component", helpKey = "" } = {}) {
+function inputField(label, field, value, { type = "text", min = "", step = "", options = null, optionLabels = {}, scope = "component", helpKey = "", unit = "" } = {}) {
   const attrs = [
     `data-inspector-scope="${scope}"`,
     `data-inspector-field="${field}"`,
@@ -6721,12 +6871,20 @@ function inputField(label, field, value, { type = "text", min = "", step = "", o
     const values = options.includes(String(value)) ? options : [String(value), ...options];
     return `<label class="field">${title}<select ${attrs}>${values.map((option) => `<option value="${escapeHtml(option)}" ${String(option) === String(value) ? "selected" : ""}>${escapeHtml(optionLabels[option] || option)}</option>`).join("")}</select></label>`;
   }
-  return `<label class="field">${title}<input ${attrs} value="${escapeHtml(value ?? "")}"></label>`;
+  const input = `<input ${attrs} value="${escapeHtml(value ?? "")}">`;
+  return `<label class="field">${title}${unit ? `<span class="field-input-with-unit">${input}${fieldUnitMarkup(unit)}</span>` : input}</label>`;
 }
 
-function metadataField(label, field, value, { type = "number", min = 0, step = "any", helpKey = "" } = {}) {
+function fieldUnitMarkup(unit) {
+  const text = String(unit || "").trim();
+  const accessible = uiText("单位 {unit}", "Unit {unit}", { unit: text });
+  return text ? `<small class="field-unit" aria-label="${escapeHtml(accessible)}">${escapeHtml(text)}</small>` : "";
+}
+
+function metadataField(label, field, value, { type = "number", min = 0, step = "any", helpKey = "", unit = "", unknown = false } = {}) {
   const title = helpKey ? fieldTitleMarkup(label, helpKey) : `<span>${escapeHtml(label)}</span>`;
-  return `<label class="field">${title}<input type="${escapeHtml(type)}" min="${escapeHtml(min)}" step="${escapeHtml(step)}" data-inspector-metadata-field="${escapeHtml(field)}" value="${escapeHtml(value ?? "")}"></label>`;
+  const input = `<input type="${escapeHtml(type)}" min="${escapeHtml(min)}" step="${escapeHtml(step)}" data-inspector-metadata-field="${escapeHtml(field)}" value="${escapeHtml(unknown ? "" : (value ?? ""))}"${unknown ? ` placeholder="未公开（可填分析假设）" data-unknown-parameter="true"` : ""}>`;
+  return `<label class="field">${title}${unit ? `<span class="field-input-with-unit">${input}${fieldUnitMarkup(unit)}</span>` : input}</label>`;
 }
 
 function conceptHelpText(keyOrText) {
@@ -6870,12 +7028,15 @@ function quantityField(label, field, value, quantity, { metadata = false, helpKe
   const formatted = quantity === "ops" ? formatOps(value) : formatBytes(value);
   const resolvedHelpKey = helpKey || (quantity === "ops" ? "peak_ops" : "capacity");
   const inputId = `inspector-${slug(field)}-input`;
-  return `<div class="field quantity-field">${fieldTitleMarkup(label, resolvedHelpKey)}<label class="sr-only" for="${inputId}">${escapeHtml(label)}</label><input id="${inputId}" type="text" inputmode="decimal" data-inspector-quantity-field="${escapeHtml(field)}" data-inspector-quantity="${escapeHtml(quantity)}" ${metadata ? 'data-inspector-quantity-metadata="true"' : ""} value="${escapeHtml(formatted)}"></div>`;
+  const input = `<input id="${inputId}" type="text" inputmode="decimal" data-inspector-quantity-field="${escapeHtml(field)}" data-inspector-quantity="${escapeHtml(quantity)}" ${metadata ? 'data-inspector-quantity-metadata="true"' : ""} value="${escapeHtml(formatted)}">`;
+  const unit = quantity === "ops" ? "OPS/s" : "B/KB…PB";
+  return `<div class="field quantity-field">${fieldTitleMarkup(label, resolvedHelpKey)}<label class="sr-only" for="${inputId}">${escapeHtml(label)}</label><span class="field-input-with-unit">${input}${fieldUnitMarkup(unit)}</span></div>`;
 }
 
-function bandwidthField(label, field, value, { scope = "component" } = {}) {
+function bandwidthField(label, field, value, { scope = "component", unknown = false } = {}) {
   const inputId = `inspector-${scope}-${slug(field)}-input`;
-  return `<div class="field bandwidth-field">${fieldTitleMarkup(label, "bandwidth")}<label class="sr-only" for="${inputId}">${escapeHtml(label)}</label><input id="${inputId}" type="text" inputmode="decimal" data-inspector-scope="${escapeHtml(scope)}" data-inspector-field="${escapeHtml(field)}" data-inspector-bandwidth="true" value="${escapeHtml(formatBandwidthGbps(value))}"></div>`;
+  const input = `<input id="${inputId}" type="text" inputmode="decimal" data-inspector-scope="${escapeHtml(scope)}" data-inspector-field="${escapeHtml(field)}" data-inspector-bandwidth="true" value="${escapeHtml(unknown ? "" : formatBandwidthGbps(value))}"${unknown ? ` placeholder="未公开（可填分析假设）" data-unknown-parameter="true"` : ""}>`;
+  return `<div class="field bandwidth-field">${fieldTitleMarkup(label, "bandwidth")}<label class="sr-only" for="${inputId}">${escapeHtml(label)}</label><span class="field-input-with-unit">${input}${fieldUnitMarkup("MB/s…TB/s")}</span></div>`;
 }
 
 function ensureFieldHelpPortal() {
@@ -7751,7 +7912,26 @@ function costProfileNumberField(label, profileKey, field, value, rule = "nonnega
   const min = rule === "positive" || rule === "efficiency" ? "0" : "0";
   const max = rule === "efficiency" ? ' max="1"' : "";
   const title = helpKey ? fieldTitleMarkup(label, helpKey) : `<span>${escapeHtml(label)}</span>`;
-  return `<label class="field">${title}<input type="number" min="${min}"${max} step="any" data-cost-profile-key="${escapeHtml(profileKey)}" data-cost-profile-field="${escapeHtml(field)}" data-cost-profile-rule="${escapeHtml(rule)}" value="${escapeHtml(value)}"></label>`;
+  const unit = costProfileFieldUnit(field, label);
+  const input = `<input type="number" min="${min}"${max} step="any" data-cost-profile-key="${escapeHtml(profileKey)}" data-cost-profile-field="${escapeHtml(field)}" data-cost-profile-rule="${escapeHtml(rule)}" value="${escapeHtml(value)}">`;
+  return `<label class="field">${title}<span class="field-input-with-unit">${input}${fieldUnitMarkup(unit)}</span></label>`;
+}
+
+function costProfileFieldUnit(field, label = "") {
+  const key = `${String(field)} ${String(label)}`.toLowerCase();
+  if (/efficiency|occupancy|ratio/.test(key)) return "0–1";
+  if (/bandwidth_gb_s|带宽（gb\/s/.test(key)) return "GB/s";
+  if (/frequency_ghz|频率（ghz/.test(key)) return "GHz";
+  if (/latency_ns|launch_ns|mispredict_ns|dispatch_ns|延迟（ns/.test(key)) return "ns";
+  if (/energy_pj_per_byte|能耗（pj\/b/.test(key)) return "pJ/B";
+  if (/energy_pj_per_op|能耗（pj\/op/.test(key)) return "pJ/op";
+  if (/eval_energy_pj|launch_energy_pj|dispatch_energy_pj/.test(key)) return "pJ";
+  if (/capacity_bytes|line_bytes|transaction_bytes|scratch_capacity_bytes|容量（b/.test(key)) return "B";
+  if (/ops_per_cycle|ops\/cycle/.test(key)) return "OPS/cycle";
+  if (/cycles/.test(key)) return "cycles";
+  if (/bits/.test(key)) return "bits";
+  if (/count|cores|units|entries|ports|banks|ways|replicas|arrays|inputs|outputs|elements/.test(key)) return "count";
+  return "";
 }
 
 function costProfileTextField(label, profileKey, field, value) {
@@ -7777,7 +7957,7 @@ function cacheHierarchyCostProfileMarkup(profileKey, profile) {
         ${costProfileNumberField("Banks（count）", profileKey, `cache_hierarchy.levels.${index}.banks`, level.banks, "positive_integer")}
         ${costProfileNumberField("读端口（ports）", profileKey, `cache_hierarchy.levels.${index}.read_ports`, level.read_ports, "positive_integer")}
         ${costProfileNumberField("写端口（ports）", profileKey, `cache_hierarchy.levels.${index}.write_ports`, level.write_ports, "positive_integer")}
-        ${costProfileNumberField("最大并发请求（requests）", profileKey, `cache_hierarchy.levels.${index}.max_outstanding`, level.max_outstanding, "positive_integer")}
+        ${costProfileNumberField("最大并发请求（requests，depth）", profileKey, `cache_hierarchy.levels.${index}.max_outstanding`, level.max_outstanding, "positive_integer")}
         ${costProfileNumberField("能耗（pJ/B）", profileKey, `cache_hierarchy.levels.${index}.energy_pj_per_byte`, level.energy_pj_per_byte)}
         ${costProfileTextField("Cache 资源 ID", profileKey, `cache_hierarchy.levels.${index}.resource_id`, level.resource_id)}
       </div>
@@ -7794,7 +7974,7 @@ function gpuDenseThroughputMarkup(profile) {
     <h4>公开 Dense ${escapeHtml(dtype || "Tensor") } 吞吐便利输入（Public Dense Throughput）</h4>
     <p class="muted">当前选择 DType（selected dtype）：<strong>${escapeHtml(dtype || "未声明")}</strong>。输入所选精度的公开稠密峰值，不使用结构化稀疏峰值。自动换算吞吐等效参数；该参数不是指令级延迟。</p>
     <label class="field"><span>公开 Dense ${escapeHtml(dtype || "Tensor")} 吞吐（${unit}）</span><input type="number" min="0" step="any" data-gpu-dense-throughput-input value="${escapeHtml(value)}"></label>
-    <div class="readout"><span>派生 cycles_per_mma（Derived）</span><strong>${Number.isFinite(cycles) && cycles > 0 ? escapeHtml(String(cycles)) : "—"}</strong></div>
+    <div class="readout"><span>派生 cycles_per_mma（Derived, cycles/MMA）</span><strong>${Number.isFinite(cycles) && cycles > 0 ? escapeHtml(formatUnit(cycles, "cycles/MMA")) : "—"}</strong></div>
   </section>`;
 }
 
@@ -7818,7 +7998,7 @@ function memoryCostProfileMarkup(profileKey, component) {
         ${costProfileNumberField("读取延迟（ns）", profileKey, "read_latency_ns", profile.read_latency_ns ?? 0, "nonnegative")}
         ${costProfileNumberField("写入延迟（ns）", profileKey, "write_latency_ns", profile.write_latency_ns ?? 0, "nonnegative")}
         ${costProfileNumberField("事务粒度（B）", profileKey, "transaction_bytes", profile.transaction_bytes ?? 256, "positive_integer")}
-        ${costProfileNumberField("最大并发请求（requests）", profileKey, "max_outstanding_requests", profile.max_outstanding_requests ?? 32, "positive_integer")}
+        ${costProfileNumberField("最大并发请求（requests，depth）", profileKey, "max_outstanding_requests", profile.max_outstanding_requests ?? 32, "positive_integer")}
         ${costProfileTextField("内存资源 ID", profileKey, "resource_id", profile.resource_id)}
         ${profileKey === "host_memory" ? costProfileTextField("Profile 名称", profileKey, "name", profile.name) : ""}
       </div>
@@ -7898,7 +8078,7 @@ function cpuCostProfileMarkup(component) {
     ${costProfileProvenanceMarkup("cpu", component)}
     <p class="muted">执行能力由乱序 Pipeline、SIMD 单元和 SRAM Cache 层级推导；组件 Peak OPS 仅用于报告。Profile 的参与计算核心数会受运行时线程设置限制，不能替代硬件 metadata 中的物理核心/线程拓扑。</p>
     <div class="field-grid-2">
-      ${costProfileNumberField("参与计算的核心数（active compute cores）", "cpu", "pipeline.core_count", pipeline.core_count, "positive_integer")}
+      ${costProfileNumberField("参与计算的核心数（active compute cores，count）", "cpu", "pipeline.core_count", pipeline.core_count, "positive_integer")}
       ${costProfileNumberField("频率（GHz）", "cpu", "pipeline.frequency_ghz", pipeline.frequency_ghz, "positive")}
       ${costProfileNumberField("SIMD 宽度（bits）", "cpu", "pipeline.simd_width_bits", pipeline.simd_width_bits, "positive_integer")}
     </div>
@@ -8178,6 +8358,7 @@ function bindCostProfileBindingControls(component) {
 function componentInspectorProfile(kind, component = {}) {
   const normalized = normalizedComponentKind(kind);
   const cpu = normalized === "cpu";
+  const gpu = normalized === "gpu";
   const transportOnly = ["fabric_switch", "io_die"].includes(normalized);
   const compute = ["gpu", "cpu", "generic_accelerator", "pim_accelerator", "digital_sram_cim"].includes(normalized);
   const memory = isActiveMemoryComponent(component) || ["hbf", "ssd", "high_io_ssd"].includes(normalized);
@@ -8185,9 +8366,9 @@ function componentInspectorProfile(kind, component = {}) {
   const known = transportOnly || compute || memory;
   return {
     transportOnly,
-    capacity: !cpu && !transportOnly && (memory || cim || Number(component.capacity_bytes) > 0 || !known),
+    capacity: !gpu && !cpu && !transportOnly && (memory || cim || Number(component.capacity_bytes) > 0 || !known),
     peakOps: !transportOnly && (compute || Number(component.peak_ops_per_s) > 0 || !known),
-    componentBandwidth: !cpu && !transportOnly && (memory || cim || Number(component.read_bandwidth_gbps) > 0 || Number(component.write_bandwidth_gbps) > 0 || !known),
+    componentBandwidth: !gpu && !cpu && !transportOnly && (memory || cim || Number(component.read_bandwidth_gbps) > 0 || Number(component.write_bandwidth_gbps) > 0 || !known),
     latencyDma: !cpu && !transportOnly && (memory || cim || !known),
   };
 }
@@ -8201,7 +8382,7 @@ function inspectorPortMarkup(port, index, { expanded = false } = {}) {
       <div class="readout"><span data-concept-help="protocol">协议 / 角色</span><strong>${escapeHtml(label)}</strong></div>
       <div class="field-grid-2">
         <label class="field"><span>版本（Version）</span><input type="text" data-inspector-port-index="${index}" data-inspector-port-field="version" value="${escapeHtml(port.version ?? "")}"></label>
-        <label class="field"><span>通道数（Lanes）</span><input type="number" min="1" step="1" data-inspector-port-index="${index}" data-inspector-port-field="lanes" value="${escapeHtml(port.lanes ?? 1)}"></label>
+        <label class="field"><span>通道数（Lanes）</span><span class="field-input-with-unit"><input type="number" min="1" step="1" data-inspector-port-index="${index}" data-inspector-port-field="lanes" value="${escapeHtml(port.lanes ?? 1)}">${fieldUnitMarkup("lanes")}</span></label>
       </div>
       <div class="field bandwidth-field">${fieldTitleMarkup("端口单向带宽（Port Bandwidth, MB/s–TB/s）", "bandwidth")}<input type="text" inputmode="decimal" data-inspector-port-index="${index}" data-inspector-port-field="bandwidth_gbps" data-inspector-bandwidth="true" value="${escapeHtml(formatBandwidthGbps(port.bandwidth_gbps ?? 0))}"></div>
       <label class="field"><span>载荷语义（Payload）</span><input type="text" data-inspector-port-index="${index}" data-inspector-port-field="payload" value="${escapeHtml(port.payload ?? "")}"></label>
@@ -8211,9 +8392,9 @@ function inspectorPortMarkup(port, index, { expanded = false } = {}) {
 
 function componentCapacityFieldLabel(component) {
   const normalized = normalizedComponentKind(component?.kind);
-  if (normalized === "gpu") return "片上/组件容量（On-chip Component Capacity, B/KiB…PiB）";
-  if (isDedicatedHbm(normalized)) return "独立设备内存容量（Separate Device Memory Capacity, B/KiB…PiB）";
-  return "物理容量（Physical Capacity, B/KiB…PiB）";
+  if (normalized === "gpu") return "片上/组件容量（On-chip Component Capacity, B/KB…PB）";
+  if (isDedicatedHbm(normalized)) return "独立设备内存容量（Separate Device Memory Capacity, B/KB…PB）";
+  return "物理容量（Physical Capacity, B/KB…PB）";
 }
 
 function componentCapacityNote(component) {
@@ -8255,12 +8436,12 @@ function hbfMediaMarkup(component) {
         <label class="field"><span>Host 事务粒度（B，固定）</span><input type="number" value="64" readonly disabled aria-readonly="true"></label>
         <label class="field"><span>媒体页大小（B，固定）</span><input type="number" value="4096" readonly disabled aria-readonly="true"></label>
         <label class="field"><span>Host 最大请求（B）</span><input type="number" min="64" max="4096" step="64" data-hbf-media-field="host_max_request_bytes" value="${escapeHtml(value("host_max_request_bytes"))}"${disabled}></label>
-        <label class="field"><span>命令队列深度（2 的幂）</span><input type="number" min="256" max="16384" step="1" data-hbf-media-field="command_queue_depth" value="${escapeHtml(value("command_queue_depth"))}"${disabled}></label>
+        <label class="field"><span>命令队列深度（depth，2 的幂）</span><input type="number" min="256" max="16384" step="1" data-hbf-media-field="command_queue_depth" value="${escapeHtml(value("command_queue_depth"))}"${disabled}></label>
         <label class="field"><span>媒体并行度（commands）</span><input type="number" min="1" step="1" data-hbf-media-field="media_parallelism" value="${escapeHtml(value("media_parallelism"))}"${disabled}></label>
         <label class="field"><span>页读取延迟（ns）</span><input type="number" min="0" step="any" data-hbf-media-field="page_read_latency_ns" value="${escapeHtml(value("page_read_latency_ns"))}"${disabled}></label>
         <label class="field"><span>页编程延迟（ns）</span><input type="number" min="0" step="any" data-hbf-media-field="page_program_latency_ns" value="${escapeHtml(value("page_program_latency_ns"))}"${disabled}></label>
         <label class="field"><span>访问模式（Access pattern）</span><select data-hbf-media-field="access_pattern"${disabled}>${fixedOptions([["contiguous_page_aligned", "连续且页对齐"], ["unknown_alignment_conservative", "未知对齐（保守）"]], value("access_pattern"))}</select></label>
-        <label class="field"><span>物理 Plane 数（可选）</span><input type="number" min="1" step="1" data-hbf-media-field="physical_planes" placeholder="留空 = 不额外限制" value="${escapeHtml(contract.physical_planes ?? "")}"${disabled}></label>
+        <label class="field"><span>物理 Plane 数（count，可选）</span><input type="number" min="1" step="1" data-hbf-media-field="physical_planes" placeholder="留空 = 不额外限制" value="${escapeHtml(contract.physical_planes ?? "")}"${disabled}></label>
       </div>
       <p class="muted">后端当前只接受 cold_page_v1、64 B Host transaction、4096 B media page；命令队列深度必须为 256–16384 的 2 的幂。写请求完成语义为 media program complete。</p>
     </div>
@@ -8287,9 +8468,9 @@ function thermalOperatingPointMarkup(element) {
       <div class="readout-grid">
         ${readout(uiText("对象热域", "Object thermal domain"), domain || "—")}
         ${readout(uiText("已应用", "Applied"), enabled ? "true" : "false")}
-        ${!link ? readout(uiText("频率比例", "Frequency scale"), factors.frequency_scale) + readout(uiText("内存带宽比例", "Memory bandwidth scale"), factors.memory_bandwidth_scale) : ""}
-        ${link ? readout(uiText("链路带宽比例", "Link bandwidth scale"), factors.link_bandwidth_scale) : ""}
-        ${readout(uiText("延迟比例", "Latency scale"), factors.latency_scale)}
+        ${!link ? readout(uiText("频率比例（%）", "Frequency scale (%)"), formatRatioPercent(factors.frequency_scale)) + readout(uiText("内存带宽比例（%）", "Memory bandwidth scale (%)"), formatRatioPercent(factors.memory_bandwidth_scale)) : ""}
+        ${link ? readout(uiText("链路带宽比例（%）", "Link bandwidth scale (%)"), formatRatioPercent(factors.link_bandwidth_scale)) : ""}
+        ${readout(uiText("延迟比例（%）", "Latency scale (%)"), formatRatioPercent(factors.latency_scale))}
         ${readout(uiText("依据", "Evidence"), enabled ? derating.evidence || factors.evidence || "—" : "—")}
       </div>
     </div>
@@ -8317,14 +8498,14 @@ function renderComponentInspector(componentId) {
   const storageTransportProfile = ["hbf", "ssd", "high_io_ssd"].includes(normalizedComponentKind(component.kind));
   const capacityNote = componentCapacityNote(component);
   const hbfReadOnlyNote = normalizedComponentKind(component.kind) === "hbf" && !isActiveMemoryComponent(component)
-    ? `<p class="muted"><strong>只读优先：</strong>HBF 是 High Bandwidth Flash 后备层，不是 HBM。写入带宽为 0 表示未知/未声明写能力，不表示零成本写入；没有显式可写证据与路径时，不应把它作为 KV Cache 或线性 state 的 offload 目标。</p>`
+    ? `<p class="muted"><strong>只读优先：</strong>HBF 是 High Bandwidth Flash 后备层，不是 HBM。厂家未公开通用写带宽和端到端写延迟，界面显示“未公开”；后端的 0 只是 unknown sentinel，不表示零成本写入或零延迟。没有显式可写证据与路径时，不应把它作为 KV Cache 或线性 state 的 offload 目标。</p>`
     : "";
   const hbfMediaMarkupHtml = hbfMediaMarkup(component);
   const kindOptionLabels = Object.fromEntries(COMPONENT_KINDS.map((kind) => [kind, kindLabel(kind)]));
   const capabilityFields = [
     profile.capacity ? quantityField(componentCapacityFieldLabel(component), "capacity_bytes", component.capacity_bytes ?? 0, "bytes") : "",
     profile.peakOps ? quantityField("硬件峰值运算率（Physical Peak OPS/s）", "peak_ops_per_s", component.peak_ops_per_s ?? 0, "ops") : "",
-    profile.componentBandwidth ? `<div class="field-grid-2">${bandwidthField("物理读取带宽（Physical Read Bandwidth, MB/s–TB/s）", "read_bandwidth_gbps", component.read_bandwidth_gbps ?? 0)}${bandwidthField("物理写入带宽（Physical Write Bandwidth, MB/s–TB/s）", "write_bandwidth_gbps", component.write_bandwidth_gbps ?? 0)}</div>` : "",
+    profile.componentBandwidth ? `<div class="field-grid-2">${bandwidthField("物理读取带宽（Physical Read Bandwidth, MB/s–TB/s）", "read_bandwidth_gbps", component.read_bandwidth_gbps ?? 0)}${bandwidthField("物理写入带宽（Physical Write Bandwidth, MB/s–TB/s）", "write_bandwidth_gbps", component.write_bandwidth_gbps ?? 0, { unknown: unknownComponentField(component, "write_bandwidth_gbps") })}</div>` : "",
   ].filter(Boolean).join("");
   dom.inspectorContent.innerHTML = `
     <section class="inspector-section">
@@ -8343,14 +8524,14 @@ function renderComponentInspector(componentId) {
     ${profile.latencyDma ? `<section class="inspector-section">
       <h3>延迟与数据搬移（Latency & DMA）</h3>
       <div class="field-grid-2">
-        ${metadataField("读取延迟（Read Latency, ns）", "read_latency_ns", metadata.read_latency_ns ?? 0, { helpKey: "read_latency" })}
-        ${metadataField("写入延迟（Write Latency, ns）", "write_latency_ns", metadata.write_latency_ns ?? 0, { helpKey: "write_latency" })}
-        ${quantityField("传输粒度（Transfer Granularity, B/KiB…PiB）", "transfer_granularity_bytes", metadata.transfer_granularity_bytes ?? 0, "bytes", { metadata: true, helpKey: "transfer_granularity" })}
-        ${metadataField("DMA 带宽（DMA Bandwidth, Gbps）", "dma_bandwidth_gbps", metadata.dma_bandwidth_gbps ?? 0, { helpKey: "dma_bandwidth" })}
-        ${metadataField("DMA 延迟（DMA Latency, ns）", "dma_latency_ns", metadata.dma_latency_ns ?? 0, { helpKey: "dma_latency" })}
-        ${metadataField("DMA 能耗（DMA Energy, pJ/byte）", "dma_energy_pj_per_byte", metadata.dma_energy_pj_per_byte ?? 0, { helpKey: "dma_energy" })}
+        ${metadataField("读取延迟（Read Latency, ns）", "read_latency_ns", metadata.read_latency_ns ?? 0, { helpKey: "read_latency", unit: "ns" })}
+        ${metadataField("写入延迟（Write Latency, ns）", "write_latency_ns", metadata.write_latency_ns ?? 0, { helpKey: "write_latency", unit: "ns", unknown: unknownComponentField(component, "write_latency_ns") })}
+        ${quantityField("传输粒度（Transfer Granularity, B/KB…PB）", "transfer_granularity_bytes", metadata.transfer_granularity_bytes ?? 0, "bytes", { metadata: true, helpKey: "transfer_granularity" })}
+        ${metadataField("DMA 带宽（DMA Bandwidth, Gb/s）", "dma_bandwidth_gbps", metadata.dma_bandwidth_gbps ?? 0, { helpKey: "dma_bandwidth", unit: "Gb/s" })}
+        ${metadataField("DMA 延迟（DMA Latency, ns）", "dma_latency_ns", metadata.dma_latency_ns ?? 0, { helpKey: "dma_latency", unit: "ns" })}
+        ${metadataField("DMA 能耗（DMA Energy, pJ/byte）", "dma_energy_pj_per_byte", metadata.dma_energy_pj_per_byte ?? 0, { helpKey: "dma_energy", unit: "pJ/B" })}
         ${metadataField("DMA 资源 ID（DMA Resource ID）", "dma_resource_id", metadata.dma_resource_id ?? `component.${component.component_id}.dma`, { type: "text", min: "", step: "", helpKey: "dma_resource" })}
-        ${storageTransportProfile ? metadataField("最大并发请求（Max Outstanding Requests）", "max_outstanding_requests", metadata.max_outstanding_requests ?? 1, { min: 1, step: 1, helpKey: "outstanding_requests" }) : ""}
+        ${storageTransportProfile ? metadataField("最大并发请求（Max Outstanding Requests, depth）", "max_outstanding_requests", metadata.max_outstanding_requests ?? 1, { min: 1, step: 1, helpKey: "outstanding_requests", unit: "depth" }) : ""}
       </div>
       ${storageTransportProfile ? `<p class="muted">存储端点、DMA 和拓扑链路是三个独立串行阶段；默认 DMA 数值属于可编辑分析假设。最大并发请求只重叠事务启动延迟。</p>` : ""}
       <div class="readout"><span>证据等级（Evidence Status）</span><strong>${escapeHtml(evidence)}</strong></div>
@@ -8491,7 +8672,7 @@ function bindInspectorQuantityFields(component) {
       if (parsed == null) {
         const guidance = quantity === "ops"
           ? "请输入非负数，并使用 OPS、KOPS、MOPS、GOPS、TOPS 或 POPS。"
-          : "请输入非负数，并使用 B、KiB、MiB、GiB、TiB 或 PiB。";
+          : "请输入非负数，并使用 B、KB、MB、GB、TB 或 PB。";
         toast("数值或单位无效", guidance, "error", 6000);
         renderComponentInspector(component.component_id);
         return;
@@ -8534,7 +8715,7 @@ function renderLinkInspector(linkId) {
       <div class="readout"><span data-concept-help="protocol">协议（Protocol）</span><strong>${escapeHtml(link.protocol)} · 删除后重建可更换</strong></div>
       <div class="field-grid-2">
         ${inputField("版本（Version）", "version", link.version ?? "1.0", { scope: "link" })}
-        ${inputField("通道数（Lanes）", "lanes", link.lanes ?? 1, { scope: "link", type: "number", min: 1, step: 1 })}
+        ${inputField("通道数（Lanes）", "lanes", link.lanes ?? 1, { scope: "link", type: "number", min: 1, step: 1, unit: "lanes" })}
       </div>
     </section>
     <section class="inspector-section">
@@ -8546,7 +8727,7 @@ function renderLinkInspector(linkId) {
     <section class="inspector-section">
       <h3>传输</h3>
       ${bandwidthField("带宽（Bandwidth, MB/s–TB/s）", "bandwidth_gbps", link.bandwidth_gbps ?? 0, { scope: "link" })}
-      ${inputField("延迟（Latency, ns）", "latency_ns", link.latency_ns ?? 0, { scope: "link", type: "number", min: 0, step: "any", helpKey: "link_latency" })}
+      ${inputField("延迟（Latency, ns）", "latency_ns", link.latency_ns ?? 0, { scope: "link", type: "number", min: 0, step: "any", helpKey: "link_latency", unit: "ns" })}
       <label class="checkbox-field"><span data-concept-help="bidirectional_link">双向传输（Bidirectional）</span><input type="checkbox" data-inspector-scope="link" data-inspector-field="bidirectional" ${link.bidirectional !== false ? "checked" : ""}></label>
     </section>
     ${thermalOperatingPointMarkup(link)}`;
@@ -8863,11 +9044,11 @@ function componentPresetFactLabel(key) {
     write_bandwidth_gbps: "写入带宽（Write Bandwidth, MB/s–TB/s）",
     bandwidth_gbps: "带宽（Bandwidth, MB/s–TB/s）",
     dma_bandwidth_gbps: "DMA 带宽（DMA Bandwidth, MB/s–TB/s）",
-    capacity_bytes: "容量（Capacity, B/KiB…PiB）",
+    capacity_bytes: "容量（Capacity, B/KB…PB）",
     peak_ops_per_s: "峰值运算率（Peak OPS/s）",
     read_latency_ns: "读取延迟（Read Latency, ns）",
     write_latency_ns: "写入延迟（Write Latency, ns）",
-    transfer_granularity_bytes: "传输粒度（Transfer Granularity, B/KiB…PiB）",
+    transfer_granularity_bytes: "传输粒度（Transfer Granularity, B/KB…PB）",
     dma_latency_ns: "DMA 延迟（DMA Latency, ns）",
     dma_energy_pj_per_byte: "DMA 能耗（DMA Energy, pJ/byte）",
     dma_resource: "DMA 资源 ID（DMA Resource ID）",
@@ -8882,8 +9063,8 @@ function componentPresetFactLabel(key) {
     unit_count_in_product: "产品内单元总数（Units in Product）",
     unit_count_status: "单元数量状态（Unit Count Status）",
     unit_count_formula: "单元数量公式（Unit Count Formula）",
-    unit_capacity_bytes: "单元容量（Capacity per Unit, B/KiB…PiB）",
-    product_total_capacity_bytes: "产品总容量（Product Total Capacity, B/KiB…PiB）",
+    unit_capacity_bytes: "单元容量（Capacity per Unit, B/KB…PB）",
+    product_total_capacity_bytes: "产品总容量（Product Total Capacity, B/KB…PB）",
     unit_bandwidth_gbps: "单元带宽（Bandwidth per Unit, MB/s–TB/s）",
     product_total_bandwidth_gbps: "产品总带宽（Product Total Bandwidth, MB/s–TB/s）",
     component_preset_id: "组件预设 ID（Component Preset ID）",
@@ -8897,8 +9078,17 @@ function componentPresetFactLabel(key) {
 
 function componentPresetListText(value, fallback = "—", key = "") {
   if (value == null || value === "") return fallback;
-  if (/_gbps$/i.test(key) && Number.isFinite(Number(value))) return formatBandwidthGbps(Number(value));
-  if (/_bytes$/i.test(key) && Number.isFinite(Number(value))) return formatBytes(Number(value));
+  if (Number.isFinite(Number(value))) {
+    const normalizedKey = String(key).toLowerCase();
+    if (/_gbps$/i.test(normalizedKey)) return formatBandwidthGbps(Number(value));
+    if (/_bytes$|capacity_bytes$/i.test(normalizedKey)) return formatBytes(Number(value));
+    if (/(?:^|_)ops_per_s$/i.test(normalizedKey)) return formatOps(Number(value));
+    if (/(?:^|_)latency_ns$/i.test(normalizedKey)) return formatUnit(value, "ns");
+    if (/(?:^|_)frequency_ghz$/i.test(normalizedKey)) return formatUnit(value, "GHz");
+    if (/(?:^|_)power_w$|(?:^|_)watts$/i.test(normalizedKey)) return formatUnit(value, "W");
+    if (/(?:^|_)energy_pj_per_(byte|op)$/i.test(normalizedKey)) return formatUnit(value, normalizedKey.includes("per_byte") ? "pJ/B" : "pJ/op");
+    if (/(^|_)(ratio|scale|efficiency)$/i.test(normalizedKey)) return formatUnit(value, "(0–1)");
+  }
   if (key === "physical_unit_count_status" || key === "unit_count_status") {
     const status = {
       explicit_physical_node: "显式物理节点",
@@ -8943,8 +9133,8 @@ function componentPresetFacts(preset) {
   if (isTopologyBundlePreset(preset)) {
     return {
       "预设类型": "组合拓扑",
-      "组件数": Number(preset?.component_count ?? asArray(preset?.components).length),
-      "内部链路数": Number(preset?.link_count ?? asArray(preset?.links).length),
+      "组件数": formatUnit(Number(preset?.component_count ?? asArray(preset?.components).length), "count"),
+      "内部链路数": formatUnit(Number(preset?.link_count ?? asArray(preset?.links).length), "count"),
       "分组根": String(asObject(preset?.group).root ?? "GPU"),
       "默认折叠": asObject(preset?.group).collapsed === true ? "是" : "否（默认展开）",
       "总 HBM 单向带宽（Total HBM One-way Bandwidth, MB/s–TB/s）": formatBandwidthGbps(preset?.read_bandwidth_gbps),
@@ -8952,14 +9142,14 @@ function componentPresetFacts(preset) {
   }
   const spec = componentPresetSpec(preset);
   const facts = asObject(preset?.facts ?? preset?.specifications ?? preset?.specs);
-  const canonical = {
-    "组件类型": kindLabel(spec.kind ?? preset?.kind),
-    "容量（Capacity, B/KiB…PiB）": formatBytes(spec.capacity_bytes),
-    "峰值运算率（Peak OPS/s）": formatOps(spec.peak_ops_per_s),
-    "读取带宽（Read Bandwidth, MB/s–TB/s）": formatBandwidthGbps(spec.read_bandwidth_gbps),
-    "写入带宽（Write Bandwidth, MB/s–TB/s）": formatBandwidthGbps(spec.write_bandwidth_gbps),
-  };
-  return Object.fromEntries([...Object.entries(canonical), ...Object.entries(facts).map(([key, value]) => [componentPresetFactLabel(key), /_gbps$/i.test(key) ? formatBandwidthGbps(value) : value])].filter(([, value]) => value !== "—" && value !== "" && value != null));
+  const unknown = (field) => unknownComponentField(spec, field);
+  const capability = (field, formatter) => unknown(field) ? "未公开（not published）" : formatter(spec[field]);
+  const canonical = { "组件类型": kindLabel(spec.kind ?? preset?.kind) };
+  if (Number(spec.capacity_bytes) > 0 || unknown("capacity_bytes")) canonical["容量（Capacity, B/KB…PB）"] = capability("capacity_bytes", formatBytes);
+  if (Number(spec.peak_ops_per_s) > 0 || unknown("peak_ops_per_s")) canonical["峰值运算率（Peak OPS/s）"] = capability("peak_ops_per_s", formatOps);
+  if (Number(spec.read_bandwidth_gbps) > 0 || unknown("read_bandwidth_gbps")) canonical["读取带宽（Read Bandwidth, MB/s–TB/s）"] = capability("read_bandwidth_gbps", formatBandwidthGbps);
+  if (Number(spec.write_bandwidth_gbps) > 0 || unknown("write_bandwidth_gbps")) canonical["写入带宽（Write Bandwidth, MB/s–TB/s）"] = capability("write_bandwidth_gbps", formatBandwidthGbps);
+  return Object.fromEntries([...Object.entries(canonical), ...Object.entries(facts).map(([key, value]) => [componentPresetFactLabel(key), componentPresetListText(value, "", key)])].filter(([, value]) => value !== "—" && value !== "" && value != null));
 }
 
 function componentPresetFacetValues(payload, keys, items, fallbackExtractor) {
@@ -9042,7 +9232,7 @@ function componentPresetCardMarkup(preset) {
   return `<article class="component-preset-card ${selected ? "is-expanded" : ""}" data-component-preset-id="${escapeHtml(id)}">
     <header><div><span class="component-preset-kind">${bundle ? "组合拓扑（Bundle）" : escapeHtml(kindLabel(componentPresetKind(value)))}</span><h3>${escapeHtml(normalizePresetBandwidthText(componentPresetDisplayName(value)))}</h3><code>${escapeHtml(id || "no-id")}</code></div><span class="evidence-chip">${escapeHtml(componentPresetEvidenceLabel(componentPresetEvidence(value)))}</span></header>
     <div class="component-preset-summary">${summary}</div>
-    <div class="component-preset-actions"><button type="button" class="button button-quiet" data-component-preset-details="${escapeHtml(id)}" aria-expanded="${String(selected)}">${selected ? "收起详情" : "查看详情"}</button><button type="button" class="button button-primary" data-load-component-preset="${escapeHtml(id)}" ${id ? "" : "disabled"}>${bundle ? "载入组合拓扑" : "载入单组件（Load One）"}</button></div>
+    <div class="component-preset-actions"><button type="button" class="button button-quiet" data-component-preset-details="${escapeHtml(id)}" aria-expanded="${String(selected)}">${selected ? "收起详情" : "查看详情"}</button><button type="button" class="button button-primary" data-load-component-preset="${escapeHtml(id)}" ${id ? "" : "disabled"}>${bundle ? "载入组合拓扑" : "载入单组件（Load One）"}</button>${bundle ? "" : `<button type="button" class="button button-quiet" data-edit-component-preset="${escapeHtml(id)}">编辑</button><button type="button" class="button button-danger" data-delete-component-preset="${escapeHtml(id)}">删除</button>`}</div>
     <section class="component-preset-details" ${selected ? "" : "hidden"}>${selected ? componentPresetDetailsMarkup(value) : ""}</section>
   </article>`;
 }
@@ -9057,6 +9247,8 @@ function renderComponentPresets() {
   dom.componentPresetList.innerHTML = items.map(componentPresetCardMarkup).join("");
   $$('[data-component-preset-details]', dom.componentPresetList).forEach((button) => button.addEventListener("click", () => { void toggleComponentPresetDetails(button.dataset.componentPresetDetails, button); }));
   $$('[data-load-component-preset]', dom.componentPresetList).forEach((button) => button.addEventListener("click", () => { void loadComponentFromPreset(button.dataset.loadComponentPreset, button); }));
+  $$('[data-edit-component-preset]', dom.componentPresetList).forEach((button) => button.addEventListener("click", () => { void openComponentPresetEditor(button.dataset.editComponentPreset); }));
+  $$('[data-delete-component-preset]', dom.componentPresetList).forEach((button) => button.addEventListener("click", () => { void deleteComponentPresetFromCatalog(button.dataset.deleteComponentPreset, button); }));
 }
 
 async function loadComponentPresets() {
@@ -9075,6 +9267,172 @@ async function loadComponentPresets() {
     dom.componentPresetList.innerHTML = `<div class="preset-empty is-error">${escapeHtml(chineseMessage(error, "组件预设目录载入失败，请确认本地 API 支持 /api/component-presets 后重试。"))}</div>`;
   } finally {
     state.componentPresetsLoading = false;
+  }
+}
+
+function componentPresetEditorValue(id) {
+  return document.getElementById(id)?.value ?? "";
+}
+
+function populateComponentPresetEditor(detail = null) {
+  const preset = asObject(detail);
+  const spec = componentPresetSpec(preset);
+  const source = asObject(componentPresetSources(preset)[0]);
+  const editing = Boolean(state.editingComponentPresetId);
+  const fields = {
+    componentPresetEditorId: componentPresetId(preset),
+    componentPresetEditorName: componentPresetDisplayName(preset),
+    componentPresetEditorKind: spec.kind || "",
+    componentPresetEditorFamily: preset.family || "用户自定义",
+    componentPresetEditorCapacity: Number.isFinite(Number(spec.capacity_bytes)) ? formatBytes(spec.capacity_bytes) : "0 B",
+    componentPresetEditorReadBandwidth: unknownComponentField(spec, "read_bandwidth_gbps") ? "" : (Number.isFinite(Number(spec.read_bandwidth_gbps)) ? formatBandwidthGbps(spec.read_bandwidth_gbps) : "0 GB/s"),
+    componentPresetEditorWriteBandwidth: unknownComponentField(spec, "write_bandwidth_gbps") ? "" : (Number.isFinite(Number(spec.write_bandwidth_gbps)) ? formatBandwidthGbps(spec.write_bandwidth_gbps) : "0 GB/s"),
+    componentPresetEditorPeakOps: Number.isFinite(Number(spec.peak_ops_per_s)) ? formatOps(spec.peak_ops_per_s) : "0 OPS/s",
+    componentPresetEditorReadLatency: Number.isFinite(Number(spec.metadata?.read_latency_ns)) ? String(spec.metadata.read_latency_ns) : "0",
+    componentPresetEditorWriteLatency: Number.isFinite(Number(spec.metadata?.write_latency_ns)) ? String(spec.metadata.write_latency_ns) : "0",
+    componentPresetEditorSourceUrl: source.url || "",
+    componentPresetEditorSourceTitle: source.title || "",
+    componentPresetEditorPorts: JSON.stringify(asArray(spec.ports), null, 2),
+    componentPresetEditorCostProfile: JSON.stringify(asObject(spec.metadata).cost_profile_template || {}, null, 2),
+    componentPresetEditorNotes: preset.notes || "",
+  };
+  Object.entries(fields).forEach(([id, value]) => { const field = document.getElementById(id); if (field) field.value = value; });
+  const gpuExternalMemory = normalizedComponentKind(spec.kind) === "gpu";
+  ["componentPresetEditorCapacity", "componentPresetEditorReadBandwidth", "componentPresetEditorWriteBandwidth"].forEach((id) => {
+    const field = document.getElementById(id)?.closest(".field");
+    if (field) field.hidden = gpuExternalMemory;
+  });
+  if (dom.componentPresetEditorTitle) dom.componentPresetEditorTitle.textContent = editing ? `编辑组件预设 · ${componentPresetId(preset)}` : "新增组件预设";
+  if (dom.componentPresetEditorId) dom.componentPresetEditorId.readOnly = editing;
+  const provenance = asObject(asObject(spec.metadata).vendor_parameter_provenance);
+  const writeStatus = String(asObject(provenance.write_bandwidth_gbps).status || asObject(asObject(spec.metadata).capability_status).write_bandwidth_gbps || "");
+  const writeLatencyStatus = String(asObject(provenance.write_latency_ns).status || asObject(asObject(spec.metadata).capability_status).write_latency_ns || "");
+  const status = editing
+    ? uiText("修改内置预设会写入本地覆盖；可用删除操作隐藏该预设。", "Editing a built-in preset writes a local override; use Delete to hide it.")
+    : uiText("新增预设会写入本地目录，重启服务后仍可使用。", "New presets are saved to the local catalog and survive service restarts.");
+  const gpuNote = gpuExternalMemory ? uiText("GPU 容量和读写带宽由外部 HBM 组件建模。", "GPU capacity and read/write bandwidth are modeled by external HBM components.") : "";
+  const unknownNote = [
+    writeStatus === "not_published" ? uiText("当前写带宽为厂家未公开值；0 仅是未知哨兵，可按实测值覆盖。", "The vendor has not published write bandwidth; 0 is an unknown sentinel and can be replaced by a measured value.") : "",
+    writeLatencyStatus === "not_published" ? uiText("当前写延迟为厂家未公开值；0 ns 仅是未知哨兵，不参与免费计费。", "The vendor has not published write latency; 0 ns is an unknown sentinel and is never treated as free service.") : "",
+  ].filter(Boolean).join(" ");
+  if (dom.componentPresetEditorStatus) dom.componentPresetEditorStatus.textContent = `${status}${gpuNote}${unknownNote}`;
+}
+
+async function openComponentPresetEditor(id = "") {
+  state.editingComponentPresetId = id || null;
+  let detail = null;
+  try {
+    if (id) detail = await componentPresetDetail(id);
+  } catch (error) {
+    showOperationError("组件预设详情载入失败", error);
+    return;
+  }
+  populateComponentPresetEditor(detail);
+  showModalDialog(dom.componentPresetEditorDialog, dom.createComponentPresetButton, dom.componentPresetEditorId);
+}
+
+function componentPresetEditorPayload() {
+  const id = componentPresetEditorValue("componentPresetEditorId").trim();
+  const existing = id ? state.componentPresetDetails.get(id) : null;
+  const currentSpec = componentPresetSpec(existing);
+  const sourceUrl = componentPresetEditorValue("componentPresetEditorSourceUrl").trim();
+  const sourceTitle = componentPresetEditorValue("componentPresetEditorSourceTitle").trim();
+  const editorKind = componentPresetEditorValue("componentPresetEditorKind").trim();
+  const editorSpec = { ...currentSpec, kind: editorKind };
+  let ports;
+  let costProfile;
+  try {
+    ports = JSON.parse(componentPresetEditorValue("componentPresetEditorPorts") || "[]");
+    costProfile = JSON.parse(componentPresetEditorValue("componentPresetEditorCostProfile") || "{}");
+  } catch (error) {
+    throw new Error("端口或 cost_profile_template 必须是有效 JSON");
+  }
+  if (!Array.isArray(ports) || !costProfile || typeof costProfile !== "object" || Array.isArray(costProfile)) throw new Error("端口必须是数组，cost_profile_template 必须是对象");
+  const capacity = parseBytes(componentPresetEditorValue("componentPresetEditorCapacity"));
+  const readBandwidth = parseBandwidthToGbps(componentPresetEditorValue("componentPresetEditorReadBandwidth"));
+  const writeBandwidthText = componentPresetEditorValue("componentPresetEditorWriteBandwidth").trim();
+  const writeBandwidth = !writeBandwidthText && unknownComponentField(editorSpec, "write_bandwidth_gbps")
+    ? 0
+    : parseBandwidthToGbps(writeBandwidthText);
+  const peakOps = parseOps(componentPresetEditorValue("componentPresetEditorPeakOps"));
+  if (capacity == null || readBandwidth == null || writeBandwidth == null || peakOps == null) {
+    throw new Error("容量请输入 B/KB/MB/GB/TB/PB；带宽请输入 MB/s、GB/s 或 TB/s；算力请输入 OPS/s、TOPS 或 POPS。未公开字段留空后请在备注中说明，或填入分析假设。");
+  }
+  // Keep the execution profile aligned with editable hardware capability fields
+  // for the common flat memory profile; nested GPU profiles remain explicit JSON.
+  if (Object.keys(costProfile).length) {
+    if (Number.isFinite(readBandwidth)) {
+      costProfile.read_bandwidth_gb_s = readBandwidth / 8;
+      costProfile.bandwidth_gb_s = readBandwidth / 8;
+    }
+    if (Number.isFinite(writeBandwidth)) costProfile.write_bandwidth_gb_s = writeBandwidth / 8;
+    costProfile.read_latency_ns = Number(componentPresetEditorValue("componentPresetEditorReadLatency"));
+    costProfile.write_latency_ns = Number(componentPresetEditorValue("componentPresetEditorWriteLatency"));
+  }
+  const metadata = { ...asObject(currentSpec.metadata), read_latency_ns: Number(componentPresetEditorValue("componentPresetEditorReadLatency")), write_latency_ns: Number(componentPresetEditorValue("componentPresetEditorWriteLatency")) };
+  if (Object.keys(costProfile).length) {
+    metadata.cost_profile_template = costProfile;
+    metadata.cost_profile_key = metadata.cost_profile_key || costProfileKeyForComponentKind(componentPresetEditorValue("componentPresetEditorKind").trim());
+  }
+  const component = {
+    ...currentSpec,
+    component_id: currentSpec.component_id || id,
+    kind: editorKind,
+    capacity_bytes: normalizedComponentKind(editorKind) === "gpu" ? 0 : capacity,
+    peak_ops_per_s: peakOps,
+    read_bandwidth_gbps: normalizedComponentKind(editorKind) === "gpu" ? 0 : readBandwidth,
+    write_bandwidth_gbps: normalizedComponentKind(editorKind) === "gpu" ? 0 : writeBandwidth,
+    ports,
+    metadata,
+  };
+  const payload = {
+    id,
+    name: componentPresetEditorValue("componentPresetEditorName").trim(),
+    family: componentPresetEditorValue("componentPresetEditorFamily").trim() || "用户自定义",
+    evidence_level: existing?.evidence_level || "A_ANALYTICAL",
+    notes: componentPresetEditorValue("componentPresetEditorNotes").trim(),
+    component,
+  };
+  if (sourceUrl || sourceTitle) payload.sources = [{ title: sourceTitle || "厂家来源", url: sourceUrl, publisher: "用户录入", evidence_level: payload.evidence_level }];
+  else if (existing) payload.sources = componentPresetSources(existing);
+  return payload;
+}
+
+async function saveComponentPresetFromEditor(event) {
+  event.preventDefault();
+  const button = dom.saveComponentPresetButton;
+  button.disabled = true;
+  if (dom.componentPresetEditorStatus) dom.componentPresetEditorStatus.textContent = "正在保存…";
+  try {
+    const id = componentPresetEditorValue("componentPresetEditorId").trim();
+    await apiRequest(`/component-presets${state.editingComponentPresetId ? `/${encodeURIComponent(state.editingComponentPresetId)}` : ""}`, {
+      method: state.editingComponentPresetId ? "PUT" : "POST",
+      body: JSON.stringify(componentPresetEditorPayload()),
+    });
+    dom.componentPresetEditorDialog.close("saved");
+    state.componentPresetDetails.clear();
+    state.componentPresetsLoaded = false;
+    await loadComponentPresets();
+    toast("硬件预设已保存", `${id} 已更新当前组件预设目录。`, "success", 4200);
+  } catch (error) {
+    if (dom.componentPresetEditorStatus) dom.componentPresetEditorStatus.textContent = chineseMessage(error, "保存失败，请检查参数和单位。");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function deleteComponentPresetFromCatalog(id, button) {
+  if (!window.confirm(`确定删除组件预设“${id}”？删除会写入本地目录。`)) return;
+  button.disabled = true;
+  try {
+    await apiRequest(`/component-presets/${encodeURIComponent(id)}`, { method: "DELETE", headers: {} });
+    state.componentPresetDetails.delete(id);
+    state.componentPresets = state.componentPresets.filter((preset) => componentPresetId(preset) !== id);
+    renderComponentPresets();
+    toast("硬件预设已删除", `${id} 已从当前目录移除。`, "success", 3600);
+  } catch (error) {
+    button.disabled = false;
+    showOperationError("删除硬件预设失败", error);
   }
 }
 
@@ -9992,9 +10350,11 @@ function protocolPresetBandwidthMarkup(preset) {
 function protocolPresetCardMarkup(preset) {
   const id = componentPresetId(preset);
   const ioSpeed = asObject(preset?.io_speed);
+  const ioSpeedUnit = String(ioSpeed.unit || "单位未声明");
+  const transferUnit = String(preset.transfer_unit || "unit");
   return `<article class="component-preset-card protocol-preset-card" data-protocol-preset-id="${escapeHtml(id)}">
     <header><div><span class="component-preset-kind" data-concept-help="protocol">${escapeHtml(String(preset.protocol || "协议"))} · ${escapeHtml(String(preset.version || "—"))}</span><h3>${escapeHtml(String(preset.name || id))}</h3><code>${escapeHtml(id)}</code></div><span class="evidence-chip">${escapeHtml(String(preset.organization || "—"))}</span></header>
-    <div class="component-preset-summary"><span>${escapeHtml(String(ioSpeed.value ?? "—"))} ${escapeHtml(String(ioSpeed.unit ?? ""))}</span><span>${escapeHtml(String(preset.transfer_unit_count ?? "—"))} ${escapeHtml(String(preset.transfer_unit || "unit"))}</span></div>
+    <div class="component-preset-summary"><span>${escapeHtml(String(ioSpeed.value ?? "—"))} ${escapeHtml(ioSpeedUnit)}</span><span>${escapeHtml(String(preset.transfer_unit_count ?? "—"))} ${escapeHtml(transferUnit)}</span></div>
     ${protocolPresetBandwidthMarkup(preset)}
     <p class="protocol-bandwidth-scope"><strong>显示口径：</strong>${escapeHtml(String(preset.displayed_bandwidth_scope || "未声明"))}</p>
     <p class="protocol-unit-semantics"><strong>通道语义：</strong>${escapeHtml(String(preset.transfer_unit_semantics || "未声明"))}</p>
@@ -13926,7 +14286,160 @@ function placementNumberField(label, field, value, group, helpKey = "") {
 }
 
 function markWorkloadChanged(message = "") {
+  const metadata = asObject(state.scenario?.workload?.metadata);
+  for (const field of ["workload_preset_id", "workload_preset_source", "workload_preset_source_scenario"]) {
+    delete metadata[field];
+  }
+  if (state.scenario?.workload) state.scenario.workload.metadata = metadata;
   markScenarioChanged(message, {
+    mappingImpact: false,
+  });
+}
+
+function workloadPresetById(id) {
+  return workloadPresetCatalog.find((preset) => preset.id === id) || null;
+}
+
+function workloadPresetLabel(preset) {
+  return uiText(preset.label[0], preset.label[1]);
+}
+
+function workloadPresetDescription(preset) {
+  return uiText(preset.description[0], preset.description[1]);
+}
+
+function workloadPresetOptions(selectedId) {
+  return workloadPresetCatalog.map((preset) => (
+    `<option value="${escapeHtml(preset.id)}" ${preset.id === selectedId ? "selected" : ""}>${escapeHtml(workloadPresetLabel(preset))}</option>`
+  )).join("");
+}
+
+function normalizeWorkloadPresetCatalogItem(item) {
+  const source = asObject(item);
+  const id = String(source.id || source.preset_id || "").trim();
+  const label = asArray(source.label).map(String);
+  const description = asArray(source.description).map(String);
+  const numericFields = ["promptTokens", "outputTokens", "batch", "batchTokens", "prefillChunkTokens"];
+  if (!id || label.length < 2 || description.length < 2) return null;
+  if (numericFields.some((field) => !Number.isSafeInteger(Number(source[field])) || Number(source[field]) < 0)) return null;
+  return Object.freeze({
+    id,
+    label: [label[0], label[1]],
+    description: [description[0], description[1]],
+    source: String(source.source || WORKLOAD_PRESET_SOURCE),
+    sourceId: String(source.sourceId || source.source_id || ""),
+    promptTokens: Number(source.promptTokens),
+    outputTokens: Number(source.outputTokens),
+    batch: Number(source.batch),
+    batchTokens: Number(source.batchTokens),
+    prefillChunkTokens: Number(source.prefillChunkTokens),
+  });
+}
+
+async function loadWorkloadPresetCatalog() {
+  try {
+    const payload = await apiRequest("/workload-presets", { method: "GET", headers: {} });
+    const items = asArray(asObject(payload).items ?? asObject(payload).presets);
+    const normalized = items.map(normalizeWorkloadPresetCatalogItem).filter(Boolean);
+    if (normalized.length) workloadPresetCatalog = Object.freeze(normalized);
+    return workloadPresetCatalog;
+  } catch (_error) {
+    // Keep the bundled definitions for offline mode and older local servers.
+    workloadPresetCatalog = WORKLOAD_PRESETS;
+    return workloadPresetCatalog;
+  }
+}
+
+function workloadRequestsForPreset(preset) {
+  return Array.from({ length: preset.batch }, (_unused, index) => ({
+    schema_version: AUTHORING_SCHEMA_VERSION,
+    request_id: `request-${String(index).padStart(4, "0")}`,
+    arrival_ns: 0,
+    prompt_tokens: preset.promptTokens,
+    output_tokens: preset.outputTokens,
+    priority: 0,
+    deadline_ns: null,
+  }));
+}
+
+function applyWorkloadPreset(presetId) {
+  const preset = workloadPresetById(presetId);
+  if (!state.scenario?.workload) return;
+  if (!preset) {
+    if (presetId !== "") return;
+    const metadata = asObject(state.scenario.workload.metadata);
+    if (!Object.hasOwn(metadata, "workload_preset_id")) return;
+    const nextMetadata = { ...metadata };
+    delete nextMetadata.workload_preset_id;
+    delete nextMetadata.workload_preset_source;
+    delete nextMetadata.workload_preset_source_scenario;
+    state.scenario.workload.metadata = nextMetadata;
+    markWorkloadChanged("已切换为自定义负载；当前请求行和调度字段保持不变。");
+    return;
+  }
+  const workload = state.scenario.workload;
+  const metadata = asObject(workload.metadata);
+  for (const field of [
+    "llama_cpp_runtime",
+    "llama_cpp_runtime_fingerprint",
+    "llama_cpp_runtime_identity",
+    "llama_cpp_final_norm_static",
+    "llama_cpp_final_norm_graph_conditions",
+    "llama_cpp_recurrent_batching_contract",
+    "llama_cpp_slot_order",
+    "llama_cpp_slot_order_contract",
+    "llama_cpp_effective_scheduler_policy",
+    "llama_cpp_mixed_phase_batching",
+    "llama_cpp_capabilities",
+    "llama_cpp_kv_capacity_contract",
+    "llama_cpp_kv_contract",
+    "llama_cpp_kv_layer_components",
+    "llama_cpp_kv_layer_ranks",
+    "llama_cpp_retained_kv_state",
+    "llama_cpp_retained_kv_state_enabled",
+    "llama_cpp_recurrent_rs",
+    "context_limit_semantics",
+    "supports_batched_stateful_execution",
+    "supports_equal_length_stateful_ubatches",
+    "runtime_observed_config",
+    "retained_kv_state",
+    "kv_capacity_contract",
+  ]) delete metadata[field];
+  state.scenario.workload = {
+    ...workload,
+    name: workloadPresetLabel(preset),
+    requests: workloadRequestsForPreset(preset),
+    request_count: preset.batch,
+    arrival_rate_rps: 0,
+    prompt_tokens: preset.promptTokens,
+    output_tokens: preset.outputTokens,
+    random_seed: 0,
+    scheduler: {
+      mode: "continuous",
+      max_num_seqs: preset.batch,
+      max_num_batched_tokens: preset.batchTokens,
+      max_num_ubatch_tokens: preset.batchTokens,
+      prefill_chunk_tokens: preset.prefillChunkTokens,
+      policy: "decode_first",
+      mixed_phase_batching: false,
+      phase_candidate_order: "least_recently_served",
+      starvation_ns: 5_000_000,
+      preemption_enabled: false,
+      preemption_granularity: "boundary",
+      preemption_policy: "auto",
+      slo_ttft_ns: null,
+      slo_tbt_ns: null,
+      prefill_stop_offsets: [],
+    },
+    mtp: null,
+    metadata: {
+      ...metadata,
+      workload_preset_id: preset.id,
+      workload_preset_source: preset.source || WORKLOAD_PRESET_SOURCE,
+      workload_preset_source_scenario: preset.sourceId,
+    },
+  };
+  markScenarioChanged(`${workloadPresetLabel(preset)}：${workloadPresetDescription(preset)}`, {
     mappingImpact: false,
   });
 }
@@ -13935,9 +14448,17 @@ function renderWorkload() {
   const workload = state.scenario.workload;
   const scheduler = asObject(workload.scheduler);
   const mtp = workload.mtp === null ? null : asObject(workload.mtp);
+  const workloadMetadata = asObject(workload.metadata);
+  const selectedPresetId = workloadPresetCatalog.some((preset) => preset.id === workloadMetadata.workload_preset_id)
+    ? workloadMetadata.workload_preset_id
+    : "";
   dom.workloadMetaForm.innerHTML = `
     <section class="workload-config-section" data-workload-section="request-generation" aria-labelledby="workloadGenerationTitle">
       <header class="workload-section-heading"><div><h2 id="workloadGenerationTitle" data-concept-help="request_generation">${escapeHtml(uiText("请求生成", "Request Generation"))}</h2></div></header>
+      <div class="workload-preset-toolbar">
+        <label class="field"><span>${escapeHtml(uiText("负载预设", "Workload Preset"))}</span><select id="workloadPresetSelect"><option value="">${escapeHtml(uiText("自定义负载", "Custom workload"))}</option>${workloadPresetOptions(selectedPresetId)}</select></label>
+        <p class="workload-preset-note">${escapeHtml(selectedPresetId ? workloadPresetDescription(workloadPresetById(selectedPresetId)) : uiText("预设来自 llama.cpp 对齐基线和 35 项目 v6.2 典型负载；选择后会重建显式请求行。", "Presets come from the llama.cpp-aligned baseline and the v6.2 typical workload table in project 35; selecting one rebuilds explicit request rows."))}</p>
+      </div>
       <div class="workload-field-grid">
         ${workloadField("负载名称", "Workload Name", "name", workload.name, "text", "", "workload")}
         ${workloadField("合成请求数", "Synthetic Request Count", "request_count", workload.request_count, "number", 0, "synthetic_request_count")}
@@ -13966,6 +14487,7 @@ function renderWorkload() {
       </div>
     </section>`;
   hydrateConceptHelp(dom.workloadMetaForm);
+  $("#workloadPresetSelect", dom.workloadMetaForm)?.addEventListener("change", (event) => applyWorkloadPreset(event.target.value));
   $$('[data-workload-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
     const field = control.dataset.workloadField;
     workload[field] = control.type === "number" ? Number(control.value) : control.value.trim();
@@ -16900,11 +17422,11 @@ function combineResults(values, separator = " · ") {
 function formatResultBytes(value) {
   if (value == null || !Number.isFinite(Number(value))) return { html: "NA", text: "NA" };
   const bytes = Number(value);
-  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
   let scaled = Math.abs(bytes);
   let unit = 0;
-  while (scaled >= 1024 && unit < units.length - 1) {
-    scaled /= 1024;
+  while (scaled >= 1000 && unit < units.length - 1) {
+    scaled /= 1000;
     unit += 1;
   }
   if (bytes < 0) scaled *= -1;
@@ -16945,19 +17467,31 @@ function runtimeSharedTrackMeasurements(root = dom.runtimeSummary) {
 
 function applyRuntimeSharedTracks(root = dom.runtimeSummary) {
   if (!root?.querySelectorAll || !root.style?.setProperty) return { titleHeight: 0, labelHeights: [], valueHeights: [] };
-  const measurements = runtimeSharedTrackMeasurements(root);
-  if (measurements.titleHeight > 0) root.style.setProperty("--runtime-title-track", `${measurements.titleHeight}px`);
-  else root.style.removeProperty?.("--runtime-title-track");
-  $$('.runtime-stat[data-runtime-stat-row]', root).forEach((stat) => {
-    const row = Math.max(0, Number(stat.dataset.runtimeStatRow) || 0);
-    const labelHeight = measurements.labelHeights[row] || 0;
-    const valueHeight = measurements.valueHeights[row] || 0;
-    if (labelHeight > 0) stat.style.setProperty("--runtime-label-track", `${labelHeight}px`);
-    else stat.style.removeProperty?.("--runtime-label-track");
-    if (valueHeight > 0) stat.style.setProperty("--runtime-value-track", `${valueHeight}px`);
-    else stat.style.removeProperty?.("--runtime-value-track");
+  const scopes = $$(".runtime-card-grid", root);
+  if (!scopes.length) scopes.push(root);
+  const aggregate = { titleHeight: 0, labelHeights: [], valueHeights: [] };
+  scopes.forEach((scope) => {
+    const measurements = runtimeSharedTrackMeasurements(scope);
+    aggregate.titleHeight = Math.max(aggregate.titleHeight, measurements.titleHeight);
+    measurements.labelHeights.forEach((height, row) => {
+      aggregate.labelHeights[row] = Math.max(aggregate.labelHeights[row] || 0, height || 0);
+    });
+    measurements.valueHeights.forEach((height, row) => {
+      aggregate.valueHeights[row] = Math.max(aggregate.valueHeights[row] || 0, height || 0);
+    });
+    if (measurements.titleHeight > 0) scope.style.setProperty("--runtime-title-track", `${measurements.titleHeight}px`);
+    else scope.style.removeProperty?.("--runtime-title-track");
+    $$('.runtime-stat[data-runtime-stat-row]', scope).forEach((stat) => {
+      const row = Math.max(0, Number(stat.dataset.runtimeStatRow) || 0);
+      const labelHeight = measurements.labelHeights[row] || 0;
+      const valueHeight = measurements.valueHeights[row] || 0;
+      if (labelHeight > 0) stat.style.setProperty("--runtime-label-track", `${labelHeight}px`);
+      else stat.style.removeProperty?.("--runtime-label-track");
+      if (valueHeight > 0) stat.style.setProperty("--runtime-value-track", `${valueHeight}px`);
+      else stat.style.removeProperty?.("--runtime-value-track");
+    });
   });
-  return measurements;
+  return scopes.length === 1 ? runtimeSharedTrackMeasurements(scopes[0]) : aggregate;
 }
 
 function scheduleRuntimeSharedTracks() {
@@ -17038,10 +17572,10 @@ function renderRuntime(report) {
     const used = Number(kvComponentUsed[component]);
     const free = Number.isFinite(cap) && Number.isFinite(used) ? cap - used : null;
     const layers = asArray(kvComponentLayers[component]).join(", ") || "—";
-    return `<tr><th>${escapeHtml(component)}</th><td>${formatResultBytes(kvComponentCapacity[component]).html}</td><td>${formatResultBytes(kvComponentUsed[component]).html}</td><td>${free == null ? "—" : formatResultBytes(free).html}</td><td>${escapeHtml(layers)}</td></tr>`;
+    return `<tr><td>${escapeHtml(component)}</td><td>${formatResultBytes(kvComponentCapacity[component]).html}</td><td>${formatResultBytes(kvComponentUsed[component]).html}</td><td>${free == null ? "—" : formatResultBytes(free).html}</td><td>${escapeHtml(layers)}</td></tr>`;
   }).join("");
-  const kvLayerRows = Object.keys(kvLayerOwner).map((layer) => `<tr><th>${escapeHtml(layer)}</th><td>${escapeHtml(kvLayerOwner[layer])}</td><td>${formatResultBytes(kvLayerBpt[layer]).html}</td><td>${formatResultBytes(kvLayerBpp[layer]).html}</td></tr>`).join("");
-  const kvAnalysisMarkup = (kvComponentRows || kvLayerRows || Object.hasOwn(kvRoot, "kv_layout_mode")) ? `<section class="runtime-kv-analysis" data-runtime-section="kv-analysis"><h3>${escapeHtml(uiText("KV 容量与放置分析", "KV capacity and placement analysis"))}</h3><dl class="technical-facts"><div><dt>${escapeHtml(uiText("驻留模式", "Layout mode"))}</dt><dd>${escapeHtml(String(kvRoot.kv_layout_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("Split 模式", "Split mode"))}</dt><dd>${escapeHtml(String(kvRoot.split_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("统一 KV", "Unified KV"))}</dt><dd>${escapeHtml(String(kvRoot.kv_unified ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("有效物理容量", "Effective physical capacity"))}</dt><dd>${formatResultBytes(kvRoot.effective_physical_capacity).html}</dd></div><div><dt>${escapeHtml(uiText("瓶颈组件", "Bottleneck component"))}</dt><dd>${escapeHtml(String(kvRoot.kv_bottleneck_component ?? "—"))}</dd></div></dl>${kvComponentRows ? `<h4>${escapeHtml(uiText("按组件", "By component"))}</h4><div class="table-shell"><table class="data-table compact-data-table"><thead><tr><th>${escapeHtml(uiText("组件", "Component"))}</th><th>${escapeHtml(uiText("容量", "Capacity"))}</th><th>${escapeHtml(uiText("已用", "Used"))}</th><th>${escapeHtml(uiText("空闲", "Free"))}</th><th>${escapeHtml(uiText("所属层", "Owned layers"))}</th></tr></thead><tbody>${kvComponentRows}</tbody></table></div>` : ""}${kvLayerRows ? `<h4>${escapeHtml(uiText("按 layer", "By layer"))}</h4><div class="table-shell"><table class="data-table compact-data-table"><thead><tr><th>Layer</th><th>Owner</th><th>Bytes/token</th><th>Bytes/page</th></tr></thead><tbody>${kvLayerRows}</tbody></table></div>` : ""}<p class="muted">${escapeHtml(uiText("运行事件：batch retry {retry}；context shift {shift}；idle slot cleanup {idle}；容量失败 {failure}。", "Runtime events: batch retry {retry}; context shift {shift}; idle slot cleanup {idle}; capacity failure {failure}.", { retry: String(kvRoot.kv_batch_retry_count ?? 0), shift: String(kvRoot.kv_context_shift_count ?? 0), idle: String(kvRoot.kv_idle_slots_cleared ?? 0), failure: kvRoot.kv_capacity_failure_count ?? kvRoot.kv_capacity_failure ?? 0 } ))}</p></section>` : "";
+  const kvLayerRows = Object.keys(kvLayerOwner).map((layer) => `<tr><td>${escapeHtml(layer)}</td><td>${escapeHtml(kvLayerOwner[layer])}</td><td>${formatResultBytes(kvLayerBpt[layer]).html}</td><td>${formatResultBytes(kvLayerBpp[layer]).html}</td></tr>`).join("");
+  const kvAnalysisMarkup = (kvComponentRows || kvLayerRows || Object.hasOwn(kvRoot, "kv_layout_mode")) ? `<section class="runtime-kv-analysis" data-runtime-section="kv-analysis"><h3>${escapeHtml(uiText("KV 容量与放置分析", "KV capacity and placement analysis"))}</h3><dl class="technical-facts"><div><dt>${escapeHtml(uiText("驻留模式", "Layout mode"))}</dt><dd>${escapeHtml(String(kvRoot.kv_layout_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("Split 模式", "Split mode"))}</dt><dd>${escapeHtml(String(kvRoot.split_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("统一 KV", "Unified KV"))}</dt><dd>${escapeHtml(String(kvRoot.kv_unified ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("有效物理容量", "Effective physical capacity"))}</dt><dd>${formatResultBytes(kvRoot.effective_physical_capacity).html}</dd></div><div><dt>${escapeHtml(uiText("瓶颈组件", "Bottleneck component"))}</dt><dd>${escapeHtml(String(kvRoot.kv_bottleneck_component ?? "—"))}</dd></div></dl>${kvComponentRows ? `<h4>${escapeHtml(uiText("按组件", "By component"))}</h4><div class="table-shell"><table class="data-table compact-data-table kv-component-table"><thead><tr><th>${escapeHtml(uiText("组件", "Component"))}</th><th>${escapeHtml(uiText("容量", "Capacity"))}</th><th>${escapeHtml(uiText("已用", "Used"))}</th><th>${escapeHtml(uiText("空闲", "Free"))}</th><th>${escapeHtml(uiText("所属层", "Owned layers"))}</th></tr></thead><tbody>${kvComponentRows}</tbody></table></div>` : ""}${kvLayerRows ? `<h4>${escapeHtml(uiText("按 layer", "By layer"))}</h4><div class="table-shell"><table class="data-table compact-data-table"><thead><tr><th>Layer</th><th>Owner</th><th>Bytes/token</th><th>Bytes/page</th></tr></thead><tbody>${kvLayerRows}</tbody></table></div>` : ""}<p class="muted">${escapeHtml(uiText("运行事件：批次重试 {retry}；上下文偏移 {shift}；空闲槽位清理 {idle}；容量失败 {failure}。", "Runtime events: batch retry {retry}; context shift {shift}; idle slot cleanup {idle}; capacity failure {failure}.", { retry: String(kvRoot.kv_batch_retry_count ?? 0), shift: String(kvRoot.kv_context_shift_count ?? 0), idle: String(kvRoot.kv_idle_slots_cleared ?? 0), failure: kvRoot.kv_capacity_failure_count ?? kvRoot.kv_capacity_failure ?? 0 } ))}</p></section>` : "";
   const mtp = asObject(summary.mtp);
   const goodput = asObject(summary.goodput);
   const machineMode = String(report.execution_mode || (state.scenario?.workload?.scheduler?.mode === "continuous" ? "continuous_batching" : "static"));
@@ -17100,7 +17634,7 @@ function renderRuntime(report) {
     ? resultText(kv.prefetch_distance_modeled ? uiText("已显式建模", "Explicitly modeled") : uiText("未显式建模（仅策略元数据）", "Not explicitly modeled (policy metadata only)"))
     : unavailableResult();
 
-  dom.runtimeSummary.innerHTML = [
+  const runtimeOverviewMarkup = [
     runtimeGroup(uiText("执行", "Execution"), [
       [uiText("模式", "Mode"), resultText(modeLabel), "runtime_execution_mode"],
       [uiText("张量并行度", "TP Degree"), degree("tp_degree"), "tp_degree"],
@@ -17119,7 +17653,14 @@ function renderRuntime(report) {
       [uiText("交换", "Swap"), swap, "kv_swap_summary"],
       [uiText("页容量", "Capacity Pages"), runtimeValue(kv, "capacity_pages"), "kv_capacity_pages"],
     ], "is-kv", "kv_cache"),
-    kvAnalysisMarkup,
+    runtimeGroup(uiText("有效吞吐", "Goodput"), [
+      [uiText("请求率", "Requests / s"), runtimeValue(goodput, "requests_per_s", (value) => formatResultRate(value, "req/s")), "goodput_request_rate"],
+      [uiText("Token 率", "Tokens / s"), runtimeValue(goodput, "visible_output_tokens_per_s", (value) => formatResultRate(value, "tok/s")), "goodput_token_rate"],
+      [uiText("达标请求", "Qualified"), runtimeValue(goodput, "qualified_requests"), "goodput_qualified_requests"],
+    ], "is-goodput", "goodput"),
+  ].join("");
+
+  const runtimeDetailsMarkup = [
     runtimeGroup(uiText("KV 读写流量", "KV Traffic"), [
       [uiText("预填读取", "Prefill Read"), kvBytePair("logical_prefill_read_bytes", "physical_prefill_read_bytes"), "kv_prefill_read_traffic"],
       [uiText("预填写入", "Prefill Write"), kvBytePair("logical_prefill_write_bytes", "physical_prefill_write_bytes"), "kv_prefill_write_traffic"],
@@ -17141,11 +17682,12 @@ function renderRuntime(report) {
       [uiText("拒绝数", "Rejected"), runtimeValue(mtp, "rejected_tokens"), "mtp_rejected_tokens"],
       [uiText("有效接受率", "Effective Rate"), runtimeValue(mtp, "effective_acceptance_rate", formatResultPercent), "mtp_effective_rate"],
     ], "", "mtp"),
-    runtimeGroup(uiText("有效吞吐", "Goodput"), [
-      [uiText("请求率", "Requests / s"), runtimeValue(goodput, "requests_per_s", (value) => formatResultRate(value, "req/s")), "goodput_request_rate"],
-      [uiText("Token 率", "Tokens / s"), runtimeValue(goodput, "visible_output_tokens_per_s", (value) => formatResultRate(value, "tok/s")), "goodput_token_rate"],
-      [uiText("达标请求", "Qualified"), runtimeValue(goodput, "qualified_requests"), "goodput_qualified_requests"],
-    ], "is-goodput", "goodput"),
+  ].join("");
+
+  dom.runtimeSummary.innerHTML = [
+    `<div class="runtime-card-grid runtime-grid runtime-overview-grid">${runtimeOverviewMarkup}</div>`,
+    `<div class="runtime-card-grid runtime-grid runtime-details-grid">${runtimeDetailsMarkup}</div>`,
+    kvAnalysisMarkup,
   ].join("");
   bindRuntimeTrackResizeObserver();
   scheduleRuntimeSharedTracks();
@@ -18115,7 +18657,7 @@ function cacheDom() {
     "modelPresetsDialog", "closeModelPresetsButton", "presetFullscreenButton", "localPresetTab", "remotePresetTab", "localPresetPanel", "remotePresetPanel", "presetFilterForm", "presetSearchInput", "presetFamilyFilter", "presetArchitectureFilter", "presetSupportFilter", "presetStatus", "presetList", "presetPagination", "presetPreviousButton", "presetNextButton", "presetPageStatus",
     "remotePresetSearchForm", "remotePresetQueryInput", "remotePresetStatus", "remotePresetList", "presetImportForm", "presetRepoIdInput", "presetRevisionInput",
     "hardwarePresetsDialog", "closeHardwarePresetsButton", "hardwarePresetComponentTab", "hardwarePresetArchitectureTab", "architecturePresetsDialog", "architecturePresetFilterForm", "architecturePresetSearchInput", "architecturePresetCategoryFilter", "architecturePresetLevelFilter", "architecturePresetVendorFilter", "architecturePresetSupportFilter", "architecturePresetStatus", "architecturePresetList",
-    "componentPresetsDialog", "componentPresetFilterForm", "componentPresetSearchInput", "componentPresetKindFilter", "componentPresetVendorFilter", "componentPresetEvidenceFilter", "componentPresetStatus", "componentPresetList",
+    "componentPresetsDialog", "componentPresetFilterForm", "componentPresetSearchInput", "componentPresetKindFilter", "componentPresetVendorFilter", "componentPresetEvidenceFilter", "componentPresetStatus", "componentPresetList", "createComponentPresetButton", "componentPresetEditorDialog", "componentPresetEditorForm", "componentPresetEditorTitle", "componentPresetEditorStatus", "componentPresetEditorId", "componentPresetEditorName", "componentPresetEditorKind", "componentPresetEditorFamily", "componentPresetEditorCapacity", "componentPresetEditorReadBandwidth", "componentPresetEditorWriteBandwidth", "componentPresetEditorPeakOps", "componentPresetEditorReadLatency", "componentPresetEditorWriteLatency", "componentPresetEditorSourceUrl", "componentPresetEditorSourceTitle", "componentPresetEditorPorts", "componentPresetEditorCostProfile", "componentPresetEditorNotes", "saveComponentPresetButton",
     "protocolPresetsDialog", "closeProtocolPresetsButton", "protocolPresetFilterForm", "protocolPresetSearchInput", "protocolPresetProtocolFilter", "protocolPresetOrganizationFilter", "protocolPresetStatus", "protocolPresetList",
     "settingsDialog", "settingsDialogForm", "uiLanguageInput", "fontScaleInput", "fontScaleNumberInput", "fontScaleValue", "resetFontScaleButton", "runtimeHealthPanel", "runtimeHealthRefreshButton",
     "customWorkspaceEnabled", "workspaceBackgroundInput", "compactLayoutInput", "topologyGridInput", "reduceMotionInput", "resetSettingsButton",
@@ -18148,6 +18690,11 @@ function bindStaticEvents() {
   dom.jsonButton.addEventListener("click", openJsonDialog);
   dom.modelPresetsButton.addEventListener("click", openModelPresetsDialog);
   dom.hardwarePresetsButton.addEventListener("click", () => { void openHardwarePresetsDialog("architectures"); });
+  dom.createComponentPresetButton.addEventListener("click", () => { void openComponentPresetEditor(); });
+  dom.componentPresetEditorForm.addEventListener("submit", (event) => {
+    if (event.submitter?.value === "cancel") return;
+    void saveComponentPresetFromEditor(event);
+  });
   dom.settingsButton.addEventListener("click", openSettingsDialog);
   dom.architectureScanButton.addEventListener("click", openArchitectureScanDialog);
   dom.validateButton.addEventListener("click", () => validateScenario());
@@ -18564,6 +19111,7 @@ async function bootstrap() {
   bindStaticEvents();
   renderConnectionState();
   await probeConnection();
+  await loadWorkloadPresetCatalog();
   const stored = readStoredJson(STORAGE_SCENARIO, null);
   if (stored) {
     try {

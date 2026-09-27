@@ -367,11 +367,10 @@ def _gpu_memory_bandwidth_gb_s(
         if bandwidth > 0.0:
             attached_gbps += bandwidth
             seen_memory.add(memory_id)
-    if attached_gbps > 0.0:
-        return attached_gbps / 8.0
-    # Some component presets explicitly carry an aggregate local-memory
-    # bandwidth on the GPU itself.  Use it only as a declared fallback.
-    return max(0.0, float(gpu.read_bandwidth_gbps)) / 8.0
+    # GPU components are compute endpoints.  Memory service bandwidth must be
+    # supplied by explicit active-memory nodes and their links; a GPU-local
+    # read_bandwidth field would duplicate HBM and hide a missing topology.
+    return attached_gbps / 8.0
 
 
 def _gpu_memory_efficiency(

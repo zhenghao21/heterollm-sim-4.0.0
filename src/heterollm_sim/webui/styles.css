@@ -1954,6 +1954,34 @@ sup {
   font-size: 0.625rem;
 }
 
+.field-input-with-unit {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.field-input-with-unit > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-radius: 1px 0 0 1px;
+}
+
+.field-unit {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: calc(36px * var(--layout-scale));
+  padding-inline: 7px;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 1px 1px 0;
+  color: var(--muted-readable);
+  background: var(--surface-raised);
+  font-family: var(--mono);
+  font-size: max(.5625rem, 11px);
+  white-space: nowrap;
+}
+
 .field textarea {
   min-height: calc(72px * var(--layout-scale));
   resize: vertical;
@@ -2044,6 +2072,13 @@ sup {
   align-items: flex-start;
   gap: 2px;
   max-width: 100%;
+}
+
+/* Help-enabled cells must keep the same table layout as their neighbors. */
+th.concept-help-title,
+td.concept-help-title {
+  display: table-cell;
+  max-width: none;
 }
 
 .field input:hover,
@@ -2141,6 +2176,33 @@ sup {
 .workload-section-heading > div { min-width: 0; display: grid; gap: 2px; }
 .workload-section-heading h2 { min-width: 0; margin: 0; color: var(--text-soft); font-size: .8125rem; overflow-wrap: anywhere; }
 .workload-section-heading p { min-width: 0; margin: 0; color: var(--muted); font-family: var(--mono); font-size: .5rem; letter-spacing: .05em; overflow-wrap: anywhere; }
+.workload-preset-toolbar {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, .42fr) minmax(0, 1fr);
+  align-items: end;
+  gap: calc(10px * var(--layout-scale));
+  padding: calc(10px * var(--layout-scale)) calc(12px * var(--layout-scale));
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-raised);
+}
+
+.workload-preset-toolbar .field { min-width: 0; margin: 0; }
+.workload-preset-toolbar .field > span { color: var(--text-soft); }
+.workload-preset-toolbar select { width: 100%; }
+.workload-preset-note {
+  min-width: 0;
+  margin: 0 0 2px;
+  color: var(--muted-readable);
+  font-size: max(.625rem, 11px);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 680px) {
+  .workload-preset-toolbar { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .workload-preset-note { margin: 0; }
+}
 .workload-field-grid {
   min-width: 0;
   display: grid;
@@ -3256,6 +3318,28 @@ sup {
 .runtime-group.is-runtime .runtime-stat dd { color: var(--copper-bright); }
 .runtime-group:is(.is-kv, .is-kv-traffic, .is-kv-movement) .runtime-stat dd { color: var(--cyan-bright); }
 .runtime-group.is-goodput .runtime-stat dd { color: var(--success); }
+
+/* KV accounting contains tables, so it needs the full results-grid row. */
+.runtime-kv-analysis {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 12px;
+  background: var(--panel);
+}
+
+.runtime-kv-analysis h3,
+.runtime-kv-analysis h4 {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.35;
+}
+
+.runtime-kv-analysis h3 { font-size: 0.8125rem; }
+.runtime-kv-analysis h4 { margin-top: 12px; font-size: 0.6875rem; }
+.runtime-kv-analysis .technical-facts { margin-top: 10px; }
+.runtime-kv-analysis .table-shell { margin-top: 7px; overflow-x: auto; }
+.runtime-kv-analysis .data-table { min-width: 620px; }
+.runtime-kv-analysis > .muted { margin: 10px 0 0; line-height: 1.45; }
 
 .panel-meta {
   color: var(--muted);
@@ -6429,6 +6513,130 @@ dialog.model-presets-dialog.is-viewport-fullscreen .preset-dialog-shell {
   }
 }
 
+/* Results layout: keep runtime information in readable groups instead of
+ * letting a full-width accounting table determine every metric column. */
+#runtimeSummary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: var(--workspace-bg);
+}
+
+#runtimeSummary > .runtime-card-grid {
+  min-width: 0;
+  display: grid;
+  align-items: stretch;
+  gap: 12px;
+  background: transparent;
+}
+
+#runtimeSummary > .runtime-card-grid.runtime-overview-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#runtimeSummary > .runtime-card-grid.runtime-details-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#runtimeSummary > .runtime-card-grid > .runtime-group {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--line-strong);
+  background: var(--panel);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .12);
+}
+
+#runtimeSummary > .runtime-card-grid > .runtime-group:is(.is-runtime, .is-goodput) {
+  border-top-color: var(--copper-dim);
+}
+
+#runtimeSummary > .runtime-card-grid > .runtime-group:is(.is-kv, .is-kv-traffic, .is-kv-movement) {
+  border-top-color: var(--cyan-dim);
+}
+
+#runtimeSummary > .runtime-card-grid > .runtime-group h3 {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+#runtimeSummary > .runtime-card-grid > .runtime-group .runtime-stats {
+  gap: 11px 14px;
+}
+
+#runtimeSummary > .runtime-kv-analysis {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--cyan-dim);
+  background: var(--panel);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .12);
+}
+
+#runtimeSummary > .runtime-kv-analysis > h3 {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.runtime-kv-analysis .technical-facts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 12px;
+  padding: 0 1px;
+}
+
+.runtime-kv-analysis .technical-facts > div {
+  padding: 8px 9px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-raised);
+}
+
+.runtime-kv-analysis .technical-facts dd {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: .6875rem;
+}
+
+.runtime-kv-analysis h4 {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+@media (max-width: 1220px) {
+  #runtimeSummary > .runtime-card-grid.runtime-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #runtimeSummary > .runtime-card-grid.runtime-details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .runtime-kv-analysis .technical-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  #runtimeSummary {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  #runtimeSummary > .runtime-card-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px;
+  }
+
+  .runtime-kv-analysis .technical-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .runtime-kv-analysis .technical-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Pass 07: high-zoom mapping controls, readable result cards, and contrast. */
 :root {
   --rail-muted: var(--muted);
@@ -7331,3 +7539,188 @@ details:is(.inspector-advanced-profile, .inspector-section.hbf-media-section, .i
 
   :root:is([data-font-band="large"], [data-font-band="extreme"]) .brand-block::-webkit-scrollbar { display: none; }
 }
+
+/* Keep one-row KV component tables readable on wide result pages. */
+#runtimeSummary > .runtime-kv-analysis .table-shell {
+  width: fit-content;
+  max-width: 100%;
+}
+
+#runtimeSummary > .runtime-kv-analysis .data-table {
+  width: max-content;
+  min-width: min(100%, 760px);
+}
+
+#runtimeSummary > .runtime-kv-analysis .kv-component-table {
+  table-layout: fixed;
+}
+
+#runtimeSummary > .runtime-kv-analysis > .muted {
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted-readable);
+  font-size: max(.625rem, 11px);
+}
+
+@media (max-width: 680px) {
+  #runtimeSummary > .runtime-kv-analysis .table-shell {
+    width: 100%;
+  }
+
+  #runtimeSummary > .runtime-kv-analysis .data-table {
+    width: 100%;
+    min-width: 620px;
+  }
+}
+
+/* Request and placement forms: use stable tracks so labels and controls do
+ * not move to unrelated rows when a helper sentence or a long option wraps. */
+#placementControls .parallel-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: calc(10px * var(--layout-scale));
+}
+
+#placementControls .parallel-grid > .field,
+#placementControls .kv-grid > .field {
+  min-width: 0;
+  margin: 0;
+}
+
+#placementControls > .control-section[aria-labelledby="parallelControlsTitle"] > .field,
+#placementControls > .control-section[aria-labelledby="parallelControlsTitle"] > .checkbox-field {
+  margin-top: calc(10px * var(--layout-scale));
+}
+
+#placementControls .parallel-diagnostic {
+  min-width: 0;
+  margin: calc(10px * var(--layout-scale)) 0 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+#placementControls .kv-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, .9fr);
+  align-items: start;
+  gap: calc(10px * var(--layout-scale));
+}
+
+#placementControls .kv-grid > .span-all,
+#placementControls .kv-grid > .field:last-child {
+  grid-column: 1 / -1;
+}
+
+#placementControls .kv-grid .field-hint {
+  display: block;
+  min-width: 0;
+  margin-top: 2px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+#view-workload {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+#view-workload .view-head {
+  min-width: 0;
+  gap: calc(12px * var(--layout-scale));
+}
+
+#view-workload .view-head > div {
+  min-width: 0;
+}
+
+#view-workload .view-head p {
+  max-width: 900px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+#view-workload .workload-config-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: calc(14px * var(--layout-scale));
+}
+
+#view-workload .workload-config-section {
+  align-self: start;
+  overflow: hidden;
+}
+
+#view-workload .workload-field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+#view-workload .workload-config-section[data-workload-section="continuous-batching"] .workload-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#view-workload .workload-config-section[data-workload-section="mtp"] .workload-field-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#view-workload .workload-field-grid > .field {
+  min-width: 0;
+}
+
+#view-workload .workload-explicit-section {
+  min-width: 0;
+  overflow: hidden;
+}
+
+#view-workload .workload-request-table-shell {
+  border-inline: 0;
+}
+
+@media (max-width: 1100px) {
+  #view-workload .workload-config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  #placementControls .parallel-grid,
+  #placementControls .kv-grid,
+  #view-workload .workload-field-grid,
+  #view-workload .workload-config-section[data-workload-section="continuous-batching"] .workload-field-grid,
+  #view-workload .workload-config-section[data-workload-section="mtp"] .workload-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #placementControls .kv-grid > .field:first-child,
+  #placementControls .kv-grid > .span-all,
+  #placementControls .kv-grid > .field:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  #placementControls .parallel-grid,
+  #placementControls .kv-grid,
+  #view-workload .workload-field-grid,
+  #view-workload .workload-config-section[data-workload-section="continuous-batching"] .workload-field-grid,
+  #view-workload .workload-config-section[data-workload-section="mtp"] .workload-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+:root[data-font-band="extreme"] #view-workload .workload-config-grid,
+:root[data-font-band="extreme"] #view-workload .workload-field-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.component-preset-editor-dialog { width: min(760px, calc(100vw - 24px)); max-width: none; padding: 0; border: 1px solid var(--line); color: var(--text); background: var(--panel); }
+.component-preset-editor-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.component-preset-editor-shell { display: grid; gap: 0; max-height: min(90vh, 780px); overflow: auto; }
+.component-preset-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 16px; }
+.component-preset-editor-grid .field-span-all { grid-column: 1 / -1; }
+.component-preset-editor-status { min-height: 1.5em; margin: 0 16px 12px; color: var(--muted); }
+.component-preset-editor-advanced { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); background: var(--surface-raised); }
+.component-preset-editor-advanced summary { cursor: pointer; color: var(--text-soft); font-weight: 600; }
+.component-preset-editor-advanced textarea { width: 100%; min-height: 90px; resize: vertical; font: 0.75rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.component-preset-editor-advanced small { color: var(--muted); }
+.component-preset-editor-shell .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid var(--line); }
+.component-preset-actions .button-danger { color: var(--danger, #ff847c); border-color: color-mix(in srgb, var(--danger, #ff847c) 45%, var(--line)); }
+@media (max-width: 620px) { .component-preset-editor-grid { grid-template-columns: 1fr; } .component-preset-editor-grid .field-span-all { grid-column: auto; } }

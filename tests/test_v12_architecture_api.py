@@ -45,19 +45,19 @@ class ArchitecturePresetApiTests(unittest.TestCase):
 
         status, filtered = self.request(
             "GET",
-            "/api/architecture-presets?vendor=NVIDIA&protocol=NVLink&loadable=true",
+            "/api/architecture-presets?vendor=NVIDIA&protocol=UCIe&loadable=true",
         )
         self.assertEqual(status, 200)
         self.assertGreater(filtered["total"], 0)
         self.assertTrue(all(item["vendor"] == "NVIDIA" for item in filtered["items"]))
-        self.assertTrue(all("NVLink" in item["protocols"] for item in filtered["items"]))
+        self.assertTrue(all("UCIe" in item["protocols"] for item in filtered["items"]))
         self.assertTrue(all(item["loadable"] for item in filtered["items"]))
 
         status, detail = self.request(
-            "GET", "/api/architecture-presets/gpu-hbm-cim"
+            "GET", "/api/architecture-presets/nvidia-b200-1gpu-2hbf-2hbm"
         )
         self.assertEqual(status, 200)
-        self.assertEqual(detail["preset"]["id"], "gpu-hbm-cim")
+        self.assertEqual(detail["preset"]["id"], "nvidia-b200-1gpu-2hbf-2hbm")
         self.assertTrue(detail["hardware"]["components"])
         self.assertTrue(detail["hardware"]["links"])
         self.assertEqual(detail["replacement_policy"]["preserve"], ["model", "workload"])
@@ -69,25 +69,15 @@ class ArchitecturePresetApiTests(unittest.TestCase):
             detail["preset"]["parameter_basis"],
             detail["hardware"]["metadata"]["parameter_basis"],
         )
-        self.assertFalse(detail["compatibility"]["planner_executable"])
+        self.assertTrue(detail["compatibility"]["planner_executable"])
         self.assertFalse(detail["compatibility"]["requires_gpu_attachment"])
-        self.assertTrue(detail["compatibility"]["requires_cpu_attachment"])
+        self.assertFalse(detail["compatibility"]["requires_cpu_attachment"])
 
-        status, gh200 = self.request(
+        status, removed = self.request(
             "GET", "/api/architecture-presets/nvidia-gh200-superchip"
         )
-        self.assertEqual(status, 200)
-        self.assertTrue(gh200["compatibility"]["planner_executable"])
-        self.assertFalse(gh200["compatibility"]["requires_gpu_attachment"])
-        self.assertFalse(gh200["compatibility"]["requires_cpu_attachment"])
-
-        status, cxl = self.request(
-            "GET", "/api/architecture-presets/cxl-type3-memory-expander"
-        )
-        self.assertEqual(status, 200)
-        self.assertFalse(cxl["compatibility"]["planner_executable"])
-        self.assertTrue(cxl["compatibility"]["requires_gpu_attachment"])
-        self.assertFalse(cxl["compatibility"]["requires_cpu_attachment"])
+        self.assertEqual(status, 404)
+        self.assertEqual(removed["error"]["code"], "not_found")
 
     def test_invalid_filter_unknown_and_wrong_method_are_chinese(self):
         status, payload = self.request(

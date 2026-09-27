@@ -22,6 +22,11 @@ from math import ceil
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
 
+_OFFLOAD_STORAGE_KINDS = frozenset(
+    {"hbf", "ssd", "high_io_ssd", "nvme", "flash", "storage"}
+)
+
+
 class KvPoolError(ValueError):
     """Base error raised for invalid or unsupported paged-pool operations."""
 
@@ -446,16 +451,83 @@ class DynamicKVPool:
             return False
 
     def _transfer_time_ns(self, source: str, target: str, bytes_: int) -> float:
+        """Price one logical page move exactly once per physical stage.
+
+        A migration reads from the current owner and writes into the target.
+        The topology owns only link service; endpoint descriptors own the
+        memory service at either end.  Keeping those terms explicit prevents
+        a route from silently replacing the medium cost (or charging a
+        source *write* / target *read* in the wrong direction).
+        """
         if source == target:
             return 0.0
+
+        source_desc, target_desc = self.components[source], self.components[target]
+
+        def endpoint_time(component: KvPoolComponent, *, read: bool) -> float:
+            direction = "read" if read else "write"
+            bandwidth = float(
+                component.read_bandwidth_gbps
+                if read
+                else component.write_bandwidth_gbps
+            )
+            # KvPoolComponent historically exposes one latency value.  Honor
+            # a direction-specific metadata override when a catalog provides
+            # one, while retaining that public shape for existing callers.
+            latency = float(component.metadata.get(
+                "{}_latency_ns".format(direction), component.latency_ns
+            ))
+            if bandwidth <= 0.0:
+                # Unknown endpoint bandwidth contributes its declared fixed
+                # latency only; communication.py applies the same fail-open
+                # rule for active memories and fails closed for storage media.
+                return max(0.0, latency)
+            return max(0.0, latency) + (8.0 * float(bytes_)) / bandwidth
+
+        endpoint_ns = endpoint_time(source_desc, read=True) + endpoint_time(
+            target_desc, read=False
+        )
         if self.topology is not None:
             hops = self._route(source, target, bytes_)
-            return float(sum(float(hop.transfer_ns(bytes_)) for hop in hops))
-        source_desc, target_desc = self.components[source], self.components[target]
-        rates = [rate for rate in (source_desc.write_bandwidth_gbps, target_desc.read_bandwidth_gbps) if rate > 0]
-        if not rates:
-            return float(source_desc.latency_ns + target_desc.latency_ns)
-        return float(source_desc.latency_ns + target_desc.latency_ns + 8.0 * bytes_ / min(rates))
+            link_ns = sum(float(hop.transfer_ns(bytes_)) for hop in hops)
+            return float(endpoint_ns + link_ns)
+        # Without a topology there is no link stage to price.  Source-read
+        # and target-write remain separate serialized endpoint services.
+        return float(endpoint_ns)
+
+    @staticmethod
+    def _require_storage_bandwidth(
+        component: KvPoolComponent, *, read: bool
+    ) -> None:
+        """Reject an unknown service direction for offload media.
+
+        A topology link cannot stand in for the medium's own service time.
+        Active HBM/DRAM descriptors may omit a direction and retain the
+        historical latency-only fallback; storage media must declare the
+        direction that the operation actually uses.
+        """
+
+        normalized_kind = (
+            str(component.kind)
+            .strip()
+            .lower()
+            .replace("-", "_")
+            .replace(" ", "_")
+        )
+        if normalized_kind not in _OFFLOAD_STORAGE_KINDS:
+            return
+        bandwidth = (
+            component.read_bandwidth_gbps
+            if read
+            else component.write_bandwidth_gbps
+        )
+        if float(bandwidth) <= 0.0:
+            direction = "read" if read else "write"
+            raise KvPoolUnsupported(
+                "storage component {} requires a positive {} bandwidth".format(
+                    component.component_id, direction
+                )
+            )
 
     def _candidate_ids(
         self,
@@ -777,6 +849,10 @@ class DynamicKVPool:
         if not target.writable:
             self._last_error = "target component is read-only: " + target_component
             return False
+        self._require_storage_bandwidth(
+            self.components[page.owner_component], read=True
+        )
+        self._require_storage_bandwidth(target, read=False)
         if not self._reachable(page.owner_component, target_component, page.bytes):
             self._last_error = "no topology route from {} to {}".format(page.owner_component, target_component)
             return False

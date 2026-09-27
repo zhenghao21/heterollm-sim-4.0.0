@@ -1,10 +1,10 @@
 """Offline architecture-topology presets for :class:`HardwareSpec`.
 
-This catalog is deliberately separate from component presets.  Each entry is
-a complete, hardware-only graph that replaces the current hardware topology;
-it never contains a model, workload, placement, or rank mapping.  Public
-logical relationships are kept distinct from analytical collapsed fabrics so
-that a useful system model is not mistaken for undisclosed physical wiring.
+Each entry is a complete, hardware-only graph composed from component preset
+instances plus explicit links and layout. It replaces the current hardware
+topology and never contains a model, workload, placement, or rank mapping.
+Public logical relationships are kept distinct from analytical collapsed
+fabrics so that a useful system model is not mistaken for undisclosed wiring.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from .component_presets import (
     _gpu_cost_profile_template,
     _hbm_cost_profile_template,
     _host_memory_cost_profile_template,
+    materialize_component_payload,
 )
 from .serde import to_primitive
 from .topology import validate_topology
@@ -697,6 +698,57 @@ def _component(
     )
 
 
+def _catalog_component(
+    preset_id: str,
+    component_id: str,
+    *,
+    package_id: str,
+    die_id: str,
+    ports: Optional[Sequence[PortSpec]] = None,
+    metadata_updates: Optional[Mapping[str, Any]] = None,
+    value_overrides: Optional[Mapping[str, Any]] = None,
+    component_catalog=None,
+) -> ComponentSpec:
+    """Materialize an architecture node from the curated component catalog.
+
+    Architecture code supplies only placement identity, endpoint ports and
+    topology-specific derived values.  Vendor capabilities and profile
+    metadata stay owned by the component preset, avoiding a second copy that
+    can drift when a hardware preset is edited.
+    """
+
+    payload = (component_catalog.detail(preset_id)["component"] if component_catalog is not None
+               else materialize_component_payload(preset_id))
+    source_id = str(payload.get("component_id", ""))
+    source_ports = tuple(PortSpec(**port) for port in payload.get("ports", ()))
+    metadata = dict(payload.get("metadata", {}))
+    if source_id and source_id != component_id:
+        def remap(value):
+            if isinstance(value, str):
+                return value.replace(source_id, component_id)
+            if isinstance(value, list):
+                return [remap(item) for item in value]
+            if isinstance(value, dict):
+                return {key: remap(item) for key, item in value.items()}
+            return value
+        metadata = remap(metadata)
+    metadata["component_preset_id"] = preset_id
+    metadata["component_preset_status"] = "catalog_reference"
+    if metadata_updates:
+        metadata.update(dict(metadata_updates))
+    values = {
+        "component_id": component_id,
+        "package_id": package_id,
+        "die_id": die_id,
+        "ports": tuple(ports) if ports is not None else source_ports,
+        "metadata": metadata,
+    }
+    values.update(dict(value_overrides or {}))
+    base_payload = dict(payload)
+    base_payload["ports"] = source_ports
+    return replace(ComponentSpec(**base_payload), **values)
+
+
 def _link(
     link_id: str,
     source_component: str,
@@ -812,6 +864,17 @@ def _hardware(
         },
         "source_scope": "sources are bibliography; derived and analytical values are labeled in field metadata",
     }
+    # Keep the architecture as a composition of catalog components plus
+    # links.  This index is intentionally derived from each component's
+    # provenance metadata so a topology consumer can see which editable
+    # hardware preset supplied every node without having to infer it from the
+    # display name.  Auxiliary nodes (for example the reference CPU) may not
+    # have a public preset and are marked accordingly by an empty value.
+    component_preset_ids = {
+        component.component_id: component.metadata.get("component_preset_id", "")
+        for component in components
+        if component.metadata.get("component_preset_id")
+    }
     topology_view = {
         "version": 1,
         "layout": {
@@ -837,6 +900,7 @@ def _hardware(
             },
             "topology_evidence": topology_evidence,
             "parameter_basis": parameter_basis,
+            "component_preset_ids": component_preset_ids,
             "topology_view": topology_view,
             "sources": [source.to_metadata() for source in sources],
             "applicability_limitations": list(limitations),
@@ -1608,34 +1672,23 @@ def _gpu_hbf() -> ArchitecturePresetDefinition:
     return _definition("gpu-hbf", "GPU + High Bandwidth Flash", "Open Compute Project", "HBF", "storage_offload", "near_package", EXPERIMENTAL_REFERENCE, components, links, groups, {"gpu0": {"x": 80.0, "y": 160.0}, "hbf0": {"x": 440.0, "y": 160.0}}, (OCP_HBF, UCIE_SPEC), limitations, "面向权重与冷数据近封装读取的实验参考。", ("gpu", "hbf", "ucie", "flash"))
 
 
-def _b200_hbf_hbm() -> ArchitecturePresetDefinition:
+def _b200_hbf_hbm(component_catalog=None) -> ArchitecturePresetDefinition:
     """B200 accelerator package plus a reference host for execution."""
 
     package = "b200_package0"
-    hbm_total_capacity_bytes = _gb(180.0)
-    hbm_total_bandwidth_gbps = 64_000.0  # 8 TB/s per B200, decimal bytes -> bits
-    hbm_preset_id = "nvidia-b200-hbm3e-90gb-4tbps-analysis"
+    def catalog_payload(preset_id):
+        return (component_catalog.detail(preset_id)["component"] if component_catalog is not None
+                else materialize_component_payload(preset_id))
+    hbm_preset_id = "samsung-hbm3e-36gb-9_2"
+    hbm_catalog_payload = catalog_payload(hbm_preset_id)
+    hbm_unit_capacity_bytes = int(hbm_catalog_payload["capacity_bytes"])
+    hbm_unit_bandwidth_gbps = float(hbm_catalog_payload["read_bandwidth_gbps"])
+    hbm_total_capacity_bytes = hbm_unit_capacity_bytes * 2
+    hbm_total_bandwidth_gbps = hbm_unit_bandwidth_gbps * 2
     pcie_gbps = 504.12307692307695  # PCIe 5.0 x16 decoded 128b/130b envelope
 
-    # The component peak is vendor-derived; all microarchitectural fields in
-    # the execution profile remain explicit analytical assumptions.
-    gpu_profile, gpu_profile_basis = _gpu_cost_profile_template(
-        "gpu0",
-        sm_count=160,
-        frequency_ghz=1.8,
-        peak_bf16_tflops=2_200.0,
-    )
-    gpu_profile_basis.update(
-        {
-            "tensor_core.sm_count": "A_ANALYTICAL B200 SM-count assumption; exact active SM count is SKU/firmware dependent",
-            "tensor_core.frequency_ghz": "A_ANALYTICAL B200 operating-clock assumption; vendor page does not guarantee one fixed clock",
-            "tensor_core.cycles_per_mma": "derived to reproduce NVIDIA Blackwell Technical Overview Table 3 dense 2.2 PFLOPS BF16/FP16 peak",
-            "cache_hierarchy": "A_ANALYTICAL B200 cache/issue defaults; exact cache timing and ports are not public",
-            "occupancy": "A_ANALYTICAL scheduler default; no workload calibration claimed",
-            "attainable_efficiency": "A_ANALYTICAL workload efficiency default; no benchmark calibration claimed",
-            "*_energy": "A_ANALYTICAL energy defaults; no B200 application measurement claimed",
-        }
-    )
+    # Compute and cache defaults are owned by the B200 component preset; the
+    # architecture contributes only endpoint identity and links.
     hbm_ports = _hbm_controller_ports(2, "HBM3E", hbm_total_bandwidth_gbps)
     gpu_ports = hbm_ports + (
         _port("hbf0", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2_048.0, payload="streaming"),
@@ -1643,26 +1696,17 @@ def _b200_hbf_hbm() -> ArchitecturePresetDefinition:
         _port("pcie0", "PCIe", "endpoint", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, payload="coherent_dma"),
     )
     components = [
-        _component(
-            "gpu0", "gpu", gpu_ports, package_id=package, die_id="b200_die",
-            peak_ops_per_s=2_200_000_000_000_000.0,
-            role="blackwell_accelerator", model="NVIDIA B200 SXM 180GB",
-            peak_ops_basis=_peak_ops_basis(
-                "BF16_tensor_dense",
-                source_basis="NVIDIA Blackwell Technical Overview Table 3; HGX B200 dense FP16/BF16 tensor peak (2.2 PFLOPS)",
-            ),
-            parameter_basis={
-                "capacity_bytes": "NVIDIA DGX B200 1,440 GB total / 8 GPUs = 180 GB per B200",
-                "peak_ops_per_s": "NVIDIA Blackwell Technical Overview Table 3 dense FP16/BF16 tensor peak = 2.2 PFLOPS",
-                "peak_ops_source_url": "https://resources.nvidia.com/en-us-blackwell-architecture/blackwell-architecture-technical-brief",
-                "hbm_bandwidth_gbps": "NVIDIA DGX B200 64 TB/s aggregate / 8 GPUs = 8 TB/s per B200, converted to decimal Gb/s",
-            },
-            extra_metadata={
+        _catalog_component(
+            "nvidia-b200-sxm-gpu", "gpu0", package_id=package, die_id="b200_die",
+            component_catalog=component_catalog,
+            ports=gpu_ports,
+            metadata_updates={
                 "architecture": "Blackwell", "memory_product": "HBM3E",
-                "memory_total_bandwidth_tb_per_s": 8.0, "memory_total_capacity_gb": 180.0,
+                "memory_total_bandwidth_tb_per_s": hbm_total_bandwidth_gbps / 8_000.0,
+                "memory_total_capacity_gb": hbm_total_capacity_bytes / 1_000_000_000.0,
+                "product_memory_reference": {"capacity_gb": 180.0, "bandwidth_tb_per_s": 8.0, "source": "NVIDIA DGX B200 aggregate / 8 GPUs"},
+                "attached_memory_component_preset_id": hbm_preset_id,
                 "hbm_node_split": "two equal analytical HBM endpoints; physical stack count intentionally unspecified",
-                "cost_profile_key": "gpu", "cost_profile_template": gpu_profile,
-                "cost_profile_parameter_basis": gpu_profile_basis,
                 "provenance": {"value_status": "vendor_aggregate_derived_and_public_product_specification", "source_basis": "NVIDIA DGX B200 aggregate system specification and Blackwell Technical Overview Table 3"},
             },
         )
@@ -1684,107 +1728,124 @@ def _b200_hbf_hbm() -> ArchitecturePresetDefinition:
         "source_basis": "OCP HBF preproduction up-to envelope",
     }
     def hbf_component(index: int) -> ComponentSpec:
-        return _component(
-            "hbf{}".format(index), "hbf",
-            (_port("host", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2_048.0, payload="streaming", metadata={"media_bandwidth_modeled_separately": True}),),
-            package_id=package, die_id="hbf{}_die".format(index), capacity_bytes=_gb(512.0),
-            read_bandwidth_gbps=24_000.0, write_bandwidth_gbps=0.0,
-            role="near_package_flash", model="OCP HBF analysis device {}".format(index),
-            physical_composition=hbf_physical(index),
-            parameter_basis={
-                "capacity_bytes": "up_to_512_GB_reference_capacity",
-                "read_bandwidth_gbps": "grade3_up_to_3TB_per_s converted to 24,000 Gb/s",
-                "write_bandwidth_gbps": "unknown_kept_zero",
-                "interface_bandwidth_gbps": "analytical UCIe x64 32 GT/s envelope",
-            },
-            extra_metadata={
-                "capacity_scope": "up_to_512GB", "bandwidth_scope": "grade3_up_to_3TB_per_s",
-                "read_latency_ns": 2_500.0, "write_latency_ns": 0.0,
-                "transfer_granularity_bytes": 4_096, "max_outstanding_requests": 32,
-                "dma_bandwidth_gbps": 2_048.0, "dma_latency_ns": 800.0, "dma_energy_pj_per_byte": 0.0,
-                "unknown_value_sentinels": {"write_bandwidth_gbps": "0.0 means unknown/not declared, not physical zero", "write_latency_ns": "0.0 means unknown/not declared, not zero latency", "dma_energy_pj_per_byte": "0.0 means unknown/not declared, not zero energy"},
-                "storage_transport_parameter_basis": "editable analytical HBF controller defaults bounded by the declared UCIe path",
-                "internal_nand_composition": {"dies_per_stack": "8-high_or_16-high", "correlation_status": "not_reliably_disclosed"},
+        hbf_payload = catalog_payload("sk-hynix-hbf-512gb")
+        catalog_port = PortSpec(**hbf_payload["ports"][0])
+        hbf_port_metadata = dict(catalog_port.metadata)
+        hbf_port_metadata["media_bandwidth_modeled_separately"] = True
+        hbf_port = replace(catalog_port, port_id="ucie0", payload="streaming", metadata=hbf_port_metadata)
+        return _catalog_component(
+            "sk-hynix-hbf-512gb", "hbf{}".format(index),
+            component_catalog=component_catalog,
+            package_id=package, die_id="hbf{}_die".format(index),
+            ports=(hbf_port,),
+            metadata_updates={
+                "architecture_role": "near_package_flash",
+                "model": "SK hynix HBF analysis device {}".format(index),
+                "physical_composition": {
+                    **hbf_physical(index),
+                    "unit_capacity_bytes": hbf_payload["capacity_bytes"],
+                    "product_total_capacity_bytes": hbf_payload["capacity_bytes"],
+                },
+                "write_capability_status": "unknown" if hbf_payload["write_bandwidth_gbps"] <= 0 else "user_configured",
             },
         )
     components.extend(hbf_component(index) for index in range(2))
 
-    # The HBM nodes are analytical endpoints.  Keep the product class in the
-    # metadata, but do not claim that either endpoint is a disclosed physical
-    # B200 stack or that the product has two physical stacks.
-    hbm_components, hbm_links = _physical_hbm_stacks(
-        root_component_id="gpu0", root_port_prefix="hbm", stack_id_prefix="hbm", link_id_prefix="gpu_hbm",
-        package_id=package, generation="HBM3E", stack_count=2,
-        product_total_capacity_bytes=hbm_total_capacity_bytes,
-        product_total_bandwidth_gbps=hbm_total_bandwidth_gbps,
-        role="local_accelerator_memory", product_model="NVIDIA B200 SXM 180GB",
-        unit_count_status="analytical_two_modeled_hbm_nodes",
-        unit_count_formula=("user-requested 2 HBM nodes; 180 GB / 2 = 90 GB and 8 TB/s / 2 = 4 TB/s per modeled endpoint; physical stack count unspecified"),
-        source_basis=("NVIDIA DGX B200 aggregate 1,440 GB and 64 TB/s across 8 GPUs -> 180 GB and 8 TB/s per B200; equal analytical split"),
-        component_preset_id=hbm_preset_id,
-    )
-    transformed_hbm_components = []
-    for component in hbm_components:
-        profile, basis = _hbm_cost_profile_template(component.component_id, component.read_bandwidth_gbps)
-        metadata = dict(component.metadata)
-        physical = dict(metadata["physical_composition"])
-        physical.update({
-            "simulator_representation": "analytical_endpoint_node",
-            "physical_unit_count": None,
-            "physical_unit_count_status": "not_reliably_disclosed",
-            "unit_count_in_product": None,
-            "unit_index_semantics": "analytical_endpoint_index_not_physical_stack_index",
-            "component_preset_status": "catalog_reference_analytical_endpoint",
-        })
-        metadata["physical_composition"] = physical
-        metadata["model"] = "NVIDIA B200 HBM3E analytical endpoint {} of 2".format(physical["unit_index"] + 1)
-        metadata["cost_profile_key"] = "hbm"
-        metadata["cost_profile_template"] = profile
-        metadata["cost_profile_parameter_basis"] = basis
-        metadata["provenance"] = {"value_status": "analytical_endpoint_split", "unit_count_status": "analytical_two_modeled_hbm_nodes", "source_basis": physical["source_basis"]}
-        port = component.ports[0]
-        port_metadata = dict(port.metadata)
-        port_metadata.update({"physical_unit_kind": "HBM_stack_class", "unit_count_in_product": None, "unit_count_status": "not_reliably_disclosed", "unit_index_semantics": "analytical_endpoint_index_not_physical_stack_index"})
-        transformed_hbm_components.append(replace(component, ports=(replace(port, metadata=port_metadata),), metadata=metadata))
-    # Remove the original unprofiled HBM instances and keep the transformed ones.
-    components = [component for component in components if component.component_id not in {"hbm0", "hbm1"}]
-    components.extend(transformed_hbm_components)
+    # HBM endpoints are direct instances of the curated Samsung component
+    # preset.  Architecture-specific information is limited to placement,
+    # endpoint identity and the GPU↔HBM links; capacity, media bandwidth and
+    # profile defaults remain owned by the component preset.
+    hbm_components = []
+    hbm_links = []
+    for index in range(2):
+        component_id = "hbm{}".format(index)
+        source_port = PortSpec(**hbm_catalog_payload["ports"][0])
+        hbm_port = replace(source_port, port_id="host")
+        hbm_component = _catalog_component(
+            hbm_preset_id,
+            component_id,
+            component_catalog=component_catalog,
+            package_id=package,
+            die_id="{}_die".format(component_id),
+            ports=(hbm_port,),
+            metadata_updates={
+                "architecture_role": "local_accelerator_memory",
+                "model": "Samsung HBM3E endpoint {} of 2".format(index + 1),
+                "physical_composition": {
+                    "simulator_representation": "catalog_component_instance",
+                    "simulator_node_count": 1,
+                    "physical_unit_kind": "HBM3E_stack_class",
+                    "physical_unit_count": 1,
+                    "physical_unit_count_status": "component_preset_instance",
+                    "unit_index": index,
+                    "unit_count_in_product": 2,
+                    "component_preset_id": hbm_preset_id,
+                    "source_basis": "Samsung HBM3E component preset",
+                },
+            },
+        )
+        hbm_components.append(hbm_component)
+        hbm_links.append(_link(
+            "gpu_hbm{}".format(index), "gpu0", "hbm{}".format(index),
+            component_id, "host", "HBM", version="HBM3E", lanes=hbm_port.lanes,
+            bandwidth_gbps=min(hbm_port.bandwidth_gbps, hbm_ports[index].bandwidth_gbps), latency_ns=40.0,
+        ))
+    components.extend(hbm_components)
 
     cpu_profile, cpu_basis = _cpu_cost_profile_template("cpu0", core_count=72, frequency_ghz=3.0)
-    host_profile, host_basis = _host_memory_cost_profile_template("hostmem0", 3_276.8, name="hostmem0-reference-memory-profile", read_latency_ns=60.0, write_latency_ns=60.0)
+    ddr_preset_id = "samsung-ddr5-32gb-udimm-5600"
+    ddr_payload = catalog_payload(ddr_preset_id)
+    ddr_source_port = PortSpec(**ddr_payload["ports"][0])
+    ddr_port = replace(ddr_source_port, port_id="ddr0", role="device")
+    hostmem_component = _catalog_component(
+        ddr_preset_id,
+        "hostmem0",
+        component_catalog=component_catalog,
+        package_id="host0",
+        die_id="ddr_die",
+        ports=(ddr_port,),
+        metadata_updates={
+            "auxiliary_host": True,
+            "architecture_role": "auxiliary_host_memory",
+            "model": "Samsung DDR5 32GB reference host memory",
+        },
+    )
+    host_bandwidth_gbps = float(hostmem_component.read_bandwidth_gbps)
+    host_read_latency_ns = float(hostmem_component.metadata.get("read_latency_ns", 60.0) or 60.0)
+    host_write_latency_ns = float(hostmem_component.metadata.get("write_latency_ns", host_read_latency_ns) or host_read_latency_ns)
+    host_profile, host_basis = _host_memory_cost_profile_template(
+        "hostmem0", host_bandwidth_gbps,
+        name="hostmem0-reference-memory-profile",
+        read_latency_ns=host_read_latency_ns,
+        write_latency_ns=host_write_latency_ns,
+    )
     components.extend((
         _component(
             "cpu0", "cpu",
-            (_port("pcie0", "PCIe", "root", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, payload="coherent_dma"), _port("ddr0", "DDR", "controller", version="5.0", lanes=64, bandwidth_gbps=3_276.8)),
+            (_port("pcie0", "PCIe", "root", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, payload="coherent_dma"), _port("ddr0", "DDR5", "controller", version="DDR5-5600", lanes=ddr_port.lanes, bandwidth_gbps=host_bandwidth_gbps)),
             package_id="host0", die_id="cpu_die", role="auxiliary_host_cpu", model="Reference Grace-class host CPU",
             extra_metadata={"auxiliary_host": True, "cost_profile_key": "cpu", "cost_profile_template": cpu_profile, "cost_profile_parameter_basis": cpu_basis, "cpu_profile_required": True},
         ),
-        _component(
-            "hostmem0", "host_memory",
-            (_port("ddr0", "DDR", "device", version="5.0", lanes=64, bandwidth_gbps=3_276.8),),
-            package_id="host0", die_id="ddr_die", capacity_bytes=256 * 1024**3,
-            read_bandwidth_gbps=3_276.8, write_bandwidth_gbps=3_276.8,
-            role="auxiliary_host_memory", model="Reference host memory",
-            extra_metadata={"auxiliary_host": True, "cost_profile_key": "host_memory", "cost_profile_template": host_profile, "cost_profile_parameter_basis": host_basis},
-        ),
+        hostmem_component,
     ))
     links = list(hbm_links)
     for index in range(2):
-        links.append(_link("gpu_hbf{}".format(index), "gpu0", "hbf{}".format(index), "hbf{}".format(index), "host", "UCIe", version="2.0", lanes=64, bandwidth_gbps=2_048.0, latency_ns=30.0, payload="streaming"))
+        hbf_endpoint = next(component for component in components if component.component_id == "hbf{}".format(index)).ports[0]
+        links.append(_link("gpu_hbf{}".format(index), "gpu0", "hbf{}".format(index), "hbf{}".format(index), "ucie0", "UCIe", version="2.0", lanes=min(64, hbf_endpoint.lanes), bandwidth_gbps=min(2_048.0, hbf_endpoint.bandwidth_gbps), latency_ns=30.0, payload="streaming"))
     links.extend((
         _link("cpu_gpu_pcie", "cpu0", "pcie0", "gpu0", "pcie0", "PCIe", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, latency_ns=800.0, payload="coherent_dma"),
-        _link("cpu_hostmem_ddr", "cpu0", "ddr0", "hostmem0", "ddr0", "DDR", version="5.0", lanes=64, bandwidth_gbps=3_276.8, latency_ns=80.0),
+        _link("cpu_hostmem_ddr", "cpu0", "ddr0", "hostmem0", "ddr0", "DDR5", version="DDR5-5600", lanes=ddr_port.lanes, bandwidth_gbps=host_bandwidth_gbps, latency_ns=80.0),
     ))
     groups = (
         _group("b200_package", "NVIDIA B200 with 2×HBM3E + 2×HBF", ("gpu0", "hbm0", "hbm1", "hbf0", "hbf1"), "gpu0"),
         _group("reference_host", "Auxiliary host CPU and memory", ("cpu0", "hostmem0"), "cpu0"),
     )
     limitations = (
-        "NVIDIA DGX B200 页面公开的是 8-GPU 系统聚合值（1,440 GB、64 TB/s）；本预设按 8 除法得到单 B200 的 180 GB 与 8 TB/s。",
-        "两个 HBM 节点是用户要求的分析端点，均分产品聚合值；物理 HBM 堆叠数量未公开，也没有在本预设中指定为 2。",
+        "NVIDIA DGX B200 页面公开的是 8-GPU 系统聚合值（1,440 GB、64 TB/s），本预设另以 Samsung HBM3E 组件预设实例化两个可编辑 HBM 端点；DGX 聚合值仅保留为 GPU 产品参考。",
+        "两个 HBM 节点的容量、读写带宽和 profile 均来自 samsung-hbm3e-36gb-9_2 组件预设；物理 B200 封装堆叠数量未由本拓扑推断。",
         "B200 峰值采用 NVIDIA Blackwell Technical Overview Table 3 的 HGX B200 dense FP16/BF16 tensor 2.2 PFLOPS；SM 数、时钟、缓存、效率、时序和能耗字段均为可编辑分析假设。",
-        "HBF 容量和媒体读带宽沿用 OCP HBF 预生产上限参考；写带宽没有可靠通用公开值，因此保持 0。",
-        "cpu0/hostmem0 仅为使仿真执行器具备 host orchestration 路径的栈外辅助参考，不改变 1 GPU + 2 HBM + 2 HBF 加速器组成；其 CPU、DDR 时序和效率 profile 均为分析默认。",
+        "HBF 容量和媒体读带宽由 SK hynix HBF 组件预设提供；写带宽没有可靠通用公开值，因此以 unknown 状态保留。",
+        "cpu0/hostmem0 仅为使仿真执行器具备 host orchestration 路径的栈外辅助参考；hostmem0 由 Samsung DDR5 32GB 组件预设提供，不改变 1 GPU + 2 HBM + 2 HBF 加速器组成。",
     )
     return _definition(
         "nvidia-b200-1gpu-2hbf-2hbm", "NVIDIA B200 + 2×HBF + 2×HBM3E", "NVIDIA", "Blackwell",
@@ -1927,7 +1988,7 @@ def _soc_2x_dram_sram_cim(*, shared_phy_noc: bool = False) -> ArchitecturePreset
     return replace(result, hardware=replace(result.hardware, metadata=metadata))
 
 
-_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
+_LEGACY_ARCHITECTURE_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
     _hbm_accelerator_cluster(preset_id="nvidia-h100-sxm-8-nvswitch", name="8× NVIDIA H100 SXM + NVSwitch", gpu_model="H100 SXM", memory_kind="HBM3", memory_capacity_gb=80, memory_bandwidth_gbps=26800.0, peak_ops_per_s=989_500_000_000_000.0, count=8, fabric_protocol="NVLink", fabric_version="4.0", fabric_bandwidth_gbps=3600.0, fabric_lanes=18, vendor="NVIDIA", family="Hopper", sources=(NVIDIA_HOPPER,), support_level=ANALYTICAL_APPROXIMATION, memory_physical_unit_count=5, memory_count_status="vendor_documented_active_stacks", memory_component_preset_id="hbm3-16gb-0_670tbs-h100-slice"),
     _hbm_accelerator_cluster(preset_id="nvidia-h200-sxm-8-nvswitch", name="8× NVIDIA H200 SXM + NVSwitch", gpu_model="H200 SXM", memory_kind="HBM3E", memory_capacity_gb=141, memory_bandwidth_gbps=38400.0, peak_ops_per_s=989_500_000_000_000.0, count=8, fabric_protocol="NVLink", fabric_version="4.0", fabric_bandwidth_gbps=3600.0, fabric_lanes=18, vendor="NVIDIA", family="Hopper", sources=(NVIDIA_H200,), support_level=ANALYTICAL_APPROXIMATION, memory_physical_unit_count=6, memory_count_status="derived_from_product_total_and_24GB_stack_class", memory_raw_capacity_gb=144.0, memory_count_formula="144 GB raw product capacity / 24 GB HBM3E stack class = 6; 141 GB is product-visible capacity", memory_source_basis="NVIDIA H200 141 GB visible aggregate plus six 24 GB raw HBM3E stack-class derivation", memory_component_preset_id="hbm3e-24gb-0_800tbs-h200-slice"),
     _gh200_superchip(),
@@ -1972,11 +2033,18 @@ _PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
     _soc_2x_dram_sram_cim(shared_phy_noc=True),
 )
 
+# Only the curated B200 architecture remains registered.  Legacy topology
+# definitions are intentionally not addressable through list/detail/materialize
+# APIs after the hardware catalog reset.
+_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (_b200_hbf_hbm(),)
+PUBLIC_ARCHITECTURE_PRESET_IDS = frozenset({"nvidia-b200-1gpu-2hbf-2hbm"})
+
 
 _BY_ID: Mapping[str, ArchitecturePresetDefinition] = {
     item.preset_id: item for item in _PRESETS
+    if item.preset_id in PUBLIC_ARCHITECTURE_PRESET_IDS
 }
-if len(_BY_ID) != len(_PRESETS):
+if len(_BY_ID) != len(PUBLIC_ARCHITECTURE_PRESET_IDS):
     raise RuntimeError("架构拓扑预设 ID 重复")
 if any(item.support_level not in SUPPORT_LEVELS for item in _PRESETS):
     raise RuntimeError("架构拓扑预设使用了未知 support_level")
@@ -2119,7 +2187,11 @@ def _metadata(item: ArchitecturePresetDefinition) -> Dict[str, Any]:
 def list_architecture_presets() -> Tuple[Dict[str, Any], ...]:
     """Return stable compact catalog rows without the full hardware graph."""
 
-    return tuple(_metadata(item) for item in sorted(_PRESETS, key=lambda value: value.preset_id))
+    return tuple(
+        _metadata(item)
+        for item in sorted(_PRESETS, key=lambda value: value.preset_id)
+        if item.preset_id in PUBLIC_ARCHITECTURE_PRESET_IDS
+    )
 
 
 def architecture_preset_filters() -> Dict[str, Sequence[Any]]:
@@ -2132,7 +2204,7 @@ def architecture_preset_filters() -> Dict[str, Sequence[Any]]:
         "support_level": sorted({item["support_level"] for item in items}),
         "protocol": sorted({protocol for item in items for protocol in item["protocols"]}),
         "tag": sorted({tag for item in items for tag in item["tags"]}),
-        "loadable": [True, False],
+        "loadable": sorted({item["loadable"] for item in items}),
     }
 
 
@@ -2191,10 +2263,12 @@ def get_architecture_preset(preset_id: str) -> ArchitecturePresetDefinition:
     return _BY_ID[preset_id]
 
 
-def materialize_architecture_payload(preset_id: str) -> Dict[str, Any]:
+def materialize_architecture_payload(preset_id: str, *, component_catalog=None) -> Dict[str, Any]:
     """Return a new JSON-compatible complete ``HardwareSpec`` payload."""
 
     item = get_architecture_preset(preset_id)
+    if component_catalog is not None and preset_id == "nvidia-b200-1gpu-2hbf-2hbm":
+        item = _b200_hbf_hbm(component_catalog)
     if not item.loadable:
         raise ValueError(
             "架构拓扑预设 {} 当前不可载入：{}".format(
@@ -2204,9 +2278,9 @@ def materialize_architecture_payload(preset_id: str) -> Dict[str, Any]:
     return to_primitive(item.hardware)
 
 
-def architecture_preset_detail(preset_id: str) -> Dict[str, Any]:
+def architecture_preset_detail(preset_id: str, *, component_catalog=None) -> Dict[str, Any]:
     item = get_architecture_preset(preset_id)
-    hardware = materialize_architecture_payload(preset_id) if item.loadable else None
+    hardware = materialize_architecture_payload(preset_id, component_catalog=component_catalog) if item.loadable else None
     topology_view = hardware["metadata"]["topology_view"] if hardware else None
     return {
         "preset": _metadata(item),

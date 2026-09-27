@@ -7,10 +7,17 @@ component to the current topology and connect it explicitly when appropriate.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, replace
+import re
+import json
+import os
+import tempfile
+import threading
+from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
-from .ir import ComponentSpec, LinkSpec, PortSpec
+from .ir import ComponentSpec, LinkSpec, PortSpec, SCHEMA_VERSION
 from .serde import to_primitive
 
 
@@ -1053,12 +1060,12 @@ def _ssd_preset(
             evidence_level=evidence_level,
             limitations=limitations,
             notes=notes,
-            measurement_basis="采用公开顺序读写峰值，按十进制 GB/s 换算到 IR 带宽字段；随机 IOPS 不直接折算。",
+            measurement_basis="read_gbps/write_gbps 已是 IR 十进制 Gb/s；调用方必须先把厂商 MB/s 或 GB/s 除/乘换算后传入；随机 IOPS 不直接折算。",
             extras={
                 **analytical_transport,
                 "value_scope": "单个 NVMe SSD 组件模板",
                 "conditions": list(conditions or default_conditions),
-                "derived_formula": "公开 GB/s 峰值乘以 8，写入 IR 带宽字段",
+                "derived_formula": "厂商 MB/s ÷ 1000 × 8 = IR Gb/s（或厂商 GB/s × 8）；具体换算保存在 vendor_parameter_provenance",
                 "expires_at": "2027-08-22",
             },
         ),
@@ -1166,6 +1173,27 @@ AMD_MI300X_SOURCE = _source(
     S2_VENDOR_DECLARED,
     publisher="AMD",
 )
+AMD_RYZEN_9_9950X3D_SOURCE = _source(
+    "AMD Ryzen 9 9950X3D Desktop Processor specifications",
+    "https://www.amd.com/en/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x3d.html",
+    S2_VENDOR_DECLARED,
+    publisher="AMD",
+    accessed_at="2026-09-27",
+)
+NVIDIA_RTX_5080_SOURCE = _source(
+    "NVIDIA GeForce RTX 5080 graphics card specifications",
+    "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5080/",
+    S2_VENDOR_DECLARED,
+    publisher="NVIDIA",
+    accessed_at="2026-09-27",
+)
+NVIDIA_BLACKWELL_ARCHITECTURE_PDF_SOURCE = _source(
+    "NVIDIA RTX Blackwell GPU Architecture technical brief (GeForce RTX 5080 table)",
+    "https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf",
+    S2_VENDOR_DECLARED,
+    publisher="NVIDIA",
+    accessed_at="2026-09-27",
+)
 INTEL_GAUDI3_SOURCE = _source(
     "Intel Gaudi 3 AI accelerator product specifications",
     "https://www.intel.com/content/www/us/en/products/details/processors/ai-accelerators/gaudi.html",
@@ -1216,6 +1244,53 @@ INTERNAL_CIM_SOURCE = _source(
     "",
     A_ANALYTICAL,
     publisher="HeteroLLM Simulator",
+)
+
+# Curated vendor sources.  The bundled catalog is intentionally offline: the
+# URL and access date are recorded so a reviewer can reproduce the values, but
+# importing the simulator never depends on a live vendor site.
+SAMSUNG_DDR5_32GB_SOURCE = _source(
+    "Samsung DDR5 DRAM / 32GB UDIMM family",
+    "https://semiconductor.samsung.com/dram/ddr/",
+    S2_VENDOR_DECLARED,
+    publisher="Samsung Semiconductor",
+    accessed_at="2026-09-27",
+)
+SAMSUNG_HBM3E_OFFICIAL_SOURCE = _source(
+    "Samsung HBM3E product specifications",
+    "https://semiconductor.samsung.com/dram/hbm/hbm3e/",
+    S2_VENDOR_DECLARED,
+    publisher="Samsung Semiconductor",
+    accessed_at="2026-09-27",
+)
+YMTC_ZHITAI_TIPRO9100_SOURCE = _source(
+    "YMTC / ZhiTai TiPlus9100 official product specification (user name: Ti Pro9100)",
+    "https://www.ymtc.com/cn/products/77.html?cat=44",
+    S2_VENDOR_DECLARED,
+    publisher="Yangtze Memory Technologies / ZhiTai",
+    accessed_at="2026-09-27",
+)
+SK_HYNIX_HBF_OFFICIAL_SOURCE = _source(
+    "SK hynix HBF standard specification announcement",
+    "https://news.skhynix.com/en/hbf-at-fms-2026/",
+    S3_VENDOR_PREPRODUCTION,
+    publisher="SK hynix",
+    published_at="2026-08-04",
+    accessed_at="2026-09-27",
+)
+NVIDIA_B200_OFFICIAL_SOURCE = _source(
+    "NVIDIA B200 Tensor Core GPU product specification",
+    "https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/",
+    S2_VENDOR_DECLARED,
+    publisher="NVIDIA",
+    accessed_at="2026-09-27",
+)
+NVIDIA_DGX_B200_OFFICIAL_SOURCE = _source(
+    "NVIDIA DGX B200 system specifications",
+    "https://www.nvidia.com/en-us/data-center/dgx-b200/",
+    S2_VENDOR_DECLARED,
+    publisher="NVIDIA",
+    accessed_at="2026-09-27",
 )
 
 
@@ -1426,7 +1501,303 @@ def _grace_cpu_preset(
     )
 
 
-_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
+def _desktop_cpu_preset(
+    preset_id: str,
+    name: str,
+    *,
+    model: str,
+    core_count: int,
+    thread_count: int,
+    base_clock_ghz: float,
+    boost_clock_ghz: float,
+    l2_capacity_bytes: int,
+    l3_capacity_bytes: int,
+    tdp_watts: int,
+    memory_data_rate_mt_s: int,
+    memory_channels: int,
+    source: ComponentSource,
+) -> ComponentPresetDefinition:
+    """Build a desktop CPU compute endpoint from a vendor product page.
+
+    Capacity and memory bandwidth intentionally remain on separate memory
+    components.  The CPU component only exposes compute/cache facts and a
+    DDR5 controller port so an architecture can connect an explicit DRAM
+    preset without duplicating its capacity.
+    """
+    component_id = preset_id.replace("-", "_")
+    profile, profile_basis = _cpu_cost_profile_template(
+        component_id,
+        core_count=core_count,
+        frequency_ghz=boost_clock_ghz,
+    )
+    # _cpu_cost_profile_template is shared with the Grace reference catalog;
+    # replace its vendor-specific wording so this AMD preset cannot imply Arm
+    # Neoverse facts or NVIDIA provenance.
+    profile_basis.update({
+        "pipeline.core_count": "AMD Ryzen 9 9950X3D official 16 physical cores",
+        "pipeline.frequency_ghz": "AMD Ryzen 9 9950X3D official max boost clock; sustained clocks remain workload dependent",
+        "pipeline.simd_width_bits": "A_ANALYTICAL editable SIMD width; AMD product page does not publish this simulator field",
+        "pipeline.vector_fma_units_per_core": "A_ANALYTICAL editable execution-unit assumption; not vendor-declared",
+        "pipeline.vector_alu_units_per_core": "A_ANALYTICAL editable execution-unit assumption; not vendor-declared",
+        "pipeline.*": "A_ANALYTICAL editable issue/queue defaults; product page does not publish all simulator fields",
+        "cache_hierarchy.levels[0].capacity_bytes": "AMD Ryzen 9 9950X3D official L1D cache class; byte conversion uses 1 MiB = 1024² B",
+        "cache_hierarchy.levels[1].capacity_bytes": "AMD Ryzen 9 9950X3D official total L2 cache 16 MB; byte conversion uses 1 MiB = 1024² B",
+        "cache_hierarchy.levels[2].capacity_bytes": "AMD Ryzen 9 9950X3D official total L3 cache 128 MB; byte conversion uses 1 MiB = 1024² B",
+    })
+    # The generic analytical profile uses a scalable cache shape.  Replace
+    # cache capacities with the product's published cache totals while keeping
+    # unreported issue/latency values explicitly analytical.
+    levels = profile["cache_hierarchy"]["levels"]
+    if levels:
+        levels[0]["capacity_bytes"] = 1280 * 1024  # AMD page: total L1 cache 1280 KB
+    if len(levels) >= 2:
+        levels[1]["capacity_bytes"] = l2_capacity_bytes
+    if len(levels) >= 3:
+        levels[2]["capacity_bytes"] = l3_capacity_bytes
+    memory_bandwidth_gbps = (
+        memory_data_rate_mt_s * 64.0 * memory_channels / 1_000.0
+    )  # MT/s × 64-bit payload × channels, expressed as decimal Gb/s
+    ports = (
+        PortSpec(
+            port_id="memory",
+            protocol="DDR5",
+            role="controller",
+            version="DDR5-{}".format(memory_data_rate_mt_s),
+            lanes=64 * memory_channels,
+            bandwidth_gbps=memory_bandwidth_gbps,
+            metadata=_port_metadata(
+                {
+                    "data_rate_mt_s": memory_data_rate_mt_s,
+                    "channels": memory_channels,
+                    "interface_width_bits": 64,
+                    "bandwidth_scope": "theoretical_payload_one_way",
+                }
+            ),
+        ),
+    )
+    limitations = (
+        "AMD 页面给出频率、核心/线程、缓存和 TDP；端到端内存延迟及跨工作负载 OPS 不在产品规格中。",
+        "capacity_bytes 保持 0；主机内存容量和介质吞吐必须由独立 host_memory 组件表达。",
+        "peak_ops_per_s 保持 0；CPU 分类执行成本由组件绑定的 profiles.components.cpu 模板提供。",
+    )
+    component = ComponentSpec(
+        component_id=component_id,
+        kind="cpu",
+        cost_profile_id=_default_cost_profile_id("cpu"),
+        ports=ports,
+        capacity_bytes=0,
+        peak_ops_per_s=0.0,
+        metadata=_component_metadata(
+            preset_id,
+            technology={
+                "vendor": "AMD",
+                "architecture": "Zen 5 with 3D V-Cache",
+                "model": model,
+                "core_count": core_count,
+                "thread_count": thread_count,
+                "base_clock_ghz": base_clock_ghz,
+                "boost_clock_ghz": boost_clock_ghz,
+                "l2_capacity_bytes": l2_capacity_bytes,
+                "l3_capacity_bytes": l3_capacity_bytes,
+                "tdp_watts": tdp_watts,
+                "socket": "AM5",
+                "memory_type": "DDR5",
+                "memory_data_rate_mt_s": memory_data_rate_mt_s,
+                "memory_channels": memory_channels,
+            },
+            sources=(source,),
+            evidence_level=S2_VENDOR_DECLARED,
+            limitations=limitations,
+            notes="AMD Ryzen 9 9950X3D 桌面 CPU 计算端点；内存容量由独立 DDR5 组件提供。",
+            measurement_basis="核心/线程、频率、缓存、TDP 和内存速度来自 AMD 产品页；OPS、延迟和效率是可编辑分析参数。",
+            extras={
+                "component_scope": "compute_side_only",
+                "external_memory_required": True,
+                "cpu_profile_required": True,
+                "capability_applicability": {
+                    "capacity_bytes": "not_applicable; use an explicit host_memory component",
+                    "read_bandwidth_gbps": "not_applicable; use an explicit host_memory component",
+                    "write_bandwidth_gbps": "not_applicable; use an explicit host_memory component",
+                    "peak_ops_per_s": "profile-bound categorized CPU cost; no vendor-general OPS claim",
+                },
+                "unknown_value_sentinels": {
+                    "peak_ops_per_s": "0.0 means not vendor-declared",
+                },
+                "value_scope": "单颗 AMD Ryzen 9 9950X3D 计算端点",
+                "conditions": [
+                    "DDR5 theoretical payload bandwidth: 5600 MT/s × 64-bit × 2 channels = 89.6 GB/s",
+                    "CPU cache and memory-controller latency remain analytical defaults",
+                ],
+                "derived_formula": "5600 MT/s × 64-bit × 2 channels ÷ 8 = 89.6 GB/s; IR port bandwidth = 716.8 Gb/s",
+                "cost_profile_template": profile,
+                "cost_profile_parameter_basis": profile_basis,
+                "cost_profile_key": "cpu",
+                "vendor_parameter_provenance": {
+                    "core_count": {"value": core_count, "unit": "core", "source_field": "CPU Cores"},
+                    "thread_count": {"value": thread_count, "unit": "thread", "source_field": "Threads"},
+                    "base_clock_ghz": {"value": base_clock_ghz, "unit": "GHz", "source_field": "Base Clock"},
+                    "boost_clock_ghz": {"value": boost_clock_ghz, "unit": "GHz", "source_field": "Max. Boost Clock"},
+                    "l2_capacity_bytes": {"value": l2_capacity_bytes, "unit": "B", "source_field": "L2 Cache"},
+                    "l3_capacity_bytes": {"value": l3_capacity_bytes, "unit": "B", "source_field": "L3 Cache"},
+                    "tdp_watts": {"value": tdp_watts, "unit": "W", "source_field": "Default TDP"},
+                    "l2_capacity_bytes": {"value": l2_capacity_bytes, "unit": "B", "source_field": "L2 Cache; converted from 16 MB using 1 MiB = 1024² B"},
+                    "l3_capacity_bytes": {"value": l3_capacity_bytes, "unit": "B", "source_field": "L3 Cache; converted from 128 MB using 1 MiB = 1024² B"},
+                    "memory": {"value": memory_data_rate_mt_s, "unit": "MT/s", "source_field": "System Memory Specification"},
+                },
+            },
+        ),
+    )
+    return ComponentPresetDefinition(
+        preset_id=preset_id,
+        name=name,
+        family="AMD Ryzen 9000 Desktop CPU",
+        component=component,
+        sources=(source,),
+        evidence_level=S2_VENDOR_DECLARED,
+        limitations=limitations,
+        notes="AMD Ryzen 9 9950X3D 桌面 CPU 计算端点；内存容量由独立 DDR5 组件提供。",
+        tags=("cpu", "amd", "ryzen", "zen5", "desktop"),
+    )
+
+
+def _consumer_gpu_preset(
+    preset_id: str,
+    name: str,
+    *,
+    model: str,
+    architecture: str,
+    cuda_cores: int,
+    sm_count: int,
+    tensor_cores_per_sm: int,
+    boost_clock_ghz: float,
+    memory_gb: float,
+    memory_data_rate_gbps: float,
+    memory_bus_bits: int,
+    memory_bandwidth_gb_s: float,
+    l2_capacity_bytes: int,
+    tgp_watts: int,
+    bf16_dense_tflops: float,
+    source: ComponentSource,
+    architecture_source: Optional[ComponentSource] = None,
+) -> ComponentPresetDefinition:
+    """Build a consumer GPU compute endpoint with explicit GDDR interface port."""
+    component_id = preset_id.replace("-", "_")
+    source_items = (source,) + ((architecture_source,) if architecture_source else ())
+    profile, profile_basis = _gpu_cost_profile_template(
+        component_id,
+        sm_count=sm_count,
+        frequency_ghz=boost_clock_ghz,
+        peak_bf16_tflops=bf16_dense_tflops,
+    )
+    profile["cache_hierarchy"]["levels"][-1]["capacity_bytes"] = l2_capacity_bytes
+    profile["cache_hierarchy"]["levels"][0]["capacity_bytes"] = 10752 * 1024  # Blackwell PDF: 10,752 KB L1 cache
+    profile_basis["tensor_core.sm_count"] = "NVIDIA RTX 5080 CUDA cores ÷ 128 CUDA cores/SM = 84 SMs"
+    profile_basis["tensor_core.frequency_ghz"] = "NVIDIA RTX 5080 official boost clock"
+    profile_basis["tensor_core.tensor_cores_per_sm"] = "NVIDIA Blackwell architecture mapping; verify exact SKU microarchitecture"
+    profile_basis["cache_hierarchy.levels[0].capacity_bytes"] = "NVIDIA RTX Blackwell Architecture Appendix B: 10,752 KB L1 cache; converted using 1 KB = 1024 B"
+    profile_basis["cache_hierarchy.levels[1].capacity_bytes"] = "NVIDIA RTX Blackwell Architecture Appendix B: 65,536 KB L2 cache; converted using 1 KB = 1024 B"
+    port_bandwidth_gbps = memory_bandwidth_gb_s * 8.0
+    component = ComponentSpec(
+        component_id=component_id,
+        kind="gpu",
+        cost_profile_id=_default_cost_profile_id("gpu"),
+        ports=(
+            PortSpec(
+                port_id="gddr7",
+                protocol="GDDR7",
+                role="controller",
+                version="GDDR7-{}Gbps".format(memory_data_rate_gbps),
+                lanes=memory_bus_bits,
+                bandwidth_gbps=port_bandwidth_gbps,
+                metadata=_port_metadata(
+                    {
+                        "memory_data_rate_gbps": memory_data_rate_gbps,
+                        "memory_bus_width_bits": memory_bus_bits,
+                        "bandwidth_scope": "vendor_memory_interface_one_way",
+                    }
+                ),
+            ),
+        ),
+        # GPU compute endpoints do not own memory capacity or media bandwidth;
+        # those are represented by an attached memory component/link.
+        capacity_bytes=0,
+        peak_ops_per_s=bf16_dense_tflops * 1_000_000_000_000,
+        read_bandwidth_gbps=0.0,
+        write_bandwidth_gbps=0.0,
+        metadata=_component_metadata(
+            preset_id,
+            technology={
+                "vendor": "NVIDIA",
+                "architecture": architecture,
+                "model": model,
+                "cuda_cores": cuda_cores,
+                "sm_count": sm_count,
+                "tensor_cores_per_sm": tensor_cores_per_sm,
+                "boost_clock_ghz": boost_clock_ghz,
+                "device_memory_gb": memory_gb,
+                "device_memory_type": "GDDR7",
+                "device_memory_data_rate_gbps": memory_data_rate_gbps,
+                "device_memory_bus_width_bits": memory_bus_bits,
+                "device_memory_bandwidth_gb_s": memory_bandwidth_gb_s,
+                "l2_capacity_bytes": l2_capacity_bytes,
+                "tgp_watts": tgp_watts,
+                "bf16_dense_tflops": bf16_dense_tflops,
+            },
+            sources=source_items,
+            evidence_level=S2_VENDOR_DECLARED,
+            limitations=(
+                "显存容量和 GDDR7 媒体带宽记录在 technology/端口元数据中；GPU 组件不重复拥有 capacity/read/write 字段。",
+                "BF16 Tensor Core 峰值采用 NVIDIA Blackwell 技术简报 RTX 5080 表格的 112.6 TFLOPS（FP32 accumulate）；实际应用吞吐取决于内核和占用率。",
+            ),
+            notes="NVIDIA GeForce RTX 5080 Blackwell 计算端点；显存通过 GDDR7 接口端口建模。",
+            measurement_basis="NVIDIA 官方页提供 CUDA 核心、显存、总线、速度、带宽和功耗；BF16 峰值是架构参数推导。",
+            extras={
+                "component_scope": "compute_side_only",
+                "external_memory_modeled_in_metadata": False,
+                "memory_requires_explicit_component": True,
+                "capability_applicability": {
+                    "capacity_bytes": "not_applicable_on_gpu_compute_endpoint; use attached GDDR7 memory metadata/port",
+                    "read_bandwidth_gbps": "not_applicable_on_gpu_compute_endpoint; use GDDR7 port",
+                    "write_bandwidth_gbps": "not_applicable_on_gpu_compute_endpoint; use GDDR7 port",
+                    "peak_ops_per_s": "derived BF16 Tensor Core compute envelope",
+                },
+                "value_scope": "单颗 NVIDIA GeForce RTX 5080 计算端点",
+                "conditions": [
+                    "RTX 5080 official memory bandwidth is 960 GB/s one-way",
+                    "BF16 dense throughput is vendor-declared in NVIDIA RTX Blackwell GPU Architecture Table 4 (112.6 TFLOPS FP32 accumulate)",
+                ],
+                "derived_formula": "960 GB/s × 8 = 7680 Gb/s; BF16 tensor peak copied from NVIDIA Blackwell Table 4",
+                "cost_profile_template": profile,
+                "cost_profile_parameter_basis": profile_basis,
+                "cost_profile_key": "gpu",
+                "vendor_parameter_provenance": {
+                    "cuda_cores": {"value": cuda_cores, "unit": "count", "source_field": "CUDA Cores"},
+                    "boost_clock_ghz": {"value": boost_clock_ghz, "unit": "GHz", "source_field": "Boost Clock"},
+                    "memory_gb": {"value": memory_gb, "unit": "GB_decimal", "source_field": "Standard Memory Config"},
+                    "memory_data_rate_gbps": {"value": memory_data_rate_gbps, "unit": "Gb/s_per_pin", "source_field": "Memory Speed"},
+                    "memory_bus_bits": {"value": memory_bus_bits, "unit": "bit", "source_field": "Memory Interface Width"},
+                    "memory_bandwidth_gb_s": {"value": memory_bandwidth_gb_s, "unit": "GB/s_decimal", "source_field": "Memory Bandwidth"},
+                    "tgp_watts": {"value": tgp_watts, "unit": "W", "source_field": "Total Graphics Power"},
+                    "l2_capacity_bytes": {"value": l2_capacity_bytes, "unit": "B", "source_field": "NVIDIA RTX Blackwell Architecture Table 3; 65,536 KB"},
+                    "bf16_dense_tflops": {"value": bf16_dense_tflops, "unit": "TFLOP/s", "status": "vendor_declared_blackwell_table_4"},
+                },
+            },
+        ),
+    )
+    return ComponentPresetDefinition(
+        preset_id=preset_id,
+        name=name,
+        family="NVIDIA GeForce RTX 50 Series",
+        component=component,
+        sources=source_items,
+        evidence_level=S2_VENDOR_DECLARED,
+        limitations=component.metadata["applicability_limitations"],
+        notes="NVIDIA GeForce RTX 5080 Blackwell 计算端点；显存通过 GDDR7 接口端口建模。",
+        tags=("gpu", "nvidia", "blackwell", "gddr7", "consumer"),
+    )
+
+
+_LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
     _grace_cpu_preset(
         "nvidia-grace-cpu-gh200",
         "NVIDIA Grace CPU for GH200",
@@ -1940,10 +2311,401 @@ _PRESETS: Tuple[ComponentPresetDefinition, ...] = (
 )
 
 
-_COMPONENT_BY_ID: Mapping[str, ComponentPresetDefinition] = {
-    item.preset_id: item for item in _PRESETS
+def _curated_clone(
+    definition: ComponentPresetDefinition,
+    *,
+    preset_id: str,
+    name: str,
+    family: Optional[str] = None,
+    sources: Optional[Sequence[ComponentSource]] = None,
+    evidence_level: Optional[str] = None,
+    notes: Optional[str] = None,
+    limitations: Optional[Sequence[str]] = None,
+    tags: Optional[Sequence[str]] = None,
+    component_updates: Optional[Mapping[str, Any]] = None,
+    technology_updates: Optional[Mapping[str, Any]] = None,
+    provenance: Optional[Mapping[str, Any]] = None,
+) -> ComponentPresetDefinition:
+    """Clone a legacy template while making the curated evidence explicit."""
+    source_items = tuple(sources or definition.sources)
+    metadata = deepcopy(dict(definition.component.metadata))
+    metadata.setdefault("preset", {})["id"] = preset_id
+    metadata["preset"]["catalog_version"] = CATALOG_VERSION
+    metadata["sources"] = list(_source_metadata(source_items))
+    if technology_updates:
+        metadata["technology"] = {
+            **dict(metadata.get("technology", {})),
+            **dict(technology_updates),
+        }
+    if provenance:
+        metadata["vendor_parameter_provenance"] = deepcopy(dict(provenance))
+    component = replace(
+        definition.component,
+        component_id=preset_id.replace("-", "_"),
+        metadata=metadata,
+        **dict(component_updates or {}),
+    )
+    return ComponentPresetDefinition(
+        preset_id=preset_id,
+        name=name,
+        family=family or definition.family,
+        component=component,
+        sources=source_items,
+        evidence_level=evidence_level or definition.evidence_level,
+        limitations=tuple(limitations or definition.limitations),
+        notes=notes or definition.notes,
+        tags=tuple(tags or definition.tags),
+    )
+
+
+def _legacy_component(preset_id: str) -> ComponentPresetDefinition:
+    return next(item for item in _LEGACY_PRESETS if item.preset_id == preset_id)
+
+
+# Public component catalog.  Legacy definitions remain importable through the
+# private compatibility registry below because saved scenarios and old tests
+# may still refer to their stable IDs; they are deliberately absent from the
+# public catalog returned by list_component_presets().
+_SAMSUNG_HBM3E = _hbm_preset(
+    "samsung-hbm3e-36gb-9_2",
+    "Samsung HBM3E 12-High 36GB (9.2Gb/s per pin)",
+    generation="HBM3E", pin_speed_gbps=9.2, io_bits=1024, channels=16,
+    capacity_gb=36.0, bandwidth_gbps=9.2 * 1024,
+    evidence_level=S2_VENDOR_DECLARED,
+    limitations=(
+        "Samsung 公布的是 HBM3E 器件/堆叠速度档；端到端可用吞吐仍取决于 GPU 控制器、封装和工作负载。",
+        "read/write 是同一接口的方向性峰值，不应相加宣传为同时双倍吞吐。",
+    ),
+    notes="Samsung HBM3E 12-high 36GB 产品档；每堆叠峰值带宽由 9.2Gb/s/pin × 1024-bit ÷ 8 换算。",
+    sources=(SAMSUNG_HBM3E_OFFICIAL_SOURCE,),
+)
+_SAMSUNG_HBM3E = _curated_clone(
+    _SAMSUNG_HBM3E,
+    preset_id="samsung-hbm3e-36gb-9_2",
+    name="Samsung HBM3E 12-High 36GB (9.2Gb/s per pin)",
+    provenance={
+        "capacity_bytes": {"value": "36 GB", "unit": "GB_decimal", "source_field": "Samsung HBM3E 12-high product capacity"},
+        "pin_speed_gbps": {"value": 9.2, "unit": "Gb/s_per_pin", "source_field": "Samsung HBM3E speed grade"},
+        "interface_bits": {"value": 1024, "unit": "bit", "source_field": "HBM3E standard interface width"},
+        "read_bandwidth_gbps": {"formula": "9.2 Gb/s/pin × 1024 bit ÷ 8 = 1177.6 GB/s = 9420.8 Gb/s", "unit": "Gb/s_decimal_one_way"},
+        "write_bandwidth_gbps": {"formula": "same interface peak used as a directional write envelope", "status": "derived_not_separately_published"},
+        "source_excerpt": "Samsung HBM3E page: 12-layer stack, up to 1,180 GB/s bandwidth at 9.2 Gbps, 36 GB capacity",
+        "vendor_display_bandwidth": {"value": 1180, "unit": "GB/s_decimal", "status": "rounded_vendor_display"},
+    },
+)
+_GENERIC_HBM3E = _hbm_preset(
+    "hbm3e-standard-24gb-8_0",
+    "HBM3E Standard 24GB 1.024TB/s Analytical Stack",
+    generation="HBM3E", pin_speed_gbps=8.0, io_bits=1024, channels=16,
+    capacity_gb=24.0, bandwidth_gbps=8.0 * 1024,
+    evidence_level=A_ANALYTICAL,
+    limitations=(
+        "这是接口速度与常见 24GB 容量组合的分析模板，不对应单一厂商 SKU。",
+        "延迟、效率、队列和可用吞吐属于可编辑仿真参数，不是 JEDEC 端到端保证。",
+    ),
+    notes="仅保留一个通用 HBM3E 分析档，避免把不同厂商产品切片误当成独立标准器件。",
+    sources=(SAMSUNG_HBM3E_OFFICIAL_SOURCE,),
+)
+_GENERIC_HBM3E = _curated_clone(
+    _GENERIC_HBM3E,
+    preset_id="hbm3e-standard-24gb-8_0",
+    name="HBM3E Standard 24GB 1.024TB/s Analytical Stack",
+    provenance={
+        "capacity_bytes": {"value": "24 GB", "unit": "GB_decimal", "status": "analytical_common_stack_class"},
+        "pin_speed_gbps": {"value": 8.0, "unit": "Gb/s_per_pin", "status": "analytical_speed_grade"},
+        "interface_bits": {"value": 1024, "unit": "bit", "status": "HBM interface convention"},
+        "read_bandwidth_gbps": {"formula": "8.0 Gb/s/pin × 1024 bit ÷ 8 = 1024 GB/s = 8192 Gb/s", "unit": "Gb/s_decimal_one_way"},
+        "write_bandwidth_gbps": {"formula": "same interface peak used as directional analytical envelope", "status": "derived_not_vendor_specific"},
+    },
+)
+
+_HBF_BASE = _legacy_component("ocp-hbf-2026-512gb")
+_SK_HYNIX_HBF = _curated_clone(
+    _HBF_BASE,
+    preset_id="sk-hynix-hbf-512gb",
+    name="SK hynix HBF 512GB Grade 3 (up to 3.0TB/s read)",
+    family="High Bandwidth Flash",
+    sources=(SK_HYNIX_HBF_OFFICIAL_SOURCE,),
+    evidence_level=S3_VENDOR_PREPRODUCTION,
+    limitations=(
+        "SK hynix 公告为 HBF 开放标准与 up-to 等级，不是量产 SKU 的持续实测吞吐。",
+        "公告未给出通用写带宽；write_bandwidth_gbps=0 表示 unknown/not declared。",
+        "媒体峰值与 UCIe 链路分别建模，端到端吞吐取受限资源和队列服务时间。",
+    ),
+    notes="SK hynix HBF 标准参考节点；512GB 和 Grade 3 up-to 3.0TB/s 由厂家公告记录。",
+    component_updates={"read_bandwidth_gbps": 24000.0, "write_bandwidth_gbps": 0.0},
+    technology_updates={"vendor": "SK hynix", "generation": "HBF 2026 OCP", "bandwidth_scope": "Grade3_up_to_3.0TB_per_s_read"},
+    provenance={
+        "capacity_bytes": {"value": 512, "unit": "GB_decimal", "source_field": "capacity specifications up to 512GB"},
+        "read_bandwidth_gbps": {"value": 3.0, "unit": "TB/s_decimal", "formula": "3.0 TB/s × 8000 = 24000 Gb/s", "source_field": "Grade3 up-to bandwidth"},
+        "write_bandwidth_gbps": {"value": None, "unit": "Gb/s_decimal_one_way", "status": "not_published"},
+        "interface": {"value": "UCIe", "unit": "protocol", "source_field": "HBF adopts UCIe"},
+        "source_excerpt": "SK hynix announcement: capacity up to 512GB; Grade1–3 approximately 0.4–3.0TB/s; UCIe connection",
+    },
+)
+_SK_HYNIX_HBF.component.metadata["capability_status"] = {
+    "read_bandwidth_gbps": "vendor_declared_up_to",
+    "write_bandwidth_gbps": "not_published",
+    "write_latency_ns": "not_published",
+    "dma_energy_pj_per_byte": "not_published",
 }
-if len(_COMPONENT_BY_ID) != len(_PRESETS):  # import-time invariant, never user input
+_SK_HYNIX_HBF.component.metadata["facts"] = {
+    "写入带宽状态": "未公开（not_published）；IR 中 0 仅为未知哨兵，不代表物理零带宽",
+    "写入延迟状态": "未公开（not_published）；不得按 0 ns 计费",
+    "DMA 能耗状态": "未公开（not_published）；不得按 0 pJ/B 宣称零能耗",
+}
+
+# The user called this product "Ti Pro9100"; YMTC's official page names it
+# TiPlus9100. Keep the stable simulator ID while recording the exact official
+# 1TB MPN, test conditions and decimal conversion formulas.
+_TIPRO9100 = _ssd_preset(
+    "ymtc-zhitai-ti-pro9100",
+    "长江存储致态 TiPlus9100 1TB SSD（用户原称 Ti Pro9100）",
+    family="Consumer NVMe SSD", kind="ssd", capacity_bytes=_gb(1024.0),
+    read_gbps=96.0, write_gbps=85.6, interface_bandwidth_gbps=126.03076923076924,
+    interface="PCIe Gen5 x4, NVMe 2.0", protocol_version="5.0", lanes=4,
+    endurance="600 TBW; 5-year limited warranty",
+    limitations=(
+        "厂家页面产品名为 TiPlus9100；本项目保留用户原称 Ti Pro9100 作为稳定 ID。",
+        "顺序读写为致态实验室内部测试峰值（不是 PCIe 链路理论值）；随机 IOPS 不折算为带宽。",
+        "接口解码带宽仅用于链路上限，媒体带宽仍由厂家顺序读写字段决定。",
+    ),
+    notes="YMTC 官方 TiPlus9100 1TB（MPN ZTSS3CB08D6CMC）；用户请求中的 Ti Pro9100 视为该官方产品别名。",
+    sources=(YMTC_ZHITAI_TIPRO9100_SOURCE,), evidence_level=S2_VENDOR_DECLARED,
+    conditions=("官方实验室测试: AMD Ryzen 9 9950X + ROG STRIX X870E-E GAMING WIFI", "CrystalDiskMark 8.0.4; sequential 1MiB Q8T1; random 4KiB Q32T16", "read/write values are decimal MB/s converted to decimal Gb/s"),
+)
+_TIPRO9100 = _curated_clone(
+    _TIPRO9100,
+    preset_id="ymtc-zhitai-ti-pro9100",
+    name="长江存储致态 TiPlus9100 1TB SSD（用户原称 Ti Pro9100）",
+    evidence_level=S2_VENDOR_DECLARED,
+    provenance={
+        "mpn": {"value": "ZTSS3CB08D6CMC", "source_field": "MPN 1024GB variant"},
+        "capacity_bytes": {"value": 1024, "unit": "GB_decimal", "formula": "1024 GB × 1,000,000,000 = 1,024,000,000,000 B"},
+        "read_bandwidth_gbps": {"value": 12000, "unit": "MB/s_decimal", "formula": "12000 MB/s ÷ 1000 = 12 GB/s × 8 = 96 Gb/s", "test_condition": "CDM 1MiB Q8T1"},
+        "write_bandwidth_gbps": {"value": 10700, "unit": "MB/s_decimal", "formula": "10700 MB/s ÷ 1000 = 10.7 GB/s × 8 = 85.6 Gb/s", "test_condition": "CDM 1MiB Q8T1"},
+        "interface_bandwidth_gbps": {"value": 126.03076923076924, "unit": "Gb/s_decimal_one_way", "formula": "PCIe Gen5 ×4 decoded payload: 31.5076923077 Gb/s/lane × 4; link ceiling only"},
+        "random_iops": {"value": 1850, "unit": "KIOPS", "test_condition": "CDM 4KiB Q32T16"},
+        "interface": {"value": "PCIe Gen5 x4 / NVMe 2.0", "unit": "protocol", "bandwidth_scope": "link ceiling only"},
+        "endurance": {"value": 600, "unit": "TBW_decimal", "scope": "1TB variant"},
+    },
+)
+_TIPRO9100.component.metadata["measurement_basis"] = (
+    "采用 YMTC 官方 TiPlus9100 1TB 实验室顺序读写峰值；容量和带宽均保留原始十进制单位及转换公式。"
+)
+_TIPRO9100.component.metadata["simulation_usable"] = True
+_TIPRO9100.component.metadata["vendor_parameter_status"] = "vendor_declared_tested"
+
+_SAMSUNG_DDR5 = _grace_lpddr_preset(
+    "samsung-ddr5-32gb-udimm-5600",
+    "Samsung DDR5 32GB UDIMM DDR5-5600 series",
+    product_family="DDR5 UDIMM 32GB", bandwidth_gbps=358.4,
+    source=SAMSUNG_DDR5_32GB_SOURCE,
+)
+_SAMSUNG_DDR5 = _curated_clone(
+    _SAMSUNG_DDR5,
+    preset_id="samsung-ddr5-32gb-udimm-5600",
+    name="Samsung DDR5 32GB UDIMM DDR5-5600 series",
+    family="Samsung DDR5 DRAM",
+    limitations=(
+        "32GB 指整条 UDIMM 模块容量，非单颗 DRAM die；这是 Samsung 官方 UDIMM 32GB/5600 速度等级，不虚构未在该页面列出的 MPN。",
+        "Samsung 页面公开 UDIMM 最高 32GB、5600Mbps 速度；未公开端到端 CPU 控制器延迟，延迟和效率保留分析参数。",
+    ),
+    notes="Samsung DDR5 32GB UDIMM 模块；峰值 payload 带宽按 5600MT/s × 64-bit ÷ 8 = 44.8GB/s 换算。",
+    component_updates={
+        "capacity_bytes": _gb(32.0),
+        "read_bandwidth_gbps": 358.4,
+        "write_bandwidth_gbps": 358.4,
+        "ports": (PortSpec(port_id="host", protocol="DDR5", role="device", version="DDR5-5600", lanes=64, bandwidth_gbps=358.4, metadata=_port_metadata({"data_rate_mt_s": 5600, "interface_width_bits": 64, "bandwidth_scope": "module_payload_one_way"})),),
+    },
+    technology_updates={"vendor": "Samsung", "generation": "DDR5", "module_capacity_gb": 32, "data_rate_mt_s": 5600, "interface_width_bits": 64, "is_module": True},
+    provenance={
+        "module_series": {"value": "Samsung DDR5 UDIMM 32GB / 5600 Mbps", "status": "vendor_family_page_declared"},
+        "capacity_bytes": {"value": 32, "unit": "GB_decimal", "scope": "one_UDIMM_module"},
+        "data_rate": {"value": 5600, "unit": "MT/s", "source_field": "DDR5 speed grade"},
+                    "interface_width": {"value": 64, "unit": "bit_payload", "ECC_note": "bandwidth uses the 64-bit payload width; any ECC/physical overhead is not included"},
+        "read_bandwidth_gbps": {"formula": "5600 MT/s × 64 bit ÷ 8 = 44.8 GB/s × 8 = 358.4 Gb/s", "unit": "Gb/s_decimal_one_way"},
+        "write_bandwidth_gbps": {"formula": "same DDR5 payload envelope", "status": "derived_directional_envelope"},
+        "source_excerpt": "Samsung DDR page: UDIMM capacity up to 32GB and speed up to 5,600Mbps at 1.1V",
+    },
+)
+_SAMSUNG_DDR5.component.metadata["physical_composition"] = {
+    "simulator_representation": "single_module_node",
+    "physical_unit_kind": "DDR5_UDIMM_module",
+    "physical_unit_count": 1,
+    "physical_unit_count_status": "one_modeled_module",
+    "unit_capacity_bytes": _gb(32.0),
+    "module_series": "Samsung DDR5 UDIMM 32GB / 5600 Mbps",
+    "source_basis": "Samsung DDR module page; 32GB/5600 speed class recorded as the selected module profile",
+}
+_SAMSUNG_DDR5.component.metadata["parameter_basis"] = {
+    "capacity_bytes": "one 32GB module; not a die or a system aggregate",
+    "data_rate_mt_s": "Samsung DDR5 module speed class 5600 MT/s",
+    "read_bandwidth_gbps": "5600 MT/s × 64-bit payload ÷ 8 × 8 = 358.4 Gb/s",
+    "write_bandwidth_gbps": "directional payload envelope; controller efficiency remains analytical",
+}
+_SAMSUNG_DDR5.component.metadata["value_scope"] = "单条 Samsung DDR5 32GB UDIMM 模块"
+_SAMSUNG_DDR5.component.metadata["conditions"] = [
+    "Samsung DDR5 module page; DDR5-5600 speed class",
+    "64-bit payload width; ECC bits excluded from payload bandwidth",
+    "latency/efficiency are editable analytical controller defaults",
+]
+
+_SRAM_CIM = _curated_clone(
+    _legacy_component("digital-sram-cim-analysis"),
+    preset_id="sram-cim-analytical-tile",
+    name="SRAM 存算一体分析 Tile（非量产 SKU）",
+    family="SRAM Compute-in-Memory",
+    evidence_level=A_ANALYTICAL,
+    limitations=(
+        "仅为分析参考，不对应公开量产器件或特定厂家 SKU。",
+        "容量、OPS、片上带宽、能效和频率均需按研究假设或实测校准。",
+    ),
+    notes="保留一个 SRAM-CIM 分析模板，明确不冒充厂家参数。",
+    provenance={
+        "all_fields": {"status": "analytical_reference_only", "source": "no vendor SKU claimed"},
+    },
+)
+
+_B200_GPU = _gpu_preset(
+    "nvidia-b200-sxm-gpu",
+    "NVIDIA B200 SXM GPU (180GB HBM3E, 8TB/s)",
+    hbm_generation="HBM3E", hbm_stack_count=8, device_memory_gb=180.0,
+    device_memory_bandwidth_gbps=64000.0,
+    bf16_dense_tflops=2250.0, fp8_dense_tflops=4500.0,
+    fp8_sparse_tflops=9000.0, bf16_sparse_tflops=4500.0,
+    tdp_watts=1000, mig_profiles="未公开 MIG 配置",
+    sources=(NVIDIA_DGX_B200_OFFICIAL_SOURCE, NVIDIA_B200_OFFICIAL_SOURCE),
+)
+_B200_GPU = _curated_clone(
+    _B200_GPU,
+    preset_id="nvidia-b200-sxm-gpu",
+    name="NVIDIA B200 SXM GPU (180GB HBM3E, 8TB/s)",
+    family="NVIDIA Blackwell GPU",
+    notes="NVIDIA B200 单 GPU 规格按 DGX B200/Blackwell 厂家聚合值折算：180GB HBM3E、8TB/s、dense BF16 2.25PFLOPS。",
+    component_updates={
+        # GPU ComponentSpec is the compute endpoint.  Its attached HBM must
+        # be represented by explicit hbm components/links; otherwise these
+        # fields would double count memory in architecture_scan and serving.
+        "capacity_bytes": 0,
+        "read_bandwidth_gbps": 0.0,
+        "write_bandwidth_gbps": 0.0,
+    },
+    technology_updates={"architecture": "NVIDIA Blackwell", "vendor": "NVIDIA", "device_memory_gb": 180.0, "device_memory_bandwidth_gbps": 64000.0, "bf16_tensor_dense_tflops": 2250.0, "tdp_watts": 1000},
+    provenance={
+        "device_memory_gb": {"value": 180, "unit": "GB_decimal", "formula": "DGX B200 1440GB ÷ 8 GPUs"},
+        "device_memory_bandwidth_gbps": {"value": 64000, "unit": "Gb/s_decimal_one_way", "formula": "DGX B200 64TB/s ÷ 8 GPUs × 8"},
+        "component_read_bandwidth_gbps": {"formula": "device memory aggregate 8TB/s × 8 = 64000Gb/s", "scope": "attached HBM3E aggregate"},
+        "component_write_bandwidth_gbps": {"formula": "same directional HBM3E aggregate envelope", "status": "derived_directional_envelope"},
+        "bf16_dense_tflops": {"value": 2250, "unit": "TFLOP/s", "status": "vendor Blackwell dense tensor aggregate"},
+        "tdp_watts": {"value": 1000, "unit": "W", "status": "vendor product power class"},
+    },
+)
+_B200_GPU_PORTS = tuple(
+    PortSpec(
+        port_id="hbm{}".format(index), protocol="HBM", role="controller",
+        version="HBM3E", lanes=16, bandwidth_gbps=8000.0,
+        metadata=_port_metadata({"expected_stack_index": index, "bandwidth_scope": "analytical_equal_share_of_8TB_per_s"}),
+    )
+    for index in range(8)
+) + (
+    PortSpec(
+        port_id="nvlink0", protocol="NVLink", role="endpoint", version="5.0",
+        lanes=18, bandwidth_gbps=7200.0,
+        metadata=_port_metadata({"bandwidth_scope": "one_way", "vendor_display_value": "1.8 TB/s bidirectional per GPU"}),
+    ),
+    PortSpec(
+        port_id="pcie0", protocol="PCIe", role="endpoint", version="6.0",
+        lanes=16, bandwidth_gbps=1008.2461538461539,
+        payload="NVMe/control",
+        metadata=_port_metadata({"bandwidth_scope": "analytical_decoded_link_ceiling", "source_status": "protocol_ceiling_not_B200_media_bandwidth"}),
+    ),
+)
+_B200_GPU = replace(_B200_GPU, component=replace(_B200_GPU.component, ports=_B200_GPU_PORTS))
+_B200_GPU.component.metadata["technology"].update({
+    "memory_stack_count": None,
+    "memory_stack_count_status": "not_vendor_disclosed",
+    "attached_memory_scope": "DGX B200 8-GPU aggregate divided by 8",
+})
+_B200_GPU.component.metadata["technology"].pop("mig_profiles", None)
+_B200_GPU.component.metadata["component_scope"] = "B200 compute endpoint; attached HBM3E requires explicit memory components"
+_B200_GPU.component.metadata["external_memory_modeled_in_metadata"] = False
+_B200_GPU.component.metadata["memory_requires_explicit_component"] = True
+_B200_GPU.component.metadata["capability_applicability"] = {
+    "capacity_bytes": "not_applicable_on_gpu_compute_endpoint; use hbm.capacity_bytes",
+    "read_bandwidth_gbps": "not_applicable_on_gpu_compute_endpoint; use hbm.read_bandwidth_gbps and links",
+    "write_bandwidth_gbps": "not_applicable_on_gpu_compute_endpoint; use hbm.write_bandwidth_gbps and links",
+    "peak_ops_per_s": "GPU compute capability",
+}
+_B200_GPU.component.metadata["conditions"] = [
+    "NVIDIA DGX B200: 1,440GB total / 8 GPUs = 180GB per GPU",
+    "NVIDIA DGX B200: 64TB/s total HBM3E / 8 GPUs = 8TB/s per GPU",
+    "dense BF16 2.25PFLOPS is a Blackwell architecture reference; scheduler/cache/efficiency fields are analytical",
+]
+_B200_GPU.component.metadata["derived_formula"] = "DGX B200 aggregate product values divided by 8 GPUs; decimal TB/s × 8000 = IR Gb/s"
+_B200_GPU.component.metadata["cost_profile_parameter_basis"] = {
+    key: str(value).replace("Hopper", "Blackwell")
+    for key, value in _B200_GPU.component.metadata.get("cost_profile_parameter_basis", {}).items()
+}
+
+_RYZEN_9_9950X3D = _desktop_cpu_preset(
+    "amd-ryzen-9-9950x3d",
+    "AMD Ryzen 9 9950X3D（16 核 / 32 线程）",
+    model="AMD Ryzen 9 9950X3D",
+    core_count=16,
+    thread_count=32,
+    base_clock_ghz=4.3,
+    boost_clock_ghz=5.7,
+    l2_capacity_bytes=16 * 1024 * 1024,
+    l3_capacity_bytes=128 * 1024 * 1024,
+    tdp_watts=170,
+    memory_data_rate_mt_s=5600,
+    memory_channels=2,
+    source=AMD_RYZEN_9_9950X3D_SOURCE,
+)
+
+_RTX_5080 = _consumer_gpu_preset(
+    "nvidia-rtx-5080",
+    "NVIDIA GeForce RTX 5080 16GB GDDR7",
+    model="NVIDIA GeForce RTX 5080",
+    architecture="NVIDIA Blackwell",
+    cuda_cores=10752,
+    sm_count=84,
+    tensor_cores_per_sm=4,
+    boost_clock_ghz=2.617,
+    memory_gb=16.0,
+    memory_data_rate_gbps=30.0,
+    memory_bus_bits=256,
+    memory_bandwidth_gb_s=960.0,
+    l2_capacity_bytes=64 * 1024 * 1024,
+    tgp_watts=360,
+    bf16_dense_tflops=112.6,
+    source=NVIDIA_RTX_5080_SOURCE,
+    architecture_source=NVIDIA_BLACKWELL_ARCHITECTURE_PDF_SOURCE,
+)
+
+_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
+    _SAMSUNG_HBM3E,
+    _SK_HYNIX_HBF,
+    _TIPRO9100,
+    _SAMSUNG_DDR5,
+    _SRAM_CIM,
+    _B200_GPU,
+    _RYZEN_9_9950X3D,
+    _RTX_5080,
+)
+
+# Legacy definitions are intentionally not registered.  The curated catalog
+# is the complete hardware component surface; old IDs must fail closed in the
+# public detail/materialize APIs.
+_LEGACY_PRESETS = ()
+
+
+_COMPONENT_BY_ID: Mapping[str, ComponentPresetDefinition] = {
+    **{item.preset_id: item for item in _LEGACY_PRESETS},
+    **{item.preset_id: item for item in _PRESETS},
+}
+if len(_COMPONENT_BY_ID) != len({item.preset_id for item in (*_LEGACY_PRESETS, *_PRESETS)}):  # import-time invariant, never user input
     raise RuntimeError("组件预设 ID 重复")
 if any(item.component_kind not in COMPONENT_KINDS for item in _PRESETS):
     raise RuntimeError("组件预设使用了不支持的 ComponentSpec.kind")
@@ -2137,44 +2899,27 @@ def _hopper_sxm_bundle(
     )
 
 
-_BUNDLES: Tuple[TopologyBundleDefinition, ...] = (
-    _hopper_sxm_bundle(
-        "nvidia-h100-sxm-bundle",
-        "NVIDIA H100 SXM + 5×HBM3",
-        gpu_preset_id="nvidia-h100-sxm-gpu",
-        hbm_generation="HBM3",
-        hbm_stack_count=5,
-        visible_memory_gb=80.0,
-        aggregate_bandwidth_gbps=26800.0,
-        source=NVIDIA_H100_SOURCE,
-        raw_stack_capacity_gb=16.0,
-        unit_count_status="vendor_documented_active_stacks",
-        unit_count_formula="vendor-documented 5 active HBM3 stacks × 16 GB = 80 GB",
-        component_preset_id="hbm3-16gb-0_670tbs-h100-slice",
-    ),
-    _hopper_sxm_bundle(
-        "nvidia-h200-sxm-bundle",
-        "NVIDIA H200 SXM + 6×HBM3E",
-        gpu_preset_id="nvidia-h200-sxm-gpu",
-        hbm_generation="HBM3E",
-        hbm_stack_count=6,
-        visible_memory_gb=141.0,
-        aggregate_bandwidth_gbps=38400.0,
-        source=NVIDIA_H200_SOURCE,
-        raw_stack_capacity_gb=24.0,
-        unit_count_status="derived_from_product_total_and_24GB_stack_class",
-        unit_count_formula="144 GB raw capacity / 24 GB HBM3E stack class = 6; 141 GB is product-visible capacity",
-        component_preset_id="hbm3e-24gb-0_800tbs-h200-slice",
-    ),
-)
+_BUNDLES: Tuple[TopologyBundleDefinition, ...] = ()
 
 
 _BUNDLE_BY_ID: Mapping[str, TopologyBundleDefinition] = {
     item.preset_id: item for item in _BUNDLES
 }
 _BY_ID: Mapping[str, Any] = {**_COMPONENT_BY_ID, **_BUNDLE_BY_ID}
-if len(_BY_ID) != len(_PRESETS) + len(_BUNDLES):
+if len(_BY_ID) != len(set(_COMPONENT_BY_ID) | set(_BUNDLE_BY_ID)):
     raise RuntimeError("组件或组合拓扑预设 ID 重复")
+
+class ComponentPresetMutationError(ValueError):
+    """A client-correctable component-preset mutation error."""
+
+    def __init__(self, code: str, message: str, *, status: int = 400):
+        super().__init__(message)
+        self.code = code
+        self.status = status
+
+
+def _catalog_definitions() -> Tuple[Any, ...]:
+    return _PRESETS
 
 
 def _metadata(definition: Any) -> Dict[str, Any]:
@@ -2236,6 +2981,8 @@ def _metadata(definition: Any) -> Dict[str, Any]:
         "sources": list(_source_metadata(definition.sources)),
         "limitations": list(definition.limitations),
         "notes": definition.notes,
+        "facts": dict(component_metadata.get("facts", {})),
+        "capability_status": dict(component_metadata.get("capability_status", {})),
         "value_scope": component_metadata.get("value_scope", ""),
         "conditions": list(component_metadata.get("conditions", ())),
         "revision": component_metadata.get("revision", ""),
@@ -2252,14 +2999,14 @@ def list_component_presets() -> Tuple[Dict[str, Any], ...]:
 
     return tuple(
         _metadata(item)
-        for item in sorted(_PRESETS + _BUNDLES, key=lambda item: item.preset_id)
+        for item in sorted(_catalog_definitions(), key=lambda item: item.preset_id)
     )
 
 
-def component_preset_filters() -> Dict[str, Any]:
+def component_preset_filters(items=None) -> Dict[str, Any]:
     """Return available filter values for the list API envelope."""
 
-    items = list_component_presets()
+    items = list_component_presets() if items is None else items
     tags = sorted({tag for item in items for tag in item["tags"]})
     return {
         "component_kind": sorted({item["component_kind"] for item in items}),
@@ -2276,6 +3023,7 @@ def component_preset_page(
     component_kind: str = "",
     evidence_level: str = "",
     tag: str = "",
+    items=None,
 ) -> Dict[str, Any]:
     """Return a small filtered list envelope for UI integration."""
 
@@ -2284,8 +3032,9 @@ def component_preset_page(
     normalized_kind = component_kind.strip().lower()
     normalized_evidence = evidence_level.strip().lower()
     normalized_tag = tag.strip().lower()
+    catalog_items = list_component_presets() if items is None else items
     items = []
-    for item in list_component_presets():
+    for item in catalog_items:
         if normalized_family and item["family"].lower() != normalized_family:
             continue
         if normalized_kind and item["component_kind"].lower() != normalized_kind:
@@ -2312,7 +3061,7 @@ def component_preset_page(
     return {
         "items": items,
         "total": len(items),
-        "filters": component_preset_filters(),
+        "filters": component_preset_filters(catalog_items),
         "query": {
             "query": query,
             "family": family,
@@ -2347,6 +3096,10 @@ def component_preset_detail(preset_id: str) -> Dict[str, Any]:
     """Build an API detail object for a component or topology bundle."""
 
     definition = get_component_preset(preset_id)
+    return _component_definition_detail(definition)
+
+
+def _component_definition_detail(definition: Any) -> Dict[str, Any]:
     if isinstance(definition, TopologyBundleDefinition):
         return {
             "preset": _metadata(definition),
@@ -2374,6 +3127,246 @@ def component_preset_detail(preset_id: str) -> Dict[str, Any]:
     }
 
 
+_PRESET_MUTATION_FIELDS = frozenset({
+    "id", "preset_id", "name", "family", "component", "component_spec",
+    "evidence_level", "limitations", "notes", "tags", "sources",
+})
+_PRESET_MUTATION_IGNORED_FIELDS = frozenset({
+    "preset_type", "component_kind", "root_component_kind", "component_count", "link_count",
+    "capacity_bytes", "peak_ops_per_s", "read_bandwidth_gbps", "write_bandwidth_gbps",
+    "capability_units", "port_count", "evidence_level", "sources", "limitations", "notes",
+    "value_scope", "conditions", "revision", "expires_at", "supersedes", "tags",
+    "catalog_version", "usage_hint", "catalog", "links",
+    "capability_status", "facts",
+})
+_COMPONENT_MUTATION_FIELDS = frozenset({
+    "component_id", "kind", "cost_profile_id", "ports", "package_id", "die_id",
+    "capacity_bytes", "peak_ops_per_s", "read_bandwidth_gbps",
+    "write_bandwidth_gbps", "metadata", "schema_version",
+})
+_PORT_MUTATION_FIELDS = frozenset({
+    "port_id", "protocol", "role", "direction", "version", "lanes",
+    "bandwidth_gbps", "max_links", "payload", "metadata", "schema_version",
+})
+_PRESET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{1,80}$")
+
+
+def _mutation_mapping(value: Any, label: str) -> Dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ComponentPresetMutationError("invalid_payload", "{} 必须是对象".format(label))
+    return dict(value)
+
+
+def _mutation_list(value: Any, label: str) -> list:
+    if not isinstance(value, (list, tuple)):
+        raise ComponentPresetMutationError("invalid_payload", "{} 必须是数组".format(label))
+    return list(value)
+
+
+def _parse_port_payload(value: Any, index: int) -> PortSpec:
+    payload = _mutation_mapping(value, "component.ports[{}]".format(index))
+    unknown = sorted(set(payload) - _PORT_MUTATION_FIELDS)
+    if unknown:
+        raise ComponentPresetMutationError("unknown_fields", "端口包含未知字段：{}".format(", ".join(unknown)))
+    payload.setdefault("schema_version", SCHEMA_VERSION)
+    payload.setdefault("direction", "bidirectional")
+    payload.setdefault("version", "1.0")
+    payload.setdefault("lanes", 1)
+    payload.setdefault("bandwidth_gbps", 0.0)
+    payload.setdefault("max_links", 1)
+    try:
+        return PortSpec(**payload)
+    except (TypeError, ValueError) as exc:
+        raise ComponentPresetMutationError("invalid_component", "端口参数无效：{}".format(exc)) from exc
+
+
+def _parse_component_payload(value: Any) -> ComponentSpec:
+    payload = _mutation_mapping(value, "component")
+    unknown = sorted(set(payload) - _COMPONENT_MUTATION_FIELDS)
+    if unknown:
+        raise ComponentPresetMutationError("unknown_fields", "组件包含未知字段：{}".format(", ".join(unknown)))
+    payload.setdefault("schema_version", SCHEMA_VERSION)
+    payload["ports"] = tuple(_parse_port_payload(item, index) for index, item in enumerate(_mutation_list(payload.get("ports", ()), "component.ports")))
+    payload.setdefault("capacity_bytes", 0)
+    payload.setdefault("peak_ops_per_s", 0.0)
+    payload.setdefault("read_bandwidth_gbps", 0.0)
+    payload.setdefault("write_bandwidth_gbps", 0.0)
+    if str(payload.get("kind", "")).strip().lower().replace("-", "_") == "gpu":
+        # GPU presets own compute capability.  Device-memory capacity and
+        # media bandwidth must be represented by explicit HBM/memory nodes.
+        payload["capacity_bytes"] = 0
+        payload["read_bandwidth_gbps"] = 0.0
+        payload["write_bandwidth_gbps"] = 0.0
+    metadata = dict(_mutation_mapping(payload.get("metadata", {}), "component.metadata"))
+    template = metadata.get("cost_profile_template")
+    if isinstance(template, Mapping) and template and not any(isinstance(item, Mapping) for item in template.values()):
+        # Keep the common flat memory profile aligned with the editable
+        # capability fields.  Nested GPU/CIM profiles remain explicit JSON and
+        # are not guessed here.
+        synchronized = dict(template)
+        read_gb_s = float(payload["read_bandwidth_gbps"]) / 8.0
+        write_gb_s = float(payload["write_bandwidth_gbps"]) / 8.0
+        if "bandwidth_gb_s" in synchronized:
+            synchronized["bandwidth_gb_s"] = read_gb_s
+        if "read_bandwidth_gb_s" in synchronized:
+            synchronized["read_bandwidth_gb_s"] = read_gb_s
+        if "write_bandwidth_gb_s" in synchronized:
+            synchronized["write_bandwidth_gb_s"] = write_gb_s
+        metadata["cost_profile_template"] = synchronized
+    payload["metadata"] = metadata
+    try:
+        return ComponentSpec(**payload)
+    except (TypeError, ValueError) as exc:
+        raise ComponentPresetMutationError("invalid_component", "组件参数无效：{}".format(exc)) from exc
+
+
+def _parse_sources(value: Any) -> Tuple[ComponentSource, ...]:
+    if value is None:
+        return ()
+    sources = []
+    for index, raw in enumerate(_mutation_list(value, "sources")):
+        source = _mutation_mapping(raw, "sources[{}]".format(index))
+        title = str(source.get("title", "")).strip()
+        url = str(source.get("url", "")).strip()
+        publisher = str(source.get("publisher", "")).strip() or "用户录入"
+        evidence = str(source.get("evidence_level", S2_VENDOR_DECLARED)).strip()
+        if not title or not url:
+            raise ComponentPresetMutationError("invalid_source", "来源必须包含 title 和 url")
+        if evidence not in EVIDENCE_LEVELS:
+            raise ComponentPresetMutationError("invalid_source", "来源 evidence_level 无效：{}".format(evidence))
+        sources.append(ComponentSource(title, url, evidence, publisher, str(source.get("published_at", "")), str(source.get("accessed_at", ""))))
+    return tuple(sources)
+
+
+def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[ComponentPresetDefinition] = None) -> ComponentPresetDefinition:
+    raw = _mutation_mapping(payload, "payload")
+    if isinstance(raw.get("preset"), Mapping):
+        preset_fields = dict(raw["preset"])
+        raw = {**preset_fields, **{key: value for key, value in raw.items() if key != "preset"}}
+    unknown = sorted(set(raw) - _PRESET_MUTATION_FIELDS - _PRESET_MUTATION_IGNORED_FIELDS)
+    if unknown:
+        raise ComponentPresetMutationError("unknown_fields", "预设包含未知字段：{}".format(", ".join(unknown)))
+    base_component = existing.component if existing else None
+    component_payload = raw.get("component", raw.get("component_spec"))
+    if component_payload is None and base_component is not None:
+        component_payload = to_primitive(base_component)
+    if component_payload is None:
+        raise ComponentPresetMutationError("missing_component", "缺少必填字段 component")
+    component = _parse_component_payload(component_payload)
+    preset_id = str(raw.get("id", raw.get("preset_id", existing.preset_id if existing else ""))).strip()
+    if not _PRESET_ID_RE.fullmatch(preset_id):
+        raise ComponentPresetMutationError("invalid_id", "id 必须是 2-81 个字母、数字、点、下划线或连字符")
+    name = str(raw.get("name", existing.name if existing else component.component_id)).strip()
+    family = str(raw.get("family", existing.family if existing else "用户自定义")).strip()
+    if not name or not family:
+        raise ComponentPresetMutationError("missing_field", "name 和 family 不能为空")
+    evidence = str(raw.get("evidence_level", existing.evidence_level if existing else A_ANALYTICAL)).strip()
+    if evidence not in EVIDENCE_LEVELS:
+        raise ComponentPresetMutationError("invalid_evidence_level", "evidence_level 无效：{}".format(evidence))
+    limitations = tuple(str(item).strip() for item in raw.get("limitations", existing.limitations if existing else ()) if str(item).strip())
+    notes = str(raw.get("notes", existing.notes if existing else "用户自定义硬件预设")).strip()
+    tags = tuple(str(item).strip() for item in raw.get("tags", existing.tags if existing else ()) if str(item).strip())
+    inherited_sources = [source.to_metadata() for source in existing.sources] if existing else ()
+    sources = _parse_sources(raw.get("sources", inherited_sources))
+    return ComponentPresetDefinition(preset_id, name, family, component, sources, evidence, limitations, notes, tags)
+
+
+class ComponentPresetCatalog:
+    """Per-server editable catalog, persisted atomically in a user-owned file.
+
+    The lock serializes requests handled by the local HTTP server.  Bundled
+    definitions never change, and constructing a catalog is the only read of
+    user state (module imports remain deterministic for CLI/tests).
+    """
+
+    def __init__(self, cache_dir=None):
+        from .model_catalog import default_catalog_cache_dir
+
+        configured = os.environ.get("HETEROLLM_SIM_HARDWARE_PRESET_CACHE") or os.environ.get("HETEROLLM_SIM_HARDWARE_PRESET_CACHE_DIR")
+        directory = Path(cache_dir) if cache_dir is not None else (
+            Path(configured).expanduser() if configured else default_catalog_cache_dir().parent / "component-presets"
+        )
+        self.path = directory / "presets.json"
+        self._lock = threading.RLock()
+        self.overrides: Dict[str, ComponentPresetDefinition] = {}
+        self.removed = set()
+        if self.path.exists():
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or raw.get("version") != 1:
+                raise ValueError("硬件预设目录版本无效：{}".format(self.path))
+            self.overrides = {
+                item.preset_id: item for item in (
+                    _definition_from_mutation(value)
+                    for value in _mutation_list(raw.get("presets", []), "presets")
+                )
+            }
+            self.removed = set(_mutation_list(raw.get("removed", []), "removed"))
+
+    def _save(self, overrides, removed):
+        records = [{
+            "id": item.preset_id, "name": item.name, "family": item.family,
+            "component": to_primitive(item.component),
+            "sources": [source.to_metadata() for source in item.sources],
+            "evidence_level": item.evidence_level, "limitations": list(item.limitations),
+            "notes": item.notes, "tags": list(item.tags),
+        } for item in sorted(overrides.values(), key=lambda item: item.preset_id)]
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.path.parent, prefix=".presets-", suffix=".json", delete=False) as handle:
+                temp_path = Path(handle.name)
+                json.dump({"version": 1, "presets": records, "removed": sorted(removed)}, handle, ensure_ascii=False, allow_nan=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, self.path)
+        finally:
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink()
+        # Publish only after the atomic write succeeds: failed saves do not
+        # expose state that disappears after restarting the server.
+        self.overrides, self.removed = overrides, removed
+
+    def _get(self, preset_id):
+        if preset_id in self.removed:
+            raise KeyError(preset_id)
+        return self.overrides[preset_id] if preset_id in self.overrides else get_component_preset(preset_id)
+
+    def page(self, **filters):
+        with self._lock:
+            definitions = [item for item in _PRESETS if item.preset_id not in self.removed and item.preset_id not in self.overrides]
+            definitions.extend(self.overrides.values())
+            return component_preset_page(items=[_metadata(item) for item in sorted(definitions, key=lambda item: item.preset_id)], **filters)
+
+    def detail(self, preset_id):
+        with self._lock:
+            return _component_definition_detail(self._get(preset_id))
+
+    def create(self, payload):
+        with self._lock:
+            definition = _definition_from_mutation(payload)
+            if definition.preset_id in _BY_ID or definition.preset_id in self.overrides:
+                raise ComponentPresetMutationError("already_exists", "组件预设 ID 已存在：{}".format(definition.preset_id), status=409)
+            self._save({**self.overrides, definition.preset_id: definition}, self.removed - {definition.preset_id})
+            return _component_definition_detail(definition)
+
+    def update(self, preset_id, payload):
+        with self._lock:
+            current = self._get(preset_id)
+            if not isinstance(current, ComponentPresetDefinition):
+                raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持编辑")
+            definition = _definition_from_mutation(payload, existing=current)
+            if definition.preset_id != preset_id:
+                raise ComponentPresetMutationError("id_change_not_allowed", "编辑时不允许修改预设 ID")
+            self._save({**self.overrides, preset_id: definition}, self.removed - {preset_id})
+            return _component_definition_detail(definition)
+
+    def delete(self, preset_id):
+        with self._lock:
+            if not isinstance(self._get(preset_id), ComponentPresetDefinition):
+                raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持删除")
+            self._save({key: value for key, value in self.overrides.items() if key != preset_id}, self.removed | {preset_id})
+
+
 __all__ = [
     "A_ANALYTICAL",
     "CATALOG_CUTOFF_AT",
@@ -2393,6 +3386,8 @@ __all__ = [
     "component_preset_detail",
     "component_preset_filters",
     "component_preset_page",
+    "ComponentPresetMutationError",
+    "ComponentPresetCatalog",
     "get_component_preset",
     "list_component_presets",
     "materialize_component_payload",

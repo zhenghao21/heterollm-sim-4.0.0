@@ -641,7 +641,7 @@ PLACEHOLDERS / BOUNDARIES
       </nav>
       <div class="hardware-preset-panels">
         <section class="hardware-preset-panel" id="componentPresetsDialog" role="tabpanel" aria-labelledby="hardwarePresetComponentTab" hidden>
-          <div class="hardware-preset-panel-intro"><h3 data-concept-help="component_preset">组件预设（Component Presets）</h3><p>单组件和组合拓扑均追加，不覆盖已有硬件；只产生一次撤销记录。</p></div>
+          <div class="hardware-preset-panel-intro"><div><h3 data-concept-help="component_preset">组件预设（Component Presets）</h3><p data-i18n-zh="单组件和组合拓扑均追加，不覆盖已有硬件；只产生一次撤销记录。组件预设支持持久化新增、编辑和删除。" data-i18n-en="Single components and topology bundles append without replacing hardware; component presets support persistent create, edit, and delete.">Single components and topology bundles append without replacing hardware; component presets support persistent create, edit, and delete.</p></div><button type="button" class="button button-primary" id="createComponentPresetButton" data-i18n-zh="新增组件预设" data-i18n-en="New Component Preset">New Component Preset</button></div>
           <form class="component-preset-filters" id="componentPresetFilterForm" aria-label="组件预设筛选">
             <label class="field component-preset-search"><span>搜索（Search）</span><input type="search" id="componentPresetSearchInput" autocomplete="off" placeholder="名称、厂商、型号或组件类型"></label>
             <label class="field"><span>组件类型（Kind）</span><select id="componentPresetKindFilter"><option value="">全部类型</option></select></label>
@@ -667,6 +667,34 @@ PLACEHOLDERS / BOUNDARIES
         </section>
       </div>
     </div>
+  </dialog>
+
+  <dialog class="component-preset-editor-dialog" id="componentPresetEditorDialog" aria-labelledby="componentPresetEditorTitle">
+    <form method="dialog" class="component-preset-editor-shell" id="componentPresetEditorForm">
+      <header class="dialog-head">
+        <div><span class="eyebrow kicker">硬件预设（Hardware Preset） · COMPONENT PRESET</span><h2 id="componentPresetEditorTitle">新增组件预设（New Component Preset）</h2><p id="componentPresetEditorDescription">按硬件类型填写适用参数；容量使用 B/KB/MB/GB/TB/PB，带宽使用 MB/s、GB/s 或 TB/s，算力使用 OPS/s、TOPS 或 POPS，延迟使用 ns。保存时自动换算为后端规范单位。</p></div>
+        <button type="submit" class="icon-button" value="cancel" aria-label="关闭组件预设编辑器">×</button>
+      </header>
+      <div class="component-preset-editor-grid">
+        <label class="field"><span>ID（必填）</span><input id="componentPresetEditorId" name="id" required pattern="[A-Za-z0-9][A-Za-z0-9_.-]{1,80}" autocomplete="off"></label>
+        <label class="field"><span>名称（必填）</span><input id="componentPresetEditorName" name="name" required autocomplete="off"></label>
+        <label class="field"><span>组件类型（必填）</span><input id="componentPresetEditorKind" name="kind" required placeholder="hbm / hbf / ssd / gpu" autocomplete="off"></label>
+        <label class="field"><span>厂商/系列</span><input id="componentPresetEditorFamily" name="family" value="用户自定义" autocomplete="off"></label>
+        <label class="field"><span>容量（Capacity）</span><span class="field-input-with-unit"><input id="componentPresetEditorCapacity" name="capacity_bytes" type="text" inputmode="decimal" value="0 B" placeholder="例如 32 GB"><small class="field-unit">B/KB…PB</small></span></label>
+        <label class="field"><span>读带宽（Read Bandwidth）</span><span class="field-input-with-unit"><input id="componentPresetEditorReadBandwidth" name="read_bandwidth_gbps" type="text" inputmode="decimal" value="0 GB/s" placeholder="例如 1.024 TB/s"><small class="field-unit">MB/s…TB/s</small></span></label>
+        <label class="field"><span>写带宽（Write Bandwidth）</span><span class="field-input-with-unit"><input id="componentPresetEditorWriteBandwidth" name="write_bandwidth_gbps" type="text" inputmode="decimal" value="0 GB/s" placeholder="未公开或例如 1 TB/s"><small class="field-unit">MB/s…TB/s</small></span></label>
+        <label class="field"><span>峰值算力（Peak Compute）</span><span class="field-input-with-unit"><input id="componentPresetEditorPeakOps" name="peak_ops_per_s" type="text" inputmode="decimal" value="0 OPS/s" placeholder="例如 2.25 POPS"><small class="field-unit">OPS/s…POPS</small></span></label>
+        <label class="field"><span>读延迟（Read Latency）</span><span class="field-input-with-unit"><input id="componentPresetEditorReadLatency" name="read_latency_ns" type="number" min="0" step="any" value="0"><small class="field-unit">ns</small></span></label>
+        <label class="field"><span>写延迟（Write Latency）</span><span class="field-input-with-unit"><input id="componentPresetEditorWriteLatency" name="write_latency_ns" type="number" min="0" step="any" value="0"><small class="field-unit">ns</small></span></label>
+        <label class="field"><span>来源 URL</span><input id="componentPresetEditorSourceUrl" name="source_url" type="url" placeholder="https://" autocomplete="off"></label>
+        <label class="field field-span-all"><span>来源标题</span><input id="componentPresetEditorSourceTitle" name="source_title" placeholder="厂家产品页或数据手册" autocomplete="off"></label>
+        <details class="component-preset-editor-advanced field-span-all"><summary>端口参数（JSON）</summary><textarea id="componentPresetEditorPorts" rows="5" spellcheck="false" placeholder='[{"port_id":"mem0","protocol":"HBM","role":"endpoint","bandwidth_gbps":1000}]'></textarea><small>lanes、bandwidth_gbps 的单位分别是 lane、Gb/s。</small></details>
+        <details class="component-preset-editor-advanced field-span-all"><summary>cost_profile_template（JSON）</summary><textarea id="componentPresetEditorCostProfile" rows="7" spellcheck="false" placeholder='{"bandwidth_gb_s":100,"read_latency_ns":40}'></textarea><small>带宽单位是 GB/s，延迟单位是 ns；保存带宽时会同步常见读写带宽字段。</small></details>
+        <label class="field field-span-all"><span>备注</span><textarea id="componentPresetEditorNotes" name="notes" rows="3"></textarea></label>
+      </div>
+      <p class="component-preset-editor-status" id="componentPresetEditorStatus" role="status" aria-live="polite"></p>
+      <footer class="dialog-actions"><button type="submit" class="button button-quiet" value="cancel">取消</button><button type="submit" class="button button-primary" id="saveComponentPresetButton" value="save">保存预设</button></footer>
+    </form>
   </dialog>
 
   <dialog class="protocol-presets-dialog" id="protocolPresetsDialog" aria-labelledby="protocolPresetsDialogTitle" aria-describedby="protocolPresetsDescription">

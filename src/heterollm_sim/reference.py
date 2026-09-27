@@ -1,6 +1,8 @@
-"""Bundled reference scenario that remains available after package install."""
+"""Bundled reference scenarios that remain available after package install."""
 
 from __future__ import annotations
+
+from dataclasses import replace
 
 from .config import FusionPolicy, InterconnectProfile, ScenarioConfig
 from .cost_models import (
@@ -607,4 +609,49 @@ def build_reference_scenario() -> ScenarioConfig:
     )
 
 
-__all__ = ["build_reference_scenario"]
+def build_llama_default_scenario() -> ScenarioConfig:
+    """Return the Web UI's llama.cpp-aligned request-load baseline.
+
+    The full reference scenario remains intentionally unchanged because it is
+    used by analytical and regression fixtures.  This baseline follows the
+    typed llama.cpp runtime defaults: one slot, continuous scheduling,
+    512-token logical/physical batches, no preemption, and no MTP.  The
+    512/128 request shape is an explicit reproducible smoke workload; it is a
+    project baseline rather than a request shape mandated by llama.cpp.
+    """
+    base = build_reference_scenario()
+    request = replace(
+        base.workload.requests[0],
+        prompt_tokens=512,
+        output_tokens=128,
+    )
+    scheduler = replace(
+        base.workload.scheduler,
+        mode="continuous",
+        max_num_seqs=1,
+        max_num_batched_tokens=512,
+        max_num_ubatch_tokens=512,
+        prefill_chunk_tokens=512,
+        policy="decode_first",
+        preemption_enabled=False,
+    )
+    workload = replace(
+        base.workload,
+        name="llama-cpp-default-baseline",
+        requests=(request,),
+        request_count=1,
+        prompt_tokens=512,
+        output_tokens=128,
+        random_seed=0,
+        scheduler=scheduler,
+        mtp=None,
+        metadata={
+            **base.workload.metadata,
+            "workload_preset_id": "llama_cpp_default",
+            "workload_preset_source": "llama.cpp runtime config defaults + explicit smoke shape",
+        },
+    )
+    return replace(base, name="llama-cpp-default-baseline", workload=workload)
+
+
+__all__ = ["build_reference_scenario", "build_llama_default_scenario"]

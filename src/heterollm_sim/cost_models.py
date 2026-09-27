@@ -28,6 +28,7 @@ from .mmvq_work import (
     UnsupportedMMVQ, derive_mmvq_work,
 )
 from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
+from .memory_service import realtime_memory_metrics
 
 
 MMVQ_HBM_MODE_LEGACY = "legacy_mma_output_wave"
@@ -2484,6 +2485,29 @@ def _memory_service(
         "bandwidth_and_latency_concurrency" if latency_service_ns == bandwidth_service_ns else
         "bandwidth"
     )
+    if service_source == "latency_concurrency":
+        bottleneck = "latency_concurrency"
+    elif service_source == "bandwidth_and_latency_concurrency":
+        bottleneck = "bandwidth_and_latency_concurrency"
+    elif service_source == "bandwidth":
+        bottleneck = "bandwidth"
+    else:
+        bottleneck = "none"
+    metrics = realtime_memory_metrics(
+        physical_bytes,
+        service_ns,
+        physical_bytes=physical_bytes,
+        bandwidth_ceiling_gb_s=(
+            physical_bytes / bandwidth_service_ns
+            if bandwidth_service_ns > 0 else 0.0
+        ),
+        queue_wait_ns=max(0.0, concurrency_service_ns - single_request_latency_ns),
+        request_window_utilization=(
+            min(1.0, transaction_count / float(max_outstanding_requests))
+            if transaction_count else 0.0
+        ),
+        bottleneck=bottleneck,
+    )
     return {
         "model": "memory_bandwidth_latency_concurrency_bound_v1",
         "evidence": EvidenceStatus.ANALYTICAL.value,
@@ -2521,6 +2545,7 @@ def _memory_service(
         "latency_bound": latency_service_ns > bandwidth_service_ns,
         "service_source": service_source,
         "service_ns": service_ns,
+        **metrics,
         "unmodeled_terms": (
             "request_dependencies_and_achieved_mlp",
             "transaction_alignment_fragmentation_and_padding",

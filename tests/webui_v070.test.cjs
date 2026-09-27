@@ -589,6 +589,8 @@ test("component inspector gives CPU profile-backed compute while fabric remains 
     assert.equal(profile.latencyDma, false);
   }
   assert.equal(gpu.peakOps, true);
+  assert.equal(gpu.capacity, false);
+  assert.equal(gpu.componentBandwidth, false);
   assert.equal(hbm.capacity, true);
   assert.equal(hbm.componentBandwidth, true);
   assert.doesNotMatch(app, /当前 Kind 的隐藏字段/);
@@ -611,7 +613,7 @@ test("component preset summaries omit zero capabilities and retain positive OPS"
       peak_ops_per_s: 989.5e12,
     },
   });
-  assert.match(gpuCard, /50 MiB/);
+  assert.match(gpuCard, /52\.43 MB/);
   assert.match(gpuCard, /989\.5 TOPS/);
   assert.doesNotMatch(gpuCard, /0 MB\/s/);
 

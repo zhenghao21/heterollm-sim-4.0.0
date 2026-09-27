@@ -123,7 +123,15 @@ def test_migration_offload_restore_records_topology_timing():
         [
             KvPoolComponent("hbm0", 64, kind="hbm", tier="hbm"),
             KvPoolComponent("hbm1", 64, kind="hbm", tier="hbm"),
-            KvPoolComponent("ssd0", 64, kind="ssd", tier="ssd", active=False),
+            KvPoolComponent(
+                "ssd0",
+                64,
+                kind="ssd",
+                tier="ssd",
+                active=False,
+                read_bandwidth_gbps=100,
+                write_bandwidth_gbps=100,
+            ),
         ],
         page_bytes=8,
         topology=Topology(),
@@ -137,6 +145,141 @@ def test_migration_offload_restore_records_topology_timing():
     assert page.owner_component == "hbm0"
     assert [event.kind for event in pool.events] == ["migration", "offload", "restore"]
     assert all(event.duration_ns > 0 for event in pool.events)
+
+
+def test_storage_transfer_rejects_unknown_service_direction():
+    pool = DynamicKVPool(
+        [
+            KvPoolComponent("hbm0", 64),
+            KvPoolComponent("ssd0", 64, kind="ssd", active=False),
+        ],
+        page_bytes=8,
+    )
+    assert pool.resize("r", 1, compatible_components={"default": ["hbm0"]})
+    page = pool.request_pages("r")[0]
+
+    with pytest.raises(KvPoolUnsupported, match="ssd0.*write bandwidth"):
+        pool.offload_page(page.logical_page_id, "ssd0")
+
+    readable_storage = DynamicKVPool(
+        [
+            KvPoolComponent("hbm0", 64),
+            KvPoolComponent(
+                "ssd0",
+                64,
+                kind="ssd",
+                active=False,
+                write_bandwidth_gbps=100,
+            ),
+        ],
+        page_bytes=8,
+    )
+    assert readable_storage.resize(
+        "r", 1, compatible_components={"default": ["hbm0"]}
+    )
+    page = readable_storage.request_pages("r")[0]
+    assert readable_storage.offload_page(page.logical_page_id, "ssd0")
+    with pytest.raises(KvPoolUnsupported, match="ssd0.*read bandwidth"):
+        readable_storage.restore_page(page.logical_page_id, "hbm0")
+
+
+def test_transfer_without_topology_prices_source_read_and_target_write():
+    """A no-topology move still models both endpoint service directions."""
+
+    pool = DynamicKVPool(
+        [
+            KvPoolComponent(
+                "slow-read",
+                128,
+                read_bandwidth_gbps=100,
+                write_bandwidth_gbps=1000,
+                latency_ns=5,
+            ),
+            KvPoolComponent(
+                "slow-write",
+                128,
+                read_bandwidth_gbps=1000,
+                write_bandwidth_gbps=10,
+                latency_ns=7,
+            ),
+        ],
+        page_bytes=100,
+    )
+    assert pool.resize("r", 1, compatible_components={"default": ["slow-read"]})
+    page = pool.request_pages("r")[0]
+    assert pool.migrate_page(page.logical_page_id, "slow-write")
+
+    # 5 + 8*100/100 (source read) + 7 + 8*100/10 (target write).
+    assert pool.events[-1].duration_ns == pytest.approx(100.0)
+
+
+def test_topology_transfer_adds_endpoint_service_to_link_service():
+    """A fast link cannot erase a slow source/target medium."""
+
+    class FastLinkTopology:
+        @dataclass(frozen=True)
+        class FastHop:
+            def transfer_ns(self, byte_count):
+                return 3 + 8 * byte_count / 1000
+
+        def route(self, source, target, byte_count, **kwargs):
+            return (self.FastHop(),)
+
+    pool = DynamicKVPool(
+        [
+            KvPoolComponent(
+                "media-a",
+                128,
+                read_bandwidth_gbps=1000,
+                write_bandwidth_gbps=1000,
+                latency_ns=2,
+            ),
+            KvPoolComponent(
+                "media-b",
+                128,
+                read_bandwidth_gbps=1000,
+                write_bandwidth_gbps=100,
+                latency_ns=4,
+            ),
+        ],
+        page_bytes=100,
+        topology=FastLinkTopology(),
+    )
+    assert pool.resize("r", 1, compatible_components={"default": ["media-a"]})
+    page = pool.request_pages("r")[0]
+    assert pool.migrate_page(page.logical_page_id, "media-b")
+
+    # Endpoint service: (2 + 0.8) + (4 + 8); link service: 3 + 8*100/1000.
+    assert pool.events[-1].duration_ns == pytest.approx(18.6)
+
+
+def test_topology_transfer_keeps_slow_link_in_the_critical_path():
+    """Fast media must not hide a slow declared route bandwidth."""
+
+    class SlowLinkTopology:
+        @dataclass(frozen=True)
+        class SlowHop:
+            def transfer_ns(self, byte_count):
+                return 1 + 8 * byte_count / 2
+
+        def route(self, source, target, byte_count, **kwargs):
+            return (self.SlowHop(),)
+
+    pool = DynamicKVPool(
+        [
+            KvPoolComponent("src", 128, read_bandwidth_gbps=10000, latency_ns=1),
+            KvPoolComponent("dst", 128, write_bandwidth_gbps=10000, latency_ns=1),
+        ],
+        page_bytes=100,
+        topology=SlowLinkTopology(),
+    )
+    assert pool.resize("r", 1, compatible_components={"default": ["src"]})
+    page = pool.request_pages("r")[0]
+    assert pool.migrate_page(page.logical_page_id, "dst")
+
+    # Hop.transfer_ns is 1 + 8*100/2 = 401 ns; endpoints add 0.08 + 0.08
+    # plus their fixed latencies.
+    assert pool.events[-1].duration_ns == pytest.approx(403.16)
 
 
 def test_layer_compatibility_and_cross_machine_boundary_are_explicit():

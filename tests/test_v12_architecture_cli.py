@@ -21,7 +21,7 @@ class ArchitecturePresetCliTests(unittest.TestCase):
                     "--vendor",
                     "NVIDIA",
                     "--protocol",
-                    "NVLink",
+                    "UCIe",
                     "--loadable",
                     "true",
                 ]
@@ -32,17 +32,17 @@ class ArchitecturePresetCliTests(unittest.TestCase):
         self.assertGreater(page["total"], 0)
         self.assertEqual(page["replacement_policy"]["mode"], "replace_hardware")
         self.assertTrue(all(item["vendor"] == "NVIDIA" for item in page["items"]))
-        self.assertTrue(all("NVLink" in item["protocols"] for item in page["items"]))
+        self.assertTrue(all("UCIe" in item["protocols"] for item in page["items"]))
 
         output = StringIO()
         with redirect_stdout(output):
             status = main(
-                ["architecture-presets", "detail", "nvidia-gh200-superchip"]
+                ["architecture-presets", "detail", "nvidia-b200-1gpu-2hbf-2hbm"]
             )
 
         self.assertEqual(status, 0)
         detail = json.loads(output.getvalue())
-        self.assertEqual(detail["preset"]["id"], "nvidia-gh200-superchip")
+        self.assertEqual(detail["preset"]["id"], "nvidia-b200-1gpu-2hbf-2hbm")
         self.assertTrue(detail["preset"]["hardware_only"])
         self.assertNotIn("model", detail["hardware"])
         self.assertNotIn("workload", detail["hardware"])
@@ -58,7 +58,7 @@ class ArchitecturePresetCliTests(unittest.TestCase):
                     [
                         "architecture-presets",
                         "export-hardware",
-                        "gpu-hbm-cim",
+                        "nvidia-b200-1gpu-2hbf-2hbm",
                         "--output",
                         str(target),
                     ]
@@ -72,7 +72,7 @@ class ArchitecturePresetCliTests(unittest.TestCase):
         hardware = hardware_from_dict(payload)
         report = validate_topology(hardware)
         self.assertTrue(report.is_valid, report.format())
-        self.assertEqual(payload["metadata"]["architecture_preset"]["id"], "gpu-hbm-cim")
+        self.assertEqual(payload["metadata"]["architecture_preset"]["id"], "nvidia-b200-1gpu-2hbf-2hbm")
         self.assertNotIn("model", payload)
         self.assertNotIn("workload", payload)
         self.assertNotIn("placement", payload)
