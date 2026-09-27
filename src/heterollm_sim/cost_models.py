@@ -1498,8 +1498,9 @@ class HostOrchestrationProfile:
 class HBMProfile:
     """Effective HBM service and energy characteristics."""
 
-    bandwidth_gb_s: float
+    bandwidth_gb_s: float = 1.0
     efficiency: float = 1.0
+    measured_effective_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
     energy_pj_per_byte: float = 0.0
     resource_id: str = "hbm.channel"
     read_latency_ns: float = 0.0
@@ -1511,6 +1512,10 @@ class HBMProfile:
 
     def __post_init__(self) -> None:
         _require_positive("bandwidth_gb_s", self.bandwidth_gb_s)
+        if self.measured_effective_bandwidth_gb_s is not None:
+            _require_positive("measured_effective_bandwidth_gb_s", self.measured_effective_bandwidth_gb_s)
+            if self.read_bandwidth_gb_s is not None or self.write_bandwidth_gb_s is not None:
+                raise ValueError("measured effective bandwidth cannot be combined with directional overrides")
         for name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
             if getattr(self, name) is not None:
                 _require_positive(name, getattr(self, name))
@@ -1525,15 +1530,21 @@ class HBMProfile:
 
     @property
     def effective_bandwidth_gb_s(self) -> float:
-        return self.bandwidth_gb_s * self.efficiency
+        return (self.measured_effective_bandwidth_gb_s
+                if self.measured_effective_bandwidth_gb_s is not None
+                else self.bandwidth_gb_s * self.efficiency)
 
     @property
     def effective_read_bandwidth_gb_s(self) -> float:
+        if self.measured_effective_bandwidth_gb_s is not None:
+            return self.measured_effective_bandwidth_gb_s
         bandwidth = self.bandwidth_gb_s if self.read_bandwidth_gb_s is None else self.read_bandwidth_gb_s
         return bandwidth * self.efficiency
 
     @property
     def effective_write_bandwidth_gb_s(self) -> float:
+        if self.measured_effective_bandwidth_gb_s is not None:
+            return self.measured_effective_bandwidth_gb_s
         bandwidth = self.bandwidth_gb_s if self.write_bandwidth_gb_s is None else self.write_bandwidth_gb_s
         return bandwidth * self.efficiency
 
@@ -1571,8 +1582,9 @@ class HBMProfile:
 class HostMemoryProfile:
     """Effective CPU-visible memory service and energy characteristics."""
 
-    bandwidth_gb_s: float
+    bandwidth_gb_s: float = 1.0
     efficiency: float = 1.0
+    measured_effective_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
     energy_pj_per_byte: float = 0.0
     resource_id: str = "host.memory"
     name: str = "host-memory"
@@ -1585,6 +1597,10 @@ class HostMemoryProfile:
 
     def __post_init__(self) -> None:
         _require_positive("bandwidth_gb_s", self.bandwidth_gb_s)
+        if self.measured_effective_bandwidth_gb_s is not None:
+            _require_positive("measured_effective_bandwidth_gb_s", self.measured_effective_bandwidth_gb_s)
+            if self.read_bandwidth_gb_s is not None or self.write_bandwidth_gb_s is not None:
+                raise ValueError("measured effective bandwidth cannot be combined with directional overrides")
         for name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
             if getattr(self, name) is not None:
                 _require_positive(name, getattr(self, name))
@@ -1600,15 +1616,21 @@ class HostMemoryProfile:
     @property
     def effective_bandwidth_gb_s(self) -> float:
         # Decimal GB/s is numerically equal to bytes/ns.
-        return self.bandwidth_gb_s * self.efficiency
+        return (self.measured_effective_bandwidth_gb_s
+                if self.measured_effective_bandwidth_gb_s is not None
+                else self.bandwidth_gb_s * self.efficiency)
 
     @property
     def effective_read_bandwidth_gb_s(self) -> float:
+        if self.measured_effective_bandwidth_gb_s is not None:
+            return self.measured_effective_bandwidth_gb_s
         bandwidth = self.bandwidth_gb_s if self.read_bandwidth_gb_s is None else self.read_bandwidth_gb_s
         return bandwidth * self.efficiency
 
     @property
     def effective_write_bandwidth_gb_s(self) -> float:
+        if self.measured_effective_bandwidth_gb_s is not None:
+            return self.measured_effective_bandwidth_gb_s
         bandwidth = self.bandwidth_gb_s if self.write_bandwidth_gb_s is None else self.write_bandwidth_gb_s
         return bandwidth * self.efficiency
 
@@ -2931,6 +2953,35 @@ def estimate_gpu_gemm(
     else:
         format_coverage = "unpacked"
     mmq_metadata["quantized_format_coverage"] = format_coverage
+    if workload.packed_weight_formats:
+        workload_name = str(workload.name).casefold()
+        phase = (
+            "prefill" if "prefill" in workload_name
+            else "decode" if "decode" in workload_name
+            else "unbound_at_gemm_cost_boundary"
+        )
+        mmq_metadata["quantized_kernel_contract"] = {
+            "schema": "heterollm.quantized-kernel-cost/v1",
+            "status": (
+                "qualified_capability"
+                if quantized_capability is not None
+                else "uncalibrated_analytical_fallback"
+            ),
+            "kernel_family": (
+                quantized_capability.kernel_family
+                if quantized_capability is not None
+                else "unresolved_quantized_matmul"
+            ),
+            "weight_formats": tuple(workload.packed_weight_formats),
+            "shape": {"m": workload.m, "n": workload.n, "k": workload.k},
+            "prefill_decode_phase": phase,
+            "dequant_work_units": workload.packed_weight_transform_operations,
+            "source_evidence": (
+                quantized_capability.evidence
+                if quantized_capability is not None
+                else "no_kernel_throughput_or_shape_microbenchmark_bound"
+            ),
+        }
     dtype_name = (
         "int8" if workload.mmq_work is not None else
         quantized_capability.tensor_core_dtype.casefold()
@@ -4893,6 +4944,33 @@ def estimate_cpu_gemm(
             if quantized_dot_capability is not None
             else "generic_quantized_fallback"
         )
+        workload_name = str(workload.name).casefold()
+        instruction_metadata["quantized_kernel_contract"] = {
+            "schema": "heterollm.quantized-kernel-cost/v1",
+            "status": (
+                "qualified_capability"
+                if quantized_dot_capability is not None
+                else "uncalibrated_analytical_fallback"
+            ),
+            "kernel_family": (
+                quantized_dot_capability.name
+                if quantized_dot_capability is not None
+                else "unresolved_cpu_quantized_dot"
+            ),
+            "weight_formats": tuple(workload.packed_weight_formats),
+            "shape": {"m": workload.m, "n": workload.n, "k": workload.k},
+            "prefill_decode_phase": (
+                "prefill" if "prefill" in workload_name
+                else "decode" if "decode" in workload_name
+                else "unbound_at_gemm_cost_boundary"
+            ),
+            "dequant_work_units": workload.packed_weight_transform_operations,
+            "source_evidence": (
+                quantized_dot_capability.evidence
+                if quantized_dot_capability is not None
+                else "no_cpu_quantized_dot_throughput_or_shape_microbenchmark_bound"
+            ),
+        }
     if source_dot_row_totals is not None:
         instruction_metadata["source_dot_rows"] = source_dot_rows
     auxiliary_compute_energy_pj = 0.0

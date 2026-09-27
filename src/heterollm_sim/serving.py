@@ -13619,10 +13619,18 @@ class _OnlineRuntime:
         float,
     ]:
         component_count = len({stage.component_id for stage in stages})
+        workload_metadata = self.plan.scenario.workload.metadata
+        if not isinstance(workload_metadata, Mapping):
+            workload_metadata = {}
         pipeline_prefill = (
             cohort.kind == "prefill"
             and all(item.phase == "prefill" for item in cohort.items)
             and component_count > 1
+            and not bool(
+                workload_metadata.get(
+                    "llama_cpp_single_request_prefill_serialized", False
+                )
+            )
         )
         host_request_ready_ns = (
             max(

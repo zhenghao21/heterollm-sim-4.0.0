@@ -1,4 +1,4 @@
-"""Contract tests for the single curated B200 architecture preset."""
+"""Contract tests for the curated, loadable architecture presets."""
 
 import unittest
 
@@ -15,6 +15,7 @@ from heterollm_sim.component_presets import materialize_component_payload
 
 
 PUBLIC_ID = "nvidia-b200-1gpu-2hbf-2hbm"
+NATIVE_ID = "local-native-rtx5080-9950x3d-gddr7-ddr5"
 REMOVED_IDS = {
     "nvidia-h100-sxm-8-nvswitch",
     "nvidia-h200-sxm-8-nvswitch",
@@ -25,12 +26,40 @@ REMOVED_IDS = {
 
 
 class CuratedArchitectureCatalogTests(unittest.TestCase):
-    def test_only_b200_is_public(self):
+    def test_curated_presets_are_public(self):
         rows = list_architecture_presets()
-        self.assertEqual([row["id"] for row in rows], [PUBLIC_ID])
-        self.assertEqual(architecture_preset_page()["total"], 1)
+        self.assertEqual({row["id"] for row in rows}, {PUBLIC_ID, NATIVE_ID})
+        self.assertEqual(architecture_preset_page()["total"], 2)
         filtered = architecture_preset_page(vendor="NVIDIA", protocol="UCIe", loadable=True)
         self.assertEqual([row["id"] for row in filtered["items"]], [PUBLIC_ID])
+
+    def test_native_rtx5080_payload_uses_curated_memory_and_protocol_limits(self):
+        detail = architecture_preset_detail(NATIVE_ID)
+        hardware = hardware_from_dict(detail["hardware"])
+        report = validate_topology(hardware)
+        self.assertTrue(report.is_valid, report.format_en())
+
+        components = {item.component_id: item for item in hardware.components}
+        self.assertEqual(set(components), {"gpu0", "cpu0", "hostmem0", "hbm0"})
+        self.assertEqual(components["gpu0"].metadata["component_preset_id"], "nvidia-rtx-5080")
+        self.assertEqual(components["cpu0"].metadata["component_preset_id"], "amd-ryzen-9-9950x3d")
+        self.assertEqual(components["hostmem0"].metadata["component_preset_id"], "acer-local-ddr5-128gb-5600-dual-channel")
+        self.assertEqual(components["hbm0"].metadata["component_preset_id"], "gddr7-16gb-30_0-256bit")
+        self.assertEqual(components["hbm0"].metadata["component_preset_status"], "logical_gpu_attached_memory")
+        self.assertEqual(components["hbm0"].metadata["attached_memory_preset_id"], "gddr7-16gb-30_0-256bit")
+        self.assertEqual(components["hbm0"].metadata["memory_type"], "GDDR7")
+        self.assertEqual(components["hbm0"].bandwidth_gbps, 7680.0)
+        self.assertEqual(components["hostmem0"].bandwidth_gbps, 716.8)
+        self.assertNotIn("hbm1", components)
+
+        links = {item.link_id: item for item in hardware.links}
+        self.assertEqual(links["gpu-gddr7"].protocol, "GDDR7")
+        self.assertEqual(links["gpu-gddr7"].bandwidth_gbps, 7680.0)
+        self.assertEqual(links["cpu-hostmem-ddr"].protocol, "DDR5")
+        self.assertEqual(links["cpu-hostmem-ddr"].bandwidth_gbps, 716.8)
+        self.assertEqual(links["cpu-gpu-pcie"].protocol, "PCIe")
+        self.assertEqual(links["cpu-gpu-pcie"].bandwidth_gbps, 252.032)
+        self.assertTrue(detail["hardware"]["metadata"]["native_input"]["hardware_only_projection"])
 
     def test_removed_architectures_are_not_addressable(self):
         for preset_id in REMOVED_IDS:

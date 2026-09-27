@@ -3546,7 +3546,8 @@ td.concept-help-title {
 .settings-dialog,
 .model-presets-dialog,
 .run-job-dialog,
-.architecture-scan-dialog {
+.architecture-scan-dialog,
+.kv-analysis-dialog {
   width: min(52rem, calc(100vw - 42px));
   max-height: min(780px, calc(100vh - 42px));
   max-height: min(780px, calc(100dvh - 42px));
@@ -3561,12 +3562,14 @@ td.concept-help-title {
 .settings-dialog::backdrop,
 .model-presets-dialog::backdrop,
 .run-job-dialog::backdrop,
-.architecture-scan-dialog::backdrop {
+.architecture-scan-dialog::backdrop,
+.kv-analysis-dialog::backdrop {
   background: rgba(4, 5, 6, 0.76);
   backdrop-filter: blur(2px);
 }
 
-.architecture-scan-dialog {
+.architecture-scan-dialog,
+.kv-analysis-dialog {
   width: min(78rem, calc(100vw - 32px));
   max-height: min(860px, calc(100dvh - 32px));
   overflow: hidden;
@@ -3649,6 +3652,24 @@ td.concept-help-title {
 .architecture-scan-table td > strong,
 .architecture-scan-table td > small { display: block; min-width: 0; overflow-wrap: anywhere; }
 .architecture-scan-table td > small { margin-top: 3px; color: var(--muted); font-family: var(--mono); font-size: 0.5rem; }
+
+.kv-analysis-controls {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.kv-analysis-scope {
+  min-width: 0;
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+}
+
+.kv-analysis-table { min-width: 78rem; }
+.kv-analysis-table td:last-child { max-width: 24rem; white-space: normal; overflow-wrap: anywhere; }
+.kv-analysis-table .kv-analysis-best { display: inline-block; margin-left: 7px; padding: 2px 5px; color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 50%, var(--line)); font: 600 0.5625rem var(--mono); }
+.kv-analysis-table .kv-analysis-winner { background: color-mix(in srgb, var(--success) 8%, var(--panel)); }
+.kv-analysis-note { margin: 0; padding: 10px 16px 14px; border-top: 1px solid var(--line); }
 
 .architecture-scan-diagnostics {
   min-width: 0;
@@ -5868,6 +5889,12 @@ dialog.model-presets-dialog.is-viewport-fullscreen .preset-dialog-shell {
   --protocol-marker: url(#protocolEndpointSquare);
   --protocol-pattern: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 6px);
 }
+.protocol-ddr {
+  --protocol-color: #a68b58;
+  --protocol-dasharray: 4 2;
+  --protocol-marker: url(#protocolEndpointSquare);
+  --protocol-pattern: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 6px);
+}
 .protocol-unknown,
 .protocol-fallback {
   --protocol-color: #85817b;
@@ -7298,6 +7325,45 @@ details:is(.inspector-advanced-profile, .inspector-section.hbf-media-section, .i
 .field-grid-2 > .field,
 :is(.inspector-advanced-profile, .control-section-body, .inspector-section-body) .field {
   min-width: 0;
+}
+
+/* Profile-backed transport values share the editor grid with real fields.
+ * Keep their label and value on separate rows so the value cannot sit on the
+ * section heading baseline when the grid gains extra columns on wide views. */
+.field-grid-2 > .readout {
+  min-width: 0;
+  width: 100%;
+  justify-self: stretch;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 0 0 9px;
+}
+
+.field-grid-2 > .readout > span {
+  min-width: 0;
+  color: var(--muted-readable);
+  font-size: max(.625rem, 12px);
+  line-height: 1.35;
+}
+
+.field-grid-2 > .readout > strong {
+  width: 100%;
+  justify-self: stretch;
+  min-width: 0;
+  min-height: max(calc(36px * var(--layout-scale)), 36px);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 1px;
+  color: var(--text);
+  background: var(--surface-input);
+  font-size: max(.625rem, 12px);
+  font-weight: 500;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .field input,

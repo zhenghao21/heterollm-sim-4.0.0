@@ -3427,6 +3427,16 @@ def _route_resident_memory_demands(demands, metadata):
                 continue
             startup_ns = sum(hop.latency_ns for hop in route)
             for hop in route:
+                # A direct local-memory interface is the topology view of
+                # the same physical bandwidth resource already demanded by
+                # the memory phase.  Keep its latency in the route audit but
+                # do not charge the payload a second time.
+                if hop.resource_id == demand.resource_id:
+                    hops_audit.append({"resource_id": hop.resource_id, "link_id": hop.link_id,
+                        "direction": direction, "bytes": count,
+                        "path_startup_ns": startup_ns,
+                        "coalesced_with_memory_resource": True})
+                    continue
                 # One path startup plus the bottleneck's payload service.
                 # All stages are a conservative whole-span reservation.
                 output.append(ResourceDemand(

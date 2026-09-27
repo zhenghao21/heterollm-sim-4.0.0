@@ -22,6 +22,82 @@ from .runtime_adapters import (
 from .parallel import build_parallel_plan
 
 
+def llama_cpp_gpu_layer_mapping(
+    scenario: ScenarioConfig, config: LlamaCppRuntimeConfig
+) -> Mapping[str, Any]:
+    """Map native ``-ngl`` units to the executable simulator graph.
+
+    llama.cpp counts GGUF ``nextn``/MTP blocks and the output head in its
+    loading budget.  The simulator's executable graph intentionally contains
+    only the main decoder layers plus the output unit.  A conversion is valid
+    only when the GGUF directory proves that exact relationship; arbitrary
+    over-large values must still fail instead of being clamped.
+    """
+
+    executable_layers = int(scenario.model.num_layers)
+    output_units = 1
+    simulator_units = executable_layers + output_units
+    native_layers = int(config.gpu_layers)
+    metadata: dict[str, Any] = {}
+    graph_attributes = getattr(scenario.model.graph, "attributes", {})
+    graph_metadata = (
+        graph_attributes.get("metadata", {})
+        if isinstance(graph_attributes, Mapping)
+        else {}
+    )
+    for source in (getattr(scenario.model, "metadata", {}), graph_metadata):
+        if isinstance(source, Mapping):
+            metadata.update(source)
+    result: dict[str, Any] = {
+        "native_gpu_layers": native_layers,
+        "simulator_gpu_layers": (
+            simulator_units if native_layers < 0 else native_layers
+        ),
+        "model_executable_layers": executable_layers,
+        "simulator_loading_units": simulator_units,
+        "gguf_declared_block_count": metadata.get("gguf_declared_block_count"),
+        "gguf_imported_executable_layers": metadata.get(
+            "gguf_imported_executable_layers"
+        ),
+        "gguf_mtp_layer_count": metadata.get("gguf_mtp_layer_count"),
+        "output_loading_units": output_units,
+        "excluded_mtp_loading_units": 0,
+        "mapping_applied": False,
+        "mapping_reason": "native_count_matches_simulator_units",
+    }
+    if native_layers < 0 or native_layers <= simulator_units:
+        if native_layers < 0:
+            result["mapping_reason"] = "native_auto_full_offload"
+        return result
+    raw_blocks = result["gguf_declared_block_count"]
+    imported = result["gguf_imported_executable_layers"]
+    mtp = result["gguf_mtp_layer_count"]
+    if (
+        type(raw_blocks) is not int
+        or type(imported) is not int
+        or type(mtp) is not int
+        or mtp <= 0
+        or imported != executable_layers
+        or raw_blocks - mtp != executable_layers
+        or native_layers != raw_blocks + output_units
+    ):
+        raise ValueError(
+            "native gpu_layers exceeds simulator units without exact GGUF "
+            "nextn loading-unit evidence; refusing to clamp"
+        )
+    result.update(
+        simulator_gpu_layers=simulator_units,
+        excluded_mtp_loading_units=mtp,
+        mapping_applied=True,
+        mapping_reason=(
+            "exact GGUF full-offload mapping: native block_count plus output "
+            "unit includes metadata-declared nextn units absent from the "
+            "executable trunk"
+        ),
+    )
+    return result
+
+
 def _llama_mixed_batching_contract(
     scenario: ScenarioConfig, enabled: bool, *, config: LlamaCppRuntimeConfig | None = None,
     recurrent_contract: Mapping[str, Any] | None = None,
@@ -253,6 +329,8 @@ def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntime
     """Return authoritative llama.cpp layer -> KV owner mapping."""
     view = model_graph_execution_view(scenario.model.graph, schema_version=scenario.model.schema_version)
     layers = tuple(item.layer for item in view.layer_instances if not item.layer.is_linear_attention)
+    loading_mapping = llama_cpp_gpu_layer_mapping(scenario, config)
+    simulator_gpu_layers = int(loading_mapping["simulator_gpu_layers"])
     components = scenario.hardware.component_map()
     host = next((c.component_id for c in scenario.hardware.components if c.normalized_kind in {"host_memory", "dram", "ddr", "ddr_memory"} and c.is_active_memory and c.is_writable), None)
     if not config.offload_kqv:
@@ -283,8 +361,8 @@ def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntime
         # llama.cpp's ``-ngl N`` keeps the earliest repeating blocks on host
         # and places the last N loadable layers on GPU.  The output layer is
         # handled by the existing final-norm binding and is not a KV layer.
-        if config.gpu_layers >= 0 and host is not None:
-            gpu_start = max(0, len(layers) - int(config.gpu_layers))
+        if simulator_gpu_layers >= 0 and host is not None:
+            gpu_start = max(0, len(layers) - simulator_gpu_layers)
             for index, layer in enumerate(layers):
                 if index < gpu_start:
                     owner[layer.layer_id] = host
@@ -300,7 +378,7 @@ def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntime
         )
         for layer in layers
     }
-    return {"kv_layer_components": owner, "kv_layer_ranks": ranks, "split_mode": config.split_mode, "kv_unified": config.kv_unified, "offload_kqv": config.offload_kqv}
+    return {"kv_layer_components": owner, "kv_layer_ranks": ranks, "split_mode": config.split_mode, "kv_unified": config.kv_unified, "offload_kqv": config.offload_kqv, "gpu_layer_mapping": dict(loading_mapping)}
 
 def llama_final_norm_static_binding(scenario: ScenarioConfig, config: LlamaCppRuntimeConfig) -> Mapping[str, Any]:
     """Bind the norm's own tensor; output-layer placement is only a candidate.
@@ -386,6 +464,7 @@ def apply_llama_runtime_config(
     )
     if config.kv_type_k is not None and config.kv_type_v is not None and config.kv_type_k.casefold() != config.kv_type_v.casefold():
         raise ValueError("simulator currently requires identical llama.cpp K/V cache dtypes")
+    loading_mapping = llama_cpp_gpu_layer_mapping(scenario, config)
     for request in scenario.workload.requests:
         required = int(request.prompt_tokens) + int(request.output_tokens)
         if required > config.context:
@@ -459,6 +538,7 @@ def apply_llama_runtime_config(
             "llama_cpp_capabilities": capabilities,
             "context_limit_semantics": "per_slot_runtime_limit",
             "llama_cpp_kv_capacity_contract": config.kv_capacity_contract(),
+            "llama_cpp_gpu_layer_mapping": dict(loading_mapping),
         },
     )
     kv = scenario.placement.kv_policy
@@ -500,7 +580,7 @@ def apply_llama_runtime_config(
     options.update({
         # This llama.cpp build counts the output layer in -ngl: -ngl=12
         # offloads the output layer plus the last 11 repeating blocks.
-        "gpu_loadable_layers": scenario.model.num_layers + 1 if config.gpu_layers < 0 else config.gpu_layers,
+        "gpu_loadable_layers": loading_mapping["simulator_gpu_layers"],
         "gpu_loadable_order": "tail",
         # llama.cpp keeps token_embd.weight CPU-resident when the output
         # matrix is a logical tied alias, then materializes a GPU runtime copy
@@ -519,6 +599,7 @@ def apply_llama_runtime_config(
     placement_metadata["llama_cpp_runtime"] = config.to_dict()
     placement_metadata["llama_cpp_runtime_fingerprint"] = config.fingerprint
     placement_metadata["llama_cpp_runtime_identity"] = identity
+    placement_metadata["llama_cpp_gpu_layer_mapping"] = dict(loading_mapping)
     placement = replace(scenario.placement, kv_policy=kv, metadata=placement_metadata)
     lowered = replace(
         scenario,
@@ -552,4 +633,9 @@ def apply_llama_runtime_config(
     return lowered
 
 
-__all__ = ["apply_llama_runtime_config", "llama_final_norm_static_binding", "llama_cpp_kv_layer_mapping"]
+__all__ = [
+    "apply_llama_runtime_config",
+    "llama_final_norm_static_binding",
+    "llama_cpp_gpu_layer_mapping",
+    "llama_cpp_kv_layer_mapping",
+]

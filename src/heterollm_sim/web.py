@@ -365,6 +365,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path in {
                 "/api/validate",
+                "/api/normalize",
                 "/api/run",
                 "/api/simulate-score",
                 "/api/run-estimate",
@@ -404,6 +405,11 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/validate":
                 payload = self._read_json_object()
                 self._send_json(200, validation_payload(payload))
+                return
+            if path == "/api/normalize":
+                payload = self._read_json_object()
+                scenario = scenario_or_http_error(payload)
+                self._send_json(200, scenario_to_payload(scenario))
                 return
             if path == "/api/run":
                 payload = self._read_json_object()
@@ -950,10 +956,16 @@ def hardware_input_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
         item["metadata"] = metadata
         profile_kind = scenario.component_profile_kind(component)
         if profile_kind is not None:
+            # Export authoring inputs, not a component-specific capped view.
+            # Shared profile IDs must round-trip to the same parameters, and
+            # calibrated/directional rates must survive the UI transport.
+            parameters = to_primitive(
+                scenario.component_profiles[profile_kind][component.cost_profile_id]
+            )
             item["execution_profile"] = {
                 "profile_id": component.cost_profile_id,
                 "profile_kind": profile_kind,
-                "parameters": to_primitive(scenario.resolve_component_profile(component)),
+                "parameters": parameters,
             }
         components.append(item)
     hardware["components"] = components
@@ -972,8 +984,9 @@ def hardware_input_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
 
 
 def scenario_to_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
+    component_profiles = to_primitive(scenario.component_profiles)
     profiles: Dict[str, Any] = {
-        "components": to_primitive(scenario.component_profiles),
+        "components": component_profiles,
         "host_orchestration": to_primitive(scenario.host_orchestration_profile),
         "fusion": to_primitive(scenario.fusion_policy),
         # Controller parameters are hardware-side defaults and must travel

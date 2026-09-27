@@ -15,9 +15,11 @@ from heterollm_sim.component_presets import (
 PUBLIC_IDS = {
     "amd-ryzen-9-9950x3d",
     "samsung-hbm3e-36gb-9_2",
+    "gddr7-16gb-30_0-256bit",
     "sk-hynix-hbf-512gb",
     "ymtc-zhitai-ti-pro9100",
     "samsung-ddr5-32gb-udimm-5600",
+    "acer-local-ddr5-128gb-5600-dual-channel",
     "sram-cim-analytical-tile",
     "nvidia-b200-sxm-gpu",
     "nvidia-rtx-5080",
@@ -56,9 +58,12 @@ class CuratedComponentCatalogTests(unittest.TestCase):
 
         hbf = component_preset_detail("sk-hynix-hbf-512gb")["component"]
         self.assertEqual(hbf["capacity_bytes"], 512_000_000_000)
-        self.assertEqual(hbf["read_bandwidth_gbps"], 24_000.0)
-        self.assertEqual(hbf["write_bandwidth_gbps"], 0.0)
-        self.assertEqual(hbf["metadata"]["capability_status"]["write_bandwidth_gbps"], "not_published")
+        self.assertEqual(hbf["read_bandwidth_gbps"], 3904.0)
+        self.assertEqual(hbf["write_bandwidth_gbps"], 217.6)
+        self.assertEqual(hbf["metadata"]["access_mode"], "memory")
+        self.assertEqual(hbf["metadata"]["read_latency_ns"], 4000.0)
+        self.assertEqual(hbf["metadata"]["write_latency_ns"], 75000.0)
+        self.assertEqual(hbf["metadata"]["capability_status"]["write_bandwidth_gbps"], "analytical_user_configured")
 
         tip = component_preset_detail("ymtc-zhitai-ti-pro9100")["component"]
         self.assertEqual(tip["metadata"]["vendor_parameter_provenance"]["mpn"]["value"], "ZTSS3CB08D6CMC")
@@ -101,6 +106,12 @@ class CuratedComponentCatalogTests(unittest.TestCase):
         self.assertEqual(rtx_levels[0]["capacity_bytes"], 10752 * 1024)
         self.assertEqual(rtx_levels[-1]["capacity_bytes"], 65536 * 1024)
         self.assertNotIn("Grace", " ".join(rtx["metadata"]["cost_profile_parameter_basis"].values()))
+
+        gddr7 = component_preset_detail("gddr7-16gb-30_0-256bit")["component"]
+        self.assertEqual(gddr7["metadata"]["technology"]["memory_type"], "GDDR7")
+        self.assertEqual(gddr7["ports"][0]["protocol"], "GDDR7")
+        self.assertEqual(gddr7["ports"][0]["bandwidth_gbps"], 7680.0)
+        self.assertEqual(gddr7["capacity_bytes"], 16_000_000_000)
 
     def test_page_filters_the_curated_catalog(self):
         page = component_preset_page(component_kind="hbf")

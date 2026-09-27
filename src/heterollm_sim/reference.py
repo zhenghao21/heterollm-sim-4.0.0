@@ -131,6 +131,7 @@ def build_reference_scenario() -> ScenarioConfig:
                 package_id="host0",
                 die_id="ddr_die",
                 capacity_bytes=256 * 1024**3,
+                bandwidth_gbps=3276.8,
             ),
         )
     )
@@ -185,6 +186,11 @@ def build_reference_scenario() -> ScenarioConfig:
                 package_id="package0",
                 die_id="{}_die".format(hbm_id),
                 capacity_bytes=16 * 1024**3,
+                bandwidth_gbps=hbm_port_bandwidth_gbps,
+                metadata={
+                    "memory_bandwidth_scope": "aggregate",
+                    "memory_aggregate_owner": "gpu0",
+                },
             )
         )
         links.append(

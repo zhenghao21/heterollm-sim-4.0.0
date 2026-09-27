@@ -23,6 +23,9 @@ _PROTOCOL_ALIASES = {
     "ucie": "ucie",
     "nvlink": "nvlink",
     "hbm": "hbm",
+    "ddr3": "ddr",
+    "ddr4": "ddr",
+    "ddr5": "ddr",
 }
 _DIRECTION_ALIASES = {
     "in": "input",
@@ -174,14 +177,14 @@ def _validate_protocol_rules(
             )
         )
 
-    if protocol == "hbm":
+    if protocol in {"hbm", "gddr7"}:
         source_is_hbm = _component_kind(source_component) == "hbm"
         target_is_hbm = _component_kind(target_component) == "hbm"
         if source_is_hbm == target_is_hbm:
             add(
                 "hbm_dedicated_endpoint",
-                "HBM 链路必须且只能连接一个 HBM 组件",
-                "HBM links must connect exactly one HBM component",
+                "本地显存链路必须且只能连接一个 GPU 本地显存组件",
+                "GPU-local memory links must connect exactly one local-memory component",
             )
             return
         memory_port = source_port if source_is_hbm else target_port
@@ -189,27 +192,27 @@ def _validate_protocol_rules(
         if _role(memory_port.role) not in {"device", "endpoint"}:
             add(
                 "hbm_device_role",
-                "HBM 侧端口必须使用 device 角色",
-                "the HBM-side port must have device role",
+                "显存侧端口必须使用 device 角色",
+                "the memory-side port must have device role",
             )
         if _role(controller_port.role) not in {"controller", "host", "root"}:
             add(
                 "hbm_controller_role",
-                "非 HBM 侧端口必须使用 controller 角色",
-                "the non-HBM port must have controller role",
+                "GPU 侧端口必须使用 controller 角色",
+                "the GPU-side port must have controller role",
             )
 
-    elif protocol == "ucie":
+    elif protocol in {"ucie", "hbf"}:
         if not source_component.package_id or not target_component.package_id:
-            add("ucie_package_missing", "UCIe 端点必须声明 package_id", "UCIe endpoints must declare package_id")
+            add("ucie_package_missing", "HBF/UCIe 端点必须声明 package_id", "HBF/UCIe endpoints must declare package_id")
         elif source_component.package_id != target_component.package_id:
-            add("ucie_cross_package", "UCIe 仅支持封装内的裸片互连", "UCIe is package-local die-to-die connectivity")
+            add("ucie_cross_package", "HBF/UCIe 仅支持封装内的裸片互连", "HBF/UCIe is package-local die-to-die connectivity")
         if not source_component.die_id or not target_component.die_id:
-            add("ucie_die_missing", "UCIe 端点必须声明 die_id", "UCIe endpoints must declare die_id")
+            add("ucie_die_missing", "HBF/UCIe 端点必须声明 die_id", "HBF/UCIe endpoints must declare die_id")
         elif source_component.die_id == target_component.die_id:
-            add("ucie_same_die", "UCIe 必须连接不同的裸片", "UCIe must connect different dies")
+            add("ucie_same_die", "HBF/UCIe 必须连接不同的裸片", "HBF/UCIe must connect different dies")
         if not link.payload or not link.payload.strip():
-            add("ucie_payload_missing", "UCIe 链路必须声明 payload", "UCIe links must declare a payload")
+            add("ucie_payload_missing", "HBF/UCIe 链路必须声明 payload", "HBF/UCIe links must declare a payload")
         else:
             link_payload = _key(link.payload)
             for port, endpoint_name in (
@@ -546,11 +549,11 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
                 endpoint[1],
             )
         component = components[endpoint[0]]
-        if (_component_kind(component) == "hbm" or _protocol(port.protocol) == "hbm") and count > 1:
+        if (_component_kind(component) == "hbm" or _protocol(port.protocol) in {"hbm", "gddr7"}) and count > 1:
             add(
                 "hbm_port_not_dedicated",
-                "HBM 端口只能由一条链路独占使用",
-                "HBM ports may be used by only one link",
+                "本地显存端口只能由一条链路独占使用",
+                "GPU-local memory ports may be used by only one link",
                 endpoint[0],
                 endpoint[1],
             )
@@ -565,19 +568,19 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
         ]
         for link in incident:
             protocol = _protocol(link.protocol)
-            if component_kind == "hbm" and protocol != "hbm":
+            if component_kind == "hbm" and protocol not in {"hbm", "gddr7"}:
                 add(
                     "hbm_non_dedicated_protocol",
-                    "HBM 组件只能使用专用 HBM 链路",
-                    "HBM components may only use dedicated HBM links",
+                    "GPU 本地显存组件只能使用 HBM 或 GDDR7 专用链路",
+                    "GPU-local memory components may only use dedicated HBM or GDDR7 links",
                     component.component_id,
                     link_id=link.link_id,
                 )
-            elif component_kind == "hbf" and protocol != "ucie":
+            elif component_kind == "hbf" and protocol not in {"ucie", "hbf"}:
                 add(
                     "hbf_non_ucie_protocol",
-                    "V4 中的 HBF 是 NAND 闪存，必须通过 UCIe 连接",
-                    "V4 HBF is NAND flash and must connect through UCIe",
+                    "V4 中的 HBF 必须通过 HBF 逻辑链路或其 UCIe 物理承载连接",
+                    "V4 HBF must connect through the HBF logical protocol or its UCIe physical carrier",
                     component.component_id,
                     link_id=link.link_id,
                 )

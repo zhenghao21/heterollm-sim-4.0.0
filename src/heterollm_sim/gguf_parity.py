@@ -668,6 +668,14 @@ def build_model_from_gguf(gguf: GGUFMetadata):
         # Q4_K_M into its single-format registry would incorrectly reject the
         # otherwise valid mixed tensor graph.
         metadata={"gguf_sha256": gguf.sha256, "gguf_file_quantization": gguf.quantization, "gguf_tensor_count": len(gguf.tensor_directory),
+                  # Keep the native loading-unit geometry beside the executable
+                  # graph.  llama.cpp counts nextn/MTP blocks in -ngl while the
+                  # simulator intentionally keeps them out of the main graph.
+                  # This is evidence for an explicit mapping, never a reason to
+                  # silently clamp an arbitrary gpu_layers value.
+                  "gguf_declared_block_count": gguf.n_layer_all,
+                  "gguf_imported_executable_layers": gguf.n_layer,
+                  "gguf_mtp_layer_count": gguf.n_layer_nextn,
                   "gguf_output_tied_to_embedding": output_tied_to_embedding,
                   # Keep graph-level bindings compact; tensor directory owns
                   # block geometry and the planner must not interpret these

@@ -5,9 +5,11 @@ import pytest
 PUBLIC_IDS = {
     "amd-ryzen-9-9950x3d",
     "samsung-hbm3e-36gb-9_2",
+    "gddr7-16gb-30_0-256bit",
     "sk-hynix-hbf-512gb",
     "ymtc-zhitai-ti-pro9100",
     "samsung-ddr5-32gb-udimm-5600",
+    "acer-local-ddr5-128gb-5600-dual-channel",
     "sram-cim-analytical-tile",
     "nvidia-b200-sxm-gpu",
     "nvidia-rtx-5080",
@@ -31,9 +33,12 @@ def test_vendor_parameter_units_and_provenance_are_explicit():
 
     hbf = _detail("sk-hynix-hbf-512gb")
     assert hbf["capacity_bytes"] == 512_000_000_000
-    assert hbf["read_bandwidth_gbps"] == 24_000.0
-    assert hbf["write_bandwidth_gbps"] == 0.0
-    assert hbf["metadata"]["vendor_parameter_provenance"]["write_bandwidth_gbps"]["status"] == "not_published"
+    assert hbf["read_bandwidth_gbps"] == 3904.0
+    assert hbf["write_bandwidth_gbps"] == 217.6
+    assert hbf["metadata"]["read_latency_ns"] == 4000.0
+    assert hbf["metadata"]["write_latency_ns"] == 75000.0
+    assert hbf["metadata"]["access_mode"] == "memory"
+    assert hbf["metadata"]["vendor_parameter_provenance"]["write_bandwidth_gbps"]["status"] == "analytical_user_configured"
     assert hbf["metadata"]["sources"][0]["url"] == "https://news.skhynix.com/en/hbf-at-fms-2026/"
 
     dram = _detail("samsung-ddr5-32gb-udimm-5600")
@@ -44,6 +49,25 @@ def test_vendor_parameter_units_and_provenance_are_explicit():
     b200 = _detail("nvidia-b200-sxm-gpu")
     assert b200["metadata"]["technology"]["device_memory_gb"] == 180.0
     assert b200["metadata"]["technology"]["device_memory_bandwidth_gbps"] == 64_000.0
+
+    gddr7 = _detail("gddr7-16gb-30_0-256bit")
+    assert gddr7["metadata"]["technology"]["memory_type"] == "GDDR7"
+    assert gddr7["ports"][0]["protocol"] == "GDDR7"
+    assert gddr7["ports"][0]["bandwidth_gbps"] == 7680.0
+
+
+def test_local_ddr5_preset_matches_the_installed_dual_channel_configuration():
+    local = _detail("acer-local-ddr5-128gb-5600-dual-channel")
+    assert local["capacity_bytes"] == 4 * 32 * 1024 ** 3
+    assert local["read_bandwidth_gbps"] == 716.8
+    assert local["write_bandwidth_gbps"] == 716.8
+    assert local["ports"][0]["protocol"] == "DDR5"
+    assert local["ports"][0]["bandwidth_gbps"] == 716.8
+    snapshot = local["metadata"]["local_hardware_snapshot"]
+    assert snapshot["part_numbers"] == ["BL.9BWWR.424", "BL.9BWWR.373"]
+    assert snapshot["configured_speed_mt_s"] == 5600
+    assert snapshot["channel_count"] == 2
+    assert snapshot["theoretical_bandwidth_gb_s"] == 89.6
 
 
 def test_desktop_prediction_hardware_has_official_sources_and_roles():

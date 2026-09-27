@@ -73,6 +73,20 @@ class ArchitecturePresetApiTests(unittest.TestCase):
         self.assertFalse(detail["compatibility"]["requires_gpu_attachment"])
         self.assertFalse(detail["compatibility"]["requires_cpu_attachment"])
 
+        status, native = self.request(
+            "GET",
+            "/api/architecture-presets/local-native-rtx5080-9950x3d-gddr7-ddr5",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(native["preset"]["id"], "local-native-rtx5080-9950x3d-gddr7-ddr5")
+        self.assertTrue(native["preset"]["loadable"])
+        self.assertEqual(
+            {component["component_id"] for component in native["hardware"]["components"]},
+            {"gpu0", "cpu0", "hostmem0", "hbm0"},
+        )
+        self.assertNotIn("hbm1", {component["component_id"] for component in native["hardware"]["components"]})
+        self.assertEqual(native["hardware"]["metadata"]["component_preset_ids"]["hbm0"], "gddr7-16gb-30_0-256bit")
+
         status, removed = self.request(
             "GET", "/api/architecture-presets/nvidia-gh200-superchip"
         )

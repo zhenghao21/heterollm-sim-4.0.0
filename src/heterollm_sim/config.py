@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
+from dataclasses import replace
 import math
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple, Type, Union
@@ -38,6 +39,8 @@ from .ir import (
     RequestSpec,
     SchedulerSpec,
     WorkloadSpec,
+    default_memory_resource_id,
+    normalize_component_kind,
 )
 from .serde import read_json
 from .precision import dtype_bits
@@ -528,6 +531,56 @@ class ScenarioConfig:
                     component.component_id, profile_id, required_type.__name__
                 )
             )
+        if component.is_active_memory and isinstance(profile, (HBMProfile, HostMemoryProfile)):
+            # Component bandwidth is the physical ceiling.  A profile remains
+            # the source of calibrated/effective throughput, except when the
+            # input omitted its bandwidth and the component must seed it.
+            # ``memory_bandwidth_scope=aggregate`` is an explicit contract:
+            # all matching banks share one profile owner and their physical
+            # link capacities form the cap for that profile.
+            caps = self._memory_bandwidth_caps(component)
+            if caps[0] <= 0.0:
+                # Profile-only memory tiers are valid.  Their profile value is
+                # the only known ceiling and is checked by the profile class.
+                caps = (
+                    float(profile.bandwidth_gb_s) * 8.0,
+                    float(profile.bandwidth_gb_s) * 8.0,
+                    float(profile.bandwidth_gb_s) * 8.0,
+                )
+            shared_cap, read_cap, write_cap = (value / 8.0 for value in caps)
+            if profile.measured_effective_bandwidth_gb_s is not None:
+                measured = float(profile.measured_effective_bandwidth_gb_s)
+                limit = min(read_cap, write_cap) if component.metadata.get("bandwidth_mode") == "directional" else shared_cap
+                if measured > limit * (1.0 + 1e-12):
+                    raise ValueError(
+                        "component {} measured effective bandwidth exceeds physical cap"
+                        .format(component.component_id)
+                    )
+            effective_shared = float(profile.effective_bandwidth_gb_s)
+            if effective_shared > shared_cap * (1.0 + 1e-12):
+                raise ValueError(
+                    "component {} profile bandwidth exceeds physical cap"
+                    .format(component.component_id)
+                )
+            if component.metadata.get("bandwidth_mode") == "directional":
+                for direction, limit in (("read", read_cap), ("write", write_cap)):
+                    effective = float(getattr(profile, "effective_" + direction + "_bandwidth_gb_s"))
+                    if effective > limit * (1.0 + 1e-12):
+                        raise ValueError(
+                            "component {} profile {} bandwidth exceeds physical cap"
+                            .format(component.component_id, direction)
+                        )
+            profile_resource_id = profile.resource_id
+            owner = component.metadata.get("memory_service_owner")
+            if owner and profile_resource_id == "hbm.channel" and component.normalized_kind != "hbf":
+                profile_resource_id = str(owner)
+            updates = {"resource_id": profile_resource_id}
+            if not caps[0] and profile.bandwidth_gb_s <= 0:
+                updates["bandwidth_gb_s"] = shared_cap
+            if profile_resource_id == profile.resource_id:
+                updates.pop("resource_id")
+            if not all(getattr(profile, key) == value for key, value in updates.items()):
+                profile = replace(profile, **updates)
         if component.normalized_kind == "hbf" and component.is_active_memory:
             for name in ("read_latency_ns", "write_latency_ns",
                          "transaction_bytes", "max_outstanding_requests"):
@@ -549,9 +602,14 @@ class ScenarioConfig:
                 if isinstance(value, bool) or value != getattr(profile, profile_name):
                     raise ValueError("HBF metadata.{} must equal profile.{}".format(media_name, profile_name))
             for direction in ("read", "write"):
-                media_cap = getattr(component, direction + "_bandwidth_gbps")
+                media_cap = component.directional_bandwidth_gbps(direction)
                 effective = getattr(profile, "effective_" + direction + "_bandwidth_gb_s",
                                     profile.effective_bandwidth_gb_s)
+                if media_cap <= 0:
+                    # A single shared total is valid for both directions.  A
+                    # zero directional field is no longer interpreted as a
+                    # free write path.
+                    media_cap = component.shared_bandwidth_gbps
                 if media_cap <= 0 or effective * 8 > media_cap * (1 + 1e-12):
                     raise ValueError(
                         "HBF memory profile bandwidth must not exceed either explicit "
@@ -567,6 +625,81 @@ class ScenarioConfig:
                 )
             )
         return profile
+
+    def _memory_bandwidth_caps(
+        self, component: ComponentSpec
+    ) -> Tuple[float, float, float]:
+        """Return shared/read/write physical caps in Gb/s.
+
+        Banks are aggregated only when the author explicitly marks the memory
+        components with the same ``memory_aggregate_owner``.  Independent
+        memory components therefore retain independent physical ceilings.
+        """
+
+        metadata = component.metadata
+        scope = str(metadata.get("memory_bandwidth_scope", "per_component")).strip().lower()
+        if scope != "aggregate" and component.cost_profile_id is not None:
+            # A copied component metadata mapping may omit the marker while
+            # its profile group still has explicitly marked aggregate banks.
+            # Preserve that group contract across such metadata edits.
+            scope = "aggregate" if any(
+                item.cost_profile_id == component.cost_profile_id
+                and str(item.metadata.get("memory_bandwidth_scope", "")).strip().lower() == "aggregate"
+                for item in self.hardware.components
+            ) else scope
+        if scope != "aggregate":
+            shared = component.shared_bandwidth_gbps
+            return (
+                shared,
+                component.directional_bandwidth_gbps("read") or shared,
+                component.directional_bandwidth_gbps("write") or shared,
+            )
+        owner = str(metadata.get("memory_aggregate_owner", "")).strip()
+        if not owner and component.cost_profile_id is not None:
+            owners = {
+                str(item.metadata.get("memory_aggregate_owner", "")).strip()
+                for item in self.hardware.components
+                if item.cost_profile_id == component.cost_profile_id
+                and str(item.metadata.get("memory_aggregate_owner", "")).strip()
+            }
+            if len(owners) == 1:
+                owner = next(iter(owners))
+        if not owner:
+            raise ValueError(
+                "component {} aggregate memory requires memory_aggregate_owner"
+                .format(component.component_id)
+            )
+        linked_to_owner = {
+            link.target_component
+            for link in self.hardware.links
+            if link.source_component == owner
+        } | {
+            link.source_component
+            for link in self.hardware.links
+            if link.target_component == owner
+        }
+        members = [
+            item for item in self.hardware.components
+            if item.is_active_memory
+            and (not linked_to_owner or item.component_id in linked_to_owner)
+            and (
+                (
+                    str(item.metadata.get("memory_bandwidth_scope", "")).strip().lower() == "aggregate"
+                    and str(item.metadata.get("memory_aggregate_owner", "")).strip() == owner
+                )
+                or (
+                    item.cost_profile_id == component.cost_profile_id
+                    and not item.metadata.get("memory_bandwidth_scope")
+                )
+            )
+        ]
+        if not members:
+            members = [component]
+        return (
+            sum(item.shared_bandwidth_gbps for item in members),
+            sum(item.directional_bandwidth_gbps("read") or item.shared_bandwidth_gbps for item in members),
+            sum(item.directional_bandwidth_gbps("write") or item.shared_bandwidth_gbps for item in members),
+        )
 
     def _unique_compatibility_profile(
         self, kind: str, *, optional: bool = False
@@ -764,24 +897,61 @@ def hardware_from_dict(data: Mapping[str, Any]) -> HardwareSpec:
             values.get("schema_version", schema_version),
             "component schema_version",
         )
+        parsed_ports = _ports(
+            values.get("ports"),
+            component_schema_version,
+            component_id=component_id,
+        )
+        declared_bandwidth = _number(
+            values.get("bandwidth_gbps", 0.0), "component bandwidth_gbps"
+        )
+        read_bandwidth = _number(
+            values.get("read_bandwidth_gbps", 0.0), "component read_bandwidth_gbps"
+        )
+        write_bandwidth = _number(
+            values.get("write_bandwidth_gbps", 0.0), "component write_bandwidth_gbps"
+        )
+        if declared_bandwidth <= 0 and normalize_component_kind(str(values.get("kind", ""))) in {
+            "hbm", "hbm_stack", "dram", "ddr", "ddr_memory", "host_memory",
+            "cxl_memory", "memory", "sram", "shared_memory",
+        }:
+            # Authoring owns the result after parsing.  This only fills a
+            # missing total from an already declared endpoint capability so
+            # old topology presets do not silently create a second profile
+            # budget.
+            declared_bandwidth = max(
+                read_bandwidth,
+                write_bandwidth,
+                *(float(port.bandwidth_gbps) for port in parsed_ports),
+                0.0,
+            )
+        metadata = _mapping(values.get("metadata", {}), "component metadata")
+        if (
+            metadata.get("bandwidth_mode") is None
+            and read_bandwidth > 0.0
+            and write_bandwidth > 0.0
+            and read_bandwidth != write_bandwidth
+        ):
+            # A component with two unequal one-way declarations is
+            # directional even when the parser also derives a shared total
+            # for compatibility with older schemas.
+            metadata = dict(metadata)
+            metadata["bandwidth_mode"] = "directional"
         components.append(
             ComponentSpec(
                 component_id=component_id,
                 kind=str(values.get("kind", "")),
                 cost_profile_id=_optional_string(values.get("cost_profile_id")),
-                ports=_ports(
-                    values.get("ports"),
-                    component_schema_version,
-                    component_id=component_id,
-                ),
+                ports=parsed_ports,
                 package_id=str(values.get("package_id", "")),
                 die_id=str(values.get("die_id", "")),
                 capacity_bytes=_integer(values.get("capacity_bytes", 0), "component capacity_bytes"),
                 peak_ops_per_s=_number(values.get("peak_ops_per_s", 0.0), "component peak_ops_per_s"),
-                read_bandwidth_gbps=_number(values.get("read_bandwidth_gbps", 0.0), "component read_bandwidth_gbps"),
-                write_bandwidth_gbps=_number(values.get("write_bandwidth_gbps", 0.0), "component write_bandwidth_gbps"),
-                metadata=_mapping(values.get("metadata", {}), "component metadata"),
+                read_bandwidth_gbps=read_bandwidth,
+                write_bandwidth_gbps=write_bandwidth,
+                metadata=metadata,
                 schema_version=component_schema_version,
+                bandwidth_gbps=declared_bandwidth,
             )
         )
     links = []
@@ -1943,7 +2113,7 @@ def _fusion_policy_from_dict(data: Mapping[str, Any]) -> FusionPolicy:
 def _hbm_profile_from_dict(data: Mapping[str, Any]) -> HBMProfile:
     values = dict(data)
     _reject_dataclass_unknown_fields(values, "component HBM profile", HBMProfile)
-    for field_name in ("bandwidth_gb_s", "efficiency", "energy_pj_per_byte",
+    for field_name in ("bandwidth_gb_s", "efficiency", "measured_effective_bandwidth_gb_s", "energy_pj_per_byte",
                        "read_latency_ns", "write_latency_ns"):
         if field_name in values:
             values[field_name] = _number(
@@ -1965,7 +2135,7 @@ def _host_memory_profile_from_dict(
     _reject_dataclass_unknown_fields(
         values, "component host-memory profile", HostMemoryProfile
     )
-    for field_name in ("bandwidth_gb_s", "efficiency", "energy_pj_per_byte",
+    for field_name in ("bandwidth_gb_s", "efficiency", "measured_effective_bandwidth_gb_s", "energy_pj_per_byte",
                        "read_latency_ns", "write_latency_ns"):
         if field_name in values:
             values[field_name] = _number(
@@ -2112,6 +2282,84 @@ def _component_profile_registries_from_dict(
     return result
 
 
+def _seed_omitted_memory_profile_bandwidths(
+    data: Mapping[str, Any], hardware: HardwareSpec
+) -> Mapping[str, Any]:
+    """Fill only omitted memory profile rates from authored hardware caps.
+
+    An empty ``profiles.components.*`` entry is common in hand-authored JSON.
+    The dataclass defaults (1 GB/s) must not turn that omission into a real
+    one-GB/s calibration.  Explicit profile rates, including directional and
+    measured values, are left untouched.
+    """
+
+    result = {kind: dict(registry) for kind, registry in data.items()}
+    components = tuple(hardware.components)
+    for profile_kind in ("hbm", "host_memory"):
+        registry = result.get(profile_kind)
+        if not isinstance(registry, dict):
+            continue
+        for profile_id, raw_profile in tuple(registry.items()):
+            if not isinstance(raw_profile, Mapping):
+                continue
+            matched = tuple(
+                item for item in components
+                if item.cost_profile_id == str(profile_id)
+                and normalize_cost_profile_kind(item.normalized_kind) == profile_kind
+            )
+            if not matched:
+                continue
+            payload = dict(raw_profile)
+            if "bandwidth_gb_s" not in payload and "measured_effective_bandwidth_gb_s" not in payload:
+                aggregate = any(
+                    str(item.metadata.get("memory_bandwidth_scope", "")).strip().lower() == "aggregate"
+                    for item in matched
+                )
+                if aggregate:
+                    owners = {
+                        str(item.metadata.get("memory_aggregate_owner", "")).strip()
+                        for item in matched
+                        if str(item.metadata.get("memory_aggregate_owner", "")).strip()
+                    }
+                    source = tuple(
+                        item for item in components
+                        if item.is_active_memory
+                        and str(item.metadata.get("memory_bandwidth_scope", "")).strip().lower() == "aggregate"
+                        and str(item.metadata.get("memory_aggregate_owner", "")).strip() in owners
+                    )
+                    source = source or matched
+                    bandwidth_gbps = sum(item.shared_bandwidth_gbps for item in source)
+                else:
+                    bandwidth_gbps = max(item.shared_bandwidth_gbps for item in matched)
+                if bandwidth_gbps > 0:
+                    payload["bandwidth_gb_s"] = bandwidth_gbps / 8.0
+                directional = any(
+                    str(item.metadata.get("bandwidth_mode", "")).strip().lower()
+                    == "directional"
+                    for item in matched
+                )
+                if directional:
+                    for direction in ("read", "write"):
+                        values = [
+                            item.directional_bandwidth_gbps(direction)
+                            for item in matched
+                            if item.directional_bandwidth_gbps(direction) > 0
+                        ]
+                        if values:
+                            value = sum(values) if aggregate else max(values)
+                            payload[direction + "_bandwidth_gb_s"] = value / 8.0
+            if "resource_id" not in payload:
+                owners = {
+                    str(item.metadata.get("memory_service_owner", "")).strip()
+                    for item in matched
+                    if str(item.metadata.get("memory_service_owner", "")).strip()
+                }
+                if len(owners) == 1:
+                    payload["resource_id"] = next(iter(owners))
+            registry[profile_id] = payload
+    return result
+
+
 def _host_output_contract_from_dict(
     data: Mapping[str, Any],
 ) -> HostOutputContract:
@@ -2183,8 +2431,296 @@ def _llama_cpp_config_from_dict(data: Mapping[str, Any]) -> LlamaCppRuntimeConfi
     return LlamaCppRuntimeConfig(**dict(data))
 
 
+def _bind_local_rtx5080_hardware_presets(data: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Resolve the local RTX5080 scene through the curated hardware catalog.
+
+    The native parity scene is a measured host/GPU snapshot, but its historical
+    ``hbm0`` node is a GPU-local memory modeling endpoint rather than physical
+    HBM.  Keep the measured fields under
+    ``scenario_observed_hardware`` and make the selected catalog component the
+    authoritative capability source for the simulation.
+    """
+
+    hardware = data.get("hardware")
+    if not isinstance(hardware, Mapping):
+        return data
+    # A frontend architecture-preset import is already fully bound to the
+    # curated component catalog.  Do not reinterpret it as the legacy native
+    # snapshot merely because the scenario name still contains ``rtx5080``.
+    architecture_metadata = hardware.get("metadata", {})
+    architecture_preset = (
+        architecture_metadata.get("architecture_preset")
+        if isinstance(architecture_metadata, Mapping)
+        else None
+    )
+    if isinstance(architecture_preset, Mapping) and str(architecture_preset.get("id", "")).strip():
+        return data
+    # Native parity binding is an explicit import contract.  Names are user
+    # labels and must never silently replace authored hardware.
+    hardware_metadata = hardware.get("metadata", {})
+    marker = (
+        hardware_metadata.get("native_hardware_preset_id")
+        if isinstance(hardware_metadata, Mapping)
+        else None
+    )
+    if marker != "local-rtx5080-9950x3d":
+        return data
+    # A native parity builder may already have materialized the curated GPU,
+    # CPU, host-memory, and attached-memory bindings.  Rebinding that complete
+    # authoring payload would replace its calibrated profile resource IDs and
+    # latency fields on every frontend round trip.  Only bind raw snapshots
+    # that lack these explicit component-level references.
+    raw_components = hardware.get("components", ())
+    complete_binding = True
+    for raw_component in raw_components if isinstance(raw_components, (list, tuple)) else ():
+        if not isinstance(raw_component, Mapping):
+            complete_binding = False
+            break
+        kind = normalize_component_kind(str(raw_component.get("kind", "")))
+        metadata = raw_component.get("metadata", {})
+        metadata = metadata if isinstance(metadata, Mapping) else {}
+        if kind == "hbm":
+            bound = metadata.get("attached_memory_preset_id")
+        elif kind in {"gpu", "cpu", "host_memory", "dram"}:
+            bound = metadata.get("component_preset_id")
+        else:
+            continue
+        if not isinstance(bound, str) or not bound.strip():
+            complete_binding = False
+            break
+    if complete_binding and raw_components:
+        return data
+    from .component_presets import materialize_component_payload
+
+    preset_by_kind = {
+        "cpu": "amd-ryzen-9-9950x3d",
+        "gpu": "nvidia-rtx-5080",
+        "host_memory": "acer-local-ddr5-128gb-5600-dual-channel",
+        "dram": "acer-local-ddr5-128gb-5600-dual-channel",
+        "hbm": "gddr7-16gb-30_0-256bit",
+    }
+    payloads = {
+        preset_id: materialize_component_payload(preset_id)
+        for preset_id in set(preset_by_kind.values())
+    }
+    components = []
+    preset_by_component: Dict[str, Mapping[str, Any]] = {}
+    for raw_component in hardware.get("components", ()):
+        component = dict(raw_component)
+        kind = normalize_component_kind(str(component.get("kind", "")))
+        preset_id = preset_by_kind.get(kind)
+        if not preset_id:
+            components.append(component)
+            continue
+        preset = payloads[preset_id]
+        observed = dict(component.get("metadata", {}))
+        metadata = dict(preset.get("metadata", {}))
+        metadata["scenario_observed_hardware"] = observed
+        metadata["component_preset_id"] = preset_id
+        metadata["component_preset_status"] = "catalog_reference"
+        if kind == "hbm":
+            # native_llama_compare uses hbm0 as the simulator's local GPU
+            # memory service endpoint.  The native hardware is RTX5080 GDDR7,
+            # so bind that logical endpoint to the explicit GDDR7 preset and
+            # keep it marked as attached memory rather than physical HBM.
+            metadata.pop("component_preset_id", None)
+            metadata["attached_memory_preset_id"] = preset_id
+            metadata["component_preset_status"] = "logical_gpu_attached_memory"
+            metadata["physical_hardware_component"] = False
+            technology = dict(preset.get("metadata", {}).get("technology", {}))
+            metadata["memory_type"] = technology.get("memory_type", kind.upper())
+        if kind in {"hbm", "host_memory", "dram"}:
+            metadata["memory_service_owner"] = (
+                "{}.hbm_fabric".format(component.get("component_id"))
+                if kind == "hbm"
+                else "{}.memory".format(component.get("component_id"))
+            )
+            metadata["resident_access_path"] = "topology"
+        component["metadata"] = metadata
+        component["cost_profile_id"] = component.get("cost_profile_id") or preset.get("cost_profile_id")
+        preset_by_component[str(component.get("component_id", ""))] = preset
+        if kind in {"hbm", "host_memory", "dram"}:
+            for field in ("capacity_bytes", "bandwidth_gbps", "read_bandwidth_gbps", "write_bandwidth_gbps"):
+                component[field] = preset[field]
+            preset_ports = list(preset.get("ports", ()))
+            current_ports = list(component.get("ports", ()))
+            ports = []
+            for index, current in enumerate(current_ports or preset_ports):
+                source = dict(preset_ports[min(index, len(preset_ports) - 1)]) if preset_ports else dict(current)
+                source["port_id"] = current.get("port_id", source.get("port_id", "host"))
+                source["metadata"] = {**dict(source.get("metadata", {})), **dict(current.get("metadata", {}))}
+                ports.append(source)
+            component["ports"] = ports
+        elif kind in {"gpu", "cpu"}:
+            ddr_preset_port = dict(next(iter(payloads["acer-local-ddr5-128gb-5600-dual-channel"].get("ports", ())), {}))
+            if kind == "cpu" and ddr_preset_port:
+                component["ports"] = [
+                    {
+                        **dict(port),
+                        **({
+                            "protocol": ddr_preset_port["protocol"],
+                            "version": ddr_preset_port["version"],
+                            "lanes": ddr_preset_port["lanes"],
+                            "bandwidth_gbps": ddr_preset_port["bandwidth_gbps"],
+                            "metadata": {**dict(ddr_preset_port.get("metadata", {})), **dict(port.get("metadata", {}))},
+                        } if normalize_component_kind(str(port.get("protocol", ""))) in {"ddr", "ddr3", "ddr4", "ddr5"} else {}),
+                    }
+                    for port in component.get("ports", ())
+                ]
+            elif kind == "gpu":
+                gpu_preset_ports = list(preset.get("ports", ()))
+                ports = []
+                memory_port_bound = False
+                for port in component.get("ports", ()):
+                    is_local_memory_port = normalize_component_kind(str(port.get("protocol", ""))) in {"hbm", "gddr7"}
+                    if is_local_memory_port:
+                        if memory_port_bound or not gpu_preset_ports:
+                            # The native snapshot may retain the illustrative
+                            # hbm1..hbm7 controller ports.  RTX 5080 has one
+                            # GDDR7 interface in this parity scene.
+                            continue
+                        source = dict(gpu_preset_ports[0])
+                        source["port_id"] = port.get("port_id", source.get("port_id", "gddr7"))
+                        source["metadata"] = {**dict(source.get("metadata", {})), **dict(port.get("metadata", {}))}
+                        ports.append(source)
+                        memory_port_bound = True
+                    else:
+                        ports.append(dict(port))
+                component["ports"] = ports
+        components.append(component)
+    result = dict(data)
+    result["hardware"] = dict(hardware)
+    result["hardware"]["components"] = components
+
+    profiles = dict(data.get("profiles", {}))
+    registries = {key: dict(value) for key, value in dict(profiles.get("components", {})).items()}
+    for component in components:
+        preset = preset_by_component.get(str(component.get("component_id", "")))
+        kind = normalize_component_kind(str(component.get("kind", "")))
+        if not preset or kind not in {"hbm", "host_memory", "dram"}:
+            continue
+        profile_key = "hbm" if kind == "hbm" else "host_memory"
+        profile_id = str(component.get("cost_profile_id", ""))
+        profile = dict(dict(registries.get(profile_key, {})).get(profile_id, {}))
+        template = dict(dict(preset.get("metadata", {})).get("cost_profile_template", {}))
+        for field in ("bandwidth_gb_s", "read_latency_ns", "write_latency_ns", "transaction_bytes", "max_outstanding_requests"):
+            if field in template:
+                profile[field] = template[field]
+        component_id = str(component.get("component_id", "memory"))
+        profile["resource_id"] = "{}.hbm_fabric".format(component_id) if profile_key == "hbm" else "{}.memory".format(component_id)
+        registries.setdefault(profile_key, {})[profile_id] = profile
+    profiles["components"] = registries
+    result["profiles"] = profiles
+
+    links = []
+    for raw_link in hardware.get("links", ()):
+        link = dict(raw_link)
+        source_id = str(link.get("source_component", ""))
+        target_id = str(link.get("target_component", ""))
+        memory_id = source_id if source_id in preset_by_component and normalize_component_kind(str(preset_by_component[source_id].get("kind", ""))) in {"hbm", "host_memory", "dram"} else target_id if target_id in preset_by_component and normalize_component_kind(str(preset_by_component[target_id].get("kind", ""))) in {"hbm", "host_memory", "dram"} else ""
+        preset = preset_by_component.get(memory_id)
+        preset_port = next(iter(preset.get("ports", ())), {}) if preset else {}
+        protocol = normalize_component_kind(str(link.get("protocol", "")))
+        if preset and protocol in {"hbm", "gddr7", "ddr", "ddr3", "ddr4", "ddr5", "dram"}:
+            link["protocol"] = preset_port.get("protocol", link.get("protocol"))
+            link["version"] = preset_port.get("version", link.get("version"))
+            link["lanes"] = preset_port.get("lanes", link.get("lanes"))
+            link["bandwidth_gbps"] = preset_port.get("bandwidth_gbps", link.get("bandwidth_gbps"))
+            metadata = dict(link.get("metadata", {}))
+            metadata["bandwidth_source"] = "memory_component"
+            metadata["bandwidth_resource_id"] = (
+                "{}.hbm_fabric".format(memory_id) if normalize_component_kind(str(preset.get("kind", ""))) == "hbm" else "{}.memory".format(memory_id)
+            )
+            link["metadata"] = metadata
+        links.append(link)
+    result["hardware"]["links"] = links
+    result["hardware"].setdefault("metadata", {})
+    result["hardware"]["metadata"] = {
+        **dict(result["hardware"]["metadata"]),
+        "component_preset_bindings": {
+            component_id: str(dict(component.get("metadata", {})).get("component_preset_id"))
+            for component_id, component in ((str(item.get("component_id", "")), item) for item in components)
+            if dict(component.get("metadata", {})).get("component_preset_id")
+        },
+        "attached_memory_preset_bindings": {
+            component_id: str(dict(component.get("metadata", {})).get("attached_memory_preset_id"))
+            for component_id, component in ((str(item.get("component_id", "")), item) for item in components)
+            if dict(component.get("metadata", {})).get("attached_memory_preset_id")
+        },
+    }
+    public_gpu_specs = dict(result["hardware"]["metadata"].get("gpu_public_specs", {}))
+    public_gpu_memory = dict(public_gpu_specs.get("memory", {}))
+    if public_gpu_memory:
+        public_gpu_memory["preset_id"] = "gddr7-16gb-30_0-256bit"
+        public_gpu_specs["memory"] = public_gpu_memory
+        result["hardware"]["metadata"]["gpu_public_specs"] = public_gpu_specs
+    public_cpu_specs = dict(result["hardware"]["metadata"].get("cpu_public_specs", {}))
+    public_cpu_memory = dict(public_cpu_specs.get("memory", {}))
+    if public_cpu_memory:
+        public_cpu_memory["preset_id"] = "acer-local-ddr5-128gb-5600-dual-channel"
+        public_cpu_specs["memory"] = public_cpu_memory
+        result["hardware"]["metadata"]["cpu_public_specs"] = public_cpu_specs
+    return result
+
+
+def _bind_local_memory_link_sources(data: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Annotate local memory topology views with their profile resource owner."""
+
+    hardware = data.get("hardware")
+    profiles = data.get("profiles")
+    if not isinstance(hardware, Mapping) or not isinstance(profiles, Mapping):
+        return data
+    components = list(hardware.get("components", ()))
+    raw_registries = profiles.get("components", {})
+    registries = raw_registries if isinstance(raw_registries, Mapping) else {}
+    memory_kinds = {"hbm", "hbm_stack", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory", "memory", "sram", "shared_memory"}
+    owner_by_component: Dict[str, str] = {}
+    for component in components:
+        if not isinstance(component, Mapping):
+            continue
+        component_id = str(component.get("component_id", ""))
+        kind = normalize_component_kind(str(component.get("kind", "")))
+        if kind not in memory_kinds:
+            continue
+        profile_kind = normalize_cost_profile_kind(kind)
+        registry = registries.get(profile_kind, {}) if profile_kind else {}
+        profile = registry.get(component.get("cost_profile_id"), {}) if isinstance(registry, Mapping) else {}
+        resource_id = profile.get("resource_id") if isinstance(profile, Mapping) else None
+        if isinstance(resource_id, str) and resource_id.strip():
+            owner_by_component[component_id] = resource_id.strip()
+    links = []
+    changed = False
+    for raw_link in hardware.get("links", ()):
+        link = dict(raw_link) if isinstance(raw_link, Mapping) else raw_link
+        if not isinstance(link, Mapping):
+            links.append(link)
+            continue
+        protocol = normalize_component_kind(str(link.get("protocol", "")))
+        source = str(link.get("source_component", ""))
+        target = str(link.get("target_component", ""))
+        memory_id = source if source in owner_by_component else target if target in owner_by_component else ""
+        if memory_id and protocol in {"hbm", "gddr7", "ddr", "dram", "tsv", "lpddr5x"}:
+            metadata = dict(link.get("metadata", {}))
+            if "bandwidth_source" not in metadata:
+                metadata["bandwidth_source"] = "memory_component"
+                changed = True
+            if "bandwidth_resource_id" not in metadata:
+                metadata["bandwidth_resource_id"] = owner_by_component[memory_id]
+                changed = True
+            link["metadata"] = metadata
+        links.append(link)
+    if not changed:
+        return data
+    result = dict(data)
+    result["hardware"] = dict(hardware)
+    result["hardware"]["links"] = links
+    return result
+
+
 def scenario_from_dict(data: Mapping[str, Any]) -> ScenarioConfig:
     data = _scenario_with_hardware_input(data)
+    data = _bind_local_rtx5080_hardware_presets(data)
+    data = _bind_local_memory_link_sources(data)
     _reject_training_fields(data, "scenario")
     _reject_unknown_fields(
         data,
@@ -2226,8 +2762,12 @@ def scenario_from_dict(data: Mapping[str, Any]) -> ScenarioConfig:
             "sampling",
         ),
     )
+    hardware = hardware_from_dict(section_data["hardware"])
+    component_profile_payload = _seed_omitted_memory_profile_bandwidths(
+        _required_profile(profiles, "components"), hardware
+    )
     component_profiles = _component_profile_registries_from_dict(
-        _required_profile(profiles, "components")
+        component_profile_payload
     )
     host_orchestration_profile = _host_orchestration_profile_from_dict(
         _required_profile(profiles, "host_orchestration")
@@ -2251,7 +2791,7 @@ def scenario_from_dict(data: Mapping[str, Any]) -> ScenarioConfig:
     sampling_raw = profiles.get("sampling")
     return ScenarioConfig(
         name=str(data.get("name", "")),
-        hardware=hardware_from_dict(section_data["hardware"]),
+        hardware=hardware,
         model=model_from_dict(section_data["model"]),
         placement=placement_from_dict(section_data["placement"]),
         workload=workload_from_dict(section_data["workload"]),

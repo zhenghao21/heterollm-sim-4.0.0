@@ -63,6 +63,7 @@
       "bf16_dense_tflops": 112.6,
       "memory": {
         "type": "GDDR7",
+        "preset_id": "gddr7-16gb-30_0-256bit",
         "capacity_gib": 16,
         "data_rate_gbps": 30,
         "bus_width_bits": 256,
@@ -94,22 +95,38 @@
       {
         "Capacity": 34359738368,
         "Speed": 5600,
-        "ConfiguredClockSpeed": 5600
+        "ConfiguredClockSpeed": 5600,
+        "Manufacturer": "Acer",
+        "PartNumber": "BL.9BWWR.424",
+        "DeviceLocator": "DIMM 0",
+        "BankLabel": "P0 CHANNEL A"
       },
       {
         "Capacity": 34359738368,
         "Speed": 4800,
-        "ConfiguredClockSpeed": 5600
+        "ConfiguredClockSpeed": 5600,
+        "Manufacturer": "Acer",
+        "PartNumber": "BL.9BWWR.373",
+        "DeviceLocator": "DIMM 1",
+        "BankLabel": "P0 CHANNEL A"
       },
       {
         "Capacity": 34359738368,
         "Speed": 5600,
-        "ConfiguredClockSpeed": 5600
+        "ConfiguredClockSpeed": 5600,
+        "Manufacturer": "Acer",
+        "PartNumber": "BL.9BWWR.424",
+        "DeviceLocator": "DIMM 0",
+        "BankLabel": "P0 CHANNEL B"
       },
       {
         "Capacity": 34359738368,
         "Speed": 4800,
-        "ConfiguredClockSpeed": 5600
+        "ConfiguredClockSpeed": 5600,
+        "Manufacturer": "Acer",
+        "PartNumber": "BL.9BWWR.373",
+        "DeviceLocator": "DIMM 1",
+        "BankLabel": "P0 CHANNEL B"
       }
     ],
     "public_specs": {
@@ -127,6 +144,27 @@
       "official_four_dimm_rate_mt_s": null,
       "official_four_dimm_rate_status": "not encoded as a guaranteed value; verify motherboard/BIOS memory training",
       "parameter_basis": "public_cpu_model_plus_observed_configured_memory_rate"
+    },
+    "preset_id": "acer-local-ddr5-128gb-5600-dual-channel",
+    "manufacturer": "Acer",
+    "part_numbers": [
+      "BL.9BWWR.424",
+      "BL.9BWWR.373"
+    ],
+    "memory_snapshot_source": "Win32_PhysicalMemory",
+    "local_snapshot": {
+      "captured_at": "2026-09-27",
+      "source": "Win32_PhysicalMemory",
+      "configured_speed_mt_s": 5600,
+      "spd_speed_mt_s": [
+        5600,
+        4800,
+        5600,
+        4800
+      ],
+      "channel_count": 2,
+      "theoretical_bandwidth_gb_s": 89.6,
+      "bandwidth_formula": "5600 MT/s × 64 bit ÷ 8 × 2 channels"
     }
   },
   "policy": {

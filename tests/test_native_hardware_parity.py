@@ -106,15 +106,23 @@ def test_matching_scenario_uses_public_specs_for_analysis_profiles_and_links():
     assert gpu_profile.tensor_core.frequency_ghz == pytest.approx(2.617)
 
     hbm_port = next(port for port in gpu_component.ports if port.port_id == "hbm0")
+    assert hbm_port.protocol == "GDDR7"
     assert hbm_port.bandwidth_gbps == pytest.approx(960.0 * 8.0)
     hbm = scenario.hardware.get_component("hbm0")
+    assert hbm.metadata["attached_memory_preset_id"] == "gddr7-16gb-30_0-256bit"
+    assert hbm.metadata["physical_hardware_component"] is False
+    assert next(port for port in hbm.ports if port.port_id == "host").protocol == "GDDR7"
     assert next(port for port in hbm.ports if port.port_id == "host").bandwidth_gbps == pytest.approx(960.0 * 8.0)
     assert scenario.component_profiles["hbm"]["legacy-hbm"].bandwidth_gb_s == pytest.approx(960.0)
+    assert hbm.bandwidth_gbps == pytest.approx(960.0 * 8.0)
+    assert scenario.resolve_component_profile("hbm0").effective_bandwidth_gb_s == pytest.approx(960.0 * 0.75)
 
     hostmem = scenario.hardware.get_component("hostmem0")
     ddr_port = next(port for port in hostmem.ports if port.port_id == "ddr0")
     assert ddr_port.bandwidth_gbps == pytest.approx(89.6 * 8.0)
     assert scenario.component_profiles["host_memory"]["legacy-host-memory"].bandwidth_gb_s == pytest.approx(89.6)
+    assert hostmem.bandwidth_gbps == pytest.approx(89.6 * 8.0)
+    assert scenario.resolve_component_profile("hostmem0").effective_bandwidth_gb_s == pytest.approx(89.6 * 0.78)
     assert scenario.hardware.metadata["analysis_input_basis"] == "public_spec"
 
 
@@ -149,6 +157,8 @@ def test_public_specs_changes_are_reflected_without_fitting_native_latency():
     assert variant_hbm_link.bandwidth_gbps == pytest.approx(500.0 * 8.0)
     variant_ddr_link = next(link for link in variant.hardware.links if link.link_id == "cpu-hostmem-ddr")
     assert variant_ddr_link.bandwidth_gbps == pytest.approx(64.0 * 8.0)
+    assert variant.resolve_component_profile("hbm0").bandwidth_gb_s == pytest.approx(500.0)
+    assert variant.resolve_component_profile("hostmem0").bandwidth_gb_s == pytest.approx(64.0)
 
 
 def test_pcie_link_records_gbps_and_gb_per_second_units():

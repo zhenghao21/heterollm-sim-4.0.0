@@ -68,7 +68,7 @@ def _derate_profile(profile, point: ThermalOperatingPoint):
         for field in fields(profile):
             if field.name in {"read_latency_ns", "write_latency_ns"}:
                 changes[field.name] = getattr(profile, field.name) * point.latency_scale
-            elif field.name in {"read_bandwidth_gb_s", "write_bandwidth_gb_s"}:
+            elif field.name in {"read_bandwidth_gb_s", "write_bandwidth_gb_s", "measured_effective_bandwidth_gb_s"}:
                 value = getattr(profile, field.name)
                 if value is not None:
                     changes[field.name] = value * point.memory_bandwidth_scale
@@ -131,6 +131,7 @@ def apply_thermal_operating_point(
                     metadata[name] *= point.latency_scale
             metadata["thermal_derating"] = {"domain_id": point.domain_id, "mode": "static_operating_point", "evidence": point.evidence}
             updates.update(peak_ops_per_s=component.peak_ops_per_s * point.frequency_scale,
+                           bandwidth_gbps=component.bandwidth_gbps * point.memory_bandwidth_scale,
                            read_bandwidth_gbps=component.read_bandwidth_gbps * point.memory_bandwidth_scale,
                            write_bandwidth_gbps=component.write_bandwidth_gbps * point.memory_bandwidth_scale,
                            metadata=metadata)

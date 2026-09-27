@@ -56,6 +56,9 @@ def normalize_component_kind(value: str) -> str:
         "high_i_o_ssd": "high_io_ssd",
         "highio_ssd": "high_io_ssd",
         "high_i/o_ssd": "high_io_ssd",
+        "ddr3": "ddr",
+        "ddr4": "ddr",
+        "ddr5": "ddr",
     }
     return aliases.get(normalized, normalized)
 
@@ -1842,6 +1845,11 @@ class ComponentSpec:
     write_bandwidth_gbps: float = 0.0
     metadata: Mapping[str, Any] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
+    # One authoritative shared data-movement ceiling for this component.  The
+    # directional read/write fields remain available for advanced asymmetric
+    # media models, but local interface links and typed memory profiles bind to
+    # this value when it is present.
+    bandwidth_gbps: float = field(default=0.0, kw_only=True)
 
     def __post_init__(self) -> None:
         _require_name(self.component_id, "component_id")
@@ -1860,6 +1868,20 @@ class ComponentSpec:
         _require_number(self.peak_ops_per_s, "peak_ops_per_s")
         _require_number(self.read_bandwidth_gbps, "read_bandwidth_gbps")
         _require_number(self.write_bandwidth_gbps, "write_bandwidth_gbps")
+        _require_number(self.bandwidth_gbps, "bandwidth_gbps")
+        if self.bandwidth_gbps <= 0 and self.normalized_kind in ACTIVE_MEMORY_COMPONENT_KINDS:
+            declared = [
+                float(self.read_bandwidth_gbps),
+                float(self.write_bandwidth_gbps),
+                *(float(port.bandwidth_gbps) for port in self.ports),
+            ]
+            derived = max((value for value in declared if value > 0), default=0.0)
+            if derived > 0:
+                object.__setattr__(self, "bandwidth_gbps", derived)
+                if self.read_bandwidth_gbps > 0 and self.write_bandwidth_gbps > 0 and self.read_bandwidth_gbps != self.write_bandwidth_gbps:
+                    metadata = dict(self.metadata)
+                    metadata.setdefault("bandwidth_mode", "directional")
+                    object.__setattr__(self, "metadata", metadata)
         _require_mapping(self.metadata, "metadata")
         _require_schema_version(self.schema_version)
         if self.normalized_kind == "hbf":
@@ -1922,6 +1944,56 @@ class ComponentSpec:
     @property
     def is_storage(self) -> bool:
         return self.normalized_kind in STORAGE_COMPONENT_KINDS
+
+    @property
+    def shared_bandwidth_gbps(self) -> float:
+        """Return the single hardware data-movement ceiling in Gb/s."""
+
+        if self.bandwidth_gbps > 0:
+            return float(self.bandwidth_gbps)
+        # Existing directional declarations remain useful as an explicit
+        # advanced fallback.  A missing write value means the shared read
+        # ceiling is the only known hardware budget.
+        return max(float(self.read_bandwidth_gbps), float(self.write_bandwidth_gbps))
+
+    def directional_bandwidth_gbps(self, direction: str) -> float:
+        """Resolve one direction without inventing a second shared budget."""
+
+        normalized = str(direction).strip().lower()
+        if normalized not in {"read", "write"}:
+            raise ValueError("direction must be read or write")
+        if normalized == "write" and not self.is_writable:
+            return 0.0
+        if self.bandwidth_gbps > 0 and self.metadata.get("bandwidth_mode", "shared_total") != "directional":
+            return float(self.bandwidth_gbps)
+        value = self.read_bandwidth_gbps if normalized == "read" else self.write_bandwidth_gbps
+        return float(value)
+
+
+def default_memory_resource_id(component: ComponentSpec) -> str:
+    """Stable resource name shared by a memory profile and its local link."""
+
+    declared = component.metadata.get("memory_service_owner")
+    if isinstance(declared, str) and declared.strip():
+        return declared.strip()
+    suffix = "hbm_fabric" if component.normalized_kind in {"hbm", "hbm_stack"} else "memory"
+    return "{}.{}".format(component.component_id, suffix)
+
+
+def is_local_memory_interface_link(link: "LinkSpec", hardware: "HardwareSpec") -> bool:
+    """Whether a link is a topology view of the endpoint's own memory port."""
+
+    source = hardware.component_map().get(link.source_component)
+    target = hardware.component_map().get(link.target_component)
+    if source is None or target is None:
+        return False
+    source_flag = str(link.metadata.get("bandwidth_source", "")).strip().lower()
+    if source_flag in {"component", "memory_component", "shared_component"}:
+        return True
+    protocol = normalize_component_kind(str(link.protocol))
+    if protocol in {"hbm", "hbf", "ddr", "dram", "tsv", "lpddr5x"}:
+        return source.is_active_memory or target.is_active_memory
+    return False
 
 
 @dataclass(frozen=True)
@@ -2469,6 +2541,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "STORAGE_COMPONENT_KINDS",
     "ComponentSpec",
+    "default_memory_resource_id",
     "HardwareSpec",
     "LayerSpec",
     "LinearAttentionSpec",
@@ -2492,4 +2565,5 @@ __all__ = [
     "SchedulerSpec",
     "WorkloadSpec",
     "normalize_component_kind",
+    "is_local_memory_interface_link",
 ]

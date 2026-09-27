@@ -12,16 +12,22 @@ def test_curated_b200_architecture_references_curated_component_presets():
     assert components["hbf1"]["metadata"]["component_preset_id"] == "sk-hynix-hbf-512gb"
     assert components["hbm0"]["metadata"]["component_preset_id"] == "samsung-hbm3e-36gb-9_2"
     assert components["hbm1"]["metadata"]["component_preset_id"] == "samsung-hbm3e-36gb-9_2"
+    assert all(item["protocol"] == "HBF" for item in payload["links"] if "hbf" in item["link_id"])
+    assert all(item["ports"][0]["protocol"] == "HBF" for item in components.values() if item["kind"] == "hbf")
 
 
-def test_hbf_write_capability_is_explicitly_unknown_and_not_free():
+def test_hbf_user_profile_exposes_directional_kv_capabilities():
     payload = materialize_architecture_payload("nvidia-b200-1gpu-2hbf-2hbm")
     for component in payload["components"]:
         if component["kind"] != "hbf":
             continue
-        assert component["write_bandwidth_gbps"] == 0.0
-        assert component["metadata"]["write_capability_status"] == "unknown"
-        assert component["metadata"]["capability_status"]["write_bandwidth_gbps"] == "not_published"
+        assert component["read_bandwidth_gbps"] == 3904.0
+        assert component["write_bandwidth_gbps"] == 217.6
+        assert component["metadata"]["access_mode"] == "memory"
+        assert component["metadata"]["read_latency_ns"] == 4000.0
+        assert component["metadata"]["write_latency_ns"] == 75000.0
+        assert component["metadata"]["write_capability_status"] == "user_configured"
+        assert component["metadata"]["capability_status"]["write_bandwidth_gbps"] == "analytical_user_configured"
 
 
 def test_local_component_override_is_applied_when_architecture_is_materialized(tmp_path):
@@ -37,7 +43,9 @@ def test_local_component_override_is_applied_when_architecture_is_materialized(t
     assert report.is_valid, report.format_en()
     assert nodes["hbm0"]["capacity_bytes"] == 48_000_000_000
     assert nodes["hbm1"]["write_bandwidth_gbps"] == 7_200.0
-    assert nodes["hbm0"]["metadata"]["cost_profile_template"]["read_bandwidth_gb_s"] == 1_000.0
+    # Calibrated profile values survive catalog materialization and are capped
+    # against the authored component hardware during scenario resolution.
+    assert nodes["hbm0"]["metadata"]["cost_profile_template"]["bandwidth_gb_s"] == 1177.6
     # Explicit local edits do not mutate the offline bundled catalog.
     bundled = materialize_architecture_payload("nvidia-b200-1gpu-2hbf-2hbm")
     assert next(node for node in bundled["components"] if node["component_id"] == "hbm0")["capacity_bytes"] == 36_000_000_000

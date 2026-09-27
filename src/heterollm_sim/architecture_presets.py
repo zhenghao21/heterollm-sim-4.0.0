@@ -137,7 +137,12 @@ class ArchitecturePresetDefinition:
 
     @property
     def protocols(self) -> Tuple[str, ...]:
-        return tuple(sorted({link.protocol for link in self.hardware.links}))
+        protocols = {link.protocol for link in self.hardware.links}
+        # Keep UCIe discoverable as a physical-transport alias after HBF
+        # links become the logical protocol used by the simulator.
+        if "HBF" in protocols:
+            protocols.add("UCIe")
+        return tuple(sorted(protocols))
 
     @property
     def groups(self) -> Tuple[Mapping[str, Any], ...]:
@@ -630,6 +635,7 @@ def _component(
     peak_ops_per_s: float = 0.0,
     read_bandwidth_gbps: float = 0.0,
     write_bandwidth_gbps: float = 0.0,
+    bandwidth_gbps: float = 0.0,
     role: str,
     model: str = "",
     approximation: str = "",
@@ -694,6 +700,7 @@ def _component(
         peak_ops_per_s=peak_ops_per_s,
         read_bandwidth_gbps=read_bandwidth_gbps,
         write_bandwidth_gbps=write_bandwidth_gbps,
+        bandwidth_gbps=(bandwidth_gbps or max(read_bandwidth_gbps, write_bandwidth_gbps)),
         metadata=component_metadata,
     )
 
@@ -1663,13 +1670,13 @@ def _gds() -> ArchitecturePresetDefinition:
 def _gpu_hbf() -> ArchitecturePresetDefinition:
     pkg = "hbf_package0"
     components = (
-        _component("gpu0", "gpu", (_port("hbf", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2048.0, payload="streaming"),), package_id=pkg, die_id="gpu_die", peak_ops_per_s=989_500_000_000_000.0, role="host_accelerator", model="parameterized GPU"),
-        _component("hbf0", "hbf", (_port("host", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2048.0, payload="streaming", metadata={"media_bandwidth_modeled_separately": True}),), package_id=pkg, die_id="hbf_die", capacity_bytes=_gb(512), read_bandwidth_gbps=24000.0, write_bandwidth_gbps=0.0, role="near_package_flash", model="OCP HBF analysis device", physical_composition={"simulator_representation": "single_physical_unit_node", "simulator_node_count": 1, "physical_unit_kind": "HBF_stack", "physical_unit_count": 1, "physical_unit_count_status": "explicit_reference_node", "known_multiple": False, "unit_index": 0, "unit_count_in_product": 1, "unit_count_status": "experimental_reference_scope", "unit_count_formula": "one HBF reference stack in this experimental preset", "unit_capacity_bytes": _gb(512), "product_total_capacity_bytes": _gb(512), "source_basis": "OCP HBF preproduction up-to envelope"}, parameter_basis={"capacity_bytes": "up_to_512_GB_reference_capacity", "read_bandwidth_gbps": "grade3_up_to_3_TB_per_s_converted_to_24000_Gb_per_s", "write_bandwidth_gbps": "unknown_kept_zero", "interface_bandwidth_gbps": "analytical_UCIe_x64_32_GTps_envelope"}, extra_metadata={"capacity_scope": "up_to_512GB", "bandwidth_scope": "grade3_up_to_3TB_per_s", "read_latency_ns": 2500.0, "write_latency_ns": 0.0, "transfer_granularity_bytes": 4096, "max_outstanding_requests": 32, "dma_bandwidth_gbps": 2048.0, "dma_latency_ns": 800.0, "dma_energy_pj_per_byte": 0.0, "unknown_value_sentinels": {"write_bandwidth_gbps": "0.0 means unknown/not declared, not physical zero", "write_latency_ns": "0.0 means unknown/not declared, not zero latency", "dma_energy_pj_per_byte": "0.0 means unknown/not declared, not zero energy"}, "storage_transport_parameter_basis": "editable analytical HBF controller defaults bounded by the declared UCIe path", "internal_nand_composition": {"dies_per_stack": "8-high_or_16-high", "correlation_status": "not_reliably_disclosed"}}),
+        _component("gpu0", "gpu", (_port("hbf", "HBF", "endpoint", version="2.0", lanes=64, bandwidth_gbps=3904.0, payload="streaming", metadata={"physical_transport_protocol": "UCIe"}),), package_id=pkg, die_id="gpu_die", peak_ops_per_s=989_500_000_000_000.0, role="host_accelerator", model="parameterized GPU"),
+        _component("hbf0", "hbf", (_port("host", "HBF", "endpoint", version="2.0", lanes=64, bandwidth_gbps=3904.0, payload="streaming", metadata={"media_bandwidth_modeled_separately": True, "physical_transport_protocol": "UCIe"}),), package_id=pkg, die_id="hbf_die", capacity_bytes=_gb(512), read_bandwidth_gbps=3904.0, write_bandwidth_gbps=217.6, role="near_package_flash", model="HBF analytical device", physical_composition={"simulator_representation": "single_physical_unit_node", "simulator_node_count": 1, "physical_unit_kind": "HBF_stack", "physical_unit_count": 1, "physical_unit_count_status": "explicit_reference_node", "known_multiple": False, "unit_index": 0, "unit_count_in_product": 1, "unit_count_status": "experimental_reference_scope", "unit_count_formula": "one HBF reference stack in this experimental preset", "unit_capacity_bytes": _gb(512), "product_total_capacity_bytes": _gb(512), "source_basis": "user-configured HBF analytical coordinates"}, parameter_basis={"capacity_bytes": "up_to_512_GB_reference_capacity", "read_bandwidth_gbps": "488_GB_per_s_user_coordinate", "write_bandwidth_gbps": "27.2_GB_per_s_user_coordinate", "interface_bandwidth_gbps": "analytical_HBF_logical_link_over_UCIe"}, extra_metadata={"capacity_scope": "up_to_512GB", "bandwidth_scope": "user_configured_488GB_per_s_read_27_2GB_per_s_write", "access_mode": "memory", "read_only": False, "writable": True, "write_buffer_bytes": 0, "memory_service_owner": "hbf0.memory", "read_latency_ns": 4000.0, "write_latency_ns": 75000.0, "transfer_granularity_bytes": 4096, "max_outstanding_requests": 32, "dma_bandwidth_gbps": 3904.0, "dma_latency_ns": 800.0, "dma_energy_pj_per_byte": 0.0, "cost_profile_key": "host_memory", "cost_profile_template": {"bandwidth_gb_s": 488.0, "efficiency": 1.0, "energy_pj_per_byte": 12.0, "resource_id": "hbf0.memory", "name": "HBF analytical active-memory profile", "read_latency_ns": 4000.0, "write_latency_ns": 75000.0, "transaction_bytes": 4096, "max_outstanding_requests": 32, "read_bandwidth_gb_s": 488.0, "write_bandwidth_gb_s": 27.2}, "internal_nand_composition": {"dies_per_stack": "8-high_or_16-high", "correlation_status": "not_reliably_disclosed"}}),
     )
-    links = (_link("ucie0", "gpu0", "hbf", "hbf0", "host", "UCIe", version="2.0", lanes=64, bandwidth_gbps=2048.0, latency_ns=30.0, payload="streaming"),)
+    links = (_link("hbf0", "gpu0", "hbf", "hbf0", "host", "HBF", version="2.0", lanes=64, bandwidth_gbps=3904.0, latency_ns=4000.0, payload="streaming", metadata={"physical_transport_protocol": "UCIe"}),)
     groups = (_group("package0", "GPU and High Bandwidth Flash", ("gpu0", "hbf0"), "gpu0"),)
-    limitations = ("HBF 仍是新兴生态参考；容量、读带宽、控制器和软件栈必须按目标实现校准。", "UCIe 链路与 HBF 媒体峰值分开建模，端到端吞吐受较小者和协议开销限制。", "写带宽没有可靠通用公开值，因此保持 0。")
-    return _definition("gpu-hbf", "GPU + High Bandwidth Flash", "Open Compute Project", "HBF", "storage_offload", "near_package", EXPERIMENTAL_REFERENCE, components, links, groups, {"gpu0": {"x": 80.0, "y": 160.0}, "hbf0": {"x": 440.0, "y": 160.0}}, (OCP_HBF, UCIE_SPEC), limitations, "面向权重与冷数据近封装读取的实验参考。", ("gpu", "hbf", "ucie", "flash"))
+    limitations = ("HBF 仍是新兴生态参考；读写带宽和延迟采用用户指定分析坐标。", "HBF 是逻辑协议，metadata.physical_transport_protocol=UCIe 保留物理承载信息。", "active-memory 仅用于 KV Cache 敏感性分析，不代表公开产品透明 load/store。")
+    return _definition("gpu-hbf", "GPU + High Bandwidth Flash", "Open Compute Project", "HBF", "storage_offload", "near_package", EXPERIMENTAL_REFERENCE, components, links, groups, {"gpu0": {"x": 80.0, "y": 160.0}, "hbf0": {"x": 440.0, "y": 160.0}}, (OCP_HBF, UCIE_SPEC), limitations, "面向 KV Cache 与权重后备的 HBF 分析参考。", ("gpu", "hbf", "ucie", "flash"))
 
 
 def _b200_hbf_hbm(component_catalog=None) -> ArchitecturePresetDefinition:
@@ -1691,8 +1698,8 @@ def _b200_hbf_hbm(component_catalog=None) -> ArchitecturePresetDefinition:
     # architecture contributes only endpoint identity and links.
     hbm_ports = _hbm_controller_ports(2, "HBM3E", hbm_total_bandwidth_gbps)
     gpu_ports = hbm_ports + (
-        _port("hbf0", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2_048.0, payload="streaming"),
-        _port("hbf1", "UCIe", "endpoint", version="2.0", lanes=64, bandwidth_gbps=2_048.0, payload="streaming"),
+        _port("hbf0", "HBF", "endpoint", version="2.0", lanes=64, bandwidth_gbps=3_904.0, payload="streaming", metadata={"physical_transport_protocol": "UCIe"}),
+        _port("hbf1", "HBF", "endpoint", version="2.0", lanes=64, bandwidth_gbps=3_904.0, payload="streaming", metadata={"physical_transport_protocol": "UCIe"}),
         _port("pcie0", "PCIe", "endpoint", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, payload="coherent_dma"),
     )
     components = [
@@ -1732,8 +1739,8 @@ def _b200_hbf_hbm(component_catalog=None) -> ArchitecturePresetDefinition:
         catalog_port = PortSpec(**hbf_payload["ports"][0])
         hbf_port_metadata = dict(catalog_port.metadata)
         hbf_port_metadata["media_bandwidth_modeled_separately"] = True
-        hbf_port = replace(catalog_port, port_id="ucie0", payload="streaming", metadata=hbf_port_metadata)
-        return _catalog_component(
+        hbf_port = replace(catalog_port, port_id="hbf0", protocol="HBF", bandwidth_gbps=3_904.0, payload="streaming", metadata=hbf_port_metadata)
+        component = _catalog_component(
             "sk-hynix-hbf-512gb", "hbf{}".format(index),
             component_catalog=component_catalog,
             package_id=package, die_id="hbf{}_die".format(index),
@@ -1748,6 +1755,20 @@ def _b200_hbf_hbm(component_catalog=None) -> ArchitecturePresetDefinition:
                 },
                 "write_capability_status": "unknown" if hbf_payload["write_bandwidth_gbps"] <= 0 else "user_configured",
             },
+        )
+        # Each HBF endpoint owns an independent memory service resource.  The
+        # catalog preset is reusable, but a two-endpoint architecture must not
+        # make both components resolve to one profile/resource ID.
+        metadata = dict(component.metadata)
+        template = dict(metadata.get("cost_profile_template", {}))
+        resource_id = "hbf{}.memory".format(index)
+        template["resource_id"] = resource_id
+        metadata["cost_profile_template"] = template
+        metadata["memory_service_owner"] = resource_id
+        return replace(
+            component,
+            cost_profile_id="sk_hynix_hbf_512gb_memory_{}".format(index),
+            metadata=metadata,
         )
     components.extend(hbf_component(index) for index in range(2))
 
@@ -1831,7 +1852,7 @@ def _b200_hbf_hbm(component_catalog=None) -> ArchitecturePresetDefinition:
     links = list(hbm_links)
     for index in range(2):
         hbf_endpoint = next(component for component in components if component.component_id == "hbf{}".format(index)).ports[0]
-        links.append(_link("gpu_hbf{}".format(index), "gpu0", "hbf{}".format(index), "hbf{}".format(index), "ucie0", "UCIe", version="2.0", lanes=min(64, hbf_endpoint.lanes), bandwidth_gbps=min(2_048.0, hbf_endpoint.bandwidth_gbps), latency_ns=30.0, payload="streaming"))
+        links.append(_link("gpu_hbf{}".format(index), "gpu0", "hbf{}".format(index), "hbf{}".format(index), "hbf0", "HBF", version="2.0", lanes=min(64, hbf_endpoint.lanes), bandwidth_gbps=min(3_904.0, hbf_endpoint.bandwidth_gbps), latency_ns=4_000.0, payload="streaming", metadata={"physical_transport_protocol": "UCIe"}))
     links.extend((
         _link("cpu_gpu_pcie", "cpu0", "pcie0", "gpu0", "pcie0", "PCIe", version="5.0", lanes=16, bandwidth_gbps=pcie_gbps, latency_ns=800.0, payload="coherent_dma"),
         _link("cpu_hostmem_ddr", "cpu0", "ddr0", "hostmem0", "ddr0", "DDR5", version="DDR5-5600", lanes=ddr_port.lanes, bandwidth_gbps=host_bandwidth_gbps, latency_ns=80.0),
@@ -1988,6 +2009,251 @@ def _soc_2x_dram_sram_cim(*, shared_phy_noc: bool = False) -> ArchitecturePreset
     return replace(result, hardware=replace(result.hardware, metadata=metadata))
 
 
+_NATIVE_RTX5080_SOURCE = _source(
+    "native-llama-parity-rtx5080.json hardware input",
+    "file:///C:/Users/A/Downloads/native-llama-parity-rtx5080.json",
+    "本机 native 采集",
+    "local_native_hardware_snapshot",
+)
+
+
+def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinition:
+    """The measured local host/RTX 5080 hardware graph as a loadable preset.
+
+    The native file also contains model, workload, placement and timing data.
+    Only its hardware meaning is retained here; all editable capabilities come
+    from the curated RTX 5080, GDDR7, Ryzen and local DDR5 component presets.
+    """
+
+    preset_id = "local-native-rtx5080-9950x3d-gddr7-ddr5"
+    pcie_gbps = 252.032
+    gddr7_gbps = 7680.0
+    ddr5_gbps = 716.8
+
+    gpu = _catalog_component(
+        "nvidia-rtx-5080",
+        "gpu0",
+        package_id="gpu_package0",
+        die_id="gpu_die0",
+        component_catalog=component_catalog,
+        ports=(
+            _port(
+                "gddr7",
+                "GDDR7",
+                "controller",
+                version="GDDR7-30.0Gbps",
+                lanes=256,
+                bandwidth_gbps=gddr7_gbps,
+                metadata={"bandwidth_source": "component_preset"},
+            ),
+            _port(
+                "pcie0",
+                "PCIe",
+                "endpoint",
+                version="5.0",
+                lanes=8,
+                bandwidth_gbps=pcie_gbps,
+                payload="coherent_dma",
+                metadata={"bandwidth_source": "native_negotiated_link"},
+            ),
+        ),
+        metadata_updates={
+            "architecture_role": "native_gpu_compute",
+            "native_source_component_id": "gpu0",
+            "memory_interface_protocol": "GDDR7",
+        },
+    )
+    cpu = _catalog_component(
+        "amd-ryzen-9-9950x3d",
+        "cpu0",
+        package_id="host_package0",
+        die_id="cpu_die0",
+        component_catalog=component_catalog,
+        ports=(
+            _port(
+                "pcie0",
+                "PCIe",
+                "root",
+                version="5.0",
+                lanes=8,
+                bandwidth_gbps=pcie_gbps,
+                payload="coherent_dma",
+                metadata={"bandwidth_source": "native_negotiated_link"},
+            ),
+            _port(
+                "memory",
+                "DDR5",
+                "controller",
+                version="DDR5-5600",
+                lanes=128,
+                bandwidth_gbps=ddr5_gbps,
+                metadata={"bandwidth_source": "component_preset"},
+            ),
+        ),
+        metadata_updates={
+            "architecture_role": "native_host_cpu",
+            "native_source_component_id": "cpu0",
+        },
+    )
+    hostmem = _catalog_component(
+        "acer-local-ddr5-128gb-5600-dual-channel",
+        "hostmem0",
+        package_id="host_package0",
+        die_id="host_memory0",
+        component_catalog=component_catalog,
+        ports=(
+            _port(
+                "memory",
+                "DDR5",
+                "device",
+                version="DDR5-5600",
+                lanes=128,
+                bandwidth_gbps=ddr5_gbps,
+                metadata={"bandwidth_source": "component_preset"},
+            ),
+        ),
+        metadata_updates={
+            "architecture_role": "native_host_memory",
+            "native_source_component_id": "hostmem0",
+            "memory_service_owner": "hostmem0.memory",
+            "resident_access_path": "topology",
+            "physical_hardware_component": True,
+        },
+    )
+    gpu_memory = _catalog_component(
+        "gddr7-16gb-30_0-256bit",
+        "hbm0",
+        package_id="gpu_package0",
+        die_id="gddr7_memory0",
+        component_catalog=component_catalog,
+        ports=(
+            _port(
+                "memory",
+                "GDDR7",
+                "device",
+                version="GDDR7-30.0Gbps",
+                lanes=256,
+                bandwidth_gbps=gddr7_gbps,
+                metadata={"bandwidth_source": "component_preset"},
+            ),
+        ),
+        metadata_updates={
+            "architecture_role": "native_gpu_local_memory",
+            "native_source_component_id": "hbm0",
+            "attached_memory_preset_id": "gddr7-16gb-30_0-256bit",
+            "component_preset_status": "logical_gpu_attached_memory",
+            "memory_type": "GDDR7",
+            "memory_service_owner": "hbm0.hbm_fabric",
+            "resident_access_path": "topology",
+            "physical_hardware_component": False,
+            "simulator_memory_kind": "hbm",
+        },
+    )
+
+    components = (gpu, cpu, hostmem, gpu_memory)
+    links = (
+        _link(
+            "cpu-gpu-pcie",
+            "cpu0",
+            "pcie0",
+            "gpu0",
+            "pcie0",
+            "PCIe",
+            version="5.0",
+            lanes=8,
+            bandwidth_gbps=pcie_gbps,
+            latency_ns=800.0,
+            payload="coherent_dma",
+            metadata={
+                "bandwidth_source": "native_negotiated_link",
+                "native_source_link_id": "cpu-gpu-pcie",
+            },
+        ),
+        _link(
+            "cpu-hostmem-ddr",
+            "cpu0",
+            "memory",
+            "hostmem0",
+            "memory",
+            "DDR5",
+            version="DDR5-5600",
+            lanes=128,
+            bandwidth_gbps=ddr5_gbps,
+            latency_ns=80.0,
+            metadata={
+                "bandwidth_source": "memory_component",
+                "bandwidth_resource_id": "hostmem0.memory",
+                "native_source_link_id": "cpu-hostmem-ddr",
+            },
+        ),
+        _link(
+            "gpu-gddr7",
+            "gpu0",
+            "gddr7",
+            "hbm0",
+            "memory",
+            "GDDR7",
+            version="GDDR7-30.0Gbps",
+            lanes=256,
+            bandwidth_gbps=gddr7_gbps,
+            latency_ns=40.0,
+            metadata={
+                "bandwidth_source": "memory_component",
+                "bandwidth_resource_id": "hbm0.hbm_fabric",
+                "native_source_link_id": "gpu-hbm0",
+                "logical_memory_interface": True,
+            },
+        ),
+    )
+    limitations = (
+        "这是 native-llama-parity-rtx5080.json 的硬件输入提炼；模型、workload、placement、profile 和 timing 不属于架构预设。",
+        "native 文件中的 hbm1-hbm7 是历史参考拓扑残留，已删除；RTX 5080 本机本地显存使用 GDDR7 组件预设。",
+        "hostmem0 使用本机 Acer DDR5-5600 双通道组件预设；当前配置带宽为 5600 MT/s × 64 bit ÷ 8 × 2 = 89.6 GB/s。",
+        "链路 bandwidth_gbps 是对应协议的传输上限，采用单向 Gb/s 口径；PCIe 采用本机协商出的 PCIe 5.0 x8 值。",
+        "CPU 到主机内存的物理接口是 DDR5；PCIe 只用于 CPU 到 GPU 的独立互连。",
+    )
+    result = _definition(
+        preset_id,
+        "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+        "Local measured hardware",
+        "RTX 5080 / Zen 5",
+        "single_gpu_host",
+        "single_host",
+        EXPERIMENTAL_REFERENCE,
+        components,
+        links,
+        (
+            _group("gpu_local", "RTX 5080 + GDDR7", ("gpu0", "hbm0"), "gpu0"),
+            _group("host", "Ryzen 9 9950X3D + DDR5", ("cpu0", "hostmem0"), "cpu0"),
+        ),
+        {
+            "gpu0": {"x": 360.0, "y": 200.0},
+            "hbm0": {"x": 650.0, "y": 200.0},
+            "cpu0": {"x": 40.0, "y": 200.0},
+            "hostmem0": {"x": 40.0, "y": 430.0},
+        },
+        (_NATIVE_RTX5080_SOURCE,),
+        limitations,
+        "本机 native RTX 5080 推理硬件场景的可直接导入架构预设；硬件能力由组件预设统一提供。",
+        ("local", "native", "rtx5080", "gddr7", "ddr5", "pcie", "single-gpu"),
+    )
+    metadata = {
+        **result.hardware.metadata,
+        "native_input": {
+            "source_file": "native-llama-parity-rtx5080.json",
+            "source_path": "C:/Users/A/Downloads/native-llama-parity-rtx5080.json",
+            "hardware_only_projection": True,
+            "excluded_sections": ["model", "workload", "placement", "profiles", "timing"],
+        },
+        "bandwidth_contract": {
+            "protocol_bandwidth_is_transfer_upper_bound": True,
+            "unit": "Gb/s_decimal_one_way",
+            "read_write_accounting": "shared_bidirectional_resource",
+        },
+    }
+    return replace(result, hardware=replace(result.hardware, metadata=metadata))
+
+
 _LEGACY_ARCHITECTURE_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
     _hbm_accelerator_cluster(preset_id="nvidia-h100-sxm-8-nvswitch", name="8× NVIDIA H100 SXM + NVSwitch", gpu_model="H100 SXM", memory_kind="HBM3", memory_capacity_gb=80, memory_bandwidth_gbps=26800.0, peak_ops_per_s=989_500_000_000_000.0, count=8, fabric_protocol="NVLink", fabric_version="4.0", fabric_bandwidth_gbps=3600.0, fabric_lanes=18, vendor="NVIDIA", family="Hopper", sources=(NVIDIA_HOPPER,), support_level=ANALYTICAL_APPROXIMATION, memory_physical_unit_count=5, memory_count_status="vendor_documented_active_stacks", memory_component_preset_id="hbm3-16gb-0_670tbs-h100-slice"),
     _hbm_accelerator_cluster(preset_id="nvidia-h200-sxm-8-nvswitch", name="8× NVIDIA H200 SXM + NVSwitch", gpu_model="H200 SXM", memory_kind="HBM3E", memory_capacity_gb=141, memory_bandwidth_gbps=38400.0, peak_ops_per_s=989_500_000_000_000.0, count=8, fabric_protocol="NVLink", fabric_version="4.0", fabric_bandwidth_gbps=3600.0, fabric_lanes=18, vendor="NVIDIA", family="Hopper", sources=(NVIDIA_H200,), support_level=ANALYTICAL_APPROXIMATION, memory_physical_unit_count=6, memory_count_status="derived_from_product_total_and_24GB_stack_class", memory_raw_capacity_gb=144.0, memory_count_formula="144 GB raw product capacity / 24 GB HBM3E stack class = 6; 141 GB is product-visible capacity", memory_source_basis="NVIDIA H200 141 GB visible aggregate plus six 24 GB raw HBM3E stack-class derivation", memory_component_preset_id="hbm3e-24gb-0_800tbs-h200-slice"),
@@ -2033,11 +2299,17 @@ _LEGACY_ARCHITECTURE_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
     _soc_2x_dram_sram_cim(shared_phy_noc=True),
 )
 
-# Only the curated B200 architecture remains registered.  Legacy topology
+# Only curated, loadable hardware graphs are registered.  Legacy topology
 # definitions are intentionally not addressable through list/detail/materialize
 # APIs after the hardware catalog reset.
-_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (_b200_hbf_hbm(),)
-PUBLIC_ARCHITECTURE_PRESET_IDS = frozenset({"nvidia-b200-1gpu-2hbf-2hbm"})
+_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
+    _b200_hbf_hbm(),
+    _native_rtx5080_local(),
+)
+PUBLIC_ARCHITECTURE_PRESET_IDS = frozenset({
+    "nvidia-b200-1gpu-2hbf-2hbm",
+    "local-native-rtx5080-9950x3d-gddr7-ddr5",
+})
 
 
 _BY_ID: Mapping[str, ArchitecturePresetDefinition] = {
@@ -2267,8 +2539,11 @@ def materialize_architecture_payload(preset_id: str, *, component_catalog=None) 
     """Return a new JSON-compatible complete ``HardwareSpec`` payload."""
 
     item = get_architecture_preset(preset_id)
-    if component_catalog is not None and preset_id == "nvidia-b200-1gpu-2hbf-2hbm":
-        item = _b200_hbf_hbm(component_catalog)
+    if component_catalog is not None:
+        if preset_id == "nvidia-b200-1gpu-2hbf-2hbm":
+            item = _b200_hbf_hbm(component_catalog)
+        elif preset_id == "local-native-rtx5080-9950x3d-gddr7-ddr5":
+            item = _native_rtx5080_local(component_catalog)
     if not item.loadable:
         raise ValueError(
             "架构拓扑预设 {} 当前不可载入：{}".format(

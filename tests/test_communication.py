@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from heterollm_sim.communication import (
     TopologyRouter,
@@ -339,6 +340,37 @@ class CommunicationTests(unittest.TestCase):
                 hbm, 4096, read=True, name="rank_memory"
             )
         )
+
+    def test_local_endpoint_coalescing_requires_matching_explicit_service(self):
+        memory = ComponentSpec(
+            "memory", "hbm", ports=(_port("p", "HBM"),),
+            read_bandwidth_gbps=80, write_bandwidth_gbps=8,
+        )
+        gpu = ComponentSpec("gpu", "gpu", ports=(_port("p", "HBM"),))
+        link = LinkSpec("local", "gpu", "p", "memory", "p", "HBM", bandwidth_gbps=100)
+        for owner, source, resource, expected_phases in (
+            (None, None, None, 2),
+            ("memory.controller", None, None, 2),
+            (None, "memory_component", None, 2),
+            ("memory.controller", "memory_component", "other.controller", 2),
+            ("memory.controller", "memory_component", None, 1),
+        ):
+            with self.subTest(owner=owner, source=source, resource=resource):
+                metadata = dict(memory.metadata)
+                if owner:
+                    metadata["memory_service_owner"] = owner
+                link_metadata = {}
+                if source:
+                    link_metadata["bandwidth_source"] = source
+                if resource:
+                    link_metadata["bandwidth_resource_id"] = resource
+                router = TopologyRouter(HardwareSpec("local", (
+                    gpu, replace(memory, metadata=metadata),
+                ), (replace(link, metadata=link_metadata),)))
+                self.assertEqual(len(router.transfer_phases("gpu", "memory", 100)), expected_phases)
+                # A shared link still respects the slower write direction.
+                self.assertEqual(router.route("gpu", "memory", 100)[0].bandwidth_gbps, 8)
+                self.assertEqual(router.route("memory", "gpu", 100)[0].bandwidth_gbps, 80)
 
     def test_dma_metadata_without_bandwidth_is_not_silently_free(self):
         component = ComponentSpec(

@@ -202,7 +202,7 @@ test("real-browser dynamic model, mapping, and workload paths use explicit langu
     [/uiText\("允许同组件多逻辑 Rank", "Allow colocated logical Ranks"\)/, "rank colocation"],
     [/"Changing TP\/PP\/EP clears the old Rank mapping; changing PP also clears the layer-to-stage mapping\./, "parallel explanation"],
     [/uiText\("KV 驻留策略", "KV residency strategy"\)/, "KV title"],
-    [/"HBF uses UCIe; SSD and high-I\/O SSD use PCIe\/CXL\./, "backing planner explanation"],
+    [/"HBF uses the HBF logical link with UCIe recorded as the physical carrier; SSD and high-I\/O SSD use PCIe\/CXL\./, "backing planner explanation"],
     [/uiText\("允许调度器抢占进行中的序列", "Allow the scheduler to preempt active sequences"\)/, "preemption help"],
     [/uiText\("启用候选 Token 提议与接受模型", "Enable candidate-Token proposals and the acceptance model"\)/, "MTP help"],
   ];

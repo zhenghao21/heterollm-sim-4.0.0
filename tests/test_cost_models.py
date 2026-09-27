@@ -347,6 +347,11 @@ class GPUCostModelTests(unittest.TestCase):
         self.assertEqual(estimate.metadata["memory_service_ns"], without_transform.metadata["memory_service_ns"])
         self.assertEqual(estimate.metadata["compute_service_ns"], without_transform.metadata["compute_service_ns"])
         self.assertNotIn("fused_dequant_accounting", without_transform.metadata)
+        contract = estimate.metadata["quantized_kernel_contract"]
+        self.assertEqual(contract["schema"], "heterollm.quantized-kernel-cost/v1")
+        self.assertEqual(contract["status"], "uncalibrated_analytical_fallback")
+        self.assertEqual(contract["weight_formats"], ("IQ4_XS",))
+        self.assertEqual(contract["dequant_work_units"], 4096)
 
     def test_gpu_quantized_matmul_capability_is_optional_and_validated(self):
         self.assertEqual(gpu_profile().quantized_matmul_capabilities, ())

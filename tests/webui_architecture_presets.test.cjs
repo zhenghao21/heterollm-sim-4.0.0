@@ -52,11 +52,15 @@ function helpers() {
     materializeComponentPreset,
     materializeTopologyBundle,
     costProfileDraft,
+    storageTransportParameters,
     resetArchitectureDependentProfiles,
     rebuildRuntimeGpuControllers,
     runtimeGpuControllerIssue,
     stableMappingEqual,
     renameComponent,
+    deleteComponent,
+    componentBandwidthMarkup,
+    componentSharedBandwidthGbps,
     hostOrchestrationReferenceIssue,
     componentKindClass,
     isActiveMemoryComponent,
@@ -100,6 +104,35 @@ test("new active-memory component kinds are visible and usable by V4 placement U
   assert.equal(ui.isActiveMemoryComponent(hbfMemory), true);
   assert.equal(ui.isWritableActiveRankMemory(hbfMemory), true);
   assert.equal(ui.componentKindClass(hbfMemory), "io");
+});
+
+test("storage inspector reads latency and transfer granularity from the authoritative profile", () => {
+  const ui = helpers();
+  const host = { component_id: "hostmem0", kind: "host_memory", cost_profile_id: "host", metadata: {} };
+  const hbm = { component_id: "hbm0", kind: "hbm", cost_profile_id: "hbm", metadata: { read_latency_ns: 40, write_latency_ns: 40, transfer_granularity_bytes: 256 } };
+  ui.state.scenario = {
+    hardware: { components: [host, hbm], links: [] },
+    profiles: { components: {
+      host_memory: { host: { bandwidth_gb_s: 89.6, efficiency: 0.78, read_latency_ns: 0, write_latency_ns: 0, transaction_bytes: 256, max_outstanding_requests: 32 } },
+      hbm: { hbm: { bandwidth_gb_s: 960, efficiency: 0.75, read_latency_ns: 0, write_latency_ns: 0, transaction_bytes: 256, max_outstanding_requests: 32 } },
+    } },
+  };
+  const hostTiming = ui.storageTransportParameters(host);
+  assert.equal(hostTiming.kind, "host_memory");
+  assert.equal(hostTiming.profileKey, "host_memory");
+  assert.equal(hostTiming.profileBacked, true);
+  assert.equal(hostTiming.readLatency, 0);
+  assert.equal(hostTiming.writeLatency, 0);
+  assert.equal(hostTiming.transactionBytes, 256);
+  assert.equal(hostTiming.unknownWrite, false);
+  assert.equal(hostTiming.source, "host_memory.host");
+  assert.equal(ui.costProfileDraft("hbm", hbm).transaction_bytes, 256);
+  assert.equal(ui.costProfileDraft("hbm", hbm).read_latency_ns, 0, "explicit profile zero remains an explicit zero-latency model");
+  const hbf = { component_id: "hbf0", kind: "hbf", read_bandwidth_gbps: 24000, write_bandwidth_gbps: 0, metadata: {} };
+  const hbfTiming = ui.storageTransportParameters(hbf);
+  assert.equal(hbfTiming.readLatency, 2500);
+  assert.equal(hbfTiming.transactionBytes, 4096);
+  assert.equal(hbfTiming.unknownWrite, true);
 });
 
 test("single component preset templates become an instance profile instead of reusing legacy calibration", () => {
@@ -206,6 +239,84 @@ test("renaming a GPU migrates its runtime controller key", () => {
   ui.renameComponent(ui.state.scenario.hardware.components[0], "b200");
   assert.deepEqual(ui.state.scenario.profiles.runtime.gpu_controllers, { b200: { marker: "keep" } });
   assert.equal(ui.state.selected.id, "b200");
+});
+
+test("renaming a component migrates orchestration resources, profile resources, owners, and KV pools", () => {
+  const ui = helpers();
+  const gpu = { component_id: "gpu0", kind: "gpu", cost_profile_id: "gpu0-profile", metadata: {
+    memory_service_owner: "gpu0.memory",
+    physical_resource_owners: { "gpu0.tensor_core": "gpu0.controller" },
+  } };
+  ui.state.scenario = {
+    hardware: {
+      components: [gpu],
+      links: [],
+      metadata: { physical_resource_owners: { "gpu0.tensor_core": "gpu0.controller" } },
+    },
+    profiles: {
+      components: { gpu: { "gpu0-profile": {
+        tensor_core: { resource_id: "gpu0.tensor_core" },
+        scalar_resource_id: "gpu0.scalar",
+      } } },
+      host_orchestration: {
+        gpu_component_id: "gpu0",
+        submission_resource_id: "gpu0.command_queue",
+        scheduler_resource_id: "cpu0.scheduler",
+      },
+      runtime: { gpu_controllers: { gpu0: { marker: "keep" } } },
+    },
+    placement: {
+      kv_policy: { pool_components: ["gpu0"] },
+      parallel: { rank_mapping: [{ component_id: "gpu0" }] },
+      metadata: { memory_service_owner: "gpu0.memory", physical_resource_owners: { "gpu0.tensor_core": "gpu0.controller" } },
+    },
+  };
+  ui.state.nodePositions = {};
+  ui.state.nodeSizes = {};
+  ui.state.topologyView = { groups: [], layout: { positions: {} } };
+  ui.state.selectedComponents = new Set();
+  ui.state.selected = { id: "gpu0" };
+  ui.renameComponent(gpu, "gpu-main");
+  assert.equal(ui.state.scenario.profiles.host_orchestration.submission_resource_id, "gpu-main.command_queue");
+  assert.equal(ui.state.scenario.profiles.components.gpu["gpu0-profile"].tensor_core.resource_id, "gpu-main.tensor_core");
+  assert.equal(ui.state.scenario.profiles.components.gpu["gpu0-profile"].scalar_resource_id, "gpu-main.scalar");
+  assert.deepEqual(ui.state.scenario.placement.kv_policy.pool_components, ["gpu-main"]);
+  assert.equal(ui.state.scenario.placement.parallel.rank_mapping[0].component_id, "gpu-main");
+  assert.equal(ui.state.scenario.placement.metadata.memory_service_owner, "gpu-main.memory");
+  assert.equal(ui.state.scenario.hardware.metadata.physical_resource_owners["gpu-main.tensor_core"], "gpu-main.controller");
+});
+
+test("directional bandwidth inspector uses read/write fields and does not expose an editable shared total", () => {
+  const ui = helpers();
+  const component = {
+    component_id: "dram0",
+    kind: "dram",
+    bandwidth_gbps: 100,
+    read_bandwidth_gbps: 100,
+    write_bandwidth_gbps: 10,
+    metadata: { bandwidth_mode: "directional" },
+  };
+  const markup = ui.componentBandwidthMarkup(component, ui.componentInspectorProfile("dram", component));
+  assert.match(markup, /方向性模式下由读写字段分别约束/);
+  assert.doesNotMatch(markup, /data-inspector-field="bandwidth_gbps"/);
+  assert.match(markup, /data-inspector-field="read_bandwidth_gbps"/);
+  assert.match(markup, /data-inspector-field="write_bandwidth_gbps"/);
+  assert.equal(ui.componentSharedBandwidthGbps(component), 100);
+});
+
+test("deleting a component removes it from the KV pool", () => {
+  const ui = helpers();
+  ui.state.scenario = {
+    hardware: { components: [{ component_id: "hbm0", kind: "hbm" }], links: [] },
+    placement: { kv_policy: { pool_components: ["hbm0", "hbm1"] }, parallel: { rank_mapping: [] } },
+  };
+  ui.state.nodePositions = {};
+  ui.state.nodeSizes = {};
+  ui.state.topologyView = { groups: [], layout: { positions: {} } };
+  ui.state.selectedComponents = new Set(["hbm0"]);
+  ui.state.selected = { type: "component", id: "hbm0" };
+  ui.deleteComponent("hbm0", { deferRender: true, quiet: true });
+  assert.deepEqual(ui.state.scenario.placement.kv_policy.pool_components, ["hbm1"]);
 });
 
 function scenario() {

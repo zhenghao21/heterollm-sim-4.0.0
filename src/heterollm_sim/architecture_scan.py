@@ -34,6 +34,7 @@ from .cost_models import (
 from .ir import (
     ComponentSpec,
     LayerSpec,
+    is_local_memory_interface_link,
     model_graph_execution_view,
     normalize_component_kind,
 )
@@ -362,8 +363,8 @@ def _gpu_memory_bandwidth_gb_s(
         bandwidth = _link_bandwidth_gbps(
             scenario, link, gpu.component_id, gpu_port_id, memory_id, memory_port_id
         )
-        if float(memory.read_bandwidth_gbps) > 0.0:
-            bandwidth = min(bandwidth, float(memory.read_bandwidth_gbps))
+        if memory.shared_bandwidth_gbps > 0.0:
+            bandwidth = min(bandwidth, memory.shared_bandwidth_gbps)
         if bandwidth > 0.0:
             attached_gbps += bandwidth
             seen_memory.add(memory_id)
@@ -376,11 +377,14 @@ def _gpu_memory_bandwidth_gb_s(
 def _gpu_memory_efficiency(
     scenario: ScenarioConfig, gpu: ComponentSpec
 ) -> float:
-    """Return the bandwidth-weighted efficiency of this GPU's real memories."""
+    """Return effective/physical bandwidth for this GPU's real memories.
+
+    Aggregate memory profiles describe one service owner across several links;
+    apply their effective rate once per owner instead of once per bank.
+    """
 
     components = scenario.hardware.component_map()
-    raw_bandwidth = 0.0
-    effective_bandwidth = 0.0
+    groups: Dict[Any, Dict[str, Any]] = {}
     seen_memory = set()
     for link in sorted(scenario.hardware.links, key=lambda item: item.link_id):
         if link.source_component == gpu.component_id:
@@ -397,22 +401,58 @@ def _gpu_memory_efficiency(
         bandwidth = _link_bandwidth_gbps(
             scenario, link, gpu.component_id, gpu_port_id, memory_id, memory_port_id
         )
-        if float(memory.read_bandwidth_gbps) > 0.0:
-            bandwidth = min(bandwidth, float(memory.read_bandwidth_gbps))
+        if memory.shared_bandwidth_gbps > 0.0:
+            bandwidth = min(bandwidth, memory.shared_bandwidth_gbps)
         if bandwidth <= 0.0:
             continue
         profile_kind = normalize_cost_profile_kind(memory.normalized_kind)
         if profile_kind == "hbm":
             profile = scenario.resolve_component_profile(memory, HBMProfile)
-            efficiency = float(profile.efficiency)
         elif profile_kind == "host_memory":
             profile = scenario.resolve_component_profile(memory, HostMemoryProfile)
-            efficiency = float(profile.efficiency)
         else:
-            efficiency = 1.0
-        raw_bandwidth += bandwidth
-        effective_bandwidth += bandwidth * efficiency
+            profile = None
+        aggregate = bool(
+            str(memory.metadata.get("memory_bandwidth_scope", "")).strip().lower()
+            == "aggregate"
+        )
+        if not aggregate and memory.cost_profile_id is not None:
+            aggregate = any(
+                item.cost_profile_id == memory.cost_profile_id
+                and str(item.metadata.get("memory_bandwidth_scope", "")).strip().lower()
+                == "aggregate"
+                for item in components.values()
+            )
+        group_key = (
+            (
+                str(getattr(profile, "resource_id", memory.component_id)),
+                str(memory.cost_profile_id),
+            )
+            if aggregate and profile is not None
+            else memory.component_id
+        )
+        group = groups.setdefault(
+            group_key,
+            {"raw": 0.0, "profile": profile, "aggregate": aggregate},
+        )
+        group["raw"] += bandwidth
         seen_memory.add(memory_id)
+    raw_bandwidth = sum(float(group["raw"]) for group in groups.values())
+    effective_bandwidth = 0.0
+    for group in groups.values():
+        raw = float(group["raw"])
+        profile = group["profile"]
+        if profile is None:
+            effective_bandwidth += raw
+        elif profile.measured_effective_bandwidth_gb_s is not None:
+            effective_bandwidth += min(
+                raw, float(profile.measured_effective_bandwidth_gb_s) * 8.0
+            )
+        else:
+            effective_bandwidth += min(
+                raw * float(profile.efficiency),
+                float(profile.bandwidth_gb_s) * float(profile.efficiency) * 8.0,
+            )
     if raw_bandwidth <= 0.0:
         return 1.0
     return effective_bandwidth / raw_bandwidth
@@ -426,6 +466,14 @@ def _link_bandwidth_gbps(
     target_id: str,
     target_port_id: str,
 ) -> float:
+    if is_local_memory_interface_link(link, scenario.hardware):
+        components = scenario.hardware.component_map()
+        memory = components.get(source_id)
+        if memory is None or not memory.is_active_memory:
+            memory = components.get(target_id)
+        if memory is not None and memory.shared_bandwidth_gbps > 0:
+            link_limit = float(link.bandwidth_gbps)
+            return min(float(memory.shared_bandwidth_gbps), link_limit) if link_limit > 0 else float(memory.shared_bandwidth_gbps)
     if float(link.bandwidth_gbps) > 0.0:
         return float(link.bandwidth_gbps)
     positive = [
@@ -666,7 +714,7 @@ def _representative_operators(
                 )
             )
     diagnostics.append(
-        "代表性 GEMM 的 M 取当前工作负载最大序列批量 {}；MoE 专家 M 按均匀路由的每专家 token 数计算。".format(
+        "代表性 GEMM 的 M 取当前工作负载最大 batched tokens {}；MoE 专家 M 按均匀路由的每专家 token 数计算。".format(
             batch_tokens
         )
     )
@@ -674,7 +722,36 @@ def _representative_operators(
 
 
 def _representative_batch_tokens(scenario: ScenarioConfig) -> int:
-    return max(1, int(scenario.workload.scheduler.max_num_seqs))
+    return max(1, int(scenario.workload.scheduler.max_num_batched_tokens))
+
+
+def _gpu_peak_tops_for_operator(
+    component: ComponentSpec,
+    profile: GPUProfile,
+    operator: _OperatorTemplate,
+) -> float:
+    """Scale the authored GPU peak by the operator's Tensor Core dtype."""
+
+    authored = float(component.peak_ops_per_s) / 1.0e12
+    if authored <= 0.0:
+        return authored
+    dtype = (
+        "int8"
+        if operator.activation_bits <= 8 and operator.weight_bits <= 8
+        else "fp16"
+        if operator.activation_bits <= 16 and operator.weight_bits <= 16
+        else "fp32"
+    )
+    try:
+        dtype_peak = float(profile.tensor_core.peak_tops(dtype))
+        default_peak = float(
+            profile.tensor_core.peak_tops(profile.default_tensor_dtype)
+        )
+    except ValueError:
+        return authored
+    if default_peak <= 0.0:
+        return authored
+    return authored * dtype_peak / default_peak
 
 
 def _shard_size(global_size: int, degree: int, allow_padding: bool) -> int:
@@ -795,6 +872,9 @@ def _build_candidates(
                 else:
                     gpu_profile = scenario.resolve_component_profile(
                         component, GPUProfile
+                    )
+                    peak_tops = _gpu_peak_tops_for_operator(
+                        component, gpu_profile, operator
                     )
                     compute_efficiency = float(
                         gpu_profile.attainable_efficiency

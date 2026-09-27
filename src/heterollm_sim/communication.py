@@ -20,6 +20,8 @@ from .ir import (
     ComponentSpec,
     HardwareSpec,
     LinkSpec,
+    default_memory_resource_id,
+    is_local_memory_interface_link,
 )
 from .memory_service import realtime_memory_metrics
 
@@ -377,7 +379,25 @@ class TopologyRouter:
     ) -> None:
         if source_component not in self.components or target_component not in self.components:
             return
+        local_memory_link = is_local_memory_interface_link(link, self.hardware)
+        memory_component = None
+        if local_memory_link:
+            source_candidate = self.components.get(source_component)
+            target_candidate = self.components.get(target_component)
+            memory_component = (
+                source_candidate if source_candidate is not None and source_candidate.is_active_memory
+                else target_candidate if target_candidate is not None and target_candidate.is_active_memory
+                else None
+            )
         bandwidth = float(link.bandwidth_gbps)
+        if memory_component is not None:
+            # The protocol/link declaration is the transfer ceiling.  Binding
+            # it to the component resource shares contention without allowing
+            # the topology view to exceed its negotiated limit.
+            direction = "read" if memory_component.component_id == source_component else "write"
+            component_limit = float(memory_component.directional_bandwidth_gbps(direction))
+            if component_limit > 0:
+                bandwidth = min(component_limit, bandwidth) if bandwidth > 0 else component_limit
         if bandwidth <= 0:
             source_port = self.hardware.get_port(source_component, (
                 link.source_port if source_component == link.source_component else link.target_port
@@ -393,8 +413,30 @@ class TopologyRouter:
             bandwidth = min(positive) if positive else 0.0
         if bandwidth <= 0:
             return
-        shared = bool(link.metadata.get("shared_bidirectional", not link.bidirectional))
-        resource_id = "link.{}".format(link.link_id)
+        declared_owner = (
+            str(memory_component.metadata.get("memory_service_owner"))
+            if memory_component is not None
+            and memory_component.metadata.get("memory_service_owner")
+            else None
+        )
+        source_flag = str(link.metadata.get("bandwidth_source", "")).strip().lower()
+        # A component owner alone is only a declaration of who owns endpoint
+        # service.  The link must also opt into using that service as its
+        # bandwidth resource before endpoint charging can be coalesced.
+        explicit_shared_binding = (
+            declared_owner is not None
+            and source_flag in {"component", "memory_component", "shared_component"}
+        )
+        shared = bool(link.metadata.get("shared_bidirectional", not link.bidirectional)) or explicit_shared_binding
+        resource_id = (
+            str(link.metadata.get("bandwidth_resource_id"))
+            if memory_component is not None and explicit_shared_binding and link.metadata.get("bandwidth_resource_id")
+            else declared_owner
+            if memory_component is not None and declared_owner is not None
+            else default_memory_resource_id(memory_component)
+            if memory_component is not None and explicit_shared_binding
+            else "link.{}".format(link.link_id)
+        )
         if not shared:
             resource_id += ".{}->{}".format(source_component, target_component)
         self._adjacency[source_component].append(
@@ -508,7 +550,26 @@ class TopologyRouter:
         phases: List[TransferPhase] = []
         source = self.components[source_component]
         target = self.components[target_component]
-        read = self._endpoint_phase(source, byte_count, read=True, name=name)
+        def includes_endpoint(component: ComponentSpec, hop: RouteHop, direction: str) -> bool:
+            # Protocol names alone do not declare whether bus time includes
+            # endpoint service. Only an explicit shared service declaration
+            # can replace the endpoint's latency, payload and contention.
+            link = self._links[hop.link_id]
+            if (not component.is_active_memory
+                    or not component.metadata.get("memory_service_owner")
+                    or str(link.metadata.get("bandwidth_source", "")).strip().lower()
+                    not in {"component", "memory_component", "shared_component"}):
+                return False
+            endpoint_id = "component.{}.{}".format(component.component_id, direction)
+            return self.resource_owners.get(endpoint_id, endpoint_id) == self.resource_owners.get(
+                hop.resource_id, hop.resource_id
+            )
+
+        read = (
+            None
+            if includes_endpoint(source, route[0], "read")
+            else self._endpoint_phase(source, byte_count, read=True, name=name)
+        )
         if read is not None:
             phases.append(read)
         source_dma = self._dma_phase(source, byte_count, name=name, direction="out")
@@ -538,7 +599,11 @@ class TopologyRouter:
         target_dma = self._dma_phase(target, byte_count, name=name, direction="in")
         if target_dma is not None:
             phases.append(target_dma)
-        write = self._endpoint_phase(target, byte_count, read=False, name=name)
+        write = (
+            None
+            if includes_endpoint(target, route[-1], "write")
+            else self._endpoint_phase(target, byte_count, read=False, name=name)
+        )
         if write is not None:
             phases.append(write)
         mode = self.coherent_dma_mode if coherent_dma_mode is None else str(
@@ -768,11 +833,7 @@ class TopologyRouter:
         component: ComponentSpec, byte_count: int, *, read: bool, name: str
     ) -> Optional[TransferPhase]:
         _non_negative_integer(byte_count, "byte_count")
-        bandwidth = (
-            float(component.read_bandwidth_gbps)
-            if read
-            else float(component.write_bandwidth_gbps)
-        )
+        bandwidth = float(component.directional_bandwidth_gbps("read" if read else "write"))
         if bandwidth <= 0:
             # Offload media are active transfer endpoints.  Silently omitting
             # a missing direction used to make an HBF with unknown write

@@ -1229,7 +1229,7 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
         layer_to_stage={item.layer_id: 0 for item in view.layer_instances},
     )
     # Keep the typed profile registry but collapse the illustrative 8-HBM/CIM
-    # topology to one GPU memory device, matching the RTX 5080 experiment.
+    # topology to one GPU-local GDDR7 memory device, matching the RTX 5080 experiment.
     gpu_raw = measured["gpu"]
     pcie = measured.get("pcie", gpu_raw.get("pcie", {}))
     # Service bandwidth follows the negotiated active link; the stable
@@ -1257,9 +1257,19 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     bf16_dense_tflops = float(gpu_specs.get("bf16_dense_tflops", 112.6))
     gpu_memory_bandwidth_gb_s = float(gpu_memory_specs.get("bandwidth_gb_s", 960.0))
     gpu_memory_type = str(gpu_memory_specs.get("type", "GDDR7"))
+    gpu_memory_data_rate_gbps = float(gpu_memory_specs.get("data_rate_gbps", 30.0))
+    gpu_memory_bus_bits = int(gpu_memory_specs.get("bus_width_bits", 256))
     l1_shared_cache_bytes = int(float(gpu_cache_specs.get("l1_shared_kib_per_sm", 128)) * sm_count * 1024)
     l2_cache_bytes = int(float(gpu_cache_specs.get("l2_mib", 64)) * 1024**2)
     host_memory_bandwidth_gb_s = float(measured.get("host_memory_bandwidth_gb_s", 89.6))
+    cpu_memory_specs = cpu_specs.get("memory", {})
+    if not isinstance(cpu_memory_specs, Mapping):
+        cpu_memory_specs = {}
+    host_memory_protocol = str(cpu_memory_specs.get("type", "DDR5"))
+    host_memory_data_rate_mt_s = int(cpu_memory_specs.get("data_rate_mt_s", 5600))
+    host_memory_channels = int(cpu_memory_specs.get("channels", 2))
+    host_memory_version = "{}-{}".format(host_memory_protocol, host_memory_data_rate_mt_s)
+    host_memory_lanes = 64 * host_memory_channels
     cpu_frequency_ghz = float(cpu_specs.get("base_clock_mhz", 4300)) / 1000.0
     gpu_memory_link_bandwidth_gbps = gpu_memory_bandwidth_gb_s * 8.0
     host_memory_link_bandwidth_gbps = host_memory_bandwidth_gb_s * 8.0
@@ -1272,9 +1282,16 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     for component in base.hardware.components:
         if component.component_id == "gpu0":
             ports = tuple(
-                replace(port, bandwidth_gbps=gpu_memory_link_bandwidth_gbps) if port.port_id == "hbm0" else
+                replace(
+                    port,
+                    protocol=gpu_memory_type,
+                    version="{}-{}Gbps".format(gpu_memory_type, gpu_memory_data_rate_gbps),
+                    lanes=gpu_memory_bus_bits,
+                    bandwidth_gbps=gpu_memory_link_bandwidth_gbps,
+                ) if port.port_id == "hbm0" else
                 replace(port, lanes=pcie_width, bandwidth_gbps=pcie_bandwidth) if port.port_id == "pcie0" else port
                 for port in component.ports
+                if not (port.port_id.startswith("hbm") and port.port_id != "hbm0")
             )
             components.append(replace(component, ports=ports, capacity_bytes=l2_cache_bytes, peak_ops_per_s=peak_ops_per_s, metadata={
                 **component.metadata, "measured_gpu": measured["gpu_name"], "gpu_uuid": gpu_raw.get("uuid"),
@@ -1284,35 +1301,54 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
                 "pcie_bandwidth_basis": measured.get("pcie_bandwidth_basis"),
                 "analysis_input_basis": measured.get("analysis_input_basis"),
                 "public_specs": dict(gpu_specs), "memory_type": gpu_memory_type,
+                "component_preset_id": "nvidia-rtx-5080",
+                "component_preset_status": "catalog_reference",
             }))
         elif component.component_id == "hostmem0":
             components.append(replace(component, ports=tuple(
-                replace(port, bandwidth_gbps=host_memory_link_bandwidth_gbps) if port.port_id == "ddr0" else port
+                replace(port, protocol=host_memory_protocol, version=host_memory_version, lanes=host_memory_lanes, bandwidth_gbps=host_memory_link_bandwidth_gbps) if port.port_id == "ddr0" else port
                 for port in component.ports
-            ), capacity_bytes=host_memory_bytes))
+            ), capacity_bytes=host_memory_bytes,
+                bandwidth_gbps=host_memory_link_bandwidth_gbps, metadata={
+                **component.metadata,
+                "memory_service_owner": "cpu0.memory",
+                "resident_access_path": "topology",
+                "component_preset_id": "acer-local-ddr5-128gb-5600-dual-channel",
+                "component_preset_status": "catalog_reference",
+            }))
         elif component.component_id == "hbm0":
-            components.append(replace(component, ports=tuple(replace(port, bandwidth_gbps=gpu_memory_link_bandwidth_gbps) for port in component.ports), capacity_bytes=vram_bytes, metadata={
+            components.append(replace(component, ports=tuple(replace(port, protocol=gpu_memory_type, version="{}-{}Gbps".format(gpu_memory_type, gpu_memory_data_rate_gbps), lanes=gpu_memory_bus_bits, bandwidth_gbps=gpu_memory_link_bandwidth_gbps) for port in component.ports), capacity_bytes=vram_bytes,
+                bandwidth_gbps=gpu_memory_link_bandwidth_gbps, metadata={
                 **component.metadata, "memory_type": gpu_memory_type,
+                "memory_service_owner": "gpu0.hbm_fabric",
+                "resident_access_path": "topology",
                 "analysis_input_basis": measured.get("analysis_input_basis"),
                 "public_specs": dict(gpu_memory_specs),
+                "attached_memory_preset_id": "gddr7-16gb-30_0-256bit",
+                "component_preset_status": "logical_gpu_attached_memory",
+                "physical_hardware_component": False,
             }))
         elif component.component_id == "cpu0":
             components.append(replace(component, ports=tuple(
                 replace(port, lanes=pcie_width, bandwidth_gbps=pcie_bandwidth) if port.port_id == "pcie0" else
-                replace(port, bandwidth_gbps=host_memory_link_bandwidth_gbps) if port.port_id == "ddr0" else port
+                replace(port, protocol=host_memory_protocol, version=host_memory_version, lanes=host_memory_lanes, bandwidth_gbps=host_memory_link_bandwidth_gbps) if port.port_id == "ddr0" else port
                 for port in component.ports
-            )))
+            ), metadata={
+                **component.metadata,
+                "component_preset_id": "amd-ryzen-9-9950x3d",
+                "component_preset_status": "catalog_reference",
+            }))
     hardware = replace(
         base.hardware,
         name="RTX5080-local",
         components=tuple(components),
         links=tuple(
-            replace(l, bandwidth_gbps=gpu_memory_link_bandwidth_gbps, metadata={**l.metadata, "memory_type": gpu_memory_type}) if l.link_id == "gpu-hbm0" else
+            replace(l, protocol=gpu_memory_type, version="{}-{}Gbps".format(gpu_memory_type, gpu_memory_data_rate_gbps), lanes=gpu_memory_bus_bits, bandwidth_gbps=gpu_memory_link_bandwidth_gbps, metadata={**l.metadata, "memory_type": gpu_memory_type, "bandwidth_source": "memory_component", "bandwidth_resource_id": "gpu0.hbm_fabric"}) if l.link_id == "gpu-hbm0" else
             replace(l, lanes=pcie_width, bandwidth_gbps=pcie_bandwidth, metadata={**l.metadata, "gen_current": pcie_generation, "width_current": pcie_width, "bandwidth_gbps": pcie_bandwidth, "bandwidth_gb_s": pcie_bandwidth / 8.0, "bandwidth_basis": measured.get("pcie_bandwidth_basis")}) if l.link_id == "cpu-gpu-pcie" else
-            replace(l, bandwidth_gbps=host_memory_link_bandwidth_gbps) if l.link_id == "cpu-hostmem-ddr" else l
+            replace(l, protocol=host_memory_protocol, version=host_memory_version, lanes=host_memory_lanes, bandwidth_gbps=host_memory_link_bandwidth_gbps, metadata={**l.metadata, "bandwidth_source": "memory_component", "bandwidth_resource_id": "cpu0.memory"}) if l.link_id == "cpu-hostmem-ddr" else l
             for l in base.hardware.links if l.link_id in {"cpu-gpu-pcie", "cpu-hostmem-ddr", "gpu-hbm0"}
         ),
-        metadata={**base.hardware.metadata, "measured_host": measured["cpu_name"], "measured_gpu": measured["gpu_name"], "gpu_vram_mib": vram_bytes // 1024**2, "gpu_uuid": gpu_raw.get("uuid"), "gpu_driver": gpu_raw.get("driver"), "gpu_clocks": gpu_raw.get("clocks", {}), "pcie_link_gen_current": pcie_generation, "pcie_link_width_current": pcie_width, "pcie_link_bandwidth_gbps_one_way": pcie_bandwidth, "pcie_link_bandwidth_gb_s_one_way": pcie_bandwidth / 8.0, "host_memory_total_bytes": host_memory_bytes, "host_memory_bandwidth_gb_s": host_memory_bandwidth_gb_s, "gpu_memory_bandwidth_gb_s": gpu_memory_bandwidth_gb_s, "gpu_memory_type": gpu_memory_type, "hardware_snapshot_source": measured["source"], "analysis_input_basis": measured.get("analysis_input_basis"), "gpu_public_specs": dict(gpu_specs), "cpu_public_specs": dict(cpu_specs), "llama_cpp_gpu_layers": gpu_layers},
+        metadata={**base.hardware.metadata, "native_hardware_preset_id": "local-rtx5080-9950x3d", "measured_host": measured["cpu_name"], "measured_gpu": measured["gpu_name"], "gpu_vram_mib": vram_bytes // 1024**2, "gpu_uuid": gpu_raw.get("uuid"), "gpu_driver": gpu_raw.get("driver"), "gpu_clocks": gpu_raw.get("clocks", {}), "pcie_link_gen_current": pcie_generation, "pcie_link_width_current": pcie_width, "pcie_link_bandwidth_gbps_one_way": pcie_bandwidth, "pcie_link_bandwidth_gb_s_one_way": pcie_bandwidth / 8.0, "host_memory_total_bytes": host_memory_bytes, "host_memory_bandwidth_gb_s": host_memory_bandwidth_gb_s, "gpu_memory_bandwidth_gb_s": gpu_memory_bandwidth_gb_s, "gpu_memory_type": gpu_memory_type, "hardware_snapshot_source": measured["source"], "analysis_input_basis": measured.get("analysis_input_basis"), "gpu_public_specs": dict(gpu_specs), "cpu_public_specs": dict(cpu_specs), "llama_cpp_gpu_layers": gpu_layers, "component_preset_bindings": {"gpu0": "nvidia-rtx-5080", "cpu0": "amd-ryzen-9-9950x3d", "hostmem0": "acer-local-ddr5-128gb-5600-dual-channel"}, "attached_memory_preset_bindings": {"hbm0": "gddr7-16gb-30_0-256bit"}},
     )
     # Qwen3.8's hybrid CPU graph lowers an 8-token prefill into two physical
     # 4-token graph invocations even when llama-server is launched with
@@ -1361,12 +1397,21 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
         request_count=parallel,
         mtp=None,
         scheduler=replace(base.workload.scheduler, mode="continuous", max_num_seqs=parallel, max_num_batched_tokens=batch, max_num_ubatch_tokens=ubatch, prefill_chunk_tokens=prefill_chunk_tokens, preemption_enabled=False),
+        metadata={
+            **base.workload.metadata,
+            # A single llama.cpp request is submitted as one prefill graph;
+            # allowing the simulator's cross-component stage overlap here
+            # removes a scheduler artifact without changing multi-request
+            # continuous batching semantics.
+            "llama_cpp_single_request_prefill_serialized": parallel == 1,
+        },
     )
     # llama.cpp keeps KV pages on the active execution memory.  With no
     # offloaded transformer layers (``-ngl 0``), that is host DRAM; when at
-    # least one layer is on CUDA, K/V tensors are allocated in the GPU HBM
-    # arena (``--kvo``).  The reference scenario defaults to hbm0, so leaving
-    # it unchanged would charge CPU-only runs to an unavailable GPU cache and
+    # least one layer is on CUDA, K/V tensors are allocated in the GPU-local
+    # memory arena (GDDR7 for this native machine, ``--kvo``).  The reference
+    # scenario defaults to the historical hbm0 node, so leaving it unchanged
+    # would charge CPU-only runs to an unavailable GPU cache and
     # hide the KV read/append traffic from the CPU resource path.
     kv_component = "hostmem0" if gpu_layers == 0 else "hbm0"
     # The reference scenario carries a generated control-plane decision for a
@@ -1486,7 +1531,7 @@ def build_matching_scenario(prompt_tokens: int, output_tokens: int, *, ctx: int,
     lowered = apply_llama_runtime_config(lowered, runtime_config, materialize_placement=True)
     # Keep the llama.cpp per-layer KV arena decision explicit.  ``-ngl`` uses
     # a tail placement: CPU-prefix layers persist K/V in host DRAM and the
-    # CUDA suffix persists K/V in HBM.  The planner still has a deterministic
+    # CUDA suffix persists K/V in GPU-local memory.  The planner still has a deterministic
     # fallback for authored scenarios without this map.
     execution_view = model_graph_execution_view(
         lowered.model.graph,

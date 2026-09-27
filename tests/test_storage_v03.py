@@ -417,6 +417,16 @@ def _multi_rank_cim_weight_backing_scenario():
         requests=(request,),
         mtp=None,
     )
+    # This reduced fixture keeps one physical HBM bank.  The reference
+    # scenario's 4096 GB/s profile is an eight-bank aggregate, so bind the
+    # representative single-bank profile explicitly for this topology.
+    component_profiles = {
+        kind: dict(registry)
+        for kind, registry in scenario.component_profiles.items()
+    }
+    component_profiles["hbm"]["legacy-hbm"] = replace(
+        component_profiles["hbm"]["legacy-hbm"], bandwidth_gb_s=512.0
+    )
     authoring = replace(
         scenario,
         hardware=HardwareSpec(
@@ -432,6 +442,7 @@ def _multi_rank_cim_weight_backing_scenario():
         placement=placement,
         workload=workload,
         weights_resident=False,
+        component_profiles=component_profiles,
     )
     # This fixture adds eight GPU ranks; each needs its own explicit controller.
     authoring = replace(authoring, runtime_profile=replace(

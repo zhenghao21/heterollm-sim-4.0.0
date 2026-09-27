@@ -21,12 +21,13 @@ from .ir import ComponentSpec, LinkSpec, PortSpec, SCHEMA_VERSION
 from .serde import to_primitive
 
 
-CATALOG_VERSION = "1.2.0"
+CATALOG_VERSION = "1.3.0"
 CATALOG_CUTOFF_AT = "2026-08-27T00:00:00Z"
 
 CAPABILITY_UNITS: Mapping[str, str] = {
     "capacity_bytes": "B",
     "peak_ops_per_s": "op/s",
+    "bandwidth_gbps": "Gb/s_decimal_shared_total",
     "read_bandwidth_gbps": "Gb/s_decimal_one_way",
     "write_bandwidth_gbps": "Gb/s_decimal_one_way",
     "read_latency_ns": "ns",
@@ -588,11 +589,12 @@ def _hbm_ports(
     generation: str,
     channels: int,
     bandwidth_gbps: float,
+    protocol: str = "HBM",
 ) -> Tuple[PortSpec, ...]:
     return (
         PortSpec(
             port_id="host",
-            protocol="HBM",
+            protocol=protocol,
             role="device",
             version=generation,
             lanes=channels,
@@ -616,6 +618,8 @@ def _hbm_preset(
     limitations: Sequence[str],
     notes: str,
     sources: Sequence[ComponentSource],
+    protocol: str = "HBM",
+    family: str = "HBM",
 ) -> ComponentPresetDefinition:
     component_id = preset_id.replace("-", "_")
     cost_profile_template, cost_profile_parameter_basis = _hbm_cost_profile_template(
@@ -628,7 +632,8 @@ def _hbm_preset(
         "interface_bits": io_bits,
         "channels": channels,
         "capacity_gb": capacity_gb,
-        "kind_policy": "HBM 代际只写入 metadata；ComponentSpec.kind 固定保持为 hbm。",
+        "kind_policy": "{} 介质代际写入 metadata；ComponentSpec.kind 固定保持为 hbm，以复用 GPU 本地显存服务模型。".format(generation),
+        "interface_protocol": protocol,
     }
     component = ComponentSpec(
         component_id=component_id,
@@ -638,6 +643,7 @@ def _hbm_preset(
             generation=generation,
             channels=channels,
             bandwidth_gbps=bandwidth_gbps,
+            protocol=protocol,
         ),
         capacity_bytes=_gb(capacity_gb),
         read_bandwidth_gbps=bandwidth_gbps,
@@ -655,7 +661,7 @@ def _hbm_preset(
                     "HBM3": "JESD238B.01",
                     "HBM4": "JESD270-4A",
                 }.get(generation, "{}-{}".format(generation, CATALOG_VERSION)),
-                "value_scope": "单个 HBM 堆叠的峰值读写带宽模板",
+                "value_scope": "单个 {} 本地显存介质的峰值读写带宽模板".format(generation),
                 "conditions": [
                     "十进制带宽单位",
                     "未扣除 ECC、控制器开销、封装损耗或热降频",
@@ -675,7 +681,7 @@ def _hbm_preset(
     return ComponentPresetDefinition(
         preset_id=preset_id,
         name=name,
-        family="HBM",
+        family=family,
         component=component,
         sources=tuple(sources),
         evidence_level=evidence_level,
@@ -2138,7 +2144,9 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
             ports=(
                 PortSpec(
                     port_id="ucie0",
-                    protocol="UCIe",
+                    # HBF is the logical service protocol.  The physical
+                    # package transport remains recorded in metadata.
+                    protocol="HBF",
                     role="endpoint",
                     version="2.0",
                     lanes=64,
@@ -2147,47 +2155,48 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
                     metadata=_port_metadata(
                         {
                             "performance_grade": "grade_3",
-                            "bandwidth_basis": "analytical_UCIe_x64_32_GTps_envelope",
+                            "bandwidth_basis": "analytical_HBF_x64_32_GTps_envelope",
+                            "physical_transport_protocol": "UCIe",
                             "media_bandwidth_modeled_separately": True,
                         }
                     ),
                 ),
             ),
             capacity_bytes=_gb(512.0),
-            read_bandwidth_gbps=24000.0,
-            write_bandwidth_gbps=0.0,
+            # ComponentSpec stores one-way rates in Gb/s; these are the
+            # requested decimal 488 GB/s read and 27.2 GB/s write values.
+            read_bandwidth_gbps=3904.0,
+            write_bandwidth_gbps=217.6,
             metadata=_component_metadata(
                 "ocp-hbf-2026-512gb",
                 technology={
                     "generation": "HBF 2026 OCP",
                     "media": "NAND flash",
-                    "interface": "UCIe / xPU-HBF",
+                    "interface": "HBF logical service over UCIe",
                     "capacity_gb": 512,
-                    "read_bandwidth_gbps": 24000.0,
-                    "write_bandwidth_gbps": None,
+                    "read_bandwidth_gbps": 3904.0,
+                    "write_bandwidth_gbps": 217.6,
                     "non_volatile": True,
                 },
                 sources=(SK_HYNIX_HBF_SOURCE, SANDISK_HBF_SOURCE),
                 evidence_level=S3_VENDOR_PREPRODUCTION,
                 limitations=(
-                    "2026 OCP HBF 仍是新兴开放规范/生态模板；供应链、控制器和软件栈可用性需要单独确认。",
-                    "公开信息主要强调读带宽和容量，写带宽未建模，IR 写带宽字段保持 0.0。",
-                    "UCIe 端口采用每方向 256 GB/s 分析 envelope；3 TB/s 是媒体读峰值，不是端口线速。",
-                    "适合 AI inference 权重/冷数据近封装读取分析，不应当替代低延迟 HBM 建模。",
+                    "2026 OCP HBF 仍是新兴生态参考；本预设的读写带宽和延迟是用户指定的分析坐标，不是量产 SKU 实测。",
+                    "HBF 通过 HBF 逻辑协议链路建模，metadata.physical_transport_protocol=UCIe 保留封装承载信息。",
+                    "读写方向带宽不对称；端到端吞吐仍受链路、控制器、事务粒度和队列深度限制。",
+                    "active-memory 语义仅用于显式 KV Cache 敏感性分析，不代表公开 HBF 产品已经提供透明 load/store。",
                 ),
-                notes="High Bandwidth Flash 位于 HBM 与 SSD 层之间；拓扑中需要显式添加 UCIe 链路。",
-                measurement_basis="采用公开 3 TB/s 读带宽等级，按十进制单位换算到 IR 带宽字段。",
+                notes="High Bandwidth Flash 位于 HBM 与 SSD 层之间；拓扑使用 HBF 逻辑链路并记录 UCIe 物理承载。",
+                measurement_basis="用户指定 488/27.2 GB/s 和 4/75 us 分析坐标；带宽换算到 IR Gb/s 字段。",
                 extras={
-                    "read_latency_ns": 2500.0,
-                    "write_latency_ns": 0.0,
+                    "read_latency_ns": 4000.0,
+                    "write_latency_ns": 75000.0,
                     "transfer_granularity_bytes": 4096,
                     "max_outstanding_requests": 32,
                     "dma_bandwidth_gbps": 2048.0,
                     "dma_latency_ns": 800.0,
                     "dma_energy_pj_per_byte": 0.0,
                     "unknown_value_sentinels": {
-                        "write_bandwidth_gbps": "0.0 means unknown/not declared, not physical zero",
-                        "write_latency_ns": "0.0 means unknown/not declared, not zero latency",
                         "dma_energy_pj_per_byte": "0.0 means unknown/not declared, not zero energy",
                     },
                     "storage_transport_parameter_basis": (
@@ -2219,11 +2228,30 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
                     },
                     "value_scope": "单个近封装非易失存储组件模板",
                     "conditions": [
-                        "预生产/工作流级公开信息",
-                        "只建模读峰值，不建模写入性能",
-                        "需要显式 UCIe 链路，且链路与媒体带宽分别受限",
+                        "预生产/工作流级公开信息与用户指定分析坐标",
+                        "读写带宽和读写延迟均是可替换分析参数",
+                        "需要显式 HBF 逻辑链路，物理承载仍记录为 UCIe",
                     ],
-                    "derived_formula": "公开 TB/s 峰值乘以 8000，写入 IR 带宽字段",
+                    "derived_formula": "用户指定十进制 GB/s 乘以 8，写入 IR Gb/s 字段",
+                    "access_mode": "memory",
+                    "read_only": False,
+                    "writable": True,
+                    "write_buffer_bytes": 0,
+                    "memory_service_owner": "ocp_hbf_2026_512gb.memory",
+                    "cost_profile_key": "host_memory",
+                    "cost_profile_template": {
+                        "bandwidth_gb_s": 488.0,
+                        "efficiency": 1.0,
+                        "energy_pj_per_byte": 12.0,
+                        "resource_id": "ocp_hbf_2026_512gb.memory",
+                        "name": "HBF analytical active-memory profile",
+                        "read_latency_ns": 4000.0,
+                        "write_latency_ns": 75000.0,
+                        "transaction_bytes": 4096,
+                        "max_outstanding_requests": 32,
+                        "read_bandwidth_gb_s": 488.0,
+                        "write_bandwidth_gb_s": 27.2,
+                    },
                     "expires_at": "2027-08-22",
                 },
             ),
@@ -2231,12 +2259,11 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
         sources=(SK_HYNIX_HBF_SOURCE, SANDISK_HBF_SOURCE),
         evidence_level=S3_VENDOR_PREPRODUCTION,
         limitations=(
-            "2026 OCP HBF 仍是新兴开放规范/生态模板；供应链、控制器和软件栈可用性需要单独确认。",
-            "公开信息主要强调读带宽和容量，写带宽未建模，IR 写带宽字段保持 0.0。",
-            "UCIe 端口采用每方向 256 GB/s 分析 envelope；3 TB/s 是媒体读峰值，不是端口线速。",
-            "适合 AI inference 权重/冷数据近封装读取分析，不应当替代低延迟 HBM 建模。",
+            "2026 OCP HBF 仍是新兴生态参考；本预设的读写带宽和延迟是用户指定的分析坐标，不是量产 SKU 实测。",
+            "HBF 使用 HBF 逻辑协议链路，metadata.physical_transport_protocol=UCIe 保留封装承载信息。",
+            "active-memory 语义仅用于显式 KV Cache 敏感性分析，不代表公开 HBF 产品已经提供透明 load/store。",
         ),
-        notes="High Bandwidth Flash 位于 HBM 与 SSD 层之间；拓扑中需要显式添加 UCIe 链路。",
+        notes="High Bandwidth Flash 位于 HBM 与 SSD 层之间；拓扑使用 HBF 逻辑链路并记录 UCIe 物理承载。",
         tags=("memory", "hbf", "ucie", "flash"),
     ),
     ComponentPresetDefinition(
@@ -2419,41 +2446,138 @@ _GENERIC_HBM3E = _curated_clone(
     },
 )
 
+# The RTX 5080 native comparison uses GDDR7, not HBM.  The runtime keeps the
+# active-memory kind ``hbm`` for the historical GPU-local memory service node,
+# while this preset preserves the real GDDR7 protocol and technology identity.
+_RTX5080_GDDR7 = _hbm_preset(
+    "gddr7-16gb-30_0-256bit",
+    "GDDR7 16GB 30Gb/s 256-bit GPU Memory",
+    generation="GDDR7",
+    pin_speed_gbps=30.0,
+    io_bits=256,
+    channels=256,
+    capacity_gb=16.0,
+    bandwidth_gbps=30.0 * 256,
+    evidence_level=S2_VENDOR_DECLARED,
+    limitations=(
+        "该预设采用 RTX 5080 公布的 GDDR7 16GB、30Gb/s、256-bit 接口参数；实际可用容量和持续吞吐受驱动、控制器和工作负载影响。",
+        "读写带宽是同一 GDDR7 接口的方向性上限，不应相加理解为同时双倍预算。",
+        "ComponentSpec.kind 保持 hbm 是模拟器 GPU 本地显存服务的兼容表示；真实介质由 protocol=GDDR7 和 metadata/interface_protocol 标明。",
+    ),
+    notes="NVIDIA GeForce RTX 5080 的 GDDR7 本地显存预设；30Gb/s × 256-bit ÷ 8 = 960GB/s，写入 IR 为 7680Gb/s。",
+    sources=(NVIDIA_RTX_5080_SOURCE,),
+    protocol="GDDR7",
+    family="GDDR7 GPU Memory",
+)
+_RTX5080_GDDR7 = _curated_clone(
+    _RTX5080_GDDR7,
+    preset_id="gddr7-16gb-30_0-256bit",
+    name="GDDR7 16GB 30Gb/s 256-bit GPU Memory",
+    tags=("memory", "gddr7", "gpu_memory"),
+    technology_updates={
+        "vendor": "NVIDIA GeForce RTX 5080 configuration",
+        "memory_type": "GDDR7",
+        "data_rate_gbps": 30.0,
+        "interface_bits": 256,
+        "bandwidth_gb_s": 960.0,
+        "simulator_component_kind": "hbm",
+        "simulator_node_role": "logical_gpu_attached_memory",
+    },
+    provenance={
+        "capacity_bytes": {"value": 16, "unit": "GB_decimal", "source_field": "RTX 5080 standard memory configuration"},
+        "pin_speed_gbps": {"value": 30.0, "unit": "Gb/s_per_pin", "source_field": "RTX 5080 memory speed"},
+        "interface_bits": {"value": 256, "unit": "bit", "source_field": "RTX 5080 memory interface width"},
+        "read_bandwidth_gbps": {"formula": "30 Gb/s/pin × 256 bit ÷ 8 = 960 GB/s = 7680 Gb/s", "unit": "Gb/s_decimal_one_way", "source_field": "RTX 5080 memory bandwidth"},
+        "write_bandwidth_gbps": {"formula": "same GDDR7 interface peak used as a directional write envelope", "status": "derived_directional_envelope"},
+    },
+)
+
 _HBF_BASE = _legacy_component("ocp-hbf-2026-512gb")
 _SK_HYNIX_HBF = _curated_clone(
     _HBF_BASE,
     preset_id="sk-hynix-hbf-512gb",
-    name="SK hynix HBF 512GB Grade 3 (up to 3.0TB/s read)",
+    name="SK hynix HBF 512GB (488 GB/s read, 27.2 GB/s write analytical)",
     family="High Bandwidth Flash",
     sources=(SK_HYNIX_HBF_OFFICIAL_SOURCE,),
     evidence_level=S3_VENDOR_PREPRODUCTION,
     limitations=(
-        "SK hynix 公告为 HBF 开放标准与 up-to 等级，不是量产 SKU 的持续实测吞吐。",
-        "公告未给出通用写带宽；write_bandwidth_gbps=0 表示 unknown/not declared。",
-        "媒体峰值与 UCIe 链路分别建模，端到端吞吐取受限资源和队列服务时间。",
+        "读写带宽和读写延迟采用用户指定分析坐标，不是量产 SKU 的持续实测吞吐。",
+        "HBF 逻辑链路 protocol=HBF；metadata.physical_transport_protocol=UCIe 记录物理封装承载。",
+        "active-memory 语义用于 KV Cache 敏感性分析；端到端吞吐仍受链路、控制器和队列约束。",
     ),
-    notes="SK hynix HBF 标准参考节点；512GB 和 Grade 3 up-to 3.0TB/s 由厂家公告记录。",
-    component_updates={"read_bandwidth_gbps": 24000.0, "write_bandwidth_gbps": 0.0},
-    technology_updates={"vendor": "SK hynix", "generation": "HBF 2026 OCP", "bandwidth_scope": "Grade3_up_to_3.0TB_per_s_read"},
+    notes="SK hynix HBF 512GB 参考节点；读写带宽和延迟是用户指定的可替换分析参数。",
+    component_updates={
+        "read_bandwidth_gbps": 3904.0,
+        "write_bandwidth_gbps": 217.6,
+        "bandwidth_gbps": 3904.0,
+        "cost_profile_id": "sk_hynix_hbf_512gb_memory",
+    },
+    technology_updates={
+        "vendor": "SK hynix",
+        "generation": "HBF 2026 OCP",
+        "bandwidth_scope": "user_configured_488GB_per_s_read_27_2GB_per_s_write",
+        "read_bandwidth_gbps": 3904.0,
+        "write_bandwidth_gbps": 217.6,
+        "read_bandwidth_gb_s": 488.0,
+        "write_bandwidth_gb_s": 27.2,
+        "read_latency_us": 4.0,
+        "write_latency_us": 75.0,
+        "logical_protocol": "HBF",
+        "physical_transport_protocol": "UCIe",
+    },
     provenance={
         "capacity_bytes": {"value": 512, "unit": "GB_decimal", "source_field": "capacity specifications up to 512GB"},
-        "read_bandwidth_gbps": {"value": 3.0, "unit": "TB/s_decimal", "formula": "3.0 TB/s × 8000 = 24000 Gb/s", "source_field": "Grade3 up-to bandwidth"},
-        "write_bandwidth_gbps": {"value": None, "unit": "Gb/s_decimal_one_way", "status": "not_published"},
-        "interface": {"value": "UCIe", "unit": "protocol", "source_field": "HBF adopts UCIe"},
-        "source_excerpt": "SK hynix announcement: capacity up to 512GB; Grade1–3 approximately 0.4–3.0TB/s; UCIe connection",
+        "read_bandwidth_gbps": {"value": 488.0, "unit": "GB/s_decimal", "formula": "user-specified 488 GB/s × 8 = 3904 Gb/s", "status": "analytical_user_configured"},
+        "write_bandwidth_gbps": {"value": 27.2, "unit": "GB/s_decimal", "formula": "user-specified 27.2 GB/s × 8 = 217.6 Gb/s", "status": "analytical_user_configured"},
+        "read_latency_ns": {"value": 4000.0, "unit": "ns", "formula": "user-specified 4 us × 1000", "status": "analytical_user_configured"},
+        "write_latency_ns": {"value": 75000.0, "unit": "ns", "formula": "user-specified 75 us × 1000", "status": "analytical_user_configured"},
+        "interface": {"value": "HBF", "unit": "logical_protocol", "physical_transport": "UCIe", "status": "analytical_protocol_alias"},
+        "source_excerpt": "SK hynix announcement: HBF uses UCIe physical connection; this preset applies user-provided logical HBF service parameters",
     },
 )
 _SK_HYNIX_HBF.component.metadata["capability_status"] = {
-    "read_bandwidth_gbps": "vendor_declared_up_to",
-    "write_bandwidth_gbps": "not_published",
-    "write_latency_ns": "not_published",
+    "read_bandwidth_gbps": "analytical_user_configured",
+    "write_bandwidth_gbps": "analytical_user_configured",
+    "read_latency_ns": "analytical_user_configured",
+    "write_latency_ns": "analytical_user_configured",
     "dma_energy_pj_per_byte": "not_published",
 }
 _SK_HYNIX_HBF.component.metadata["facts"] = {
-    "写入带宽状态": "未公开（not_published）；IR 中 0 仅为未知哨兵，不代表物理零带宽",
-    "写入延迟状态": "未公开（not_published）；不得按 0 ns 计费",
+    "读带宽": "488 GB/s（用户指定分析参数）",
+    "写带宽": "27.2 GB/s（用户指定分析参数）",
+    "读延迟": "4 us（用户指定分析参数）",
+    "写延迟": "75 us（用户指定分析参数）",
+    "链路协议": "HBF（逻辑）；UCIe（物理承载）",
     "DMA 能耗状态": "未公开（not_published）；不得按 0 pJ/B 宣称零能耗",
 }
+_SK_HYNIX_HBF.component.metadata.update({
+    # Opt in to the typed active-memory contract so the default B200
+    # architecture can be used for KV placement scans.  The profile remains
+    # analytical and is remapped per materialized component instance.
+    "access_mode": "memory",
+    "read_only": False,
+    "writable": True,
+    "write_buffer_bytes": 0,
+    "memory_service_owner": "sk_hynix_hbf_512gb.memory",
+    "transfer_granularity_bytes": 4096,
+    "max_outstanding_requests": 32,
+    "read_latency_ns": 4000.0,
+    "write_latency_ns": 75000.0,
+    "cost_profile_key": "host_memory",
+    "cost_profile_template": {
+        "bandwidth_gb_s": 488.0,
+        "efficiency": 1.0,
+        "energy_pj_per_byte": 12.0,
+        "resource_id": "sk_hynix_hbf_512gb.memory",
+        "name": "HBF analytical active-memory profile",
+        "read_latency_ns": 4000.0,
+        "write_latency_ns": 75000.0,
+        "transaction_bytes": 4096,
+        "max_outstanding_requests": 32,
+        "read_bandwidth_gb_s": 488.0,
+        "write_bandwidth_gb_s": 27.2,
+    },
+})
 
 # The user called this product "Ti Pro9100"; YMTC's official page names it
 # TiPlus9100. Keep the stable simulator ID while recording the exact official
@@ -2550,6 +2674,114 @@ _SAMSUNG_DDR5.component.metadata["conditions"] = [
     "64-bit payload width; ECC bits excluded from payload bandwidth",
     "latency/efficiency are editable analytical controller defaults",
 ]
+
+# Local measured configuration from Win32_PhysicalMemory on the development
+# host: four 32 GiB DIMMs, two memory channels, and a currently trained
+# DDR5-5600 data rate.  This is a machine snapshot, not a vendor SKU claim.
+_ACER_LOCAL_DDR5 = _curated_clone(
+    _SAMSUNG_DDR5,
+    preset_id="acer-local-ddr5-128gb-5600-dual-channel",
+    name="本机 Acer DDR5 128 GiB DDR5-5600 双通道",
+    family="Local measured DDR5",
+    sources=(),
+    evidence_level=S4_PRIMARY_RESEARCH,
+    limitations=(
+        "这是本机 Win32_PhysicalMemory 快照，不是 Acer 的公开产品 SKU；更换 DIMM、BIOS memory training 或通道数后应重新读取。",
+        "第二组 DIMM 的 SPD Speed 为 4800，但当前 ConfiguredClockSpeed 为 5600；带宽按当前配置速率和两个通道计算。",
+        "系统未提供端到端内存访问延迟；延迟、效率和事务粒度仍是可编辑分析参数。",
+    ),
+    notes="本机实测安装配置：4×32 GiB，A/B 双通道，当前 DDR5-5600；理论 payload 带宽 5600 MT/s × 64 bit ÷ 8 × 2 = 89.6 GB/s。",
+    component_updates={
+        "capacity_bytes": 4 * 32 * 1024 ** 3,
+        "bandwidth_gbps": 716.8,
+        "read_bandwidth_gbps": 716.8,
+        "write_bandwidth_gbps": 716.8,
+        "ports": (PortSpec(
+            port_id="host",
+            protocol="DDR5",
+            role="device",
+            version="DDR5-5600",
+            lanes=128,
+            bandwidth_gbps=716.8,
+            metadata=_port_metadata({
+                "data_rate_mt_s": 5600,
+                "interface_width_bits": 64,
+                "channel_count": 2,
+                "bandwidth_scope": "configured_system_payload_one_way",
+            }),
+        ),),
+    },
+    technology_updates={
+        "vendor": "Acer (SMBIOS manufacturer)",
+        "generation": "DDR5",
+        "capacity_gib": 128,
+        "installed_dimm_count": 4,
+        "module_capacity_gib": 32,
+        "configured_data_rate_mt_s": 5600,
+        "spd_data_rates_mt_s": [5600, 4800, 5600, 4800],
+        "channel_count": 2,
+        "part_numbers": ["BL.9BWWR.424", "BL.9BWWR.373"],
+    },
+    provenance={
+        "manufacturer": {"value": "Acer", "source_field": "Win32_PhysicalMemory.Manufacturer", "status": "local_snapshot"},
+        "part_numbers": {"value": ["BL.9BWWR.424", "BL.9BWWR.373"], "source_field": "Win32_PhysicalMemory.PartNumber", "status": "local_snapshot"},
+        "capacity_bytes": {"value": 137438953472, "unit": "B", "formula": "4 × 32 GiB", "source_field": "Win32_PhysicalMemory.Capacity", "status": "local_snapshot"},
+        "configured_data_rate_mt_s": {"value": 5600, "unit": "MT/s", "source_field": "Win32_PhysicalMemory.ConfiguredClockSpeed", "status": "local_snapshot"},
+        "bandwidth_gb_s": {"value": 89.6, "unit": "GB/s_decimal", "formula": "5600 MT/s × 64 bit ÷ 8 × 2 channels", "status": "derived_from_local_snapshot"},
+    },
+)
+_ACER_LOCAL_DDR5 = replace(
+    _ACER_LOCAL_DDR5,
+    sources=(),
+    component=replace(
+        _ACER_LOCAL_DDR5.component,
+        metadata={
+            **_ACER_LOCAL_DDR5.component.metadata,
+            "local_hardware_snapshot": {
+                "source": "Win32_PhysicalMemory",
+                "captured_at": "2026-09-27",
+                "manufacturer": "Acer",
+                "part_numbers": ["BL.9BWWR.424", "BL.9BWWR.373"],
+                "module_count": 4,
+                "module_capacity_bytes": 34359738368,
+                "capacity_bytes": 137438953472,
+                "spd_speed_mt_s": [5600, 4800, 5600, 4800],
+                "configured_speed_mt_s": 5600,
+                "channel_count": 2,
+                "theoretical_bandwidth_gb_s": 89.6,
+            },
+            "facts": {
+                "本机厂商": "Acer（SMBIOS）",
+                "料号": "BL.9BWWR.424 ×2；BL.9BWWR.373 ×2",
+                "安装容量": "128 GiB（4 × 32 GiB）",
+                "当前速率": "5600 MT/s",
+                "通道": "双通道",
+                "理论带宽": "89.6 GB/s",
+            },
+            "sources": [],
+        },
+    ),
+)
+_ACER_LOCAL_PROFILE, _ACER_LOCAL_PROFILE_BASIS = _host_memory_cost_profile_template(
+    "acer_local_ddr5_128gb_5600_dual_channel",
+    716.8,
+    name="acer-local-ddr5-128gb-5600-dual-channel-memory-profile",
+    read_latency_ns=100.0,
+    write_latency_ns=100.0,
+    transaction_bytes=256,
+    max_outstanding_requests=32,
+)
+_ACER_LOCAL_DDR5 = replace(
+    _ACER_LOCAL_DDR5,
+    component=replace(
+        _ACER_LOCAL_DDR5.component,
+        metadata={
+            **_ACER_LOCAL_DDR5.component.metadata,
+            "cost_profile_template": _ACER_LOCAL_PROFILE,
+            "cost_profile_parameter_basis": _ACER_LOCAL_PROFILE_BASIS,
+        },
+    ),
+)
 
 _SRAM_CIM = _curated_clone(
     _legacy_component("digital-sram-cim-analysis"),
@@ -2686,9 +2918,11 @@ _RTX_5080 = _consumer_gpu_preset(
 
 _PRESETS: Tuple[ComponentPresetDefinition, ...] = (
     _SAMSUNG_HBM3E,
+    _RTX5080_GDDR7,
     _SK_HYNIX_HBF,
     _TIPRO9100,
     _SAMSUNG_DDR5,
+    _ACER_LOCAL_DDR5,
     _SRAM_CIM,
     _B200_GPU,
     _RYZEN_9_9950X3D,
@@ -3142,7 +3376,7 @@ _PRESET_MUTATION_IGNORED_FIELDS = frozenset({
 _COMPONENT_MUTATION_FIELDS = frozenset({
     "component_id", "kind", "cost_profile_id", "ports", "package_id", "die_id",
     "capacity_bytes", "peak_ops_per_s", "read_bandwidth_gbps",
-    "write_bandwidth_gbps", "metadata", "schema_version",
+    "write_bandwidth_gbps", "bandwidth_gbps", "metadata", "schema_version",
 })
 _PORT_MUTATION_FIELDS = frozenset({
     "port_id", "protocol", "role", "direction", "version", "lanes",
@@ -3191,28 +3425,20 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
     payload.setdefault("peak_ops_per_s", 0.0)
     payload.setdefault("read_bandwidth_gbps", 0.0)
     payload.setdefault("write_bandwidth_gbps", 0.0)
+    # Keep an omitted shared total omitted. The IR derives active-memory
+    # defaults; flash/SSD write capability must never be inferred from reads.
+    payload.setdefault("bandwidth_gbps", 0.0)
     if str(payload.get("kind", "")).strip().lower().replace("-", "_") == "gpu":
         # GPU presets own compute capability.  Device-memory capacity and
         # media bandwidth must be represented by explicit HBM/memory nodes.
         payload["capacity_bytes"] = 0
         payload["read_bandwidth_gbps"] = 0.0
         payload["write_bandwidth_gbps"] = 0.0
+        payload["bandwidth_gbps"] = 0.0
     metadata = dict(_mutation_mapping(payload.get("metadata", {}), "component.metadata"))
     template = metadata.get("cost_profile_template")
-    if isinstance(template, Mapping) and template and not any(isinstance(item, Mapping) for item in template.values()):
-        # Keep the common flat memory profile aligned with the editable
-        # capability fields.  Nested GPU/CIM profiles remain explicit JSON and
-        # are not guessed here.
-        synchronized = dict(template)
-        read_gb_s = float(payload["read_bandwidth_gbps"]) / 8.0
-        write_gb_s = float(payload["write_bandwidth_gbps"]) / 8.0
-        if "bandwidth_gb_s" in synchronized:
-            synchronized["bandwidth_gb_s"] = read_gb_s
-        if "read_bandwidth_gb_s" in synchronized:
-            synchronized["read_bandwidth_gb_s"] = read_gb_s
-        if "write_bandwidth_gb_s" in synchronized:
-            synchronized["write_bandwidth_gb_s"] = write_gb_s
-        metadata["cost_profile_template"] = synchronized
+    # Profile rates describe a calibrated service model and are bounded by
+    # hardware during scenario resolution. Preserve them across catalog edits.
     payload["metadata"] = metadata
     try:
         return ComponentSpec(**payload)

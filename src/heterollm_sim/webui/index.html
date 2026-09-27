@@ -48,6 +48,7 @@ PLACEHOLDERS / BOUNDARIES
         <button type="button" class="button button-quiet top-settings-button" id="settingsButton" aria-haspopup="dialog" aria-controls="settingsDialog">设置</button>
         <span class="action-divider" aria-hidden="true"></span>
         <button type="button" class="button button-secondary" id="validateButton">校验</button>
+        <button type="button" class="button button-quiet" id="kvAnalysisButton" aria-haspopup="dialog" aria-controls="kvAnalysisDialog" data-i18n-zh="KV Cache 分层扫描" data-i18n-en="KV Cache Residency Scan">KV Cache Residency Scan</button>
         <button type="button" class="button button-quiet" id="openDirectScoreButton">Native 评分</button>
         <button type="button" class="button button-primary" id="runButton">运行仿真</button>
       </div>
@@ -202,6 +203,7 @@ PLACEHOLDERS / BOUNDARIES
                         <option value="HBM">HBM</option>
                         <option value="PCIe">PCIe</option>
                         <option value="CXL">CXL</option>
+                        <option value="HBF">HBF</option>
                         <option value="UCIe" selected>UCIe</option>
                         <option value="NVLink">NVLink</option>
                         <option value="NVLink-C2C">NVLink-C2C</option>
@@ -252,6 +254,7 @@ PLACEHOLDERS / BOUNDARIES
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-roce"></i>RoCE</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-infinityfabric"></i>Infinity Fabric</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-hbm"></i>HBM / internal</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-ddr"></i>DDR</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-lpddr5x"></i>LPDDR5X</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-unknown"></i><span data-i18n-zh="未知" data-i18n-en="Unknown">Unknown</span></span>
                 </div>
@@ -471,6 +474,7 @@ PLACEHOLDERS / BOUNDARIES
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-roce"></i>RoCE</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-infinityfabric"></i>Infinity Fabric</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-hbm"></i>HBM / internal</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-ddr"></i>DDR</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-lpddr5x"></i>LPDDR5X</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-unknown"></i><span data-i18n-zh="未知" data-i18n-en="Unknown">Unknown</span></span>
                 </div>
@@ -681,8 +685,8 @@ PLACEHOLDERS / BOUNDARIES
         <label class="field"><span>组件类型（必填）</span><input id="componentPresetEditorKind" name="kind" required placeholder="hbm / hbf / ssd / gpu" autocomplete="off"></label>
         <label class="field"><span>厂商/系列</span><input id="componentPresetEditorFamily" name="family" value="用户自定义" autocomplete="off"></label>
         <label class="field"><span>容量（Capacity）</span><span class="field-input-with-unit"><input id="componentPresetEditorCapacity" name="capacity_bytes" type="text" inputmode="decimal" value="0 B" placeholder="例如 32 GB"><small class="field-unit">B/KB…PB</small></span></label>
-        <label class="field"><span>读带宽（Read Bandwidth）</span><span class="field-input-with-unit"><input id="componentPresetEditorReadBandwidth" name="read_bandwidth_gbps" type="text" inputmode="decimal" value="0 GB/s" placeholder="例如 1.024 TB/s"><small class="field-unit">MB/s…TB/s</small></span></label>
-        <label class="field"><span>写带宽（Write Bandwidth）</span><span class="field-input-with-unit"><input id="componentPresetEditorWriteBandwidth" name="write_bandwidth_gbps" type="text" inputmode="decimal" value="0 GB/s" placeholder="未公开或例如 1 TB/s"><small class="field-unit">MB/s…TB/s</small></span></label>
+        <label class="field"><span>共享总带宽（Shared Total Bandwidth）</span><span class="field-input-with-unit"><input id="componentPresetEditorBandwidth" name="bandwidth_gbps" type="text" inputmode="decimal" value="0 GB/s" placeholder="for example 3 TB/s"><small class="field-unit">MB/s…TB/s</small></span></label>
+        <details class="component-preset-editor-advanced field-span-all"><summary>Directional bandwidth (optional)</summary><p class="muted">Basic mode uses one shared total; fill the two fields only for an explicit directional bottleneck.</p><div class="field-grid-2"><label class="field"><span>Directional Read</span><span class="field-input-with-unit"><input id="componentPresetEditorReadBandwidth" name="read_bandwidth_gbps" type="text" inputmode="decimal" value="0 GB/s" placeholder="Leave blank to use the shared total"><small class="field-unit">MB/s…TB/s</small></span></label><label class="field"><span>Directional Write</span><span class="field-input-with-unit"><input id="componentPresetEditorWriteBandwidth" name="write_bandwidth_gbps" type="text" inputmode="decimal" value="0 GB/s" placeholder="Unknown or independent ceiling"><small class="field-unit">MB/s…TB/s</small></span></label></div></details>
         <label class="field"><span>峰值算力（Peak Compute）</span><span class="field-input-with-unit"><input id="componentPresetEditorPeakOps" name="peak_ops_per_s" type="text" inputmode="decimal" value="0 OPS/s" placeholder="例如 2.25 POPS"><small class="field-unit">OPS/s…POPS</small></span></label>
         <label class="field"><span>读延迟（Read Latency）</span><span class="field-input-with-unit"><input id="componentPresetEditorReadLatency" name="read_latency_ns" type="number" min="0" step="any" value="0"><small class="field-unit">ns</small></span></label>
         <label class="field"><span>写延迟（Write Latency）</span><span class="field-input-with-unit"><input id="componentPresetEditorWriteLatency" name="write_latency_ns" type="number" min="0" step="any" value="0"><small class="field-unit">ns</small></span></label>
@@ -829,6 +833,32 @@ PLACEHOLDERS / BOUNDARIES
         <summary>扫描诊断与限制（Diagnostics &amp; Limits）</summary>
         <div id="architectureScanDiagnostics"></div>
       </details>
+    </div>
+  </dialog>
+
+  <dialog class="architecture-scan-dialog kv-analysis-dialog" id="kvAnalysisDialog" aria-labelledby="kvAnalysisDialogTitle" aria-describedby="kvAnalysisDescription">
+    <div class="architecture-scan-shell">
+      <header class="dialog-head">
+        <div>
+          <span class="eyebrow kicker" data-i18n-zh="KV 驻留决策 · KV RESIDENCY EXPLORER" data-i18n-en="KV Residency Explorer">KV Residency Explorer</span>
+          <h2 id="kvAnalysisDialogTitle" data-i18n-zh="KV Cache 分层扫描" data-i18n-en="KV Cache Residency Scan">KV Cache Residency Scan</h2>
+          <p id="kvAnalysisDescription" data-i18n-zh="复制当前模型和负载，分别运行 HBM、HBF 及混合候选，比较 TTFT、TPOT、E2E、KV 峰值驻留、读写流量和迁移成本。扫描不会修改当前场景。" data-i18n-en="Clone the current model and workload, run HBM, HBF, and hybrid candidates, and compare TTFT, TPOT, E2E, KV peak residency, traffic, and migration cost. The scan does not modify the current scenario.">Clone the current model and workload, run HBM, HBF, and hybrid candidates, and compare TTFT, TPOT, E2E, KV peak residency, traffic, and migration cost. The scan does not modify the current scenario.</p>
+        </div>
+        <button type="button" class="icon-button" id="closeKvAnalysisButton" aria-label="Close KV Cache residency scan" data-i18n-aria-label-zh="关闭 KV Cache 分层扫描" data-i18n-aria-label-en="Close KV Cache residency scan">×</button>
+      </header>
+      <div class="architecture-scan-controls kv-analysis-controls">
+        <span class="kv-analysis-scope" id="kvAnalysisScope" data-i18n-zh="当前模型 · 当前负载 · 当前硬件" data-i18n-en="Current model · current workload · current hardware">Current model · current workload · current hardware</span>
+        <button type="button" class="button button-primary" id="runKvAnalysisButton" data-i18n-zh="运行分层对比" data-i18n-en="Run residency comparison">Run residency comparison</button>
+      </div>
+      <div class="architecture-scan-status" id="kvAnalysisStatus" role="status" aria-live="polite" data-i18n-zh="尚未运行分层对比。" data-i18n-en="Residency comparison has not run yet.">Residency comparison has not run yet.</div>
+      <div class="architecture-scan-summary" id="kvAnalysisSummary"></div>
+      <div class="table-shell architecture-scan-table-shell kv-analysis-table-shell">
+        <table class="data-table architecture-scan-table kv-analysis-table">
+          <thead><tr><th data-i18n-zh="候选" data-i18n-en="Candidate">Candidate</th><th data-i18n-zh="状态" data-i18n-en="Status">Status</th><th>TTFT p50</th><th>TPOT p50</th><th>E2E p50</th><th data-i18n-zh="KV 峰值 / 容量" data-i18n-en="KV peak / capacity">KV peak / capacity</th><th data-i18n-zh="KV 流量" data-i18n-en="KV traffic">KV traffic</th><th data-i18n-zh="迁移 / 解释" data-i18n-en="Migration / explanation">Migration / explanation</th></tr></thead>
+          <tbody id="kvAnalysisBody"><tr><td colspan="8" class="empty-row" data-i18n-zh="运行后显示各分层方案的完整结果。" data-i18n-en="Run the scan to show complete results for each residency candidate.">Run the scan to show complete results for each residency candidate.</td></tr></tbody>
+        </table>
+      </div>
+      <p class="muted kv-analysis-note" id="kvAnalysisNote" data-i18n-zh="结果来自当前后端的 ANALYTICAL 事件仿真；HBF 若未声明可写能力会被标记为不可行，不会被静默当成 HBM。" data-i18n-en="Results come from the current backend ANALYTICAL event simulation. HBF without declared write capability is marked infeasible instead of being silently treated as HBM.">Results come from the current backend ANALYTICAL event simulation. HBF without declared write capability is marked infeasible instead of being silently treated as HBM.</p>
     </div>
   </dialog>
 

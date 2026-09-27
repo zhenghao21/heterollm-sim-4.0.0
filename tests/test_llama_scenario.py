@@ -1,6 +1,11 @@
 from dataclasses import replace
 
-from heterollm_sim.llama_scenario import apply_llama_runtime_config
+import pytest
+
+from heterollm_sim.llama_scenario import (
+    apply_llama_runtime_config,
+    llama_cpp_gpu_layer_mapping,
+)
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.runtime_adapters import LlamaCppRuntimeConfig
 from heterollm_sim.control_plane_state import mapping_input_fingerprint
@@ -39,3 +44,48 @@ def test_no_kv_offload_moves_cache_to_host_memory():
                                    offload_kqv=False)
     lowered = apply_llama_runtime_config(scenario, config)
     assert lowered.placement.kv_policy.cache_component == "hostmem0"
+
+
+def test_qwen_nextn_loading_units_are_mapped_only_with_exact_evidence():
+    scenario = build_reference_scenario()
+    metadata = {
+        **scenario.model.graph.attributes.get("metadata", {}),
+        "gguf_declared_block_count": scenario.model.num_layers + 1,
+        "gguf_imported_executable_layers": scenario.model.num_layers,
+        "gguf_mtp_layer_count": 1,
+    }
+    model = replace(
+        scenario.model,
+        graph=replace(
+            scenario.model.graph,
+            attributes={**scenario.model.graph.attributes, "metadata": metadata},
+        ),
+    )
+    mapped = llama_cpp_gpu_layer_mapping(
+        replace(scenario, model=model),
+        LlamaCppRuntimeConfig(gpu_layers=scenario.model.num_layers + 2),
+    )
+    assert mapped["simulator_gpu_layers"] == scenario.model.num_layers + 1
+    assert mapped["excluded_mtp_loading_units"] == 1
+    assert mapped["mapping_applied"] is True
+
+    with pytest.raises(ValueError, match="refusing to clamp"):
+        llama_cpp_gpu_layer_mapping(
+            scenario,
+            LlamaCppRuntimeConfig(gpu_layers=scenario.model.num_layers + 2),
+        )
+
+
+def test_native_builder_serializes_only_single_request_prefill():
+    from tools.native_llama_compare import build_matching_scenario
+
+    single = build_matching_scenario(
+        8, 1, ctx=256, parallel=1, batch=32, ubatch=16,
+        threads=2, gpu_layers=-1,
+    )
+    batch = build_matching_scenario(
+        8, 1, ctx=256, parallel=2, batch=32, ubatch=16,
+        threads=2, gpu_layers=-1,
+    )
+    assert single.workload.metadata["llama_cpp_single_request_prefill_serialized"] is True
+    assert batch.workload.metadata["llama_cpp_single_request_prefill_serialized"] is False
