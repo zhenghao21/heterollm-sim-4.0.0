@@ -328,7 +328,8 @@ def _resolve_llama_scheduler_policy(
 def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntimeConfig) -> Mapping[str, Any]:
     """Return authoritative llama.cpp layer -> KV owner mapping."""
     view = model_graph_execution_view(scenario.model.graph, schema_version=scenario.model.schema_version)
-    layers = tuple(item.layer for item in view.layer_instances if not item.layer.is_linear_attention)
+    all_layers = tuple(item.layer for item in view.layer_instances)
+    layers = tuple(layer for layer in all_layers if not layer.is_linear_attention)
     loading_mapping = llama_cpp_gpu_layer_mapping(scenario, config)
     simulator_gpu_layers = int(loading_mapping["simulator_gpu_layers"])
     components = scenario.hardware.component_map()
@@ -362,9 +363,9 @@ def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntime
         # and places the last N loadable layers on GPU.  The output layer is
         # handled by the existing final-norm binding and is not a KV layer.
         if simulator_gpu_layers >= 0 and host is not None:
-            gpu_start = max(0, len(layers) - simulator_gpu_layers)
-            for index, layer in enumerate(layers):
-                if index < gpu_start:
+            gpu_start = max(0, len(all_layers) + 1 - simulator_gpu_layers)
+            for index, layer in enumerate(all_layers):
+                if index < gpu_start and layer.layer_id in owner:
                     owner[layer.layer_id] = host
     for layer_id, component_id in owner.items():
         component = components.get(component_id)
@@ -610,14 +611,21 @@ def apply_llama_runtime_config(
         assumptions=tuple(dict.fromkeys((*scenario.assumptions, "llama.cpp runtime config lowered into typed scheduler/KV/offload semantics"))),
     )
     if materialize_placement:
+        placement_policy = PlacementPolicy(
+            gpu_loadable_layers=options["gpu_loadable_layers"],
+            gpu_loadable_order=options["gpu_loadable_order"],
+            tied_weight_runtime_copies=options["tied_weight_runtime_copies"],
+        )
+        if config.device_memory_tiering:
+            from .llama_memory import prepare_device_memory_policy
+            lowered, placement_policy = prepare_device_memory_policy(lowered, placement_policy)
         decision = plan_runtime_placement(
             lowered,
-            PlacementPolicy(
-                gpu_loadable_layers=options["gpu_loadable_layers"],
-                gpu_loadable_order=options["gpu_loadable_order"],
-                tied_weight_runtime_copies=options["tied_weight_runtime_copies"],
-            ),
+            placement_policy,
         )
+        if config.device_memory_tiering and not decision.fully_placed:
+            missing = "; ".join(item.item_id + ": " + item.reason for item in decision.unplaced)
+            raise ValueError("llama.cpp device-memory placement is incomplete: " + missing)
         lowered = decision.apply(lowered)
         # Keep the runtime evidence alongside planner evidence after apply().
         metadata = dict(lowered.placement.metadata)
@@ -633,8 +641,36 @@ def apply_llama_runtime_config(
     return lowered
 
 
+def prepare_llama_scenario(scenario: ScenarioConfig) -> ScenarioConfig:
+    """Shared analytical entry point; preserve separately bound native evidence.
+
+    A benchmark that already applied the same runtime config needs no second
+    application. The analytical tier extension is explicitly opt-in and uses
+    source rules without requiring a source checkout or executable.
+    """
+    config = scenario.llama_cpp_config
+    if config is None or config.policy != "llama_cpp":
+        return scenario
+    metadata = scenario.placement.metadata
+    if metadata.get("llama_cpp_runtime_fingerprint") == config.fingerprint:
+        if not config.device_memory_tiering:
+            return scenario
+        from .llama_memory import device_memory_input_fingerprint
+        if metadata.get("llama_device_memory_input_fingerprint") == device_memory_input_fingerprint(scenario):
+            return scenario
+    lowered = apply_llama_runtime_config(scenario, config)
+    if config.device_memory_tiering:
+        from .llama_memory import device_memory_input_fingerprint
+        lowered = replace(lowered, placement=replace(lowered.placement, metadata={
+            **lowered.placement.metadata,
+            "llama_device_memory_input_fingerprint": device_memory_input_fingerprint(lowered),
+        }))
+    return lowered
+
+
 __all__ = [
     "apply_llama_runtime_config",
+    "prepare_llama_scenario",
     "llama_final_norm_static_binding",
     "llama_cpp_gpu_layer_mapping",
     "llama_cpp_kv_layer_mapping",

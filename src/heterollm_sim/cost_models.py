@@ -29,6 +29,7 @@ from .mmvq_work import (
 )
 from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
 from .memory_service import realtime_memory_metrics
+from .data_motion import memory_service as _memory_service
 
 
 MMVQ_HBM_MODE_LEGACY = "legacy_mma_output_wave"
@@ -1500,6 +1501,7 @@ class HBMProfile:
 
     bandwidth_gb_s: float = 1.0
     efficiency: float = 1.0
+    service_model: str = "analytical"
     measured_effective_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
     energy_pj_per_byte: float = 0.0
     resource_id: str = "hbm.channel"
@@ -1511,6 +1513,8 @@ class HBMProfile:
     write_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
 
     def __post_init__(self) -> None:
+        if self.service_model not in {"analytical", "serialized", "overlapped"}:
+            raise ValueError("memory_service_model must be analytical, serialized or overlapped")
         _require_positive("bandwidth_gb_s", self.bandwidth_gb_s)
         if self.measured_effective_bandwidth_gb_s is not None:
             _require_positive("measured_effective_bandwidth_gb_s", self.measured_effective_bandwidth_gb_s)
@@ -1575,6 +1579,7 @@ class HBMProfile:
             write_latency_ns=self.write_latency_ns,
             transaction_bytes=self.transaction_bytes,
             max_outstanding_requests=self.max_outstanding_requests,
+            service_model=self.service_model,
         )
 
 
@@ -1584,6 +1589,7 @@ class HostMemoryProfile:
 
     bandwidth_gb_s: float = 1.0
     efficiency: float = 1.0
+    service_model: str = "analytical"
     measured_effective_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
     energy_pj_per_byte: float = 0.0
     resource_id: str = "host.memory"
@@ -1596,6 +1602,8 @@ class HostMemoryProfile:
     write_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
 
     def __post_init__(self) -> None:
+        if self.service_model not in {"analytical", "serialized", "overlapped"}:
+            raise ValueError("memory_service_model must be analytical, serialized or overlapped")
         _require_positive("bandwidth_gb_s", self.bandwidth_gb_s)
         if self.measured_effective_bandwidth_gb_s is not None:
             _require_positive("measured_effective_bandwidth_gb_s", self.measured_effective_bandwidth_gb_s)
@@ -1661,6 +1669,7 @@ class HostMemoryProfile:
             write_latency_ns=self.write_latency_ns,
             transaction_bytes=self.transaction_bytes,
             max_outstanding_requests=self.max_outstanding_requests,
+            service_model=self.service_model,
         )
 
 
@@ -2437,144 +2446,6 @@ class DigitalSramCimProfile:
         return estimate_cim_gemm(self, workload, weights_resident=weights_resident)
 
 
-def _memory_service(
-    *,
-    read_bytes: int,
-    write_bytes: int,
-    bandwidth_gb_s: float,
-    read_bandwidth_gb_s: Optional[float] = None,
-    write_bandwidth_gb_s: Optional[float] = None,
-    read_latency_ns: float = 0.0,
-    write_latency_ns: float = 0.0,
-    transaction_bytes: int = 256,
-    max_outstanding_requests: int = 32,
-) -> Mapping[str, object]:
-    """Analytical bandwidth/latency envelope for one resolved payload stream.
-
-    Reads and writes share the outstanding-request window.  Request-slot time
-    divided by that window is an optimistic concurrency bound, not a schedule.
-    A nonempty direction also cannot complete before its single-request latency.
-    Bandwidth and these bounds overlap (max, not sum).  Zero latency reproduces
-    the historical payload/BW model exactly, including partial transactions.
-
-    Inputs must already reflect cache misses or other physical-flow decisions.
-    No addresses, access ordering or achieved MLP are known: transaction counts
-    assume coalesced per-direction streams, and payload bytes are NOT rounded up
-    to transaction size.  Unaligned/strided overfetch must be supplied upstream.
-    """
-
-    _require_non_negative_int("read_bytes", read_bytes)
-    _require_non_negative_int("write_bytes", write_bytes)
-    _require_positive("bandwidth_gb_s", bandwidth_gb_s)
-    read_bw = bandwidth_gb_s if read_bandwidth_gb_s is None else read_bandwidth_gb_s
-    write_bw = bandwidth_gb_s if write_bandwidth_gb_s is None else write_bandwidth_gb_s
-    _require_positive("read_bandwidth_gb_s", read_bw)
-    _require_positive("write_bandwidth_gb_s", write_bw)
-    _require_non_negative("read_latency_ns", read_latency_ns)
-    _require_non_negative("write_latency_ns", write_latency_ns)
-    _require_positive_int("transaction_bytes", transaction_bytes)
-    _require_positive_int("max_outstanding_requests", max_outstanding_requests)
-    physical_bytes = read_bytes + write_bytes
-    read_transactions = _ceil_div(read_bytes, transaction_bytes)
-    write_transactions = _ceil_div(write_bytes, transaction_bytes)
-    transaction_count = read_transactions + write_transactions
-    effective_outstanding = min(max_outstanding_requests, transaction_count)
-    read_bandwidth_service_ns = read_bytes / read_bw if read_bytes else 0.0
-    write_bandwidth_service_ns = write_bytes / write_bw if write_bytes else 0.0
-    # One shared controller: directions add; preserve exact legacy rounding
-    # when their rates coincide (rather than adding two rounded divisions).
-    bandwidth_service_ns = (
-        physical_bytes / read_bw if read_bw == write_bw else
-        read_bandwidth_service_ns + write_bandwidth_service_ns
-    )
-    single_request_latency_ns = max(
-        read_latency_ns if read_transactions else 0.0,
-        write_latency_ns if write_transactions else 0.0,
-    )
-    request_slot_time_ns = (
-        read_transactions * read_latency_ns
-        + write_transactions * write_latency_ns
-    )
-    concurrency_service_ns = (
-        request_slot_time_ns / effective_outstanding
-        if effective_outstanding else 0.0
-    )
-    latency_service_ns = max(single_request_latency_ns, concurrency_service_ns)
-    service_ns = max(bandwidth_service_ns, latency_service_ns)
-    service_source = (
-        "zero_traffic" if not physical_bytes else
-        "latency_concurrency" if latency_service_ns > bandwidth_service_ns else
-        "bandwidth_and_latency_concurrency" if latency_service_ns == bandwidth_service_ns else
-        "bandwidth"
-    )
-    if service_source == "latency_concurrency":
-        bottleneck = "latency_concurrency"
-    elif service_source == "bandwidth_and_latency_concurrency":
-        bottleneck = "bandwidth_and_latency_concurrency"
-    elif service_source == "bandwidth":
-        bottleneck = "bandwidth"
-    else:
-        bottleneck = "none"
-    metrics = realtime_memory_metrics(
-        physical_bytes,
-        service_ns,
-        physical_bytes=physical_bytes,
-        bandwidth_ceiling_gb_s=(
-            physical_bytes / bandwidth_service_ns
-            if bandwidth_service_ns > 0 else 0.0
-        ),
-        queue_wait_ns=max(0.0, concurrency_service_ns - single_request_latency_ns),
-        request_window_utilization=(
-            min(1.0, transaction_count / float(max_outstanding_requests))
-            if transaction_count else 0.0
-        ),
-        bottleneck=bottleneck,
-    )
-    return {
-        "model": "memory_bandwidth_latency_concurrency_bound_v1",
-        "evidence": EvidenceStatus.ANALYTICAL.value,
-        "cycle_accurate": False,
-        "latency_model_enabled": read_latency_ns > 0.0 or write_latency_ns > 0.0,
-        "byte_scope": "resolved_backing_payload",
-        "logical_read_bytes": read_bytes,
-        "logical_write_bytes": write_bytes,
-        "logical_bytes": physical_bytes,
-        "physical_read_bytes": read_bytes,
-        "physical_write_bytes": write_bytes,
-        "physical_bytes": physical_bytes,
-        "physical_traffic_basis": "payload_only_no_transaction_padding",
-        "transaction_bytes": transaction_bytes,
-        "read_transactions": read_transactions,
-        "write_transactions": write_transactions,
-        "transaction_count": transaction_count,
-        "max_outstanding_requests": max_outstanding_requests,
-        "effective_outstanding": effective_outstanding,
-        "outstanding_basis": "configured_limit_capped_by_transaction_count",
-        "concurrency_assumption": "independent_requests_shared_read_write_window",
-        "read_latency_ns": read_latency_ns,
-        "write_latency_ns": write_latency_ns,
-        "bandwidth_gb_s": bandwidth_gb_s,
-        "read_bandwidth_gb_s": read_bw,
-        "write_bandwidth_gb_s": write_bw,
-        "read_bandwidth_service_ns": read_bandwidth_service_ns,
-        "write_bandwidth_service_ns": write_bandwidth_service_ns,
-        "bandwidth_model": "shared_controller_directional_serial_payload",
-        "bandwidth_service_ns": bandwidth_service_ns,
-        "single_request_latency_ns": single_request_latency_ns,
-        "request_slot_time_ns": request_slot_time_ns,
-        "concurrency_service_ns": concurrency_service_ns,
-        "latency_service_ns": latency_service_ns,
-        "latency_bound": latency_service_ns > bandwidth_service_ns,
-        "service_source": service_source,
-        "service_ns": service_ns,
-        **metrics,
-        "unmodeled_terms": (
-            "request_dependencies_and_achieved_mlp",
-            "transaction_alignment_fragmentation_and_padding",
-            "bank_row_buffer_refresh_and_read_write_turnaround",
-        ),
-    }
-
 
 def _cache_memory_demands(
     *,
@@ -2870,11 +2741,19 @@ def quantized_shape_efficiency(
             sum(work.loop_iterations_by_thread),
             len(work.loop_iterations_by_thread) * max_iterations,
         )
-        effective = min(output, cta_wave, lane)
+        source_effective = min(output, cta_wave, lane)
+        # Source MMVQ geometry is evidence only until it has an independently
+        # qualified throughput/occupancy model. Keep the legacy analytical
+        # output-wave factor on the cost path so adding source metadata cannot
+        # change the main demand by itself.
+        legacy_effective = ratio(float(tile_wave.get("output_tile_wave_utilization", 1.0)), 1.0)
         return {
             "model": "source_mmvq_geometry_shape_efficiency_v1",
-            "effective": effective,
+            "effective": legacy_effective,
             "applied_to_compute": True,
+            "source_geometry_applied_to_compute": False,
+            "source_geometry_effective": source_effective,
+            "legacy_fallback_effective": legacy_effective,
             "output_utilization": output,
             "cta_wave_utilization": cta_wave,
             "active_k_lane_utilization": lane,
@@ -6477,3 +6356,4 @@ __all__ = [
     "estimate_gpu_reduction",
     "estimate_gpu_tensor_kernel",
 ]
+

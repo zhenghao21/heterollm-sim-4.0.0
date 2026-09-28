@@ -15,15 +15,13 @@ from dataclasses import dataclass
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .contracts import ResourceDemand, TaskCategory, TaskSpec
+from .data_motion import LinkService, endpoint_service, resolve_service
 from .ir import (
-    OFFLOAD_STORAGE_COMPONENT_KINDS,
     ComponentSpec,
     HardwareSpec,
     LinkSpec,
     default_memory_resource_id,
-    is_local_memory_interface_link,
 )
-from .memory_service import realtime_memory_metrics
 
 
 def _non_negative_integer(value: object, name: str) -> int:
@@ -64,7 +62,10 @@ def declared_resource_owners(hardware: HardwareSpec) -> Mapping[str, str]:
     for logical, owner in raw.items():
         bind(logical, owner)
     for component in hardware.components:
-        common = component.metadata.get("memory_service_owner")
+        common = (component.metadata.get("memory_service", {}).get("physical_owner")
+                  or component.metadata.get("physical_owner")
+                  or component.metadata.get("memory_service_owner")
+                  or (default_memory_resource_id(component) if component.is_storage else None))
         for direction in ("read", "write"):
             owner = component.metadata.get(direction + "_service_owner", common)
             if owner is not None:
@@ -83,6 +84,8 @@ class RouteHop:
     bandwidth_gbps: float
     latency_ns: float
     energy_pj_per_byte: float = 0.0
+    service_ref: Optional[str] = None
+    queue_depth: int = 1
 
     def transfer_ns(self, byte_count: int) -> float:
         _non_negative_integer(byte_count, "byte_count")
@@ -90,6 +93,21 @@ class RouteHop:
             raise ValueError("route hop bandwidth must be positive")
         # Gbit/s is numerically bit/ns.
         return self.latency_ns + (8.0 * byte_count) / self.bandwidth_gbps
+
+    @property
+    def service(self) -> LinkService:
+        return LinkService(self.link_id, self.resource_id, self.resource_id,
+                           self.bandwidth_gbps / 8.0, self.latency_ns, self.queue_depth)
+
+    @property
+    def resource_capacities(self) -> Mapping[str, int]:
+        return {} if self.service_ref else self.service.resource_capacities
+
+    def demands(self, byte_count: int) -> Tuple[ResourceDemand, ...]:
+        _non_negative_integer(byte_count, "byte_count")
+        if self.service_ref is not None:
+            return ()
+        return self.service.demands(byte_count, energy_pj_per_byte=self.energy_pj_per_byte)
 
 
 @dataclass(frozen=True)
@@ -369,6 +387,10 @@ class TopologyRouter:
             self._add_link_direction(link, link.source_component, link.target_component)
             if link.bidirectional:
                 self._add_link_direction(link, link.target_component, link.source_component)
+        self.resource_capacities = {}
+        for hops in self._adjacency.values():
+            for hop in hops:
+                self.resource_capacities.update(hop.resource_capacities)
         for component_id in self._adjacency:
             self._adjacency[component_id].sort(
                 key=lambda hop: (hop.target_component, hop.link_id, hop.resource_id)
@@ -379,66 +401,62 @@ class TopologyRouter:
     ) -> None:
         if source_component not in self.components or target_component not in self.components:
             return
-        local_memory_link = is_local_memory_interface_link(link, self.hardware)
+        service_ref = link.metadata.get("service_ref")
+        source_flag = str(link.metadata.get("bandwidth_source", "")).strip().lower()
         memory_component = None
-        if local_memory_link:
-            source_candidate = self.components.get(source_component)
-            target_candidate = self.components.get(target_component)
-            memory_component = (
-                source_candidate if source_candidate is not None and source_candidate.is_active_memory
-                else target_candidate if target_candidate is not None and target_candidate.is_active_memory
-                else None
-            )
+        if service_ref or source_flag in {"component", "memory_component", "shared_component"}:
+            candidates = [self.components[ident] for ident in (source_component, target_component)
+                          if self.components[ident].is_storage]
+            if service_ref:
+                candidates = [item for item in candidates if str(service_ref) in {
+                    item.component_id, item.component_id + ".access",
+                    str(item.metadata.get("memory_service", {}).get("service_id", "")),
+                }]
+            if len(candidates) != 1:
+                raise ValueError("link {} service_ref must identify one storage endpoint".format(link.link_id))
+            memory_component = candidates[0]
+            owner = resolve_service(memory_component).resource_id
+            declared = link.metadata.get("bandwidth_resource_id")
+            if declared and declared != owner:
+                raise ValueError("link {} bandwidth_resource_id conflicts with service_ref {}".format(link.link_id, service_ref or memory_component.component_id))
+            service_ref = memory_component.component_id + ".access"
         bandwidth = float(link.bandwidth_gbps)
         if memory_component is not None:
-            # The protocol/link declaration is the transfer ceiling.  Binding
-            # it to the component resource shares contention without allowing
-            # the topology view to exceed its negotiated limit.
             direction = "read" if memory_component.component_id == source_component else "write"
-            component_limit = float(memory_component.directional_bandwidth_gbps(direction))
-            if component_limit > 0:
-                bandwidth = min(component_limit, bandwidth) if bandwidth > 0 else component_limit
-        if bandwidth <= 0:
+            physical_service = resolve_service(memory_component)
+            bandwidth = getattr(physical_service, direction + "_bandwidth_gb_s") * 8.0
+        elif str(link.protocol).strip().lower() in {"hbm", "hbm_stack", "hbf", "ddr", "dram", "tsv", "lpddr5x"}:
+            # An unbound local interface remains an independent topology
+            # service, but its negotiated rate cannot exceed the endpoint's
+            # declared direction. This is a physical link ceiling, not an
+            # inferred service alias.
+            candidates = [self.components[ident] for ident in (source_component, target_component)
+                          if self.components[ident].is_storage]
+            if candidates:
+                direction = "read" if candidates[0].component_id == source_component else "write"
+                endpoint_limit = candidates[0].directional_bandwidth_gbps(direction)
+                if endpoint_limit > 0 and bandwidth > 0:
+                    bandwidth = min(bandwidth, endpoint_limit)
+        if bandwidth <= 0 and memory_component is None:
             source_port = self.hardware.get_port(source_component, (
                 link.source_port if source_component == link.source_component else link.target_port
             ))
             target_port = self.hardware.get_port(target_component, (
                 link.target_port if target_component == link.target_component else link.source_port
             ))
-            positive = [
-                float(value)
-                for value in (source_port.bandwidth_gbps, target_port.bandwidth_gbps)
-                if float(value) > 0
-            ]
+            positive = [float(value) for value in (source_port.bandwidth_gbps, target_port.bandwidth_gbps)
+                        if float(value) > 0]
             bandwidth = min(positive) if positive else 0.0
         if bandwidth <= 0:
             return
-        declared_owner = (
-            str(memory_component.metadata.get("memory_service_owner"))
-            if memory_component is not None
-            and memory_component.metadata.get("memory_service_owner")
-            else None
-        )
-        source_flag = str(link.metadata.get("bandwidth_source", "")).strip().lower()
-        # A component owner alone is only a declaration of who owns endpoint
-        # service.  The link must also opt into using that service as its
-        # bandwidth resource before endpoint charging can be coalesced.
-        explicit_shared_binding = (
-            declared_owner is not None
-            and source_flag in {"component", "memory_component", "shared_component"}
-        )
-        shared = bool(link.metadata.get("shared_bidirectional", not link.bidirectional)) or explicit_shared_binding
-        resource_id = (
-            str(link.metadata.get("bandwidth_resource_id"))
-            if memory_component is not None and explicit_shared_binding and link.metadata.get("bandwidth_resource_id")
-            else declared_owner
-            if memory_component is not None and declared_owner is not None
-            else default_memory_resource_id(memory_component)
-            if memory_component is not None and explicit_shared_binding
-            else "link.{}".format(link.link_id)
-        )
-        if not shared:
-            resource_id += ".{}->{}".format(source_component, target_component)
+        if memory_component is not None:
+            resource_id = resolve_service(memory_component).resource_id
+        else:
+            resource_id = str(link.metadata.get("bandwidth_resource_id") or "link.{}".format(link.link_id))
+            shared = bool(link.metadata.get("shared_bidirectional", not link.bidirectional))
+            if not shared:
+                resource_id += ".{}->{}".format(source_component, target_component)
+        queue_depth = _metadata_positive_integer(link.metadata, "queue_depth", 1, "link " + link.link_id)
         self._adjacency[source_component].append(
             RouteHop(
                 link_id=link.link_id,
@@ -446,7 +464,9 @@ class TopologyRouter:
                 target_component=target_component,
                 resource_id=resource_id,
                 bandwidth_gbps=bandwidth,
-                latency_ns=float(link.latency_ns),
+                latency_ns=0.0 if service_ref else float(link.latency_ns),
+                service_ref=str(service_ref) if service_ref else None,
+                queue_depth=queue_depth,
                 energy_pj_per_byte=_metadata_non_negative_number(
                     link.metadata,
                     "energy_pj_per_byte",
@@ -550,60 +570,39 @@ class TopologyRouter:
         phases: List[TransferPhase] = []
         source = self.components[source_component]
         target = self.components[target_component]
-        def includes_endpoint(component: ComponentSpec, hop: RouteHop, direction: str) -> bool:
-            # Protocol names alone do not declare whether bus time includes
-            # endpoint service. Only an explicit shared service declaration
-            # can replace the endpoint's latency, payload and contention.
-            link = self._links[hop.link_id]
-            if (not component.is_active_memory
-                    or not component.metadata.get("memory_service_owner")
-                    or str(link.metadata.get("bandwidth_source", "")).strip().lower()
-                    not in {"component", "memory_component", "shared_component"}):
-                return False
-            endpoint_id = "component.{}.{}".format(component.component_id, direction)
-            return self.resource_owners.get(endpoint_id, endpoint_id) == self.resource_owners.get(
-                hop.resource_id, hop.resource_id
-            )
-
-        read = (
-            None
-            if includes_endpoint(source, route[0], "read")
-            else self._endpoint_phase(source, byte_count, read=True, name=name)
-        )
+        # A reference edge only describes connectivity. The endpoint service
+        # owns its timing, payload and controller; never delete the endpoint
+        # because a topology view happens to share its resource name.
+        read = self._endpoint_phase(source, byte_count, read=True, name=name)
         if read is not None:
             phases.append(read)
         source_dma = self._dma_phase(source, byte_count, name=name, direction="out")
         if source_dma is not None:
             phases.append(source_dma)
         for index, hop in enumerate(route):
+            if hop.service_ref is not None:
+                continue
             phases.append(
                 TransferPhase(
                     name="{}.link{:02d}".format(name, index),
-                    demands=(
-                        ResourceDemand(
-                            resource_id=hop.resource_id,
-                            service_ns=hop.transfer_ns(byte_count),
-                            bytes_moved=byte_count,
-                            energy_pj=byte_count * hop.energy_pj_per_byte,
-                        ),
-                    ),
+                    demands=hop.demands(byte_count),
                     metadata={
                         "event_kind": "transfer",
                         "source_component": hop.source_component,
                         "target_component": hop.target_component,
                         "link_id": hop.link_id,
                         "bytes": byte_count,
+                        "operation_id": name,
+                        "access_kind": "COPY",
+                        "link_bytes": byte_count,
+                        "resource_capacities": hop.resource_capacities,
                     },
                 )
             )
         target_dma = self._dma_phase(target, byte_count, name=name, direction="in")
         if target_dma is not None:
             phases.append(target_dma)
-        write = (
-            None
-            if includes_endpoint(target, route[-1], "write")
-            else self._endpoint_phase(target, byte_count, read=False, name=name)
-        )
+        write = self._endpoint_phase(target, byte_count, read=False, name=name)
         if write is not None:
             phases.append(write)
         mode = self.coherent_dma_mode if coherent_dma_mode is None else str(
@@ -668,7 +667,7 @@ class TopologyRouter:
             max_inflight_chunks=max_inflight_chunks, consumers=consumers,
             request_id=request_id, name=name, buffer_id=buffer_id,
             resource_owners=self.resource_owners if resource_owners is None else resource_owners,
-            resource_capacities=resource_capacities,
+            resource_capacities={**self.resource_capacities, **dict(resource_capacities or {})},
         )
 
     def _coherent_dma_phase(
@@ -832,179 +831,10 @@ class TopologyRouter:
     def _endpoint_phase(
         component: ComponentSpec, byte_count: int, *, read: bool, name: str
     ) -> Optional[TransferPhase]:
-        _non_negative_integer(byte_count, "byte_count")
-        bandwidth = float(component.directional_bandwidth_gbps("read" if read else "write"))
-        if bandwidth <= 0:
-            # Offload media are active transfer endpoints.  Silently omitting
-            # a missing direction used to make an HBF with unknown write
-            # bandwidth accept state/KV writes at zero cost.  Active HBM/DRAM
-            # interfaces may rely on their declared topology link or global
-            # memory profile, but HBF/SSD media must fail closed when a real
-            # transfer uses an unknown direction.
-            if (
-                byte_count > 0
-                and component.normalized_kind
-                in OFFLOAD_STORAGE_COMPONENT_KINDS
-            ):
-                direction = "read" if read else "write"
-                raise ValueError(
-                    "storage component {} requires a positive {} bandwidth "
-                    "for this transfer".format(component.component_id, direction)
-                )
+        service = endpoint_service(component, byte_count, read=read, name=name)
+        if service is None:
             return None
-        direction = "read" if read else "write"
-        # Opt-in OCP-style cold-page accounting.  The link still carries the
-        # host-visible request bytes; this endpoint demand charges the
-        # physical page traffic and media latency separately.  We intentionally
-        # keep one logical endpoint demand: a shared physical owner cannot
-        # accept two demands from the same task, and the diagnostic metadata
-        # retains RMW read bytes for write requests.
-        if component.normalized_kind == "hbf" and component.metadata.get("hbf_media") is not None:
-            if byte_count == 0:
-                return None
-            from .hbf_media import hbf_media_service
-            media = hbf_media_service(component, byte_count, read)
-            physical_bytes = media["physical_read_bytes"] if read else media["physical_bytes"]
-            return TransferPhase(
-                name="{}.{}.{}.cold_page".format(name, component.component_id, direction),
-                demands=(ResourceDemand(
-                    resource_id="component.{}.{}".format(component.component_id, direction),
-                    service_ns=media["service_ns"],
-                    bytes_moved=physical_bytes,
-                    energy_pj=media["energy_pj"],
-                ),),
-                metadata={
-                    "event_kind": "memory_{}".format(direction),
-                    "component_id": component.component_id,
-                    "bytes": byte_count,
-                    "transferred_bytes": media["host_transfer_bytes"],
-                    "physical_bytes": media["physical_bytes"],
-                    "hbf_media": media,
-                    "transfer_granularity_bytes": media["media_page_bytes"],
-                    "transactions": media["command_count"],
-                    "max_outstanding_requests": media["command_queue_depth"],
-                    "latency_ns": (media["page_read_latency_ns"] if read
-                                   else media["page_program_latency_ns"]),
-                    "latency_batches": media["media_waves"],
-                    "bandwidth_service_ns": media["host_service_ns"],
-                    "latency_service_ns": media["media_read_service_ns"] if read else media["service_ns"],
-                    "physical_kind": component.normalized_kind,
-                    "access_mode": component.metadata.get("access_mode", "default"),
-                    "memory_service_model": "cold_page_v1",
-                    "timing_evidence": "ANALYTICAL",
-                },
-            )
-        latency = _metadata_non_negative_number(
-            component.metadata,
-            "{}_latency_ns".format(direction),
-            0.0,
-            component.component_id,
-        )
-        granularity_raw = component.metadata.get("transfer_granularity_bytes", 0)
-        if isinstance(granularity_raw, bool):
-            raise ValueError(
-                "component {} transfer_granularity_bytes must be a non-negative integer".format(
-                    component.component_id
-                )
-            )
-        try:
-            granularity = int(granularity_raw)
-        except (TypeError, ValueError, OverflowError):
-            raise ValueError(
-                "component {} transfer_granularity_bytes must be a non-negative integer".format(
-                    component.component_id
-                )
-            )
-        if granularity < 0 or (
-            isinstance(granularity_raw, float) and granularity_raw != granularity
-        ):
-            raise ValueError(
-                "component {} transfer_granularity_bytes must be a non-negative integer".format(
-                    component.component_id
-                )
-            )
-        transaction_count = 1 if byte_count > 0 else 0
-        transferred_bytes = byte_count
-        if granularity > 0 and byte_count > 0:
-            transaction_count = int(math.ceil(byte_count / float(granularity)))
-            transferred_bytes = transaction_count * granularity
-        max_outstanding = _metadata_positive_integer(
-            component.metadata,
-            "max_outstanding_requests",
-            1,
-            component.component_id,
-        )
-        latency_batches = (
-            int(math.ceil(transaction_count / float(max_outstanding)))
-            if transaction_count
-            else 0
-        )
-        # Preserve the legacy conservative serialized endpoint model.  An
-        # explicitly memory-addressable/pipelined controller can instead use
-        # the same bandwidth/MLP envelope as active memory.  This never turns
-        # flash pages into DRAM cache lines: granularity rounding stays above.
-        service_model = component.metadata.get("memory_service_model", "serialized")
-        if service_model not in {"serialized", "overlapped"}:
-            raise ValueError("memory_service_model must be serialized or overlapped")
-        bandwidth_ns = (8.0 * transferred_bytes) / bandwidth
-        latency_ns = latency_batches * latency
-        service_ns = latency_ns + bandwidth_ns
-        if service_model == "overlapped":
-            service_ns = max(latency_ns, bandwidth_ns)
-        energy_key = "{}_energy_pj_per_byte".format(direction)
-        energy = _metadata_non_negative_number(
-            component.metadata,
-            energy_key,
-            0.0,
-            component.component_id,
-        )
-        if service_model == "overlapped":
-            bottleneck = "latency" if latency_ns > bandwidth_ns else "bandwidth"
-            if latency_ns == bandwidth_ns:
-                bottleneck = "bandwidth_and_latency"
-        else:
-            bottleneck = "serialized_bandwidth_and_latency"
-        throughput_metrics = realtime_memory_metrics(
-            byte_count,
-            service_ns,
-            physical_bytes=transferred_bytes,
-            # Component fields are Gbit/s; the shared helper reports GB/s.
-            bandwidth_ceiling_gb_s=bandwidth / 8.0,
-            queue_wait_ns=max(0.0, latency_ns * (latency_batches - 1)),
-            request_window_utilization=min(
-                1.0, transaction_count / float(max_outstanding)
-            ) if transaction_count else 0.0,
-            bottleneck=bottleneck,
-        )
-        return TransferPhase(
-            name="{}.{}.{}".format(name, component.component_id, direction),
-            demands=(
-                ResourceDemand(
-                    resource_id="component.{}.{}".format(component.component_id, direction),
-                    service_ns=service_ns,
-                    bytes_moved=transferred_bytes,
-                    energy_pj=transferred_bytes * energy,
-                ),
-            ),
-            metadata={
-                "event_kind": "memory_{}".format(direction),
-                "component_id": component.component_id,
-                "bytes": byte_count,
-                "transferred_bytes": transferred_bytes,
-                "transfer_granularity_bytes": granularity,
-                "transactions": transaction_count,
-                "max_outstanding_requests": max_outstanding,
-                "latency_batches": latency_batches,
-                "latency_ns": latency,
-                "physical_kind": component.normalized_kind,
-                "access_mode": component.metadata.get("access_mode", "default"),
-                "memory_service_model": service_model,
-                "bandwidth_service_ns": bandwidth_ns,
-                "latency_service_ns": latency_ns,
-                **throughput_metrics,
-                "timing_evidence": "ANALYTICAL",
-            },
-        )
+        return TransferPhase(service.name, service.demands, service.metadata)
 
     @staticmethod
     def _dma_phase(

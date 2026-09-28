@@ -123,7 +123,8 @@ def test_staging_is_per_invocation_raw_activation_once_and_kv_stays_host():
     assert transfers
     # A route may contain several segments. Each segment transports the same
     # single payload; no duplicate transfer is introduced per segment.
-    routes = [(t.metadata.get("source_component"), t.metadata.get("target_component")) for t in transfers]
+    routes = [(t.metadata.get("source_component"), t.metadata.get("target_component"))
+              for t in transfers if t.metadata.get("link_id")]
     assert len(routes) == len(set(routes))
     assert all(t.metadata["bytes"] == main.metadata["weight_read_bytes"] for t in transfers)
     stages = [t for t in schedule.tasks if t.metadata.get("weight_read_invocation_id") == key
@@ -131,6 +132,11 @@ def test_staging_is_per_invocation_raw_activation_once_and_kv_stays_host():
     assert {t.metadata["event_kind"] for t in stages} == {
         "staged_weight_register", "staged_weight_read", "staged_weight_release"}
     assert len({t.metadata["staged_weight_allocation_id"] for t in stages}) == 1
+    register = next(t for t in stages if t.metadata["event_kind"] == "staged_weight_register")
+    writes = [t for t in transfers if t.metadata.get("transfer_phase_event_kind") == "memory_write"]
+    assert writes and writes[-1].metadata["component_id"] == "hbm0"
+    assert register.task_id in ancestors(schedule, transfers[0])
+    assert writes[-1].task_id in ancestors(schedule, main)
     release = next(t for t in stages if t.metadata["event_kind"] == "staged_weight_release")
     assert main.task_id in ancestors(schedule, release)
     assert all(t.metadata["release_semantics"] == "clean_discard" and not t.demands for t in stages)

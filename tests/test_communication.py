@@ -174,29 +174,20 @@ class CommunicationTests(unittest.TestCase):
             tuple(hop["source_component"] for hop in phase.metadata["route_hops"]),
             ("hostmem0", "cpu0", "gpu0"),
         )
-        self.assertEqual(
-            tuple(demand.resource_id for demand in phase.demands),
-            (
-                "component.hostmem0.read",
-                "link.cpu-hostmem-ddr.hostmem0->cpu0",
-                "link.cpu-gpu-pcie.cpu0->gpu0",
-                "link.gpu-vram-hbm.gpu0->vram0",
-                "component.vram0.write",
-            ),
-        )
-        self.assertTrue(
-            all(demand.bytes_moved == byte_count for demand in phase.demands)
-        )
-        self.assertEqual(
-            phase.metadata["resource_directions"],
-            {
-                "component.hostmem0.read": "read",
-                "link.cpu-hostmem-ddr.hostmem0->cpu0": "transfer",
-                "link.cpu-gpu-pcie.cpu0->gpu0": "transfer",
-                "link.gpu-vram-hbm.gpu0->vram0": "transfer",
-                "component.vram0.write": "write",
-            },
-        )
+        # In-flight slots retain arrival latency without charging the payload
+        # twice or occupying the transmitting interface for that entire time.
+        traffic = tuple(d for d in phase.demands if d.bytes_moved)
+        self.assertEqual(tuple(d.resource_id for d in traffic), (
+            "hostmem0.memory", "link.cpu-hostmem-ddr.hostmem0->cpu0",
+            "link.cpu-gpu-pcie.cpu0->gpu0", "link.gpu-vram-hbm.gpu0->vram0",
+            "vram0.hbm_fabric",
+        ))
+        self.assertTrue(all(d.bytes_moved == byte_count for d in traffic))
+        slots = tuple(d for d in phase.demands if not d.bytes_moved)
+        self.assertEqual(len(slots), 3)
+        self.assertTrue(all(d.resource_id.endswith(".inflight") for d in slots))
+        self.assertEqual(phase.metadata["resource_directions"]["hostmem0.memory"], "read")
+        self.assertEqual(phase.metadata["resource_directions"]["vram0.hbm_fabric"], "write")
 
     def test_strict_serialized_mode_keeps_each_dma_stage(self):
         router = _coherent_dma_router()
@@ -341,36 +332,34 @@ class CommunicationTests(unittest.TestCase):
             )
         )
 
-    def test_local_endpoint_coalescing_requires_matching_explicit_service(self):
+    def test_local_service_reference_keeps_endpoint_latency_once(self):
         memory = ComponentSpec(
             "memory", "hbm", ports=(_port("p", "HBM"),),
             read_bandwidth_gbps=80, write_bandwidth_gbps=8,
+            metadata={"read_latency_ns": 1000, "write_latency_ns": 2000},
         )
         gpu = ComponentSpec("gpu", "gpu", ports=(_port("p", "HBM"),))
-        link = LinkSpec("local", "gpu", "p", "memory", "p", "HBM", bandwidth_gbps=100)
-        for owner, source, resource, expected_phases in (
-            (None, None, None, 2),
-            ("memory.controller", None, None, 2),
-            (None, "memory_component", None, 2),
-            ("memory.controller", "memory_component", "other.controller", 2),
-            ("memory.controller", "memory_component", None, 1),
+        link = LinkSpec("local", "gpu", "p", "memory", "p", "HBM", bandwidth_gbps=80,
+                        metadata={"service_ref": "memory.access"})
+        router = TopologyRouter(HardwareSpec("local", (gpu, memory), (link,)))
+        for source, target, event_kind, latency in (
+            ("gpu", "memory", "memory_write", 2000),
+            ("memory", "gpu", "memory_read", 1000),
         ):
-            with self.subTest(owner=owner, source=source, resource=resource):
-                metadata = dict(memory.metadata)
-                if owner:
-                    metadata["memory_service_owner"] = owner
-                link_metadata = {}
-                if source:
-                    link_metadata["bandwidth_source"] = source
-                if resource:
-                    link_metadata["bandwidth_resource_id"] = resource
-                router = TopologyRouter(HardwareSpec("local", (
-                    gpu, replace(memory, metadata=metadata),
-                ), (replace(link, metadata=link_metadata),)))
-                self.assertEqual(len(router.transfer_phases("gpu", "memory", 100)), expected_phases)
-                # A shared link still respects the slower write direction.
-                self.assertEqual(router.route("gpu", "memory", 100)[0].bandwidth_gbps, 8)
-                self.assertEqual(router.route("memory", "gpu", 100)[0].bandwidth_gbps, 80)
+            phases = router.transfer_phases(source, target, 100)
+            self.assertEqual(len(phases), 1)
+            self.assertEqual(phases[0].metadata["event_kind"], event_kind)
+            self.assertEqual(phases[0].demands[0].service_ns, latency)
+            self.assertEqual(phases[0].demands[0].resource_id, "memory.hbm_fabric")
+        independent = TopologyRouter(HardwareSpec("local", (gpu, memory), (
+            replace(link, metadata={"bandwidth_source": "link"}, bandwidth_gbps=4),)))
+        phases = independent.transfer_phases("gpu", "memory", 100)
+        self.assertEqual(len(phases), 2)
+        self.assertEqual(phases[0].demands[0].service_ns, 200)
+        self.assertEqual(phases[1].demands[0].service_ns, 2000)
+        with self.assertRaisesRegex(ValueError, "conflicts with service_ref"):
+            TopologyRouter(HardwareSpec("bad", (gpu, memory), (
+                replace(link, metadata={"service_ref": "memory.access", "bandwidth_resource_id": "other"}),)))
 
     def test_dma_metadata_without_bandwidth_is_not_silently_free(self):
         component = ComponentSpec(

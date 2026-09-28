@@ -54,6 +54,7 @@ function helpers() {
     costProfileDraft,
     storageTransportParameters,
     resetArchitectureDependentProfiles,
+    seedDeepseekV3HbfWeightTargets,
     rebuildRuntimeGpuControllers,
     runtimeGpuControllerIssue,
     stableMappingEqual,
@@ -65,6 +66,7 @@ function helpers() {
     componentKindClass,
     isActiveMemoryComponent,
     isWritableActiveRankMemory,
+    kvAnalysisCandidateScenario,
     kindLabel,
     componentInspectorProfile,
     applyArchitecturePresetDetail,
@@ -79,6 +81,58 @@ function helpers() {
   };`, context, { filename: path.join(webui, "app.js") });
   return context.__architecturePresets;
 }
+
+test("DeepSeek-V3 capacity topology seeds routed expert weights across three HBF targets", () => {
+  const ui = helpers();
+  ui.state.scenario = {
+    model: {
+      metadata: { preset_id: "deepseek-v3-671b" },
+      graph: {
+        operators: [{
+          op_kind: "layer_group",
+          parameters: {
+            overrides: {
+              "layer-003": { metadata: { preset_pattern: "routed_moe" } },
+              "layer-004": { metadata: { preset_pattern: "routed_moe" } },
+              "layer-005": { metadata: { preset_pattern: "routed_moe" } },
+            },
+          },
+        }],
+      },
+    },
+    hardware: { components: [
+      { component_id: "hbf0", kind: "hbf", metadata: { access_mode: "memory", writable: true } },
+      { component_id: "hbf1", kind: "hbf", metadata: { access_mode: "memory", writable: true } },
+      { component_id: "hbf2", kind: "hbf", metadata: { access_mode: "memory", writable: true } },
+    ] },
+    placement: { metadata: { control_plane: { policy: { options: {} } } } },
+  };
+  assert.equal(ui.seedDeepseekV3HbfWeightTargets(), 3);
+  assert.equal(JSON.stringify(ui.state.scenario.placement.metadata.control_plane.policy.options.weight_tensor_targets), JSON.stringify({
+    "layer-003.expert_weights": "hbf0",
+    "layer-004.expert_weights": "hbf1",
+    "layer-005.expert_weights": "hbf2",
+  }));
+});
+
+test("KV residency candidates clear stale control-plane KV targets", () => {
+  const ui = helpers();
+  const base = scenario();
+  base.placement.kv_policy = { cache_component: "hbm0", offload_component: null };
+  base.placement.metadata.control_plane = { policy: { options: {
+    kv_cache_target: "hbm0",
+    kv_layer_targets: { layer0: "hbm0" },
+  } } };
+  const candidate = {
+    id: "hbf",
+    policy: { layout_mode: "fixed", cache_component: "hbf0", offload_component: null },
+  };
+  const mapped = ui.kvAnalysisCandidateScenario(base, candidate);
+  assert.equal(mapped.placement.kv_policy.cache_component, "hbf0");
+  assert.equal(Object.hasOwn(mapped.placement.metadata.control_plane.policy.options, "kv_cache_target"), false);
+  assert.equal(Object.hasOwn(mapped.placement.metadata.control_plane.policy.options, "kv_layer_targets"), false);
+  assert.equal(base.placement.metadata.control_plane.policy.options.kv_cache_target, "hbm0");
+});
 
 test("new active-memory component kinds are visible and usable by V4 placement UI", () => {
   const ui = helpers();

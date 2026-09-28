@@ -106,7 +106,17 @@ def test_remote_table_staging_keeps_entire_capacity_before_local_gather(contract
     assert any(t.metadata.get('weight_read_bytes')==340000 and t.metadata.get('weight_access_semantics')=='full_weight_staging_before_row_lookup' for t in tasks)
     transfers = [t for t in tasks if t.metadata.get('event_kind') == 'model_weight_read']
     assert transfers and all(t.metadata['bytes'] == 340000 for t in transfers)
-    assert all(d.bytes_moved == 340000 for t in transfers for d in t.demands)
+    # The unified link service exposes zero-byte in-flight reservations for
+    # propagation/queue occupancy; payload demands still carry the complete
+    # staged tensor.
+    assert all(
+        d.bytes_moved in {0, 340000}
+        for t in transfers for d in t.demands
+    )
+    assert all(
+        any(d.bytes_moved == 340000 for d in t.demands)
+        for t in transfers
+    )
     assert task.metadata['weight_read_bytes']==2176
     assert task.metadata['lookup_write_bytes']==8192
 

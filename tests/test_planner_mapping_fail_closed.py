@@ -7,10 +7,48 @@ from heterollm_sim.contracts import TaskCategory
 from heterollm_sim.ir import ComponentSpec, LinkSpec, PortSpec
 from heterollm_sim.planner import (
     ScenarioValidationError,
+    ScenarioValidationReport,
+    _planner_message_zh,
     compile_scenario,
     compile_serving_cohort_schedule,
     validate_scenario,
 )
+
+
+class PlannerDiagnosticMessageTests(unittest.TestCase):
+    def test_unknown_message_keeps_original_reason(self):
+        message = "new planner failure: component gpu9 has no memory"
+        self.assertEqual(
+            _planner_message_zh(message),
+            "场景校验未通过：" + message,
+        )
+
+    def test_shared_kv_linear_capacity_message_keeps_capacity_and_component(self):
+        translated = _planner_message_zh(
+            "request req-7 KV and linear-state working sets require "
+            "2097152 bytes, exceeding shared physical cache capacity "
+            "1048576 bytes on kv0"
+        )
+        self.assertIn("req-7", translated)
+        self.assertIn("2 MiB", translated)
+        self.assertIn("1 MiB", translated)
+        self.assertIn("kv0", translated)
+        self.assertIn("显式缓存上限或请求负载", translated)
+
+    def test_validation_exception_preserves_localized_and_original_errors(self):
+        report = ScenarioValidationReport(
+            errors=("组件 gpu0 容量不足",),
+            errors_en=("component gpu0 capacity is insufficient",),
+        )
+        with self.assertRaises(ScenarioValidationError) as caught:
+            report.raise_for_errors()
+        self.assertEqual(
+            caught.exception.details["errors"], ["组件 gpu0 容量不足"]
+        )
+        self.assertEqual(
+            caught.exception.details["errors_en"],
+            ["component gpu0 capacity is insufficient"],
+        )
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.serving import compile_serving_plan, serving_admission_diagnostics
 

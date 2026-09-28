@@ -194,10 +194,17 @@ class ScenarioValidationError(ValueError):
         self,
         message: str,
         diagnostics: Sequence[Mapping[str, object]] = (),
+        *,
+        errors: Sequence[str] = (),
+        errors_en: Sequence[str] = (),
     ) -> None:
         super().__init__(message)
         serialized = [dict(diagnostic) for diagnostic in diagnostics]
         self.details: Dict[str, object] = {"diagnostics": serialized}
+        if errors:
+            self.details["errors"] = list(errors)
+        if errors_en:
+            self.details["errors_en"] = list(errors_en)
         if len(serialized) == 1:
             self.details.update(serialized[0])
 
@@ -938,6 +945,8 @@ class ScenarioValidationReport:
             raise ScenarioValidationError(
                 "场景校验失败：\n- " + "\n- ".join(self.errors),
                 self.diagnostics,
+                errors=self.errors,
+                errors_en=self.errors_en,
             )
 
 
@@ -1184,6 +1193,24 @@ def _planner_message_zh(
             ),
         ),
         (
+            r"request (.+) KV and linear-state working sets require (\d+) bytes, exceeding shared physical cache capacity (\d+) bytes on (.+)",
+            lambda match: "请求 {} 的 KV 与线性状态工作集需要 {}，超过组件 {} 的共享物理缓存容量 {}；请调整显式缓存上限或请求负载".format(
+                match.group(1),
+                _format_iec_bytes(match.group(2)),
+                match.group(4),
+                _format_iec_bytes(match.group(3)),
+            ),
+        ),
+        (
+            r"request (.+) partition on (.+) requires (\d+) bytes, exceeding (\d+) bytes",
+            lambda match: "请求 {} 在组件 {} 上的分区工作集需要 {}，超过该组件容量 {}；请调整显式缓存上限或请求负载".format(
+                match.group(1),
+                match.group(2),
+                _format_iec_bytes(match.group(3)),
+                _format_iec_bytes(match.group(4)),
+            ),
+        ),
+        (
             r"request (.+) sequence has (\d+) tokens, exceeding model max_sequence_length (\d+)",
             lambda match: "请求 {} 的完整序列包含 {} 个词元，超过模型 max_sequence_length {}".format(
                 *match.groups()
@@ -1268,7 +1295,7 @@ def _planner_message_zh(
         detail = message[len("serving admission preflight failed: ") :]
         return "服务准入预检失败：{}".format(_planner_message_zh(detail))
     if message.startswith("topology validation failed:"):
-        return "拓扑校验失败；具体问题请查看拓扑错误列表"
+        return "拓扑校验失败：{}".format(message.split(":", 1)[1].strip())
     if message.startswith("parallel plan:"):
         nested = message[len("parallel plan:") :].strip()
         translated = _planner_message_zh(
@@ -1276,18 +1303,17 @@ def _planner_message_zh(
             warning=warning,
             information=information,
         )
-        if translated not in {"场景校验未通过；请查看 message_en 获取技术细节", "场景校验警告；请查看 message_en 获取技术细节"}:
+        if translated not in _GENERIC_PLANNER_MESSAGES_ZH:
             return "并行计划无效：{}".format(translated)
         return "并行计划无效；请检查并行度、rank_mapping 和层级划分"
     if message.startswith("serving admission preflight failed:"):
         return "服务准入预检查失败；请检查请求规模和缓存容量"
     if message.startswith("serving admission will reject this request:"):
         return "服务准入预计会拒绝该请求；请检查请求规模和缓存容量"
-    if information:
-        return "场景校验信息；请查看 message_en 获取技术细节"
-    if warning:
-        return "场景校验警告；请查看 message_en 获取技术细节"
-    return "场景校验未通过；请查看 message_en 获取技术细节"
+    prefix = "场景校验信息" if information else (
+        "场景校验警告" if warning else "场景校验未通过"
+    )
+    return "{}：{}".format(prefix, message)
 
 
 _MANIFEST_ASSUMPTION_EN_TO_ZH = {
@@ -3159,9 +3185,13 @@ def _validate_scenario_uncached(
     # Admission always uses the current workload.  Auto-generated runtime-state
     # tensor sizes are estimates from the mapping run, not capacity declarations;
     # the serving planner derives their budgets from physical placement instead.
-    if requests and not placement_unmaterialized and not any(
-        "does not support non-zero prefetch_distance" in error
-        for error in errors
+    if (
+        requests
+        and not placement_unmaterialized
+        and not any(
+            "does not support non-zero prefetch_distance" in error
+            for error in errors
+        )
     ):
         try:
             from .serving import serving_admission_diagnostics
@@ -3176,6 +3206,19 @@ def _validate_scenario_uncached(
                 for failure in admission_failures
                 if failure not in errors and failure not in warnings
             )
+            if scenario.workload.metadata.get(
+                "_control_plane_placement_validation", False
+            ):
+                # The placement pass must not reject a legal mapping merely
+                # because the real request's KV/state working set is larger
+                # than the post-weight residual cache.  A zero-capacity
+                # component remains a hard authoring error, however.
+                admission_failures = tuple(
+                    failure
+                    for failure in admission_failures
+                    if "cache capacity 0 bytes" in failure
+                    or "capacity_bytes=0" in failure
+                )
             if (
                 admission_failures
                 and not scenario.workload.requests
@@ -3431,7 +3474,7 @@ def _route_resident_memory_demands(demands, metadata):
                 # the same physical bandwidth resource already demanded by
                 # the memory phase.  Keep its latency in the route audit but
                 # do not charge the payload a second time.
-                if hop.resource_id == demand.resource_id:
+                if hop.service_ref is not None:
                     hops_audit.append({"resource_id": hop.resource_id, "link_id": hop.link_id,
                         "direction": direction, "bytes": count,
                         "path_startup_ns": startup_ns,
@@ -5914,6 +5957,8 @@ def _weight_source_is_compute_local_backing(
         return False
     if source == target:
         return True
+    if _direct_device_memory(scenario, source, target):
+        return True
     target_component = _component_map(scenario).get(target)
     if target_component is None or _kind(target_component) != "cpu":
         return False
@@ -5921,6 +5966,83 @@ def _weight_source_is_compute_local_backing(
         scenario, target, "host_memory"
     )
     return bool(attached_host_memory and source == attached_host_memory)
+
+
+def _direct_device_memory(scenario: ScenarioConfig, storage: Optional[str], device: str) -> bool:
+    """Only explicitly exposed backend buffers are directly GPU-addressable."""
+    exposure = scenario.placement.metadata.get("llama_backend_memory", {})
+    entry = exposure.get(storage, {}) if isinstance(exposure, Mapping) else {}
+    return bool(isinstance(entry, Mapping) and entry.get("access") == "direct"
+                and entry.get("device_id") == device)
+
+
+def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_bytes=0):
+    """Move an operand's backing service, preserving compute and GPU cache work."""
+    if (not storage or storage == rank.memory_component_id
+            or not _direct_device_memory(scenario, storage, rank.component_id)):
+        return phase
+    gpu, local = _gpu_profiles(scenario, rank.component_id, rank.memory_component_id)
+    backing = next((d for d in phase.demands if d.resource_id == local.resource_id), None)
+    if backing is None or not (read_bytes or write_bytes):
+        return phase
+    from .data_motion import resolve_service
+    profile = _resolve_component_profile(scenario, storage)
+    service = resolve_service(_component(scenario, storage), profile)
+    cache = dict(phase.metadata.get("cache", {}))
+    reads = int(cache.get("physical_read_bytes", 0))
+    writes = int(cache.get("physical_write_bytes", 0))
+    if not cache:
+        reads = max(0, backing.bytes_moved - write_bytes)
+        writes = write_bytes
+    moved_reads = min(reads, max(0, int(read_bytes)))
+    moved_writes = min(writes, max(0, int(write_bytes)))
+    if not (moved_reads or moved_writes):
+        return phase
+    bandwidth_meta = phase.metadata.get("hbm_bandwidth", {})
+    bandwidth = float(bandwidth_meta.get("shape_effective_hbm_bandwidth_gb_s", local.effective_bandwidth_gb_s))
+    local_service = local.memory_service(reads - moved_reads, writes - moved_writes, bandwidth_gb_s=bandwidth)
+    remote_service = profile.memory_service(moved_reads, moved_writes)
+    remaining = reads + writes - moved_reads - moved_writes
+    demands = [replace(d, service_ns=float(local_service["service_ns"]), bytes_moved=remaining,
+                       energy_pj=remaining * local.energy_pj_per_byte)
+               if d is backing else d for d in phase.demands]
+    demands.append(ResourceDemand(service.resource_id, float(remote_service["service_ns"]),
+                                  bytes_moved=moved_reads + moved_writes,
+                                  energy_pj=(moved_reads + moved_writes) * profile.energy_pj_per_byte))
+    # Reference edges expose this same controller. Independent links still carry bytes.
+    for source, target, amount in ((storage, rank.component_id, moved_reads),
+                                   (rank.component_id, storage, moved_writes)):
+        if amount:
+            for hop in _topology_router(scenario).route(source, target, amount):
+                demands.extend(hop.demands(amount))
+    merged = {}
+    for demand in demands:
+        previous = merged.get(demand.resource_id)
+        merged[demand.resource_id] = demand if previous is None else replace(
+            previous, service_ns=previous.service_ns + demand.service_ns,
+            bytes_moved=previous.bytes_moved + demand.bytes_moved,
+            energy_pj=previous.energy_pj + demand.energy_pj)
+    return replace(phase, demands=tuple(merged.values()), metadata={**phase.metadata,
+        "direct_memory_access": {"component_id": storage, "physical_owner": service.physical_owner,
+            "resource_id": service.resource_id, "read_bytes": moved_reads, "write_bytes": moved_writes,
+            "access_kind": "READ_WRITE" if moved_reads and moved_writes else "READ" if moved_reads else "WRITE",
+            "memory_service": remote_service, "local_read_bytes": reads - moved_reads,
+            "local_write_bytes": writes - moved_writes}})
+
+
+def _add_direct_state_access(builder, scenario, router, storage, device, byte_count,
+                             dependencies, *, name, read, metadata):
+    from .data_motion import endpoint_service
+    service = endpoint_service(_component(scenario, storage), byte_count, read=read, name=name)
+    demands = list(service.demands if service else ())
+    source, target = (storage, device) if read else (device, storage)
+    for hop in router.route(source, target, byte_count):
+        demands.extend(hop.demands(byte_count))
+    return builder.add(name, TaskCategory.MEMORY, tuple(demands), dependencies=dependencies,
+        advance=False, metadata={**metadata, "direct_memory_component": storage,
+            "access_kind": "READ" if read else "WRITE", "bytes": byte_count,
+            "source_component": source, "target_component": target,
+            "resource_accounting": "direct_memory_access", "resource_transfer_bytes": 0})
 
 
 def _weight_backing_read_gate(
@@ -6796,35 +6918,16 @@ def _coherent_staged_weight_target(
     *,
     routing_policy: str,
 ) -> str:
-    """Return an explicit active-memory target only for a coherent DMA span."""
-
-    memory_component = rank.memory_component_id
-    if not memory_component or memory_component == compute_component:
-        return compute_component
-    try:
-        target = _component(scenario, memory_component)
-    except KeyError:  # pragma: no cover - validated scenario invariant
-        return compute_component
-    if not target.is_active_memory:
-        return compute_component
-    try:
-        phases = _transfer_phases(
-            scenario,
-            router,
-            source_component,
-            memory_component,
-            byte_count,
-            policy=routing_policy,
-            name="coherent_staged_weight_probe",
-        )
-    except ValueError:
-        return compute_component
-    if (
-        len(phases) == 1
-        and phases[0].metadata.get("transfer_execution") == "coherent_dma"
-    ):
-        return memory_component
-    return compute_component
+    """Resolve staging to storage independently of the DMA timing mode."""
+    memory_component = _compute_local_runtime_memory_component_id(scenario, compute_component)
+    target = _component(scenario, memory_component)
+    if not target.is_active_memory or not target.is_writable:
+        raise ValueError("weight COPY requires writable active storage for " + compute_component)
+    if byte_count > target.capacity_bytes:
+        raise ValueError("weight COPY of {} bytes exceeds staging capacity {} on {}".format(
+            byte_count, target.capacity_bytes, memory_component))
+    router.route(source_component, memory_component, byte_count, policy=routing_policy)
+    return memory_component
 
 
 def _add_host_orchestration(
@@ -10129,6 +10232,10 @@ def _add_rank_gemm(
                 allocation_name,
             )
         )
+        staged_storage = _coherent_staged_weight_target(
+            scenario, router, rank, weight_source, target_component_id,
+            workload.weight_bytes, routing_policy=plan.routing_policy,
+        )
         staged_weight_metadata = {
             **operation_metadata,
             "allocation_id": staged_weight_allocation_id,
@@ -10138,7 +10245,7 @@ def _add_rank_gemm(
             "weight_owner_component_id": weight_source,
             "weight_source_component": weight_source,
             "weight_target_component": target_component_id,
-            "residency_component_id": rank.memory_component_id,
+            "residency_component_id": staged_storage,
             "lifecycle": "temporary",
             "read_only": True,
             "fully_resident": True,
@@ -10148,6 +10255,20 @@ def _add_rank_gemm(
             "dirty_writeback": False,
             "rank": rank.rank,
         }
+    if staged_weight_allocation_id is not None:
+        register = builder.add(
+            name + ".staged_weight.register",
+            TaskCategory.SYNCHRONIZATION,
+            dependencies=prior,
+            advance=False,
+            metadata={
+                **staged_weight_metadata,
+                "event_kind": "staged_weight_register",
+                "staged_weight_operation": "register",
+                "resource_accounting": "zero_resource_lifecycle_marker",
+            },
+        )
+        prior = (register,)
     extra_phase_demands: Dict[str, Tuple[ResourceDemand, ...]] = {}
     rank_local_weight_source = (
         _kind(target) == "gpu"
@@ -10168,6 +10289,7 @@ def _add_rank_gemm(
     )
     compute_local_weight_source = (
         rank_local_weight_source or cpu_local_weight_source
+        or _direct_device_memory(scenario, weight_source, target_component_id)
     )
     # Residency observes operator reads, not only topology transfers.  Emit one
     # marker even when the physical backing is already local or resident; any
@@ -10563,22 +10685,10 @@ def _add_rank_gemm(
         raise ValueError("并行 GEMM 目标 {} 不具备计算能力".format(target.kind))
 
     if staged_weight_allocation_id is not None:
-        register = builder.add(
-            name + ".staged_weight.register",
-            TaskCategory.SYNCHRONIZATION,
-            dependencies=prior,
-            advance=False,
-            metadata={
-                **staged_weight_metadata,
-                "event_kind": "staged_weight_register",
-                "staged_weight_operation": "register",
-                "resource_accounting": "zero_resource_lifecycle_marker",
-            },
-        )
         staged_read = builder.add(
             name + ".staged_weight.read",
             TaskCategory.SYNCHRONIZATION,
-            dependencies=(register,),
+            dependencies=prior,
             advance=False,
             metadata={
                 **staged_weight_metadata,
@@ -10626,6 +10736,13 @@ def _add_rank_gemm(
         **operation_metadata,
     }
     for phase_index, phase in enumerate(estimate.phases):
+        if _kind(target) == "gpu":
+            direct_source = weight_source if model_weight_read else None
+            if rhs_is_activation and dynamic_attention_replay is not None:
+                direct_source = _kv_components(scenario, rank, target_component_id,
+                                              dynamic_attention_replay.layer)[0]
+            phase = _direct_memory_phase(scenario, rank, phase, direct_source,
+                                         read_bytes=workload.weight_bytes)
         phase_demands = phase.demands + extra_phase_demands.get(phase.name, ())
         # ``estimate_cpu_gemm`` already passes activation + physical weight
         # bytes through the cache hierarchy to the local backing demand.
@@ -11152,7 +11269,11 @@ def _add_rank_fused_attention(
         ),
     )
     last = ""
+    layer = next((item for item in _execution_layers(scenario)
+                  if item.layer_id == (metadata or {}).get("layer_id")), None)
+    cache = _kv_components(scenario, rank, rank.component_id, layer)[0]
     for phase_index, phase in enumerate(estimate.phases):
+        phase = _direct_memory_phase(scenario, rank, phase, cache, read_bytes=workload.kv_read_bytes)
         demands = tuple(
             _namespace_demand(
                 scenario,
@@ -11495,6 +11616,10 @@ def _add_rank_primitive(
         **dict(metadata or {}),
     }
     for phase_index, phase in enumerate(estimate.phases):
+        if operation_metadata.get("event_kind") == "embedding":
+            phase = _direct_memory_phase(scenario, rank, phase,
+                operation_metadata.get("weight_source_component"),
+                read_bytes=int(operation_metadata.get("lookup_read_bytes", operation_metadata.get("weight_read_bytes", 0))))
         demands = tuple(
             _namespace_demand(
                 scenario,
@@ -12005,6 +12130,14 @@ def _add_linear_state_read(
                 },
             ),
         )
+    if _direct_device_memory(scenario, active, state_target):
+        state_read = _add_direct_state_access(builder, scenario, router, active, state_target,
+            byte_count, prior, name=name + ".read", read=True, metadata={
+                "event_kind": "linear_state_read", "layer_id": layer.layer_id, "rank": rank.rank,
+                "operator_class": OperatorClass.MEMORY.value, "state_lifecycle": "read",
+                "state_kind": "recurrent_conv", "state_persistence": "committed",
+                **runtime.audit_metadata()})
+        return _discard_side_branch_rank_value(builder, state_read, rank)
     state_read = _add_transfer_tasks(
         builder,
         router,
@@ -12072,6 +12205,14 @@ def _add_linear_state_write(
         builder.rank_value_component(dependencies, rank.rank)
         or rank.component_id
     )
+    if _direct_device_memory(scenario, active, source_component) and not offload:
+        written = _add_direct_state_access(builder, scenario, router, active, source_component,
+            byte_count, dependencies, name=name + ".write", read=False, metadata={
+                "event_kind": "linear_state_write", "layer_id": layer.layer_id, "rank": rank.rank,
+                "operator_class": OperatorClass.MEMORY.value, "state_lifecycle": "commit",
+                "state_kind": "recurrent_conv", "state_persistence": "committed",
+                **runtime.audit_metadata()})
+        return _discard_side_branch_rank_value(builder, written, rank)
     written = _add_transfer_tasks(
         builder,
         router,
@@ -12403,6 +12544,7 @@ def _logical_kv_bytes_per_token_for_rank(
 
 def _add_kv_access(
     builder: _TaskBuilder,
+    scenario: ScenarioConfig,
     router: TopologyRouter,
     plan: ParallelPlan,
     rank: LogicalRank,
@@ -12431,6 +12573,24 @@ def _add_kv_access(
         "source_component": source_component,
         "target_component": target_component,
     }
+    owner = source_component if metadata.get("memory_direction") == "read" else target_component
+    if _direct_device_memory(scenario, owner, rank.component_id):
+        from .data_motion import endpoint_service
+        is_read = metadata.get("memory_direction") == "read"
+        # Attention owns the read demand; append has its own physical store.
+        service = endpoint_service(
+            _component(scenario, owner), byte_count, read=is_read, name=name)
+        demands = list(service.demands if service else ())
+        if not is_read:
+            for hop in router.route(rank.component_id, owner, byte_count, policy=plan.routing_policy):
+                demands.extend(hop.demands(byte_count))
+        local = builder.add(name + ".direct", TaskCategory.MEMORY, tuple(demands),
+            dependencies=dependencies, advance=False, metadata={**payload,
+                "access_kind": "READ" if is_read else "WRITE",
+                "direct_memory_component": owner,
+                "resource_accounting": "included_in_attention_kernel" if is_read else "direct_memory_store",
+                "resource_transfer_bytes": 0})
+        return _discard_side_branch_rank_value(builder, local, rank)
     if source_component == target_component or {
         source_component,
         target_component,
@@ -12525,6 +12685,7 @@ def _add_kv_read(
         )
     task_id = _add_kv_access(
         builder,
+        scenario,
         router,
         plan,
         rank,
@@ -12576,6 +12737,8 @@ def _task_segment_dynamic_task_overrides(
     and namespace every demand in the same order as uncached lowering.
     """
 
+    if replay.scenario.placement.metadata.get("llama_backend_memory"):
+        return None
     if any(component.metadata.get("resident_access_path") == "topology"
            for component in replay.scenario.hardware.components):
         return None  # Recompile exact context-shaped link traffic; never replay stale bytes.
@@ -13514,6 +13677,7 @@ def _add_kv_append(
         )
     return _add_kv_access(
         builder,
+        scenario,
         router,
         plan,
         rank,
@@ -14528,6 +14692,7 @@ def _compile_parallel_embedding(
         )
         compute_local_weight_source = (
             rank_local_weight_source or cpu_local_weight_source
+            or _direct_device_memory(scenario, weight_source, target_component_id)
         )
         if weight_source:
             access_metadata = {
@@ -14593,6 +14758,8 @@ def _compile_parallel_embedding(
                     },
                 ),
             )
+        operation_metadata["weight_source_component"] = weight_source
+        operation_metadata.setdefault("lookup_read_bytes", lookup_read_bytes)
         end, _target_component_id = _add_rank_primitive(
             builder,
             scenario,

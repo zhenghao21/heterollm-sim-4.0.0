@@ -67,6 +67,7 @@ py -3.12 -m pip install . --no-index --find-links .\packages
 3. 当前可直接载入的示例包括：
    - `local-native-rtx5080-9950x3d-gddr7-ddr5`：本机参考拓扑，适合展示真实本机硬件边界；它的显存是 GDDR7，不应称为 HBM 实测。
    - `nvidia-b200-1gpu-2hbf-2hbm`：B200 + 2×HBF + 2×HBM3E 的分析拓扑，适合展示 HBM/HBF 对比；它是 `analytical_approximation`，HBF 参数使用本次登记的分析坐标：读 488 GB/s、写 27.2 GB/s、读延迟 4 μs、写延迟 75 μs。
+   - `nvidia-b200-1gpu-3hbf-2hbm`：为 DeepSeek-V3 BF16 权重容量分析增加的 3×HBF 分析坐标；第三个 HBF 不代表量产 B200 封装拓扑。DeepSeek-V3 的 BF16 权重约 1.34 TB，2×HBF 预设无法完整承载，使用 3HBF 才能做本节的端到端 KV 对比。
 4. 点击“查看来源、限制与兼容性”，先读限制说明；需要替换时点击“替换当前硬件（Load）”，确认弹窗。
 5. 载入架构预设会替换全部组件、端口、链路、分组和布局，但会保留当前模型与负载；旧 Rank 映射和硬件绑定 Profile 会清理或重建，所以载入后要回到“映射”复核。
 6. 在拓扑画布中确认 GPU、HBM、HBF、Host Memory 以及它们的链路。点击组件可以在右侧检查器查看容量、读写带宽、延迟、DMA、证据等级和来源。
@@ -74,6 +75,18 @@ py -3.12 -m pip install . --no-index --find-links .\packages
 B200 预设中的 GPU↔HBF 链路协议字段是 `HBF`；组件和链路 metadata 同时记录 `physical_transport_protocol=UCIe`，用于说明逻辑服务协议与封装物理承载的区别。
 
 “组件预设 · 追加”只向当前拓扑增加组件或组合，不替换当前架构，适合需要自定义对照硬件时使用。新增组件后必须创建并检查它与 GPU 的链路，否则运行时可能无法到达。
+
+### 3.3 DeepSeek-V3 + 端侧个人助手专项流程
+
+要验证 DeepSeek-V3 在 `edge_personal_assistant` 输入下的 HBM/HBF 甜点值，按以下顺序操作：
+
+1. 在模型预设中应用 `deepseek-v3-671b`（DeepSeek-V3-Base，671B/A37B）。它的支持级别是 `analytical_approximation`：当前模型图保留公开层和专家形状，但 MLA 压缩细节、共享专家和 MTP 辅助图没有完全展开；结果用于相对趋势和容量敏感性分析。
+2. 在硬件预设中载入 `nvidia-b200-1gpu-3hbf-2hbm`，不要使用 2HBF 预设做完整 BF16 权重运行。3HBF 是容量扩展的分析坐标，三个 HBF 各 512 GB，参数仍是读 488 GB/s、写 27.2 GB/s、读延迟 4 μs、写延迟 75 μs。
+3. 在负载预设中选择 `edge_personal_assistant`：Prompt 1,024、Output 512、Batch 1、Prefill chunk 512。
+4. 载入模型或 3HBF 架构后，前端会自动把 routed expert 权重按 layer 轮转到 `hbf0`、`hbf1`、`hbf2`；dense、attention、router 和 embedding 权重由控制平面留在 HBM。打开“映射”页的“运行时控制平面约束 → Weight tensor targets”可以复核这些只读前置目标，不需要现场手工添加几十个 layer 条目。
+5. 分别运行 HBM-only、HBF-only 和 HBM 主缓存 + HBF 卸载三种候选。每个候选都必须重新校验并运行，记录 TTFT p50、TPOT p50、E2E p50、KV 峰值、KV 读写流量、Migration、Offload 和 Swap Transfer。
+
+如果误载入 2HBF 预设，容量校验失败是预期边界，不是前端故障：DeepSeek-V3 BF16 权重超过两颗 HBF 与 HBM 的可用总容量。不要通过把容量字段改大来掩盖这个结果；切换到 3HBF 分析坐标，或明确改用另一个已声明精度的量化模型预设。
 
 ## 4. 设置真实 AI 负载
 
@@ -149,7 +162,7 @@ active-memory HBF 的运行约束仍然会被校验：`metadata.access_mode = "m
 - **当前策略**：保留映射页现有的 KV 策略，作为同一场景的基线；
 - **HBM（hbm0）**：固定在第一个 HBM，关闭卸载；
 - **HBF（hbf0）**：固定在第一个 HBF；本次 B200 预设可以直接运行，参数仍标记为 analytical/user-configured；
-- **混合（HBM + HBF）**：HBM 做活动缓存，容量压力下将页卸载到 HBF；如果自定义 HBF 缺少 active-memory 证据，会显示为不可行。
+- **混合（HBM + HBF）**：HBM 做活动缓存，HBF 后备容量按 `offload_ratio=1.0` 开放，容量压力下将页卸载到 HBF；如果自定义 HBF 缺少 active-memory 证据，会显示为不可行。当前 HBM 容量足够时没有迁移是预期结果，不代表混合策略没有生效。
 
 操作步骤：
 

@@ -843,7 +843,8 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
 
 def validation_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
     try:
-        scenario = scenario_from_dict(payload)
+        from .llama_scenario import prepare_llama_scenario
+        scenario = prepare_llama_scenario(scenario_from_dict(payload))
     except (ValueError, TypeError, KeyError) as exc:
         message_zh, message_en = _scenario_parse_messages(exc)
         return {
@@ -1079,7 +1080,8 @@ def validation_payload_for_scenario(scenario: ScenarioConfig) -> Dict[str, Any]:
 
 def scenario_or_http_error(payload: Mapping[str, Any]) -> ScenarioConfig:
     try:
-        return scenario_from_dict(payload)
+        from .llama_scenario import prepare_llama_scenario
+        return prepare_llama_scenario(scenario_from_dict(payload))
     except (ValueError, TypeError, KeyError) as exc:
         details = validation_payload(payload)
         message_zh, message_en = _scenario_parse_messages(exc)

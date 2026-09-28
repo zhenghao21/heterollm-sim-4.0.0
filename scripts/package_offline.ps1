@@ -99,6 +99,20 @@ if (Test-Path -LiteralPath $currentErrors) {
     Copy-Item -LiteralPath $currentErrors -Destination (Join-Path $evidenceDestination "current_errors.0001.json") -Force
 }
 
+# Keep the bounded DeepSeek-V3 edge-assistant demonstration and its exact
+# full-preset feasibility evidence with the offline package.  These are small
+# JSON summaries, not native traces or model weights.
+foreach ($fileName in @(
+    "deepseek_v3_edge_short_scan.json",
+    "deepseek_v3_edge_evidence.json",
+    "deepseek_frontend_api_flow.json"
+)) {
+    $sourceFile = Join-Path $repoRoot ".tmp\$fileName"
+    if (Test-Path -LiteralPath $sourceFile) {
+        Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $evidenceDestination $fileName) -Force
+    }
+}
+
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "start_offline.ps1") -Destination (Join-Path $staging "Start-Simulator.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "start_offline.cmd") -Destination (Join-Path $staging "Start-Simulator.cmd") -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "check_offline.ps1") -Destination (Join-Path $staging "Check-Offline.ps1") -Force

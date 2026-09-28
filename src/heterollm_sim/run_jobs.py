@@ -31,6 +31,8 @@ from .reporting import (
     run_scenario,
 )
 from .run_estimation import estimate_scenario
+from .planner import ScenarioValidationError
+from .runtime_diagnostics import record_unexpected_exception
 
 
 QUEUED = "queued"
@@ -137,7 +139,7 @@ class _RunJob:
     progress_detail: Optional[Dict[str, Any]] = None
     report: Optional[Dict[str, Any]] = None
     result: Optional[RunResult] = None
-    error: Optional[Dict[str, str]] = None
+    error: Optional[Dict[str, Any]] = None
     cancellation_requested: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event)
     future: Optional[Future] = None
@@ -245,6 +247,8 @@ class RunJobManager:
             if self._shutdown:
                 raise RuntimeError("RunJobManager 已关闭")
             self._ensure_submission_capacity_locked()
+        from .llama_scenario import prepare_llama_scenario
+        scenario = prepare_llama_scenario(scenario)
         estimate = estimate_scenario(scenario)
         if selected_policy is None:
             selected_policy = RetentionPolicy(
@@ -544,6 +548,17 @@ class RunJobManager:
                     self._prune_terminal_locked(self._max_history)
             return
         except Exception as exc:
+            error: Dict[str, Any] = {
+                "message": str(exc) or "未提供异常消息",
+                "exception_type": type(exc).__name__,
+            }
+            details = getattr(exc, "details", None)
+            if isinstance(details, Mapping):
+                error["details"] = _json_safe(details)
+            if not isinstance(exc, ScenarioValidationError):
+                error["diagnostic_id"] = record_unexpected_exception(
+                    exc, context="background simulation job {}".format(job_id)
+                )
             with self._lock:
                 current = self._jobs.get(job_id)
                 if current is not None and current.status not in TERMINAL_STATUSES:
@@ -553,10 +568,7 @@ class RunJobManager:
                         current.status = FAILED
                         current.finished_at = _now()
                         self._record_terminal_locked(current)
-                        current.error = {
-                            "message": "仿真任务失败，请检查场景配置后重试。",
-                            "exception_type": type(exc).__name__,
-                        }
+                        current.error = error
                         current.progress = _progress_dict(
                             FAILED,
                             current.progress["completed"],

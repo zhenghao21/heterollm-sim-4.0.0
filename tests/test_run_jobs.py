@@ -8,6 +8,7 @@ from unittest.mock import patch
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.reporting import replay_online_batch_trace
 from heterollm_sim.planner import (
+    ScenarioValidationError,
     compile_scenario,
     materialize_requests,
     validate_scenario,
@@ -829,12 +830,15 @@ class RunJobManagerTests(unittest.TestCase):
             [slow_id],
         )
 
-    def test_failure_exposes_only_safe_error(self):
+    def test_failure_exposes_exception_and_diagnostic_id(self):
         manager = self.manager(max_workers=1, max_history=2)
 
         with patch(
             "heterollm_sim.run_jobs.run_scenario",
             side_effect=ValueError("secret path D:/private/config.json"),
+        ), patch(
+            "heterollm_sim.run_jobs.record_unexpected_exception",
+            return_value="diagnostic-123",
         ):
             job_id = manager.submit(self.scenario)
             failed = wait_for(manager, job_id, {"failed"})
@@ -842,11 +846,32 @@ class RunJobManagerTests(unittest.TestCase):
         self.assertEqual(
             failed["error"],
             {
-                "message": "仿真任务失败，请检查场景配置后重试。",
+                "message": "secret path D:/private/config.json",
                 "exception_type": "ValueError",
+                "diagnostic_id": "diagnostic-123",
             },
         )
-        self.assertNotIn("private", json.dumps(failed, ensure_ascii=False))
+
+    def test_scenario_validation_error_preserves_structured_diagnostics(self):
+        manager = self.manager(max_workers=1, max_history=2)
+        validation_error = ScenarioValidationError(
+            "场景校验失败：模型架构不匹配",
+            [{"code": "model_architecture_mismatch", "path": "model.name"}],
+        )
+
+        with patch(
+            "heterollm_sim.run_jobs.run_scenario",
+            side_effect=validation_error,
+        ):
+            job_id = manager.submit(self.scenario)
+            failed = wait_for(manager, job_id, {"failed"})
+
+        self.assertEqual(failed["error"]["exception_type"], "ScenarioValidationError")
+        self.assertEqual(failed["error"]["message"], str(validation_error))
+        self.assertEqual(
+            failed["error"]["details"],
+            validation_error.details,
+        )
 
 
 if __name__ == "__main__":

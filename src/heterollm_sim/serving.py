@@ -2009,7 +2009,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
             parallel = _parallel_plan(scenario)
             rank_components = (
                 (str(owner),)
-                if tier_layer_map and not native_layer_map
+                if (tier_layer_map and not native_layer_map) or native_layer_map
                 else tuple(
                     dict.fromkeys(
                         str(rank.memory_component_id)

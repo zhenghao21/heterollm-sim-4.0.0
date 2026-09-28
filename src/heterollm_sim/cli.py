@@ -242,6 +242,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             scenario = build_reference_scenario()
         else:
             scenario = load_scenario(args.scenario)
+        from .llama_scenario import prepare_llama_scenario
+        scenario = prepare_llama_scenario(scenario)
         if args.command == "validate":
             topology = validate_topology(scenario.hardware)
             scenario_report = validate_scenario(scenario)

@@ -1878,6 +1878,76 @@ def _b200_hbf_hbm(component_catalog=None) -> ArchitecturePresetDefinition:
         ("nvidia", "b200", "blackwell", "hbm3e", "hbf", "ucie", "flash"),
     )
 
+
+def _b200_hbf_hbm_3hbf(component_catalog=None) -> ArchitecturePresetDefinition:
+    """Capacity-expanded B200 analysis graph for full BF16 DeepSeek-V3 weights.
+
+    The third HBF is an explicit analytical capacity coordinate. It does not
+    claim that a production B200 package contains three HBF devices.
+    """
+
+    base = _b200_hbf_hbm(component_catalog)
+    hardware = base.hardware
+    components = list(hardware.components)
+    gpu = next(item for item in components if item.component_id == "gpu0")
+    hbf0 = next(item for item in components if item.component_id == "hbf0")
+    metadata = dict(hbf0.metadata)
+    template = dict(metadata.get("cost_profile_template", {}))
+    resource_id = "hbf2.memory"
+    template["resource_id"] = resource_id
+    metadata["cost_profile_template"] = template
+    metadata["memory_service_owner"] = resource_id
+    metadata["model"] = "SK hynix HBF analysis device 2"
+    physical = dict(metadata.get("physical_composition", {}))
+    physical["unit_index"] = 2
+    physical["unit_count_in_product"] = 3
+    physical["unit_count_status"] = "analytical_capacity_expansion"
+    metadata["physical_composition"] = physical
+    hbf2 = replace(
+        hbf0,
+        component_id="hbf2",
+        die_id="hbf2_die",
+        cost_profile_id="sk_hynix_hbf_512gb_memory_2",
+        ports=tuple(replace(port, port_id="hbf0") for port in hbf0.ports),
+        metadata=metadata,
+    )
+    gpu_port = _port(
+        "hbf2", "HBF", "endpoint", version="2.0", lanes=64,
+        bandwidth_gbps=3_904.0, payload="streaming",
+        metadata={"physical_transport_protocol": "UCIe"},
+    )
+    components = [replace(item, ports=item.ports + (gpu_port,)) if item.component_id == "gpu0" else item for item in components]
+    components.append(hbf2)
+    links = list(hardware.links)
+    links.append(_link(
+        "gpu_hbf2", "gpu0", "hbf2", "hbf2", "hbf0", "HBF",
+        version="2.0", lanes=64, bandwidth_gbps=3_904.0,
+        latency_ns=4_000.0, payload="streaming",
+        metadata={"physical_transport_protocol": "UCIe"},
+    ))
+    groups = []
+    for group in base.groups:
+        item = dict(group)
+        if item.get("group_id") == "b200_package":
+            item["members"] = list(item.get("members", ())) + ["hbf2"]
+            item["label"] = "NVIDIA B200 with 2×HBM3E + 3×HBF"
+        groups.append(item)
+    positions = dict(hardware.metadata.get("topology_view", {}).get("layout", {}).get("positions", {}))
+    positions["hbf2"] = {"x": 1000.0, "y": 300.0}
+    limitations = tuple(base.limitations) + (
+        "这是为 DeepSeek-V3 BF16 全量权重敏感性分析增加的第三个 HBF 容量坐标，不代表量产 B200 封装拓扑。",
+        "总可用 HBF 容量约 1.536 TB；仍需为运行时、KV 和控制面保留余量。",
+    )
+    return _definition(
+        "nvidia-b200-1gpu-3hbf-2hbm",
+        "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+        "NVIDIA", "Blackwell", "storage_offload", "single_package",
+        ANALYTICAL_APPROXIMATION, components, links, groups, positions,
+        base.sources, limitations,
+        "为 DeepSeek-V3 BF16 权重容量分析准备的扩展 HBF 拓扑；第三个 HBF 是分析容量坐标。",
+        ("nvidia", "b200", "blackwell", "hbm3e", "hbf", "ucie", "flash", "deepseek"),
+    )
+
 def _soc_2x_dram_sram_cim(*, shared_phy_noc: bool = False) -> ArchitecturePresetDefinition:
     """User-authored 3D topology, not a calibrated SoC or a UCIe proxy.
 
@@ -2179,7 +2249,8 @@ def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinitio
             version="DDR5-5600",
             lanes=128,
             bandwidth_gbps=ddr5_gbps,
-            latency_ns=80.0,
+            # memory_component service is authoritative for this logical DDR path.
+            latency_ns=100.0,
             metadata={
                 "bandwidth_source": "memory_component",
                 "bandwidth_resource_id": "hostmem0.memory",
@@ -2304,10 +2375,12 @@ _LEGACY_ARCHITECTURE_PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
 # APIs after the hardware catalog reset.
 _PRESETS: Tuple[ArchitecturePresetDefinition, ...] = (
     _b200_hbf_hbm(),
+    _b200_hbf_hbm_3hbf(),
     _native_rtx5080_local(),
 )
 PUBLIC_ARCHITECTURE_PRESET_IDS = frozenset({
     "nvidia-b200-1gpu-2hbf-2hbm",
+    "nvidia-b200-1gpu-3hbf-2hbm",
     "local-native-rtx5080-9950x3d-gddr7-ddr5",
 })
 
@@ -2542,6 +2615,8 @@ def materialize_architecture_payload(preset_id: str, *, component_catalog=None) 
     if component_catalog is not None:
         if preset_id == "nvidia-b200-1gpu-2hbf-2hbm":
             item = _b200_hbf_hbm(component_catalog)
+        elif preset_id == "nvidia-b200-1gpu-3hbf-2hbm":
+            item = _b200_hbf_hbm_3hbf(component_catalog)
         elif preset_id == "local-native-rtx5080-9950x3d-gddr7-ddr5":
             item = _native_rtx5080_local(component_catalog)
     if not item.loadable:

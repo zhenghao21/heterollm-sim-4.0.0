@@ -1549,6 +1549,13 @@ def plan_runtime_placement(
         prompt_tokens=1,
         output_tokens=0,
         arrival_rate_rps=0.0,
+        metadata={
+            **dict(scenario.workload.metadata),
+            # This pass checks placement legality.  Admission, including the
+            # real KV working set, runs after placement against the real
+            # workload in the simulation path.
+            "_control_plane_placement_validation": True,
+        },
         scheduler=replace(scenario.workload.scheduler, max_num_seqs=1),
     )
     validation = validate_scenario(
@@ -1557,7 +1564,16 @@ def plan_runtime_placement(
     warnings.extend(validation.warnings)
     information.extend(validation.information)
     if validation.errors:
-        for validation_error in validation.errors:
+        for error_index, validation_error in enumerate(validation.errors):
+            # Keep the original English validator text beside the localized
+            # summary.  Placement failures are raised later by the control
+            # plane, so dropping errors_en here made the run job report only
+            # “scenario validation failed” with no actionable cause.
+            message_en = (
+                validation.errors_en[error_index]
+                if error_index < len(validation.errors_en)
+                else validation_error
+            )
             unplaced.append(
                 UnplacedRequirement(
                     item_id="scenario_validation",
@@ -1566,6 +1582,8 @@ def plan_runtime_placement(
                     required_bytes=0,
                     reason=validation_error,
                     details={
+                        "message_zh": validation_error,
+                        "message_en": message_en,
                         "diagnostics": [
                             dict(diagnostic)
                             for diagnostic in validation.diagnostics

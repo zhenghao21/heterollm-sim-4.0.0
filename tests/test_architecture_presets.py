@@ -15,6 +15,7 @@ from heterollm_sim.component_presets import materialize_component_payload
 
 
 PUBLIC_ID = "nvidia-b200-1gpu-2hbf-2hbm"
+DEEPSEEK_CAPACITY_ID = "nvidia-b200-1gpu-3hbf-2hbm"
 NATIVE_ID = "local-native-rtx5080-9950x3d-gddr7-ddr5"
 REMOVED_IDS = {
     "nvidia-h100-sxm-8-nvswitch",
@@ -28,10 +29,10 @@ REMOVED_IDS = {
 class CuratedArchitectureCatalogTests(unittest.TestCase):
     def test_curated_presets_are_public(self):
         rows = list_architecture_presets()
-        self.assertEqual({row["id"] for row in rows}, {PUBLIC_ID, NATIVE_ID})
-        self.assertEqual(architecture_preset_page()["total"], 2)
+        self.assertEqual({row["id"] for row in rows}, {PUBLIC_ID, DEEPSEEK_CAPACITY_ID, NATIVE_ID})
+        self.assertEqual(architecture_preset_page()["total"], 3)
         filtered = architecture_preset_page(vendor="NVIDIA", protocol="UCIe", loadable=True)
-        self.assertEqual([row["id"] for row in filtered["items"]], [PUBLIC_ID])
+        self.assertEqual([row["id"] for row in filtered["items"]], [PUBLIC_ID, DEEPSEEK_CAPACITY_ID])
 
     def test_native_rtx5080_payload_uses_curated_memory_and_protocol_limits(self):
         detail = architecture_preset_detail(NATIVE_ID)

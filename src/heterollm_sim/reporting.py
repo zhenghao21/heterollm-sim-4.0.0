@@ -151,6 +151,13 @@ def run_scenario(
 ) -> RunResult:
     """Plan, validate, and execute through the V4 unified event kernel."""
 
+    from .llama_scenario import prepare_llama_scenario
+
+    authored = scenario
+    scenario = prepare_llama_scenario(scenario)
+    if batch_lowerer is not None and scenario is not authored:
+        raise ValueError("prepare llama runtime before constructing a custom batch lowerer")
+
     scheduler = getattr(scenario.workload, "scheduler", None)
     scheduler_mode = (
         str(getattr(scheduler, "mode", "static")) if scheduler else "static"

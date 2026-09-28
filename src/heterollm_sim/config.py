@@ -445,6 +445,7 @@ class ScenarioConfig:
                     )
                 )
             self.resolve_component_profile(component)
+        self._bind_memory_services()
         for component_id, expected_kind in (
             (
                 self.host_orchestration_profile.cpu_component_id,
@@ -572,12 +573,23 @@ class ScenarioConfig:
                         )
             profile_resource_id = profile.resource_id
             owner = component.metadata.get("memory_service_owner")
+            hbf_contract = component.normalized_kind == "hbf" and component.is_active_memory
             if owner and profile_resource_id == "hbm.channel" and component.normalized_kind != "hbf":
                 profile_resource_id = str(owner)
-            updates = {"resource_id": profile_resource_id}
+            updates = {} if hbf_contract else {"resource_id": str(owner) if owner else profile_resource_id}
+            if "memory_service_model" in component.metadata and hasattr(profile, "service_model"):
+                updates["service_model"] = str(component.metadata["memory_service_model"])
+            for metadata_name, profile_name in (
+                ("read_latency_ns", "read_latency_ns"),
+                ("write_latency_ns", "write_latency_ns"),
+                ("transfer_granularity_bytes", "transaction_bytes"),
+                ("max_outstanding_requests", "max_outstanding_requests"),
+            ):
+                if metadata_name in component.metadata and not hbf_contract:
+                    updates[profile_name] = component.metadata[metadata_name]
             if not caps[0] and profile.bandwidth_gb_s <= 0:
                 updates["bandwidth_gb_s"] = shared_cap
-            if profile_resource_id == profile.resource_id:
+            if updates.get("resource_id") == profile.resource_id:
                 updates.pop("resource_id")
             if not all(getattr(profile, key) == value for key, value in updates.items()):
                 profile = replace(profile, **updates)
@@ -625,6 +637,97 @@ class ScenarioConfig:
                 )
             )
         return profile
+
+    def _bind_memory_services(self) -> None:
+        """Resolve physical memory once for operator and explicit endpoint access."""
+        components = []
+        for component in self.hardware.components:
+            if not component.is_active_memory:
+                components.append(component)
+                continue
+            # Generic topology bridges may be memory-like for routing purposes
+            # without owning a typed memory service.  Keep them as topology
+            # nodes; typed HBM/HBF/host-memory components still resolve through
+            # the strict profile contract above.
+            if self.component_profile_kind(component) is None:
+                components.append(component)
+                continue
+            profile = self.resolve_component_profile(component)
+            if not isinstance(profile, (HBMProfile, HostMemoryProfile)):
+                components.append(component)
+                continue
+            metadata = dict(component.metadata)
+            # Resolved values belong only in memory_service. Copying profile
+            # defaults into authoring metadata would mask later profile edits.
+            caps = self._memory_bandwidth_caps(component)
+            if caps[0] <= 0:
+                caps = (profile.bandwidth_gb_s * 8,) * 3
+            metadata["memory_service"] = {
+                "service_id": component.component_id + ".access",
+                "physical_owner": profile.resource_id,
+                "bandwidth_gb_s": profile.effective_bandwidth_gb_s,
+                "read_bandwidth_gb_s": profile.effective_read_bandwidth_gb_s,
+                "write_bandwidth_gb_s": profile.effective_write_bandwidth_gb_s,
+                # Explicit names keep the calibrated rate distinct from the
+                # physical ceiling for consumers that do not know the legacy
+                # profile field names.
+                "effective_bandwidth_gb_s": profile.effective_bandwidth_gb_s,
+                "effective_read_bandwidth_gb_s": profile.effective_read_bandwidth_gb_s,
+                "effective_write_bandwidth_gb_s": profile.effective_write_bandwidth_gb_s,
+                "physical_bandwidth_gb_s": caps[0] / 8,
+                "physical_read_bandwidth_gb_s": caps[1] / 8,
+                "physical_write_bandwidth_gb_s": caps[2] / 8,
+                "read_latency_ns": profile.read_latency_ns,
+                "write_latency_ns": profile.write_latency_ns,
+                "transaction_bytes": profile.transaction_bytes,
+                "max_outstanding_requests": profile.max_outstanding_requests,
+                "energy_pj_per_byte": profile.energy_pj_per_byte,
+                "latency_scope": "memory_service",
+                "service_model": getattr(profile, "service_model", metadata.get("memory_service_model", "analytical")),
+            }
+            components.append(replace(component, metadata=metadata))
+        component_map = {item.component_id: item for item in components}
+        links = []
+        for link in self.hardware.links:
+            metadata = dict(link.metadata)
+            reference = metadata.get("service_ref")
+            legacy_reference = metadata.get("bandwidth_source") in {"component", "memory_component", "shared_component"}
+            if not reference and legacy_reference:
+                memories = [component_map[name] for name in (link.source_component, link.target_component)
+                            if name in component_map and component_map[name].is_active_memory]
+                if len(memories) != 1:
+                    raise ValueError("hardware.links[{}].metadata.service_ref requires one memory endpoint".format(link.link_id))
+                reference = memories[0].component_id + ".access"
+            if reference:
+                memory = component_map.get(str(reference).removesuffix(".access"))
+                if memory is None or not memory.is_active_memory or reference != memory.component_id + ".access":
+                    raise ValueError("hardware.links[{}].metadata.service_ref={} is not a memory service".format(link.link_id, reference))
+                if memory.component_id not in (link.source_component, link.target_component):
+                    raise ValueError("hardware.links[{}].metadata.service_ref must reference an endpoint".format(link.link_id))
+                service = memory.metadata["memory_service"]
+                for field, expected in (("bandwidth_gbps", memory.shared_bandwidth_gbps),
+                                        ("latency_ns", service["read_latency_ns"])):
+                    value = getattr(link, field)
+                    if value and not math.isclose(value, expected, rel_tol=1e-12):
+                        raise ValueError("hardware.links[{}].{}={} conflicts with hardware.components[{}].{}={}; declare bandwidth_source=link for independent hardware".format(
+                            link.link_id, field, value, memory.component_id,
+                            "bandwidth_gbps" if field == "bandwidth_gbps" else "metadata.read_latency_ns", expected))
+                metadata["service_ref"] = reference
+                metadata["bandwidth_source"] = "memory_component"
+                metadata["bandwidth_resource_id"] = service["physical_owner"]
+                link = replace(link, bandwidth_gbps=0.0, latency_ns=0.0, metadata=metadata)
+            links.append(link)
+        components = tuple(components)
+        links = tuple(links)
+        # Keep ScenarioConfig.replace() cheap and identity-stable when the
+        # already-resolved service contract is unchanged. Several planners
+        # intentionally use object identity to prove placement-only edits.
+        if components != self.hardware.components or links != self.hardware.links:
+            object.__setattr__(
+                self,
+                "hardware",
+                replace(self.hardware, components=components, links=links),
+            )
 
     def _memory_bandwidth_caps(
         self, component: ComponentSpec
@@ -2664,57 +2767,42 @@ def _bind_local_rtx5080_hardware_presets(data: Mapping[str, Any]) -> Mapping[str
 
 
 def _bind_local_memory_link_sources(data: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Annotate local memory topology views with their profile resource owner."""
+    """Import legacy profile physical fields into the component service contract.
 
+    A profile bandwidth is calibrated throughput, so it is deliberately not
+    compared for equality with the component's physical ceiling.
+    """
     hardware = data.get("hardware")
     profiles = data.get("profiles")
     if not isinstance(hardware, Mapping) or not isinstance(profiles, Mapping):
         return data
-    components = list(hardware.get("components", ()))
-    raw_registries = profiles.get("components", {})
-    registries = raw_registries if isinstance(raw_registries, Mapping) else {}
-    memory_kinds = {"hbm", "hbm_stack", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory", "memory", "sram", "shared_memory"}
-    owner_by_component: Dict[str, str] = {}
-    for component in components:
-        if not isinstance(component, Mapping):
-            continue
-        component_id = str(component.get("component_id", ""))
-        kind = normalize_component_kind(str(component.get("kind", "")))
-        if kind not in memory_kinds:
-            continue
-        profile_kind = normalize_cost_profile_kind(kind)
-        registry = registries.get(profile_kind, {}) if profile_kind else {}
-        profile = registry.get(component.get("cost_profile_id"), {}) if isinstance(registry, Mapping) else {}
-        resource_id = profile.get("resource_id") if isinstance(profile, Mapping) else None
-        if isinstance(resource_id, str) and resource_id.strip():
-            owner_by_component[component_id] = resource_id.strip()
-    links = []
-    changed = False
-    for raw_link in hardware.get("links", ()):
-        link = dict(raw_link) if isinstance(raw_link, Mapping) else raw_link
-        if not isinstance(link, Mapping):
-            links.append(link)
-            continue
-        protocol = normalize_component_kind(str(link.get("protocol", "")))
-        source = str(link.get("source_component", ""))
-        target = str(link.get("target_component", ""))
-        memory_id = source if source in owner_by_component else target if target in owner_by_component else ""
-        if memory_id and protocol in {"hbm", "gddr7", "ddr", "dram", "tsv", "lpddr5x"}:
-            metadata = dict(link.get("metadata", {}))
-            if "bandwidth_source" not in metadata:
-                metadata["bandwidth_source"] = "memory_component"
-                changed = True
-            if "bandwidth_resource_id" not in metadata:
-                metadata["bandwidth_resource_id"] = owner_by_component[memory_id]
-                changed = True
-            link["metadata"] = metadata
-        links.append(link)
-    if not changed:
-        return data
-    result = dict(data)
-    result["hardware"] = dict(hardware)
-    result["hardware"]["links"] = links
-    return result
+    registries = profiles.get("components", {})
+    components = []
+    for raw in hardware.get("components", ()):
+        component = dict(raw)
+        metadata = dict(component.get("metadata", {}))
+        kind = normalize_cost_profile_kind(normalize_component_kind(str(component.get("kind", ""))))
+        if kind in {"hbm", "host_memory"}:
+            profile_id = component.get("cost_profile_id")
+            profile = registries.get(kind, {}).get(profile_id, {})
+            for profile_name, metadata_name in (
+                ("service_model", "memory_service_model"),
+                ("read_latency_ns", "read_latency_ns"),
+                ("write_latency_ns", "write_latency_ns"),
+                ("transaction_bytes", "transfer_granularity_bytes"),
+                ("max_outstanding_requests", "max_outstanding_requests"),
+            ):
+                if profile_name not in profile:
+                    continue
+                value = profile[profile_name]
+                if metadata_name in metadata and metadata[metadata_name] != value:
+                    raise ValueError("hardware.components[{}].metadata.{}={} conflicts with profiles.components.{}.{}.{}={}".format(
+                        component.get("component_id"), metadata_name, metadata[metadata_name], kind, profile_id, profile_name, value))
+            if metadata.get("latency_scope", "memory_service") != "memory_service":
+                raise ValueError("hardware.components[{}].metadata.latency_scope must be memory_service; end-to-end latency cannot be added to independent links".format(component.get("component_id")))
+        component["metadata"] = metadata
+        components.append(component)
+    return {**data, "hardware": {**hardware, "components": components}}
 
 
 def scenario_from_dict(data: Mapping[str, Any]) -> ScenarioConfig:

@@ -31,6 +31,8 @@ http://127.0.0.1:8765/
 
 `demo/evidence` 中保存了冻结的 Native 数据、R0 结果和本次结果，便于离线讲解误差来源。Native 数据是既有实测快照，演示电脑不会重新采集硬件数据。
 
+本次 DeepSeek-V3 专项证据也已随包提供：`deepseek_v3_edge_short_scan.json` 是 128/32 有界端侧演示的 HBM-only、HBF-only、Hybrid 三方案结果；`deepseek_v3_edge_evidence.json` 是完整 `edge_personal_assistant` 1024/512 负载的容量、放置、估算和校验证据；`deepseek_frontend_api_flow.json` 记录前端对应的校验、估算和架构扫描接口摘要。它们用于现场复核，不包含模型权重，也不会冒充完整 1024/512 serving 实测。
+
 ## 健康检查
 
 服务运行时执行：

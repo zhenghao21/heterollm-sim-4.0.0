@@ -57,7 +57,7 @@ def test_local_memory_transfer_uses_one_shared_resource_without_endpoint_recharg
     phases = TopologyRouter(scenario.hardware).transfer_phases(
         "cpu0", "hostmem0", 1024
     )
-    assert [phase.name for phase in phases] == ["transfer.link00"]
+    assert [phase.name for phase in phases] == ["transfer.hostmem0.write"]
     assert phases[0].demands[0].resource_id == profile.resource_id
 
 

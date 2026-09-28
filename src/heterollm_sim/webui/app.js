@@ -2036,6 +2036,7 @@ function mappingImpactView(scenario) {
       host_orchestration: deepClone(profiles.host_orchestration ?? null),
       fusion: deepClone(profiles.fusion ?? null),
       cim_interconnect: deepClone(profiles.cim_interconnect ?? null),
+      llama_cpp: deepClone(profiles.llama_cpp ?? null),
     },
     weights_resident: source.weights_resident,
     placement_inputs: {
@@ -2204,7 +2205,17 @@ function localizedBackendValue(value, fallbackZh = "操作失败，未提供本�
     ? [item.message_en, item.detail_en, item.reason_en]
     : [item.message_zh, item.detail_zh, item.reason_zh];
   const localized = localizedCandidates.find((candidate) => String(candidate || "").trim());
-  if (localized) return String(localized);
+  if (localized) {
+    const rendered = String(localized);
+    const technical = String(item.message_en || "").trim();
+    if (language !== "en" && technical
+        && rendered.includes("请查看 message_en 获取技术细节")
+        && technical !== rendered) {
+      const prefix = rendered.replace(/[；;]\s*请查看 message_en 获取技术细节[。.]?$/u, "");
+      return `${prefix || "技术原因"}：${technical}`;
+    }
+    return rendered;
+  }
   const stable = ISSUE_MESSAGE_BY_CODE[String(item.code || "")];
   if (stable) return stable[language];
   const generic = [item.message, item.detail, item.reason].find((candidate) => String(candidate || "").trim());
@@ -2233,7 +2244,18 @@ function backendChineseMessage(value, fallback = "操作失败，未提供中文
     ? [...diagnostics.flatMap((item) => [item.field_path_en, item.path_en, item.location_en, item.detail_en, item.message_en]), details.field_path_en, details.path_en, details.location_en, details.detail_en, details.message_en]
     : [...diagnostics.flatMap((item) => [item.field_path_zh, item.path_zh, item.location_zh, item.detail_zh, item.message_zh]), details.field_path_zh, details.path_zh, details.location_zh, details.detail_zh, details.message_zh];
   const specific = specificCandidates.find((candidate) => String(candidate || "").trim());
-  if (specific) return String(specific);
+  if (specific) {
+    const source = diagnostics.find((item) => (
+      item.message_zh === specific || item.message_en === specific
+    ));
+    const technical = String(source?.message_en || "").trim();
+    if (state?.settings?.language !== "en" && technical
+        && String(specific).includes("请查看 message_en 获取技术细节")) {
+      const prefix = String(specific).replace(/[；;]\s*请查看 message_en 获取技术细节[。.]?$/u, "");
+      return `${prefix || "技术原因"}：${technical}`;
+    }
+    return String(specific);
+  }
   return localizedBackendValue(root, fallback, "The operation failed; inspect the error code and diagnostic ID.");
 }
 
@@ -3200,6 +3222,12 @@ function markScenarioChanged(message = "", {
   mappingReason = "影响映射的模型、拓扑、并行、驻留或结构性优化输入已修改。",
 } = {}) {
   if (!state.scenario) return;
+  // Any draft edit invalidates backend-derived values. Authoring fields stay
+  // visible until /normalize returns the newly resolved service.
+  asArray(state.scenario.hardware?.components).forEach((component) => {
+    if (component.metadata) delete component.metadata.memory_service;
+  });
+  if (scenarioUsesLlamaRuntime(state.scenario)) clearLlamaRuntimeExposure(state.scenario);
   state.architectureScanResult = null;
   state.kvAnalysisResults = [];
   if (mappingImpact) markMappingStale(mappingReason);
@@ -3741,11 +3769,25 @@ function diagnosticContextText(issue) {
 }
 
 function localizedIssueMessage(issue) {
-  return localizedBackendValue(
+  const item = asObject(issue);
+  const localized = localizedBackendValue(
     issue,
     "未提供本地化诊断说明，请根据错误代码检查输入。",
     "No localized diagnostic was provided; inspect the input using the error code.",
   );
+  const rawTechnical = String(item.message_en || item.message || "").trim();
+  const chinese = String(item.message_zh || "").trim();
+  // The planner intentionally uses a stable Chinese summary for messages it
+  // has not translated yet.  Do not hide the original constraint behind the
+  // old “请查看 message_en” hint; the diagnostics panel is the place where
+  // users need that technical cause.
+  if (state?.settings?.language !== "en" && rawTechnical
+      && (chinese.includes("请查看 message_en 获取技术细节") || !chinese)
+      && rawTechnical !== localized) {
+    const prefix = localized.replace(/[；;]\s*请查看 message_en 获取技术细节[。.]?$/u, "");
+    return `${prefix || "技术原因"}：${rawTechnical}`;
+  }
+  return localized;
 }
 
 function normalizeValidation(payload) {
@@ -4310,6 +4352,9 @@ function finishRunJob(snapshot) {
       5200,
     );
   } else if (snapshot.status === "failed") {
+    // Close the progress modal before opening diagnostics; otherwise the
+    // error panel is rendered behind the modal and appears to be missing.
+    if (dom.runJobDialog.open) dom.runJobDialog.close("failed");
     showOperationError(uiText("后台仿真失败", "Background simulation failed"), { ...asObject(snapshot.error), code: "run_job_failed" });
   }
   syncRunButtons();
@@ -4666,11 +4711,18 @@ function operationErrorIssues(error, fallbackMessage) {
       }, "control_plane", "error");
     });
   }
+  const rawMessage = String(
+    error?.message_zh || error?.message_en || error?.message || details.message_zh
+      || details.message_en || details.message || "",
+  ).trim();
+  const rawIsChinese = hasChineseText(rawMessage);
   return [normalizeIssue({
     code: error?.code || "request_error",
-    message_zh: hasChineseText(fallbackMessage) ? fallbackMessage : "",
-    message_en: hasChineseText(fallbackMessage) ? "" : fallbackMessage,
-    message: fallbackMessage,
+    message_zh: error?.message_zh || (rawIsChinese ? rawMessage : "")
+      || (hasChineseText(fallbackMessage) ? fallbackMessage : ""),
+    message_en: error?.message_en || (!rawIsChinese && rawMessage ? rawMessage : "")
+      || (hasChineseText(fallbackMessage) ? "" : fallbackMessage),
+    message: rawMessage || fallbackMessage,
   }, "network", "error")];
 }
 
@@ -4856,11 +4908,10 @@ function sharedMemoryLinkComponent(link, scenario = state.scenario) {
   if (["component", "memory_component", "shared_component"].includes(explicit)) {
     return [source, target].find((item) => item && isActiveMemoryComponent(item)) || source || target || null;
   }
-  const protocol = normalizedComponentKind(link?.protocol || "");
-  if (["hbm", "ddr", "dram", "tsv", "lpddr5x"].includes(protocol)) {
-    return [source, target].find((item) => item && isActiveMemoryComponent(item)) || null;
-  }
-  return null;
+  const serviceRef = String(link?.metadata?.service_ref || "").trim();
+  if (!serviceRef) return null;
+  const serviceComponentId = serviceRef.endsWith(".access") ? serviceRef.slice(0, -7) : "";
+  return [source, target].find((item) => item && String(item.component_id) === serviceComponentId) || null;
 }
 
 function linkDisplayedBandwidthGbps(link, scenario = state.scenario) {
@@ -5174,6 +5225,10 @@ function kvAnalysisComponentCandidates(scenario) {
       layout_mode: "fixed",
       cache_component: hbm[0].component_id,
       offload_component: target.component_id,
+      // Keep the HBF backing capacity available for pressure cases.  The
+      // default policy is 0, which makes a hybrid candidate silently behave
+      // like HBM-only even though an offload component is selected.
+      offload_ratio: 1.0,
       pool_components: [],
     }, isWritableActiveRankMemory(target)
       ? "HBM 作为活动层，容量压力下将 KV 页卸载到 HBF。"
@@ -5218,6 +5273,15 @@ function kvAnalysisCandidateScenario(scenario, candidate) {
     ...asObject(copy.placement.kv_policy),
     ...deepClone(candidate.policy),
   };
+  // A manual KV target is a stronger control-plane constraint than the
+  // policy. Remove stale manual targets for generated candidates so HBF and
+  // hybrid rows actually exercise the candidate policy instead of conflicting
+  // with an older hbm0 target left in the current mapping.
+  if (candidate.id !== "current") {
+    const options = controlPlanePolicyOptionsForPlacement(copy.placement);
+    delete options.kv_cache_target;
+    delete options.kv_layer_targets;
+  }
   return copy;
 }
 
@@ -8250,9 +8314,9 @@ function memoryCostProfileMarkup(profileKey, component) {
   const physicalCap = physicalBandwidth > 0 ? physicalBandwidth : Number.POSITIVE_INFINITY;
   const measured = profile.measured_effective_bandwidth_gb_s != null ? Number(profile.measured_effective_bandwidth_gb_s) : null;
   const directional = profile.read_bandwidth_gb_s != null || profile.write_bandwidth_gb_s != null;
-  const effective = measured != null ? Math.min(measured, physicalCap) : Math.min(Number(profile.bandwidth_gb_s), physicalCap) * Number(profile.efficiency);
+  const effective = measured != null ? measured : Number(profile.bandwidth_gb_s) * Number(profile.efficiency);
   const directionalEffective = directional && measured == null
-    ? ` · 读取 ${formatBandwidthGbps(Math.min(Number(profile.read_bandwidth_gb_s ?? profile.bandwidth_gb_s), physicalCap) * Number(profile.efficiency) * 8)}；写入 ${formatBandwidthGbps(Math.min(Number(profile.write_bandwidth_gb_s ?? profile.bandwidth_gb_s), physicalCap) * Number(profile.efficiency) * 8)}`
+    ? ` · 读取 ${formatBandwidthGbps(Number(profile.read_bandwidth_gb_s ?? profile.bandwidth_gb_s) * Number(profile.efficiency) * 8)}；写入 ${formatBandwidthGbps(Number(profile.write_bandwidth_gb_s ?? profile.bandwidth_gb_s) * Number(profile.efficiency) * 8)}`
     : "";
   return `<section class="inspector-section cost-profile-section" data-profile-section="${escapeHtml(profileKey)}">
     <h3>${title}</h3>
@@ -8586,6 +8650,21 @@ function bindCostProfileFields(component) {
       next.arithmetic_mode = "fp16_fp32_analytical";
     }
     registry[profileId] = next;
+    if (["hbm", "host_memory"].includes(profileKey)) {
+      const physicalField = {
+        read_latency_ns: "read_latency_ns", write_latency_ns: "write_latency_ns",
+        transaction_bytes: "transfer_granularity_bytes", max_outstanding_requests: "max_outstanding_requests",
+        resource_id: "memory_service_owner",
+      }[field];
+      if (physicalField) asArray(state.scenario.hardware?.components)
+        .filter((item) => item.cost_profile_id === profileId && costProfileKeyForComponentKind(item) === profileKey)
+        .forEach((item) => {
+          item.metadata = asObject(item.metadata);
+          // This control edits the one physical service, including legacy
+          // authoring copies that would otherwise conflict on normalization.
+          item.metadata[physicalField] = value;
+        });
+    }
     commitTopologyHistory(historyBefore, "编辑成本 Profile", { mappingImpact: true });
     markScenarioChanged("", { mappingImpact: true, mappingReason: `组件 ${component.component_id} 绑定的 ${profileKey} Profile 已修改，映射需要重新生成。` });
     if (profileKey === "cim" && field === "arithmetic_mode" && value === "integer_bit_slice") {
@@ -8695,6 +8774,7 @@ function storageTransportParameters(component, scenario = state.scenario) {
   const profileKey = costProfileKeyForComponentKind(component);
   const profileBacked = ["hbm", "host_memory"].includes(profileKey);
   const profile = profileBacked ? costProfileDraft(profileKey, component, scenario) : {};
+  const service = asObject(metadata.memory_service);
   const media = kind === "hbf" ? {
     ...DEFAULT_HBF_MEDIA_CONTRACT,
     ...asObject(metadata.hbf_media),
@@ -8705,7 +8785,9 @@ function storageTransportParameters(component, scenario = state.scenario) {
     return number != null && number > 0 ? number : null;
   };
   const first = (...values) => values.find((value) => value != null) ?? 0;
-  const readLatency = profileBacked
+  const readLatency = service.read_latency_ns != null
+    ? finite(service.read_latency_ns)
+    : profileBacked
     ? first(finite(profile.read_latency_ns), finite(metadata.read_latency_ns))
     : first(
       positive(metadata.read_latency_ns),
@@ -8713,7 +8795,9 @@ function storageTransportParameters(component, scenario = state.scenario) {
       kind === "ssd" ? 80000 : null,
       kind === "high_io_ssd" ? 25000 : null,
     );
-  const writeLatency = profileBacked
+  const writeLatency = service.write_latency_ns != null
+    ? finite(service.write_latency_ns)
+    : profileBacked
     ? first(finite(profile.write_latency_ns), finite(metadata.write_latency_ns))
     : first(
       positive(metadata.write_latency_ns),
@@ -8721,7 +8805,9 @@ function storageTransportParameters(component, scenario = state.scenario) {
       kind === "ssd" ? 100000 : null,
       kind === "high_io_ssd" ? 40000 : null,
     );
-  const transactionBytes = profileBacked
+  const transactionBytes = service.transaction_bytes != null
+    ? positive(service.transaction_bytes)
+    : profileBacked
     ? first(positive(profile.transaction_bytes), positive(metadata.transfer_granularity_bytes), 256)
     : first(
       positive(metadata.transfer_granularity_bytes),
@@ -9116,10 +9202,11 @@ function renderLinkInspector(linkId) {
   const sharedMemory = sharedMemoryLinkComponent(link);
   const transferMarkup = sharedMemory
     ? `<div class="readout-grid">
-        <div class="readout"><span>带宽资源（只读引用）</span><strong>${escapeHtml(String(sharedMemory.component_id))} · 共享总带宽</strong></div>
-        <div class="readout"><span>协议传输上限（只读）</span><strong>${escapeHtml(formatBandwidthGbps(linkDisplayedBandwidthGbps(link)))}</strong></div>
+        <div class="readout"><span>服务引用（只读）</span><strong>${escapeHtml(String(link?.metadata?.service_ref || `${sharedMemory.component_id}.access`))}</strong></div>
+        <div class="readout"><span>有效带宽（只读）</span><strong>${escapeHtml(formatBandwidthGbps(Number(sharedMemory?.metadata?.memory_service?.bandwidth_gb_s ?? linkDisplayedBandwidthGbps(link) / 8) * 8))}</strong></div>
+        <div class="readout"><span>物理峰值（只读）</span><strong>${escapeHtml(formatBandwidthGbps(Number(sharedMemory?.metadata?.memory_service?.physical_bandwidth_gb_s || componentSharedBandwidthGbps(sharedMemory) / 8) * 8))}</strong></div>
       </div>
-      <p class="muted">这是本地内存接口的拓扑表示，带宽由 ${escapeHtml(String(sharedMemory.component_id))} 的组件总带宽提供；请回到组件 Inspector 修改。</p>`
+      <p class="muted">这是 ${escapeHtml(String(link?.metadata?.service_ref || `${sharedMemory.component_id}.access`))} 的拓扑引用；带宽和延迟来自后端解析的内存服务。请回到组件 Inspector 修改组件或 Profile。</p>`
     : bandwidthField("带宽（Bandwidth, MB/s–TB/s）", "bandwidth_gbps", link.bandwidth_gbps ?? 0, { scope: "link" });
   dom.inspectorContent.innerHTML = `
     <section class="inspector-section">
@@ -9140,7 +9227,9 @@ function renderLinkInspector(linkId) {
     <section class="inspector-section">
       <h3>传输</h3>
       ${transferMarkup}
-      ${inputField("延迟（Latency, ns）", "latency_ns", link.latency_ns ?? 0, { scope: "link", type: "number", min: 0, step: "any", helpKey: "link_latency", unit: "ns" })}
+      ${sharedMemory
+        ? `<div class="readout"><span>服务延迟（只读）</span><strong>${escapeHtml(formatUnit(Number(sharedMemory?.metadata?.memory_service?.read_latency_ns ?? 0), "ns"))}</strong></div>`
+        : inputField("延迟（Latency, ns）", "latency_ns", link.latency_ns ?? 0, { scope: "link", type: "number", min: 0, step: "any", helpKey: "link_latency", unit: "ns" })}
       <label class="checkbox-field"><span data-concept-help="bidirectional_link">双向传输（Bidirectional）</span><input type="checkbox" data-inspector-scope="link" data-inspector-field="bidirectional" ${link.bidirectional !== false ? "checked" : ""}></label>
     </section>
     ${thermalOperatingPointMarkup(link)}`;
@@ -10784,6 +10873,7 @@ function applyArchitecturePresetDetail(detail) {
     state.scenario.hardware = hardware;
     const rebuiltProfiles = resetArchitectureDependentProfiles(state.scenario);
     resetPlacementForArchitecturePreset(state.scenario.placement, hardware.name);
+    seedDeepseekV3HbfWeightTargets(state.scenario);
     state.topologyView = normalized.view;
     state.nodePositions = normalized.view.layout.positions;
     state.nodeSizes = {};
@@ -11336,6 +11426,40 @@ function resetModelGraphForPreset(graphValue) {
   return graph;
 }
 
+// DeepSeek-V3's routed expert weights are much larger than its dense and
+// attention weights. On the capacity-expanded 3-HBF analysis topology, seed
+// only the routed expert tensors across HBF0/1/2; the runtime control plane
+// still generates and owns the final placement decision.
+function seedDeepseekV3HbfWeightTargets(scenario = state.scenario) {
+  if (!scenario || String(scenario?.model?.metadata?.preset_id || "") !== "deepseek-v3-671b") return 0;
+  const hbfIds = asArray(scenario?.hardware?.components)
+    .filter((component) => normalizedComponentKind(component?.kind) === "hbf"
+      && asObject(component?.metadata).access_mode === "memory"
+      && asObject(component?.metadata).writable !== false)
+    .map((component) => String(component.component_id || "").trim())
+    .filter(Boolean)
+    .sort();
+  if (hbfIds.length < 3) return 0;
+  const routedLayers = asArray(scenario?.model?.graph?.operators)
+    .filter((operator) => operator?.op_kind === "layer_group")
+    .flatMap((operator) => {
+      const overrides = asObject(asObject(operator.parameters).overrides);
+      return Object.entries(overrides)
+        .filter(([, value]) => asObject(asObject(value).metadata).preset_pattern === "routed_moe")
+        .map(([layerId]) => String(layerId));
+    })
+    .filter(Boolean)
+    .sort();
+  if (!routedLayers.length) return 0;
+  const options = controlPlanePolicyOptionsForPlacement(scenario.placement, { create: true });
+  const targets = asObject(options.weight_tensor_targets);
+  routedLayers.forEach((layerId, index) => {
+    targets[`${layerId}.expert_weights`] = hbfIds[index % hbfIds.length];
+  });
+  options.weight_tensor_targets = targets;
+  return routedLayers.length;
+}
+
 function applyPresetDetailToScenario(payload) {
   const preset = asObject(payload?.preset);
   const readiness = presetMaterializationReadiness(payload);
@@ -11359,6 +11483,7 @@ function applyPresetDetailToScenario(payload) {
   resetModelGraphForPreset(nextModel.graph);
   state.scenario.model = nextModel;
   state.scenario.placement.model_name = nextModel.name;
+  seedDeepseekV3HbfWeightTargets(state.scenario);
   markScenarioChanged();
   return { preset, level, nextModel, removedByGroup, layerToStage };
 }
@@ -14701,6 +14826,91 @@ function bindControlPlanePolicyControls(placement) {
   }));
 }
 
+function clearLlamaRuntimeExposure(scenario) {
+  for (const metadata of [scenario?.workload?.metadata, scenario?.placement?.metadata]) {
+    if (!metadata) continue;
+    for (const key of Object.keys(metadata)) {
+      if (key.startsWith("llama_cpp_") && !["llama_cpp_runtime_identity", "llama_cpp_recurrent_batching_contract", "llama_cpp_slot_order_contract"].includes(key)) delete metadata[key];
+    }
+  }
+  const controlPlane = asObject(scenario?.placement?.metadata?.control_plane);
+  delete controlPlane.decision;
+  delete controlPlane.evidence;
+}
+
+function scenarioUsesLlamaRuntime(scenario) {
+  if (scenario?.profiles?.llama_cpp && typeof scenario.profiles.llama_cpp === "object") return true;
+  for (const metadata of [scenario?.workload?.metadata, scenario?.placement?.metadata]) {
+    if (!metadata || typeof metadata !== "object") continue;
+    if (Object.keys(metadata).some((key) => key.startsWith("llama_cpp_")
+      || ["llama_backend_memory", "llama_device_memory_policy", "memory_tiers"].includes(key))) return true;
+  }
+  return false;
+}
+
+function llamaRuntimeDefaults(scenario = state.scenario) {
+  const workload = asObject(scenario?.workload);
+  const scheduler = asObject(workload.scheduler);
+  const positive = (value, fallback) => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
+  const requests = asArray(workload.requests);
+  const tokenSpan = requests.length
+    ? requests.reduce((largest, request) => Math.max(largest, Number(request.prompt_tokens || 0) + Number(request.output_tokens || 0)), 0)
+    : Number(workload.prompt_tokens || 0) + Number(workload.output_tokens || 0);
+  const parallel = positive(scheduler.max_num_seqs, 1);
+  const batch = positive(scheduler.max_num_batched_tokens, 512);
+  return {
+    policy: "llama_cpp", gpu_layers: -1, batch,
+    ubatch: Math.min(batch, positive(scheduler.max_num_ubatch_tokens, batch)),
+    context: Math.max(parallel, positive(tokenSpan, 4096)), parallel,
+    offload_kqv: true, device_memory_tiering: true,
+  };
+}
+
+function setLlamaRuntimeMode(mode, scenario = state.scenario) {
+  if (!["auto", "llama_cpp"].includes(mode)) return false;
+  scenario.profiles = asObject(scenario.profiles);
+  if (mode === "llama_cpp") scenario.profiles.llama_cpp = { ...llamaRuntimeDefaults(scenario), ...asObject(scenario.profiles.llama_cpp) };
+  else delete scenario.profiles.llama_cpp;
+  clearLlamaRuntimeExposure(scenario);
+  return true;
+}
+
+function updateLlamaRuntimeField(field, value, scenario = state.scenario) {
+  const profile = scenario?.profiles?.llama_cpp;
+  if (!profile) return false;
+  const booleanFields = ["offload_kqv", "device_memory_tiering"];
+  if (booleanFields.includes(field)) {
+    if (typeof value !== "boolean") return false;
+  } else if (!["gpu_layers", "batch", "ubatch", "context", "parallel"].includes(field)
+      || !Number.isSafeInteger(value) || value < (field === "gpu_layers" ? -1 : 1)) return false;
+  const next = { ...llamaRuntimeDefaults(scenario), ...profile, [field]: value };
+  if (field === "batch") next.ubatch = Math.min(next.ubatch, value);
+  if (next.ubatch > next.batch || next.parallel > next.context
+      || (field === "context" && next.context < llamaRuntimeDefaults(scenario).context)) return false;
+  scenario.profiles.llama_cpp = next;
+  clearLlamaRuntimeExposure(scenario);
+  return true;
+}
+
+function llamaRuntimeControlsMarkup() {
+  const profile = state.scenario?.profiles?.llama_cpp;
+  const values = { ...llamaRuntimeDefaults(), ...asObject(profile) };
+  const numeric = (field, zh, en) => `<label class="field"><span>${escapeHtml(uiText(zh, en))}</span><input type="number" min="${field === "gpu_layers" ? -1 : 1}" step="1" data-llama-runtime-field="${field}" value="${escapeHtml(values[field])}"></label>`;
+  return `<section class="control-section" aria-labelledby="llamaRuntimeTitle">
+    <strong class="control-section-title" id="llamaRuntimeTitle">${escapeHtml(uiText("映射与调度模式", "Mapping and scheduling mode"))}</strong>
+    <label class="field"><span>${escapeHtml(uiText("运行规则", "Runtime rules"))}</span><select data-llama-runtime-mode>${fixedOptions([["auto", uiText("通用自动", "Generic automatic")], ["llama_cpp", uiText("llama.cpp 规则", "llama.cpp rules")]], profile ? "llama_cpp" : "auto")}</select></label>
+    ${profile ? `<label class="checkbox-field"><span><strong>${escapeHtml(uiText("HBM/HBF统一显存", "Unified HBM/HBF device memory"))}</strong><small>${escapeHtml(uiText("HBM 优先；权重与 KV 超出时使用 HBF，直接访问，无强制回搬 HBM。", "HBM first; overflow weights and KV use HBF directly, without mandatory HBM staging."))}</small></span><input type="checkbox" data-llama-runtime-field="device_memory_tiering" ${values.device_memory_tiering ? "checked" : ""}></label>
+    <details><summary>${escapeHtml(uiText("llama.cpp 参数", "llama.cpp parameters"))}</summary><div class="field-grid-2">
+      ${numeric("gpu_layers", "GPU 层数（-1 为全部）", "GPU layers (-1 = all)")}
+      ${numeric("batch", "批次 Token 上限", "Batch token limit")}
+      ${numeric("ubatch", "微批次 Token 上限", "Microbatch token limit")}
+      ${numeric("context", "上下文 Token 上限", "Context token limit")}
+      ${numeric("parallel", "并发序列数", "Parallel sequences")}
+    </div><label class="checkbox-field"><span>${escapeHtml(uiText("在设备上执行 K/Q/V", "Offload K/Q/V to device"))}</span><input type="checkbox" data-llama-runtime-field="offload_kqv" ${values.offload_kqv ? "checked" : ""}></label></details>
+    <p class="muted">${escapeHtml(uiText("按 llama.cpp 层放置与调度规则建模；HBM/HBF 分层为模拟器扩展，不代表原生运行已验证。实际放置在运行后只读展示。", "Models llama.cpp layer placement and scheduling rules. HBM/HBF tiering is a simulator extension, not verified native execution. Actual placement is read-only after a run."))}</p>` : ""}
+  </section>`;
+}
+
 function renderPlacementControls() {
   const placement = state.scenario.placement;
   const parallel = asObject(placement.parallel);
@@ -14719,6 +14929,7 @@ function renderPlacementControls() {
     "Changing TP/PP/EP clears the old Rank mapping; changing PP also clears the layer-to-stage mapping. With colocation enabled, the interface builds the complete Cartesian mapping only from eligible GPUs and their directly connected active memory (including DRAM/HBM) and CIM components.",
   );
   dom.placementControls.innerHTML = `
+    ${llamaRuntimeControlsMarkup()}
     <section class="control-section" aria-labelledby="parallelControlsTitle">
       <strong class="control-section-title" id="parallelControlsTitle" data-concept-help="parallel_strategy">${escapeHtml(uiText("并行策略", "Parallel strategy"))}</strong>
       <div class="parallel-grid">
@@ -14736,7 +14947,7 @@ function renderPlacementControls() {
     <section class="control-section" aria-labelledby="kvControlsTitle">
       <strong class="control-section-title" id="kvControlsTitle" data-concept-help="kv_residency_policy">${escapeHtml(uiText("KV 驻留策略", "KV residency strategy"))}</strong>
       <div class="kv-grid">
-         <label class="field"><span>${escapeHtml(uiText("KV 驻留模式", "KV residency mode"))}</span><select data-placement-group="kv_policy" data-placement-field="layout_mode" aria-describedby="kvLayoutModeHelp">${fixedOptions([["auto", uiText("跟随 llama.cpp layer placement", "Follow llama.cpp layer placement")], ["fixed", uiText("固定单组件", "Fixed single component")], ["manual", uiText("手动按 layer 指定", "Manual per-layer mapping")], ["paged_pool", uiText("动态 KV Pool（实验性）", "Dynamic KV Pool (experimental)")]], kvPolicy.layout_mode)}</select><small id="kvLayoutModeHelp" class="field-hint">${escapeHtml(uiText("默认模式按 split/layer 自动决定 KV 所属组件；动态 Pool 只有后端明确支持时才可用。", "Auto mode follows split/layer placement; Dynamic Pool is only meaningful when the backend supports it."))}</small></label>
+         <label class="field"><span>${escapeHtml(uiText("KV 驻留模式", "KV residency mode"))}</span><select data-placement-group="kv_policy" data-placement-field="layout_mode" aria-describedby="kvLayoutModeHelp">${fixedOptions([["auto", uiText("跟随 llama.cpp layer placement", "Follow llama.cpp layer placement")], ["fixed", uiText("固定单组件", "Fixed single component")], ["manual", uiText("手动按 layer 指定", "Manual per-layer mapping")], ["paged_pool", uiText("动态 KV Pool（实验性）", "Dynamic KV Pool (experimental)")]], kvPolicy.layout_mode)}</select><small id="kvLayoutModeHelp" class="field-hint">${escapeHtml(uiText(state.scenario?.profiles?.llama_cpp?.device_memory_tiering ? "HBM/HBF统一显存已开启：按层归属与剩余容量分配，HBM 优先，超出时在可直接访问的 HBF 上存放 KV。" : "有 llama.cpp 运行时层归属证据时才按 layer owner；没有该证据时退回当前映射的单组件策略，也不会按剩余容量自动换 HBM。需要容量避让请使用固定组件或控制平面目标。", state.scenario?.profiles?.llama_cpp?.device_memory_tiering ? "Unified HBM/HBF device memory: layer owners and available capacity determine placement; HBM first, then directly accessible HBF for overflowing KV." : "Layer owners are followed only when llama.cpp runtime evidence exists; without it, auto falls back to the current single-component mapping and does not rebalance by remaining capacity. Use a fixed component or a control-plane target for capacity avoidance."))}</small></label>
          ${kvPolicy.layout_mode === "auto" ? `<label class="field"><span>${escapeHtml(uiText("默认活动组件 / fallback", "Default active / fallback component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("自动决定", "Auto"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>` : ""}
          ${kvPolicy.layout_mode === "paged_pool" ? `<label class="field"><span>${escapeHtml(uiText("Pool 组件（实验性）", "Pool components (experimental)"))}</span><select multiple size="3" data-placement-group="kv_policy" data-placement-field="pool_components">${componentOptions(kvPolicy.pool_components, activeMemoryFilter)}</select></label>` : ""}
          ${kvPolicy.layout_mode === "fixed" ? `<label class="field"><span data-concept-help="kv_cache_component">${escapeHtml(uiText("缓存组件", "Cache Component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("未指定", "Unspecified"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>` : ""}
@@ -14774,6 +14985,18 @@ function renderPlacementControls() {
     if (placement.metadata[field] === value) return;
     placement.metadata[field] = value;
     markScenarioChanged("", { mappingImpact: true, mappingReason: "Linear state 卸载模式已修改。" });
+  }));
+  $('[data-llama-runtime-mode]', dom.placementControls)?.addEventListener("change", (event) => {
+    if (setLlamaRuntimeMode(event.target.value)) markScenarioChanged("", { mappingImpact: true, mappingReason: "映射与调度模式已修改。" });
+  });
+  $$('[data-llama-runtime-field]', dom.placementControls).forEach((control) => control.addEventListener("change", () => {
+    const value = control.type === "checkbox" ? control.checked : Number(control.value);
+    if (!updateLlamaRuntimeField(control.dataset.llamaRuntimeField, value)) {
+      toast("llama.cpp 参数无效", "请使用有效整数；微批次不能大于批次，上下文必须容纳请求 Token 与并发数。", "error", 6200);
+      renderPlacementControls();
+      return;
+    }
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "llama.cpp 规则参数已修改。" });
   }));
   bindControlPlanePolicyControls(placement);
   $("#allowColocatedRanksInput", dom.placementControls).addEventListener("change", (event) => {

@@ -60,6 +60,8 @@ class LlamaCppRuntimeConfig:
     policy: str = "llama_cpp"
     preemption_enabled: bool = False
     prefill_chunk_tokens: int | None = None
+    # Analytical CUDA buffer extension; not a native llama.cpp CLI flag.
+    device_memory_tiering: bool = False
 
     def __post_init__(self) -> None:
         for name in ("threads", "threads_batch"):
@@ -76,7 +78,7 @@ class LlamaCppRuntimeConfig:
         for name in ("flash_attn", "kv_unified", "cont_batching", "warmup"):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f"llama.cpp {name} must be boolean")
-        for name in ("mmap", "mlock", "offload_kqv", "op_offload"):
+        for name in ("mmap", "mlock", "offload_kqv", "op_offload", "device_memory_tiering"):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f"llama.cpp {name} must be boolean")
         if isinstance(self.seed, bool) or not isinstance(self.seed, int):
@@ -139,6 +141,7 @@ class LlamaCppRuntimeConfig:
             "policy": self.policy,
             "preemption_enabled": self.preemption_enabled,
             "prefill_chunk_tokens": self.prefill_chunk_tokens,
+            "device_memory_tiering": self.device_memory_tiering,
         }
 
     @property
@@ -735,6 +738,7 @@ class LlamaCppAdapter:
             "policy": config.policy,
             "preemption_enabled": config.preemption_enabled,
             "prefill_chunk_tokens": config.prefill_chunk_tokens,
+            "device_memory_tiering": config.device_memory_tiering,
         }
         return _plan(self.runtime, tasks, semantics)
 

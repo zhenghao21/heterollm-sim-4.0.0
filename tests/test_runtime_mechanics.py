@@ -194,7 +194,8 @@ def test_pipeline_reuses_transaction_costs_without_dividing_startup_latency():
                                     buffer_capacity_bytes=8, max_inflight_chunks=2)
     assert plan.chunk_byte_counts == (4, 4, 2)
     transfer_tasks = [task for task in plan.tasks if not task.metadata["is_chunk_consumer"]]
-    assert [task.demands[0].service_ns for task in transfer_tasks] == [7, 7, 5]
+    assert [task.demands[0].service_ns for task in transfer_tasks] == [4, 4, 2]
+    assert [max(d.service_ns for d in task.demands) for task in transfer_tasks] == [7, 7, 5]
     assert sum(task.demands[0].bytes_moved for task in transfer_tasks) == 10
 
 
@@ -205,7 +206,9 @@ def test_hardware_ownership_requires_explicit_declaration():
         "hbm.compute": "controller", "component.mem.read": "controller", "component.mem.write": "controller",
     }
     assert "dma" not in declared_resource_owners(hardware)
-    assert declared_resource_owners(replace(hardware, metadata={}, components=(replace(memory, metadata={}),))) == {}
+    assert declared_resource_owners(replace(hardware, metadata={}, components=(replace(memory, metadata={}),))) == {
+        "component.mem.read": "mem.hbm_fabric", "component.mem.write": "mem.hbm_fabric",
+    }
 
 
 def overheads():

@@ -261,6 +261,7 @@ function loadRunHarness(fetchImpl) {
       validationIssueTarget,
       inferValidationIssueFields,
       normalizeIssue,
+      localizedIssueMessage,
       beginValidationNavigation,
       advanceValidationNavigation,
       setScenario,
@@ -454,6 +455,39 @@ test("V4 run still stops on backend validation errors before estimate or submiss
   assert.deepEqual(calls, ["/api/validate"]);
   assert.equal(ui.dom.runJobDialog.open, false);
   assert.equal(ui.state.validation.errors.length, 1);
+});
+
+test("diagnostics reveal the technical reason behind a generic Chinese validation summary", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  const message = ui.localizedIssueMessage({
+    code: "runtime_placement_validation",
+    message_zh: "场景校验未通过；请查看 message_en 获取技术细节",
+    message_en: "request request-0000 KV and linear-state working sets require 157417472 bytes, exceeding shared physical cache capacity 28600320 bytes on hbm0",
+  });
+  assert.match(message, /157417472 bytes/);
+  assert.match(message, /28600320 bytes on hbm0/);
+});
+
+test("failed background jobs close the progress modal before opening diagnostics", () => {
+  const ui = loadRunHarness(async () => { throw new Error("no request"); });
+  ui.dom.runJobDialog.open = true;
+  ui.finishRunJob({
+    job_id: "failed-job",
+    status: "failed",
+    error: {
+      message: "运行时控制平面无法完成放置",
+      exception_type: "ScenarioValidationError",
+      details: {
+        diagnostics: [{
+          message_zh: "场景校验未通过；请查看 message_en 获取技术细节",
+          message_en: "KV working set exceeds shared physical cache capacity on hbm0",
+        }],
+      },
+    },
+  });
+  assert.equal(ui.dom.runJobDialog.open, false);
+  assert.equal(ui.operationErrors.length, 1);
+  assert.equal(ui.operationErrors[0].code, "run_job_failed");
 });
 
 function runtimeReport() {

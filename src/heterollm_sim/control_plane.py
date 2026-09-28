@@ -18,6 +18,7 @@ from .ir import normalize_component_kind
 from .runtime import ControlPlaneRuntime, RuntimeRunResult
 from .runtime_ir import RuntimeAction
 from .runtime_state import RuntimeState
+from .planner import ScenarioValidationError
 
 
 @dataclass(frozen=True)
@@ -265,6 +266,8 @@ def _execution_resource_capacities(
     # in both directions.  Keep capacity discovery on the same reachability
     # contract so disconnected authored profiles cannot become runtime lanes.
     router = TopologyRouter(scenario.hardware)
+    for resource_id, capacity in router.resource_capacities.items():
+        declare(resource_id, capacity)
     for component in sorted(
         scenario.hardware.components,
         key=lambda item: item.component_id,
@@ -920,10 +923,38 @@ def bootstrap_control_plane(
         reasons = tuple(
             item.reason for item in decision.unplaced if item.reason
         )
-        raise ValueError(
-            "runtime control plane could not place scenario: {}".format(
+        diagnostics = []
+        for item in decision.unplaced:
+            details = dict(item.details or {})
+            nested = details.get("diagnostics")
+            if isinstance(nested, (list, tuple)):
+                diagnostics.extend(
+                    dict(value) for value in nested
+                    if isinstance(value, Mapping)
+                )
+            if details.get("message_en") or details.get("message_zh"):
+                diagnostics.append({
+                    "code": "runtime_placement_validation",
+                    "message_zh": details.get("message_zh", item.reason),
+                    "message_en": details.get("message_en", item.reason),
+                    "stage": "capacity_check",
+                    "item_id": item.item_id,
+                    "required_bytes": item.required_bytes,
+                })
+            elif item.reason:
+                diagnostics.append({
+                    "code": "runtime_placement_unplaced",
+                    "message_zh": item.reason,
+                    "message_en": item.reason,
+                    "stage": "capacity_check",
+                    "item_id": item.item_id,
+                    "required_bytes": item.required_bytes,
+                })
+        raise ScenarioValidationError(
+            "运行时控制平面无法完成放置：{}".format(
                 "; ".join(reasons) or decision.status
-            )
+            ),
+            diagnostics,
         )
     candidate = decision.apply(scenario)
     # A previously mapped scenario is revalidated on every run, but solver

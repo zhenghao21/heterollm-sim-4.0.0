@@ -1,5 +1,6 @@
 """Regression coverage for derived, analytical memory throughput metrics."""
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 from heterollm_sim.communication import TopologyRouter
@@ -82,4 +83,8 @@ def test_ssd_and_cxl_endpoint_paths_expose_same_derived_metrics():
         assert metadata["transactions"] == 3
         assert metadata["request_window_utilization"] == 1.0
         assert metadata["bandwidth_ceiling_gb_s"] == 10.0  # 80 Gbit/s
-        assert metadata["realtime_throughput_gb_s"] < metadata["bandwidth_ceiling_gb_s"]
+        assert metadata["realtime_throughput_gb_s"] <= metadata["bandwidth_ceiling_gb_s"]
+        serial = TopologyRouter._endpoint_phase(replace(component, metadata={
+            **component.metadata, "memory_service_model": "serialized",
+        }), 3 * 4096, read=True, name="serialized")
+        assert serial.metadata["realtime_throughput_gb_s"] < metadata["bandwidth_ceiling_gb_s"]
