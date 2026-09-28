@@ -8,7 +8,7 @@
   "llama_mode": "llama_cpp source-rule approximation",
   "native_reference": "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json",
   "r0_reference": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_000/on/errors.0001.json",
-  "source_commit": "e6ac22d",
+  "source_commit": "0af751b",
   "cells": [
     {
       "cell_id": "qwen25_p512_o128_c1__fixed_runtime",
