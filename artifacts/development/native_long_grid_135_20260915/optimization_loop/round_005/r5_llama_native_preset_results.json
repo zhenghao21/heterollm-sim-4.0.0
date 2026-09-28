@@ -1,0 +1,278 @@
+{
+  "schema": "heterollm.llama-native-r0-freeze/v1",
+  "freeze_id": "R5",
+  "frozen_at": "2026-09-28",
+  "result_scope": "representative_multi_model_only",
+  "architecture_preset": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+  "hardware_binding": "architecture preset topology and identity bound to native measured snapshot",
+  "llama_mode": "llama_cpp source-rule approximation",
+  "native_reference": "artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json",
+  "r0_reference": "artifacts/development/native_long_grid_135_20260915/optimization_loop/round_000/on/errors.0001.json",
+  "source_commit": "e6ac22d",
+  "cells": [
+    {
+      "cell_id": "qwen25_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen25",
+      "deployment": null,
+      "metrics": {
+        "ttft": {
+          "current_ms": 21.244964503914918,
+          "native_ms": 59.463,
+          "r0_ms": 21.204273161692754,
+          "current_signed_error_pct": -64.27195986762369,
+          "current_ape_pct": 64.27195986762369,
+          "r0_signed_error_pct": -64.34039123203883,
+          "r0_ape_pct": 64.34039123203883,
+          "delta_ape_vs_r0_pct_points": -0.06843136441512832,
+          "current_vs_r0_pct": 0.1919016129997628
+        },
+        "tpot": {
+          "current_ms": 2.077824661431241,
+          "native_ms": 3.557181102362205,
+          "r0_ms": 2.077904648839668,
+          "current_signed_error_pct": -41.5878865416375,
+          "current_ape_pct": 41.5878865416375,
+          "r0_signed_error_pct": -41.58563792380992,
+          "r0_ape_pct": 41.58563792380992,
+          "delta_ape_vs_r0_pct_points": 0.0022486178275782907,
+          "current_vs_r0_pct": -0.003849426318557429
+        },
+        "e2e": {
+          "current_ms": 285.12869650568246,
+          "native_ms": 511.045,
+          "r0_ms": 285.0981635643306,
+          "current_signed_error_pct": -44.20673394599645,
+          "current_ape_pct": 44.20673394599645,
+          "r0_signed_error_pct": -44.2127085551506,
+          "r0_ape_pct": 44.2127085551506,
+          "delta_ape_vs_r0_pct_points": -0.005974609154154858,
+          "current_vs_r0_pct": 0.010709624001124487
+        }
+      }
+    },
+    {
+      "cell_id": "smollm2_p512_o128_c1__fixed_runtime",
+      "model_key": "smollm2",
+      "deployment": null,
+      "metrics": {
+        "ttft": {
+          "current_ms": 42.830232826856,
+          "native_ms": 67.53,
+          "r0_ms": 42.705508829967066,
+          "current_signed_error_pct": -36.57599166762032,
+          "current_ape_pct": 36.57599166762032,
+          "r0_signed_error_pct": -36.760685872994124,
+          "r0_ape_pct": 36.760685872994124,
+          "delta_ape_vs_r0_pct_points": -0.18469420537380685,
+          "current_vs_r0_pct": 0.29205599068149063
+        },
+        "tpot": {
+          "current_ms": 3.877013595334319,
+          "native_ms": 3.8972913385826775,
+          "r0_ms": 3.877093582742763,
+          "current_signed_error_pct": -0.5203035002185106,
+          "current_ape_pct": 0.5203035002185106,
+          "r0_signed_error_pct": -0.5182511155878833,
+          "r0_ape_pct": 0.5182511155878833,
+          "delta_ape_vs_r0_pct_points": 0.00205238463062725,
+          "current_vs_r0_pct": -0.0020630765478519245
+        },
+        "e2e": {
+          "current_ms": 535.2109594343145,
+          "native_ms": 562.866,
+          "r0_ms": 535.0963938382979,
+          "current_signed_error_pct": -4.913254765021418,
+          "current_ape_pct": 4.913254765021418,
+          "r0_signed_error_pct": -4.933608738439005,
+          "r0_ape_pct": 4.933608738439005,
+          "delta_ape_vs_r0_pct_points": -0.020353973417586477,
+          "current_vs_r0_pct": 0.021410272492184496
+        }
+      }
+    },
+    {
+      "cell_id": "tinyllama_p512_o128_c1__fixed_runtime",
+      "model_key": "tinyllama",
+      "deployment": null,
+      "metrics": {
+        "ttft": {
+          "current_ms": 30.52485286243256,
+          "native_ms": 54.718,
+          "r0_ms": 30.42061348092825,
+          "current_signed_error_pct": -44.214238710419686,
+          "current_ape_pct": 44.214238710419686,
+          "r0_signed_error_pct": -44.40474161897685,
+          "r0_ape_pct": 44.40474161897685,
+          "delta_ape_vs_r0_pct_points": -0.19050290855716684,
+          "current_vs_r0_pct": 0.34266035288756386
+        },
+        "tpot": {
+          "current_ms": 2.424546733927818,
+          "native_ms": 3.1603779527559053,
+          "r0_ms": 2.424626721336251,
+          "current_signed_error_pct": -23.283013292332,
+          "current_ape_pct": 23.283013292332,
+          "r0_signed_error_pct": -23.280482347944055,
+          "r0_ape_pct": 23.280482347944055,
+          "delta_ape_vs_r0_pct_points": 0.00253094438794668,
+          "current_vs_r0_pct": -0.0032989576386874674
+        },
+        "e2e": {
+          "current_ms": 338.4422880712654,
+          "native_ms": 455.563,
+          "r0_ms": 338.3482070906321,
+          "current_signed_error_pct": -25.709004446966627,
+          "current_ape_pct": 25.709004446966627,
+          "r0_signed_error_pct": -25.72965603206755,
+          "r0_ape_pct": 25.72965603206755,
+          "delta_ape_vs_r0_pct_points": -0.020651585100917684,
+          "current_vs_r0_pct": 0.027805963992619143
+        }
+      }
+    },
+    {
+      "cell_id": "qwen35_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen35",
+      "deployment": null,
+      "metrics": {
+        "ttft": {
+          "current_ms": 70.16337593652415,
+          "native_ms": 76.371,
+          "r0_ms": 70.01896819613819,
+          "current_signed_error_pct": -8.128247716379056,
+          "current_ape_pct": 8.128247716379056,
+          "r0_signed_error_pct": -8.317334857291126,
+          "r0_ape_pct": 8.317334857291126,
+          "delta_ape_vs_r0_pct_points": -0.1890871409120714,
+          "current_vs_r0_pct": 0.20624088601454524
+        },
+        "tpot": {
+          "current_ms": 2.3614763834302477,
+          "native_ms": 4.440409448818897,
+          "r0_ms": 2.361556370838683,
+          "current_signed_error_pct": -46.81849927018835,
+          "current_ape_pct": 46.81849927018835,
+          "r0_signed_error_pct": -46.816697918097795,
+          "r0_ape_pct": 46.816697918097795,
+          "delta_ape_vs_r0_pct_points": 0.0018013520905527307,
+          "current_vs_r0_pct": -0.003387063269931324
+        },
+        "e2e": {
+          "current_ms": 370.0708766321656,
+          "native_ms": 641.427,
+          "r0_ms": 369.93662729265094,
+          "current_signed_error_pct": -42.30506719670896,
+          "current_ape_pct": 42.30506719670896,
+          "r0_signed_error_pct": -42.32599698911164,
+          "r0_ape_pct": 42.32599698911164,
+          "delta_ape_vs_r0_pct_points": -0.020929792402668977,
+          "current_vs_r0_pct": 0.036289820907207726
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen38",
+      "deployment": null,
+      "metrics": {
+        "ttft": {
+          "current_ms": 8958.67551538117,
+          "native_ms": 7961.666,
+          "r0_ms": 8527.088038890775,
+          "current_signed_error_pct": 12.52262422690389,
+          "current_ape_pct": 12.52262422690389,
+          "r0_signed_error_pct": 7.101805562940911,
+          "r0_ape_pct": 7.101805562940911,
+          "delta_ape_vs_r0_pct_points": 5.4208186639629785,
+          "current_vs_r0_pct": 5.061370007228595
+        },
+        "tpot": {
+          "current_ms": 202.08595296404172,
+          "native_ms": 255.08357480314962,
+          "r0_ms": 197.60378681011963,
+          "current_signed_error_pct": -20.7765717098824,
+          "current_ape_pct": 20.7765717098824,
+          "r0_signed_error_pct": -22.533708035645837,
+          "r0_ape_pct": 22.533708035645837,
+          "delta_ape_vs_r0_pct_points": -1.757136325763438,
+          "current_vs_r0_pct": 2.268259240511961
+        },
+        "e2e": {
+          "current_ms": 34623.591541814465,
+          "native_ms": 40357.28,
+          "r0_ms": 33622.76896377597,
+          "current_signed_error_pct": -14.207321351155315,
+          "current_ape_pct": 14.207321351155315,
+          "r0_signed_error_pct": -16.687227276526144,
+          "r0_ape_pct": 16.687227276526144,
+          "delta_ape_vs_r0_pct_points": -2.479905925370829,
+          "current_vs_r0_pct": 2.976621524291318
+        }
+      }
+    },
+    {
+      "cell_id": "qwen38_gpu_p512_o128_c1__fixed_runtime",
+      "model_key": "qwen38_gpu",
+      "deployment": null,
+      "metrics": {
+        "ttft": {
+          "current_ms": 647.9539832242465,
+          "native_ms": 513.083,
+          "r0_ms": 645.5791355512417,
+          "current_signed_error_pct": 26.28638704152087,
+          "current_ape_pct": 26.28638704152087,
+          "r0_signed_error_pct": 25.823528659347858,
+          "r0_ape_pct": 25.823528659347858,
+          "delta_ape_vs_r0_pct_points": 0.4628583821730113,
+          "current_vs_r0_pct": 0.367863139036694
+        },
+        "tpot": {
+          "current_ms": 29.282724189237264,
+          "native_ms": 24.810496062992126,
+          "r0_ms": 29.282804176645804,
+          "current_signed_error_pct": 18.02554900510841,
+          "current_ape_pct": 18.02554900510841,
+          "r0_signed_error_pct": 18.025871398535518,
+          "r0_ape_pct": 18.025871398535518,
+          "delta_ape_vs_r0_pct_points": -0.0003223934271089251,
+          "current_vs_r0_pct": -0.00027315487976386626
+        },
+        "e2e": {
+          "current_ms": 4366.85995525738,
+          "native_ms": 3665.769,
+          "r0_ms": 4364.495265985259,
+          "current_signed_error_pct": 19.125344648213783,
+          "current_ape_pct": 19.125344648213783,
+          "r0_signed_error_pct": 19.06083733004614,
+          "r0_ape_pct": 19.06083733004614,
+          "delta_ape_vs_r0_pct_points": 0.06450731816764269,
+          "current_vs_r0_pct": 0.05418013144727283
+        }
+      }
+    }
+  ],
+  "frontend_api_smoke": {
+    "qwen25_p512_o128_c1__fixed_runtime": {
+      "normalize_name": "native-llama-parity-rtx5080",
+      "estimate_scheduler": "continuous",
+      "completed_requests": 1,
+      "warnings": 0,
+      "ttft_ms": 14.974027845745983
+    },
+    "qwen38_p512_o128_c1__fixed_runtime": {
+      "normalize_name": "native-llama-parity-rtx5080",
+      "estimate_scheduler": "continuous",
+      "completed_requests": 1,
+      "warnings": 96,
+      "ttft_ms": 802.8235952394521,
+      "warning_category": "attention operator placement references absent from the selected runtime placement; simulation completed",
+      "warning_count": 96,
+      "warning_sample": [
+        "layer-003.attention.q_norm.reduce",
+        "layer-003.attention.q_norm.apply",
+        "layer-003.attention.qk_scale",
+        "layer-003.attention.gate"
+      ]
+    }
+  }
+}
