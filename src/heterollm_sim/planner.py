@@ -1499,6 +1499,25 @@ def _reference_lowering_op_mapping_keys(
                     "{}.attention.residual".format(layer_id),
                 }
             )
+            # Hybrid attention descriptors add typed primitives that the
+            # lowering already resolves through _primitive_target(). Keep the
+            # validation allowlist aligned so Qwen3.8/qk-norm mappings do not
+            # appear as unused when their explicit targets are consumed.
+            attention_execution = _attention_execution_descriptor(layer)
+            if attention_execution is not None:
+                if attention_execution.qk_norm:
+                    supported.update(
+                        {
+                            "{}.attention.q_norm.reduce".format(layer_id),
+                            "{}.attention.q_norm.apply".format(layer_id),
+                            "{}.attention.k_norm.reduce".format(layer_id),
+                            "{}.attention.k_norm.apply".format(layer_id),
+                        }
+                    )
+                if attention_execution.qk_scale is not None:
+                    supported.add("{}.attention.qk_scale".format(layer_id))
+                if attention_execution.gate_width > 0:
+                    supported.add("{}.attention.gate".format(layer_id))
         if layer.is_moe:
             supported.update(
                 {

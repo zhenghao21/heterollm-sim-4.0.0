@@ -1,8 +1,10 @@
 import unittest
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from heterollm_sim.control_plane_planner import plan_runtime_placement
+from heterollm_sim import planner as planner_module
 from heterollm_sim.cost_models import HostMemoryProfile
 from heterollm_sim.planner import (
     MappingResolutionError,
@@ -109,6 +111,38 @@ class OperatorClassMappingTests(unittest.TestCase):
 
         self.assertTrue(generated)
         self.assertFalse(unused_warnings, unused_warnings)
+
+    def test_attention_descriptor_primitives_are_consumed_by_reference_allowlist(self):
+        layer = SimpleNamespace(
+            layer_id="layer-003",
+            is_linear_attention=False,
+            is_moe=False,
+            has_shared_expert=False,
+            shared_expert_gate=False,
+        )
+        execution_view = SimpleNamespace(
+            layer_instances=(SimpleNamespace(layer=layer),),
+            mtp_descriptors=(),
+            vocabulary_size=0,
+        )
+        descriptor = SimpleNamespace(qk_norm=True, qk_scale=0.0625, gate_width=4096)
+        with patch.object(
+            planner_module,
+            "_attention_execution_descriptor",
+            return_value=descriptor,
+        ):
+            keys = planner_module._reference_lowering_op_mapping_keys(
+                None, execution_view=execution_view
+            )
+        for suffix in (
+            "attention.q_norm.reduce",
+            "attention.q_norm.apply",
+            "attention.k_norm.reduce",
+            "attention.k_norm.apply",
+            "attention.qk_scale",
+            "attention.gate",
+        ):
+            self.assertIn("layer-003." + suffix, keys)
 
     def test_unknown_manual_operator_key_still_warns(self):
         scenario = build_reference_scenario()
