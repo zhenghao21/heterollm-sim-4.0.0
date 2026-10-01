@@ -1,0 +1,65 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_013",
+  "status": "review",
+  "purpose": "mechanism_fidelity",
+  "primary_goal": "give component-preset persistence failures one stable direct and HTTP error contract",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "ae9891fe1f4211c1b4045e2052be49588503b291",
+    "role": "current engineering baseline after round_012 and workflow closure rule"
+  },
+  "hypothesis_id": "H13_COMPONENT_PRESET_ERROR_MAPPING",
+  "scope": {
+    "operator": "ComponentPresetCatalog persistence and all HTTP component-preset entry points",
+    "phase": "read, write, lock, startup, and error-envelope handling",
+    "trigger": "malformed JSON, invalid existing record/version/list, unreadable directory path, lock failure, or atomic save failure"
+  },
+  "problem_domain_closure": {
+    "persistence_read": "wrapped as ComponentPresetPersistenceError",
+    "persistence_write": "wrapped as ComponentPresetPersistenceError",
+    "lock_acquisition": "wrapped as ComponentPresetPersistenceError",
+    "http_get": "503 catalog_unavailable",
+    "http_post": "503 catalog_unavailable",
+    "http_put": "503 catalog_unavailable",
+    "http_delete": "503 catalog_unavailable",
+    "architecture_indirect_component_read": "covered by the same GET catch",
+    "startup": "fail-fast ComponentPresetPersistenceError; CLI catches the ValueError-compatible type",
+    "client_payload_validation": "unchanged ComponentPresetMutationError statuses and not_found behavior"
+  },
+  "data_roles": {
+    "development": "malformed JSON, bad version/list/record, and directory-path failures",
+    "comparison": "baseline endpoint status/code matrix",
+    "holdout": "architecture detail indirect read and save/lock failure paths",
+    "final_acceptance": "not started"
+  },
+  "metrics": [
+    "stable_catalog_error_type",
+    "stable_http_status_and_code",
+    "no_path_or_traceback_leakage",
+    "valid_client_error_regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 1
+  },
+  "guardrails": [
+    "do not turn malformed persistence into a successful stale read",
+    "keep valid payload validation and 404/409 semantics unchanged",
+    "keep startup fail-fast rather than starting a half-initialized catalog",
+    "do not expose local paths or raw JSON exceptions through HTTP",
+    "run clean .venv full suite before promotion"
+  ],
+  "next_step": "review semantic validation of tombstones and duplicate persisted IDs as a separate persistence-schema hypothesis",
+  "selected_candidate": "C13_COMPONENT_PRESET_ERROR_MAPPING",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 1
+  }
+}

@@ -4,7 +4,10 @@ import threading
 import tempfile
 import unittest
 
-from heterollm_sim.component_presets import ComponentPresetCatalog
+from heterollm_sim.component_presets import (
+    ComponentPresetCatalog,
+    ComponentPresetPersistenceError,
+)
 from heterollm_sim.web import build_server
 
 
@@ -126,11 +129,68 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
                 },
             })
             catalog.path.write_text("{invalid", encoding="utf-8")
-            with self.assertRaises(json.JSONDecodeError):
+            with self.assertRaises(ComponentPresetPersistenceError):
                 catalog.create({})
             self.assertIn("catalog-reload-good", catalog.overrides)
-            with self.assertRaises(json.JSONDecodeError):
+            with self.assertRaises(ComponentPresetPersistenceError):
                 catalog.detail("catalog-reload-good")
+            with self.assertRaises(ComponentPresetPersistenceError):
+                ComponentPresetCatalog(directory)
+
+    def test_corrupt_persistence_uses_catalog_error_contract(self):
+        payload = {
+            "id": "catalog-error-contract",
+            "name": "Catalog error contract",
+            "family": "Error test",
+            "component": {
+                "component_id": "error-contract",
+                "kind": "hbm",
+                "capacity_bytes": 1024,
+                "ports": [],
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            server = build_server("127.0.0.1", 0, component_preset_cache_dir=directory)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            port = server.server_address[1]
+
+            def request(method, path, body=None):
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                try:
+                    encoded = None
+                    headers = {}
+                    if body is not None:
+                        encoded = json.dumps(body).encode("utf-8")
+                        headers["Content-Type"] = "application/json"
+                    connection.request(method, path, encoded, headers)
+                    response = connection.getresponse()
+                    return response.status, json.loads(response.read().decode("utf-8"))
+                finally:
+                    connection.close()
+
+            try:
+                status, _ = request("POST", "/api/component-presets", payload)
+                self.assertEqual(status, 201)
+                server.component_preset_catalog.path.write_text("{invalid", encoding="utf-8")
+                for method, path, body in (
+                    ("GET", "/api/component-presets", None),
+                    ("GET", "/api/component-presets/catalog-error-contract", None),
+                    ("POST", "/api/component-presets", payload),
+                    ("PUT", "/api/component-presets/catalog-error-contract", payload),
+                    ("DELETE", "/api/component-presets/catalog-error-contract", None),
+                ):
+                    status, detail = request(method, path, body)
+                    self.assertEqual(status, 503, (method, path, detail))
+                    self.assertEqual(detail["error"]["code"], "catalog_unavailable")
+                server.component_preset_catalog.path = server.component_preset_catalog.path.parent
+                status, detail = request("GET", "/api/component-presets")
+                self.assertEqual(status, 503)
+                self.assertEqual(detail["error"]["code"], "catalog_unavailable")
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
 
     def test_catalog_reads_reload_shared_directory_mutations(self):
         def payload(preset_id, name=None):

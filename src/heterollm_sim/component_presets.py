@@ -16,6 +16,7 @@ import os
 import tempfile
 import threading
 import time
+import sys
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
@@ -68,8 +69,12 @@ _CATALOG_PROCESS_LOCK = threading.RLock()
 _CATALOG_FILE_LOCK_TIMEOUT_S = 10.0
 
 
+class ComponentPresetPersistenceError(ValueError):
+    """The user-owned component-preset persistence is unavailable."""
+
+
 @contextmanager
-def _catalog_file_lock(path: Path):
+def _catalog_file_lock_unchecked(path: Path):
     """Serialize catalog mutations across instances and processes."""
 
     with _CATALOG_PROCESS_LOCK:
@@ -105,6 +110,17 @@ def _catalog_file_lock(path: Path):
                     msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _catalog_file_lock(path: Path):
+    try:
+        with _catalog_file_lock_unchecked(path):
+            yield
+    except ComponentPresetPersistenceError:
+        raise
+    except OSError as exc:
+        raise ComponentPresetPersistenceError("组件预设目录锁定失败：{}".format(path)) from exc
 
 
 def _default_cost_profile_id(kind: str) -> Optional[str]:
@@ -3357,9 +3373,9 @@ def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[
 class ComponentPresetCatalog:
     """Per-server editable catalog, persisted atomically in a user-owned file.
 
-    The lock serializes requests handled by the local HTTP server.  Bundled
-    definitions never change, and constructing a catalog is the only read of
-    user state (module imports remain deterministic for CLI/tests).
+    The lock serializes requests handled by the local HTTP server. Bundled
+    definitions never change, and page/detail refresh user state under the
+    instance lock (module imports remain deterministic for CLI/tests).
     """
 
     def __init__(self, cache_dir=None):
@@ -3378,17 +3394,22 @@ class ComponentPresetCatalog:
     def _load_persisted(self):
         overrides: Dict[str, ComponentPresetDefinition] = {}
         removed = set()
-        if self.path.exists():
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict) or raw.get("version") != 1:
-                raise ValueError("硬件预设目录版本无效：{}".format(self.path))
-            overrides = {
-                item.preset_id: item for item in (
-                    _definition_from_mutation(value)
-                    for value in _mutation_list(raw.get("presets", []), "presets")
-                )
-            }
-            removed = set(_mutation_list(raw.get("removed", []), "removed"))
+        try:
+            if self.path.exists():
+                raw = json.loads(self.path.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict) or raw.get("version") != 1:
+                    raise ValueError("硬件预设目录版本无效：{}".format(self.path))
+                overrides = {
+                    item.preset_id: item for item in (
+                        _definition_from_mutation(value)
+                        for value in _mutation_list(raw.get("presets", []), "presets")
+                    )
+                }
+                removed = set(_mutation_list(raw.get("removed", []), "removed"))
+        except ComponentPresetPersistenceError:
+            raise
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise ComponentPresetPersistenceError("组件预设目录无法读取：{}".format(self.path)) from exc
         self.overrides, self.removed = overrides, removed
 
     def _save(self, overrides, removed):
@@ -3399,18 +3420,24 @@ class ComponentPresetCatalog:
             "evidence_level": item.evidence_level, "limitations": list(item.limitations),
             "notes": item.notes, "tags": list(item.tags),
         } for item in sorted(overrides.values(), key=lambda item: item.preset_id)]
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = None
         try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.path.parent, prefix=".presets-", suffix=".json", delete=False) as handle:
                 temp_path = Path(handle.name)
                 json.dump({"version": 1, "presets": records, "removed": sorted(removed)}, handle, ensure_ascii=False, allow_nan=False, indent=2)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp_path, self.path)
+        except OSError as exc:
+            raise ComponentPresetPersistenceError("组件预设目录无法写入：{}".format(self.path)) from exc
         finally:
             if temp_path is not None and temp_path.exists():
-                temp_path.unlink()
+                try:
+                    temp_path.unlink()
+                except OSError as exc:
+                    if sys.exc_info()[0] is None:
+                        raise ComponentPresetPersistenceError("组件预设临时文件无法清理：{}".format(temp_path)) from exc
         # Publish only after the atomic write succeeds: failed saves do not
         # expose state that disappears after restarting the server.
         self.overrides, self.removed = overrides, removed
@@ -3478,6 +3505,7 @@ __all__ = [
     "BUNDLE_USAGE_HINT",
     "USAGE_HINT",
     "ComponentPresetDefinition",
+    "ComponentPresetPersistenceError",
     "ComponentSource",
     "TopologyBundleDefinition",
     "component_preset_detail",

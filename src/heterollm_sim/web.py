@@ -23,6 +23,7 @@ from .architecture_scan import scan_architecture_candidates
 from .component_presets import (
     ComponentPresetCatalog,
     ComponentPresetMutationError,
+    ComponentPresetPersistenceError,
 )
 from .compiler_ir import compile_canonical_scenario
 from .config import ScenarioConfig, scenario_from_dict
@@ -82,6 +83,15 @@ class HttpError(Exception):
     message_en: Optional[str] = None
     diagnostic_id: Optional[str] = None
     exception_type: Optional[str] = None
+
+
+def _component_catalog_unavailable_error() -> HttpError:
+    return HttpError(
+        503,
+        "catalog_unavailable",
+        "组件预设目录当前不可用；请检查本地持久化文件和权限",
+        message_en="component preset catalog is unavailable; check persistence and permissions",
+    )
 
 
 class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
@@ -385,6 +395,8 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             self._send_static(path)
         except HttpError as exc:
             self._send_error(exc)
+        except ComponentPresetPersistenceError:
+            self._send_error(_component_catalog_unavailable_error())
         except CatalogError as exc:
             self._send_error(
                 HttpError(
@@ -567,6 +579,8 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             raise HttpError(404, "not_found", "未知端点", message_en="unknown endpoint")
         except HttpError as exc:
             self._send_error(exc)
+        except ComponentPresetPersistenceError:
+            self._send_error(_component_catalog_unavailable_error())
         except ComponentPresetMutationError as exc:
             self._send_error(HttpError(exc.status, exc.code, str(exc), message_en=str(exc)))
         except CatalogError as exc:
@@ -591,7 +605,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             self._send_unexpected_error(exc)
 
     def do_PUT(self) -> None:  # noqa: N802 - stdlib API name
-        """Update one component preset in the process-local overlay."""
+        """Update one component preset in the shared persistent catalog."""
 
         path = urlsplit(self.path).path
         try:
@@ -603,6 +617,8 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, self._component_catalog().update(preset_id, self._read_json_object()))
         except HttpError as exc:
             self._send_error(exc)
+        except ComponentPresetPersistenceError:
+            self._send_error(_component_catalog_unavailable_error())
         except ComponentPresetMutationError as exc:
             self._send_error(HttpError(exc.status, exc.code, str(exc), message_en=str(exc)))
         except KeyError:
@@ -613,7 +629,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             self._send_unexpected_error(exc)
 
     def do_DELETE(self) -> None:  # noqa: N802 - stdlib API name
-        """Hide one component preset in the process-local overlay."""
+        """Hide one component preset in the shared persistent catalog."""
 
         path = urlsplit(self.path).path
         try:
@@ -626,6 +642,8 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"deleted": preset_id, "catalog": {"version": "runtime"}})
         except HttpError as exc:
             self._send_error(exc)
+        except ComponentPresetPersistenceError:
+            self._send_error(_component_catalog_unavailable_error())
         except ComponentPresetMutationError as exc:
             self._send_error(HttpError(exc.status, exc.code, str(exc), message_en=str(exc)))
         except KeyError:
