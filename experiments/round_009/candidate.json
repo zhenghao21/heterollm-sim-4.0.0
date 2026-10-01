@@ -1,0 +1,31 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_009",
+  "status": "not_applicable",
+  "hypothesis": {
+    "id": "H9_CLEAN_FULL_SUITE_BASELINE",
+    "claim": "A dependency-consistent project-local Python environment produces a stable full-suite regression oracle; system-Python failures should not be used to reject product code.",
+    "trigger": "previous system Python run emitted pyarrow loader warning and one WinError 10053 API test failure",
+    "expected_baseline": "clean .venv run exits 0 with no API/environment failure",
+    "expected_candidate": "no code candidate; freeze environment identity",
+    "falsifier": "clean .venv run reproduces a stable product failure"
+  },
+  "parent_commit": "ba1a0bfdb3c8646c67632837f204c574fee90277",
+  "changed_files": [],
+  "activation_checks": [
+    "Python 3.12.13 project venv",
+    "module imported from src/heterollm_sim",
+    "full suite exits 0",
+    "no failed tests"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "3017 passed, 4 skipped, 0 failed in 440.01s; exit code 0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ]
+}

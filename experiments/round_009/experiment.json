@@ -1,0 +1,54 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_009",
+  "status": "closed_review",
+  "purpose": "regression_baseline",
+  "primary_goal": "establish a clean project-local full-suite regression oracle before further product optimization",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "ba1a0bfdb3c8646c67632837f204c574fee90277",
+    "role": "current engineering baseline after round_008"
+  },
+  "hypothesis_id": "H9_CLEAN_FULL_SUITE_BASELINE",
+  "scope": {
+    "operator": "repository-wide test execution",
+    "phase": "clean regression baseline",
+    "trigger": "project-local .venv Python 3.12.13 with PYTHONPATH=src"
+  },
+  "data_roles": {
+    "development": "project-local environment and test runner",
+    "comparison": "previous system-Python run with one environment failure",
+    "holdout": "full repository test collection",
+    "final_acceptance": "not applicable"
+  },
+  "metrics": [
+    "test_pass_count",
+    "test_skip_count",
+    "test_fail_count",
+    "exit_code",
+    "module_identity",
+    "dependency_environment"
+  ],
+  "budget": {
+    "candidate_count": 0,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "do not change source while establishing baseline",
+    "do not treat test counts as model accuracy",
+    "do not read historical score files",
+    "record interpreter and module path"
+  ],
+  "next_step": "use this clean baseline as the regression oracle for the next actual code candidate",
+  "selected_candidate": "C9_CLEAN_FULL_SUITE_BASELINE",
+  "budget_used": {
+    "candidate_count": 0,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 0
+  }
+}

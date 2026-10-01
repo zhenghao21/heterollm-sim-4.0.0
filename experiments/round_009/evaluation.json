@@ -1,0 +1,24 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_009",
+  "candidate_id": "C9_CLEAN_FULL_SUITE_BASELINE",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "baseline environment run, no product candidate"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "test regression baseline is not a native accuracy score"
+  },
+  "mechanism_status": "not_applicable",
+  "accuracy_status": "not_evaluated",
+  "generalization_status": "repository_regression_baseline",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_009/full_suite_baseline.json",
+  "result": "The project-local Python 3.12.13 environment runs the repository suite cleanly: 3017 passed, 4 skipped, 0 failed. It is now the regression oracle for future candidates.",
+  "limitations": [
+    "This establishes software regression health, not simulator timing accuracy",
+    "The full suite is long-running and should be reused rather than repeated after unrelated changes"
+  ]
+}
