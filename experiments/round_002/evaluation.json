@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_002",
+  "candidate_id": "C2_STREAMK_HEAD_TILE_FAIL_CLOSED",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "mechanism candidate evaluated with exact synthetic geometry oracle; no target latency claim"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "no native timing truth opened; traffic/layout conservation is the oracle"
+  },
+  "mechanism_status": "passed",
+  "accuracy_status": "not_evaluated",
+  "generalization_status": "not_evaluated",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_002/streamk_reproduction.json",
+  "result": "baseline entered an invalid uniform Stream-K layout and failed during scratch binding; candidate fell back before tile accounting",
+  "limitations": [
+    "Only non-divisible head geometry was evaluated",
+    "Decode phase guard remains a separate future hypothesis",
+    "No native collection or end-to-end timing claim"
+  ]
+}

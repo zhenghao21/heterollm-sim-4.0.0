@@ -619,7 +619,10 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
                 or workload.hidden_size // workload.score_heads != 64):
             return None
         gqa = workload.hidden_size // workload.effective_kv_hidden_size
-        if gqa < 1 or workload.hidden_size % workload.effective_kv_hidden_size or gqa % kernel.attention_heads_per_tile:
+        if (gqa < 1
+                or workload.hidden_size % workload.effective_kv_hidden_size
+                or gqa % kernel.attention_heads_per_tile
+                or workload.score_heads % kernel.attention_heads_per_tile):
             return None
         tiles = math.ceil(m / kernel.attention_query_tile) * workload.score_heads // kernel.attention_heads_per_tile
         stream_k = attention_stream_k_schedule(n, tiles, kernel.attention_kv_tile,

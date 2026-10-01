@@ -484,6 +484,22 @@ def test_streamk_attention_cost_has_ordered_fixup_and_two_launches():
     with pytest.raises(ValueError, match='stream-K'):
         replace(descriptor, samples=(KernelSample(64,2048,256,100,100,1,20,'test'),))
 
+
+def test_streamk_rejects_non_divisible_score_heads_before_tile_accounting():
+    descriptor = capability(operator='attention', phase='prefill', weight_formats=('fp16',),
+        output_bits=32, internal_dtype='fp16', compute_primitive='tensor',
+        attention_stream_k=True, registers_per_thread=64, attention_heads_per_tile=2)
+    base = gpu_profile()
+    gpu = replace(base, tensor_core=replace(base.tensor_core, sm_count=100),
+                  kernel_model=profile(descriptor))
+    workload = FusedAttentionWorkload(64, 2048, 192, kv_hidden_size=96,
+        output_bits=32, score_heads=3, execution_phase='prefill')
+
+    estimate = estimate_gpu_fused_attention(gpu, HBMProfile(1000), workload)
+
+    assert estimate.metadata['model'] != 'kernel_aware'
+    assert 'stream_k' not in estimate.metadata.get('kernel_model', {})
+
 def test_uniform_fixup_traffic_separates_allocation_writes_and_reads():
     from heterollm_sim.kernel_model import attention_uniform_fixup_traffic
     traffic = attention_uniform_fixup_traffic(blocks=96, output_tiles=4,

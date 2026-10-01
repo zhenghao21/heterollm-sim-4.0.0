@@ -1,0 +1,18 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_002",
+  "candidate_id": "C2_STREAMK_HEAD_TILE_FAIL_CLOSED",
+  "status": "decided",
+  "decision": "accepted_for_engineering_baseline",
+  "reason": "The candidate prevents an invalid scratch layout, preserves divisible-head Stream-K controls, and passes the focused kernel regression suite. This is a mechanism acceptance, not an accuracy promotion.",
+  "evidence": [
+    "artifacts/optimization/round_002/streamk_reproduction.json",
+    "tests/test_kernel_model.py",
+    "src/heterollm_sim/kernel_model.py"
+  ],
+  "next_hypothesis": {
+    "id": "H3_STREAMK_PHASE_DOMAIN",
+    "claim": "Stream-K descriptors outside prefill should fail closed unless a separate decode scratch contract exists; current implementation may accept a custom decode descriptor.",
+    "status": "registered_not_started"
+  }
+}
