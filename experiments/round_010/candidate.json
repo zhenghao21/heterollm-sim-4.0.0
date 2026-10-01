@@ -1,0 +1,46 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_010",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H10_RUNTIME_KV_TRAFFIC_ROLLBACK",
+    "claim": "A failed cohort must not leave KV/MTP traffic counters in formal metrics after the retained-state or provider commit fails.",
+    "trigger": "prefill cohort followed by retained.commit that succeeds once then raises RuntimeError",
+    "expected_baseline": "failed cohort adds 4096 logical/physical prefill read and write bytes to runtime counters",
+    "expected_candidate": "all 16 runtime traffic counters equal their pre-cohort values after failure",
+    "falsifier": "any tracked traffic counter remains changed after failure, while existing fail-stop semantics regress"
+  },
+  "parent_commit": "bd58b3c76307a7c873a6542eb17e015b1a1241c1",
+  "changed_files": [
+    "src/heterollm_sim/serving.py",
+    "tests/test_retained_kv_state.py"
+  ],
+  "activation_checks": [
+    "baseline reproduction showed four prefill counters +4096",
+    "candidate reproduction restored all 16 fields",
+    "existing lowerer/commit failure and KeyboardInterrupt tests pass"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_retained_kv_state.py -k \"execution_or_commit_failure or failed_execution\"",
+      "result": "5 passed in 0.41s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_retained_kv_state.py tests/test_kv_layout_contract.py tests/test_memory_tier_placement.py tests/test_native_kv_placement.py tests/test_component_timeseries.py",
+      "result": "121 passed in 39.79s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_llama_graph_runtime.py tests/test_llama_scheduler_contract.py tests/test_llama_engine_start.py tests/test_retained_kv_state.py",
+      "result": "86 passed in 1.71s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "3017 passed, 4 skipped, 0 failed in 457.64s; exit code 0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "candidate_source_sha256": "30bd2d7cab3c5b1b7ca9ead76a568478ea86dfcb6d91f25f94e44caad4508ef8"
+}

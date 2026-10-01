@@ -14292,6 +14292,27 @@ class _OnlineRuntime:
             "_last_kv_allocation_request_id": self._last_kv_allocation_request_id,
             "_last_prompt_cache_allocation_request_id": self._last_prompt_cache_allocation_request_id,
         }
+        traffic_snapshot = {
+            key: getattr(self, key)
+            for key in (
+                "logical_prefill_read_bytes",
+                "logical_prefill_write_bytes",
+                "logical_decode_read_bytes",
+                "logical_decode_write_bytes",
+                "physical_prefill_read_bytes",
+                "physical_prefill_write_bytes",
+                "physical_decode_read_bytes",
+                "physical_decode_write_bytes",
+                "mtp_materialized_tokens",
+                "mtp_temporary_tokens",
+                "logical_mtp_materialized_write_bytes",
+                "physical_mtp_materialized_write_bytes",
+                "logical_mtp_temporary_write_bytes",
+                "physical_mtp_temporary_write_bytes",
+                "logical_mtp_verification_read_bytes",
+                "physical_mtp_verification_read_bytes",
+            )
+        }
         try:
             self._execute_cohort(cohort)
         except BaseException as error:
@@ -14327,6 +14348,8 @@ class _OnlineRuntime:
             self._last_prompt_cache_allocation_request_id = accounting_snapshot[
                 "_last_prompt_cache_allocation_request_id"
             ]
+            for key, value in traffic_snapshot.items():
+                setattr(self, key, value)
             self.batches[:] = [
                 batch for batch in self.batches if batch.cohort_id != cohort.cohort_id
             ]

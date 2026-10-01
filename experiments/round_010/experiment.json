@@ -1,0 +1,52 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_010",
+  "status": "review",
+  "purpose": "mechanism_fidelity",
+  "primary_goal": "restore online KV traffic counters when a cohort execution or retained-state commit fails",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "bd58b3c76307a7c873a6542eb17e015b1a1241c1",
+    "role": "clean full-suite regression baseline accepted by round_009"
+  },
+  "hypothesis_id": "H10_RUNTIME_KV_TRAFFIC_ROLLBACK",
+  "scope": {
+    "operator": "_OnlineRuntime cohort execution",
+    "phase": "prefill/decode/MTP traffic accounting",
+    "trigger": "_record_kv_traffic runs before retained KV commit/provider validation raises"
+  },
+  "data_roles": {
+    "development": "retained KV fixture with injected post-commit failure",
+    "comparison": "baseline before/after traffic counters",
+    "holdout": "lowerer failure, commit failure, KeyboardInterrupt, scheduler/engine/runtime tests",
+    "final_acceptance": "not started"
+  },
+  "metrics": [
+    "traffic_counter_conservation",
+    "failed_cohort_not_counted",
+    "retained_state_failure_behavior",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "restore only counters mutated by _record_kv_traffic",
+    "preserve existing retained-state poison/fail-stop behavior",
+    "do not change native timing or target scores",
+    "run clean .venv full suite before promotion"
+  ],
+  "next_step": "review traffic snapshot coverage and full-suite result",
+  "selected_candidate": "C10_RUNTIME_KV_TRAFFIC_ROLLBACK",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 0
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_010",
+  "candidate_id": "C10_RUNTIME_KV_TRAFFIC_ROLLBACK",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "engineering mechanism candidate; no target latency prediction"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "counter conservation oracle; no native timing truth opened"
+  },
+  "mechanism_status": "passed",
+  "accuracy_status": "not_evaluated",
+  "generalization_status": "limited_to_online_KV_traffic_accounting",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_010/kv_traffic_rollback_reproduction.json",
+  "result": "The candidate snapshots and restores all runtime KV/MTP traffic counters on cohort failure. A failed retained.commit no longer contaminates the next formal kv_metrics result; existing fail-stop retained-state semantics remain unchanged.",
+  "limitations": [
+    "The snapshot covers runtime traffic counters, not a redesign of the broader transaction rollback path",
+    "No native accuracy or timing claim"
+  ]
+}

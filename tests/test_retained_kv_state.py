@@ -321,9 +321,25 @@ def test_execution_or_commit_failure_poison_retained_state_and_reraise_original(
 
         retained.commit = partial_commit_then_fail
     retry = cohort(context=64)
+    traffic_fields = (
+        "logical_prefill_read_bytes", "logical_prefill_write_bytes",
+        "logical_decode_read_bytes", "logical_decode_write_bytes",
+        "physical_prefill_read_bytes",
+        "physical_prefill_write_bytes", "physical_decode_read_bytes",
+        "physical_decode_write_bytes",
+        "mtp_materialized_tokens", "mtp_temporary_tokens",
+        "logical_mtp_materialized_write_bytes",
+        "physical_mtp_materialized_write_bytes",
+        "logical_mtp_temporary_write_bytes",
+        "physical_mtp_temporary_write_bytes",
+        "logical_mtp_verification_read_bytes",
+        "physical_mtp_verification_read_bytes",
+    )
+    traffic_before = {field: getattr(rt, field) for field in traffic_fields}
     with pytest.raises(error_type) as caught:
         rt._execute(retry)
     assert caught.value is original_error
+    assert {field: getattr(rt, field) for field in traffic_fields} == traffic_before
     assert retained.rows == {10: 64 if failure_stage == "lowerer" else 128, 11: 543}
     assert retained.invalid_reason == "cohort execution or commit failed: " + error_type.__name__
     with pytest.raises(ValueError, match="invalidated lifecycle"):
