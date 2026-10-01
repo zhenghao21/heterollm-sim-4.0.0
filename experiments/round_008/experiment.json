@@ -1,0 +1,50 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_008",
+  "status": "closed_review",
+  "purpose": "environment_boundary_audit",
+  "primary_goal": "determine whether optional OR-Tools diagnostics require product-side import isolation after a Windows native loader warning",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "8e5e0acc8a01b7fa6a32390193414bd773c60eee",
+    "role": "engineering baseline; no diagnostic code candidate activated"
+  },
+  "hypothesis_id": "H8_RUNTIME_DIAGNOSTICS_IMPORT_ISOLATION",
+  "scope": {
+    "operator": "runtime health diagnostics",
+    "phase": "optional OR-Tools CP-SAT capability probe",
+    "trigger": "transitive pandas/pyarrow native import warning on Windows"
+  },
+  "data_roles": {
+    "development": "source/import chain and focused diagnostics test",
+    "comparison": "full-suite warning context",
+    "holdout": "ordinary ImportError handling and focused test completion",
+    "final_acceptance": "not applicable"
+  },
+  "metrics": [
+    "ordinary_failure_contained",
+    "focused_test_completion",
+    "stable_product_failure_reproduced"
+  ],
+  "budget": {
+    "candidate_count": 0,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 1
+  },
+  "guardrails": [
+    "do not rewrite health API for dependency loader noise",
+    "do not claim Python exception handling catches native loader termination",
+    "do not read historical score files"
+  ],
+  "next_step": "defer to clean Python312 dependency repair or a reproducible process failure",
+  "selected_candidate": "C8_RUNTIME_DIAGNOSTICS_IMPORT_ISOLATION",
+  "budget_used": {
+    "candidate_count": 0,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 1
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_008",
+  "status": "not_actionable",
+  "hypothesis": {
+    "id": "H8_RUNTIME_DIAGNOSTICS_IMPORT_ISOLATION",
+    "claim": "Optional native diagnostics must be isolated only if their import failure reliably kills or corrupts the simulator process; ordinary package errors should remain contained by the existing catch.",
+    "trigger": "ortools.sat.python.cp_model indirectly loads pandas/pyarrow",
+    "expected_baseline": "ordinary ImportError/OSError returns available=false; native loader warnings are environment failures",
+    "expected_candidate": "subprocess probe only after stable product-level reproduction",
+    "falsifier": "focused diagnostics consistently fail or corrupt simulator behavior"
+  },
+  "parent_commit": "8e5e0acc8a01b7fa6a32390193414bd773c60eee",
+  "changed_files": [],
+  "activation_checks": [
+    "focused diagnostics suite completes despite loader warning",
+    "ordinary import failure path returns structured unavailable payload",
+    "no stable API failure reproduced"
+  ],
+  "tests": [
+    {
+      "command": "pytest -q tests/test_runtime_diagnostics.py",
+      "result": "6 passed in 0.59s; Windows 0xc0000139 warning emitted by dependency loader"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_runtime_diagnostics.py",
+      "result": "6 passed in 0.60s; Python 3.12.13 clean project environment"
+    }
+  ]
+}
