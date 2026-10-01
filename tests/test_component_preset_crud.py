@@ -128,9 +128,52 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
             catalog.path.write_text("{invalid", encoding="utf-8")
             with self.assertRaises(json.JSONDecodeError):
                 catalog.create({})
+            self.assertIn("catalog-reload-good", catalog.overrides)
+            with self.assertRaises(json.JSONDecodeError):
+                catalog.detail("catalog-reload-good")
+
+    def test_catalog_reads_reload_shared_directory_mutations(self):
+        def payload(preset_id, name=None):
+            return {
+                "id": preset_id,
+                "name": name or preset_id,
+                "family": "Shared read test",
+                "component": {
+                    "component_id": preset_id,
+                    "kind": "hbm",
+                    "capacity_bytes": 1024,
+                    "ports": [],
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            first = ComponentPresetCatalog(directory)
+            second = ComponentPresetCatalog(directory)
+            first.create(payload("catalog-shared-a"))
             self.assertEqual(
-                catalog.detail("catalog-reload-good")["preset"]["id"],
-                "catalog-reload-good",
+                second.detail("catalog-shared-a")["preset"]["id"],
+                "catalog-shared-a",
+            )
+
+            first.update("catalog-shared-a", payload("catalog-shared-a", "updated"))
+            self.assertEqual(
+                second.detail("catalog-shared-a")["preset"]["name"],
+                "updated",
+            )
+
+            second.create(payload("catalog-shared-b"))
+            self.assertEqual(
+                first.detail("catalog-shared-b")["preset"]["id"],
+                "catalog-shared-b",
+            )
+
+            first.delete("catalog-shared-a")
+            with self.assertRaises(KeyError):
+                second.detail("catalog-shared-a")
+            page = second.page()
+            self.assertEqual(
+                {item["id"] for item in page["items"] if item["id"].startswith("catalog-shared-")},
+                {"catalog-shared-b"},
             )
 
     def test_gpu_preset_drops_external_memory_fields(self):

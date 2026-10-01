@@ -3422,12 +3422,14 @@ class ComponentPresetCatalog:
 
     def page(self, **filters):
         with self._lock:
+            self._load_persisted()
             definitions = [item for item in _PRESETS if item.preset_id not in self.removed and item.preset_id not in self.overrides]
             definitions.extend(self.overrides.values())
             return component_preset_page(items=[_metadata(item) for item in sorted(definitions, key=lambda item: item.preset_id)], **filters)
 
     def detail(self, preset_id):
         with self._lock:
+            self._load_persisted()
             return _component_definition_detail(self._get(preset_id))
 
     def create(self, payload):

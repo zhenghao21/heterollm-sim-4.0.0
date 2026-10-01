@@ -1,0 +1,26 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_012",
+  "candidate_id": "C12_COMPONENT_PRESET_SHARED_READ_REFRESH",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "engineering mechanism candidate; no target latency prediction"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "cross-instance visibility and persistence error oracle; no native timing truth opened"
+  },
+  "mechanism_status": "passed",
+  "accuracy_status": "not_evaluated",
+  "generalization_status": "limited_to_same-host_shared_component_preset_directories_and_their_HTTP_servers",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_012/component_preset_shared_read_reproduction.json",
+  "result": "page/detail now reload the current persisted catalog before serving reads, so a long-lived instance observes creates, updates, and deletions made by another instance. Invalid persisted JSON remains an explicit read failure rather than a successful stale response. The separately registered update/delete contention hypothesis was tested and deferred because the existing lock-held reload path is linearizable for the tested races.",
+  "limitations": [
+    "The evidence covers same-host multiple instances/processes and HTTP servers, not a distributed filesystem consistency guarantee",
+    "Read refresh reparses the small catalog on every page/detail call; no throughput optimization was attempted",
+    "HTTP persistence errors currently use the existing generic 422 exception path and may deserve a dedicated catalog error code",
+    "No native accuracy, latency, or deployment claim"
+  ]
+}

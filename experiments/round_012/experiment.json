@@ -1,0 +1,59 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_012",
+  "status": "review",
+  "purpose": "mechanism_fidelity",
+  "primary_goal": "make component-preset reads reflect mutations made by another catalog instance sharing the same persistence directory",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "030179158216118525175d94c5655b5c7c3c9025",
+    "role": "current engineering baseline after round_011"
+  },
+  "registered_hypothesis_check": {
+    "id": "H12_COMPONENT_PRESET_UPDATE_DELETE_CONTENTION",
+    "result": "defer_as_no_bug",
+    "reason": "Independent same-instance, HTTP, and Windows-process checks showed lock-held reload is linearizable for update/delete races and prevents delete-after-update resurrection.",
+    "artifact": "artifacts/optimization/round_012/component_preset_update_delete_concurrency.json"
+  },
+  "hypothesis_id": "H12_COMPONENT_PRESET_SHARED_READ_REFRESH",
+  "scope": {
+    "operator": "ComponentPresetCatalog page/detail reads",
+    "phase": "shared-directory read after create/update/delete",
+    "trigger": "a long-lived catalog instance reads after another instance or process mutates the same presets.json"
+  },
+  "data_roles": {
+    "development": "two preconstructed catalogs with create/update/delete interleaving",
+    "comparison": "fresh persisted IDs and detail/page results before and after each mutation",
+    "holdout": "two HTTP servers sharing one directory; independent Windows process contention evidence",
+    "final_acceptance": "not started"
+  },
+  "metrics": [
+    "cross_instance_read_visibility",
+    "delete_not_found_visibility",
+    "persisted_state_error_surface",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 1
+  },
+  "guardrails": [
+    "reload the latest persisted state before page/detail reads",
+    "keep atomic write and lock-held mutation behavior unchanged",
+    "do not hide corrupt or invalid persisted data as a successful stale read",
+    "do not claim native timing or accuracy improvement",
+    "run clean .venv full suite before promotion"
+  ],
+  "next_step": "review HTTP error mapping for corrupted component-preset persistence",
+  "selected_candidate": "C12_COMPONENT_PRESET_SHARED_READ_REFRESH",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 1
+  }
+}
