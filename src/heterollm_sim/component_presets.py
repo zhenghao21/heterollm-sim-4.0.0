@@ -3283,6 +3283,33 @@ def _mutation_list(value: Any, label: str) -> list:
     return list(value)
 
 
+def _validate_metadata_keys(value: Any) -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError("metadata 对象键必须是字符串")
+            _validate_metadata_keys(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _validate_metadata_keys(item)
+
+
+def _strict_payload_equal(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, Mapping):
+        return (
+            set(left) == set(right)
+            and all(_strict_payload_equal(left[key], right[key]) for key in left)
+        )
+    if isinstance(left, (list, tuple)):
+        return len(left) == len(right) and all(
+            _strict_payload_equal(item_left, item_right)
+            for item_left, item_right in zip(left, right)
+        )
+    return left == right
+
+
 def _parse_port_payload(value: Any, index: int) -> PortSpec:
     payload = _mutation_mapping(value, "component.ports[{}]".format(index))
     unknown = sorted(set(payload) - _PORT_MUTATION_FIELDS)
@@ -3296,6 +3323,7 @@ def _parse_port_payload(value: Any, index: int) -> PortSpec:
     payload.setdefault("max_links", 1)
     metadata = dict(_mutation_mapping(payload.get("metadata", {}), "port.metadata"))
     try:
+        _validate_metadata_keys(metadata)
         to_primitive(metadata)
     except (TypeError, ValueError) as exc:
         raise ComponentPresetMutationError("invalid_component", "端口 metadata 无法序列化：{}".format(exc)) from exc
@@ -3328,7 +3356,20 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
         payload["write_bandwidth_gbps"] = 0.0
         payload["bandwidth_gbps"] = 0.0
     metadata = dict(_mutation_mapping(payload.get("metadata", {}), "component.metadata"))
+    for field in ("facts", "capability_status"):
+        if field in metadata and not isinstance(metadata[field], Mapping):
+            raise ComponentPresetMutationError("invalid_component", "component.metadata.{} 必须是对象".format(field))
+    for field in ("conditions", "supersedes"):
+        if field in metadata and (
+            not isinstance(metadata[field], (list, tuple))
+            or any(not isinstance(item, str) for item in metadata[field])
+        ):
+            raise ComponentPresetMutationError("invalid_component", "component.metadata.{} 必须是字符串数组".format(field))
+    for field in ("value_scope", "revision", "expires_at"):
+        if field in metadata and not isinstance(metadata[field], str):
+            raise ComponentPresetMutationError("invalid_component", "component.metadata.{} 必须是字符串".format(field))
     try:
+        _validate_metadata_keys(metadata)
         to_primitive(metadata)
     except (TypeError, ValueError) as exc:
         raise ComponentPresetMutationError("invalid_component", "组件 metadata 无法序列化：{}".format(exc)) from exc
@@ -3340,6 +3381,48 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
         return ComponentSpec(**payload)
     except (TypeError, ValueError) as exc:
         raise ComponentPresetMutationError("invalid_component", "组件参数无效：{}".format(exc)) from exc
+
+
+def _validate_ignored_fields(raw: Mapping[str, Any], component: ComponentSpec, *, fields: Optional[Sequence[str]] = None) -> None:
+    metadata = component.metadata
+    expected = {
+        "preset_type": "component",
+        "component_kind": component.kind,
+        "capacity_bytes": component.capacity_bytes,
+        "peak_ops_per_s": component.peak_ops_per_s,
+        "read_bandwidth_gbps": component.read_bandwidth_gbps,
+        "write_bandwidth_gbps": component.write_bandwidth_gbps,
+        "capability_units": dict(CAPABILITY_UNITS),
+        "port_count": len(component.ports),
+        "facts": dict(metadata.get("facts", {})),
+        "capability_status": dict(metadata.get("capability_status", {})),
+        "value_scope": metadata.get("value_scope", ""),
+        "conditions": list(metadata.get("conditions", ())),
+        "revision": metadata.get("revision", ""),
+        "expires_at": metadata.get("expires_at", ""),
+        "supersedes": list(metadata.get("supersedes", ())),
+        "catalog_version": CATALOG_VERSION,
+        "usage_hint": USAGE_HINT,
+        "links": [],
+        "catalog": {"version": CATALOG_VERSION, "cutoff_at": CATALOG_CUTOFF_AT},
+    }
+    fields = set(raw) if fields is None else set(fields)
+    type_conflicts = {
+        field
+        for field in ("capacity_bytes", "port_count", "peak_ops_per_s", "read_bandwidth_gbps", "write_bandwidth_gbps")
+        if field in fields and isinstance(raw.get(field), bool)
+    }
+    conflicts = sorted(
+        field for field, expected_value in expected.items()
+        if field in fields
+        and field not in _PRESET_MUTATION_FIELDS
+        and (field in type_conflicts or not _strict_payload_equal(raw[field], expected_value))
+    )
+    if conflicts:
+        raise ComponentPresetMutationError(
+            "conflicting_fields",
+            "只读派生字段与 component 不一致：{}".format(", ".join(conflicts)),
+        )
 
 
 _SOURCE_FIELDS = frozenset({
@@ -3363,7 +3446,7 @@ def _parse_sources(value: Any, *, strict: bool = False) -> Tuple[ComponentSource
         url = str(source.get("url", "")).strip()
         publisher = str(source.get("publisher", "")).strip() or "用户录入"
         evidence = str(source.get("evidence_level", S2_VENDOR_DECLARED)).strip()
-        if not title or not url:
+        if not title or (not url and evidence != A_ANALYTICAL):
             raise ComponentPresetMutationError("invalid_source", "来源必须包含 title 和 url")
         if evidence not in EVIDENCE_LEVELS:
             raise ComponentPresetMutationError("invalid_source", "来源 evidence_level 无效：{}".format(evidence))
@@ -3373,18 +3456,21 @@ def _parse_sources(value: Any, *, strict: bool = False) -> Tuple[ComponentSource
 
 def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[ComponentPresetDefinition] = None, strict: bool = False) -> ComponentPresetDefinition:
     raw = _mutation_mapping(payload, "payload")
+    validation_fields = set(raw)
+    wrapper_fields = set()
     if isinstance(raw.get("preset"), Mapping):
         preset_fields = dict(raw["preset"])
+        wrapper_fields = set(preset_fields)
         conflicting = sorted(
             key for key in set(preset_fields) & (set(raw) - {"preset"})
-            if preset_fields[key] != raw[key]
+            if not _strict_payload_equal(preset_fields[key], raw[key])
         )
         if conflicting:
             raise ComponentPresetMutationError("conflicting_fields", "preset 包装层与外层字段冲突：{}".format(", ".join(conflicting)))
         raw = {**preset_fields, **{key: value for key, value in raw.items() if key != "preset"}}
-    if "id" in raw and "preset_id" in raw and raw["id"] != raw["preset_id"]:
+    if "id" in raw and "preset_id" in raw and not _strict_payload_equal(raw["id"], raw["preset_id"]):
         raise ComponentPresetMutationError("conflicting_fields", "id 和 preset_id 不能指向不同预设")
-    if "component" in raw and "component_spec" in raw and raw["component"] != raw["component_spec"]:
+    if "component" in raw and "component_spec" in raw and not _strict_payload_equal(raw["component"], raw["component_spec"]):
         raise ComponentPresetMutationError("conflicting_fields", "component 和 component_spec 不能同时使用不同值")
     unknown = sorted(set(raw) - _PRESET_MUTATION_FIELDS - _PRESET_MUTATION_IGNORED_FIELDS)
     if unknown:
@@ -3411,6 +3497,13 @@ def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[
     if component_payload is None:
         raise ComponentPresetMutationError("missing_component", "缺少必填字段 component")
     component = _parse_component_payload(component_payload)
+    if strict:
+        if wrapper_fields and (
+            existing is None
+            or component_payload == to_primitive(existing.component)
+        ):
+            validation_fields |= wrapper_fields
+        _validate_ignored_fields(raw, component, fields=validation_fields)
     preset_id = str(raw.get("id", raw.get("preset_id", existing.preset_id if existing else ""))).strip()
     if not _PRESET_ID_RE.fullmatch(preset_id):
         raise ComponentPresetMutationError("invalid_id", "id 必须是 2-81 个字母、数字、点、下划线或连字符")
@@ -3434,9 +3527,9 @@ def _definition_from_persisted_record(value: Any) -> ComponentPresetDefinition:
     if "preset" in raw:
         raise ValueError("硬件预设目录记录不允许使用 preset 包装层")
     if "id" in raw and "preset_id" in raw:
-        if not isinstance(raw["id"], str) or not isinstance(raw["preset_id"], str) or raw["id"] != raw["preset_id"]:
+        if not isinstance(raw["id"], str) or not isinstance(raw["preset_id"], str) or not _strict_payload_equal(raw["id"], raw["preset_id"]):
             raise ValueError("硬件预设目录中的 id 和 preset_id 冲突")
-    if "component" in raw and "component_spec" in raw and raw["component"] != raw["component_spec"]:
+    if "component" in raw and "component_spec" in raw and not _strict_payload_equal(raw["component"], raw["component_spec"]):
         raise ValueError("硬件预设目录中的 component 和 component_spec 冲突")
     return _definition_from_mutation(raw, strict=True)
 

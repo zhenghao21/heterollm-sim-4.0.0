@@ -8,6 +8,7 @@ from heterollm_sim.component_presets import (
     ComponentPresetCatalog,
     ComponentPresetMutationError,
     ComponentPresetPersistenceError,
+    list_component_presets,
 )
 from heterollm_sim.web import build_server
 
@@ -129,12 +130,56 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
                 },
                 "code": "bad_json",
             }),
+            ("invalid-facts-shape", {
+                "component": {
+                    **base["component"],
+                    "metadata": {"facts": ["not-an-object"]},
+                },
+                "code": "invalid_component",
+            }),
+            ("invalid-conditions-shape", {
+                "component": {
+                    **base["component"],
+                    "metadata": {"conditions": "not-an-array"},
+                },
+                "code": "invalid_component",
+            }),
+            ("invalid-value-scope-type", {
+                "component": {
+                    **base["component"],
+                    "metadata": {"value_scope": 123},
+                },
+                "code": "invalid_component",
+            }),
             ("conflicting-component-alias", {
                 "component_spec": {
                     "component_id": "different",
                     "kind": "hbm",
                     "ports": [],
                 },
+                "code": "conflicting_fields",
+            }),
+            ("conflicting-component-alias-types", {
+                "component": {
+                    **base["component"],
+                    "metadata": {"same_key": 1},
+                },
+                "component_spec": {
+                    **base["component"],
+                    "metadata": {"same_key": True},
+                },
+                "code": "conflicting_fields",
+            }),
+            ("conflicting-derived-field", {
+                "capacity_bytes": 999,
+                "code": "conflicting_fields",
+            }),
+            ("conflicting-derived-bool", {
+                "capacity_bytes": False,
+                "code": "conflicting_fields",
+            }),
+            ("conflicting-catalog-envelope", {
+                "catalog": {"version": "wrong", "cutoff_at": "wrong"},
                 "code": "conflicting_fields",
             }),
             ("conflicting-wrapper-field", {
@@ -162,6 +207,75 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
                         "metadata": {"custom_number": float("nan")},
                     },
                 })
+            self.assertFalse(catalog.path.exists())
+            with self.assertRaises(ComponentPresetMutationError):
+                catalog.create({
+                    **base,
+                    "id": "nested-direct-key",
+                    "component": {
+                        **base["component"],
+                        "metadata": {"custom": {1: "collision", "1": "text"}},
+                    },
+                })
+            self.assertFalse(catalog.path.exists())
+
+    def test_full_detail_round_trip_preserves_canonical_fields(self):
+        preset_id = "crud-round-trip-component"
+        payload = {
+            "preset_id": preset_id,
+            "name": "Round trip component",
+            "family": "Round trip",
+            "component_spec": {
+                "component_id": "round-trip",
+                "kind": "hbm",
+                "capacity_bytes": 123,
+                "ports": [],
+                "metadata": {"custom_extension": {"keep": True}},
+            },
+            "sources": [{
+                "title": "Round trip source",
+                "url": "https://example.com/round-trip",
+                "publisher": "Test",
+                "evidence_level": "S2_VENDOR_DECLARED",
+            }],
+            "tags": ["round-trip"],
+            "notes": "Round trip note",
+            "limitations": ["Round trip limitation"],
+        }
+        try:
+            status, created = self.request("POST", "/api/component-presets", payload)
+            self.assertEqual(status, 201)
+            status, before = self.request("GET", "/api/component-presets/" + preset_id)
+            self.assertEqual(status, 200)
+            mutated_detail = json.loads(json.dumps(before))
+            mutated_detail["preset"]["capacity_bytes"] = 999
+            status, conflict = self.request("PUT", "/api/component-presets/" + preset_id, mutated_detail)
+            self.assertEqual(status, 400)
+            self.assertEqual(conflict["error"]["code"], "conflicting_fields")
+            status, after_put = self.request("PUT", "/api/component-presets/" + preset_id, before)
+            self.assertEqual(status, 200)
+            status, after = self.request("GET", "/api/component-presets/" + preset_id)
+            self.assertEqual(status, 200)
+            self.assertEqual(after["preset"]["sources"], before["preset"]["sources"])
+            self.assertEqual(after["preset"]["tags"], ["round-trip"])
+            self.assertEqual(after["preset"]["notes"], "Round trip note")
+            self.assertEqual(after["component"]["metadata"]["custom_extension"], {"keep": True})
+            self.assertEqual(after["component"], before["component"])
+            self.assertEqual(after_put["component"], before["component"])
+        finally:
+            self.request("DELETE", "/api/component-presets/" + preset_id)
+
+    def test_all_bundled_component_details_round_trip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = ComponentPresetCatalog(directory)
+            for item in list_component_presets():
+                if item["preset_type"] != "component":
+                    continue
+                preset_id = item["id"]
+                detail = catalog.detail(preset_id)
+                updated = catalog.update(preset_id, detail)
+                self.assertEqual(updated["preset"]["id"], preset_id)
+                self.assertEqual(catalog.detail(preset_id)["preset"]["sources"], detail["preset"]["sources"])
 
     def test_separate_catalog_instances_merge_persistent_overrides(self):
         with tempfile.TemporaryDirectory() as directory:

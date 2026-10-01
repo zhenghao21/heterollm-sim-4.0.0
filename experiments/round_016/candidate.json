@@ -1,0 +1,54 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_016",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H16_COMPONENT_PRESET_CANONICAL_REWRITE",
+    "claim": "Compatibility input aliases and read-only derived fields need an explicit canonical round-trip contract; mismatches must be visible and failed nested validation must occur before persistence.",
+    "trigger": "alias-only payloads, full detail PUT, conflicting derived summaries, reserved metadata shapes, and built-in analysis sources",
+    "expected_baseline": "aliases canonicalize but ignored conflicts are accepted and dropped; malformed reserved metadata can fail after save",
+    "expected_candidate": "editable fields and extensions round-trip, conflicts return structured errors, invalid metadata never writes, and all built-ins round-trip",
+    "falsifier": "any canonical editable field or extension is lost, a conflicting derived field is silently accepted, or invalid nested metadata leaves a file behind"
+  },
+  "parent_commit": "1721e5335e26b06681422bae0fec5452ab4d7454",
+  "changed_files": [
+    "src/heterollm_sim/component_presets.py",
+    "tests/test_component_preset_crud.py",
+    "AGENTS.md"
+  ],
+  "implementation": [
+    "compare payload aliases recursively with type-sensitive equality",
+    "validate ignored derived fields against canonical component values",
+    "allow stale nested summaries only when the component itself changed and is authoritative",
+    "validate reserved metadata shape, finite serialization, and string keys before save",
+    "allow empty URL only for A_ANALYTICAL sources",
+    "add full detail and all-built-in round-trip regressions"
+  ],
+  "activation_checks": [
+    "parent matrix showed ignored fields accepted then dropped",
+    "HTTP alias and full-detail round-trip preserved component, sources, metadata, tags, notes",
+    "all 10 built-in component details round-tripped successfully",
+    "invalid reserved metadata left no presets.json",
+    "conflicting ignored and alias fields returned conflicting_fields"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_component_preset_crud.py tests/test_component_presets.py tests/test_architecture_component_composition.py tests/test_web.py",
+      "result": "54 passed in 6.63s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "3025 passed, 4 skipped in 434.94s; exit code 0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_016/h16_canonical_rewrite_baseline.json",
+    "artifacts/optimization/round_016/h16_http_roundtrip.json",
+    "artifacts/optimization/round_016/h16_canonical_rewrite_candidate_final.json"
+  ],
+  "candidate_source_sha256": "f3336f6b7d394dcb28146f92b36cf8d1f53a7dc7f91881fe6d078a1d43b01824"
+}

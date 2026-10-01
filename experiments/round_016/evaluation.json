@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_016",
+  "candidate_id": "C16_COMPONENT_PRESET_CANONICAL_REWRITE",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "engineering canonical round-trip candidate; no target latency prediction"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "round-trip equality and pre-save atomicity oracle; no native timing truth opened"
+  },
+  "mechanism_status": "passed",
+  "accuracy_status": "not_evaluated",
+  "generalization_status": "limited_to_component_preset_catalog_and_local_HTTP_round-trips",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_016/h16_canonical_rewrite_baseline.json",
+  "result": "The parent accepted ignored derived-field conflicts and silently recomputed/dropped them. The candidate makes canonical authority explicit, rejects mismatches, validates reserved metadata before save, preserves compatibility aliases and extensions, and passes all bundled detail round-trips including the analytical source with an empty URL.",
+  "limitations": [
+    "When component is explicitly changed, stale nested derived summaries are intentionally ignored and recomputed from the component.",
+    "Metadata keys remain open extensions rather than a closed vocabulary.",
+    "No native accuracy, latency, or deployment claim"
+  ]
+}
