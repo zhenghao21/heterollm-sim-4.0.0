@@ -1,0 +1,18 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_004",
+  "candidate_id": "C4_KV_RELEASE_ATOMICITY",
+  "status": "decided",
+  "decision": "accepted_for_engineering_baseline",
+  "reason": "The candidate makes a rejected single-page release fail before mutating page/index/binding/refcount state, keeps the physical ledger unchanged, and permits a successful retry. Focused KV/cache regressions pass. This accepts single-page release recovery semantics; it is not a full multi-page transaction or accuracy promotion.",
+  "evidence": [
+    "artifacts/optimization/round_004/kv_release_reproduction.json",
+    "tests/test_kv_pool.py",
+    "src/heterollm_sim/kv_pool.py"
+  ],
+  "next_hypothesis": {
+    "id": "H5_KV_MULTI_PAGE_RELEASE_TRANSACTION",
+    "claim": "Releasing multiple pages should either complete all physical ledger decrements or preserve the complete request/page state when a later decrement is rejected; current per-page retry behavior may allow partial release.",
+    "status": "registered_not_started"
+  }
+}

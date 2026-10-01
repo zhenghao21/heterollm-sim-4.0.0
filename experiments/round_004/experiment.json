@@ -1,0 +1,53 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_004",
+  "status": "review",
+  "purpose": "mechanism_fidelity",
+  "primary_goal": "preserve DynamicKVPool page and request state when physical ledger rejects a release",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "59f0d51d4bc6cdc242ca659f64ab695e73f41786",
+    "role": "engineering baseline accepted by round_003; no end-to-end accuracy promotion"
+  },
+  "hypothesis_id": "H4_KV_RELEASE_ATOMICITY",
+  "scope": {
+    "operator": "DynamicKVPool release",
+    "phase": "page eviction/release",
+    "formats": "external physical ledger callback",
+    "trigger": "ledger.adjust(component, -page.bytes) rejects after a page is allocated"
+  },
+  "data_roles": {
+    "development": "synthetic external ledger that rejects negative deltas",
+    "comparison": "baseline/candidate mechanism reproduction",
+    "holdout": "ordinary release, prefix release, migration and cache identity tests",
+    "final_acceptance": "not started"
+  },
+  "metrics": [
+    "failure_state_preserved",
+    "ledger_unchanged_on_failure",
+    "retry_release_succeeds",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "do not silently discard logical page state",
+    "do not invent ledger rollback semantics",
+    "do not read historical score files",
+    "ordinary release and prefix lifetime must remain unchanged"
+  ],
+  "next_step": "verify rejecting-ledger reproduction and KV/cache regression before editing",
+  "selected_candidate": "C4_KV_RELEASE_ATOMICITY",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 0
+  }
+}

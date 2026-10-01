@@ -101,6 +101,48 @@ def test_external_ledger_callbacks_receive_per_component_allocations():
     assert used == {"hbm0": 0, "hbm1": 0}
 
 
+def test_rejected_page_release_preserves_page_and_request_state():
+    used = {"hbm0": 0}
+    reject_release = {"value": True}
+
+    def can_adjust(component, delta):
+        return delta <= 0 or used[component] + delta <= 16
+
+    def adjust(component, delta):
+        if reject_release["value"] and delta < 0:
+            return False
+        if used[component] + delta > 16:
+            return False
+        used[component] += delta
+        return True
+
+    pool = DynamicKVPool(
+        [KvPoolComponent("hbm0", 16)],
+        page_bytes=8,
+        ledger_can_adjust=can_adjust,
+        ledger_adjust=adjust,
+    )
+    assert pool.resize("r", 1)
+    page = pool.request_pages("r")[0]
+
+    with pytest.raises(RuntimeError, match="rejected page release"):
+        pool.release("r")
+
+    assert pool.request_pages("r") == (page,)
+    assert pool.pages() == (page,)
+    assert page.ref_count == 1
+    assert pool._bindings[page.logical_page_id] == {"r"}
+    assert dict(pool._owned_bytes) == {"hbm0": 8}
+    assert used == {"hbm0": 8}
+
+    reject_release["value"] = False
+    pool.release("r")
+    assert pool.pages() == ()
+    assert pool.request_pages("r") == ()
+    assert dict(pool._owned_bytes) == {}
+    assert used == {"hbm0": 0}
+
+
 @dataclass(frozen=True)
 class Hop:
     delay: float

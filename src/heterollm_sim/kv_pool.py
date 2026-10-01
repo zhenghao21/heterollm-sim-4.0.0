@@ -576,11 +576,15 @@ class DynamicKVPool:
         self._bindings[page.logical_page_id].add(page.request_id)
 
     def _free_page(self, page_id: int) -> None:
-        page = self._pages.pop(page_id, None)
+        # Commit the shared ledger release before mutating pool indexes.  A
+        # rejecting external ledger must leave the page and its ownership
+        # metadata available for a retry.
+        page = self._pages.get(page_id)
         if page is None:
             return
         if not self._ledger.adjust(page.owner_component, -page.bytes):
             raise RuntimeError("KV pool physical ledger rejected page release")
+        self._pages.pop(page_id, None)
         self._owned_bytes[page.owner_component] -= page.bytes
         if self._owned_bytes[page.owner_component] <= 0:
             self._owned_bytes.pop(page.owner_component, None)
@@ -595,13 +599,17 @@ class DynamicKVPool:
         page = self._pages.get(page_id)
         if page is None:
             return
-        if binding is not None:
-            self._bindings.get(page_id, set()).discard(binding)
         if page.ref_count <= 0:
             raise RuntimeError("KV pool page refcount underflow")
-        page.ref_count -= 1
-        if page.ref_count == 0 and not page.pinned:
+        # The final unpinned reference frees the page.  Do this before
+        # removing the binding/decrementing ref_count so a rejected ledger
+        # release leaves the whole page state unchanged.
+        if page.ref_count == 1 and not page.pinned:
             self._free_page(page_id)
+            return
+        if binding is not None:
+            self._bindings.get(page_id, set()).discard(binding)
+        page.ref_count -= 1
 
     def _attach_ref(self, page_id: int, request_id: str) -> None:
         page = self._pages[page_id]
@@ -767,10 +775,11 @@ class DynamicKVPool:
         return self.resize(request_id, page_count, **kwargs)
 
     def release(self, request_id: str) -> None:
-        page_ids = self._requests.pop(request_id, [])
-        self._request_components.pop(request_id, None)
+        page_ids = list(self._requests.get(request_id, ()))
         for page_id in page_ids:
             self._drop_ref(page_id, request_id)
+        self._requests.pop(request_id, None)
+        self._request_components.pop(request_id, None)
 
     def request_pages(self, request_id: str) -> Tuple[KvPage, ...]:
         return tuple(self._pages[page_id] for page_id in self._requests.get(request_id, ()) if page_id in self._pages)
@@ -838,9 +847,11 @@ class DynamicKVPool:
         self._prefixes[str(prefix_key)] = ids
 
     def release_prefix(self, prefix_key: str) -> None:
-        ids = self._prefixes.pop(str(prefix_key), [])
+        key = str(prefix_key)
+        ids = list(self._prefixes.get(key, ()))
         for page_id in ids:
             self._drop_ref(page_id)
+        self._prefixes.pop(key, None)
 
     def prefix_pages(self, prefix_key: str) -> Tuple[KvPage, ...]:
         return tuple(self._pages[page_id] for page_id in self._prefixes.get(str(prefix_key), ()) if page_id in self._pages)
