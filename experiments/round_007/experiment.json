@@ -1,0 +1,50 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_007",
+  "status": "closed_review",
+  "purpose": "environment_boundary_audit",
+  "primary_goal": "separate an intermittent Windows full-suite HTTP failure from a reproducible architecture API defect",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "0a19836a214383033a66e0923b9123dba7a7b337",
+    "role": "engineering baseline; no API code candidate activated"
+  },
+  "hypothesis_id": "H7_ARCHITECTURE_HTTP_LIFECYCLE",
+  "scope": {
+    "operator": "architecture preset HTTP API",
+    "phase": "wrong-method error response",
+    "trigger": "POST /api/architecture-presets after full-suite dependency/process stress"
+  },
+  "data_roles": {
+    "development": "isolated HTTP server and focused test reruns",
+    "comparison": "initial full-suite failure trace",
+    "holdout": "two isolated focused reruns and direct http.client sequence",
+    "final_acceptance": "not applicable"
+  },
+  "metrics": [
+    "isolated_reproduction",
+    "expected_405_response",
+    "server_thread_survival"
+  ],
+  "budget": {
+    "candidate_count": 0,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 3
+  },
+  "guardrails": [
+    "do not change API code for a one-off environment failure",
+    "do not hide full-suite failure",
+    "do not read historical score files"
+  ],
+  "next_step": "defer until a clean isolated reproduction or lifecycle trace exists",
+  "selected_candidate": "C7_ARCHITECTURE_HTTP_LIFECYCLE_AUDIT",
+  "budget_used": {
+    "candidate_count": 0,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 3
+  }
+}

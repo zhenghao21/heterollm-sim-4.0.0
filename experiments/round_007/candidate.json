@@ -1,0 +1,30 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_007",
+  "status": "not_actionable",
+  "hypothesis": {
+    "id": "H7_ARCHITECTURE_HTTP_LIFECYCLE",
+    "claim": "Change the API only if the wrong-method request reproducibly aborts an isolated server connection; otherwise classify the full-suite failure as environment/process interference.",
+    "trigger": "WinError 10053 during POST /api/architecture-presets in a full pytest process with pyarrow import fatal exception",
+    "expected_baseline": "isolated API returns 405 JSON",
+    "expected_candidate": "only a proven lifecycle fix",
+    "falsifier": "isolated focused test and direct sequence consistently return 405"
+  },
+  "parent_commit": "0a19836a214383033a66e0923b9123dba7a7b337",
+  "changed_files": [],
+  "activation_checks": [
+    "two focused full-file reruns pass",
+    "single focused method rerun passes",
+    "direct http.client sequence returns 400/404/405 and server remains alive"
+  ],
+  "tests": [
+    {
+      "command": "pytest -q tests/test_v12_architecture_api.py",
+      "result": "2 passed in 0.94s and 2 passed in 0.96s"
+    },
+    {
+      "command": "pytest -q tests/test_v12_architecture_api.py::ArchitecturePresetApiTests::test_invalid_filter_unknown_and_wrong_method_are_chinese",
+      "result": "1 passed in 0.91s"
+    }
+  ]
+}
