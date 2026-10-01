@@ -117,6 +117,19 @@ class ControlPlaneRuntime:
                 )
         return tuple(lowered)
 
+    def _restore_state(self, snapshot: RuntimeState) -> None:
+        """Restore a failed run without replacing the caller's state object."""
+        for name, value in snapshot.__dict__.items():
+            current = getattr(self.state, name, None)
+            if isinstance(current, dict) and isinstance(value, dict):
+                current.clear()
+                current.update(deepcopy(value))
+            elif isinstance(current, set) and isinstance(value, set):
+                current.clear()
+                current.update(deepcopy(value))
+            else:
+                setattr(self.state, name, deepcopy(value))
+
     def run(
         self,
         initial_tasks: Optional[Iterable[RuntimeTask]],
@@ -129,6 +142,23 @@ class ControlPlaneRuntime:
         _reject_callbacks(context)
         context_data = dict(context)
         self._begin_run_transaction()
+        state_before_run = deepcopy(self.state)
+        kernel_before_run = self.kernel
+        try:
+            return self._run_after_transaction(initial_tasks, context_data)
+        except Exception:
+            self._restore_state(state_before_run)
+            self._run_capacity_reservations = {}
+            self._run_allocations = {}
+            self.kernel = kernel_before_run
+            raise
+
+    def _run_after_transaction(
+        self,
+        initial_tasks: Optional[Iterable[RuntimeTask]],
+        context_data: Mapping[str, object],
+    ) -> RuntimeRunResult:
+        """Execute a run after its rollback snapshot has been taken."""
 
         context_capacities = context_data.get("capacity_bytes", {})
         if context_capacities and not isinstance(context_capacities, Mapping):

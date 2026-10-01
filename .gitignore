@@ -57,6 +57,7 @@ tmp_*.log
 # Local codebase index and scratch hardware notes
 .codebase-memory/
 .tmp_specs.txt
+artifacts/optimization/
 
 # Independent native diagnostic overlays: keep source and build recipes, not generated binaries/objects.
 source/llama.cpp-annotation-control/build*/

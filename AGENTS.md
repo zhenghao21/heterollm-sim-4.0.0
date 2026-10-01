@@ -1,40 +1,36 @@
-# 项目约定
+# 仿真器工作约定
 
-## 默认误差对比配置（用户于 2026-09-29 指定）
+## 当前流程（用户于 2026-10-01 确认）
 
-后续用户要求做误差对比时，默认使用本次 native 同配置基线，不得换成前端自动部署默认值。除非用户明确指定改变比较条件，否则固定模型、负载、硬件与运行参数，只切换待评估的仿真器版本/成本模型。
+开始或恢复优化时读取 `docs/OPTIMIZATION_WORKFLOW.md` 与对应轮次的四个 JSON 记录。该文件是持久化工作流程，不依赖聊天记忆。
 
-- 配置与审计依据：`artifacts/development/ui_native_matched_20260929/configuration_audit.json`。
-- 六个完整仿真输入：同目录 `*.scenario.json`；运行及构建输入的方法见 `run_comparison.py`。复用脚本时将结果写入新目录，不覆盖本次基线及历史 native/R5。
-- Native 基准：`artifacts/development/native_long_grid_135_20260915/stable_native_dataset.json` 中对应六个 cell；R5 对照：其 `optimization_loop/round_005/r5_llama_native_preset_results.json`。
-- 场景：Qwen2.5、SmolLM2、TinyLlama、Qwen3.5、Qwen3.8 CPU、Qwen3.8 GPU；使用对应 GGUF SHA 和原始 prompt 身份。
-- 负载：P512/O128/C1；batch=64、ubatch=64、context=2048、threads=16、threads_batch=16、seed=42。
-- llama.cpp 调度映射；KV K/V F16；FlashAttention 关闭；保留 native 的硬件快照、时钟、源码运行契约及采样配置；不重置硬件 profile，不启用自动内存分层（device_memory_tiering=false）。完整序列化输入优先于本摘要。
-- 前四个场景 gpu_layers=-1；Qwen3.8 CPU=0；Qwen3.8 GPU native -ngl=66，按有 GGUF MTP 依据的主干映射为仿真 65，不得把两个场景都改成 -1。
-- 本次启用了当前 Blackwell analytical kernel_model；后续保留该建模路径，版本升级须明确记录，不得默默退回旧模型。不得为降低误差用目标 LLM 耗时拟合参数或安装未经验证的实测曲面。
-- 指标采用 engine 边界 TTFT/TPOT/E2E，与历史 native 对应 cell 的中位数比较；TPOT=(末 token 时间-首 token 时间)/(输出 token 数-1)，排除模型加载及客户端网络耗时。
-- 如配置无法复现或模型身份不符，明确报告，不能静默替换。替代部署实验须单独标注，不能冒充同配置预测精度。
+- 流程：prepare → verify → predict → score → review → promote；一个活动候选对应一个可证伪因果假设。
+- 分别记录实现、机制、预测、精度、泛化、回归状态和接纳决定。测试通过、代码发布、数值改善和正式验收不是同一状态。
+- 区分预测精度优化、仿真器自身工程优化、借助仿真器优化部署。每轮声明一个主要目的。
+- 在评分前冻结基线/候选源码、相同输入、数据角色、评价方法、退化保护和预算。基线与候选在独立进程执行；检查实际模块路径。
+- 预测阶段不加载目标 Native 耗时；评分阶段才读取答案。已经接触过的数据始终标记为开发/回归数据，屏蔽文件不能使它重新成为盲测。
+- 机制依据来自源码、守恒关系或独立观测。不得通过目标场景时延反推无解释倍率、虚构参数或忽略失败格。
+- 修复须到达实际执行/计费链路；覆盖触发、排除和控制场景。相关测试先行，扩大回归按风险进行。
+- 候选接纳依据预登记条件；历史比较起点、迭代基线、发布版本分别保存。拒绝的候选和负结论保留，不能覆盖旧结果。
+- 复用满足本轮契约的原始数据；未知/域外/回退明确记录。不要把条件预测、分析假设或合成测试称为实测精度验证。
+- 修改预测输入或源码后产生新的预测身份；不得拼接不同版本的结果。停止/重试按当轮预算，不无限重复。
+- 默认只执行用户指定的轮次。普通检查点可以继续；若第一轮完成，不自动开始第二轮或新建定时任务。
 
+## 历史材料屏蔽
 
-## Kernel surface acceptance state (2026-09-30)
+以下材料仅作历史档案，不进入当前流程的默认指令、候选排序和基线选择：
 
-- Synthetic cold-cache holdouts are recorded under `artifacts/development/cold_surface_*_20260929` and `cold_surface_q4_repeat_20260930`; they are evidence only and are not installed as the default LLM profile.
-- Accepted narrow operator domains: N interpolation at M=1/2/4,K=4096 for Q4_K/Q6_K/IQ4_XS; K interpolation at M=1,N=4096 for all three; K interpolation at M=2/4,N=4096 for Q6_K/IQ4_XS.
-- Rejected domain: Q4_K K interpolation at M=2/4,N=4096. The K=2560 anomaly is repeatable; do not use separable or blanket Q4_K interpolation there.
-- Acceptance matrix: `artifacts/development/cold_surface_acceptance_20260929.json`.
+- `docs/history/**`，含旧 AGENTS 内容；
+- `docs/TASK_BRIEF_AUDIT_20260914.md`；
+- `artifacts/development/native_long_grid_135_20260915/optimization_loop/**`；
+- 历史 `comparison*.json`、`errors*.json`、`*.score.json` 及实验结论。
 
-## Level-2 calibrated analytical surface (2026-09-30)
+本轮需要的原始测量、场景配置、源码证据须在 experiment.json 中显式列出，按数据角色读取。旧文件的路径、SHA、结构可作为待验证事实，不继承其旧候选、层级优先、门槛、预算或发布规则。历史材料不删除，不当作没有发生过。
 
-- Opt-in preset: `blackwell_calibrated_analytical_v1`; the ordinary frontend `blackwell_analytical_v1` remains the uncalibrated analytical path.
-- Surface source/build: `tools/collect_level2_shape_grid.py`, `tools/build_level2_surfaces.py`, `artifacts/development/level2_shape_grid_20260930/` and `artifacts/development/kernel_level2_surface_manifest.json`.
-- Surface uses independent synthetic CUDA main-kernel measurements only; no native LLM latency fitting. It binds runtime DLL SHA, source MMVQ signature, cache protocol, dtype/output and complete shape cells. Unsupported or rejected cells fall back to analytical.
-- Holdout acceptance: `artifacts/development/level2_shape_grid_20260930/holdout_evaluation.json`; four of seven declared holdouts pass the current `<10% APE` and `<10% CV` gates. Q5_K/Q5_0 exact observations and Q8_0 observations remain evidence only because no complete validated joint cell/holdout surface was accepted; rejected correctness and high-CV cases are listed in the protocol/manifest.
-- Native-matched Level-2 comparison: latest rerun is `artifacts/development/ui_native_matched_level2_mmq_20260930/`; `ui_native_matched_level2_release2_20260930/`, `ui_native_matched_level2_grid_20260930/` and `ui_native_matched_level2_grid2_20260930/` are retained as prior attempts. All remain separate from the analytical baseline.
+## 项目操作
 
-## Level-2 prefill MMQ extension (2026-09-30)
-
-- Independent protocol and measurements: `artifacts/development/level2_mmq_prefill_exact_20260930/`; collector `tools/collect_level2_mmq_grid.py`, exact-Q8 probe `tools/probe_synthetic_mmq.py`, holdout report `holdout_evaluation.json`.
-- The installed surface now includes only MMQ prefill M=512 Q4_K/Q6_K/IQ4_XS cells whose six holdouts pass CV<10% and APE<10%. MMQ stream-K and no-fixup dispatch signatures are separate; no interpolation crosses them.
-- The measured boundary is the `mul_mat_q` main kernel. Activation quantization/repacking and `mul_mat_q_stream_k_fixup` remain separately priced and are not included in the surface wall.
-- MMQ resources are bound from Nsight Compute for the exact specialization (255 registers/thread, 58880 B shared allocation, 8 warps/CTA) and remain guarded by hardware/runtime/source signature.
-- Latest native-matched rerun is `artifacts/development/ui_native_matched_level2_mmq_20260930/`; its mean APE is TTFT 24.5985%, TPOT 36.0785%, E2E 31.2146%, overall 30.6306%. This is an opt-in experiment, not a claim that every LLM path is validated.
+- 使用当前仓库，保留 `GITHUB_SUBMISSION_SCOPE.md` 所描述的大型本地数据排除范围。
+- 原始 Native、模型权重、CUDA/llama.cpp 源码和证据不作为缓存清理。
+- 源码/测试用现有工具；不新增平行评分框架。四个实验记录可以引用既有产物，不重复保存巨型输入。
+- 当前独立流程起始代码：`ea6848c05a46537e3367753ce8487958a258bca5`。这只是可恢复的工程起点，不是已验证的精度基线。
+- 第一轮记录目录：`experiments/round_001/`；本地预测与日志目录：`artifacts/optimization/round_001/`。

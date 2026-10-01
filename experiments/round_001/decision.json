@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_001",
+  "candidate_id": "C1_RUNTIME_TRANSACTION_ROLLBACK",
+  "status": "decided",
+  "decision": "accepted_for_engineering_baseline",
+  "reason": "The falsifiable state invariant passed and the focused runtime regression suite passed. This is not an accuracy promotion or release claim.",
+  "evidence": [
+    "artifacts/optimization/round_001/atomicity_reproduction.json",
+    "tests/test_runtime_mechanics.py",
+    "src/heterollm_sim/runtime.py"
+  ],
+  "next_hypothesis": {
+    "id": "H2_STREAMK_NON_DIVISIBLE_HEAD_TILES",
+    "claim": "Stream-K attention must fail closed when score_heads is not divisible by attention_heads_per_tile, because floor division currently undercounts output tiles and violates scratch traffic conservation.",
+    "priority": "next after current round is committed",
+    "status": "registered_not_started"
+  }
+}

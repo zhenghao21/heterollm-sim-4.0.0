@@ -264,6 +264,28 @@ def test_cost_and_dynamic_runtime_honor_shared_owners():
     assert result.kernel_metrics["physical_owner_service_ns"]["hbm.physical"] == 22
 
 
+def test_failed_dynamic_run_rolls_back_state_and_transient_ledger():
+    from heterollm_sim.runtime import ControlPlaneRuntime
+    from heterollm_sim.runtime_lowering import RuntimeDispatchError
+
+    runtime = ControlPlaneRuntime({"capacity_bytes": {"vram": 100}})
+    with pytest.raises(RuntimeDispatchError, match="placement decision"):
+        runtime.run(
+            None,
+            {
+                "capacity_bytes": {"ephemeral": 32},
+                "requests": [{"request_id": "r", "flow_id": "f", "required_bytes": 10}],
+            },
+        )
+
+    assert runtime.state.capacity_bytes == {"vram": 100}
+    assert runtime.state.reserved_bytes == {}
+    assert runtime.state.metrics == {}
+    assert runtime._run_capacity_reservations == {}
+    assert runtime._run_allocations == {}
+    assert runtime.kernel is None
+
+
 def test_runtime_adapter_preserves_owner_mapping():
     from heterollm_sim.runtime_adapters import LlamaCppAdapter
     plan = LlamaCppAdapter().lower(())
