@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_003",
-  "status": "verified",
+  "status": "rejected_after_review",
   "hypothesis": {
     "id": "H3_STREAMK_PHASE_DOMAIN",
     "claim": "The registered decode attention contract is paged/page-table based and omits Stream-K scratch/fixup; a custom decode Stream-K descriptor must fail closed until an independent decode contract exists.",
@@ -43,6 +43,16 @@
       "result": "passed"
     }
   ],
-  "candidate_source_sha256": "322cd0534fa3a467bcab670548b29e52cd1864fc56b9600464f1984556a7e7bc",
-  "contract_evidence": "artifacts/development/attention_level2_registry_20260930.json"
+  "candidate_source_sha256": "07abcd1c302d913d15e342cb79390f407630c0403ffc71b571e4917ea4d88740",
+  "contract_evidence": "artifacts/development/attention_level2_registry_20260930.json",
+  "review_correction": {
+    "status": "hypothesis_not_proven",
+    "reason": "The registry describes the qualified decode Level-2 surface, but local llama.cpp semantic CUDA source permits dense Stream-K selection by shape/hardware and does not impose a phase-wide ban.",
+    "source_evidence": [
+      "source/llama.cpp-semantic/ggml/src/ggml-cuda/fattn-common.cuh:1135-1173",
+      "source/llama.cpp-semantic/ggml/src/ggml-cuda/fattn-common.cuh:1252-1283",
+      "source/llama.cpp-semantic/ggml/src/ggml-cuda/fattn-mma-f16.cuh:2065"
+    ],
+    "corrected_control": "explicit dense decode descriptor remains kernel_aware with Stream-K; paged/quantized/unknown layouts retain existing fallback guards"
+  }
 }

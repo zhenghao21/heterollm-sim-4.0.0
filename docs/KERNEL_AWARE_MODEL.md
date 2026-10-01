@@ -122,8 +122,8 @@ source specialization 回到 analytical fallback。`attention_causal_20260929`
 和 `attention_streamk_20260929` 的主/fixup holdout 仅为诊断（M=64 causal fixup
 APE 16.03%，且 probe runtime SHA 与 calibrated MMQ 不同），因此没有把 device
 wall 或错误的资源列作为生产 Level-2 correction surface。
-未独立定义 Stream-K 临时缓冲和页表契约的 decode descriptor 会 fail closed 到
-解析路径；已注册的 decode 契约不包含 Stream-K 或 fixup 字段。
+decode 的 paged/page-table Level-2 surface 尚无同运行时 trace，因此该校准面
+保留解析回退；这不等价于禁止显式 dense contiguous descriptor 使用 Stream-K。
 
 继续复用已有 topology/DES 中 compute、内存方向、NVLink 方向、PCIe、NIC、DMA 和 CPU submission 的独立资源及 owner alias。
 有依赖时串行、无依赖且不共享资源才可重叠；没有增加 blanket sum/max。

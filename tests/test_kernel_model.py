@@ -501,7 +501,7 @@ def test_streamk_rejects_non_divisible_score_heads_before_tile_accounting():
     assert 'stream_k' not in estimate.metadata.get('kernel_model', {})
 
 
-def test_streamk_decode_descriptor_fails_closed_without_decode_scratch_contract():
+def test_streamk_decode_descriptor_is_allowed_for_explicit_dense_contract():
     descriptor = capability(operator='attention', phase='decode', weight_formats=('fp16',),
         output_bits=32, internal_dtype='fp16', compute_primitive='tensor',
         attention_stream_k=True, registers_per_thread=64,
@@ -512,9 +512,9 @@ def test_streamk_decode_descriptor_fails_closed_without_decode_scratch_contract(
 
     estimate = estimate_gpu_fused_attention(gpu, HBMProfile(1000), workload)
 
-    assert estimate.metadata['model'] != 'kernel_aware'
-    assert estimate.phase_names == ('gpu_fused_attention',)
-    assert 'stream_k' not in estimate.metadata.get('kernel_model', {})
+    assert estimate.metadata['model'] == 'kernel_aware'
+    assert estimate.phase_names == ('gpu_fused_attention', 'gpu_attention_stream_k_fixup')
+    assert estimate.metadata['kernel_model']['stream_k']['fixup_required']
 
 def test_uniform_fixup_traffic_separates_allocation_writes_and_reads():
     from heterollm_sim.kernel_model import attention_uniform_fixup_traffic
