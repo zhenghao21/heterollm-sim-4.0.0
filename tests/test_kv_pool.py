@@ -101,7 +101,8 @@ def test_external_ledger_callbacks_receive_per_component_allocations():
     assert used == {"hbm0": 0, "hbm1": 0}
 
 
-def test_rejected_page_release_preserves_page_and_request_state():
+@pytest.mark.parametrize("owner", ["request", "prefix"])
+def test_rejected_page_release_preserves_page_and_owner_state(owner):
     used = {"hbm0": 0}
     reject_release = {"value": True}
 
@@ -124,21 +125,33 @@ def test_rejected_page_release_preserves_page_and_request_state():
     )
     assert pool.resize("r", 1)
     page = pool.request_pages("r")[0]
+    if owner == "prefix":
+        pool.register_prefix("cached", [page])
+        pool.release("r")
+        release = pool.release_prefix
+        owner_pages = pool.prefix_pages
+        owner_key = "cached"
+        bindings = set()
+    else:
+        release = pool.release
+        owner_pages = pool.request_pages
+        owner_key = "r"
+        bindings = {"r"}
 
     with pytest.raises(RuntimeError, match="rejected page release"):
-        pool.release("r")
+        release(owner_key)
 
-    assert pool.request_pages("r") == (page,)
+    assert owner_pages(owner_key) == (page,)
     assert pool.pages() == (page,)
     assert page.ref_count == 1
-    assert pool._bindings[page.logical_page_id] == {"r"}
+    assert pool._bindings[page.logical_page_id] == bindings
     assert dict(pool._owned_bytes) == {"hbm0": 8}
     assert used == {"hbm0": 8}
 
     reject_release["value"] = False
-    pool.release("r")
+    release(owner_key)
     assert pool.pages() == ()
-    assert pool.request_pages("r") == ()
+    assert owner_pages(owner_key) == ()
     assert dict(pool._owned_bytes) == {}
     assert used == {"hbm0": 0}
 
