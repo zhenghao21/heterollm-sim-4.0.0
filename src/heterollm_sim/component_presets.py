@@ -3294,6 +3294,12 @@ def _parse_port_payload(value: Any, index: int) -> PortSpec:
     payload.setdefault("lanes", 1)
     payload.setdefault("bandwidth_gbps", 0.0)
     payload.setdefault("max_links", 1)
+    metadata = dict(_mutation_mapping(payload.get("metadata", {}), "port.metadata"))
+    try:
+        to_primitive(metadata)
+    except (TypeError, ValueError) as exc:
+        raise ComponentPresetMutationError("invalid_component", "端口 metadata 无法序列化：{}".format(exc)) from exc
+    payload["metadata"] = metadata
     try:
         return PortSpec(**payload)
     except (TypeError, ValueError) as exc:
@@ -3322,6 +3328,10 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
         payload["write_bandwidth_gbps"] = 0.0
         payload["bandwidth_gbps"] = 0.0
     metadata = dict(_mutation_mapping(payload.get("metadata", {}), "component.metadata"))
+    try:
+        to_primitive(metadata)
+    except (TypeError, ValueError) as exc:
+        raise ComponentPresetMutationError("invalid_component", "组件 metadata 无法序列化：{}".format(exc)) from exc
     template = metadata.get("cost_profile_template")
     # Profile rates describe a calibrated service model and are bounded by
     # hardware during scenario resolution. Preserve them across catalog edits.
@@ -3332,12 +3342,23 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
         raise ComponentPresetMutationError("invalid_component", "组件参数无效：{}".format(exc)) from exc
 
 
-def _parse_sources(value: Any) -> Tuple[ComponentSource, ...]:
+_SOURCE_FIELDS = frozenset({
+    "title", "url", "evidence_level", "publisher", "published_at", "accessed_at",
+})
+
+
+def _parse_sources(value: Any, *, strict: bool = False) -> Tuple[ComponentSource, ...]:
     if value is None:
         return ()
     sources = []
     for index, raw in enumerate(_mutation_list(value, "sources")):
         source = _mutation_mapping(raw, "sources[{}]".format(index))
+        if strict:
+            unknown = sorted(set(source) - _SOURCE_FIELDS)
+            if unknown:
+                raise ComponentPresetMutationError("invalid_source", "来源包含未知字段：{}".format(", ".join(unknown)))
+            if any(not isinstance(source.get(field), str) for field in source):
+                raise ComponentPresetMutationError("invalid_source", "来源字段必须是字符串")
         title = str(source.get("title", "")).strip()
         url = str(source.get("url", "")).strip()
         publisher = str(source.get("publisher", "")).strip() or "用户录入"
@@ -3350,14 +3371,39 @@ def _parse_sources(value: Any) -> Tuple[ComponentSource, ...]:
     return tuple(sources)
 
 
-def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[ComponentPresetDefinition] = None) -> ComponentPresetDefinition:
+def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[ComponentPresetDefinition] = None, strict: bool = False) -> ComponentPresetDefinition:
     raw = _mutation_mapping(payload, "payload")
     if isinstance(raw.get("preset"), Mapping):
         preset_fields = dict(raw["preset"])
+        conflicting = sorted(
+            key for key in set(preset_fields) & (set(raw) - {"preset"})
+            if preset_fields[key] != raw[key]
+        )
+        if conflicting:
+            raise ComponentPresetMutationError("conflicting_fields", "preset 包装层与外层字段冲突：{}".format(", ".join(conflicting)))
         raw = {**preset_fields, **{key: value for key, value in raw.items() if key != "preset"}}
+    if "id" in raw and "preset_id" in raw and raw["id"] != raw["preset_id"]:
+        raise ComponentPresetMutationError("conflicting_fields", "id 和 preset_id 不能指向不同预设")
+    if "component" in raw and "component_spec" in raw and raw["component"] != raw["component_spec"]:
+        raise ComponentPresetMutationError("conflicting_fields", "component 和 component_spec 不能同时使用不同值")
     unknown = sorted(set(raw) - _PRESET_MUTATION_FIELDS - _PRESET_MUTATION_IGNORED_FIELDS)
     if unknown:
         raise ComponentPresetMutationError("unknown_fields", "预设包含未知字段：{}".format(", ".join(unknown)))
+    if strict:
+        for field in ("id", "preset_id"):
+            if field in raw and not isinstance(raw[field], str):
+                raise ComponentPresetMutationError("invalid_id", "{} 必须是字符串".format(field))
+        for field in ("name", "family", "evidence_level", "notes"):
+            if field in raw and not isinstance(raw[field], str):
+                raise ComponentPresetMutationError("invalid_payload", "预设字段必须是字符串：{}".format(field))
+        for field in ("limitations", "tags"):
+            if field in raw and (
+                not isinstance(raw[field], list)
+                or any(not isinstance(item, str) for item in raw[field])
+            ):
+                raise ComponentPresetMutationError("invalid_payload", "预设字段必须是字符串数组：{}".format(field))
+        if "sources" in raw and raw["sources"] is None:
+            raise ComponentPresetMutationError("invalid_source", "sources 必须是数组")
     base_component = existing.component if existing else None
     component_payload = raw.get("component", raw.get("component_spec"))
     if component_payload is None and base_component is not None:
@@ -3379,7 +3425,7 @@ def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[
     notes = str(raw.get("notes", existing.notes if existing else "用户自定义硬件预设")).strip()
     tags = tuple(str(item).strip() for item in raw.get("tags", existing.tags if existing else ()) if str(item).strip())
     inherited_sources = [source.to_metadata() for source in existing.sources] if existing else ()
-    sources = _parse_sources(raw.get("sources", inherited_sources))
+    sources = _parse_sources(raw.get("sources", inherited_sources), strict=strict)
     return ComponentPresetDefinition(preset_id, name, family, component, sources, evidence, limitations, notes, tags)
 
 
@@ -3392,7 +3438,7 @@ def _definition_from_persisted_record(value: Any) -> ComponentPresetDefinition:
             raise ValueError("硬件预设目录中的 id 和 preset_id 冲突")
     if "component" in raw and "component_spec" in raw and raw["component"] != raw["component_spec"]:
         raise ValueError("硬件预设目录中的 component 和 component_spec 冲突")
-    return _definition_from_mutation(raw)
+    return _definition_from_mutation(raw, strict=True)
 
 
 class ComponentPresetCatalog:
@@ -3506,7 +3552,7 @@ class ComponentPresetCatalog:
         with self._lock:
             with _catalog_file_lock(self.path):
                 self._load_persisted()
-                definition = _definition_from_mutation(payload)
+                definition = _definition_from_mutation(payload, strict=True)
                 if definition.preset_id in _BY_ID or definition.preset_id in self.overrides:
                     raise ComponentPresetMutationError("already_exists", "组件预设 ID 已存在：{}".format(definition.preset_id), status=409)
                 self._save({**self.overrides, definition.preset_id: definition}, self.removed - {definition.preset_id})
@@ -3519,7 +3565,7 @@ class ComponentPresetCatalog:
                 current = self._get(preset_id)
                 if not isinstance(current, ComponentPresetDefinition):
                     raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持编辑")
-                definition = _definition_from_mutation(payload, existing=current)
+                definition = _definition_from_mutation(payload, existing=current, strict=True)
                 if definition.preset_id != preset_id:
                     raise ComponentPresetMutationError("id_change_not_allowed", "编辑时不允许修改预设 ID")
                 self._save({**self.overrides, preset_id: definition}, self.removed - {preset_id})

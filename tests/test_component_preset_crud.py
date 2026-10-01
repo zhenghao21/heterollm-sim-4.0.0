@@ -6,6 +6,7 @@ import unittest
 
 from heterollm_sim.component_presets import (
     ComponentPresetCatalog,
+    ComponentPresetMutationError,
     ComponentPresetPersistenceError,
 )
 from heterollm_sim.web import build_server
@@ -89,6 +90,78 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
         status, payload = self.request("POST", "/api/component-presets", {})
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"]["code"], "missing_component")
+
+    def test_nested_mutation_schema_errors_are_client_errors(self):
+        base = {
+            "name": "Nested mutation",
+            "family": "Nested test",
+            "component": {
+                "component_id": "nested-mutation",
+                "kind": "hbm",
+                "capacity_bytes": 1024,
+                "ports": [],
+            },
+        }
+        cases = (
+            ("invalid-source-field", {
+                "sources": [{
+                    "title": "source",
+                    "url": "https://example.com",
+                    "evidence_level": "S2_VENDOR_DECLARED",
+                    "publisher": "test",
+                    "unexpected": True,
+                }],
+                "code": "invalid_source",
+            }),
+            ("invalid-source-type", {
+                "sources": [{
+                    "title": 1,
+                    "url": "https://example.com",
+                    "evidence_level": "S2_VENDOR_DECLARED",
+                    "publisher": "test",
+                }],
+                "code": "invalid_source",
+            }),
+            ("invalid-metadata-number", {
+                "component": {
+                    **base["component"],
+                    "metadata": {"custom_number": float("nan")},
+                },
+                "code": "bad_json",
+            }),
+            ("conflicting-component-alias", {
+                "component_spec": {
+                    "component_id": "different",
+                    "kind": "hbm",
+                    "ports": [],
+                },
+                "code": "conflicting_fields",
+            }),
+            ("conflicting-wrapper-field", {
+                "preset": {"name": "inner"},
+                "code": "conflicting_fields",
+            }),
+        )
+        for suffix, extra in cases:
+            with self.subTest(suffix=suffix):
+                payload = {**base, "id": "nested-" + suffix}
+                expected_code = extra.pop("code")
+                payload.update(extra)
+                status, detail = self.request("POST", "/api/component-presets", payload)
+                self.assertEqual(status, 400)
+                self.assertEqual(detail["error"]["code"], expected_code)
+
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = ComponentPresetCatalog(directory)
+            with self.assertRaises(ComponentPresetMutationError):
+                catalog.create({
+                    **base,
+                    "id": "nested-direct-metadata",
+                    "component": {
+                        **base["component"],
+                        "metadata": {"custom_number": float("nan")},
+                    },
+                })
 
     def test_separate_catalog_instances_merge_persistent_overrides(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -216,6 +289,31 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
             {"version": 1, "presets": [{**definition, "preset_id": "other-id"}], "removed": []},
             {"version": 1, "presets": [{**definition, "component_spec": {}}], "removed": []},
             {"version": 1, "presets": [{"preset": definition, "id": "other-id"}], "removed": []},
+            {"version": 1, "presets": [{**definition, "id": 123}], "removed": []},
+            {"version": 1, "presets": [{**definition, "sources": None}], "removed": []},
+            {
+                "version": 1,
+                "presets": [{
+                    **definition,
+                    "sources": [{
+                        "title": "source",
+                        "url": "https://example.com",
+                        "evidence_level": "S2_VENDOR_DECLARED",
+                        "publisher": "test",
+                        "unexpected": True,
+                    }],
+                }],
+                "removed": [],
+            },
+            {
+                "version": 1,
+                "presets": [{
+                    **definition,
+                    "limitations": [1],
+                    "notes": 2,
+                }],
+                "removed": [],
+            },
         )
         for raw in cases:
             with self.subTest(raw=raw):

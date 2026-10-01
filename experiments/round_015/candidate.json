@@ -1,0 +1,51 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_015",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H15_COMPONENT_PRESET_NESTED_FIELD_SCHEMA",
+    "claim": "Nested component-preset fields must either retain their extension semantics or fail before a mutation reaches persistence; silent source coercion and alias precedence are unsafe.",
+    "trigger": "source unknown/scalar fields, metadata non-finite values, or conflicting aliases/wrapper fields",
+    "expected_baseline": "HTTP create can return 201 while dropping source fields; direct metadata NaN fails later during serialization; conflicting aliases silently win",
+    "expected_candidate": "covered nested errors return structured client errors before save, while open metadata extensions and single aliases remain compatible",
+    "falsifier": "any covered input is silently coerced/dropped, saves only to fail later, or changes valid extension/CRUD compatibility"
+  },
+  "parent_commit": "be89a841d403908f8ec436e2ebde372de3a31412",
+  "changed_files": [
+    "src/heterollm_sim/component_presets.py",
+    "tests/test_component_preset_crud.py"
+  ],
+  "implementation": [
+    "add strict source keys/string checks",
+    "strictly type nested persisted/API scalar fields",
+    "validate metadata through to_primitive before constructing/saving",
+    "reject conflicting aliases and wrapper/outer fields",
+    "reject numeric persisted IDs and null sources in strict paths"
+  ],
+  "activation_checks": [
+    "parent matrix reproduced source coercion, alias precedence, and late metadata failure",
+    "direct and HTTP nested errors now return structured client errors",
+    "HTTP JSON NaN remains bad_json at the trust boundary",
+    "valid CRUD, open metadata keys, and single-alias compatibility remain green"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_component_preset_crud.py tests/test_component_presets.py tests/test_architecture_component_composition.py tests/test_web.py",
+      "result": "52 passed in 6.56s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "3023 passed, 4 skipped in 433.46s; exit code 0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_015/h15_nested_schema_baseline.json",
+    "artifacts/optimization/round_015/h15_nested_schema_http_matrix.json",
+    "artifacts/optimization/round_015/h15_nested_schema_candidate_final.json"
+  ],
+  "candidate_source_sha256": "ad23d49581c491f474d7d11ce7513d186f500b17bb5f7daa8f53ae970ab47069"
+}

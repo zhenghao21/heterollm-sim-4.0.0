@@ -1,0 +1,62 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_015",
+  "status": "review",
+  "purpose": "mechanism_fidelity",
+  "primary_goal": "prevent nested component-preset fields from being silently coerced, dropped, or serialized only to fail later",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "be89a841d403908f8ec436e2ebde372de3a31412",
+    "role": "current engineering baseline after round_014"
+  },
+  "hypothesis_id": "H15_COMPONENT_PRESET_NESTED_FIELD_SCHEMA",
+  "scope": {
+    "operator": "ComponentPresetCatalog nested record parser and create/update mutation parser",
+    "phase": "sources, scalar fields, component/port metadata, aliases, and persistence serialization",
+    "trigger": "unknown or non-string sources, non-finite metadata, scalar coercion, or conflicting aliases/wrapper fields"
+  },
+  "problem_domain_closure": {
+    "sources": "strict field set and string values for persisted records and create/update",
+    "scalar_fields": "strict types for persisted records and create/update where coercion could lose meaning",
+    "metadata": "open extension keys retained, but unsupported/non-finite values rejected before save",
+    "aliases": "conflicting id/preset_id, component/component_spec, and preset wrapper fields rejected",
+    "json_boundary": "HTTP NaN is rejected as bad_json before mutation validation",
+    "persistence_and_http": "errors remain ComponentPresetPersistenceError/catalog_unavailable from H13",
+    "compatibility": "single aliases and ignored detail fields remain accepted"
+  },
+  "data_roles": {
+    "development": "parent-commit direct nested matrix",
+    "comparison": "direct Catalog and HTTP status/code outcomes",
+    "holdout": "metadata NaN direct call, HTTP JSON NaN, alias conflicts, and valid extension metadata",
+    "final_acceptance": "not started"
+  },
+  "metrics": [
+    "nested_schema_rejection",
+    "no_late_serialization_failure",
+    "alias_conflict_visibility",
+    "valid_compatibility_and_regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 1
+  },
+  "guardrails": [
+    "keep metadata keys open for forward-compatible extensions",
+    "reject unsupported values before atomic save",
+    "preserve H13 persistence error envelope and H14 top-level schema checks",
+    "preserve valid CRUD and single-alias compatibility",
+    "run clean .venv full suite before promotion"
+  ],
+  "next_step": "review any remaining canonicalization of source metadata and ignored mutation fields as an independent scope",
+  "selected_candidate": "C15_COMPONENT_PRESET_NESTED_FIELD_SCHEMA",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 1
+  }
+}

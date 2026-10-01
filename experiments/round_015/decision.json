@@ -1,0 +1,20 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_015",
+  "candidate_id": "C15_COMPONENT_PRESET_NESTED_FIELD_SCHEMA",
+  "status": "decided",
+  "decision": "accepted_for_engineering_baseline",
+  "reason": "The parent matrix showed source fields silently coerced/dropped, alias conflicts silently resolved by precedence, and direct metadata non-finite values failing only during serialization. The candidate closes the nested source, scalar, metadata, alias, and wrapper paths before persistence, preserves open metadata extensions and single-alias compatibility, passes the H13/H14 contracts, and the clean .venv suite passes (3023 passed, 4 skipped, 0 failed). This is mechanism acceptance, not accuracy promotion.",
+  "evidence": [
+    "artifacts/optimization/round_015/h15_nested_schema_baseline.json",
+    "artifacts/optimization/round_015/h15_nested_schema_http_matrix.json",
+    "artifacts/optimization/round_015/h15_nested_schema_candidate_final.json",
+    "src/heterollm_sim/component_presets.py",
+    "tests/test_component_preset_crud.py"
+  ],
+  "next_hypothesis": {
+    "id": "H16_COMPONENT_PRESET_CANONICAL_REWRITE",
+    "claim": "Compatibility aliases and ignored fields should have an explicit canonical rewrite contract so round-tripping cannot silently discard user-visible metadata.",
+    "status": "registered_not_started"
+  }
+}
