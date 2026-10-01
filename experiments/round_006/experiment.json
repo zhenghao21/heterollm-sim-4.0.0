@@ -1,0 +1,52 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_006",
+  "status": "closed_review",
+  "purpose": "capability_boundary_audit",
+  "primary_goal": "determine whether the paged KV pool has a public atomic batch-ledger contract before adding cross-page rollback code",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "dbdd3cbe3d868c5505a8e5d79a04106cada02a45",
+    "role": "engineering baseline accepted through round_005 retry-safe partial progress"
+  },
+  "hypothesis_id": "H6_KV_BATCH_LEDGER_TRANSACTION",
+  "scope": {
+    "operator": "DynamicKVPool physical ledger integration",
+    "phase": "multi-page release",
+    "formats": "serving physical capacity ledger and external ledger adapters",
+    "trigger": "request for all-or-nothing multi-page rollback"
+  },
+  "data_roles": {
+    "development": "source/API contract inspection",
+    "comparison": "none; no candidate was activated",
+    "holdout": "existing 143 KV/cache regression suite",
+    "final_acceptance": "not applicable"
+  },
+  "metrics": [
+    "public_batch_api_present",
+    "atomicity_contract_explicit",
+    "safe_minimal_candidate"
+  ],
+  "budget": {
+    "candidate_count": 0,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "do not bind to private serving implementation by duck typing",
+    "do not claim cross-page atomicity without rollback/commit semantics",
+    "do not add an abstraction without an active call path",
+    "do not read historical score files"
+  ],
+  "next_step": "defer until a public batch-ledger contract is explicitly required and specified",
+  "selected_candidate": "C6_LEDGER_BATCH_CAPABILITY_AUDIT",
+  "budget_used": {
+    "candidate_count": 0,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 0
+  }
+}

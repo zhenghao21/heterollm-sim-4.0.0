@@ -1,0 +1,18 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_006",
+  "candidate_id": "C6_LEDGER_BATCH_CAPABILITY_AUDIT",
+  "status": "decided",
+  "decision": "deferred_not_actionable",
+  "reason": "No public batch-ledger contract is available to DynamicKVPool. The serving-private adjust_many helper cannot safely be assumed by external ledgers, so no speculative adapter or transaction abstraction was added. Round_005 remains the supported retry-safe partial-progress boundary.",
+  "evidence": [
+    "artifacts/optimization/round_006/ledger_capability_review.json",
+    "src/heterollm_sim/kv_pool.py",
+    "src/heterollm_sim/serving.py"
+  ],
+  "next_hypothesis": {
+    "id": "H7_ARCHITECTURE_HTTP_LIFECYCLE",
+    "claim": "The architecture preset API test server aborts its connection on an invalid-method request; determine whether the failure is a lifecycle/cleanup bug or a Windows-only test harness issue before changing product code.",
+    "status": "registered_not_started"
+  }
+}
