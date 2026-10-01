@@ -192,6 +192,50 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
                 thread.join(timeout=5)
                 server.server_close()
 
+    def test_invalid_persisted_schema_is_rejected_without_partial_state(self):
+        definition = {
+            "id": "catalog-schema-id",
+            "name": "Catalog schema",
+            "family": "Schema test",
+            "component": {
+                "component_id": "schema-id",
+                "kind": "hbm",
+                "capacity_bytes": 1024,
+                "ports": [],
+            },
+        }
+        cases = (
+            {"version": 1, "presets": [], "removed": [], "extra": True},
+            {"version": 1, "presets": []},
+            {"version": True, "presets": [], "removed": []},
+            {"version": 1, "presets": [], "removed": [1]},
+            {"version": 1, "presets": [], "removed": ["?"]},
+            {"version": 1, "presets": [], "removed": ["catalog-schema-id", "catalog-schema-id"]},
+            {"version": 1, "presets": [definition, definition], "removed": []},
+            {"version": 1, "presets": [definition], "removed": ["catalog-schema-id"]},
+            {"version": 1, "presets": [{**definition, "preset_id": "other-id"}], "removed": []},
+            {"version": 1, "presets": [{**definition, "component_spec": {}}], "removed": []},
+            {"version": 1, "presets": [{"preset": definition, "id": "other-id"}], "removed": []},
+        )
+        for raw in cases:
+            with self.subTest(raw=raw):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = ComponentPresetCatalog(directory).path
+                    path.write_text(json.dumps(raw), encoding="utf-8")
+                    with self.assertRaises(ComponentPresetPersistenceError):
+                        ComponentPresetCatalog(directory)
+
+        for raw_text in (
+            '{"version":1,"presets":[],"removed":[],"removed":[]}',
+            '{"version":1,"presets":[],"removed":[NaN]}',
+        ):
+            with self.subTest(raw_text=raw_text):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = ComponentPresetCatalog(directory).path
+                    path.write_text(raw_text, encoding="utf-8")
+                    with self.assertRaises(ComponentPresetPersistenceError):
+                        ComponentPresetCatalog(directory)
+
     def test_catalog_reads_reload_shared_directory_mutations(self):
         def payload(preset_id, name=None):
             return {

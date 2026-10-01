@@ -73,6 +73,19 @@ class ComponentPresetPersistenceError(ValueError):
     """The user-owned component-preset persistence is unavailable."""
 
 
+def _reject_duplicate_json_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("组件预设目录包含重复的 JSON 字段：{}".format(key))
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite_json_constant(value):
+    raise ValueError("组件预设目录包含非有限 JSON 数值：{}".format(value))
+
+
 @contextmanager
 def _catalog_file_lock_unchecked(path: Path):
     """Serialize catalog mutations across instances and processes."""
@@ -3370,6 +3383,18 @@ def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[
     return ComponentPresetDefinition(preset_id, name, family, component, sources, evidence, limitations, notes, tags)
 
 
+def _definition_from_persisted_record(value: Any) -> ComponentPresetDefinition:
+    raw = _mutation_mapping(value, "presets")
+    if "preset" in raw:
+        raise ValueError("硬件预设目录记录不允许使用 preset 包装层")
+    if "id" in raw and "preset_id" in raw:
+        if not isinstance(raw["id"], str) or not isinstance(raw["preset_id"], str) or raw["id"] != raw["preset_id"]:
+            raise ValueError("硬件预设目录中的 id 和 preset_id 冲突")
+    if "component" in raw and "component_spec" in raw and raw["component"] != raw["component_spec"]:
+        raise ValueError("硬件预设目录中的 component 和 component_spec 冲突")
+    return _definition_from_mutation(raw)
+
+
 class ComponentPresetCatalog:
     """Per-server editable catalog, persisted atomically in a user-owned file.
 
@@ -3396,16 +3421,34 @@ class ComponentPresetCatalog:
         removed = set()
         try:
             if self.path.exists():
-                raw = json.loads(self.path.read_text(encoding="utf-8"))
-                if not isinstance(raw, dict) or raw.get("version") != 1:
+                raw = json.loads(
+                    self.path.read_text(encoding="utf-8"),
+                    object_pairs_hook=_reject_duplicate_json_keys,
+                    parse_constant=_reject_nonfinite_json_constant,
+                )
+                if not isinstance(raw, dict) or set(raw) != {"version", "presets", "removed"}:
+                    raise ValueError("硬件预设目录顶层结构无效：{}".format(self.path))
+                if type(raw.get("version")) is not int or raw["version"] != 1:
                     raise ValueError("硬件预设目录版本无效：{}".format(self.path))
-                overrides = {
-                    item.preset_id: item for item in (
-                        _definition_from_mutation(value)
-                        for value in _mutation_list(raw.get("presets", []), "presets")
-                    )
-                }
-                removed = set(_mutation_list(raw.get("removed", []), "removed"))
+                parsed = [
+                    _definition_from_persisted_record(value)
+                    for value in _mutation_list(raw.get("presets", []), "presets")
+                ]
+                ids = [item.preset_id for item in parsed]
+                if len(ids) != len(set(ids)):
+                    raise ValueError("硬件预设目录包含重复的预设 ID：{}".format(self.path))
+                overrides = {item.preset_id: item for item in parsed}
+                removed_values = _mutation_list(raw.get("removed", []), "removed")
+                if any(
+                    not isinstance(item, str) or not _PRESET_ID_RE.fullmatch(item)
+                    for item in removed_values
+                ):
+                    raise ValueError("硬件预设目录包含无效的删除标记：{}".format(self.path))
+                if len(removed_values) != len(set(removed_values)):
+                    raise ValueError("硬件预设目录包含重复的删除标记：{}".format(self.path))
+                removed = set(removed_values)
+                if set(overrides) & removed:
+                    raise ValueError("硬件预设目录同时保留并删除同一预设：{}".format(self.path))
         except ComponentPresetPersistenceError:
             raise
         except (OSError, ValueError, TypeError, KeyError) as exc:

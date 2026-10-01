@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_014",
+  "candidate_id": "C14_COMPONENT_PRESET_SCHEMA_INTEGRITY",
+  "status": "decided",
+  "decision": "accepted_for_engineering_baseline",
+  "reason": "The isolated parent matrix showed silent duplicate-ID last-wins behavior, scalar tombstones, version coercion, missing/unknown root fields, duplicate keys, and contradictory override/remove state. The candidate rejects the covered contradictions before publication, preserves explicitly supported built-in/unknown tombstone compatibility, passes the H13 HTTP contract and valid CRUD behavior, and the clean .venv suite passes (3022 passed, 4 skipped, 0 failed). This is mechanism acceptance, not accuracy promotion.",
+  "evidence": [
+    "artifacts/optimization/round_014/component_preset_schema_reproduction.json",
+    "artifacts/optimization/round_014/component_preset_schema_candidate_final.json",
+    "src/heterollm_sim/component_presets.py",
+    "tests/test_component_preset_crud.py"
+  ],
+  "next_hypothesis": {
+    "id": "H15_COMPONENT_PRESET_NESTED_FIELD_SCHEMA",
+    "claim": "Persisted source fields, scalar types, and metadata values should be canonicalized or rejected instead of being silently coerced or dropped.",
+    "status": "registered_not_started"
+  }
+}
