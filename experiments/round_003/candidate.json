@@ -1,0 +1,48 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_003",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H3_STREAMK_PHASE_DOMAIN",
+    "claim": "The registered decode attention contract is paged/page-table based and omits Stream-K scratch/fixup; a custom decode Stream-K descriptor must fail closed until an independent decode contract exists.",
+    "trigger": "decode attention; batch_tokens=1; context_tokens=2048; hidden_size=256; kv_hidden_size=128; score_heads=4; attention_heads_per_tile=1; output_bits=32; dense fp16 KV",
+    "expected_baseline": "kernel_aware costing enters gpu_attention_stream_k_fixup even though Level-2 status rejects decode Stream-K",
+    "expected_candidate": "analytical attention fallback with one gpu_fused_attention phase and no Stream-K metadata",
+    "falsifier": "candidate remains kernel_aware, enters fixup, or changes prefill Stream-K controls"
+  },
+  "parent_commit": "8883a6f886ef8c32b925ac9b27c48d53254d72ee",
+  "changed_files": [
+    "src/heterollm_sim/kernel_model.py",
+    "tests/test_kernel_model.py",
+    "docs/KERNEL_AWARE_MODEL.md"
+  ],
+  "activation_checks": [
+    "decode custom descriptor reproduced kernel_aware plus fixup before guard",
+    "candidate reproduces gpu_fused_attention_v3 without stream_k metadata",
+    "existing prefill Stream-K and ordinary decode tests remain passing"
+  ],
+  "tests": [
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q tests/test_kernel_model.py -k \"streamk\"",
+      "result": "14 passed in 0.32s"
+    },
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q tests/test_kernel_model.py",
+      "result": "58 passed in 8.15s"
+    },
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q tests/test_kernel_model.py tests/test_mmq_level2_surfaces.py tests/test_mmq_work.py tests/test_attention_streamk_holdout.py",
+      "result": "79 passed in 8.27s"
+    },
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q tests/test_runtime_residual.py tests/test_attention_streamk_holdout.py",
+      "result": "10 passed in 0.19s"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "candidate_source_sha256": "322cd0534fa3a467bcab670548b29e52cd1864fc56b9600464f1984556a7e7bc",
+  "contract_evidence": "artifacts/development/attention_level2_registry_20260930.json"
+}

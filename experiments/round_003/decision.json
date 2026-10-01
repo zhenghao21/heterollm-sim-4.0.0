@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_003",
+  "candidate_id": "C3_STREAMK_PHASE_FAIL_CLOSED",
+  "status": "decided",
+  "decision": "accepted_for_engineering_baseline",
+  "reason": "The registry explicitly omits Stream-K/fixup from the decode dispatch contract and requires unknown or missing contracts to fall back analytically. The guard prevents unsupported decode scratch costing, preserves prefill Stream-K behavior, and passes the focused regression suite. This is a mechanism acceptance, not an accuracy promotion.",
+  "evidence": [
+    "artifacts/development/attention_level2_registry_20260930.json",
+    "artifacts/optimization/round_003/streamk_phase_reproduction.json",
+    "tests/test_kernel_model.py",
+    "src/heterollm_sim/kernel_model.py"
+  ],
+  "next_hypothesis": {
+    "id": "H4_KV_RELEASE_ATOMICITY",
+    "claim": "DynamicKVPool release must not remove a page before the external ledger accepts the negative adjustment; a rejected release should preserve page/index/binding state for retry or recovery.",
+    "status": "registered_not_started"
+  }
+}

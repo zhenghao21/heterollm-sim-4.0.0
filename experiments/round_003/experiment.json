@@ -1,0 +1,53 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_003",
+  "status": "review",
+  "purpose": "mechanism_fidelity",
+  "primary_goal": "keep Stream-K phase domain aligned with the registered attention execution contract",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "8883a6f886ef8c32b925ac9b27c48d53254d72ee",
+    "role": "engineering baseline accepted by round_002; no end-to-end accuracy promotion"
+  },
+  "hypothesis_id": "H3_STREAMK_PHASE_DOMAIN",
+  "scope": {
+    "operator": "attention Stream-K",
+    "phase": "decode",
+    "formats": "dense fp16 attention control geometry",
+    "trigger": "custom decode descriptor sets attention_stream_k=true without a decode scratch/page-table contract"
+  },
+  "data_roles": {
+    "development": "attention Level-2 registry contract and synthetic decode descriptor",
+    "comparison": "baseline/candidate mechanism reproduction",
+    "holdout": "prefill Stream-K controls and ordinary decode analytical fallback",
+    "final_acceptance": "not started"
+  },
+  "metrics": [
+    "phase_contract_valid",
+    "candidate_fallback_status",
+    "stream_k_metadata_absent",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "do not infer decode scratch/page-table layout",
+    "do not turn rejected calibration metadata into target timing",
+    "do not read historical score files",
+    "prefill Stream-K controls must remain unchanged"
+  ],
+  "next_step": "verify decode custom-descriptor reproduction and focused regression before editing",
+  "selected_candidate": "C3_STREAMK_PHASE_FAIL_CLOSED",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 0
+  }
+}

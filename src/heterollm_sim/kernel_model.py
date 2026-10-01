@@ -613,6 +613,12 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
     m, n, k = shape
     stream_k = None
     if attention and kernel.attention_stream_k:
+        # The registered decode contract is paged and has no Stream-K
+        # scratch/fixup or page-table binding.  Keep custom descriptors from
+        # silently pricing an unsupported decode layout until that contract is
+        # defined independently.
+        if phase != 'prefill':
+            return None
         # Single-sequence dense view only; no inference for paged/quantized KV.
         if (workload.kv_physical_contract is not None or workload.effective_kv_input_bits != 16
                 or workload.output_bits != 32 or workload.hidden_size % workload.score_heads

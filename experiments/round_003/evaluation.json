@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_003",
+  "candidate_id": "C3_STREAMK_PHASE_FAIL_CLOSED",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "mechanism candidate evaluated with an explicit decode dispatch-contract oracle; no target latency claim"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "no native timing truth opened; phase/scratch contract is the oracle"
+  },
+  "mechanism_status": "passed",
+  "accuracy_status": "not_evaluated",
+  "generalization_status": "not_evaluated",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_003/streamk_phase_reproduction.json",
+  "result": "the parent allowed an unsupported custom decode Stream-K descriptor to enter a uniform fixup path; the candidate returns None from kernel-aware dispatch so the caller uses analytical decode costing",
+  "limitations": [
+    "Only custom decode descriptor phase gating was evaluated",
+    "No separate decode Stream-K scratch/page-table implementation exists to assess",
+    "No native collection or end-to-end timing claim"
+  ]
+}
