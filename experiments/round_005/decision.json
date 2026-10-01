@@ -1,0 +1,18 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_005",
+  "candidate_id": "C5_KV_RELEASE_PROGRESS_RETRY",
+  "status": "decided",
+  "decision": "accepted_for_engineering_baseline",
+  "reason": "The candidate records progress after each committed page operation, so failures leave only the unprocessed suffix and retries do not consume shared prefix refs twice. Unpin and eviction no longer mutate state before a rejecting ledger can commit. Focused KV/cache/layout tests pass. This accepts retry-safe partial progress, not a cross-page transaction. The full suite also reached 3017 passed and 3 skipped; one unrelated architecture HTTP test failed reproducibly with WinError 10053 and is recorded as an environment/out-of-scope limitation.",
+  "evidence": [
+    "artifacts/optimization/round_005/kv_release_progress_reproduction.json",
+    "tests/test_kv_pool.py",
+    "src/heterollm_sim/kv_pool.py"
+  ],
+  "next_hypothesis": {
+    "id": "H6_KV_BATCH_LEDGER_TRANSACTION",
+    "claim": "If a future ledger offers batch release/rollback semantics, DynamicKVPool should use it to make multi-page release all-or-nothing; current API does not support proving that property.",
+    "status": "registered_not_started"
+  }
+}

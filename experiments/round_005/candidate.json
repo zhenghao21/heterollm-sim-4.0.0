@@ -1,0 +1,47 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_005",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H5_KV_MULTI_PAGE_RELEASE_TRANSACTION",
+    "claim": "When a multi-page operation fails after a prior page has committed, the mapping must retain only unprocessed refs; retry must not drop a shared page twice.",
+    "trigger": "request r owns two pages; page0 is also held by prefix cached; page1 ledger release rejects after page0 ref processing",
+    "expected_baseline": "the whole request list remains after partial progress, so retry reduces page0 prefix ref incorrectly",
+    "expected_candidate": "request list advances to pending page1; retry releases only page1 and leaves prefix page0 alive",
+    "falsifier": "retry changes page0 ref/prefix state, loses request mapping, or leaks physical bytes"
+  },
+  "parent_commit": "63b5f80",
+  "changed_files": [
+    "src/heterollm_sim/kv_pool.py",
+    "tests/test_kv_pool.py"
+  ],
+  "activation_checks": [
+    "partial request release persists pending suffix",
+    "partial prefix release persists pending suffix",
+    "resize shrink and unpin rejection preserve retry state",
+    "evict skips pages with multiple prefix refs"
+  ],
+  "tests": [
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q tests/test_kv_pool.py",
+      "result": "22 passed in 0.12s"
+    },
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q tests/test_kv_pool.py tests/test_kv_layout_contract.py tests/test_cache_state.py tests/test_retained_kv_state.py tests/test_memory_tier_placement.py",
+      "result": "143 passed in 3.41s"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q",
+      "result": "3017 passed, 3 skipped, 1 failed in 891.05s; unrelated tests/test_v12_architecture_api.py HTTP server connection aborted with WinError 10053"
+    },
+    {
+      "command": "E:\\anaconda\\python.exe -m pytest -q tests/test_v12_architecture_api.py",
+      "result": "1 failed, 1 passed; same repeatable WinError 10053 outside KV scope"
+    }
+  ],
+  "candidate_source_sha256": "27f40430acd11527f7f6fdabf9b2ac8572a86f15fcf0176fac772ab6a5f089f1"
+}

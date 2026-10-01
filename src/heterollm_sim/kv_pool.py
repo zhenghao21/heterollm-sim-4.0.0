@@ -695,13 +695,26 @@ class DynamicKVPool:
 
         if target_pages < current_count:
             removed = current_ids[target_pages:]
-            for page_id in removed:
-                self._drop_ref(page_id, request_id)
-            self._requests[request_id] = current_ids[:target_pages]
+            kept = current_ids[:target_pages]
+            pending = list(removed)
+            released = 0
+            while pending:
+                page_id = pending[0]
+                try:
+                    self._drop_ref(page_id, request_id)
+                except RuntimeError:
+                    # Preserve only the refs that still belong to this
+                    # request.  A retry must not drop a shared page twice.
+                    self._requests[request_id] = kept + pending
+                    raise
+                pending.pop(0)
+                released += 1
+                self._requests[request_id] = kept + pending
+            self._requests[request_id] = kept
             if not self._requests[request_id]:
                 self._requests.pop(request_id, None)
                 self._request_components.pop(request_id, None)
-            return KvPoolResizeResult(True, request_id, target_pages, released_pages=len(removed))
+            return KvPoolResizeResult(True, request_id, target_pages, released_pages=released)
 
         # All newly attached/allocated pages are rolled back if one page cannot
         # be placed.  This is the central atomicity guarantee of the pool.
@@ -775,9 +788,16 @@ class DynamicKVPool:
         return self.resize(request_id, page_count, **kwargs)
 
     def release(self, request_id: str) -> None:
-        page_ids = list(self._requests.get(request_id, ()))
-        for page_id in page_ids:
-            self._drop_ref(page_id, request_id)
+        pending = list(self._requests.get(request_id, ()))
+        while pending:
+            page_id = pending[0]
+            try:
+                self._drop_ref(page_id, request_id)
+            except RuntimeError:
+                self._requests[request_id] = pending
+                raise
+            pending.pop(0)
+            self._requests[request_id] = pending
         self._requests.pop(request_id, None)
         self._request_components.pop(request_id, None)
 
@@ -848,9 +868,17 @@ class DynamicKVPool:
 
     def release_prefix(self, prefix_key: str) -> None:
         key = str(prefix_key)
-        ids = list(self._prefixes.get(key, ()))
-        for page_id in ids:
-            self._drop_ref(page_id)
+        pending = list(self._prefixes.get(key, ()))
+        while pending:
+            page_id = pending[0]
+            try:
+                self._drop_ref(page_id)
+            except RuntimeError:
+                self._prefixes[key] = pending
+                raise
+            pending.pop(0)
+            if key in self._prefixes:
+                self._prefixes[key] = pending
         self._prefixes.pop(key, None)
 
     def prefix_pages(self, prefix_key: str) -> Tuple[KvPage, ...]:
@@ -871,10 +899,11 @@ class DynamicKVPool:
             pages = tuple(page for page in pages if page.logical_page_id == int(logical_page_id))
         count = 0
         for page in pages:
-            page.pinned = False
-            count += 1
             if page.ref_count == 0:
                 self._free_page(page.logical_page_id)
+            else:
+                page.pinned = False
+            count += 1
         return count
 
     def unpin_page(self, logical_page_id: int) -> bool:
@@ -883,9 +912,10 @@ class DynamicKVPool:
         page = self.page(logical_page_id)
         if not page.pinned:
             return False
-        page.pinned = False
         if page.ref_count == 0:
             self._free_page(page.logical_page_id)
+        else:
+            page.pinned = False
         return True
 
     def touch(self, request_id: str) -> None:
@@ -900,7 +930,7 @@ class DynamicKVPool:
         allowed = {str(item) for item in component_ids} if component_ids is not None else None
         candidates = [
             page for page in self._pages.values()
-            if page.ref_count > 0 and not page.pinned and not self._bindings.get(page.logical_page_id)
+            if page.ref_count == 1 and not page.pinned and not self._bindings.get(page.logical_page_id)
             and (allowed is None or page.owner_component in allowed)
         ]
         candidates.sort(key=lambda page: (page.last_access, page.logical_page_id))
@@ -908,10 +938,9 @@ class DynamicKVPool:
         for page in candidates:
             if freed >= int(bytes_needed):
                 break
-            freed += page.bytes
             # Drop the prefix reference (the only legal unbound reference).
-            page.ref_count = 1
             self._free_page(page.logical_page_id)
+            freed += page.bytes
         return freed
 
     def _move(self, page: KvPage, target_component: str, *, kind: str) -> bool:

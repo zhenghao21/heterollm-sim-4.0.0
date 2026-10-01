@@ -156,6 +156,153 @@ def test_rejected_page_release_preserves_page_and_owner_state(owner):
     assert used == {"hbm0": 0}
 
 
+def test_partial_release_retry_does_not_drop_shared_page_twice():
+    used = {"hbm0": 0}
+    reject_release = {"value": True}
+
+    def can_adjust(component, delta):
+        return delta <= 0 or used[component] + delta <= 32
+
+    def adjust(component, delta):
+        if reject_release["value"] and delta < 0:
+            return False
+        used[component] += delta
+        return True
+
+    pool = DynamicKVPool([KvPoolComponent("hbm0", 32)], page_bytes=8,
+                         ledger_can_adjust=can_adjust, ledger_adjust=adjust)
+    assert pool.resize("r", 2)
+    first, second = pool.request_pages("r")
+    pool.register_prefix("cached", [first])
+
+    with pytest.raises(RuntimeError, match="rejected page release"):
+        pool.release("r")
+
+    assert pool.request_pages("r") == (second,)
+    assert pool.prefix_pages("cached") == (first,)
+    assert first.ref_count == 1
+    assert used == {"hbm0": 16}
+
+    reject_release["value"] = False
+    pool.release("r")
+    assert pool.request_pages("r") == ()
+    assert pool.prefix_pages("cached") == (first,)
+    assert used == {"hbm0": 8}
+
+
+def test_partial_prefix_release_retry_keeps_unprocessed_pages():
+    used = {"hbm0": 0}
+    negative_calls = {"value": 0}
+    reject_after_first = {"value": True}
+
+    def can_adjust(component, delta):
+        return delta <= 0 or used[component] + delta <= 16
+
+    def adjust(component, delta):
+        if delta < 0:
+            negative_calls["value"] += 1
+            if reject_after_first["value"] and negative_calls["value"] >= 2:
+                return False
+        used[component] += delta
+        return True
+
+    pool = DynamicKVPool([KvPoolComponent("hbm0", 16)], page_bytes=8,
+                         ledger_can_adjust=can_adjust, ledger_adjust=adjust)
+    assert pool.resize("r", 2)
+    first, second = pool.request_pages("r")
+    pool.register_prefix("cached", [first, second])
+    pool.release("r")
+
+    with pytest.raises(RuntimeError, match="rejected page release"):
+        pool.release_prefix("cached")
+
+    assert pool.pages() == (second,)
+    assert pool.prefix_pages("cached") == (second,)
+    assert used == {"hbm0": 8}
+
+    reject_after_first["value"] = False
+    pool.release_prefix("cached")
+    assert pool.pages() == ()
+    assert used == {"hbm0": 0}
+
+
+def test_partial_resize_shrink_retry_keeps_shared_prefix_reference():
+    used = {"hbm0": 0}
+    reject_release = {"value": True}
+
+    def can_adjust(component, delta):
+        return delta <= 0 or used[component] + delta <= 16
+
+    def adjust(component, delta):
+        if reject_release["value"] and delta < 0:
+            return False
+        used[component] += delta
+        return True
+
+    pool = DynamicKVPool([KvPoolComponent("hbm0", 16)], page_bytes=8,
+                         ledger_can_adjust=can_adjust, ledger_adjust=adjust)
+    assert pool.resize("r", 2)
+    first, second = pool.request_pages("r")
+    pool.register_prefix("cached", [first])
+
+    with pytest.raises(RuntimeError, match="rejected page release"):
+        pool.resize("r", 0)
+
+    assert pool.request_pages("r") == (second,)
+    assert pool.prefix_pages("cached") == (first,)
+    assert used == {"hbm0": 16}
+
+    reject_release["value"] = False
+    assert pool.resize("r", 0)
+    assert pool.request_pages("r") == ()
+    assert pool.prefix_pages("cached") == (first,)
+    assert used == {"hbm0": 8}
+
+
+def test_unpin_page_rejection_keeps_pin_for_retry():
+    used = {"hbm0": 0}
+    reject_release = {"value": True}
+
+    def can_adjust(component, delta):
+        return delta <= 0 or used[component] + delta <= 8
+
+    def adjust(component, delta):
+        if reject_release["value"] and delta < 0:
+            return False
+        used[component] += delta
+        return True
+
+    pool = DynamicKVPool([KvPoolComponent("hbm0", 8)], page_bytes=8,
+                         ledger_can_adjust=can_adjust, ledger_adjust=adjust)
+    assert pool.resize("r", 1)
+    page = pool.request_pages("r")[0]
+    pool.pin("r")
+    pool.release("r")
+
+    with pytest.raises(RuntimeError, match="rejected page release"):
+        pool.unpin_page(page.logical_page_id)
+    assert pool.page(page.logical_page_id).pinned
+    assert used == {"hbm0": 8}
+
+    reject_release["value"] = False
+    assert pool.unpin_page(page.logical_page_id)
+    assert pool.pages() == ()
+    assert used == {"hbm0": 0}
+
+
+def test_evict_skips_pages_with_multiple_prefix_references():
+    pool = DynamicKVPool([KvPoolComponent("hbm0", 8)], page_bytes=8)
+    assert pool.resize("r", 1)
+    page = pool.request_pages("r")[0]
+    pool.register_prefix("a", [page])
+    pool.register_prefix("b", [page])
+    pool.release("r")
+
+    assert page.ref_count == 2
+    assert pool.evict(8) == 0
+    assert pool.page(page.logical_page_id) is page
+
+
 @dataclass(frozen=True)
 class Hop:
     delay: float
