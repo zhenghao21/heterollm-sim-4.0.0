@@ -1,5 +1,7 @@
 # llama.cpp 请求级 NVTX marker
 
+> `source/llama.cpp-semantic` 是本机忽略的外部 llama.cpp checkout，不随仓库提交。没有恢复该 checkout 时，本文只作为 marker 契约，不能直接执行文中的源码或构建命令。
+
 项目源码位于 `source/llama.cpp-semantic`。请求生命周期由 `tools/server/server-context.cpp` 发出，NVTX 实现集中在 `src/llama-context.cpp`，通过 `src/llama-ext.h` 提供 no-op-safe 包装。
 
 ## marker 语义

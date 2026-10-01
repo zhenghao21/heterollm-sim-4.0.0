@@ -16,6 +16,8 @@ capacity counter.
 
 from __future__ import annotations
 
+import copy
+from uuid import uuid4
 from collections import defaultdict
 from dataclasses import dataclass, field
 from math import ceil
@@ -150,6 +152,7 @@ class KvPage:
     pinned: bool = False
     last_access: int = 0
     prefix_key: Optional[str] = None
+    allocation_generation: int = 0
 
     def __post_init__(self) -> None:
         if not self.request_id or not self.layer_group or not self.owner_component:
@@ -370,6 +373,7 @@ class DynamicKVPool:
         self._prefixes: Dict[str, List[int]] = {}
         self._bindings: Dict[int, Set[str]] = defaultdict(set)
         self._owned_bytes: Dict[str, int] = defaultdict(int)
+        self._cache_namespace = "kv_pool:" + uuid4().hex
         self._page_counter = 0
         self._clock = 0
         self._events: List[KvPoolTransfer] = []
@@ -728,6 +732,29 @@ class DynamicKVPool:
             self._last_error = str(exc)
             return KvPoolResizeResult(False, request_id, current_count, error=self._last_error)
 
+    def can_resize(self, request_id: str, target_pages: int) -> bool:
+        """Probe the same placement algorithm without changing live identities.
+
+        A shadow ledger accumulates reservations so external capacity checks see
+        total growth, not just one page. No external adjust callback is invoked.
+        """
+        shadow = copy.copy(self)
+        for name in ("_pages", "_requests", "_request_components", "_prefixes",
+                     "_bindings", "_owned_bytes", "_events"):
+            setattr(shadow, name, copy.deepcopy(getattr(self, name)))
+        initial = dict(self._ledger.used_bytes)
+        ledger = _LocalLedger(self._ledger.limits)
+        ledger.used_bytes.update(initial)
+        local_can_adjust = ledger.can_adjust
+        ledger.can_adjust = lambda component, delta: (
+            local_can_adjust(component, delta)
+            and self._ledger.can_adjust(
+                component, ledger.used_bytes.get(component, 0)
+                - initial.get(component, 0) + delta)
+        )
+        shadow._ledger = _LedgerAdapter(self._ledger.limits, ledger)
+        return shadow.resize_detailed(request_id, target_pages).success
+
     def resize(self, request_id: str, target_pages: Optional[int] = None, **kwargs: Any) -> bool:
         """Resize and return only success, matching the legacy ledger API."""
 
@@ -747,6 +774,41 @@ class DynamicKVPool:
 
     def request_pages(self, request_id: str) -> Tuple[KvPage, ...]:
         return tuple(self._pages[page_id] for page_id in self._requests.get(request_id, ()) if page_id in self._pages)
+
+    def cache_accesses(self, request_id: str, *, first_token: int, token_count: int,
+                       operation: str = "read"):
+        """Export byte ranges from actual live page owners, including prefixes.
+
+        IDs are pool-monotonic, so release/reallocate does not resurrect cache
+        lines. Every migration advances a generation, including a return to
+        the original component. Independent pools never alias one another.
+        """
+        from .kernel_memory import paged_buffer_accesses
+        from dataclasses import replace
+        pages = self.request_pages(request_id)
+        sizes = {p.bytes for p in pages}
+        if not pages:
+            # Still validate range and operation for empty requests.
+            return paged_buffer_accesses(
+                buffer_id=self._cache_namespace, page_ids=(),
+                tokens_per_page=self.tokens_per_page, bytes_per_token=1,
+                first_token=first_token, token_count=token_count, operation=operation)
+        if len(sizes) != 1 or next(iter(sizes)) % self.tokens_per_page:
+            raise KvPoolUnsupported("KV cache range requires uniform complete token rows")
+        page_bytes = next(iter(sizes))
+        accesses = paged_buffer_accesses(
+            buffer_id=self._cache_namespace, page_ids=tuple(p.logical_page_id for p in pages),
+            tokens_per_page=self.tokens_per_page,
+            bytes_per_token=page_bytes // self.tokens_per_page,
+            first_token=first_token, token_count=token_count, operation=operation)
+        by_id = {p.logical_page_id: p for p in pages}
+        result = []
+        for access in accesses:
+            page = by_id[int(access.buffer_id.rsplit(":", 1)[1])]
+            identity = (f"{page.owner_component}:{self._cache_namespace}:"
+                        f"generation:{page.allocation_generation}:page:{page.logical_page_id}")
+            result.append((page.owner_component, replace(access, buffer_id=identity)))
+        return tuple(result)
 
     def page(self, logical_page_id: int) -> KvPage:
         try:
@@ -845,6 +907,9 @@ class DynamicKVPool:
         if target_component not in self.components:
             self._last_error = "unknown target component " + target_component
             return False
+        if page.owner_component == target_component:
+            self._last_error = None
+            return True
         target = self.components[target_component]
         if not target.writable:
             self._last_error = "target component is read-only: " + target_component
@@ -866,6 +931,7 @@ class DynamicKVPool:
         duration = self._transfer_time_ns(source, target_component, page.bytes)
         self._owned_bytes[source] -= page.bytes
         self._owned_bytes[target_component] += page.bytes
+        page.allocation_generation += 1
         page.owner_component = target_component
         page.resident_tier = target.tier
         self._touch(page)

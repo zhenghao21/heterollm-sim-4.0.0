@@ -43,6 +43,7 @@ from .ir import (
     normalize_component_kind,
 )
 from .serde import read_json
+from .kernel_model import kernel_model_from_dict
 from .precision import dtype_bits
 from .schema_v1 import model_graph_from_dict
 from .runtime_adapters import LlamaCppRuntimeConfig
@@ -1930,6 +1931,8 @@ def _gpu_profile_from_dict(data: Mapping[str, Any]) -> GPUProfile:
         GPUProfile,
     )
     values = dict(data)
+    if values.get("kernel_model") is not None:
+        values["kernel_model"] = kernel_model_from_dict(values["kernel_model"])
     values["tensor_core"] = _tensor_core_profile_from_dict(
         _mapping(values.get("tensor_core"), "GPU tensor_core")
     )

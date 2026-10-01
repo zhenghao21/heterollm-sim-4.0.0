@@ -65,10 +65,7 @@ Get-ChildItem -LiteralPath (Join-Path $staging "runtime\Lib\site-packages") -For
     Remove-Item -Force
 
 Copy-Tree (Join-Path $repoRoot "src") (Join-Path $staging "app\src")
-Copy-Tree (Join-Path $repoRoot "tools") (Join-Path $staging "app\tools")
-Copy-Tree (Join-Path $repoRoot "configs") (Join-Path $staging "app\configs")
 Copy-Tree (Join-Path $repoRoot "docs") (Join-Path $staging "app\docs")
-Copy-Tree (Join-Path $repoRoot "tests") (Join-Path $staging "app\tests")
 Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $staging "app\README.md") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "pyproject.toml") -Destination (Join-Path $staging "app\pyproject.toml") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "uv.lock") -Destination (Join-Path $staging "app\uv.lock") -Force

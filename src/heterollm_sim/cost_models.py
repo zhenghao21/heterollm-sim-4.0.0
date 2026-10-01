@@ -30,6 +30,7 @@ from .mmvq_work import (
 from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
 from .memory_service import realtime_memory_metrics
 from .data_motion import memory_service as _memory_service
+from .kernel_model import KernelModelProfile, estimate_kernel
 
 
 MMVQ_HBM_MODE_LEGACY = "legacy_mma_output_wave"
@@ -217,8 +218,20 @@ class GemmWorkload:
     # CIM-only operand arithmetic, not inferred from storage width. Legacy
     # callers retain integer bit-slice semantics; fp16 must be explicit.
     cim_arithmetic: str = "integer"
+    cache_protocol: str = "cold_streaming"
+    execution_phase: str = "unspecified"
+    activation_dtype: Optional[str] = None
+    layout: str = "contiguous"
 
     def __post_init__(self) -> None:
+        if not isinstance(self.cache_protocol, str) or not self.cache_protocol.strip():
+            raise ValueError("cache_protocol must be nonempty text")
+        if self.execution_phase not in ("unspecified", "prefill", "decode"):
+            raise ValueError("invalid execution_phase")
+        if self.activation_dtype not in (None, "fp16", "bf16", "fp32", "int8"):
+            raise ValueError("invalid activation_dtype")
+        if not isinstance(self.layout, str) or not self.layout:
+            raise ValueError("layout must be nonempty")
         if self.cim_arithmetic not in ("integer", "fp16"):
             raise ValueError("cim_arithmetic must be integer or fp16")
         for field_name in ("m", "k", "n"):
@@ -528,7 +541,32 @@ class FusedAttentionWorkload:
     # Backing Q storage can differ from the tiled matrix input precision.
     query_storage_bits: Optional[int] = None
 
+    cache_protocol: str = "cold_streaming"
+    execution_phase: str = "unspecified"
+    activation_dtype: Optional[str] = None
+    layout: str = "contiguous"
+
+    # Explicit positions for one sequence only; flattened batches must not
+    # infer causal visibility from batch_tokens.
+    causal_query_positions: Tuple[int, ...] = ()
+
     def __post_init__(self) -> None:
+        if not isinstance(self.causal_query_positions, tuple):
+            raise ValueError("causal_query_positions must be a tuple")
+        if self.causal_query_positions and (
+            len(self.causal_query_positions) != self.batch_tokens
+            or any(type(p) is not int or not 0 <= p < self.context_tokens for p in self.causal_query_positions)
+            or tuple(sorted(set(self.causal_query_positions))) != self.causal_query_positions
+        ):
+            raise ValueError("causal positions must be ordered unique positions within context")
+        if not isinstance(self.cache_protocol, str) or not self.cache_protocol.strip():
+            raise ValueError("cache_protocol must be nonempty text")
+        if self.execution_phase not in ("unspecified", "prefill", "decode"):
+            raise ValueError("invalid execution_phase")
+        if self.activation_dtype not in (None, "fp16", "bf16", "fp32", "int8"):
+            raise ValueError("invalid activation_dtype")
+        if not isinstance(self.layout, str) or not self.layout:
+            raise ValueError("invalid layout")
         for field_name in (
             "batch_tokens",
             "context_tokens",
@@ -938,8 +976,11 @@ class MemoryWorkload:
     reuse_factor: float = 1.0
     streaming_fraction: float = 1.0
     name: str = "memory"
+    effective_core_count: Optional[int] = None
 
     def __post_init__(self) -> None:
+        if self.effective_core_count is not None:
+            _require_positive_int("effective_core_count", self.effective_core_count)
         _require_non_negative_int("read_bytes", self.read_bytes)
         _require_non_negative_int("write_bytes", self.write_bytes)
         _require_non_negative_int("working_set_bytes", self.working_set_bytes)
@@ -1913,7 +1954,11 @@ class GPUProfile:
     default_tensor_dtype: str = "int8"
     name: str = "gpu"
 
+    kernel_model: Optional[KernelModelProfile] = field(default=None, metadata={"omit_none": True})
+
     def __post_init__(self) -> None:
+        if self.kernel_model is not None and not isinstance(self.kernel_model, KernelModelProfile):
+            raise ValueError("kernel_model must be KernelModelProfile")
         if not isinstance(self.tensor_core, TensorCoreProfile):
             raise ValueError("tensor_core must be a TensorCoreProfile")
         if not isinstance(self.cache_hierarchy, CacheHierarchyProfile):
@@ -2859,7 +2904,88 @@ def _mmvq_nominal_hbm_eligibility(workload: GemmWorkload) -> Tuple[bool, str]:
     return True, "canonical_unfused_mmvq_source_geometry_only"
 
 
+def _kernel_fallback(estimate: CostEstimate, gpu: GPUProfile, workload: object) -> CostEstimate:
+    if gpu.kernel_model is None:
+        prediction = {
+            "model": "analytical", "prediction_ns": estimate.service_ns,
+            "confidence": "low", "distance_to_calibration_domain": None,
+            "uncertainty_ns": None, "uncertainty_kind": "unvalidated",
+            "reason": "kernel_model_profile_unavailable", "extrapolated": False,
+            "fallback_kind": "legacy_analytical",
+            "format_coverage": "profile_unavailable",
+            "phase": getattr(workload, "execution_phase", "unspecified"),
+            "validated_llm_scope": False,
+        }
+        return replace(
+            estimate,
+            metadata={**estimate.metadata, "prediction": prediction},
+            phases=tuple(
+                replace(p, metadata={**p.metadata, "kernel_prediction": prediction})
+                for p in estimate.phases
+            ),
+        )
+    known_quantization_formats = frozenset({
+        "q2_k", "q3_k", "q4_0", "q4_1", "q4_k", "q5_0", "q5_1",
+        "q5_k", "q6_k", "q8_0", "iq1_m", "iq1_s", "iq2_s", "iq2_xs",
+        "iq2_xxs", "iq3_s", "iq3_xxs", "iq4_nl", "iq4_xs",
+    })
+    formats = tuple(
+        str(value).strip().casefold()
+        for value in getattr(workload, "packed_weight_formats", ())
+    )
+    dispatch_candidate = (
+        quantized_dispatch_candidate(workload)
+        if isinstance(workload, GemmWorkload)
+        else None
+    )
+    if formats and any(value not in known_quantization_formats for value in formats):
+        fallback_reason = "unsupported_quantization_format"
+        format_coverage = "unsupported"
+    elif dispatch_candidate == "mixed_format_dispatch_unresolved":
+        fallback_reason = "mixed_quantization_dispatch_unresolved"
+        format_coverage = "mixed_unresolved"
+    else:
+        fallback_reason = "kernel_dispatch_not_covered"
+        format_coverage = "known_format_outside_kernel_domain"
+    supported_formats = tuple(sorted({
+        value.casefold()
+        for kernel in gpu.kernel_model.kernels
+        for value in kernel.weight_formats
+    }))
+    prediction = {
+        "model": "analytical", "prediction_ns": estimate.service_ns,
+        "confidence": "low", "distance_to_calibration_domain": None,
+        "uncertainty_ns": None, "uncertainty_kind": "unvalidated",
+        "reason": fallback_reason, "extrapolated": False,
+        "fallback_kind": "legacy_analytical",
+        "format_coverage": format_coverage,
+        "weight_formats": formats,
+        "unsupported_weight_formats": tuple(
+            value for value in formats if value not in supported_formats
+        ),
+        "profile_weight_formats": supported_formats,
+        "dispatch_candidate": dispatch_candidate,
+        "phase": getattr(workload, "execution_phase", "unspecified"),
+        "hardware_id": gpu.kernel_model.hardware_id,
+        "runtime_id": gpu.kernel_model.runtime_id, "validated_llm_scope": False,
+    }
+    return replace(estimate, metadata={**estimate.metadata, "prediction": prediction},
+                   phases=tuple(replace(p, metadata={**p.metadata, "kernel_prediction": prediction}) for p in estimate.phases))
+
+
 def estimate_gpu_gemm(
+    gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload, *,
+    mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
+) -> CostEstimate:
+    validate_mmvq_hbm_mode(mmvq_hbm_mode)
+    kernel = estimate_kernel(gpu, hbm, workload)
+    if kernel is not None:
+        return kernel
+    return _kernel_fallback(_estimate_gpu_gemm_analytical(
+        gpu, hbm, workload, mmvq_hbm_mode=mmvq_hbm_mode), gpu, workload)
+
+
+def _estimate_gpu_gemm_analytical(
     gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload, *,
     mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
 ) -> CostEstimate:
@@ -3652,6 +3778,15 @@ def _estimate_gpu_q4_mma_materialized_attention(
 
 
 def estimate_gpu_fused_attention(
+    gpu: GPUProfile, hbm: HBMProfile, workload: FusedAttentionWorkload,
+) -> CostEstimate:
+    kernel = estimate_kernel(gpu, hbm, workload, attention=True)
+    if kernel is not None:
+        return kernel
+    return _kernel_fallback(_estimate_gpu_fused_attention_analytical(gpu, hbm, workload), gpu, workload)
+
+
+def _estimate_gpu_fused_attention_analytical(
     gpu: GPUProfile,
     hbm: HBMProfile,
     workload: FusedAttentionWorkload,
@@ -5203,6 +5338,7 @@ def estimate_cpu_memory(
         write_bytes=workload.write_bytes,
         element_bits=8,
         dependency_depth=1,
+        effective_core_count=workload.effective_core_count,
     )
 
     return _estimate_typed_roofline(

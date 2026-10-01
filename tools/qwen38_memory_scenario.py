@@ -1,4 +1,4 @@
-"""Read-only GGUF-sidecar Qwen3.8 memory experiments; never run native hardware.
+"""Read-only GGUF Qwen3.8 memory experiments; never run native hardware.
 
 All hardware values are analytical examples, NOT measured HBF/3D-SoC data.
 Outputs are exclusive-create and confined to the new memory-tier experiment folder.
@@ -23,7 +23,7 @@ for directory in (ROOT, ROOT / "src"):
 from heterollm_sim.config import hardware_from_dict, scenario_from_dict
 from heterollm_sim.control_plane_planner import PlacementPolicy, plan_runtime_placement
 from heterollm_sim.gguf_parity import (build_model_from_gguf, gguf_metadata_digest,
-                                      read_gguf_metadata_cache)
+                                      read_gguf_metadata_cache, read_gguf_metadata, GGUFError)
 from heterollm_sim.ir import (ComponentSpec, KVCachePolicy, LinkSpec, ParallelSpec,
                              PlacementSpec, PortSpec, RankMappingSpec, RequestSpec,
                              SchedulerSpec, WorkloadSpec)
@@ -46,7 +46,7 @@ LIMITATIONS = [
     "Layer-static KV/linear-state partitions; no page-level direct-addressing claim.",
     "GPU reference structural profile is an uncalibrated SoC proxy, not a source-kernel calibration.",
     "Resource-accounted bytes include every hop/cache; they are NOT unique payload bytes.",
-    "Sidecar SHA binding and file stat checked; GGUF payload is not reread or rehashed.",
+    "Model identity records whether validated sidecar or fresh GGUF parse/hash was used.",
 ]
 
 
@@ -67,10 +67,15 @@ def source_identity():
 
 
 def load_model(model_path=DEFAULT_MODEL):
-    # No fallback to read_gguf_metadata: that rehashes the entire 14.8 GB payload.
+    # Preserve historical sidecars. An invalid cache is never trusted or repaired in place.
     path = Path(model_path).resolve(strict=True)
     sidecar = Path(str(path) + ".metadata.json")
-    gguf = read_gguf_metadata_cache(path, sidecar, strict=False)
+    cache_error = None
+    try:
+        gguf = read_gguf_metadata_cache(path, sidecar, strict=False)
+    except GGUFError as exc:
+        cache_error = str(exc)
+        gguf = read_gguf_metadata(path)
     model = build_model_from_gguf(gguf)
     groups = defaultdict(list)
     for item in model._execution_view.layer_instances:
@@ -79,7 +84,9 @@ def load_model(model_path=DEFAULT_MODEL):
             or len(groups["full_attention"]) != 16 or len(groups["linear_attention"]) != 48):
         raise ValueError("Expected the project's real Qwen3.8-27B 48-linear/16-full backbone")
     identity = {"gguf_path": str(path), "gguf_sha256": gguf.sha256,
-                "size_bytes": path.stat().st_size, "sidecar": file_ref(sidecar),
+                "size_bytes": path.stat().st_size, "sidecar": file_ref(sidecar) if sidecar.exists() else None,
+                "metadata_source": "fresh_gguf" if cache_error else "validated_sidecar",
+                "sidecar_rejection": cache_error,
                 "metadata_digest": gguf_metadata_digest(gguf),
                 "architecture": gguf.architecture, "hidden_size": gguf.n_embd,
                 "quantization_label": gguf.quantization,
@@ -87,7 +94,7 @@ def load_model(model_path=DEFAULT_MODEL):
                 "tensor_count": gguf.tensor_count, "layers": dict(groups),
                 "dense_f16_matrix_count": sum(t.type_name == "F16" and len(t.shape) == 2 for t in gguf.tensor_directory),
                 "nextn_predict_layers": gguf.metadata.get("qwen35.nextn_predict_layers"),
-                "mtp_enabled": False, "gguf_payload_rehashed": False}
+                "mtp_enabled": False, "gguf_payload_rehashed": cache_error is not None}
     return model, identity
 
 

@@ -304,3 +304,74 @@ def test_resize_accepts_logical_token_target():
     assert pool.resize("tokens", target_tokens=9)
     assert len(pool.request_pages("tokens")) == 3
     assert pool.request_pages("tokens")[-1].token_end == 9
+
+def test_page_allocator_exports_real_cache_accesses():
+    pool = DynamicKVPool([KvPoolComponent('hbm0',128,kind='hbm')],tokens_per_page=4,page_bytes=16)
+    assert pool.resize('request',2)
+    accesses=pool.cache_accesses('request',first_token=3,token_count=3)
+    assert [(owner,a.offset_bytes,a.size_bytes) for owner,a in accesses]==[('hbm0',12,4),('hbm0',0,8)]
+    old_id=accesses[0][1].buffer_id
+    pool.release('request')
+    assert pool.resize('request',2)
+    assert pool.cache_accesses('request',first_token=3,token_count=3)[0][1].buffer_id!=old_id
+
+def test_capacity_probe_preserves_pages_prefixes_and_cache_identity():
+    from copy import deepcopy
+    pool = DynamicKVPool([KvPoolComponent('hbm0', 64)], tokens_per_page=4, page_bytes=16)
+    assert pool.resize('r', 2)
+    pool.register_prefix('prefix', pool.request_pages('r'))
+    before = deepcopy(pool.__dict__)
+    identities = pool.cache_accesses('r', first_token=0, token_count=8)
+    for size, expected in [(0, True), (1, True), (3, True), (5, False)]:
+        assert pool.can_resize('r', size) is expected
+        assert pool.cache_accesses('r', first_token=0, token_count=8) == identities
+        for key in ('_pages', '_requests', '_prefixes', '_bindings', '_owned_bytes',
+                    '_page_counter', '_clock', '_events', '_last_error'):
+            assert pool.__dict__[key] == before[key]
+    assert pool.ledger.used_bytes == before['_ledger'].used_bytes
+
+
+def test_capacity_probe_uses_cumulative_external_capacity_without_writes():
+    writes = []
+    used = {'hbm0': 0}
+    def adjust(component, delta):
+        writes.append(delta)
+        used[component] += delta
+        return True
+    pool = DynamicKVPool([KvPoolComponent('hbm0', 128)], page_bytes=16,
+                         ledger_can_adjust=lambda c, d: used[c] + d <= 32,
+                         ledger_adjust=adjust)
+    assert pool.resize('r', 1)
+    assert pool.can_resize('r', 2)
+    assert not pool.can_resize('r', 3)
+    assert writes == [16]
+    assert used == {'hbm0': 16}
+
+
+def test_cache_identity_survives_aliases_but_not_round_trip_migration():
+    pool = DynamicKVPool([KvPoolComponent('hbm0', 64), KvPoolComponent('hbm1', 64)],
+                         tokens_per_page=4, page_bytes=16)
+    assert pool.resize('r', 1)
+    page = pool.request_pages('r')[0]
+    owner = page.owner_component
+    original = pool.cache_accesses('r', first_token=0, token_count=4)
+    pool.register_prefix('prefix', [page])
+    assert pool.resize('alias', 1, prefix_key='prefix')
+    assert pool.cache_accesses('alias', first_token=0, token_count=4) == original
+    assert pool.migrate(page.logical_page_id, 'hbm1' if owner == 'hbm0' else 'hbm0')
+    assert pool.migrate(page.logical_page_id, owner)
+    assert pool.cache_accesses('r', first_token=0, token_count=4) != original
+    assert page.allocation_generation == 2
+    assert pool.migrate(page.logical_page_id, owner)
+    assert page.allocation_generation == 2
+
+
+def test_independent_pools_do_not_alias_and_empty_ranges_are_validated():
+    pools = [DynamicKVPool([KvPoolComponent('hbm0', 64)], tokens_per_page=4, page_bytes=16)
+             for _ in range(2)]
+    for pool in pools:
+        assert pool.cache_accesses('r', first_token=0, token_count=0) == ()
+        with pytest.raises(ValueError):
+            pool.cache_accesses('r', first_token=0, token_count=1)
+        assert pool.resize('r', 1)
+    assert pools[0].cache_accesses('r', first_token=0, token_count=4) != pools[1].cache_accesses('r', first_token=0, token_count=4)

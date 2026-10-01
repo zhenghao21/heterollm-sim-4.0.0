@@ -43,6 +43,17 @@ class ThermalOperatingPoint:
             raise ValueError("enabled thermal point requires explicit evidence or a labeled analytical assumption")
 
 
+def _invalidate_kernel_samples(profile, reason):
+    model = profile.kernel_model
+    if model is None or not any(kernel.samples for kernel in model.kernels):
+        return profile
+    return replace(profile, kernel_model=replace(model, kernels=tuple(
+        replace(kernel, samples=(), calibration_source_bound=False,
+                calibration_cells=(), validation_relative_error=None,
+                evidence=kernel.evidence + "; " + reason)
+        if kernel.samples else kernel for kernel in model.kernels)))
+
+
 def _derate_profile(profile, point: ThermalOperatingPoint):
     """Clone known typed profiles, retaining capacities, precision and resource IDs."""
 
@@ -54,6 +65,10 @@ def _derate_profile(profile, point: ThermalOperatingPoint):
         ))
 
     if isinstance(profile, GPUProfile):
+        if (point.frequency_scale != 1.0 or point.memory_bandwidth_scale != 1.0
+                or point.latency_scale != 1.0):
+            profile = _invalidate_kernel_samples(profile,
+                "thermal operating point changed: measured surface invalidated")
         return replace(profile,
                        tensor_core=replace(profile.tensor_core, frequency_ghz=profile.tensor_core.frequency_ghz * point.frequency_scale),
                        cache_hierarchy=cache(profile.cache_hierarchy))
@@ -153,5 +168,26 @@ def apply_thermal_operating_point(
                            **asdict(point), "mode": "static_derating_only", "calibrated": False,
                            "dynamic_temperature_model": False,
                        }})
-    return replace(scenario, hardware=hardware, component_profiles=profiles,
-                   assumptions=scenario.assumptions + ("Static thermal derating only: " + point.evidence,))
+    derated = replace(scenario, hardware=hardware, component_profiles=profiles,
+                      assumptions=scenario.assumptions + ("Static thermal derating only: " + point.evidence,))
+    changed_memories = tuple(component.component_id for component in scenario.hardware.components
+        if component.is_active_memory and component.metadata.get("memory_service") !=
+        derated.hardware.get_component(component.component_id).metadata.get("memory_service"))
+    changed_links = tuple(link.link_id for link, updated in zip(scenario.hardware.links, derated.hardware.links)
+                          if link != updated)
+    if changed_memories or changed_links:
+        # Profiles do not yet bind samples to a complete memory/route set.
+        # Invalidate all GPU surfaces conservatively rather than guess which
+        # remote/aggregate service a measured kernel may have consumed.
+        reason = ("thermal memory/route changed: measured surface invalidated; "
+                  "dependency binding unavailable, conservative all-GPU scope")
+        registry = profiles.get("gpu", {})
+        revised = {key: _invalidate_kernel_samples(value, reason)
+                   for key, value in registry.items()}
+        if revised != registry:
+            metadata = {**derated.hardware.metadata, "kernel_calibration_invalidation": {
+                "reason": reason, "memory_components": changed_memories,
+                "links": changed_links, "scope": "all_gpu_profiles"}}
+            derated = replace(derated, component_profiles={**profiles, "gpu": revised},
+                              hardware=replace(derated.hardware, metadata=metadata))
+    return derated

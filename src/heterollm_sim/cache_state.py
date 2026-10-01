@@ -407,6 +407,25 @@ class ExplicitCacheState:
     def access_many(
         self, accesses: Iterable[CacheAccess]
     ) -> Tuple[CacheAccessResult, ...]:
+        # Validate the entire batch before any line, counter, or remembered
+        # buffer-size mutation. Materialize generators once, so a late invalid
+        # access cannot leave a partially applied kernel memory transaction.
+        accesses = tuple(accesses)
+        sizes = {}
+        for access in accesses:
+            if not isinstance(access, CacheAccess):
+                raise CacheStateError("access must be a CacheAccess")
+            buffer_id = access.buffer_id
+            if buffer_id not in sizes:
+                if buffer_id in self._buffer_sizes:
+                    sizes[buffer_id] = self._buffer_sizes[buffer_id]
+                else:
+                    sizes[buffer_id] = access.buffer_size_bytes
+            size = sizes[buffer_id]
+            if access.buffer_size_bytes is not None and size != access.buffer_size_bytes:
+                raise CacheStateError("buffer_size_bytes must be fixed at first access for buffer " + buffer_id)
+            if size is not None and access.offset_bytes + access.size_bytes > size:
+                raise CacheStateError("access range exceeds remembered buffer_size_bytes")
         return tuple(self.access(access) for access in accesses)
 
     def read(

@@ -26,6 +26,9 @@ def derive_llama_tensor_storage_contract(source_root: str | Path) -> dict[str, A
     root = Path(source_root)
     paths = {'operators': root/'ggml/src/ggml.c', 'cpu_get_rows': root/'ggml/src/ggml-cpu/ops.cpp',
              'cuda_get_rows': root/'ggml/src/ggml-cuda/getrows.cu', 'input_graph': root/'src/llama-graph.cpp'}
+    scheduling = root/'ggml/src/ggml-cpu/ggml-cpu.c'
+    if scheduling.exists():
+        paths['cpu_schedule'] = scheduling
     raw = {k: p.read_bytes() for k, p in paths.items()}
     source = {k: v.decode('utf-8') for k, v in raw.items()}
     operators = source['operators']
@@ -54,10 +57,19 @@ def derive_llama_tensor_storage_contract(source_root: str | Path) -> dict[str, A
         raise ValueError('unrecognized native tensor storage rule: '+', '.join(failures))
     cpu_types = set(re.findall(r'case GGML_TYPE_([A-Z0-9_]+):', cpu_dispatch)) - {'I32'}
     cuda_types = set(re.findall(r'case GGML_TYPE_([A-Z0-9_]+):', source['cuda_get_rows'])) - {'I32'}
+    cpu_task_count = None
+    if 'cpu_schedule' in source:
+        schedule = _cpp_source_function(source['cpu_schedule'], 'static int ggml_get_n_tasks(')
+        schedule = re.sub(r'/\*.*?\*/|//[^\n]*', '', schedule, flags=re.S)
+        match = re.search(r'case GGML_OP_GET_ROWS:(.*?)break;', schedule, flags=re.S)
+        if (match is None or re.findall(r'n_tasks\s*=\s*([^;]+);', match.group(1)) != ['1']):
+            raise ValueError('unrecognized CPU GET_ROWS task count')
+        cpu_task_count = 1
     return {'schema': SCHEMA, 'status': 'source_derived',
         'source_sha256': {str(paths[k].resolve()): hashlib.sha256(v).hexdigest() for k, v in raw.items()},
         'source_symbols': ['llm_graph_context::build_inp_embd', 'ggml_get_rows', 'ggml_mul_mat',
                            'ggml_compute_forward_get_rows_q', 'k_get_rows', *hidden_sources],
+        'cpu_get_rows_tasks': cpu_task_count,
         'embedding_index_bits': 32, 'embedding_output_storage_bits': 32,
         'get_rows_access': 'selected_packed_rows_per_index',
         'supported_weight_types': {'cpu': sorted(cpu_types), 'gpu': sorted(cuda_types)},
@@ -216,6 +228,8 @@ def resolve_embedding_gather_access(scenario, *, token_rows: int, hidden_width: 
         'weight_type': weight_type, 'selected_weight_read_bytes': token_rows*row_bytes,
         'index_read_bytes': token_rows*4, 'output_write_bytes': token_rows*hidden_width*4,
         'output_storage_bits': 32,
+        'cpu_task_count': (1 if target_kind == 'cpu' and type(contract.get('cpu_get_rows_tasks')) is int
+                           and contract['cpu_get_rows_tasks'] == 1 else None),
         'dequantization_compute': {'status': 'unmodeled_selected_rows_only' if conversion else 'not_required',
                                   'selected_rows': token_rows, 'selected_elements': token_rows*hidden_width,
                                   'source_conversion': 'to_float/gpu_dequantize(selected_row)' if conversion else 'F32 row copy',

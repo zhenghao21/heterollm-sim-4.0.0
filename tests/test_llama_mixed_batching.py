@@ -284,3 +284,12 @@ def test_relowering_invalidates_owned_capabilities_when_kv_mode_changes(hybrid_c
 def test_bound_hybrid_final_mapping_fingerprint_is_current(hybrid_contract):
     status = mapping_fingerprint_status(lower_hybrid(hybrid_contract))
     assert status['fingerprint_present'] and not status['mapping_stale']
+
+def test_single_slot_mixed_phase_relevance_is_explicit():
+    case = authored()
+    case = replace(case, workload=replace(case.workload, requests=(case.workload.requests[0],)))
+    result = apply_llama_runtime_config(case, LlamaCppRuntimeConfig(
+        batch=64, ubatch=64, context=512, parallel=1))
+    audit = result.workload.metadata['llama_cpp_mixed_phase_batching']
+    assert audit['mixed_phase_relevant_to_workload'] is False
+    assert audit['workload_effect'] == 'single_slot_no_cross_request_phase_overlap'

@@ -125,7 +125,7 @@ class V05ApiRegressionTests(unittest.TestCase):
         scenario["placement"]["kv_policy"]["cache_component"] = "hbm7"
         hbm7 = next(
             component
-            for component in scenario["hardware"]["components"]
+            for component in scenario["hardware_input"]["hardware"]["components"]
             if component["component_id"] == "hbm7"
         )
         hbm7["capacity_bytes"] = 16 * 1024
@@ -247,7 +247,7 @@ class V05PublicApiRegressionTests(unittest.TestCase):
 
     def test_control_plane_apply_preserves_hardware_and_topology_view_depth(self):
         payload = scenario_to_payload(build_reference_scenario())
-        payload["hardware"]["metadata"]["topology_view"] = {
+        payload["hardware_input"]["hardware"]["metadata"]["topology_view"] = {
             "version": 1,
             "layout": {
                 "positions": {

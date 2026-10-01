@@ -44,3 +44,7 @@ py -3.12 tools/predict_stable_native_dataset.py score --output <prediction-dir> 
 本次优化从固定R0基线开始，基线位于 `artifacts/development/native_long_grid_135_20260915/optimization_loop/round_000/on`。R1 已完成控制面事务隔离候选，R2 已完成 source-qualified 逐行 CPU sampling/output terminal 候选的配对 predict→score；R1、R2 的 393 项数值均与 R0 等价，因此 R0 仍是固定比较基线，候选不自动接纳。R2 的冻结输出实际位于 `optimization_loop/candidate_paired`，其热力图和轮次测试记录位于 `optimization_loop/round_002/`。固定native范围仍为131格，循环外备份仅用于恢复，不参与本次优化计数。
 
 R0是用户指定的比较起点。canonical R0 的 131 格 predict→score、worker seal、sidecar 身份和 strict identity 已闭合；R1 与 R2 也完成配对的 131 格 predict→score，但没有任何超过 1e-9 APE 的数值改善，R0 继续保持固定基线。A 门仍因数值精度失败而未通过，B 门尚未验证。后续候选须从 R0 冻结源码独立派生并按任务书核实身份及配对条件。完整约束与当前状态见 `docs/TASK_BRIEF_AUDIT_20260914.md`。
+
+## Kernel-aware GPU 成本模型
+
+GPU profile 可显式配置 `kernel_model`，启用按物理格式/阶段/shape 分派、性能曲面、CTA/寄存器/shared-memory occupancy、带宽模型与运行时状态化 L2。配置、校准输入、证据等级和未覆盖边界见 [KERNEL_AWARE_MODEL.md](docs/KERNEL_AWARE_MODEL.md)。默认旧路径保持兼容；新能力尚不代表已验证达到 10% 延迟误差。

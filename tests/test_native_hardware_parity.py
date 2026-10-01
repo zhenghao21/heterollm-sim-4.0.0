@@ -154,9 +154,12 @@ def test_public_specs_changes_are_reflected_without_fitting_native_latency():
     variant_hbm_port = next(port for port in variant_gpu.ports if port.port_id == "hbm0")
     assert variant_hbm_port.bandwidth_gbps == pytest.approx(500.0 * 8.0)
     variant_hbm_link = next(link for link in variant.hardware.links if link.link_id == "gpu-hbm0")
-    assert variant_hbm_link.bandwidth_gbps == pytest.approx(500.0 * 8.0)
+    from heterollm_sim.communication import TopologyRouter
+    assert variant_hbm_link.metadata['service_ref'] == 'hbm0.access'
+    assert TopologyRouter(variant.hardware).route('gpu0','hbm0',1024)[0].bandwidth_gbps == pytest.approx(variant.resolve_component_profile('hbm0').effective_bandwidth_gb_s * 8.0)
     variant_ddr_link = next(link for link in variant.hardware.links if link.link_id == "cpu-hostmem-ddr")
-    assert variant_ddr_link.bandwidth_gbps == pytest.approx(64.0 * 8.0)
+    assert variant_ddr_link.metadata['service_ref'] == 'hostmem0.access'
+    assert TopologyRouter(variant.hardware).route('cpu0','hostmem0',1024)[0].bandwidth_gbps == pytest.approx(variant.resolve_component_profile('hostmem0').effective_bandwidth_gb_s * 8.0)
     assert variant.resolve_component_profile("hbm0").bandwidth_gb_s == pytest.approx(500.0)
     assert variant.resolve_component_profile("hostmem0").bandwidth_gb_s == pytest.approx(64.0)
 

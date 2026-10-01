@@ -1,5 +1,7 @@
 # 带 NVTX/CUPTI 语义的 llama.cpp 构建
 
+> `source/llama.cpp-semantic` 是本机忽略的外部 llama.cpp checkout，不随仓库提交。构建前必须从记录的提交恢复源码，并核对编译器、CUDA 和目标架构身份。
+
 项目 37 的 `source/llama.cpp-semantic` 提供 Windows + CUDA 12.8 下的 Release semantic 构建。源码提交为 `3057bb66c86c46d5781e50e85462a760ba7d1feb`（llama.cpp `0.4.0-dev`），它与 LMStudio 随附的 `2.33.0 / 0f3a71b` 二进制不是同一提交，因此性能数值不能直接替代原生基线；本构建用于取得 operator 语义和验证插桩路径。
 
 构建配置为：MSVC 19.44、CUDA 12.8.93、`CMAKE_CUDA_ARCHITECTURES=120a-real`、`GGML_CUDA=ON`、`GGML_CUDA_GRAPHS=ON`、`GGML_CUDA_FA=OFF`、`GGML_CUDA_NVTX=ON`。新增的 CMake 选项默认关闭，开启时通过 `find_path` 查找 `nvtx3/nvToolsExt.h`，缺少头文件会直接失败，避免生成没有语义标记的伪语义构建。

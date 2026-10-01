@@ -168,3 +168,30 @@ class ExplicitCacheStateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_invalid_access_batch_preserves_lru_dirty_lines_and_counters():
+    import pytest
+    cache = ExplicitCacheState(64, 32)
+    cache.write('dirty', 0, 32, buffer_size_bytes=32)
+    before = cache.snapshot()
+    with pytest.raises(CacheStateError):
+        cache.access_many(iter((CacheAccess('new',0,64,'read',64),
+                                CacheAccess('dirty',32,1,'read'))))
+    assert cache.snapshot() == before
+    assert cache.read('dirty',0,32).hit_lines == 1
+
+
+def test_batch_checks_new_buffer_size_conflicts_before_first_fill():
+    import pytest
+    cache = ExplicitCacheState(64,32)
+    before = cache.snapshot()
+    with pytest.raises(CacheStateError):
+        cache.access_many((CacheAccess('new',0,32,'write',32),
+                           CacheAccess('new',0,32,'read',64)))
+    assert cache.snapshot() == before
+    # Rejected batch must not reserve a remembered size either.
+    assert cache.read('new',0,64,buffer_size_bytes=64).miss_lines == 2
+    before = cache.snapshot()
+    with pytest.raises(CacheStateError):
+        cache.access_many((CacheAccess('new',0,32,'read'), object()))
+    assert cache.snapshot() == before

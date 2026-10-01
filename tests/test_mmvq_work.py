@@ -113,3 +113,30 @@ def test_completed_trace_geometry_only_crosscheck():
             assert '(bool)1, (bool)0>' in k['demangled_name_text']
             count+=1
     assert count==36
+
+
+@pytest.mark.parametrize('k,small,regs',[(3072,True,79),(4096,False,47),(5120,False,47)])
+def test_iq4_xs_explicit_geometry_and_resource_binding(k,small,regs):
+    from heterollm_sim.native_kernel_resources import BINARY_SHA256, observed_mmvq_resources
+    c=contract(runtime_binary_sha256=BINARY_SHA256)
+    with pytest.raises(UnsupportedMMVQ):
+        derive_mmvq_work(m=1,n=6144,k=k,weight_format='IQ4_XS',contract=c)
+    w=derive_mmvq_work(m=1,n=6144,k=k,weight_format='IQ4_XS',contract=c,allow_iq4_xs=True)
+    assert w.small_k is small
+    assert w.weight_block_bytes==136
+    assert observed_mmvq_resources(w,hardware_id='nvidia-rtx-5080')['registers']==regs
+
+
+def test_q5_k_explicit_geometry():
+    c=contract(runtime_binary_sha256='a'*64)
+    w=derive_mmvq_work(m=1,n=1024,k=1024,weight_format='Q5_K',contract=c,allow_k_formats=True)
+    assert w.qk==256 and w.qi==32 and w.vdr==2 and w.weight_block_bytes==176
+
+
+def test_q5_k_dispatch_limit_and_unpriced_issue_work():
+    from heterollm_sim.mmvq_issue_bound import issue_counts
+    w=derive_mmvq_work(m=6,n=2048,k=4096,weight_format='Q5_K',contract=contract(),allow_k_formats=True)
+    with pytest.raises(UnsupportedMMVQ,match='issue-count'):
+        issue_counts(w)
+    with pytest.raises(UnsupportedMMVQ):
+        derive_mmvq_work(m=7,n=2048,k=4096,weight_format='Q5_K',contract=contract(),allow_k_formats=True)

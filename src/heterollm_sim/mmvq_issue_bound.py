@@ -67,6 +67,8 @@ def source_issue_contract(*, runtime_binary_sha256: str, sm_count: int) -> dict:
 
 
 def issue_counts(work: MMVQWork) -> dict:
+    if work.weight_format not in {"Q5_0", "Q8_0", "Q4_K", "Q6_K"}:
+        raise UnsupportedMMVQ("format has geometry but no qualified issue-count contract")
     source = MMVQSourceContract(1200, 1200, 32, dict(SOURCE_SHA256), work.runtime_binary_sha256,
         True, False, True)
     canonical = derive_mmvq_work(m=work.m, k=work.k, n=work.n,

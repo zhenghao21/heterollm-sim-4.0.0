@@ -72,6 +72,8 @@ py -3.12 -m pip install . --no-index --find-links .\packages
 5. 载入架构预设会替换全部组件、端口、链路、分组和布局，但会保留当前模型与负载；旧 Rank 映射和硬件绑定 Profile 会清理或重建，所以载入后要回到“映射”复核。
 6. 在拓扑画布中确认 GPU、HBM、HBF、Host Memory 以及它们的链路。点击组件可以在右侧检查器查看容量、读写带宽、延迟、DMA、证据等级和来源。
 
+本机 RTX 5080 + Ryzen 9 9950X3D 的公开硬件快照保存在 `configs/hardware/rtx5080_9950x3d_public.json`，用于复核来源和观测值；运行时以同一数据已固化的 `local-native-rtx5080-9950x3d-gddr7-ddr5` 架构预设为准，不直接读取该 JSON。
+
 B200 预设中的 GPU↔HBF 链路协议字段是 `HBF`；组件和链路 metadata 同时记录 `physical_transport_protocol=UCIe`，用于说明逻辑服务协议与封装物理承载的区别。
 
 “组件预设 · 追加”只向当前拓扑增加组件或组合，不替换当前架构，适合需要自定义对照硬件时使用。新增组件后必须创建并检查它与 GPU 的链路，否则运行时可能无法到达。

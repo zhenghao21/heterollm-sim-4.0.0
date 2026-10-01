@@ -320,3 +320,52 @@ def test_conflicting_flat_and_nested_identity_is_not_silently_promoted(contract)
     audit = qualify_llama_tensor_storage_contract(apply_llama_tensor_storage_contract(replace(case, model=model), contract))
     assert audit["qualified"] is False
     assert "conflicting_nested_gguf_evidence" in audit["reasons"]
+
+def test_llama_kernel_preset_installs_qualified_gather_without_hidden_dtype_change(contract,monkeypatch):
+    from heterollm_sim.llama_scenario import apply_llama_runtime_config
+    from heterollm_sim.runtime_adapters import LlamaCppRuntimeConfig
+    import heterollm_sim.llama_tensor_storage as storage
+    case=scenario()
+    case=replace(case,workload=replace(case.workload,metadata={
+        **case.workload.metadata,'llama_cpp_kernel_model_preset':'blackwell_analytical_v1'}))
+    monkeypatch.setattr(storage,'derive_llama_tensor_storage_contract',lambda root:contract)
+    lowered=apply_llama_runtime_config(case,LlamaCppRuntimeConfig(batch=64,ubatch=64,context=256),materialize_placement=False)
+    assert lowered.workload.metadata[AUDIT_KEY]['qualified']
+    assert not lowered.workload.metadata.get('llama_cpp_f32_hidden_storage',False)
+    task=compute_task(embedding_tasks(lowered,rows=1))
+    assert task.metadata['cost_model']['read_bytes']==38
+    assert task.metadata['cost_model']['write_bytes']==128
+
+
+def test_llama_kernel_preset_missing_source_fails_closed(monkeypatch):
+    from heterollm_sim.llama_scenario import apply_llama_runtime_config
+    from heterollm_sim.runtime_adapters import LlamaCppRuntimeConfig
+    import heterollm_sim.llama_tensor_storage as storage
+    case=scenario()
+    case=replace(case,workload=replace(case.workload,metadata={
+        'llama_cpp_kernel_model_preset':'blackwell_analytical_v1'}))
+    def missing(root):raise OSError('source absent')
+    monkeypatch.setattr(storage,'derive_llama_tensor_storage_contract',missing)
+    lowered=apply_llama_runtime_config(case,LlamaCppRuntimeConfig(batch=64,ubatch=64,context=256),materialize_placement=False)
+    assert SOURCE_KEY not in lowered.workload.metadata
+    assert lowered.workload.metadata[AUDIT_KEY]['qualified'] is False
+
+def test_source_get_rows_single_task_reaches_cpu_cost_model(contract):
+    contract={**contract,'cpu_get_rows_tasks':1}
+    case=apply_llama_tensor_storage_contract(scenario(),contract)
+    task=compute_task(embedding_tasks(case,rows=64))
+    assert task.metadata['native_get_rows_storage']['cpu_task_count']==1
+    schedule=task.metadata['cost_model']['instruction_schedule']
+    assert schedule['effective_core_count']==1
+
+
+def test_derive_get_rows_schedule_rejects_changed_task_count(tmp_path):
+    write_source_fixture(tmp_path)
+    source=tmp_path/'ggml/src/ggml-cpu/ggml-cpu.c'
+    source.write_text('static int ggml_get_n_tasks(int node, int n_threads) { switch(node) { case GGML_OP_GET_ROWS: case GGML_OP_SET_ROWS: { /* n_tasks = n_threads; */ n_tasks = 1; } break; }}')
+    result=derive_llama_tensor_storage_contract(tmp_path)
+    assert result['cpu_get_rows_tasks']==1
+    assert len(result['source_sha256'])==5
+    source.write_text(source.read_text().replace('n_tasks = 1;', 'n_tasks = n_threads;'))
+    with pytest.raises(ValueError,match='task count'):
+        derive_llama_tensor_storage_contract(tmp_path)

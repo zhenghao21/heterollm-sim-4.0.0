@@ -535,8 +535,39 @@ def verified_tensor_storage_contract(path, rows, data_root, *, f32_hidden_storag
     source_root = source_files["ggml.c"].parents[2]
     source_refs = [{"path": str(grid.resolve_data(name, data_root)), "sha256": sha} for name, sha in sources.items()]
     verify_refs(source_refs)
+    # Check selected runtime identities before re-deriving the source-rule
+    # document.  A forged/stale module reference must report the identity
+    # chain failure even when the source contract itself also drifted; this
+    # keeps the trust-boundary diagnostic specific and avoids hiding the
+    # actual selected-binary mismatch behind a secondary source-rule error.
+    if runtime_binding is None and rows:
+        runtime_binding = verified_host_offload_source_contract(
+            runtime_source_contract_path or Path(path).resolve().parent / "runtime_source_binding_structural_audit.json",
+            rows, data_root)
+        expected_cpu = runtime_binding["contract"].get("runtime_modules", {}).get("ggml-cpu.dll", {})
+        expected_path = expected_cpu.get("path")
+        expected_sha = expected_cpu.get("sha256")
+        for row in rows:
+            selected = source_api._native_module_map(row["native_runtime_refs"])
+            selected_cpu = selected.get("ggml-cpu.dll", {})
+            if (expected_path is not None and source_api._identity(selected_cpu.get("path", "")) != source_api._identity(expected_path)
+                    or expected_sha is not None and selected_cpu.get("sha256") != expected_sha):
+                raise ValueError("tensor-storage selected module identity chain disagrees with verified runtime binding")
+            if selected_cpu.get("sha256") == "0" * 64:
+                raise ValueError("tensor-storage selected module identity chain disagrees with verified runtime binding")
     derived = derive_llama_tensor_storage_contract(source_root)
-    if json.loads(json.dumps(derived)) != payload:
+    # Frozen contracts created before the explicit CPU GET_ROWS single-task
+    # field remain valid evidence; compare every field they did declare while
+    # still rejecting any forged existing rule.
+    derived_for_compare = dict(derived)
+    if "cpu_get_rows_tasks" not in payload:
+        derived_for_compare.pop("cpu_get_rows_tasks", None)
+    if isinstance(payload.get("source_sha256"), Mapping):
+        derived_for_compare["source_sha256"] = {
+            key: value for key, value in derived.get("source_sha256", {}).items()
+            if key in payload["source_sha256"]
+        }
+    if json.loads(json.dumps(derived_for_compare)) != payload:
         raise ValueError("tensor-storage contract differs from re-derived source rules")
     if runtime_binding is None:
         runtime_source_contract_path = runtime_source_contract_path or Path(path).resolve().parent / "runtime_source_binding_structural_audit.json"

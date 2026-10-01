@@ -15,7 +15,7 @@ from collections import OrderedDict, deque
 from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from functools import lru_cache
 from graphlib import CycleError, TopologicalSorter
 from typing import Callable, Dict, FrozenSet, Hashable, Iterator, List, Optional, Sequence, Set, Tuple
@@ -23,6 +23,10 @@ from typing import Callable, Dict, FrozenSet, Hashable, Iterator, List, Optional
 from . import __version__
 from .kernel_query_ledger import summarize_kernel_queries
 from .config import ScenarioConfig
+from .cache_state import CacheAccess
+from .kernel_memory import attach_l2_contract, paged_buffer_accesses, attention_stream_k_accesses
+from .kernel_model import summarize_kernel_predictions, apply_captured_graph_launch
+
 from .calibration import (
     calibrate_cost_phase,
     decode_first_invocation_extra_ns,
@@ -98,6 +102,7 @@ from .control_plane_state import (
 )
 from .mtp import MTPRequestCursor, expected_prefix_tokens, round_accepted_prefix
 from .mmq_work import MMVQ_MAX_BATCH_SIZE, MMQWork, UnsupportedMMQ, derive_mmq_work
+from .mmq_level2_surfaces import mmq_stage_source_binding
 from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
 from .mmvq_work import (
     MMVQSourceContract, MMVQWork, SOURCE_SHA256 as MMVQ_SOURCE_SHA256,
@@ -3530,6 +3535,93 @@ def _route_resident_memory_demands(demands, metadata):
 
 
 
+def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
+    audit = task.metadata.get("phase_metadata", {}).get("kernel_model", task.metadata.get("cost_model", {}).get("kernel_model"))
+    if audit and task.metadata.get("phase") != "kernel_launch":
+        task = replace(task, metadata={**task.metadata, "kernel_prediction": audit})
+    context = _COMPILATION_CONTEXT.get()
+    if context is None or task.metadata.get("phase") == "kernel_launch":
+        return task
+    scenario = context.scenario
+    target_id = task.metadata.get("target_component")
+    if not target_id or _kind(_component(scenario, target_id)) != "gpu":
+        return task
+    rank = next((r for r in _parallel_plan(scenario).ranks
+                 if r.rank == task.metadata.get("rank") and r.component_id == target_id), None)
+    if rank is None:
+        return task
+    gpu, hbm = _gpu_profiles(scenario, target_id, rank.memory_component_id)
+    if gpu.kernel_model is None or not gpu.kernel_model.stateful_l2:
+        return task
+    memory_resource = _rank_memory_resource(scenario, rank)
+    if not any(d.resource_id == memory_resource for d in task.demands):
+        return task
+    cost = task.metadata.get("cost_model", {})
+    model = task.metadata.get("phase_metadata", {}).get("kernel_model", cost.get("kernel_model", {}))
+    if model:
+        read, write = model["read_bytes"], model["write_bytes"]
+    elif "activation_bytes" in cost:
+        read, write = cost["activation_bytes"] + cost["weight_bytes"], cost["output_bytes"]
+    else:
+        read, write = cost.get("read_bytes", 0), cost.get("write_bytes", 0)
+    explicit = task.metadata.get("buffer_accesses")
+    paged = task.metadata.get("paged_buffer_accesses")
+    if paged is not None:
+        if explicit is not None:
+            raise ValueError("use either byte-range or paged buffer accesses, not both")
+        from dataclasses import asdict
+        explicit = [asdict(a) for spec in paged for a in paged_buffer_accesses(**spec)]
+    if explicit is not None:
+        accesses = tuple(CacheAccess(**row) for row in explicit)
+        if sum(a.size_bytes for a in accesses if a.operation == "read") != read or sum(a.size_bytes for a in accesses if a.operation == "write") != write:
+            raise ValueError("buffer_accesses must cover all physical reads/writes exactly")
+    else:
+        accesses = []
+        weight_bytes = int(cost.get("weight_bytes", 0))
+        tensor_id = task.metadata.get("weight_tensor_id")
+        projection = task.metadata.get("projection_id")
+        if tensor_id and weight_bytes and weight_bytes <= read:
+            # Fused logical weight groups need a physical projection identity.
+            if projection:
+                accesses.append(CacheAccess(f"{target_id}:weights:{tensor_id}:{projection}:{rank.tp_rank}", 0, weight_bytes, "read"))
+                read -= weight_bytes
+        input_id = task.metadata.get("input_buffer_id")
+        if input_id and read:
+            accesses.append(CacheAccess(str(input_id), int(task.metadata.get("input_offset_bytes", 0)), read, "read"))
+            read = 0
+        if read:
+            accesses.append(CacheAccess("@tasklocal:unknown_read", 0, read, "read"))
+        if write:
+            output_id = task.metadata.get("output_buffer_id", "@tasklocal:unknown_write")
+            accesses.append(CacheAccess(str(output_id), int(task.metadata.get("output_offset_bytes", 0)), write, "write"))
+    cache_resource = _rank_gpu_resource(scenario, rank, gpu.cache_hierarchy.levels[-1].resource_id)
+    return attach_l2_contract(task, gpu=gpu, hbm=hbm, memory_resource=memory_resource,
+                              cache_resource=cache_resource, owner=target_id + ".l2", accesses=accesses)
+
+
+def _apply_planned_graph_launches(tasks):
+    context = _COMPILATION_CONTEXT.get()
+    result = list(tasks)
+    if context is None:
+        return tuple(result)
+    scenario = context.scenario
+    # Captured membership must come from an explicit runtime binding, never a
+    # fusion flag or a shape-based guess. Existing frontends remain independent.
+    by_device = {}
+    for index, task in enumerate(result):
+        if task.metadata.get("cuda_graph_captured") is True:
+            target = task.metadata.get("target_component")
+            if target:
+                by_device.setdefault(target, []).append(index)
+    for target, indices in by_device.items():
+        gpu, _ = _gpu_profiles(scenario, target)
+        if gpu.kernel_model is not None:
+            revised = apply_captured_graph_launch(tuple(result[i] for i in indices), gpu.kernel_model)
+            for index, task in zip(indices, revised):
+                result[index] = task
+    return tuple(result)
+
+
 class _TaskBuilder:
     def __init__(self, request: RequestSpec) -> None:
         self.request = request
@@ -3626,6 +3718,7 @@ class _TaskBuilder:
                 metadata=bound_metadata,
             )
         )
+        self.tasks[-1] = _attach_planned_l2(self.tasks[-1])
         inherited: Dict[int, str] = {}
         ambiguous = set()
         for dependency_id in dependency_ids:
@@ -3654,7 +3747,7 @@ class _TaskBuilder:
         full compiler can concatenate the same chunks into ``ScheduleIR``.
         """
 
-        tasks = tuple(self.tasks)
+        tasks = _apply_planned_graph_launches(self.tasks)
         referenced = {
             dependency
             for task in tasks
@@ -5242,6 +5335,9 @@ def _task_segment_cache(
 ) -> Optional["OrderedDict[Hashable, _TaskSegmentTemplate]"]:
     if context.leaf_cache_entries <= 0:
         return None
+    if any(isinstance(p, GPUProfile) and p.kernel_model is not None and p.kernel_model.stateful_l2
+           for group in context.scenario.component_profiles.values() for p in group.values()):
+        return None
     cache_value = context.invariant(key, OrderedDict)
     if not isinstance(cache_value, OrderedDict):  # pragma: no cover - defensive
         return None
@@ -5413,6 +5509,9 @@ def _compile_scenario_in_context(scenario: ScenarioConfig) -> ScheduleIR:
         manifest = replace(manifest, metadata={
             **manifest.metadata, "mmvq_hbm_mode": summarize_mmvq_hbm_mode(tasks, _mmvq_hbm_mode(scenario)),
         })
+    kernel_predictions = summarize_kernel_predictions(tasks)
+    if kernel_predictions["kernel_count"] or kernel_predictions["fallback_count"]:
+        manifest = replace(manifest, metadata={**manifest.metadata, "kernel_predictions": kernel_predictions})
     return ScheduleIR(
         manifest=manifest,
         tasks=tuple(tasks),
@@ -8391,6 +8490,20 @@ def _gpu_profiles(
         gpu_profile = _resolve_component_profile(
             scenario, gpu_component_id, GPUProfile
         )
+        if gpu_profile.kernel_model is not None:
+            if any(scenario.placement.metadata.get(key) is True for key in (
+                    "native_calibration_apply_stage", "native_calibration_apply_memory", "native_calibration_apply_launch")):
+                raise ValueError("kernel_model cannot share cost ownership with native calibration")
+            expected_runtime = scenario.workload.metadata.get("kernel_runtime_id")
+            expected_hardware = _component(scenario, gpu_component_id).metadata.get("kernel_hardware_id")
+            if any(kernel.samples for kernel in gpu_profile.kernel_model.kernels) and (expected_runtime is None or expected_hardware is None):
+                raise ValueError("measured surfaces require explicit kernel_runtime_id and kernel_hardware_id bindings")
+            if expected_runtime is not None and expected_runtime != gpu_profile.kernel_model.runtime_id:
+                raise ValueError("kernel runtime identity mismatch")
+            if expected_hardware is not None and expected_hardware != gpu_profile.kernel_model.hardware_id:
+                raise ValueError("kernel hardware identity mismatch")
+        if gpu_profile.kernel_model is not None and gpu_profile.kernel_model.launch_ns is not None:
+            gpu_profile = replace(gpu_profile, kernel_launch_ns=gpu_profile.kernel_model.launch_ns)
         selected_memory = memory_component_id
         if selected_memory is not None:
             memory_component = _component(scenario, selected_memory)
@@ -8993,6 +9106,7 @@ def _namespace_demand(
                 gpu_profile.scalar_resource_id,
                 gpu_profile.special_function_resource_id,
                 gpu_profile.launch_resource_id,
+                gpu_profile.launch_resource_id + ".device_stream",
                 *(
                     level.resource_id
                     for level in gpu_profile.cache_hierarchy.levels
@@ -9771,14 +9885,34 @@ def _declared_mmq_work(
     if workload.k % 256 and contract.get("reduction_tail_contract") != "logical-k-streamk-tail/v1":
         return uncovered("missing_logical_k_tail_source_contract")
     try:
+        conversion_contract = target.metadata.get("llama_cpp_conversion_source_contract")
+        runtime_binary_sha256 = (
+            conversion_contract.get("runtime_binary_sha256")
+            if isinstance(conversion_contract, Mapping)
+            else ""
+        )
         work = derive_mmq_work(
             m=workload.m, k=workload.k, n=workload.n,
             weight_format=formats[0], sm_count=gpu_profile.sm_count,
             shared_memory_per_block=shared,
+            runtime_binary_sha256=runtime_binary_sha256 or "",
         )
     except UnsupportedMMQ as error:
         return uncovered(str(error))
-    return work, {**audit, **work.to_metadata(), "status": "applied"}, 0
+    # Keep the non-main owners source-qualified even when no independent
+    # timing surface has been accepted.  The binding is audit metadata only;
+    # the stage correction remains fail-closed in mmq_level2_surfaces.
+    source_hashes = (
+        conversion_contract.get("source_hashes", {})
+        if isinstance(conversion_contract, Mapping) else {}
+    )
+    stage_bindings = {
+        stage: mmq_stage_source_binding(stage, work, source_hashes=source_hashes)
+        for stage in ("activation_repack", "stream_k_fixup")
+    }
+    return work, {**audit, **work.to_metadata(), "status": "applied",
+                  "stage_bindings": stage_bindings,
+                  "stage_surface_policy": "independent_holdout_required_fail_closed"}, 0
 
 
 def _declared_mmvq_work(
@@ -9869,6 +10003,10 @@ def _declared_mmvq_work(
             m=workload.m, k=workload.k, n=workload.n,
             weight_format=formats[0], contract=contract,
             allow_k_formats=_mmvq_issue_bound_requested(scenario),
+            allow_iq4_xs=scenario.workload.metadata.get("llama_cpp_kernel_model_preset") in {
+                "blackwell_analytical_v1",
+                "blackwell_calibrated_analytical_v1",
+            },
         )
     except (TypeError, UnsupportedMMVQ, ValueError) as error:
         return uncovered(str(error))
@@ -9903,6 +10041,8 @@ def _declared_mmvq_issue_contract(scenario, workload, target, gpu_profile):
     audit = {"requested": True, "status": "uncovered"}
     if workload.mmvq_work is None:
         return None, {**audit, "reason": "no_supported_source_MMVQ_work"}
+    if workload.mmvq_work.weight_format == "IQ4_XS":
+        return None, {**audit, "reason": "IQ4_XS_geometry_only_no_issue_rate_contract"}
     competing = scenario.hardware.metadata.get("llama_cpp_mmvq_prmt_partial_contract", {})
     if isinstance(competing, Mapping) and competing.get("enabled") is True:
         return None, {**audit, "reason": "competing_PRMT_partial_cost_treatment"}
@@ -10126,6 +10266,10 @@ def _add_rank_gemm(
     )
     iq_panel_audit = None
     operation_metadata = dict(metadata or {})
+    execution_phase = operation_metadata.get("execution_phase")
+    if execution_phase not in ("prefill", "decode"):
+        execution_phase = _execution_phase_from_name(name) or "unspecified"
+    workload = replace(workload, execution_phase=execution_phase)
     gpu_graph_audit = scenario.workload.metadata.get(_GPU_INVOCATION_KEY, {})
     if (isinstance(gpu_graph_audit, Mapping) and gpu_graph_audit.get("applied") is True
             and target_component_id in gpu_graph_audit.get("gpu_component_ids", ()) and model_weight_read and not dynamic_rhs):
@@ -10633,6 +10777,14 @@ def _add_rank_gemm(
                     "layer_id": operation_metadata.get("layer_id"),
                     "projection_id": operation_metadata.get("projection_id"),
                     "mmq_source_work": {**dict(mmq_audit or {}), "stage": "conversion"},
+                    "mmq_stage_binding": (
+                        dict(mmq_audit or {}).get("stage_bindings", {}).get("activation_repack", {})
+                    ),
+                    "mmq_stage_surface": {
+                        "status": "uncovered",
+                        "reason": "no_independent_stage_holdout_surface",
+                        "applied": False,
+                    },
                     **({"conversion_source_work": conversion_source_audit} if conversion_source_audit is not None else {}),
                 },
             ),)
@@ -10903,6 +11055,10 @@ def _add_rank_gemm(
         if dynamic_attention_replay is not None:
             builder._task_segment_dynamic_payloads[last] = replace(
                 dynamic_attention_replay,
+                # _add_rank_gemm binds the phase after the replay payload is
+                # authored. Preserve that typed workload for context replay;
+                # otherwise the fallback estimator sees ``unspecified``.
+                workload=workload,
                 target_component_id=target_component_id,
                 operator_class=OperatorClass.GEMM,
                 phase_index=phase_index,
@@ -10934,6 +11090,14 @@ def _add_rank_gemm(
                 "layer_id": operation_metadata.get("layer_id"),
                 "projection_id": operation_metadata.get("projection_id"),
                 "mmq_source_work": {**dict(mmq_audit or {}), "stage": "fixup"},
+                "mmq_stage_binding": (
+                    dict(mmq_audit or {}).get("stage_bindings", {}).get("stream_k_fixup", {})
+                ),
+                "mmq_stage_surface": {
+                    "status": "uncovered",
+                    "reason": "no_independent_stage_holdout_surface",
+                    "applied": False,
+                },
             },
         )
         prior = (last,)
@@ -11127,6 +11291,46 @@ def _add_rank_tensor_kernel(
             gpu_profile, hbm_profile, workload
         ),
     )
+    stage_surface_audit = {}
+    # MMQ conversion and fixup have independent accepted Level-2 surfaces.
+    # Bind them from the actual lowered source metadata; a missing runtime,
+    # signature, or calibrated cell leaves the analytical tensor cost intact.
+    source_meta = (metadata or {}).get("mmq_source_work", {}) if metadata else {}
+    stage_binding = (metadata or {}).get("mmq_stage_binding", {}) if metadata else {}
+    stage = source_meta.get("stage") if isinstance(source_meta, Mapping) else None
+    if stage in {"conversion", "fixup"} and isinstance(stage_binding, Mapping):
+        stage_name = "activation_repack" if stage == "conversion" else "stream_k_fixup"
+        try:
+            from .mmq_level2_stage_data import mmq_stage_surface
+            surface = mmq_stage_surface(
+                stage_name,
+                str(source_meta.get("weight_format", "")).casefold(),
+                str(stage_binding.get("dispatch_signature", "")),
+            )
+            if surface is not None:
+                shape = (int(source_meta["m"]), int(source_meta["n"]), int(source_meta["k"]))
+                runtime = str(stage_binding.get("runtime_binary_sha256", ""))
+                analytical = max((phase.demands and max(d.service_ns for d in phase.demands)
+                                  for phase in estimate.phases if phase.name != "kernel_launch"), default=0.0)
+                prediction = surface.predict(shape, runtime_binary_sha256=runtime,
+                                             dispatch_signature=surface.dispatch_signature,
+                                             analytical_ns=analytical)
+                if prediction.get("accepted") and prediction.get("prediction_ns") and analytical > 0:
+                    factor = float(prediction["prediction_ns"]) / analytical
+                    estimate = replace(estimate, phases=tuple(
+                        replace(phase, demands=tuple(replace(d, service_ns=d.service_ns * factor)
+                                                     for d in phase.demands))
+                        if phase.name != "kernel_launch" else phase
+                        for phase in estimate.phases))
+                    stage_surface_audit = {"mmq_stage_surface": {**prediction,
+                        "status": "applied", "stage": stage_name, "factor": factor}}
+                else:
+                    stage_surface_audit = {"mmq_stage_surface": {**prediction,
+                        "status": "uncovered", "stage": stage_name}}
+        except (KeyError, TypeError, ValueError):
+            stage_surface_audit = {"mmq_stage_surface": {
+                "status": "uncovered", "stage": stage_name,
+                "reason": "stage_binding_or_shape_invalid"}}
     last = ""
     for phase in estimate.phases:
         if phase.name == "kernel_launch" and not emit_kernel_launch:
@@ -11233,6 +11437,7 @@ def _add_rank_tensor_kernel(
                     (demand.service_ns for demand in demands), default=0.0
                 ),
                 **dict(metadata or {}),
+                **stage_surface_audit,
             },
         )
         prior = (last,)
@@ -11287,12 +11492,13 @@ def _add_rank_fused_attention(
             gpu_profile, hbm_profile, workload
         ),
     )
+    invocation_id = f"{builder.request.request_id}:{name}:{builder.counter}:stream_k"
     last = ""
     layer = next((item for item in _execution_layers(scenario)
                   if item.layer_id == (metadata or {}).get("layer_id")), None)
     cache = _kv_components(scenario, rank, rank.component_id, layer)[0]
     for phase_index, phase in enumerate(estimate.phases):
-        phase = _direct_memory_phase(scenario, rank, phase, cache, read_bytes=workload.kv_read_bytes)
+        phase = _direct_memory_phase(scenario, rank, phase, cache, read_bytes=phase.metadata.get("persistent_kv_read_bytes", workload.kv_read_bytes))
         demands = tuple(
             _namespace_demand(
                 scenario,
@@ -11336,6 +11542,13 @@ def _add_rank_fused_attention(
             )
             demands = calibrated_phase.demands
             effective_phase_metadata = dict(calibrated_phase.metadata)
+        physical_accesses = None
+        phase_audit = effective_phase_metadata.get("kernel_model", {})
+        if (gpu_profile.kernel_model is not None and gpu_profile.kernel_model.stateful_l2
+                and phase_audit and cache == rank.memory_component_id):
+            physical_accesses = attention_stream_k_accesses(
+                phase_audit, invocation_id,
+                fixup=phase.name == "gpu_attention_stream_k_fixup")
         last = builder.add(
             "{}.{}".format(name, phase.name),
             phase.category,
@@ -11374,6 +11587,8 @@ def _add_rank_fused_attention(
                     (demand.service_ns for demand in demands), default=0.0
                 ),
                 **dict(metadata or {}),
+                **({"buffer_accesses": [asdict(a) for a in physical_accesses]}
+                   if physical_accesses is not None else {}),
             },
         )
         builder._task_segment_dynamic_payloads[last] = (
@@ -11714,6 +11929,10 @@ def _add_rank_primitive(
         if dynamic_attention_replay is not None:
             builder._task_segment_dynamic_payloads[last] = replace(
                 dynamic_attention_replay,
+                # Keep the phase-bound primitive workload in the replay
+                # payload so refreshed non-flash attention metadata matches a
+                # fresh lowering of the same invocation.
+                workload=workload,
                 target_component_id=target_component_id,
                 operator_class=operator_class,
                 phase_index=phase_index,
@@ -14805,6 +15024,7 @@ def _compile_parallel_embedding(
                 reuse_factor=1.0,
                 streaming_fraction=1.0,
                 name="embedding_lookup",
+                effective_core_count=gather.get("cpu_task_count") if source_get_rows else None,
             ),
             embedding.operator_id,
             name,
@@ -16230,6 +16450,15 @@ def _compile_parallel_layer_body(
             output_bits=activation_bits,
             query_storage_bits=32 if _f32_hidden_storage_enabled(scenario) else None,
             name="attention_qk_softmax_pv",
+            execution_phase=_execution_phase_from_name(phase) or "unspecified",
+            causal_query_positions=(
+                tuple(range(context_tokens - token_batch, context_tokens))
+                if scenario.workload.scheduler.max_num_seqs == 1
+                and len(scenario.workload.requests) == 1
+                and 0 < token_batch <= context_tokens
+                and scenario.workload.mtp is None
+                else ()
+            ),
             kv_hidden_size=kv_hidden_size,
             kv_input_bits=kv_input_bits,
             kv_read_tokens=max(0, kv_read_tokens),
@@ -23188,6 +23417,8 @@ def _execution_task_facts(
             key: dict(value)
             for key in (
                 "transient_residency_fact",
+                "stateful_l2",
+                "kernel_prediction",
                 "mmq_source_work",
                 "native_kv_work",
                 "qwen35_attention_work",
@@ -25670,6 +25901,9 @@ def _serving_lowering_from_builder(
 ) -> _ServingCohortLowering:
     effective_scenario_hash = scenario_hash or stable_hash(scenario)
     enriched_extra_metadata = dict(extra_metadata)
+    predictions = summarize_kernel_predictions(builder.tasks)
+    if predictions["kernel_count"] or predictions["fallback_count"]:
+        enriched_extra_metadata["kernel_predictions"] = predictions
     row_count = max(
         0,
         int(
@@ -25680,7 +25914,7 @@ def _serving_lowering_from_builder(
             or 0
         ),
     )
-    raw_tasks = tuple(builder.tasks)
+    raw_tasks = _apply_planned_graph_launches(builder.tasks)
     operator_facts, transient_envelopes = (
         _transient_residency_envelopes(
             scenario,
@@ -25717,7 +25951,8 @@ def _serving_lowering_from_builder(
         assumptions=assumptions,
         assumptions_zh=manifest_assumptions_zh,
         assumptions_en=manifest_assumptions_en,
-        metadata={"cohort_id": cohort_id, "cohort_kind": kind},
+        metadata={"cohort_id": cohort_id, "cohort_kind": kind,
+                  **({"kernel_predictions": predictions} if predictions["kernel_count"] or predictions["fallback_count"] else {})},
     )
     if scenario.workload.metadata.get("llama_cpp_tensor_storage_contract") is not None:
         tensor_storage = summarize_tensor_storage(tasks)

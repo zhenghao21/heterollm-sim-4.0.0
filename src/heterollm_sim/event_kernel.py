@@ -27,6 +27,7 @@ from typing import (
 )
 
 from .contracts import ResourceDemand, TaskSpec
+from .kernel_memory import resolve_l2_task
 from .runtime_ir import (
     KernelCompletion,
     RUNTIME_ACTION_METADATA_KEY,
@@ -397,7 +398,8 @@ class CompiledGraphLayout:
                 ):
                     return False
                 if any(
-                    not valid_position(demand_position)
+                    (type(demand_position) is not int
+                     or not 0 <= demand_position < len(demand_resource_ids))
                     for demand_position in self.demand_order[position]
                 ):
                     return False
@@ -768,6 +770,7 @@ class UnifiedEventKernel:
         # otherwise a two-engine owner looks overutilized on a one-lane alias.
         for logical_id, owner_id in owners.items():
             capacities.setdefault(logical_id, owner_capacities.get(owner_id, 1))
+        self._l2_states = {}
         self._tasks: Dict[str, TaskSpec] = {}
         self._indegree: Dict[str, int] = {}
         self._dependents: Dict[str, List[str]] = {}
@@ -1591,7 +1594,7 @@ class UnifiedEventKernel:
         if self.has_active_tasks:
             raise ValueError("prevalidated compiled drain requires an idle kernel")
         chunk = tuple(tasks)
-        if self.resource_owners:
+        if self.resource_owners or any("stateful_l2" in task.metadata for task in chunk):
             if not layout.matches_structure(chunk):
                 raise ValueError("task graph does not match compiled structure")
             self.submit_compiled(chunk, layout)
@@ -2083,7 +2086,17 @@ class UnifiedEventKernel:
             _version,
         ) = queued
         task = self._tasks[task_id]
-        demands = self._sorted_demands[task_id]
+        if "stateful_l2" in task.metadata:
+            try:
+                task = resolve_l2_task(task, self._l2_states)
+            except (ValueError, TypeError, KeyError):
+                # The task remains in its group queue; retain its global ready
+                # entry too, so validation failure cannot silently drop it.
+                heapq.heappush(self._ready_heap, queued)
+                raise
+            demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
+        else:
+            demands = self._sorted_demands[task_id]
         isfinite = math.isfinite
         timing_is_finite = isfinite(start_ns)
         if timing_is_finite:

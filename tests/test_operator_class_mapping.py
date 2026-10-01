@@ -51,8 +51,16 @@ def _cpu_scenario():
         bandwidth_gb_s=1.0e12,
         resource_id="cpu0.memory",
     )
+    # Synthetic fast-CPU fixture: declare the same physical memory ceiling,
+    # rather than bypassing the production effective <= physical invariant.
+    hardware = replace(scenario.hardware, components=tuple(
+        replace(component, bandwidth_gbps=8.0e12,
+                read_bandwidth_gbps=8.0e12, write_bandwidth_gbps=8.0e12)
+        if component.component_id == "hostmem0" else component
+        for component in scenario.hardware.components))
     return replace(
         scenario,
+        hardware=hardware,
         component_profiles=component_profiles,
     )
 

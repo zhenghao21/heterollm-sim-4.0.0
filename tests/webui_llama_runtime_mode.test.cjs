@@ -49,3 +49,12 @@ test("runtime fields reject invalid limits and batch reductions reconcile ubatch
   assert.equal(h.updateLlamaRuntimeField("offload_kqv", false, s), true);
   assert.equal(s.profiles.llama_cpp.offload_kqv, false);
 });
+
+test("RTX5080 llama mode requests analytical kernels without enabling other GPUs", () => {
+  const h=helpers(), s=scenario();
+  s.hardware={components:[{metadata:{component_preset_id:"nvidia-rtx-5080"}}]};
+  h.setLlamaRuntimeMode("llama_cpp",s);
+  assert.equal(s.workload.metadata.llama_cpp_kernel_model_preset,"blackwell_analytical_v1");
+  h.setLlamaRuntimeMode("auto",s);
+  assert.equal(s.workload.metadata.llama_cpp_kernel_model_preset,undefined);
+});

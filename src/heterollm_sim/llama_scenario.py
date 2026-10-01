@@ -157,6 +157,9 @@ def _llama_mixed_batching_contract(
         "status": "enabled" if enabled and qualified else "disabled" if not enabled else "unsupported",
         "reason": reason if enabled else "cont_batching_disabled",
         "graph_qualified": qualified,
+        "mixed_phase_relevant_to_workload": bool(config is None or config.parallel > 1),
+        "workload_effect": ("single_slot_no_cross_request_phase_overlap"
+                            if config is not None and config.parallel == 1 else "multi_slot_capability_gate"),
         "source": "locked llama.cpp tools/server/server-context.cpp:update_slots; can_batch_with; can_split",
         "source_rule": "generating rows first; append compatible ordinary prompt rows until n_batch; split by n_ubatch",
         "scope": "causal dense text; hybrid allowed only with a source-bound equal-length microbatch proof; no adapters, MTP or experts",
@@ -610,6 +613,74 @@ def apply_llama_runtime_config(
         fusion_policy=replace(scenario.fusion_policy, flash_attention=config.flash_attn),
         assumptions=tuple(dict.fromkeys((*scenario.assumptions, "llama.cpp runtime config lowered into typed scheduler/KV/offload semantics"))),
     )
+    kernel_model_preset = scenario.workload.metadata.get("llama_cpp_kernel_model_preset")
+    if kernel_model_preset in {
+        "blackwell_analytical_v1",
+        "blackwell_calibrated_analytical_v1",
+    }:
+        from .kernel_model import llama_blackwell_analytical_profile
+        calibrated = kernel_model_preset == "blackwell_calibrated_analytical_v1"
+        profiles = {kind: dict(values) for kind, values in lowered.component_profiles.items()}
+        for component in lowered.hardware.components:
+            if component.metadata.get("component_preset_id") != "nvidia-rtx-5080":
+                continue
+            ident = component.cost_profile_id
+            gpu = profiles.get("gpu", {}).get(ident)
+            if gpu is not None and gpu.kernel_model is None:
+                profiles["gpu"][ident] = replace(gpu, kernel_model=llama_blackwell_analytical_profile(
+                    "nvidia-rtx-5080", "llama-source-rule:" + config.fingerprint,
+                    calibrated=calibrated))
+        kernel_runtime_id = "llama-source-rule:" + config.fingerprint
+        if calibrated:
+            # Level-2 surfaces are bound to one runtime binary and one GPU
+            # identity.  Carry both bindings into the authored scenario so
+            # planner-side cost ownership checks cannot accidentally reuse a
+            # surface on another device/runtime.
+            bound_components = tuple(
+                replace(
+                    component,
+                    metadata={
+                        **dict(component.metadata),
+                        "kernel_hardware_id": "nvidia-rtx-5080",
+                    },
+                )
+                if component.metadata.get("component_preset_id") == "nvidia-rtx-5080"
+                else component
+                for component in lowered.hardware.components
+            )
+            lowered = replace(
+                lowered,
+                hardware=replace(lowered.hardware, components=bound_components),
+                workload=replace(
+                    lowered.workload,
+                    metadata={
+                        **lowered.workload.metadata,
+                        "kernel_runtime_id": kernel_runtime_id,
+                    },
+                ),
+            )
+        lowered = replace(lowered, component_profiles=profiles)
+        # The preset already names this locked source-rule runtime. Read and
+        # qualify GET_ROWS semantics rather than charge the whole embedding
+        # table per token. Keep the broader hidden-dtype change separate.
+        from pathlib import Path
+        from .llama_tensor_storage import (
+            SOURCE_KEY, AUDIT_KEY, derive_llama_tensor_storage_contract,
+            apply_llama_tensor_storage_contract,
+        )
+        if SOURCE_KEY not in lowered.workload.metadata:
+            source_root = Path(__file__).resolve().parents[2] / "source/llama.cpp-semantic"
+            try:
+                storage_contract = derive_llama_tensor_storage_contract(source_root)
+            except (OSError, ValueError) as exc:
+                lowered = replace(lowered, workload=replace(lowered.workload, metadata={
+                    **lowered.workload.metadata, AUDIT_KEY: {
+                        "status": "unsupported", "qualified": False,
+                        "reasons": ["preset_source_rules_unavailable"], "detail": str(exc),
+                    }}))
+            else:
+                lowered = apply_llama_tensor_storage_contract(
+                    lowered, storage_contract, f32_hidden_storage=False)
     if materialize_placement:
         placement_policy = PlacementPolicy(
             gpu_loadable_layers=options["gpu_loadable_layers"],

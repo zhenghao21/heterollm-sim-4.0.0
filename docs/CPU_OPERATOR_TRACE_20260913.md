@@ -1,5 +1,7 @@
 # CPU operator wall-time trace
 
+> 本文命令依赖本机忽略的 `source/llama.cpp-semantic` checkout；该目录不在 Git 包内，需先恢复匹配源码和构建产物。
+
 项目37的 semantic direct binary 支持一个默认关闭的 CPU graph operator trace。设置
 `GGML_CPU_OPERATOR_TRACE=1` 后，`ggml-cpu.c` 在每个可执行 graph node 的现有
 node barrier 范围内，由 worker 0 输出一条 `CPU_PERF|...` 记录。记录包含操作名、节点名、

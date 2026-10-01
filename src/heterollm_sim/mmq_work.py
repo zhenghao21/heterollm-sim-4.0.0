@@ -82,6 +82,9 @@ class MMQWork:
     partial_writer_count: int
     fixup_tile_indices: tuple[int, ...]
     fixup_valid_elements: int
+    # Optional loaded CUDA binary identity.  Older source-only callers leave
+    # this empty; calibrated MMQ callers must bind it before using a surface.
+    runtime_binary_sha256: str = ""
 
     @property
     def conversion_read_bytes(self) -> int:
@@ -180,6 +183,12 @@ class MMQWork:
     def to_metadata(self) -> dict[str, object]:
         source_threads = self.m * self.k_padded // 4
         summed_layout = self.conversion_layout == "DS4"
+        # Stage signatures are source-specialization identities, not timing
+        # claims.  Keep them beside the main work ledger so callers cannot
+        # accidentally merge repack/fixup into ``mul_mat_q``.
+        from .mmq_level2_surfaces import mmq_stage_dispatch_signature
+        conversion_signature = mmq_stage_dispatch_signature("activation_repack", self)
+        fixup_signature = mmq_stage_dispatch_signature("stream_k_fixup", self)
         return {
             "model": "fixed_source_mmq_work/v1",
             "backend_commit": "0f3a71be15af836d277c9f918adfafb45732677e",
@@ -187,6 +196,10 @@ class MMQWork:
             "k": self.k,
             "n": self.n,
             "weight_format": self.weight_format,
+            "runtime_binary_sha256": self.runtime_binary_sha256,
+            "activation_repack_dispatch_signature": conversion_signature,
+            "stream_k_fixup_dispatch_signature": fixup_signature,
+            "stage_surface_policy": "independent_device_interval_and_holdout_required_fail_closed",
             "sm_count": self.sm_count,
             "shared_memory_per_block": self.shared_memory_per_block,
             "i": self.i,
@@ -272,6 +285,7 @@ def derive_mmq_work(
     weight_format: str,
     sm_count: int,
     shared_memory_per_block: int,
+    runtime_binary_sha256: str = "",
 ) -> MMQWork:
     """Derive the fixed-source MMQ work or reject an uncovered call exactly."""
     m = _positive_int("m", m)
@@ -281,6 +295,13 @@ def derive_mmq_work(
     shared_memory_per_block = _positive_int(
         "shared_memory_per_block", shared_memory_per_block
     )
+    if not isinstance(runtime_binary_sha256, str):
+        raise ValueError("runtime_binary_sha256 must be text")
+    if runtime_binary_sha256 and (
+        len(runtime_binary_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in runtime_binary_sha256)
+    ):
+        raise ValueError("runtime_binary_sha256 must be lowercase SHA-256 or empty")
     if not isinstance(weight_format, str) or not weight_format.strip():
         raise ValueError("weight_format must be non-empty text")
     weight_format = weight_format.strip().upper()
@@ -371,6 +392,7 @@ def derive_mmq_work(
         stream_k_boundaries_qblocks=boundaries,
         partial_writer_count=len(partial_tiles), fixup_tile_indices=fixup_tiles,
         fixup_valid_elements=valid_elements,
+        runtime_binary_sha256=runtime_binary_sha256,
     )
 
 

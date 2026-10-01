@@ -9,6 +9,8 @@ units, so the resulting trace is deterministic and straightforward to audit.
 
 from __future__ import annotations
 
+from .kernel_memory import bind_l2_invocation
+
 from collections import Counter, OrderedDict
 from collections.abc import Mapping as _ABCMapping, Sequence as _ABCSequence
 from dataclasses import dataclass, field, replace
@@ -563,7 +565,7 @@ class _ExecutionStageReplayLayout:
                         demands=task.demands,
                         earliest_start_ns=0.0,
                         metadata={
-                            **dict(task.metadata),
+                            **bind_l2_invocation(task.metadata, namespace),
                             "execution_stage_id": stage.stage_id,
                         },
                     )
@@ -646,7 +648,7 @@ class _ExecutionStageReplayLayout:
                     demands=task.demands,
                     earliest_start_ns=ready_by_stage[stage.stage_id],
                     metadata={
-                        **dict(task.metadata),
+                        **bind_l2_invocation(task.metadata, namespace),
                         "execution_stage_id": stage.stage_id,
                     },
                 )
@@ -728,7 +730,7 @@ class _ExecutionStageReplayLayout:
             )
             object.__setattr__(spec, "marker", None)
             object.__setattr__(spec, "token_index", None)
-            object.__setattr__(spec, "metadata", task.metadata)
+            object.__setattr__(spec, "metadata", bind_l2_invocation(task.metadata, namespace))
             specs.append(spec)
         return tuple(specs)
 
@@ -2911,16 +2913,7 @@ class _KVLedger:
                 return False
             if pages == request.kv_pages:
                 return True
-            # ``resize_detailed`` is atomic and does not mutate on failure;
-            # use the real allocator for all page-owner decisions.
-            result = self.paged_pool.resize_detailed(
-                request.spec.request_id, pages
-            )
-            if result.success:
-                # Undo the probe immediately.  A subsequent resize performs
-                # the actual allocation; this preserves the legacy can_* API.
-                self.paged_pool.resize(request.spec.request_id, request.kv_pages)
-            return result.success
+            return self.paged_pool.can_resize(request.spec.request_id, pages)
         delta_bytes = (pages - request.kv_pages) * self.policy.bytes_per_page
         return (
             self.used_pages + pages - request.kv_pages <= self.policy.capacity_pages
@@ -12294,7 +12287,7 @@ class _OnlineRuntime:
                         demands=task.demands,
                         earliest_start_ns=ready_by_stage[stage.stage_id],
                         metadata={
-                            **dict(task.metadata),
+                            **bind_l2_invocation(task.metadata, namespace),
                             "execution_stage_id": stage.stage_id,
                         },
                     )
@@ -12376,7 +12369,8 @@ class _OnlineRuntime:
         # The array shortcut is keyed by logical resource IDs. Explicit
         # shared owners use the unified kernel until this optimization has an
         # owner-aware structural key and parity proof.
-        if kernel.has_active_tasks or kernel.resource_owners:
+        if (kernel.has_active_tasks or kernel.resource_owners
+                or any("stateful_l2" in task.metadata for stage in stages for task in stage.execution_tasks)):
             return None
         layout = replay_layout.compiled
         task_count = layout.task_count

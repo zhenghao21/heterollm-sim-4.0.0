@@ -161,7 +161,7 @@ class MMVQWork:
 
 
 def derive_mmvq_work(*, m: int, k: int, n: int, weight_format: str,
-                     contract: MMVQSourceContract, allow_k_formats: bool = False) -> MMVQWork:
+                     contract: MMVQSourceContract, allow_k_formats: bool = False, allow_iq4_xs: bool = False) -> MMVQWork:
     """Derive exact source launch geometry, not GPU performance.
 
     Default Q5_0/Q8_0 generic CC1200 dispatch accepts M<=8; explicit
@@ -180,7 +180,12 @@ def derive_mmvq_work(*, m: int, k: int, n: int, weight_format: str,
     parameters = {'Q5_0': (32, 4, 2, 22, 8), 'Q8_0': (32, 8, 2, 34, 8)}
     if allow_k_formats:
         # Generic CC1200 launch table, ggml-common QI/QR and vecdotq VDR.
-        parameters.update(Q4_K=(256, 32, 2, 144, 5), Q6_K=(256, 32, 1, 210, 7))
+        parameters.update(Q4_K=(256, 32, 2, 144, 5), Q5_K=(256, 32, 2, 176, 6), Q6_K=(256, 32, 1, 210, 7))
+    if type(allow_iq4_xs) is not bool:
+        raise UnsupportedMMVQ('IQ4_XS geometry requires explicit boolean opt-in')
+    if allow_iq4_xs:
+        # Locked common.h QK=256, QI=32, block=136; vecdotq VDR=4.
+        parameters['IQ4_XS'] = (256, 32, 4, 136, 8)
     if not isinstance(weight_format, str) or weight_format not in parameters:
         raise UnsupportedMMVQ('format outside explicitly enabled MMVQ geometry scope')
     qk, qi, vdr, block_bytes, max_m = parameters[weight_format]

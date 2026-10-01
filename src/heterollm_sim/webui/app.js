@@ -14872,6 +14872,14 @@ function setLlamaRuntimeMode(mode, scenario = state.scenario) {
   if (mode === "llama_cpp") scenario.profiles.llama_cpp = { ...llamaRuntimeDefaults(scenario), ...asObject(scenario.profiles.llama_cpp) };
   else delete scenario.profiles.llama_cpp;
   clearLlamaRuntimeExposure(scenario);
+  scenario.workload = asObject(scenario.workload);
+  scenario.workload.metadata = asObject(scenario.workload.metadata);
+  if (mode === "llama_cpp" && asArray(scenario.hardware?.components).some(
+    (c) => c.metadata?.component_preset_id === "nvidia-rtx-5080")) {
+    scenario.workload.metadata.llama_cpp_kernel_model_preset = "blackwell_analytical_v1";
+  } else {
+    delete scenario.workload.metadata.llama_cpp_kernel_model_preset;
+  }
   return true;
 }
 

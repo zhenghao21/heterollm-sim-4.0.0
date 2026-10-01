@@ -88,3 +88,42 @@ def test_paged_pool_uses_multiple_physical_components_without_summing_pages():
     assert set(plan.kv_policy.capacity_bytes_by_component) == {"hbm0", "hbm1"}
     assert result.kv_metrics.layout_mode == "paged_pool"
     assert result.kv_metrics.peak_used_pages > 0
+
+def test_online_paged_capacity_probes_preserve_live_allocation(monkeypatch):
+    from copy import deepcopy
+    from heterollm_sim.kv_pool import DynamicKVPool
+    original = DynamicKVPool.can_resize
+    probes = []
+
+    def checked(pool, request_id, pages):
+        before = deepcopy((pool._pages, pool._requests, pool._bindings,
+                           pool._owned_bytes, pool._page_counter, pool._clock,
+                           dict(pool.ledger.used_bytes)))
+        result = original(pool, request_id, pages)
+        after = (pool._pages, pool._requests, pool._bindings,
+                 pool._owned_bytes, pool._page_counter, pool._clock,
+                 dict(pool.ledger.used_bytes))
+        assert before == after
+        probes.append((request_id, pages))
+        return result
+
+    monkeypatch.setattr(DynamicKVPool, 'can_resize', checked)
+    from heterollm_sim.serving import _KVLedger
+    original_resize = _KVLedger.resize
+
+    def resize_with_probe(ledger, request, pages):
+        # Exercise the ledger's public capacity-check path with actual online
+        # requests; this scheduler may otherwise call resize directly.
+        ledger.can_resize(request, pages)
+        return original_resize(ledger, request, pages)
+
+    monkeypatch.setattr(_KVLedger, 'resize', resize_with_probe)
+    scenario = build_reference_scenario()
+    scenario = replace(scenario, placement=replace(
+        scenario.placement, kv_policy=replace(
+            scenario.placement.kv_policy, layout_mode='paged_pool',
+            pool_components=('hbm0', 'hbm1'), cache_component='hbm0',
+            offload_component=None, tokens_per_page=4)))
+    result = simulate_online(scenario)
+    assert result.kv_metrics.peak_used_pages > 0
+    assert probes, 'online admission must use the non-mutating pool probe'

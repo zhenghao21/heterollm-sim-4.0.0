@@ -67,7 +67,7 @@ remote_flash短case会显式将batch至少设2以制造压力，实际workload�
 最小检查：
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_memory_tier_validation.py -q
+.venv\Scripts\python.exe -m pytest tests/test_memory_tier_integration.py tests/test_memory_tier_placement.py -q
 ```
 
 ## 后续硬件校准
