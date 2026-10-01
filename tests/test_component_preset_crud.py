@@ -4,6 +4,7 @@ import threading
 import tempfile
 import unittest
 
+from heterollm_sim.component_presets import ComponentPresetCatalog
 from heterollm_sim.web import build_server
 
 
@@ -85,6 +86,52 @@ class ComponentPresetCrudApiTests(unittest.TestCase):
         status, payload = self.request("POST", "/api/component-presets", {})
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"]["code"], "missing_component")
+
+    def test_separate_catalog_instances_merge_persistent_overrides(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = ComponentPresetCatalog(directory)
+            second = ComponentPresetCatalog(directory)
+            for preset_id, component_id, catalog in (
+                ("catalog-race-a", "race-a", first),
+                ("catalog-race-b", "race-b", second),
+            ):
+                catalog.create({
+                    "id": preset_id,
+                    "name": preset_id,
+                    "family": "Catalog race",
+                    "component": {
+                        "component_id": component_id,
+                        "kind": "hbm",
+                        "capacity_bytes": 1024,
+                        "ports": [],
+                    },
+                })
+            persisted = ComponentPresetCatalog(directory)
+            self.assertGreaterEqual(
+                set(persisted.overrides), {"catalog-race-a", "catalog-race-b"}
+            )
+
+    def test_failed_reload_does_not_clear_published_catalog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = ComponentPresetCatalog(directory)
+            catalog.create({
+                "id": "catalog-reload-good",
+                "name": "catalog-reload-good",
+                "family": "Reload test",
+                "component": {
+                    "component_id": "reload-good",
+                    "kind": "hbm",
+                    "capacity_bytes": 1024,
+                    "ports": [],
+                },
+            })
+            catalog.path.write_text("{invalid", encoding="utf-8")
+            with self.assertRaises(json.JSONDecodeError):
+                catalog.create({})
+            self.assertEqual(
+                catalog.detail("catalog-reload-good")["preset"]["id"],
+                "catalog-reload-good",
+            )
 
     def test_gpu_preset_drops_external_memory_fields(self):
         preset_id = "crud-gpu-component"

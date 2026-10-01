@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_011",
+  "candidate_id": "C11_COMPONENT_PRESET_CROSS_INSTANCE_SAVE",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "engineering mechanism candidate; no target latency prediction"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "persistence and lock conservation oracle; no native timing truth opened"
+  },
+  "mechanism_status": "passed",
+  "accuracy_status": "not_evaluated",
+  "generalization_status": "limited_to_shared_component_preset_cache_directories_on_supported_os_locks",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_011/component_preset_cross_instance_reproduction.json",
+  "result": "The candidate prevents stale complete snapshots from dropping successful component-preset mutations, serializes independent Windows writers, reloads current disk state under the lock, and preserves the last published in-memory state when a reload fails.",
+  "limitations": [
+    "The test and process evidence cover component-preset persistence, not every filesystem or network filesystem locking implementation",
+    "The module uses a single lock per cache file; high-contention throughput was not optimized",
+    "No native accuracy, latency, or deployment claim"
+  ]
+}

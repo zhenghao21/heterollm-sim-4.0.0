@@ -8,12 +8,14 @@ component to the current topology and connect it explicitly when appropriate.
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import re
 import json
 import os
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
@@ -61,6 +63,48 @@ _DEFAULT_COST_PROFILE_IDS: Mapping[str, str] = {
     "host_memory": "legacy-host-memory",
     "cim": "legacy-cim",
 }
+
+_CATALOG_PROCESS_LOCK = threading.RLock()
+_CATALOG_FILE_LOCK_TIMEOUT_S = 10.0
+
+
+@contextmanager
+def _catalog_file_lock(path: Path):
+    """Serialize catalog mutations across instances and processes."""
+
+    with _CATALOG_PROCESS_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = path.with_name(path.name + ".lock")
+        with lock_path.open("a+b") as handle:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                deadline = time.monotonic() + _CATALOG_FILE_LOCK_TIMEOUT_S
+                while True:
+                    try:
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError("组件预设目录锁定超时")
+                        time.sleep(0.01)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _default_cost_profile_id(kind: str) -> Optional[str]:
@@ -3329,17 +3373,23 @@ class ComponentPresetCatalog:
         self._lock = threading.RLock()
         self.overrides: Dict[str, ComponentPresetDefinition] = {}
         self.removed = set()
+        self._load_persisted()
+
+    def _load_persisted(self):
+        overrides: Dict[str, ComponentPresetDefinition] = {}
+        removed = set()
         if self.path.exists():
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict) or raw.get("version") != 1:
                 raise ValueError("硬件预设目录版本无效：{}".format(self.path))
-            self.overrides = {
+            overrides = {
                 item.preset_id: item for item in (
                     _definition_from_mutation(value)
                     for value in _mutation_list(raw.get("presets", []), "presets")
                 )
             }
-            self.removed = set(_mutation_list(raw.get("removed", []), "removed"))
+            removed = set(_mutation_list(raw.get("removed", []), "removed"))
+        self.overrides, self.removed = overrides, removed
 
     def _save(self, overrides, removed):
         records = [{
@@ -3382,28 +3432,34 @@ class ComponentPresetCatalog:
 
     def create(self, payload):
         with self._lock:
-            definition = _definition_from_mutation(payload)
-            if definition.preset_id in _BY_ID or definition.preset_id in self.overrides:
-                raise ComponentPresetMutationError("already_exists", "组件预设 ID 已存在：{}".format(definition.preset_id), status=409)
-            self._save({**self.overrides, definition.preset_id: definition}, self.removed - {definition.preset_id})
-            return _component_definition_detail(definition)
+            with _catalog_file_lock(self.path):
+                self._load_persisted()
+                definition = _definition_from_mutation(payload)
+                if definition.preset_id in _BY_ID or definition.preset_id in self.overrides:
+                    raise ComponentPresetMutationError("already_exists", "组件预设 ID 已存在：{}".format(definition.preset_id), status=409)
+                self._save({**self.overrides, definition.preset_id: definition}, self.removed - {definition.preset_id})
+                return _component_definition_detail(definition)
 
     def update(self, preset_id, payload):
         with self._lock:
-            current = self._get(preset_id)
-            if not isinstance(current, ComponentPresetDefinition):
-                raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持编辑")
-            definition = _definition_from_mutation(payload, existing=current)
-            if definition.preset_id != preset_id:
-                raise ComponentPresetMutationError("id_change_not_allowed", "编辑时不允许修改预设 ID")
-            self._save({**self.overrides, preset_id: definition}, self.removed - {preset_id})
-            return _component_definition_detail(definition)
+            with _catalog_file_lock(self.path):
+                self._load_persisted()
+                current = self._get(preset_id)
+                if not isinstance(current, ComponentPresetDefinition):
+                    raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持编辑")
+                definition = _definition_from_mutation(payload, existing=current)
+                if definition.preset_id != preset_id:
+                    raise ComponentPresetMutationError("id_change_not_allowed", "编辑时不允许修改预设 ID")
+                self._save({**self.overrides, preset_id: definition}, self.removed - {preset_id})
+                return _component_definition_detail(definition)
 
     def delete(self, preset_id):
         with self._lock:
-            if not isinstance(self._get(preset_id), ComponentPresetDefinition):
-                raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持删除")
-            self._save({key: value for key, value in self.overrides.items() if key != preset_id}, self.removed | {preset_id})
+            with _catalog_file_lock(self.path):
+                self._load_persisted()
+                if not isinstance(self._get(preset_id), ComponentPresetDefinition):
+                    raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持删除")
+                self._save({key: value for key, value in self.overrides.items() if key != preset_id}, self.removed | {preset_id})
 
 
 __all__ = [

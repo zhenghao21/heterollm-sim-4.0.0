@@ -1,0 +1,53 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_011",
+  "status": "review",
+  "purpose": "mechanism_fidelity",
+  "primary_goal": "preserve all successful component-preset mutations when catalog instances or processes share one cache directory",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "4491d92862f6a5fd9a0573aab156b8dc258edb8d",
+    "role": "current engineering baseline after round_010"
+  },
+  "hypothesis_id": "H11_COMPONENT_PRESET_CROSS_INSTANCE_SAVE",
+  "scope": {
+    "operator": "ComponentPresetCatalog create/update/delete persistence",
+    "phase": "shared-directory mutation and reload",
+    "trigger": "two long-lived catalog instances or processes write different mutations to one presets.json"
+  },
+  "data_roles": {
+    "development": "deterministic stale-instance and malformed-reload reproductions",
+    "comparison": "fresh-catalog persisted IDs and lock-blocking behavior",
+    "holdout": "independent Windows-process simultaneous writers and lock contention",
+    "final_acceptance": "not started"
+  },
+  "metrics": [
+    "no_lost_successful_updates",
+    "cross_process_mutual_exclusion",
+    "reload_failure_state_preservation",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 1
+  },
+  "guardrails": [
+    "keep atomic replace for durable writes",
+    "reload the latest persisted state before each mutation",
+    "do not change bundled preset definitions or API validation semantics",
+    "do not claim native timing or accuracy improvement",
+    "run clean .venv full suite before promotion"
+  ],
+  "next_step": "review shared-directory update/delete contention and lock timeout behavior",
+  "selected_candidate": "C11_COMPONENT_PRESET_CROSS_INSTANCE_SAVE",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 1,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 1
+  }
+}

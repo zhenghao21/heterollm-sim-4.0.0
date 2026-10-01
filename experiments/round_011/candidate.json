@@ -1,0 +1,46 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_011",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H11_COMPONENT_PRESET_CROSS_INSTANCE_SAVE",
+    "claim": "A shared component-preset cache needs cross-instance/process serialization and lock-held reload; otherwise successful mutations can overwrite one another through stale complete snapshots.",
+    "trigger": "two catalogs are constructed before either create, or two independent processes create different IDs concurrently",
+    "expected_baseline": "both mutations return success but a fresh catalog can contain only one ID",
+    "expected_candidate": "both IDs survive reload; lock contention blocks the writer; malformed reload does not clear the last published in-memory state",
+    "falsifier": "any successful shared-directory mutation is lost, a writer bypasses an owned lock, or a failed reload clears a previously published definition"
+  },
+  "parent_commit": "4491d92862f6a5fd9a0573aab156b8dc258edb8d",
+  "changed_files": [
+    "src/heterollm_sim/component_presets.py",
+    "tests/test_component_preset_crud.py"
+  ],
+  "implementation": [
+    "serialize catalog mutations with an in-process RLock plus a stable OS lock file",
+    "reload presets.json after acquiring the lock and before validation/mutation",
+    "publish parsed reload state only after the entire file has been validated",
+    "retain atomic temporary-file write and os.replace"
+  ],
+  "activation_checks": [
+    "stale-instance reproduction lost one successful ID before the change",
+    "two independent Windows processes read back both simultaneous IDs after the change",
+    "lock holder blocked a writer until release",
+    "malformed reload preserved the previous published catalog state"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_component_preset_crud.py tests/test_component_presets.py",
+      "result": "10 passed in 2.15s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "3019 passed, 4 skipped in 807.15s; exit code 0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "independent_evidence": "artifacts/optimization/round_011/process_lock_check.json",
+  "candidate_source_sha256": "64b495a671ee81df9e26de0b7c84ecbff285fac75fdf545163ec19374cdb6f16"
+}
