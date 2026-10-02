@@ -1,0 +1,54 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_018",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H18_SWAP_TRANSFER_ROUTE_FAILURE_ATOMICITY",
+    "claim": "Swap transfer route/cost must be validated before ledger.offload or ledger.restore changes request ownership.",
+    "trigger": "real ScenarioConfig with KV/linear-state offload target hbf0 and all hbf0 hardware links removed",
+    "expected_baseline": "route lowering raises after ledger mutation, leaving RUNNING request with no active KV and phantom offload bytes",
+    "observed": "baseline mutation reproduced; candidate preflights both directions before mutation and preserves all state on ValueError",
+    "falsifier": "missing-route preemption changes any request/ledger/event state, or successful swap timing/events regress"
+  },
+  "parent_commit": "fbc4a44dcf32001d87eac7c3433ac3094204f3ac",
+  "changed_files": [
+    "src/heterollm_sim/serving.py",
+    "tests/test_memory_tier_placement.py"
+  ],
+  "activation_checks": [
+    "real hybrid ScenarioConfig with KV and linear-state swap was compiled without route validation",
+    "baseline _preempt raised no communication route after offload mutation",
+    "candidate lowered KV/state swap-out costs before offload",
+    "candidate lowered KV/state swap-in costs before restore mutation",
+    "failed-route regression found request, physical ledger, both offload ledgers, events and batches unchanged"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_memory_tier_placement.py tests/test_kv_layout_contract.py",
+      "result": "56 passed in 2.25s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "3026 passed, 4 skipped in 434.27s (0:07:14); exit code 0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "independent_evidence": "artifacts/optimization/round_018/runtime_discovery.json",
+  "deferred_candidates": [
+    {
+      "id": "H18_KV_LAYER_SHARD_REMAINDER",
+      "status": "rejected_unreachable",
+      "evidence": "artifacts/optimization/round_018/planner_discovery.json",
+      "reason": "static layer mapping currently forces a single owner component; the multi-rank split branch is not reachable from a valid compiled ScenarioConfig"
+    },
+    {
+      "id": "H18_STATIC_KV_REPORT_LEGACY_COMPONENT_USAGE",
+      "status": "candidate_for_followup",
+      "evidence": "artifacts/optimization/round_018/planner_discovery.json",
+      "reason": "independent reporting/UI contract gap, deferred to avoid combining a separate root cause with swap transaction repair"
+    }
+  ]
+}

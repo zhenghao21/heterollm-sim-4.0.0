@@ -10680,6 +10680,10 @@ class _OnlineRuntime:
                     state.spec.prompt_tokens, state.spec.output_tokens
                 )
             )
+        kv_transfer_cost: Optional[BatchCost] = None
+        state_transfer_cost: Optional[BatchCost] = None
+        if swapped_pages > 0 and byte_count <= 0:
+            raise ValueError("swapped KV pages are missing transfer bytes")
         # Keep offloaded KV in the host ledger until the transfer cohort has
         # completed.  ``can_restore`` checks the net move, so active and spill
         # storage may share one physical component without a transient double
@@ -10737,6 +10741,22 @@ class _OnlineRuntime:
                 return False
         elif not self._reserve_with_pressure(state, target_pages):
             return False
+        if byte_count > 0:
+            source = self.plan.kv_policy.offload_component
+            target = self.plan.kv_policy.cache_component
+            if not source or not target:
+                raise ValueError("swapped KV state is missing a valid transfer")
+            kv_transfer_cost = self._lower_swap_transfer_cost(
+                state, "kv_swap_in", source, target, byte_count, swapped_pages
+            )
+        if state_byte_count > 0:
+            source = self.plan.linear_state_policy.offload_component
+            target = self.plan.linear_state_policy.cache_component
+            if not source or not target:
+                raise ValueError("swapped linear state is missing a valid transfer")
+            state_transfer_cost = self._lower_swap_transfer_cost(
+                state, "linear_state_swap_in", source, target, state_byte_count
+            )
         if not self.state_ledger.restore(state):
             if not kv_restore_pending:
                 self.ledger.resize(state, 0)
@@ -10761,6 +10781,7 @@ class _OnlineRuntime:
                 target,
                 byte_count,
                 swapped_pages,
+                cost=kv_transfer_cost,
             )
             if not self.ledger.restore(state, target_pages):
                 raise RuntimeError("failed to restore KV state after transfer")
@@ -10798,6 +10819,7 @@ class _OnlineRuntime:
                 state_source,
                 state_target,
                 state_byte_count,
+                cost=state_transfer_cost,
             )
             self.linear_state_swap_in_bytes += state_byte_count
             self.events.append(
@@ -11359,7 +11381,36 @@ class _OnlineRuntime:
             # unavailable.
             return False
         swapped = False
+        kv_transfer_cost: Optional[BatchCost] = None
+        state_transfer_cost: Optional[BatchCost] = None
         if use_swap:
+            if kv_swap_bytes > 0:
+                source = self.plan.kv_policy.cache_component
+                target = self.plan.kv_policy.offload_component
+                if not source or not target:
+                    raise ValueError("KV swap requires cache and offload components")
+                kv_transfer_cost = self._lower_swap_transfer_cost(
+                    state,
+                    "kv_swap_out",
+                    source,
+                    target,
+                    kv_swap_bytes,
+                    state.kv_pages,
+                )
+            if state_swap_bytes > 0:
+                source = state_policy.cache_component
+                target = state_policy.offload_component
+                if not source or not target:
+                    raise ValueError(
+                        "linear state swap requires cache and offload components"
+                    )
+                state_transfer_cost = self._lower_swap_transfer_cost(
+                    state,
+                    "linear_state_swap_out",
+                    source,
+                    target,
+                    state_swap_bytes,
+                )
             kv_offloaded = self.ledger.offload(state)
             state_offloaded = kv_offloaded and self.state_ledger.offload(state)
             swapped = kv_offloaded and state_offloaded
@@ -11404,6 +11455,7 @@ class _OnlineRuntime:
                     target,
                     byte_count,
                     swapped_pages,
+                    cost=kv_transfer_cost,
                 )
                 event = "kv_swap_out"
             else:
@@ -11431,6 +11483,7 @@ class _OnlineRuntime:
                     state_source,
                     state_target,
                     state_byte_count,
+                    cost=state_transfer_cost,
                 )
                 if byte_count > 0:
                     self.events.append(
@@ -11477,7 +11530,7 @@ class _OnlineRuntime:
         self.events.append(ServingEvent(self.now, "request_preempted", state.spec.request_id, details={"reason": reason, "strategy": state.preemption_strategy}))
         return True
 
-    def _execute_swap_transfer(
+    def _swap_transfer_cohort(
         self,
         state: _MutableRequest,
         kind: str,
@@ -11485,16 +11538,15 @@ class _OnlineRuntime:
         target_component: str,
         byte_count: int,
         page_count: int = 0,
-    ) -> None:
-        cohort_id = "cohort-{:06d}".format(len(self.batches))
+    ) -> BatchCohort:
         item = BatchItem(
             request_id=state.spec.request_id,
             phase=kind,
             token_count=0,
             context_tokens=state.cached_tokens,
         )
-        cohort = BatchCohort(
-            cohort_id=cohort_id,
+        return BatchCohort(
+            cohort_id="cohort-{:06d}".format(len(self.batches)),
             kind=kind,
             start_ns=self.now,
             items=(item,),
@@ -11505,7 +11557,51 @@ class _OnlineRuntime:
                 "page_count": page_count,
             },
         )
-        cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+
+    def _lower_swap_transfer_cost(
+        self,
+        state: _MutableRequest,
+        kind: str,
+        source_component: str,
+        target_component: str,
+        byte_count: int,
+        page_count: int = 0,
+    ) -> BatchCost:
+        """Validate and price a swap route before mutating any ledger."""
+
+        return _lower_cost(
+            self.lowerer,
+            self.plan.scenario,
+            self._swap_transfer_cohort(
+                state,
+                kind,
+                source_component,
+                target_component,
+                byte_count,
+                page_count,
+            ),
+        )
+
+    def _execute_swap_transfer(
+        self,
+        state: _MutableRequest,
+        kind: str,
+        source_component: str,
+        target_component: str,
+        byte_count: int,
+        page_count: int = 0,
+        cost: Optional[BatchCost] = None,
+    ) -> None:
+        cohort = self._swap_transfer_cohort(
+            state,
+            kind,
+            source_component,
+            target_component,
+            byte_count,
+            page_count,
+        )
+        cohort_id = cohort.cohort_id
+        cost = cost or _lower_cost(self.lowerer, self.plan.scenario, cohort)
         end_ns = self.now + cost.duration_ns
         self.events.append(
             ServingEvent(

@@ -13,10 +13,15 @@ from heterollm_sim.control_plane_state import mapping_fingerprint_status
 from heterollm_sim.cost_models import HBMProfile, HostMemoryProfile
 from heterollm_sim.ir import ComponentSpec, LayerSpec, LinearAttentionSpec, model_graph_execution_view
 from heterollm_sim.parallel import build_parallel_plan
-from heterollm_sim.planner import _kv_components, _linear_state_components
+from heterollm_sim.planner import (
+    TopologyAwareBatchCostProvider,
+    _kv_components,
+    _linear_state_components,
+)
 from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.serving import (
-    _KVLedger, _LinearStateLedger, _PhysicalCapacityLedger, _physical_runtime_limits,
+    _KVLedger, _LinearStateLedger, _OnlineRuntime, _PhysicalCapacityLedger,
+    RequestStatus, _physical_runtime_limits,
     _kv_bytes_per_token, _linear_state_bytes_per_request,
     compile_serving_plan, simulate_online,
 )
@@ -353,6 +358,65 @@ def test_generated_linear_state_offload_reuses_real_swap_ledger():
     ledger.release(request)
     assert all(n == 0 for n in physical.used_bytes.values())
     assert ledger.offload_events == ledger.restore_events == 1
+
+
+def test_swap_route_failure_leaves_request_and_ledgers_unchanged():
+    scenario = _scenario(mode="remote_flash", hybrid=True)
+    scenario = replace(scenario, placement=replace(
+        scenario.placement,
+        kv_policy=replace(
+            scenario.placement.kv_policy,
+            offload_component="hbf0",
+            preemption_mode="swap",
+        ),
+    ))
+    mapped = _solve(
+        scenario,
+        linear_state_target="hbm0",
+        linear_state_offload_target="hbf0",
+    )
+    mapped = replace(mapped, hardware=replace(
+        mapped.hardware,
+        links=tuple(
+            link for link in mapped.hardware.links
+            if "hbf0" not in (link.source_component, link.target_component)
+        ),
+    ))
+    plan = compile_serving_plan(mapped)
+    runtime = _OnlineRuntime(plan, TopologyAwareBatchCostProvider(mapped))
+    state = next(iter(runtime.states.values()))
+    runtime._set_status(state, RequestStatus.RUNNING)
+    assert runtime.ledger.resize(state, 2)
+    assert runtime.state_ledger.allocate(state)
+    before = (
+        state.status,
+        state.kv_pages,
+        state.swapped_pages,
+        state.swap_bytes,
+        state.linear_state_resident,
+        state.linear_state_swapped_bytes,
+        runtime.ledger.offload_used_bytes,
+        runtime.state_ledger.offload_used_bytes,
+        dict(runtime.physical_ledger.used_bytes),
+        len(runtime.events),
+        len(runtime.batches),
+    )
+    with pytest.raises(ValueError, match="no communication route"):
+        runtime._preempt(state, "missing_route")
+    after = (
+        state.status,
+        state.kv_pages,
+        state.swapped_pages,
+        state.swap_bytes,
+        state.linear_state_resident,
+        state.linear_state_swapped_bytes,
+        runtime.ledger.offload_used_bytes,
+        runtime.state_ledger.offload_used_bytes,
+        dict(runtime.physical_ledger.used_bytes),
+        len(runtime.events),
+        len(runtime.batches),
+    )
+    assert after == before
 
 
 @pytest.mark.parametrize("change", ["zero", "small", "read_only", "missing", "same", "no_state", "partition", "no_route"])
