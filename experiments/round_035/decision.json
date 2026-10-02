@@ -31,8 +31,8 @@
   "publication": {
     "source_commit": "a464b191ee9cf8a5fa0f5ad8fe9903d4d30f7201",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H35 negative records"
+    "verified_remote_sha": "117aa8e8a432e3dc02a3d519344bec37d12f70a9",
+    "verification": "git push origin main exit 0; H35 negative records publication commit 117aa8e8a432e3dc02a3d519344bec37d12f70a9 matched git ls-remote before final metadata update"
   },
   "process_learning": "评估负向扫描必须同时检查 partial/empty/failure 状态和 API/UI 序列化，不能只看 happy path。",
   "source_identity": {
