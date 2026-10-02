@@ -19,5 +19,11 @@
   "result": "pending",
   "limitations": [
     "H26 尚未完成 NAND source scan 或源码修改。"
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_026/nand_design_scan.json",
+      "sha256": "e80a4aa68b71cbdbd55708bb788893319f9498a385af637c75ac79ce902b164d"
+    }
   ]
 }

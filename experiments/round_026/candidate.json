@@ -33,7 +33,7 @@
   "final_evidence_hashes": [
     {
       "path": "artifacts/optimization/round_026/nand_design_scan.json",
-      "sha256": "693ee2c8e4eebf14cc55a98452fadb91b1a5f2c9e928e75aa072a9b99c349eeb"
+      "sha256": "e80a4aa68b71cbdbd55708bb788893319f9498a385af637c75ac79ce902b164d"
     }
   ]
 }
