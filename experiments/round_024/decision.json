@@ -36,10 +36,10 @@
     "status": "registered_for_next_round"
   },
   "publication": {
-    "source_commit": "36d0ebf",
+    "source_commit": "36d0ebf15be5724a4139fd54f6ba126f9f6d44a3",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "待记录提交后 push 并以 git ls-remote 校验"
+    "verified_remote_sha": "2944a0feb9947a521f214bc82caec0034a07911d",
+    "verification": "source commit 36d0ebf15be5724a4139fd54f6ba126f9f6d44a3 was frozen before records; records commit was pushed with git push origin main and git ls-remote matched 2944a0feb9947a521f214bc82caec0034a07911d"
   },
   "process_learning": "先完成一个方向的同一根因收口，再将独立运行时候选转入下一轮；DRAM/HBM 与 SSD/HBF 保持两家族而非四个独立模型。"
 }

@@ -8,7 +8,7 @@
     "baseline_artifact": "artifacts/optimization/round_024/dram_probe_baseline.json",
     "candidate_artifact": "artifacts/optimization/round_024/dram_probe_candidate.json",
     "score_artifact": "artifacts/optimization/round_024/dram_probe_score.json",
-    "source_commit": "36d0ebf",
+    "source_commit": "36d0ebf15be5724a4139fd54f6ba126f9f6d44a3",
     "observed": {
       "lane_1_endpoint_latency_service_ns": 1600.0,
       "lane_4_endpoint_latency_service_ns": 400.0,
@@ -71,5 +71,5 @@
       "sha256": "c61fa7195da87aa5798e249b50404638bd3c16768681989e2c71c06b3154510c"
     }
   ],
-  "published_source_commit": "36d0ebf"
+  "published_source_commit": "36d0ebf15be5724a4139fd54f6ba126f9f6d44a3"
 }

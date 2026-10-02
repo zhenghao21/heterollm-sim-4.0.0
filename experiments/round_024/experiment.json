@@ -73,7 +73,7 @@
   "selected_candidate": "H24_DRAM_FAMILY_PARALLEL_LANES",
   "next_step": "H24 已发布；下一轮登记 H25 运行速度与内存候选，验证 aggregate report 是否可安全走 online_summary_dict；随后再进入 NAND 家族。",
   "source_identity": {
-    "source_commit": "36d0ebf",
+    "source_commit": "36d0ebf15be5724a4139fd54f6ba126f9f6d44a3",
     "source_hashes": {
       "src/heterollm_sim/cost_models.py": "a980fcfa49724b3cb160d75302728eb0234c2f14cf6ab5d1e9e7fe3aea702377",
       "src/heterollm_sim/data_motion.py": "6d4f9626c777bd2115ab3d49fb60a800ef3fabcbf79aa7cad55f16a3737d168e",
