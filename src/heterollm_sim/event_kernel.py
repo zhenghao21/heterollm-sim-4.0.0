@@ -968,7 +968,14 @@ class UnifiedEventKernel:
         would rewrite that history and therefore fails closed.
         """
 
-        for logical_id, capacity in dict(capacities).items():
+        # Validate the complete batch before touching any live state.  Serving
+        # and streaming may declare several resources at once; a rejected
+        # later entry must not leave an earlier entry partially registered.
+        capacity_updates = dict(capacities)
+        requested_by_owner: Dict[str, int] = {}
+        for logical_id, capacity in capacity_updates.items():
+            if not isinstance(logical_id, str) or not logical_id:
+                raise ValueError("resource capacity ids must not be empty")
             resource_id = self._physical_owner(logical_id)
             if not isinstance(resource_id, str) or not resource_id:
                 raise ValueError("resource capacity ids must not be empty")
@@ -978,30 +985,48 @@ class UnifiedEventKernel:
                 or capacity <= 0
             ):
                 raise ValueError("resource capacities must be positive integers")
+            previous = requested_by_owner.get(resource_id)
+            if previous is not None and previous != capacity:
+                raise ValueError(
+                    "conflicting capacity for physical resource owner "
+                    + resource_id
+                )
+            requested_by_owner[resource_id] = capacity
+
+        staged_lanes: Dict[str, List[float]] = {}
+        for resource_id, capacity in requested_by_owner.items():
             existing = self._owner_capacities.get(resource_id)
             lanes = self._resource_lane_available.get(resource_id)
-            if existing is not None:
-                if existing != capacity:
-                    raise ValueError(
-                        "resource capacity mismatch for {}: {} != {}".format(
-                            resource_id,
-                            existing,
-                            capacity,
-                        )
+            if existing is not None and existing != capacity:
+                raise ValueError(
+                    "resource capacity mismatch for {}: {} != {}".format(
+                        resource_id,
+                        existing,
+                        capacity,
                     )
-                self.resource_capacities[logical_id] = capacity
-                continue
-            if lanes is not None:
-                if len(lanes) != capacity:
-                    raise ValueError(
-                        "cannot change capacity for used resource {}".format(
-                            resource_id
-                        )
+                )
+            if lanes is not None and len(lanes) != capacity:
+                raise ValueError(
+                    "cannot change capacity for used resource {}".format(
+                        resource_id
                     )
-            else:
-                self._resource_lane_available[resource_id] = [0.0] * capacity
-            self.resource_capacities[logical_id] = capacity
+                )
+            if existing is None and lanes is None:
+                staged_lanes[resource_id] = [0.0] * capacity
+
+        # Commit only after every owner has passed validation.  Keep every
+        # logical alias that names the owner in sync with the physical lane
+        # count, because completion reports expose logical resource IDs.
+        for resource_id, lanes in staged_lanes.items():
+            self._resource_lane_available[resource_id] = lanes
+        for resource_id, capacity in requested_by_owner.items():
             self._owner_capacities[resource_id] = capacity
+            self.resource_capacities[resource_id] = capacity
+            for logical_id, owner_id in self.resource_owners.items():
+                if owner_id == resource_id:
+                    self.resource_capacities[logical_id] = capacity
+        for logical_id, capacity in capacity_updates.items():
+            self.resource_capacities[logical_id] = capacity
 
     def _resource_ready_ns(self, resource_id: str) -> float:
         # ``resource_available`` is maintained as the earliest free lane for

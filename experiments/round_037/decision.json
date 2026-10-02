@@ -1,3 +1,36 @@
 {
-  "schema": "heterollm.optimization.decision/v1", "round_id": "round_037", "candidate_id": "H37_EXECUTION_RESOURCE_SEMANTIC_CONTRACT", "status": "pending", "decision": "pending", "reason": "Prepare registered execution/resource semantic direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_037",
+  "candidate_id": "H37_CAPACITY_UPDATE_PARTIAL_COMMIT_ALIAS_STALENESS",
+  "status": "complete",
+  "decision": "accept",
+  "reason": "独立补充扫描复现了部分提交与alias容量陈旧；候选以两阶段校验/提交同步owner、alias和physical-owner报告。触发、排除、控制和生产调用者已验证；全套回归通过。",
+  "evidence": [
+    "artifacts/optimization/round_037/supplemental_dynamic_scan.json",
+    "artifacts/optimization/round_037/candidate_dynamic_capacity_probe.json",
+    "artifacts/optimization/round_037/full_regression_result.json"
+  ],
+  "changed_files": [
+    "src/heterollm_sim/event_kernel.py",
+    "tests/test_event_kernel.py",
+    "experiments/round_037/experiment.json",
+    "experiments/round_037/candidate.json",
+    "experiments/round_037/evaluation.json",
+    "experiments/round_037/decision.json"
+  ],
+  "source_sha256": {
+    "src/heterollm_sim/event_kernel.py": "b678e3fcdd61502abdd814ebd6b88a9e15ba0c5256675f7a1139220d221c4c48",
+    "tests/test_event_kernel.py": "270380d75105fecf2a0670bf1f530eefc71dcae79534d12bf4b106924016049d"
+  },
+  "baseline_commit": "1916534cb509b976b3509ada444f1809c2328ccc",
+  "deferred_scope": [
+    "未对所有未知错误类型做全域扫描",
+    "无Native精度验收",
+    "声明容量不可漂移策略未扩展为可变容量API"
+  ],
+  "next_hypothesis": {
+    "direction": "运行速度与内存/计算成本模型",
+    "claim": "先用独立仿真wall-time与成本曲面基准寻找实际热点，避免继续只做语义扫描。",
+    "rationale": "用户指出运行速度和计算成本长期被忽略；H37已完成当前语义根因，不应在同方向制造新缺口。"
+  }
 }

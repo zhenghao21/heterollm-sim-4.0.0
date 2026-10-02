@@ -1,3 +1,35 @@
 {
-  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_037", "candidate_id": "H37_EXECUTION_RESOURCE_SEMANTIC_CONTRACT", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_037/", "result": "pending", "limitations": ["H37 尚未完成 execution/resource semantic source scan。"]
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_037",
+  "candidate_id": "H37_CAPACITY_UPDATE_PARTIAL_COMMIT_ALIAS_STALENESS",
+  "status": "complete",
+  "prediction": {
+    "status": "mechanism_verified",
+    "native_loaded": false,
+    "source_commit_before": "1916534cb509b976b3509ada444f1809c2328ccc",
+    "candidate_source_files": {
+      "src/heterollm_sim/event_kernel.py": "b678e3fcdd61502abdd814ebd6b88a9e15ba0c5256675f7a1139220d221c4c48",
+      "tests/test_event_kernel.py": "270380d75105fecf2a0670bf1f530eefc71dcae79534d12bf4b106924016049d"
+    }
+  },
+  "score": {
+    "status": "mechanism_score_only",
+    "acceptance": "原子性、owner/alias容量报告和回归保护通过；无Native精度分数",
+    "evidence": [
+      "artifacts/optimization/round_037/supplemental_dynamic_scan.json",
+      "artifacts/optimization/round_037/candidate_dynamic_capacity_probe.json",
+      "artifacts/optimization/round_037/full_regression_result.json"
+    ]
+  },
+  "mechanism_status": "fixed_and_verified",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "limited_to_owner_alias_capacity_contract",
+  "regression_status": "3073 passed, 4 skipped",
+  "comparison_artifact": "artifacts/optimization/round_037/",
+  "result": "accepted_for_development_baseline",
+  "limitations": [
+    "独立动态probe覆盖批量失败、alias_a/alias_b及physical owner；dependency/compiled仅为拒绝控制，不是全域证明。",
+    "没有Native观测，因此没有预测精度或泛化精度结论。",
+    "当前源码候选在提交前以文件SHA记录；提交后需用git核对源码身份。"
+  ]
 }

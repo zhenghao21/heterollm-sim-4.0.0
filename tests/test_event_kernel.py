@@ -738,6 +738,57 @@ class EventKernelHotLoopTests(unittest.TestCase):
             max(expected_completed_end.values(), default=0.0),
         )
 
+class DynamicResourceCapacityTests(unittest.TestCase):
+    def test_capacity_batch_rejection_is_atomic(self) -> None:
+        kernel = UnifiedEventKernel()
+        kernel.submit((task("busy", demands=(demand("busy", 1.0),)),))
+        self.assertEqual(kernel.step().task.task_id, "busy")
+        before = {
+            "capacities": dict(kernel.resource_capacities),
+            "owner_capacities": dict(kernel._owner_capacities),
+            "lanes": {
+                resource_id: list(lanes)
+                for resource_id, lanes in kernel._resource_lane_available.items()
+            },
+        }
+
+        with self.assertRaisesRegex(ValueError, "cannot change capacity for used resource busy"):
+            kernel.ensure_resource_capacities({"new": 2, "busy": 2})
+
+        self.assertEqual(dict(kernel.resource_capacities), before["capacities"])
+        self.assertEqual(dict(kernel._owner_capacities), before["owner_capacities"])
+        self.assertEqual(kernel._resource_lane_available, before["lanes"])
+        kernel.ensure_resource_capacities({"new": 2})
+        self.assertEqual(kernel.resource_capacities["new"], 2)
+
+    def test_dynamic_capacity_updates_all_alias_reports_and_completion(self) -> None:
+        kernel = UnifiedEventKernel(
+            resource_owners={
+                "alias_a": "physical",
+                "alias_b": "physical",
+            }
+        )
+        kernel.ensure_resource_capacities({"alias_a": 2})
+        self.assertEqual(kernel.resource_capacities["alias_a"], 2)
+        self.assertEqual(kernel.resource_capacities["alias_b"], 2)
+
+        kernel.submit((task("alias-task", demands=(demand("alias_b", 1.0),)),))
+        completion = kernel.step_completion()
+        self.assertIsNotNone(completion)
+        self.assertEqual(completion.resource_metrics["alias_b"]["capacity"], 2.0)
+        self.assertEqual(kernel.metrics["resource_capacities"]["alias_b"], 2)
+
+    def test_dynamic_capacity_reports_direct_owner_demands(self) -> None:
+        kernel = UnifiedEventKernel(
+            resource_owners={"alias_a": "physical", "alias_b": "physical"}
+        )
+        kernel.ensure_resource_capacities({"alias_a": 2})
+        kernel.submit((task("owner-task", demands=(demand("physical", 1.0),)),))
+        completion = kernel.step_completion()
+        self.assertIsNotNone(completion)
+        self.assertEqual(completion.resource_metrics["physical"]["capacity"], 2.0)
+        self.assertEqual(kernel.metrics["resource_capacities"]["physical"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
