@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_025",
+  "candidate_id": "H25_RUNTIME_REPORT_AGGREGATE_SERIALIZATION",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare registered a runtime/reporting hypothesis; independent call-site scan is required before source edits.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

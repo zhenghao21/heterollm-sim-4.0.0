@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_025",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H25_RUNTIME_REPORT_AGGREGATE_SERIALIZATION",
+    "direction": "运行速度与内存",
+    "claim": "只需 aggregate summary/requests 的调用方可以复用 online_summary_dict，避免 report_dict 的 serde.to_primitive、visualization 和 bounded history 构造开销，同时保持 API summary/requests 语义等价。",
+    "trigger": "H24 cProfile 与 probe：16x256x32 report median 0.0664945s，online_summary_dict 0.00277999998s，summary/requests 完全一致。",
+    "falsifier": "存在 aggregate-only 调用方依赖被省略的字段，或 online_summary_dict 与 report_dict 语义/API 不等价，或提速来自不计入实际路径的探针。"
+  },
+  "parent_commit": "2213ea95940661706d94df5f5b0241a9595810f7",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": [
+    {
+      "id": "H25_STORAGE_NAND_FAMILY_GRANULARITY",
+      "status": "deferred_until_runtime_round_closes",
+      "reason": "保持方向轮换；SSD/NVMe/HBF 共享 NAND 家族另行处理。"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_025",
+  "candidate_id": "H25_RUNTIME_REPORT_AGGREGATE_SERIALIZATION",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_025/",
+  "result": "pending",
+  "limitations": [
+    "H24 runtime data is a development baseline, not yet an accepted improvement.",
+    "No source change or independent call-site scan has been completed in H25."
+  ]
+}
