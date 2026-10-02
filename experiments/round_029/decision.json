@@ -29,8 +29,8 @@
   "publication": {
     "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H29 source and records"
+    "verified_remote_sha": "64771e9c1f4d69a4abc5778176f9598601850e92",
+    "verification": "git push origin main exit 0; source and H29 records publication commit 64771e9c1f4d69a4abc5778176f9598601850e92 matched git ls-remote before final metadata update"
   },
   "process_learning": "报告函数应支持调用方复用已生成 payload；性能改动必须与输出等价性同时验收。",
   "source_identity": {
