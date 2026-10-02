@@ -17,7 +17,7 @@
   },
   "regression_status": "source unchanged; H47 full 3108 passed/4 skipped inherited; no repeat required",
   "result": "no_candidate_retained_finite_negative",
-  "review_artifact_sha256": "1ab11ce652765bbfe3345810caccdf11cc8cdb31ea96b327af985b7d8d8c31aa",
+  "review_artifact_sha256": "fc6990484b1d46c2604519e70f42f1a4ab9ef0ba7507c82878644176dce85743",
   "round_id": "round_051",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
@@ -29,5 +29,8 @@
     ],
     "status": "finite_negative_prediction_provenance_scan"
   },
-  "status": "complete"
+  "status": "complete",
+  "superseded_review_artifact_sha256": [
+    "1ab11ce652765bbfe3345810caccdf11cc8cdb31ea96b327af985b7d8d8c31aa"
+  ]
 }
