@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_048",
-  "status": "prepare",
+  "status": "promote",
   "purpose": "nand_background_queue_unknown_boundary",
   "primary_goal": "在 SSD/NVMe/HBF 共享 NAND 模型边界内，检查 background/GC/FTL marker、queue 冲突、die/channel unknown 和 erase/program 状态是否显式传播，不引入未经来源核验的硬件数值。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -44,8 +44,14 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一 NAND background/unknown queue 根因若影响 media state、DataAccess/PhysicalService、endpoint/legacy alias、report 或 error handling，必须同轮收口；未知参数必须显式保留。"
+    "status": "closed_limited_negative",
+    "media": "operation/program/erase/background marker and counters explicit",
+    "unknown": "physical_dies/channels and background_work.gc/ftl explicit unknown",
+    "queue": "direct queue depth/plane waves/owner guard pass; cross-request scheduler not exercised",
+    "service": "PhysicalService/endpoint resource and service alignment direct control",
+    "report": "full report/API propagation not exercised",
+    "candidate": "none; no reproducible source defect",
+    "deferred": "FTL/GC timing, cross-request queue, full report/API E2E"
   },
   "data_roles": {
     "development": "fresh NAND source scan and state/queue controls",
@@ -65,9 +71,9 @@
     "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
-    "source_scan_runs": 0,
-    "nand_matrix_runs": 0,
-    "retries": 0
+    "source_scan_runs": 1,
+    "nand_matrix_runs": 1,
+    "retries": 1
   },
   "guardrails": [
     "不重开 H39 DRAM/HBM",
@@ -77,5 +83,5 @@
     "无真实 NAND 执行缺陷不改源码"
   ],
   "selected_candidate": null,
-  "next_step": "先独立扫描 hbf_media.py、data_motion.py、PhysicalService、endpoint/legacy alias 和 reporting 的 background/queue/unknown 传播，登记唯一可证伪候选或有限负结论。"
+  "next_step": "轮换到其他最长未查功能方向；不重复 H48 direct NAND matrix，FTL/GC 或 die/channel 仅在新权威来源和真实 E2E 触发下重开。"
 }

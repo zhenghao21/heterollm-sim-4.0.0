@@ -2,11 +2,33 @@
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_048",
   "candidate_id": "H48_NAND_BACKGROUND_QUEUE_UNKNOWN_BOUNDARY",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare 已登记 NAND 家族 background/queue/unknown 边界；需要独立 source scan 和状态矩阵后再决定是否修改。",
-  "evidence": [],
-  "deferred_scope": [],
-  "next_hypothesis": null,
-  "source_commit": "dd2d7b24761e6937d38215299eaf617d35d8e49e"
+  "status": "complete",
+  "decision": "reject_no_candidate",
+  "reason": "独立 source scan 与 NAND matrix 确认共享 SSD/NVMe/HBF 直达链路保留 operation/background/unknown/queue/erase/program 状态，非法输入 fail closed；未发现可复现源码缺陷，且 report/API 与跨请求调度范围明确未验证。",
+  "evidence": [
+    "artifacts/optimization/round_048/source_scan_independent.json",
+    "artifacts/optimization/round_048/nand_matrix_independent.json",
+    "artifacts/optimization/round_048/final_review.json",
+    "artifacts/optimization/round_048/final_review.json.sha256"
+  ],
+  "deferred_scope": [
+    "FTL/GC timing",
+    "cross-request queue/event scheduling",
+    "full report/API propagation",
+    "authoritative die/channel geometry",
+    "Native accuracy"
+  ],
+  "next_hypothesis": {
+    "direction": "其他最长未查功能方向",
+    "claim": "依据方向台账选择不同于 H48 存储直达链路的功能执行方向，避免重复 NAND 字段扫描。",
+    "rationale": "H48 仅得到有限负结论，未形成安全源码候选；未知存储内部状态继续保持显式。"
+  },
+  "source_commit": "46939f9cca3a4e6c4aacb7ab6e1b9afeecce94c2",
+  "changed_files": [
+    "experiments/round_048/experiment.json",
+    "experiments/round_048/candidate.json",
+    "experiments/round_048/evaluation.json",
+    "experiments/round_048/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ]
 }

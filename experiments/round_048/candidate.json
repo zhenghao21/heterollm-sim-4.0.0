@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_048",
-  "status": "prepare",
+  "status": "complete_negative",
   "hypothesis": {
     "id": "H48_NAND_BACKGROUND_QUEUE_UNKNOWN_BOUNDARY",
     "direction": "存储硬件建模粒度",
@@ -11,9 +11,45 @@
   },
   "parent_commit": "dd2d7b24761e6937d38215299eaf617d35d8e49e",
   "changed_files": [],
-  "source_sha256": null,
-  "activation_checks": [],
-  "tests": [],
-  "independent_evidence": [],
-  "deferred_candidates": []
+  "source_sha256": {
+    "source_commit": "46939f9cca3a4e6c4aacb7ab6e1b9afeecce94c2",
+    "note": "H48 未修改源码；两份独立 artifact 使用同一 HEAD"
+  },
+  "activation_checks": [
+    "shared SSD/NVMe/HBF alias fields align",
+    "background/GC/FTL unknown preserved",
+    "die/channel unknown preserved",
+    "queue waves/owner conflict direct controls",
+    "invalid version/key/alignment/die/channel/erase geometry fail closed"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m py_compile artifacts/optimization/round_048/nand_matrix.py",
+      "exit_code": 0,
+      "result": "compile succeeded"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe artifacts/optimization/round_048/nand_matrix.py",
+      "exit_code": 0,
+      "result": "nand_matrix_independent.json; direct controls passed"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_048/source_scan_independent.json",
+    "artifacts/optimization/round_048/source_scan_independent.sha256",
+    "artifacts/optimization/round_048/nand_matrix_independent.json",
+    "artifacts/optimization/round_048/nand_matrix_independent.json.sha256",
+    "artifacts/optimization/round_048/final_review.json",
+    "artifacts/optimization/round_048/final_review.json.sha256"
+  ],
+  "deferred_candidates": [
+    "FTL/GC timing simulation",
+    "cross-request queue/event scheduling",
+    "full reporting/API propagation",
+    "authoritative die/channel geometry source",
+    "Native accuracy"
+  ],
+  "source_commit": "46939f9cca3a4e6c4aacb7ab6e1b9afeecce94c2",
+  "candidate_source_commit": "46939f9cca3a4e6c4aacb7ab6e1b9afeecce94c2",
+  "review": "两份独立扫描确认共享NAND直达链路有限负结论；未将未执行的report/API/跨请求调度声明为通过，background marker不等于FTL/GC时序。"
 }
