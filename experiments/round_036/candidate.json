@@ -1,0 +1,8 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_036",
+  "status": "prepare",
+  "hypothesis": {"id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY", "direction": "运行速度与内存", "claim": "实际 run_scenario/批处理执行路径可能存在可独立测量的 wall-time 或峰值内存候选。", "trigger": "待独立 runtime execution source scan；不得继承 H29 CLI-only 结论。", "falsifier": "执行/批处理/retention 路径无可复现开销候选，或候选无法保持结果等价。"},
+  "parent_commit": "6ae95b7a130ad731df2429554d5b9bb27f621ef9",
+  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+}

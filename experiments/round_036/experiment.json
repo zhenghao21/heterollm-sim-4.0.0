@@ -1,0 +1,23 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_036",
+  "status": "prepare",
+  "purpose": "runtime_execution_batch_memory",
+  "primary_goal": "在不重开 H29 CLI report reuse、H35 evaluation/API 或 H30 storage 的前提下，检查实际 run_scenario/批处理执行路径的 wall time、峰值内存和结果等价性候选。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {"parent_commit": "6ae95b7a130ad731df2429554d5b9bb27f621ef9", "role": "H35 negative evaluation/API scan plus H29 runtime baseline"},
+  "hypothesis_id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY",
+  "direction": "运行速度与内存",
+  "previous_direction": "评估/API与可视化口径（H35）",
+  "direction_switch_reason": "H35 评估/API负向收口；H29 只收口 CLI 重复报告，H36 转查 run_scenario/批处理执行链路，不重复既有 CLI 修复。",
+  "recent_directions": ["H34:预测泛化负向扫描", "H35:评估/API负向扫描", "H36:运行执行/批处理内存（活动）"],
+  "direction_last_checked": {"仿真器正确性与语义": "H31", "运行速度与内存": "H36活动（H29基础）", "计算成本模型": "H32", "存储硬件建模粒度": "H30", "预测精度与泛化": "H34", "评估/API与可视化口径": "H35", "开发工具链与可复现性": "H33"},
+  "scope": {"candidate": "run_scenario/continuous batching/streaming retention/compilation and peak memory execution paths", "include": ["simulator wall time", "peak traced memory", "request-count scaling", "retention equivalence", "batch compilation/reuse"], "exclude": ["H29 CLI report serialization", "H35 evaluation status", "H30 storage", "Native latency claims"]},
+  "problem_domain_closure": {"status": "prepare", "rule": "同一运行时根因直接影响的执行、批处理、缓存/编译、报告保留和内存路径必须同轮收口；无候选保留负结论。"},
+  "data_roles": {"development": "fresh runtime source scan and controlled local wall/memory probes", "comparison": "parent 6ae95b7a130ad731df2429554d5b9bb27f621ef9", "holdout": "independent request-count/retention controls", "final_acceptance": "engineering runtime/memory only; no Native accuracy"},
+  "metrics": ["simulator_wall_time", "peak_memory", "request_scaling", "retention_equivalence", "regression_status"],
+  "budget": {"candidate_count": 1, "full_prediction_runs": 0, "native_collection_runs": 0, "new_microbenchmark_runs": 3, "retries": 0},
+  "guardrails": ["不得重复 H29 CLI report reuse", "不得将 simulator wall time 称为 Native latency", "不得以单测通过称为精度改善", "结果语义和 retention 等价性必须保持"],
+  "selected_candidate": null,
+  "next_step": "完成独立 runtime execution source scan，登记唯一可证伪候选。"
+}

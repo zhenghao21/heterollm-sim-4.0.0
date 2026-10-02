@@ -1,0 +1,3 @@
+{
+  "schema": "heterollm.optimization.decision/v1", "round_id": "round_036", "candidate_id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY", "status": "pending", "decision": "pending", "reason": "Prepare registered runtime execution direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+}

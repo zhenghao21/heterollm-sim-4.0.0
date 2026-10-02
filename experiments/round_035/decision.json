@@ -1,3 +1,41 @@
 {
-  "schema": "heterollm.optimization.decision/v1", "round_id": "round_035", "candidate_id": "H35_EVALUATION_API_STATUS_CONTRACT", "status": "pending", "decision": "pending", "reason": "Prepare registered evaluation/API direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_035",
+  "candidate_id": "H35_EVALUATION_API_STATUS_CONTRACT",
+  "status": "decided",
+  "decision": "reject_no_candidate",
+  "reason": "独立 evaluation/API/UI 扫描与 partial/empty reference controls均通过：partial_reference 与 passed=false、empty reference insufficient_native_reference、HttpError JSON、report/UI score 状态和 coverage 均显式一致；未发现新缺陷，未加载 Native、未改源码。",
+  "evidence": [
+    {
+      "path": "artifacts/optimization/round_035/evaluation_scan.json",
+      "sha256": "2b3efd6191191927fa9eb80f47af4539464ec35b5c439a2a73136fd69cb4e2c4"
+    },
+    {
+      "path": "artifacts/optimization/round_035/evaluation_scan.sha256",
+      "sha256": "53bb879c4563775cc2d49301e7b6e31afb70a20a62a263551fd52702042c3321"
+    },
+    "Both independent controls exit 0",
+    "HttpError/API/report/UI status propagation explicit",
+    "Inherited H30 full regression: 3070 passed, 4 skipped; source unchanged"
+  ],
+  "deferred_scope": [
+    "No Native accuracy; H28 request coverage excluded."
+  ],
+  "next_hypothesis": {
+    "id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY",
+    "direction": "运行速度与内存",
+    "claim": "下一轮检查尚未覆盖的实际仿真执行/批处理内存路径，不重复 H29 CLI report reuse。",
+    "basis": "H35 evaluation/API negative scan completed；运行时方向上次 H29 只收口 CLI 重复报告，仍可检查 run_scenario/批处理执行路径。",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "a464b191ee9cf8a5fa0f5ad8fe9903d4d30f7201",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "pending push of H35 negative records"
+  },
+  "process_learning": "评估负向扫描必须同时检查 partial/empty/failure 状态和 API/UI 序列化，不能只看 happy path。",
+  "source_identity": {
+    "source_commit": "a464b191ee9cf8a5fa0f5ad8fe9903d4d30f7201"
+  }
 }

@@ -1,3 +1,38 @@
 {
-  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_035", "candidate_id": "H35_EVALUATION_API_STATUS_CONTRACT", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_035/", "result": "pending", "limitations": ["H35 尚未完成 evaluation/API source scan。"]
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_035",
+  "candidate_id": "H35_EVALUATION_API_STATUS_CONTRACT",
+  "status": "completed",
+  "prediction": {
+    "status": "mechanism_scan_only",
+    "artifact": "artifacts/optimization/round_035/evaluation_scan.json",
+    "source_commit": "a464b191ee9cf8a5fa0f5ad8fe9903d4d30f7201",
+    "result": "partial/empty reference controls and API/UI status scan passed."
+  },
+  "score": {
+    "status": "not_scored_no_candidate",
+    "result": "No new evaluation/API/text/UI inconsistency; no Native observation loaded.",
+    "native_accuracy": "not_applicable"
+  },
+  "mechanism_status": "rejected_no_candidate",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "not_applicable",
+  "regression_status": "inherited_source_unchanged",
+  "comparison_artifact": "artifacts/optimization/round_035/evaluation_scan.json",
+  "result": "H35 closes the checked evaluation/API status surfaces as a negative scan without source change.",
+  "limitations": [
+    "No Native target loaded; no accuracy claim.",
+    "No source modified; H30 regression inherited because source unchanged.",
+    "H28 request coverage deliberately excluded and not reopened."
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_035/evaluation_scan.json",
+      "sha256": "2b3efd6191191927fa9eb80f47af4539464ec35b5c439a2a73136fd69cb4e2c4"
+    },
+    {
+      "path": "artifacts/optimization/round_035/evaluation_scan.sha256",
+      "sha256": "53bb879c4563775cc2d49301e7b6e31afb70a20a62a263551fd52702042c3321"
+    }
+  ]
 }
