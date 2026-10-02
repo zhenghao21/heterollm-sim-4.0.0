@@ -7,7 +7,7 @@
 | 方向 | 关注内容 | 最近完成轮次 | 当前状态 | 下一步要求 |
 |---|---|---:|---|---|
 | 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H23 | H23 在有限执行链路上为负结论；不能视为全域关闭 | 只有新的契约证据或独立复现才能重开 |
-| 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H24（仅基线） | 已有独立 wall/memory/cProfile 基线；尚未接纳源码候选 | H25 验证 aggregate 报告是否可安全走 `online_summary_dict`，先完成等价性与 wall-time 评估 |
+| 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H29（活动） | H25 仅关闭 aggregate 报告替换假设；H29 正在扫描实际 run_scenario/调度执行链路 | 先取得独立 wall-time/峰值内存候选和结果等价性证据 |
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H27 | serialized/overlapped backing demand 已修复并通过机制回归；完整套件仅有无关 Windows SQLite 文件锁瞬态失败 | 下一轮转到预测精度/泛化或评估/API，避免重复成本模型 |
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H26 | H24 接入 DRAM/HBM 共享 aggregate lane；H26 接入 opt-in NAND page/RMW/plane/queue；标准 presets、die/channel/block/erase/FTL/GC 保持明确延期 | 只有 profile-specific geometry 或实际 erase/FTL 调用链证据出现时重开；下一轮先转计算成本模型 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H28 | H28 收口请求集合覆盖契约：部分 Native 参考返回 `partial_reference` 并 fail-closed；无 Native 精度结论 | 下一轮转运行速度/内存；保持无 Native 时只做机制验证 |
@@ -24,5 +24,6 @@
 - H26：将现有 HBF cold-page 路径最小泛化为 opt-in `nand_media_v1`，SSD/high_io_ssd/NVMe/HBF 显式 contract 共用 page/RMW/program/plane/queue 链路；focused 131 passed、全量 3057 passed/4 skipped，无 Native/cycle-accuracy 结论。
 - H27：修复 serialized/overlapped 内存成本中 service physical bytes/energy 与 ResourceDemand/cache metadata 仍使用 logical payload 的不一致；focused 302 passed，排除无关 SQLite 测试的套件 2912 passed/4 skipped，SQLite 测试单独 1 passed，无 Native 精度结论。
 - H28：修复 `/api/simulate-score` 只遍历 simulated request ID 导致 Native 多请求被静默忽略的问题；加入双方请求覆盖计数，部分集合返回 `partial_reference` 且不允许 `passed=true`；focused 38 passed，相关回归 225 passed，排除无关 SQLite 测试的套件 2913 passed/4 skipped，SQLite 测试单独 1 passed，无 Native 精度结论。
-- 当前推进点：H28 已发布；下一轮切换到运行速度/内存方向，检查实际仿真执行链路的 wall time/峰值内存，不把 H25 的 aggregate 负结论扩展到全域。
+- H29：已登记运行速度/内存方向；先独立扫描真实执行链路，不把 H25 的 aggregate 负结论扩展到全域。
+- 当前推进点：H29 活动，检查 `run_scenario`、调度、报告保留/序列化和缓存路径的 wall time、峰值内存与结果等价性。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。

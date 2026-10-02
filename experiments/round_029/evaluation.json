@@ -1,0 +1,15 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_029",
+  "candidate_id": "H29_RUNTIME_WALLTIME_MEMORY_EXECUTION_CHAIN",
+  "status": "pending",
+  "prediction": {"status": "pending"},
+  "score": {"status": "pending"},
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_029/",
+  "result": "pending",
+  "limitations": ["H29 尚未完成 runtime source scan 或独立 wall-time/memory 测量。"]
+}

@@ -1,0 +1,78 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_029",
+  "status": "prepare",
+  "purpose": "simulator_runtime_speed_and_memory",
+  "primary_goal": "在不重开 H28 评估语义、H27 成本模型和 H24/H26 存储契约的前提下，检查实际仿真执行链路中可独立测量的 wall time 或峰值内存候选。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "4e22ea31c2152091c30528d31b9a6505bce620f7",
+    "role": "H28 promoted evaluation request-coverage contract plus H27/H24/H26 baselines"
+  },
+  "hypothesis_id": "H29_RUNTIME_WALLTIME_MEMORY_EXECUTION_CHAIN",
+  "direction": "运行速度与内存",
+  "previous_direction": "预测精度与泛化（H28）",
+  "direction_switch_reason": "H28 已收口评估 API 请求覆盖；H25 只关闭 aggregate 报告替换假设，不能代表实际 run_scenario 执行链路已无运行时候选。",
+  "recent_directions": [
+    "H26:NAND/SSD/HBF共享模型",
+    "H27:计算成本模型物理守恒",
+    "H28:预测/评估请求覆盖契约"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H23",
+    "运行速度与内存": "H29活动（H25为aggregate负向）",
+    "计算成本模型": "H27",
+    "存储硬件建模粒度": "H26",
+    "预测精度与泛化": "H28",
+    "评估/API与可视化口径": "H28",
+    "开发工具链与可复现性": "H21-H28"
+  },
+  "scope": {
+    "candidate": "待独立扫描 run_scenario、调度、报告保留、缓存和输入规模的真实执行链路",
+    "include": [
+      "simulation wall time",
+      "peak resident memory where independently measurable",
+      "retention/report serialization overhead",
+      "batch size and request count controls"
+    ],
+    "exclude": [
+      "H28 evaluation status semantics",
+      "H27 cost demand",
+      "H24/H26 storage contracts",
+      "Native accuracy claims",
+      "unexplained end-to-end multiplier fitting"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一运行时根因直接影响的执行、报告保留、序列化、缓存和错误路径必须同轮收口；没有可证伪候选保留负结论。"
+  },
+  "data_roles": {
+    "development": "fresh runtime source scan and controlled local benchmarks",
+    "comparison": "parent 4e22ea31c2152091c30528d31b9a6505bce620f7",
+    "holdout": "request-count/retention controls not used to tune a multiplier",
+    "final_acceptance": "engineering wall-time/memory evidence only; no Native accuracy"
+  },
+  "metrics": [
+    "simulator_wall_time",
+    "peak_memory",
+    "retention_equivalence",
+    "request_count_scaling",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 3,
+    "retries": 0
+  },
+  "guardrails": [
+    "不得把运行时改善称为预测精度改善",
+    "不得将 H25 aggregate 负结论扩展到所有执行链路",
+    "不得用目标模型端到端耗时反推无解释倍率",
+    "保持报告语义和结果等价性"
+  ],
+  "selected_candidate": null,
+  "next_step": "完成独立 runtime source scan，登记唯一可证伪候选。"
+}

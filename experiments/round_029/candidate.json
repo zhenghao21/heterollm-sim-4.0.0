@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_029",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H29_RUNTIME_WALLTIME_MEMORY_EXECUTION_CHAIN",
+    "direction": "运行速度与内存",
+    "claim": "实际仿真执行链路存在可独立测量的 wall-time 或峰值内存开销，且能在保持报告等价性的前提下最小修复。",
+    "trigger": "待独立 runtime source scan；不得继承 H25 aggregate 负向结论。",
+    "falsifier": "现有执行链路在控制输入和保留策略下无可重复运行时/内存差异，或候选无法保持结果等价。"
+  },
+  "parent_commit": "4e22ea31c2152091c30528d31b9a6505bce620f7",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}
