@@ -1,1 +1,38 @@
-{"schema":"heterollm.optimization.evaluation/v1","round_id":"round_038","candidate_id":"H38_COMPUTE_COST_MODEL_SHAPE_UNIT_CONTRACT","status":"pending","prediction":{"status":"pending"},"score":{"status":"pending"},"mechanism_status":"pending_scan","accuracy_status":"not_applicable","generalization_status":"pending","regression_status":"pending","comparison_artifact":"artifacts/optimization/round_038/","result":"pending","limitations":["H38尚未完成独立成本模型源码扫描。"]}
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_038",
+  "candidate_id": "H38_COMPUTE_COST_MODEL_SHAPE_UNIT_CONTRACT",
+  "status": "complete",
+  "prediction": {
+    "status": "mechanism_negative_scan",
+    "native_loaded": false,
+    "source_commit": "4a512646159d5a9beb9fec36ad28b4b471fdeeef",
+    "source_sha256": {
+      "src/heterollm_sim/cost_models.py": "9b63242c148f9cdae9545dd571e730bf1a636aa4ab0748be8b1701ed80aff8d1",
+      "src/heterollm_sim/data_motion.py": "98d1e41c960e0e9767e6ffc9365677c7318afc4bf739c8d2138f1c76cfc24436",
+      "src/heterollm_sim/event_kernel.py": "d8668285226f02d1c99895eb639f7bc987c1213f3ce357e3e973b807a0617e10"
+    }
+  },
+  "score": {
+    "status": "negative_control_only",
+    "acceptance": "未发现新可复现成本模型缺陷，保留有限负结论；没有性能或精度改善声明。",
+    "evidence": [
+      "artifacts/optimization/round_038/fresh_cost_scan.json",
+      "artifacts/optimization/round_038/cost_review.json",
+      "artifacts/optimization/round_038/cost_regression_result.json"
+    ],
+    "review_artifact_sha256": "cbdd3fd9f1fab6736bedff62427ba3834ca9e9d119b5fafa3a60e1d3c54114b4"
+  },
+  "mechanism_status": "negative_scan_passed_limited",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "limited_to_small_analytical_controls",
+  "regression_status": "131 passed; H37 full 3089 passed/4 skipped inherited because source commit unchanged",
+  "comparison_artifact": "artifacts/optimization/round_038/",
+  "result": "no_candidate_retained_negative_conclusion",
+  "limitations": [
+    "MMA、collective和完整kernel微架构未覆盖。",
+    "解析守恒控制不等同于端到端仿真wall-time或Native精度。",
+    "未修改源码，因此没有候选预测或成本改善。",
+    "独立审查确认scope外的concurrency/capacity、directional latency、shape boundary sweep和finite pipeline未实际执行；不能外推为全域。"
+  ]
+}

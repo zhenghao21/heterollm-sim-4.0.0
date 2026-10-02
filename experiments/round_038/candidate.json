@@ -1,1 +1,47 @@
-{"schema":"heterollm.optimization.candidate/v1","round_id":"round_038","status":"prepare","hypothesis":{"id":"H38_COMPUTE_COST_MODEL_SHAPE_UNIT_CONTRACT","direction":"计算成本模型","claim":"成本模型的shape/单位/并发/owner路径可能存在未被H32历史扫描覆盖的偏差。","trigger":"待独立成本源码扫描；不继承H32结论。","falsifier":"新鲜解析探针在支持域所有shape、单位、并发和owner控制均守恒。"},"parent_commit":"eb02413e0e084f45e35672b90c912bd99b697622","changed_files":[],"source_sha256":null,"activation_checks":[],"tests":[],"independent_evidence":[],"deferred_candidates":[]}
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_038",
+  "status": "complete_negative",
+  "hypothesis": {
+    "id": "H38_COMPUTE_COST_MODEL_SHAPE_UNIT_CONTRACT",
+    "direction": "计算成本模型",
+    "claim": "成本模型的shape/单位/并发/owner路径可能存在未被H32历史扫描覆盖的偏差。",
+    "trigger": "待独立成本源码扫描；不继承H32结论。",
+    "falsifier": "新鲜解析探针在支持域所有shape、单位、并发和owner控制均守恒。"
+  },
+  "parent_commit": "eb02413e0e084f45e35672b90c912bd99b697622",
+  "changed_files": [],
+  "source_sha256": {
+    "src/heterollm_sim/cost_models.py": "9b63242c148f9cdae9545dd571e730bf1a636aa4ab0748be8b1701ed80aff8d1",
+    "src/heterollm_sim/data_motion.py": "98d1e41c960e0e9767e6ffc9365677c7318afc4bf739c8d2138f1c76cfc24436",
+    "src/heterollm_sim/event_kernel.py": "d8668285226f02d1c99895eb639f7bc987c1213f3ce357e3e973b807a0617e10"
+  },
+  "activation_checks": [
+    "1/1024/10000000B memory_service单位守恒",
+    "GEMM 2x3x4 operations=48, minimum_io=34B",
+    "Reduction input100/output10 combine2 operations=180, io=240B",
+    "同physical owner重复logical demand拒绝"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_cost_models.py tests/test_parallel.py tests/test_data_motion.py",
+      "exit_code": 0,
+      "result": "131 passed in 1.49s"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_038/fresh_cost_scan.json",
+    "artifacts/optimization/round_038/fresh_cost_scan.sha256",
+    "artifacts/optimization/round_038/cost_regression_result.json",
+    "artifacts/optimization/round_038/cost_review.json"
+  ],
+  "deferred_candidates": [
+    "MMA occupancy",
+    "collective reduction",
+    "full kernel microarchitecture",
+    "Native accuracy/performance"
+  ],
+  "source_commit": "4a512646159d5a9beb9fec36ad28b4b471fdeeef",
+  "review_artifact_sha256": "cbdd3fd9f1fab6736bedff62427ba3834ca9e9d119b5fafa3a60e1d3c54114b4",
+  "review": "独立审查重跑控制并确认模块/源码/artifact身份一致；把scope外的concurrency/capacity、directional latency、shape sweep和finite pipeline明确列为未执行。"
+}

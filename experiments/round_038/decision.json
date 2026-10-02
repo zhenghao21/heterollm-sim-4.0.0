@@ -1,1 +1,36 @@
-{"schema":"heterollm.optimization.decision/v1","round_id":"round_038","candidate_id":"H38_COMPUTE_COST_MODEL_SHAPE_UNIT_CONTRACT","status":"pending","decision":"pending","reason":"Prepare已登记成本模型方向；需要独立源码扫描和解析探针后再决定是否修改。","evidence":[],"deferred_scope":[],"next_hypothesis":null}
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_038",
+  "candidate_id": "H38_COMPUTE_COST_MODEL_SHAPE_UNIT_CONTRACT",
+  "status": "complete",
+  "decision": "reject_no_candidate",
+  "reason": "独立成本源码扫描和新鲜解析控制未发现可复现缺陷；memory/GEMM/reduction单位与shape守恒、owner重复拒绝及data motion约束通过。该结论只覆盖登记范围，MMA/collective/full kernel仍延期。",
+  "evidence": [
+    "artifacts/optimization/round_038/fresh_cost_scan.json",
+    "artifacts/optimization/round_038/fresh_cost_scan.sha256",
+    "artifacts/optimization/round_038/cost_review.json",
+    "artifacts/optimization/round_038/cost_regression_result.json"
+  ],
+  "deferred_scope": [
+    "MMA occupancy",
+    "collective reduction",
+    "full kernel microarchitecture",
+    "concurrency/capacity sweep",
+    "directional latency",
+    "shape boundary sweep",
+    "finite pipeline",
+    "Native accuracy/performance"
+  ],
+  "next_hypothesis": {
+    "direction": "存储硬件建模粒度",
+    "claim": "按DRAM/HBM共同DRAM模型及SSD/HBF共同NAND模型，检查geometry/page/plane/queue和真实访问拆分调用链是否仍有未覆盖缺陷。",
+    "rationale": "用户定向要求提升存储内部元素建模；H38成本方向仅有限负结论，应轮换到该方向。"
+  },
+  "source_sha256": {
+    "src/heterollm_sim/cost_models.py": "9b63242c148f9cdae9545dd571e730bf1a636aa4ab0748be8b1701ed80aff8d1",
+    "src/heterollm_sim/data_motion.py": "98d1e41c960e0e9767e6ffc9365677c7318afc4bf739c8d2138f1c76cfc24436",
+    "src/heterollm_sim/event_kernel.py": "d8668285226f02d1c99895eb639f7bc987c1213f3ce357e3e973b807a0617e10"
+  },
+  "source_commit": "4a512646159d5a9beb9fec36ad28b4b471fdeeef",
+  "review_artifact_sha256": "cbdd3fd9f1fab6736bedff62427ba3834ca9e9d119b5fafa3a60e1d3c54114b4"
+}
