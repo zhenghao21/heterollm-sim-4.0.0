@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_042",
+  "candidate_id": "H42_EVALUATION_STATE_BOUNDARY",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记评估/API与可视化口径方向；需要独立 source scan、状态矩阵和边界控制后再决定是否修改。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "0a366c83de7725679c03ad26c0402c2616d0bc3a"
+}

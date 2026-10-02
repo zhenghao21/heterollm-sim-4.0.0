@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_042",
+  "candidate_id": "H42_EVALUATION_STATE_BOUNDARY",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_042/",
+  "result": "pending",
+  "limitations": [
+    "H42 尚未完成状态矩阵和 API/报告/可视化边界验证。"
+  ]
+}

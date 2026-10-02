@@ -11,7 +11,7 @@
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H38 | H38 新鲜 memory/GEMM/reduction 单位与 shape 控制、owner 重复拒绝和 data-motion 约束通过；MMA/collective/full kernel 仍未覆盖 | 下一轮转存储硬件建模粒度；不把有限负向扫描扩展为全域正确 |
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H40 | H40 已把共享 NAND ERASE operation 接入 PhysicalService、endpoint、DataAccess 和 legacy HBF alias；page/RMW/program/plane/queue旧链路保持；未公开 die/channel/FTL/GC 继续unknown | 下一轮轮换到运行速度/内存或评估/API；没有新来源与真实瓶颈不继续制造NAND字段轮次 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H34（活动） | H28 收口请求集合覆盖契约；H34 重新检查输入身份、shape/hardware coverage 和 fallback 泛化边界，无 Native 时只做机制验证 | 先做独立输入/泛化 source scan；不重复 H28 请求覆盖修复 |
-| 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H35（活动） | H28 收口 request coverage；H35 重新检查结果状态、失败/缺失和可视化/API 一致性 | 先独立评估/API source scan；不重复 H28 request coverage |
+| 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H42（活动） | H28 收口 request coverage；H35 检查 partial/empty reference、HttpError 和基础报告/UI 状态；H42 转向 retention 与 incomplete/degraded/failure 状态跨 serde/report/API/visualization 的一致性 | 先独立状态矩阵和序列化边界扫描；不重复 H28 request coverage 或 H35 基础状态控制 |
 | 开发工具链与可复现性 | 测试隔离、缓存身份、实验记录、证据哈希、恢复 | H21-H23 记录流程 | 局部维护 | 只在证据或恢复失败时重开 |
 
 ## 轮换记录
@@ -47,4 +47,5 @@
 - H39：按官方可访问资料确认DDR5 bank/subchannel、HBM channel/pseudo-channel概念边界，不导入未经核验数值；修复共享DRAM family的显式地址访问入口，支持burst/channel/bank/row、row hit/miss/conflict、读写切换、refresh、queue与immutable preview/commit状态，并让endpoint/planner/event kernel真实执行。定向96 passed，全量3098 passed/4 skipped；无Native精度结论，cycle accuracy与未声明时序延期。下一步切换NAND家族。
 - H40：独立扫描确认SSD/NVMe/HBF共享NAND路径已有page offset、RMW/program、physical_planes和queue，但缺少erase operation与background marker；新增共享ERASE contract、block rounding、erase count/latency/physical bytes、legacy alias透传、zero-write入口和resolved resource统一，并对无NAND contract的generic endpoint fail-closed。定向85 passed，全量3103 passed/4 skipped；无Native精度结论，FTL/GC和die/channel调度延期。下一步轮换运行速度/内存或评估/API。
 - H41：独立运行速度/内存扫描先发现 `streaming_des.observe`、metadata clone/capture 等热点，但独立复核确认 event kernel、双 observer、EXACT history materialization 和 metadata namespace 隔离都承载不同契约；分段 profile 将 compile/lowering 与 execute 分离，compile 中位约 4.21ms，medium 7936-task execute 为 exact 0.54882s、streaming 0.46550s、aggregate 0.43693s，三者 task_count/makespan 相同而 retained tasks 为 7936/2000/0，tracemalloc 峰值按 retention 语义为 60,800,556/22,549,905/12,614,158B。未发现可安全删除或生产缓存候选，未改源码、未加载 Native；保留 bounded metadata/coverage reuse 为后续可证伪候选，下一轮切换评估/API。
+- H42：已登记评估/API与可视化口径方向，独立检查 retention、partial/unknown/failure/degraded/incomplete 状态从执行结果到 serde、report_dict、HTTP API、trace/visualization payload 的边界一致性；明确排除 H28 request coverage 和 H35 已完成的基础 partial/empty/HttpError 控制，先做状态矩阵与来源路径扫描，只有真实状态丢失、误报通过或失败格被渲染为成功才改源码。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。

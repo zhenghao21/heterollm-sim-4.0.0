@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_042",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H42_EVALUATION_STATE_BOUNDARY",
+    "direction": "评估、API与可视化口径",
+    "claim": "执行结果中的 retention 与 partial/unknown/failure/degraded/incomplete 状态可能在 serde、report_dict、HTTP API 或可视化 payload 中被丢失、重命名或误转成 passed。",
+    "trigger": "需要独立 source scan 与状态矩阵复现；不继承 H35 基础状态扫描作为全域证明。",
+    "falsifier": "所有声明状态在序列化、报告、API、trace/visualization 边界保持同义且失败/部分状态始终 fail closed。"
+  },
+  "parent_commit": "0a366c83de7725679c03ad26c0402c2616d0bc3a",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}
