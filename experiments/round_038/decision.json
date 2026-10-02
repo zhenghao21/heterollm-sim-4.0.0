@@ -1,0 +1,1 @@
+{"schema":"heterollm.optimization.decision/v1","round_id":"round_038","candidate_id":"H38_COMPUTE_COST_MODEL_SHAPE_UNIT_CONTRACT","status":"pending","decision":"pending","reason":"Prepare已登记成本模型方向；需要独立源码扫描和解析探针后再决定是否修改。","evidence":[],"deferred_scope":[],"next_hypothesis":null}
