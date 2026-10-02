@@ -50,7 +50,7 @@
     "do not alter canonical request timestamps without evidence",
     "no native accuracy claim"
   ],
-  "next_step": "freeze H22 source, commit, push origin/main and verify remote SHA; register H23 after promotion",
+  "next_step": "H22 completed and source published; next wakeup discovers H23.",
   "selected_candidate": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
   "source_identity": {
     "parent_commit": "1f1d012264654c809d7554c8723b7fd558ea48f5",
@@ -58,7 +58,8 @@
     "src/heterollm_sim/web.py": "9af8d9aff63724b3861af5494172ba091f00783a5d67884d20b7a2ee53b4f583",
     "src/heterollm_sim/webui/app.js": "85e8e26611b7f408b759a2b89db55cb8920c79dd85acc4e206a122ef54ab756d",
     "tests/test_web.py": "9226c736ca0fe60f66218c836f6b2e749aba5f3ae2f817aac580731b0e1b3c7e",
-    "independent_scan_source": "eb9fb910001b361da6ef86cf51f7f9368474c770"
+    "independent_scan_source": "eb9fb910001b361da6ef86cf51f7f9368474c770",
+    "source_commit": "1e1d011e153c3be546339b608e3e24edf3db7e74"
   },
   "budget_used": {
     "candidate_count": 1,
@@ -69,5 +70,11 @@
     "final_full_pytest_runs": 1,
     "focused_runs": 2,
     "node_check_runs": 2
+  },
+  "publication": {
+    "source_commit": "1e1d011e153c3be546339b608e3e24edf3db7e74",
+    "remote": "origin/main",
+    "verified_remote_sha": "1e1d011e153c3be546339b608e3e24edf3db7e74",
+    "verification": "git push origin main exit 0; local HEAD and ls-remote matched before this records-only correction"
   }
 }

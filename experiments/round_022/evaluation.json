@@ -12,7 +12,8 @@
       "src/heterollm_sim/web.py": "9af8d9aff63724b3861af5494172ba091f00783a5d67884d20b7a2ee53b4f583",
       "src/heterollm_sim/webui/app.js": "85e8e26611b7f408b759a2b89db55cb8920c79dd85acc4e206a122ef54ab756d",
       "tests/test_web.py": "9226c736ca0fe60f66218c836f6b2e749aba5f3ae2f817aac580731b0e1b3c7e"
-    }
+    },
+    "source_commit": "1e1d011e153c3be546339b608e3e24edf3db7e74"
   },
   "score": {
     "status": "mechanism_score",
@@ -48,5 +49,6 @@
       "path": "artifacts/optimization/round_022/engine_boundary_candidate.json",
       "sha256": "c656df27690070f5502b260cb0fe12e310aa2dc7289b2963a9207a5a635fbac0"
     }
-  ]
+  ],
+  "published_source_commit": "1e1d011e153c3be546339b608e3e24edf3db7e74"
 }

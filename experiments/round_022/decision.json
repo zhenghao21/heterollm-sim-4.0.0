@@ -17,5 +17,11 @@
     "id": "H23_SOURCE_GROUNDED_CANDIDATE",
     "claim": "Continue discovery outside H18 swap, H19 report attribution, H20 scheduler promotion, H21 collective bytes and H22 latency boundary domains; accept only a new independently reproducible defect.",
     "status": "registered_needs_discovery"
+  },
+  "publication": {
+    "source_commit": "1e1d011e153c3be546339b608e3e24edf3db7e74",
+    "remote": "origin/main",
+    "verified_remote_sha": "1e1d011e153c3be546339b608e3e24edf3db7e74",
+    "verification": "source commit pushed successfully; this follow-up records-only commit will carry final evidence fields"
   }
 }

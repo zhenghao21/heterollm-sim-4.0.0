@@ -29,7 +29,7 @@
     {
       "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_web.py tests/test_webui_runtime_contract.py tests/test_llama_engine_start.py tests/test_component_timeseries.py",
       "result": "66 passed in 6.02s; exit code 0 (one earlier parallel web run had a transient WinError 10053 connection abort; immediate rerun passed)",
-      "source_commit": "pending_h22_source_commit"
+      "source_commit": "1e1d011e153c3be546339b608e3e24edf3db7e74"
     },
     {
       "command": "node --check src/heterollm_sim/webui/app.js",
@@ -63,5 +63,6 @@
       "path": "artifacts/optimization/round_022/engine_boundary_candidate.json",
       "sha256": "c656df27690070f5502b260cb0fe12e310aa2dc7289b2963a9207a5a635fbac0"
     }
-  ]
+  ],
+  "published_source_commit": "1e1d011e153c3be546339b608e3e24edf3db7e74"
 }
