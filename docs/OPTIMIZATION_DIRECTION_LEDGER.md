@@ -6,7 +6,7 @@
 
 | 方向 | 关注内容 | 最近完成轮次 | 当前状态 | 下一步要求 |
 |---|---|---:|---|---|
-| 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H23 | H23 在有限执行链路上为负结论；不能视为全域关闭 | 只有新的契约证据或独立复现才能重开 |
+| 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H31（活动） | H23 仅在有限执行链路上为负结论；H31 重新检查错误、缺失和 unknown 传播 | 先取得独立执行链路复现；不把 H23 负结论扩展到全域 |
 | 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H29 | H29 收口 CLI 文本路径重复 `report_dict` 构建；独立父/候选探针约 49.3% 报告路径 wall-time 降低，输出等价 | 下一轮转存储硬件建模粒度；一般 report cache 仍需独立失效/内存证据 |
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H27 | serialized/overlapped backing demand 已修复并通过机制回归；完整套件仅有无关 Windows SQLite 文件锁瞬态失败 | 下一轮转到预测精度/泛化或评估/API，避免重复成本模型 |
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H30 | H30 将已知 MemoryPosition offset 传入共享 NAND page/RMW/program 计费，并补齐 endpoint/legacy alias 可选入口；geometry 数值仍 profile-specific | 下一轮转评估/API或正确性语义；只有新的来源与实际 erase/FTL 调用链才重开存储方向 |
@@ -29,5 +29,6 @@
 - H30：已登记存储硬件建模粒度方向，保持 NAND 家族（SSD/HBF/NVMe）共享边界，检查 profile-specific geometry、地址映射和访问拆分调用链。
 - H30：修复已知 `MemoryPosition.offset_bytes` 在 NAND 计费入口被丢弃的问题；128B@页尾跨页读从 4096B 变为 8192B，写从 8192B 变为 16384B，并补齐 endpoint/legacy alias 可选偏移；focused 83 passed、全量 3070 passed/4 skipped，无 Native 精度结论。
 - H31：已登记评估/API或正确性语义方向，离开已收口存储模型。
-- 当前推进点：H31 活动，检查独立执行链路中的错误、缺失和边界契约，不重复 H30 存储 geometry。
+- H31：已登记正确性/语义方向，检查独立执行链路中的错误、缺失和 unknown 边界，不重复 H30 存储 geometry。
+- 当前推进点：H31 活动，等待独立 correctness/semantic source scan。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。

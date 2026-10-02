@@ -1,0 +1,8 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_031",
+  "status": "prepare",
+  "hypothesis": {"id": "H31_EXECUTION_UNKNOWN_ERROR_SEMANTICS", "direction": "仿真器正确性与语义", "claim": "实际执行链路可能将输入缺失、资源失败或 unknown fallback 静默当作成功。", "trigger": "待独立 source scan；不得继承 H23 负向结论。", "falsifier": "错误、缺失、unknown 和 fallback 已在执行/API/报告所有相关入口显式区分。"},
+  "parent_commit": "32235698761ecf1060d01531e5481fd82a4fbe93",
+  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+}

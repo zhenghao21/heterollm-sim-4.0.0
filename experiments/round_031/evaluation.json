@@ -1,0 +1,3 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_031", "candidate_id": "H31_EXECUTION_UNKNOWN_ERROR_SEMANTICS", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_031/", "result": "pending", "limitations": ["H31 尚未完成 correctness/semantic source scan。"]
+}

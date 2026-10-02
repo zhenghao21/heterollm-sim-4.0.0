@@ -1,0 +1,38 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_031",
+  "status": "prepare",
+  "purpose": "simulator_correctness_semantic_contract",
+  "primary_goal": "在不重开 H30 NAND offset 计费、H29 runtime 或 H28 评估契约的前提下，检查实际执行链路中错误、缺失输入和 unknown/fallback 状态是否被静默当作成功。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "32235698761ecf1060d01531e5481fd82a4fbe93",
+    "role": "H30 promoted NAND page-offset propagation plus H28/H29 baselines"
+  },
+  "hypothesis_id": "H31_EXECUTION_UNKNOWN_ERROR_SEMANTICS",
+  "direction": "仿真器正确性与语义",
+  "previous_direction": "存储硬件建模粒度（H30）",
+  "direction_switch_reason": "H30 已收口已知 NAND page offset；按方向轮换回到长期未检查的执行错误/缺失/unknown 语义，不重开存储模型。",
+  "recent_directions": ["H29:运行速度与内存", "H30:存储硬件页偏移与地址映射", "H31:执行错误/unknown语义（活动）"],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H31活动（H23后重新检查）",
+    "运行速度与内存": "H29",
+    "计算成本模型": "H27",
+    "存储硬件建模粒度": "H30",
+    "预测精度与泛化": "H28",
+    "评估/API与可视化口径": "H28",
+    "开发工具链与可复现性": "H21-H30"
+  },
+  "scope": {
+    "candidate": "实际执行/调度/资源报告链路的 unknown、缺失、失败和回退状态",
+    "include": ["invalid or incomplete input", "resource/accounting failure", "unknown fallback", "error propagation", "API/report status"],
+    "exclude": ["H30 NAND geometry", "H29 report serialization", "Native accuracy claims", "invented performance multipliers"]
+  },
+  "problem_domain_closure": {"status": "prepare", "rule": "同一语义根因直接影响的输入校验、执行状态、资源账本、异常传播和结果 API 必须同轮收口；无候选保留负结论。"},
+  "data_roles": {"development": "fresh source scan and controlled invalid/unknown execution probes", "comparison": "parent 32235698761ecf1060d01531e5481fd82a4fbe93", "holdout": "independent error and fallback controls", "final_acceptance": "correctness/semantic mechanism and regression only; no Native accuracy"},
+  "metrics": ["error_propagation", "unknown_explicitness", "resource_accounting_status", "api_status", "regression_status"],
+  "budget": {"candidate_count": 1, "full_prediction_runs": 0, "native_collection_runs": 0, "new_microbenchmark_runs": 2, "retries": 0},
+  "guardrails": ["不得把单测通过称为精度改善", "不得重开 H30/H29/H28 已收口问题", "unknown/域外保持显式状态", "不为增加轮数虚构缺陷"],
+  "selected_candidate": null,
+  "next_step": "完成独立 correctness/semantic source scan，登记唯一可证伪候选。"
+}
