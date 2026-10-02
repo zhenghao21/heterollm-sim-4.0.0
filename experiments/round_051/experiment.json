@@ -43,12 +43,16 @@
     "mismatch_fail_closed",
     "api_serialization"
   ],
-  "next_step": "先独立扫描 score/report/API prediction provenance 与 shape/hardware mismatch 入口；若无缺陷，保留有限负结论并切换其他方向。",
+  "next_step": "切换计算成本模型或其他最长未查方向；不重复 H51 provenance matrix、H43 fallback/OOD gate、H34 fingerprint generation。",
   "previous_direction": "评估、API与可视化口径（H50）",
   "primary_goal": "检查 prediction 输入身份、支持域与 provenance 在 score/report/API 链路中的保持和跨 shape/hardware 控制；不重复 H43 fallback/OOD gate 或 H34 fingerprint generation。",
   "problem_domain_closure": {
-    "rule": "同一 prediction provenance 根因若影响 generation, score, report, API 与 fallback/error 面，必须本轮收口；无法触发的入口记录不适用。",
-    "status": "prepare"
+    "candidate": "none; no safe source change without an explicit external identity contract",
+    "deferred": "native/report artifact identity schema, cross-request artifact pairing guard, Native accuracy",
+    "errors": "unknown/incomplete/degraded/failure coverage states remain non-comparable and passed=false",
+    "generation": "score/report/API emit candidate/hardware/scheduler/mapping/runtime fingerprints and support/provenance markers",
+    "mismatch": "direct report-A/scenario-B pairing accepted by compact score function; observed as caller-owned contract boundary",
+    "status": "closed_limited_negative"
   },
   "purpose": "prediction_provenance_generalization_boundary",
   "recent_directions": [
@@ -76,5 +80,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }

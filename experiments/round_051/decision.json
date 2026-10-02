@@ -1,12 +1,32 @@
 {
   "candidate_id": "H51_PREDICTION_PROVENANCE_SHAPE",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记预测/泛化方向的 provenance/support-domain 假设，等待独立 source scan 与矩阵。",
+  "changed_files": [
+    "experiments/round_051/experiment.json",
+    "experiments/round_051/candidate.json",
+    "experiments/round_051/evaluation.json",
+    "experiments/round_051/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "reject_no_candidate",
+  "deferred_scope": [
+    "explicit native/report identity schema",
+    "cross-request artifact pairing guard",
+    "Native accuracy"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_051/source_scan_independent.json",
+    "artifacts/optimization/round_051/provenance_matrix_independent.json",
+    "artifacts/optimization/round_051/final_review.json",
+    "artifacts/optimization/round_051/final_review.json.sha256"
+  ],
+  "next_hypothesis": {
+    "claim": "检查新的算子/通信/存储成本执行链路的单位、owner、并发和失败边界；不重做 H38/H44 已收口矩阵。",
+    "direction": "计算成本模型",
+    "rationale": "H51 已收口 prediction provenance；成本模型方向自 H44 后未复查，继续轮换避免重复评估/API或存储扫描。"
+  },
+  "reason": "source scan 与 provenance matrix 确认 prediction/support fingerprints、runtime/config provenance 以及 unknown/incomplete/failure/degraded fail-closed；直接将 report A 与 scenario B 配对会被 compact score 函数接受，但当前 API 契约要求同请求生成并没有外部 identity 字段，暂不引入未定义的 guard。",
   "round_id": "round_051",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "c99c61549c6caea71de79a3e7b72f340d1b25f02",
-  "status": "pending"
+  "source_commit": "1a88f256829a9be568f819d58c6f74b85d1a427f",
+  "status": "complete"
 }
