@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_062",
-  "hypothesis_id": "H62_NAND_UNCOVERED_EXECUTION_CHAIN",
+  "hypothesis_id": "H62_DIRECT_NAND_MEMORY_BILLING",
   "direction": "存储硬件建模粒度",
   "previous_direction": "运行速度与内存",
   "recent_directions": [
@@ -19,7 +19,7 @@
     "评估/API与可视化口径": "H57",
     "开发工具链与可复现性": "H56"
   },
-  "primary_goal": "检查 SSD/NVMe/HBF 共享 NAND 模型中 page/plane/die/channel/queue/读写/擦除内部元素在另一实际执行链路的粒度、守恒和错误边界；不重复 H39/H40 geometry/erase、H48/H49 propagation。",
+  "primary_goal": "修复直接暴露 NAND/HBF 组件的 GPU memory billing 绕过共享 NAND page/plane/queue/read-program 模型的问题；验证 read/program、owner/resource、错误和回归边界，不扩展 direct erase API。",
   "purpose": "nand_uncovered_execution_granularity",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "budget": {
@@ -71,10 +71,14 @@
     ]
   },
   "problem_domain_closure": {
-    "rule": "同一 NAND 粒度根因若影响 profile、地址映射、访问拆分、队列/资源、错误、报告或回归表面，本轮一起收口。",
-    "status": "prepare"
+    "candidate": "accepted/promoted",
+    "deferred": "FTL/GC firmware timing, real-device calibration, direct erase API",
+    "fix": "planner._direct_memory_phase routes AccessKind.READ/WRITE through PhysicalService.price and carries physical bytes/energy",
+    "regression": "focused 6 passed; inherited full 3111 passed/4 skipped at functional source commit",
+    "status": "closed_with_source_fix",
+    "trigger": "direct llama_backend_memory exposure used HostMemoryProfile.memory_service and ignored nand_media_v1 geometry"
   },
-  "selected_candidate": null,
-  "next_step": "等待独立 source scan 与 NAND matrix；若无缺陷保留有限负结论并切换方向。",
-  "status": "prepare"
-}\n
+  "selected_candidate": "H62_DIRECT_NAND_MEMORY_BILLING",
+  "next_step": "切换到评估/API与可视化口径或其他最长未查方向；不重复 H62 direct billing、H48/H49 propagation。",
+  "status": "promote"
+}
