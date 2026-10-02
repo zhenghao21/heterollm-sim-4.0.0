@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H55_DRAM_HBM_REFRESH_REPORT_QUEUE_BOUNDARY",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记 DRAM/HBM shared-model metadata propagation 假设，等待独立 source scan 与矩阵。",
+  "round_id": "round_055",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "5d499dc64ff1112ae543342169aaa42a748ebaa8",
+  "status": "pending"
+}

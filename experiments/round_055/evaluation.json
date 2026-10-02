@@ -1,0 +1,21 @@
+{
+  "accuracy_status": "not_applicable",
+  "candidate_id": "H55_DRAM_HBM_REFRESH_REPORT_QUEUE_BOUNDARY",
+  "comparison_artifact": "artifacts/optimization/round_055/",
+  "generalization_status": "pending",
+  "limitations": [
+    "H55 尚未完成 DRAM/HBM metadata/report/resource 独立扫描。"
+  ],
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "round_id": "round_055",
+  "schema": "heterollm.optimization.evaluation/v1",
+  "score": {
+    "status": "pending"
+  },
+  "status": "prepare"
+}

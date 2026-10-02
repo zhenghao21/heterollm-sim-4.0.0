@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "DRAM/HBM 共享模型中的 refresh/row/queue/burst/channel/bank metadata 可能在真实计费、资源或报告链路中丢失或被当作零成本。",
+    "direction": "存储硬件建模粒度",
+    "falsifier": "metadata、physical bytes/energy、owner/queue 在 endpoint→planner→event→report/API 保持，非法状态 fail-closed。",
+    "id": "H55_DRAM_HBM_REFRESH_REPORT_QUEUE_BOUNDARY",
+    "trigger": "H39 已覆盖 direct geometry/access/queue/refresh 结构，但未覆盖完整 report/API propagation。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "5d499dc64ff1112ae543342169aaa42a748ebaa8",
+  "round_id": "round_055",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}
