@@ -8,7 +8,7 @@ existing :class:`ResourceDemand`/``TaskSpec`` contracts.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
@@ -698,6 +698,7 @@ def endpoint_service(
     read: bool,
     name: str,
     page_offset_bytes: Optional[int] = None,
+    dram_address_bytes: Optional[int] = None,
 ) -> Optional[EndpointService]:
     _non_negative_int(byte_count, "byte_count")
     bandwidth = float(component.directional_bandwidth_gbps("read" if read else "write"))
@@ -801,6 +802,34 @@ def endpoint_service(
     service_ns = billed["service_ns"]
     energy_key = "{}_energy_pj_per_byte".format(direction)
     energy = _non_negative(component.metadata.get(energy_key, component.metadata.get("memory_service", {}).get("energy_pj_per_byte", 0.0)), energy_key)
+    dram_contract = None
+    dram_profile = component.metadata.get("dram_profile")
+    if dram_profile is not None:
+        if is_dataclass(dram_profile):
+            dram_profile = asdict(dram_profile)
+        if not isinstance(dram_profile, Mapping):
+            raise ValueError("dram_profile must be a mapping or DramProfile")
+        address = (
+            dram_address_bytes
+            if dram_address_bytes is not None
+            else component.metadata.get("dram_address_bytes")
+        )
+        if address is not None:
+            if isinstance(address, bool) or not isinstance(address, int) or address < 0:
+                raise ValueError("dram_address_bytes must be a non-negative integer")
+            dram_contract = {
+                "profile": dict(dram_profile),
+                "accesses": ({
+                    "operation": "read" if read else "write",
+                    "offset_bytes": address,
+                    "byte_count": byte_count,
+                },),
+                "read_bandwidth_gb_s": physical_service.read_bandwidth_gb_s,
+                "write_bandwidth_gb_s": physical_service.write_bandwidth_gb_s,
+                "max_outstanding_requests": physical_service.queue_depth,
+                "resource_id": physical_service.resource_id,
+                "state_key": physical_service.physical_owner,
+            }
     if service_model in {"analytical", "overlapped"}:
         bottleneck = "latency" if latency_ns > bandwidth_ns else "bandwidth"
         if latency_ns == bandwidth_ns:
@@ -855,6 +884,8 @@ def endpoint_service(
             **throughput_metrics,
             "estimated_internal_wait_ns": billed["estimated_internal_wait_ns"],
             "timing_evidence": "ANALYTICAL",
+            **({"dram_access": dram_contract} if dram_contract is not None else {}),
+            **({"dram_address_scope": "aggregate_unknown"} if dram_profile is not None and dram_contract is None else {}),
         },
     )
 

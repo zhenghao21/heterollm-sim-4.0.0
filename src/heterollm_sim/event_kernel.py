@@ -772,6 +772,7 @@ class UnifiedEventKernel:
         for logical_id, owner_id in owners.items():
             capacities.setdefault(logical_id, owner_capacities.get(owner_id, 1))
         self._l2_states = {}
+        self._dram_states = {}
         self._tasks: Dict[str, TaskSpec] = {}
         self._indegree: Dict[str, int] = {}
         self._dependents: Dict[str, List[str]] = {}
@@ -1617,7 +1618,11 @@ class UnifiedEventKernel:
         if self.has_active_tasks:
             raise ValueError("prevalidated compiled drain requires an idle kernel")
         chunk = tuple(tasks)
-        if self.resource_owners or any("stateful_l2" in task.metadata for task in chunk):
+        if (
+            self.resource_owners
+            or any("stateful_l2" in task.metadata for task in chunk)
+            or any("dram_access" in task.metadata for task in chunk)
+        ):
             if not layout.matches_structure(chunk):
                 raise ValueError("task graph does not match compiled structure")
             self.submit_compiled(chunk, layout)
@@ -2120,6 +2125,21 @@ class UnifiedEventKernel:
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
         else:
             demands = self._sorted_demands[task_id]
+        dram_commit = None
+        if "dram_access" in task.metadata:
+            from .dram import resolve_dram_task
+            try:
+                task, state_key, next_state = resolve_dram_task(
+                    task, self._dram_states
+                )
+            except (TypeError, ValueError, KeyError):
+                # DRAM preview is transactional just like stateful L2: an
+                # invalid contract must leave both the ready heap and kernel
+                # state available for a corrected retry.
+                heapq.heappush(self._ready_heap, queued)
+                raise
+            dram_commit = (state_key, next_state)
+            demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
         isfinite = math.isfinite
         timing_is_finite = isfinite(start_ns)
         if timing_is_finite:
@@ -2138,6 +2158,8 @@ class UnifiedEventKernel:
         heapq.heappop(group_ready)
 
         self._tasks.pop(task_id)
+        if dram_commit is not None:
+            self._dram_states[dram_commit[0]] = dram_commit[1]
         self._dependency_ready.pop(task_id)
         self._resource_groups.pop(task_id)
         self._sorted_demands.pop(task_id)

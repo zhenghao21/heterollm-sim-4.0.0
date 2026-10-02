@@ -6157,7 +6157,7 @@ def _add_direct_state_access(builder, scenario, router, storage, device, byte_co
     for hop in router.route(source, target, byte_count):
         demands.extend(hop.demands(byte_count))
     return builder.add(name, TaskCategory.MEMORY, tuple(demands), dependencies=dependencies,
-        advance=False, metadata={**metadata, "direct_memory_component": storage,
+        advance=False, metadata={**(service.metadata if service else {}), **metadata, "direct_memory_component": storage,
             "access_kind": "READ" if read else "WRITE", "bytes": byte_count,
             "source_component": source, "target_component": target,
             "resource_accounting": "direct_memory_access", "resource_transfer_bytes": 0})
