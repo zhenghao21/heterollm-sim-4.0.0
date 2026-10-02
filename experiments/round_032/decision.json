@@ -39,8 +39,8 @@
   "publication": {
     "source_commit": "310ec74785bc817b777d7458a4bf87984124bcbd",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H32 negative records"
+    "verified_remote_sha": "a2020ac0b0b7780b8ad3c9bb3c8e4d93ab92ed2b",
+    "verification": "git push origin main exit 0; H32 negative records publication commit a2020ac0b0b7780b8ad3c9bb3c8e4d93ab92ed2b matched git ls-remote before final metadata update"
   },
   "process_learning": "成本模型负向扫描必须保留通过的守恒面和未实测代理，不能把解析守恒扩展成 Native/硬件精度结论。",
   "source_identity": {
