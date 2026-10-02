@@ -1,0 +1,37 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_017",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H17_COMPONENT_PRESET_PERSISTENCE_MIGRATION",
+    "claim": "Version-1 compatibility aliases and ignored detail fields may need an explicit migration layer to preserve meaning across rewrites.",
+    "trigger": "a version-1 file uses preset_id/component_spec aliases and is then mutated/reloaded",
+    "expected_baseline": "either aliases fail to load, canonical rewrite loses editable data, or unsupported version markers are silently accepted",
+    "observed": "aliases load, first mutation rewrites canonical id/component keys, editable data remains, and all unsupported version markers fail",
+    "falsifier": "any supported version-1 alias loses data after canonical rewrite/reload, or an unsupported version is accepted"
+  },
+  "parent_commit": "fa1acb55be3861571c039580c58c00156c1b169b",
+  "changed_files": [],
+  "activation_checks": [
+    "version-1 alias-only file loaded and detail returned the expected ID",
+    "first mutation rewrote alias-only persisted keys to id/component",
+    "reload after rewrite remained canonical and readable",
+    "version 0/2/string/float/bool markers all raised ComponentPresetPersistenceError"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_component_preset_crud.py tests/test_component_presets.py",
+      "result": "16 passed in 2.95s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "reused unchanged parent result: 3025 passed, 4 skipped in 434.94s; exit code 0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "independent_evidence": "artifacts/optimization/round_017/h17_migration_matrix.json",
+  "candidate_source_sha256": "f3336f6b7d394dcb28146f92b36cf8d1f53a7dc7f91881fe6d078a1d43b01824"
+}
