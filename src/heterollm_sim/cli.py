@@ -287,9 +287,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         result = run_scenario(
             scenario, retention_policy=args.retention_policy
         )
-        payload = report_dict(result)
-        print(canonical_json(payload) if args.json else format_report(result))
+        payload = report_dict(result) if args.json or args.output else None
+        print(
+            canonical_json(payload)
+            if args.json
+            else format_report(result, data=payload)
+        )
         if args.output:
+            assert payload is not None
             write_json(args.output, payload)
             print("报告已写入：{}".format(args.output), file=sys.stderr)
         return 0

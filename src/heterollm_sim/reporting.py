@@ -6007,8 +6007,15 @@ def _report_dict_in_context(
     }
 
 
-def format_report(result: RunResult) -> str:
-    data = report_dict(result)
+def format_report(
+    result: RunResult,
+    *,
+    data: Optional[Mapping[str, Any]] = None,
+) -> str:
+    """Format a report, reusing a payload when the caller already built it."""
+
+    if data is None:
+        data = report_dict(result)
     summary = data["summary"]
     manifest = data["manifest"]
     lines = [
