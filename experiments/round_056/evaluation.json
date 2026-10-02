@@ -1,0 +1,21 @@
+{
+  "accuracy_status": "not_applicable",
+  "candidate_id": "H56_EVIDENCE_SUPERSESSION_CLOSURE",
+  "comparison_artifact": "artifacts/optimization/round_056/",
+  "generalization_status": "pending",
+  "limitations": [
+    "H56 尚未完成跨轮 records/artifact/source identity 审计。"
+  ],
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "round_id": "round_056",
+  "schema": "heterollm.optimization.evaluation/v1",
+  "score": {
+    "status": "pending"
+  },
+  "status": "prepare"
+}

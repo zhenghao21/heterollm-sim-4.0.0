@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H56_EVIDENCE_SUPERSESSION_CLOSURE",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记跨轮证据闭合假设，等待独立 source/records scan 与 closure matrix。",
+  "round_id": "round_056",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "ec48c20eabeb2f5723d980d1bb91c36079241f0e",
+  "status": "pending"
+}
