@@ -28,7 +28,7 @@
     "开发工具链与可复现性": "H33"
   },
   "scope": {
-    "candidate": "event-kernel ensure_resource_capacities及serving/streaming调用链",
+    "candidate": "event-kernel constructor/ensure_resource_capacities及engine、serving、streaming容量报告调用链",
     "include": [
       "批量容量校验与原子提交",
       "物理owner与逻辑alias容量同步",
@@ -80,5 +80,5 @@
   ],
   "selected_candidate": "H37_CAPACITY_UPDATE_PARTIAL_COMMIT_ALIAS_STALENESS",
   "problem_domain_scope_note": "ensure_resource_capacities对已声明但尚未调度的owner也保守拒绝容量漂移，属于契约保护而非仅已用lane限制。",
-  "next_step": "轮换到运行速度/内存或计算成本模型；优先建立独立基准，再决定是否进入代码修改。"
+  "next_step": "轮换到运行速度/内存或计算成本模型；先独立wall-time/成本基准，再决定是否修改源码。"
 }
