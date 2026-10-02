@@ -2618,11 +2618,20 @@ def _cache_memory_demands(
         )
     )
     backing_service_ns = float(backing_memory_service["service_ns"])
+    # The backing service may round each direction to its transaction
+    # quantum (serialized/overlapped models).  Carry that resolved physical
+    # traffic into the actual resource demand and energy accounting; the
+    # cache-level rows above remain logical payload accounting.
+    logical_backing_read_bytes = incoming_reads
+    logical_backing_write_bytes = incoming_writes
+    physical_backing_read_bytes = int(backing_memory_service["physical_read_bytes"])
+    physical_backing_write_bytes = int(backing_memory_service["physical_write_bytes"])
+    physical_backing_bytes = physical_backing_read_bytes + physical_backing_write_bytes
     demands.append(ResourceDemand(
         resource_id=backing_resource_id,
         service_ns=backing_service_ns,
-        bytes_moved=backing_bytes,
-        energy_pj=backing_bytes * backing_energy_pj_per_byte,
+        bytes_moved=physical_backing_bytes,
+        energy_pj=physical_backing_bytes * backing_energy_pj_per_byte,
     ))
     return tuple(demands), {
         "cache_model": "v4_directional_closed_interval",
@@ -2635,13 +2644,15 @@ def _cache_memory_demands(
         "logical_read_bytes": read_bytes,
         "logical_write_bytes": write_bytes,
         "logical_bytes": read_bytes + write_bytes,
-        "physical_read_bytes": incoming_reads,
-        "physical_write_bytes": incoming_writes,
-        "physical_bytes": backing_bytes,
+        "physical_read_bytes": physical_backing_read_bytes,
+        "physical_write_bytes": physical_backing_write_bytes,
+        "physical_bytes": physical_backing_bytes,
         "backing_memory_service": backing_memory_service,
-        "backing_read_bytes": incoming_reads,
-        "backing_write_bytes": incoming_writes,
-        "backing_bytes": backing_bytes,
+        "logical_backing_read_bytes": logical_backing_read_bytes,
+        "logical_backing_write_bytes": logical_backing_write_bytes,
+        "backing_read_bytes": physical_backing_read_bytes,
+        "backing_write_bytes": physical_backing_write_bytes,
+        "backing_bytes": physical_backing_bytes,
         "backing_service_ns": backing_service_ns,
         "write_back": hierarchy.write_back,
         "write_allocate": hierarchy.write_allocate,
@@ -4184,12 +4195,15 @@ def _estimate_typed_roofline(
             )
         )
         backing_service_ns = float(backing_memory_service["service_ns"])
+        physical_read_bytes = int(backing_memory_service["physical_read_bytes"])
+        physical_write_bytes = int(backing_memory_service["physical_write_bytes"])
+        physical_bytes = physical_read_bytes + physical_write_bytes
         memory_demands = (
             ResourceDemand(
                 resource_id=memory_resource_id,
                 service_ns=backing_service_ns,
-                bytes_moved=bytes_moved,
-                energy_pj=bytes_moved * memory_energy_pj_per_byte,
+                bytes_moved=physical_bytes,
+                energy_pj=physical_bytes * memory_energy_pj_per_byte,
             ),
         ) if bytes_moved > 0 else ()
         cache_metadata = {
@@ -4197,13 +4211,15 @@ def _estimate_typed_roofline(
             "logical_read_bytes": read_bytes,
             "logical_write_bytes": write_bytes,
             "logical_bytes": bytes_moved,
-            "physical_read_bytes": read_bytes,
-            "physical_write_bytes": write_bytes,
-            "physical_bytes": bytes_moved,
-            "backing_read_bytes": read_bytes,
-            "backing_write_bytes": write_bytes,
+            "physical_read_bytes": physical_read_bytes,
+            "physical_write_bytes": physical_write_bytes,
+            "physical_bytes": physical_bytes,
+            "logical_backing_read_bytes": read_bytes,
+            "logical_backing_write_bytes": write_bytes,
+            "backing_read_bytes": physical_read_bytes,
+            "backing_write_bytes": physical_write_bytes,
             "backing_memory_service": backing_memory_service,
-            "backing_bytes": bytes_moved,
+            "backing_bytes": physical_bytes,
             "backing_service_ns": backing_service_ns,
         }
     # Keep cache payload reports invariant under timing-only profile changes.
