@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H54_CHUNK_PLAN_REUSE_BOUNDARY",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记 chunk plan reuse 速度/内存假设，等待独立 source scan 与 fresh/reused A/B。",
+  "round_id": "round_054",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "b5655a86077173f3bd9c3ceb5c54d41019ecce1f",
+  "status": "pending"
+}

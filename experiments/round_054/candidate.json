@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "重复请求的 lazy chunk lowering 可能可安全复用已有 context/segment 计划，降低 wall time/峰值内存而保持任务和报告完全等价。",
+    "direction": "运行速度与内存",
+    "falsifier": "fresh/reused A/B 在任务 ID、依赖、metadata、makespan、retention 和错误边界任一不等价，或收益低于噪声。",
+    "id": "H54_CHUNK_PLAN_REUSE_BOUNDARY",
+    "trigger": "H46 profile 定位 lazy lowering/metadata clone 为稳定热点，但未有 A/B 或 invariant 计数器。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "b5655a86077173f3bd9c3ceb5c54d41019ecce1f",
+  "round_id": "round_054",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

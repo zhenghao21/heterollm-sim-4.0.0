@@ -1,0 +1,21 @@
+{
+  "accuracy_status": "not_applicable",
+  "candidate_id": "H54_CHUNK_PLAN_REUSE_BOUNDARY",
+  "comparison_artifact": "artifacts/optimization/round_054/",
+  "generalization_status": "pending",
+  "limitations": [
+    "H54 尚未完成 lazy chunk reuse source scan 与 A/B。"
+  ],
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "round_id": "round_054",
+  "schema": "heterollm.optimization.evaluation/v1",
+  "score": {
+    "status": "pending"
+  },
+  "status": "prepare"
+}

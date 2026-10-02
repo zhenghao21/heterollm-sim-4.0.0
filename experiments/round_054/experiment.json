@@ -1,0 +1,80 @@
+{
+  "baseline": {
+    "parent_commit": "b5655a86077173f3bd9c3ceb5c54d41019ecce1f",
+    "role": "H53 finite negative run-job lifecycle; H46 lazy lowering profile historical comparator"
+  },
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "matrix_runs": 1,
+    "native_collection_runs": 0,
+    "retries": 0,
+    "source_scan_runs": 1
+  },
+  "data_roles": {
+    "comparison": "H46 profile as historical timing context only",
+    "development": "fresh repeated request chunk A/B",
+    "final_acceptance": "engineering speed/memory only; no Native accuracy",
+    "holdout": "independent chunk identity/metadata controls"
+  },
+  "direction": "运行速度与内存",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H53",
+    "存储硬件建模粒度": "H49",
+    "开发工具链与可复现性": "H47",
+    "计算成本模型": "H52",
+    "评估/API与可视化口径": "H50",
+    "运行速度与内存": "H54活动",
+    "预测精度与泛化": "H51"
+  },
+  "direction_switch_reason": "H53 已收口 run_jobs 生命周期且无源码候选；运行速度方向自 H46 后未复查，H46 留下 H46_CHUNK_METADATA_PLAN_REUSE_BOUNDARY 待证伪，切换到有界等价 A/B。",
+  "guardrails": [
+    "不重做 H41/H46 retention/profile结论",
+    "不引入进程级全局缓存",
+    "任务/metadata/依赖不等价时拒绝优化",
+    "无安全 A/B 候选不改源码"
+  ],
+  "hypothesis_id": "H54_CHUNK_PLAN_REUSE_BOUNDARY",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "metrics": [
+    "lowering_wall_time",
+    "peak_memory",
+    "task_equivalence",
+    "cache_hit_miss",
+    "output_retention_equivalence"
+  ],
+  "next_step": "先独立扫描 CompilationContext/task segment cache 与 lazy iterator，再运行 fresh/reused A/B；无收益或不等价则保留有限负结论。",
+  "previous_direction": "仿真器正确性与语义（H53）",
+  "primary_goal": "对同一请求的 lazy chunk lowering 做有界 fresh-context/reused-context A/B，验证任务序列、metadata、makespan/retention 等价，再决定是否存在安全的计划复用或缓存优化；不重复 H41/H46 retention/profile。",
+  "problem_domain_closure": {
+    "rule": "同一 chunk reuse 根因若影响 compile, lazy iterator, cache identity, output equivalence and memory/error 面，必须本轮收口；无等价证明不得修改源码。",
+    "status": "prepare"
+  },
+  "purpose": "chunk_plan_reuse_runtime_boundary",
+  "recent_directions": [
+    "H52:计算成本模型（有限负结论）",
+    "H53:仿真器正确性与语义（有限负结论）",
+    "H54:运行速度与内存（活动）"
+  ],
+  "round_id": "round_054",
+  "schema": "heterollm.optimization.experiment/v1",
+  "scope": {
+    "candidate": "safe compilation-context/task-segment reuse for repeated request chunk lowering",
+    "exclude": [
+      "H41 retention semantics",
+      "H46 profile rerun without A/B",
+      "event kernel behavior",
+      "Native accuracy",
+      "global process cache"
+    ],
+    "include": [
+      "fresh vs reused CompilationContext",
+      "task IDs/dependencies/metadata equivalence",
+      "chunk counts/makespan/retention equivalence",
+      "wall time and tracemalloc",
+      "cache hit/miss/eviction counters"
+    ]
+  },
+  "selected_candidate": null,
+  "status": "prepare"
+}
