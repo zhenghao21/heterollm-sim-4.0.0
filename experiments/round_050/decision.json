@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H50_RETENTION_STATUS_PROJECTION",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记评估/API方向的 retention/status projection 假设，等待独立 source scan 与状态矩阵。",
+  "round_id": "round_050",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "ddbbcb8e6f34390c84becd62f863cf1741cf1e89",
+  "status": "pending"
+}

@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "execution result 在 exact/streaming/aggregate retention 与 static/online report/API/visualization 投影中可能丢失 failure/degraded/incomplete/partial 状态或不一致。",
+    "direction": "评估、API与可视化口径",
+    "falsifier": "各 retention 与入口对同一状态保持一致且失败/缺失不误报成功。",
+    "id": "H50_RETENTION_STATUS_PROJECTION",
+    "trigger": "H42 仅覆盖 analytical_coverage 评分 gate，H49 发现 aggregate projection 依赖 retention；需要独立状态矩阵。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "ddbbcb8e6f34390c84becd62f863cf1741cf1e89",
+  "round_id": "round_050",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

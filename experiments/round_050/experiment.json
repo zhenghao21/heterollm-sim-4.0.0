@@ -1,0 +1,79 @@
+{
+  "baseline": {
+    "parent_commit": "ddbbcb8e6f34390c84becd62f863cf1741cf1e89",
+    "role": "H49 finite negative NAND E2E boundary; H42 coverage-gate source as historical comparator only"
+  },
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "matrix_runs": 1,
+    "native_collection_runs": 0,
+    "retries": 0,
+    "source_scan_runs": 1
+  },
+  "data_roles": {
+    "comparison": "H42 published coverage gate only as non-reopened comparator",
+    "development": "fresh synthetic status/retention controls",
+    "final_acceptance": "status/report contract only; no Native accuracy",
+    "holdout": "independent retention/API/visualization controls"
+  },
+  "direction": "评估、API与可视化口径",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H45",
+    "存储硬件建模粒度": "H49",
+    "开发工具链与可复现性": "H47",
+    "计算成本模型": "H44",
+    "评估/API与可视化口径": "H50活动",
+    "运行速度与内存": "H46",
+    "预测精度与泛化": "H43"
+  },
+  "direction_switch_reason": "H49 已收口同 owner queue/report retention 边界且无源码候选；评估/API 方向自 H42 以来未复查，切换到最久未检查方向。",
+  "guardrails": [
+    "不重做 H42 analytical_coverage gate",
+    "不重做 H49 NAND projection",
+    "未知/失败状态不得静默变零或 passed",
+    "无独立可复现缺陷不改源码"
+  ],
+  "hypothesis_id": "H50_RETENTION_STATUS_PROJECTION",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "metrics": [
+    "status_preservation",
+    "retention_parity",
+    "report_api_parity",
+    "visualization_state",
+    "failure_closed_form"
+  ],
+  "next_step": "先独立扫描 report_dict/online report/report_api/visualization 与 retention 状态入口；若未发现缺陷，保留有限负结论并转下一方向。",
+  "previous_direction": "存储硬件建模粒度（H49）",
+  "primary_goal": "检查 static/online report、retention、failure/degraded/incomplete 与 visualization/API 的状态投影是否一致；不重复 H42 analytical_coverage gate 或 H49 NAND metadata projection。",
+  "problem_domain_closure": {
+    "rule": "同一 status projection 根因若影响 execution result、report、API、visualization 与 error 面，必须本轮收口；不适用入口需显式记录。",
+    "status": "prepare"
+  },
+  "purpose": "evaluation_api_visualization_status_boundary",
+  "recent_directions": [
+    "H48:存储硬件建模粒度（有限负结论）",
+    "H49:存储硬件建模粒度 E2E（有限负结论）",
+    "H50:评估/API与可视化口径（活动）"
+  ],
+  "round_id": "round_050",
+  "schema": "heterollm.optimization.experiment/v1",
+  "scope": {
+    "candidate": "execution result status and retention-specific projection across report_dict/online report/report_api/visualization",
+    "exclude": [
+      "H42 analytical_coverage/fallback score gates",
+      "H49 NAND metadata projection",
+      "Native accuracy",
+      "new scoring framework"
+    ],
+    "include": [
+      "exact/streaming/aggregate retention status",
+      "failure/degraded/incomplete propagation",
+      "static vs online report/API field parity",
+      "visualization/task status projection",
+      "empty/partial output controls"
+    ]
+  },
+  "selected_candidate": null,
+  "status": "prepare"
+}
