@@ -2,7 +2,8 @@
 from dataclasses import replace
 
 from heterollm_sim import planner
-from heterollm_sim.cost_models import GemmWorkload, HostMemoryProfile
+from heterollm_sim.contracts import ResourceDemand, TaskCategory
+from heterollm_sim.cost_models import CostPhase, GemmWorkload, HostMemoryProfile
 from heterollm_sim.reference import build_reference_scenario
 
 
@@ -124,3 +125,25 @@ def test_direct_nand_read_uses_page_geometry_and_media_latency():
     assert direct.service_ns == bill["service_ns"]
     assert direct.bytes_moved == bill["physical_bytes"]
     assert direct.service_ns > 600000.0
+
+
+def test_direct_nand_program_uses_media_rmw_and_physical_bytes():
+    case = _nand_case()
+    with planner._compilation_scope(case):
+        plan = planner._parallel_plan(case)
+        rank = plan.ranks[0]
+        _, local = planner._gpu_profiles(case, rank.component_id, rank.memory_component_id)
+        phase = CostPhase(
+            "direct_write",
+            TaskCategory.MEMORY,
+            (ResourceDemand(local.resource_id, 1.0, bytes_moved=4096),),
+            metadata={"cache": {"physical_read_bytes": 0, "physical_write_bytes": 4096}},
+        )
+        updated = planner._direct_memory_phase(
+            case, rank, phase, "hbm1", read_bytes=0, write_bytes=4096
+        )
+    bill = updated.metadata["direct_memory_access"]["memory_service"]
+    assert bill["operation"] == "program"
+    assert bill["rmw_read_operations"] == 1
+    assert bill["physical_write_bytes"] == 8192
+    assert updated.metadata["direct_memory_access"]["physical_bytes"] == bill["physical_bytes"]
