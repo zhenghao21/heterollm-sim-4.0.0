@@ -2,20 +2,31 @@
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_043",
   "candidate_id": "H43_OOD_FALLBACK_PROVENANCE_BOUNDARY",
-  "status": "pending",
+  "status": "complete",
   "prediction": {
-    "status": "pending"
+    "status": "ood_fallback_contract_verified",
+    "native_loaded": false,
+    "source_commit": "21df2e70c17fcf6e770e1753257b09567fa708c0"
   },
   "score": {
-    "status": "pending"
+    "status": "non_comparable_fallback_fail_closed",
+    "acceptance": "explicit analytical fallback/OOD provenance cannot be scored as comparable native agreement; measured/native and absent coverage remain compatible",
+    "evidence": [
+      "artifacts/optimization/round_043/ood_matrix_pre_fix.json",
+      "artifacts/optimization/round_043/ood_matrix_independent.json",
+      "artifacts/optimization/round_043/fix_review.json"
+    ]
   },
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "fixed_and_reviewed",
   "accuracy_status": "not_applicable",
-  "generalization_status": "pending",
-  "regression_status": "pending",
-  "comparison_artifact": "artifacts/optimization/round_043/",
-  "result": "pending",
+  "generalization_status": "mechanism_only; no Native accuracy or broad OOD surface",
+  "regression_status": "focused 60 passed; full 3106 passed/4 skipped",
+  "comparison_artifact": "artifacts/optimization/round_043/ood_matrix_independent.json",
+  "result": "accepted_engineering_contract_fix_no_precision_claim",
   "limitations": [
-    "H43 尚未完成 OOD/fallback provenance 扫描。"
+    "OOD/fallback controls are synthetic and validate provenance/gating, not numeric accuracy",
+    "no Native target loaded; no TTFT/TPOT/E2E precision or cross-model accuracy claim",
+    "source_scan and matrix cover listed fallback paths; unobserved adapters remain unknown",
+    "tracemalloc/other runtime directions are out of scope"
   ]
 }

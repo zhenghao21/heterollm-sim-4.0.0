@@ -1,12 +1,12 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_043",
-  "status": "prepare",
+  "status": "promote",
   "purpose": "prediction_ood_fallback_provenance",
   "primary_goal": "检查未知模型/硬件/shape 与 fallback 适配的 provenance 是否在预测、评分、报告/API边界保持显式，避免 OOD 或条件 fallback 被当作精度可比结果。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "baseline": {
-    "parent_commit": "a43cf4e92f19e39c9f3e2e280819ea88bd0923ab",
+    "parent_commit": "0755082026a2e0f7da7937065a62dbfbd794c067",
     "role": "H42 score state contract fix；H34 fingerprint/coverage 仅作已验证背景，不继承其全域结论"
   },
   "hypothesis_id": "H43_OOD_FALLBACK_PROVENANCE_BOUNDARY",
@@ -45,12 +45,18 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一 OOD/fallback provenance 根因若影响 prediction、score、report 或 API，必须同轮收口；不能把单一 fingerprint 通过拆成精度接纳。"
+    "status": "closed",
+    "calibration": "blocked coverage and unknown shape remain explicit",
+    "dispatch": "unknown hardware/shape has no matched dispatch",
+    "serialization": "fallback source/status/provenance preserved",
+    "score": "nested fallback/OOD provenance gates native and R0 comparability",
+    "api_report": "analytical coverage and prediction provenance retained in score response",
+    "candidate": "accepted and promoted in source commit 21df2e70c17fcf6e770e1753257b09567fa708c0",
+    "deferred": "Native paired accuracy and broader calibrated OOD surface remain unmeasured"
   },
   "data_roles": {
     "development": "fresh synthetic OOD/fallback controls and source scan",
-    "comparison": "H42 published source a43cf4e92f19e39c9f3e2e280819ea88bd0923ab",
+    "comparison": "H42 published source 0755082026a2e0f7da7937065a62dbfbd794c067",
     "holdout": "independent unknown model/hardware/shape combinations",
     "final_acceptance": "mechanism/generalization contract only; no Native precision unless explicitly measured"
   },
@@ -66,8 +72,9 @@
     "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
-    "source_scan_runs": 0,
-    "state_matrix_runs": 0,
+    "source_scan_runs": 1,
+    "state_matrix_runs": 2,
+    "api_control_runs": 1,
     "retries": 0
   },
   "guardrails": [
@@ -77,6 +84,6 @@
     "fallback/unknown provenance 缺失时 fail closed",
     "无可复现状态丢失不改源码"
   ],
-  "selected_candidate": null,
-  "next_step": "先独立扫描 model_catalog、runtime_adapters、scenario/config fingerprint、reporting/web score 的 OOD/fallback provenance 路径，登记唯一可证伪候选。"
+  "selected_candidate": "H43_OOD_FALLBACK_PROVENANCE_BOUNDARY",
+  "next_step": "轮换到计算成本模型；先独立检查 MMA/collective/full-kernel 与 shape/单位/并发成本边界，不重复 H38 已收口的 memory/GEMM/reduction 基线。"
 }
