@@ -1,0 +1,82 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_043",
+  "status": "prepare",
+  "purpose": "prediction_ood_fallback_provenance",
+  "primary_goal": "检查未知模型/硬件/shape 与 fallback 适配的 provenance 是否在预测、评分、报告/API边界保持显式，避免 OOD 或条件 fallback 被当作精度可比结果。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "a43cf4e92f19e39c9f3e2e280819ea88bd0923ab",
+    "role": "H42 score state contract fix；H34 fingerprint/coverage 仅作已验证背景，不继承其全域结论"
+  },
+  "hypothesis_id": "H43_OOD_FALLBACK_PROVENANCE_BOUNDARY",
+  "direction": "预测精度与泛化",
+  "previous_direction": "评估、API与可视化口径（H42）",
+  "direction_switch_reason": "H42 已完成 analytical_coverage fail-closed 修复；按轮换规则切换预测精度/泛化，专门检查 OOD/fallback provenance，排除 H28 request coverage、H34 fingerprint/coverage 与 H42 score gate。",
+  "recent_directions": [
+    "H41:运行速度与内存（有限负结论）",
+    "H42:评估、API与可视化口径（已接纳）",
+    "H43:预测精度与泛化（活动）"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H37",
+    "运行速度与内存": "H41",
+    "计算成本模型": "H38",
+    "存储硬件建模粒度": "H40",
+    "预测精度与泛化": "H43活动",
+    "评估/API与可视化口径": "H42",
+    "开发工具链与可复现性": "H33"
+  },
+  "scope": {
+    "candidate": "model_catalog/runtime_adapters/scenario fingerprints/fallback provenance 到 prediction/report/score 的传播",
+    "include": [
+      "unknown model/hardware/shape controls",
+      "fallback adapter and source provenance",
+      "OOD/conditional prediction status",
+      "input fingerprint and comparable-domain gates",
+      "report/API status preservation"
+    ],
+    "exclude": [
+      "H28 request coverage",
+      "H34 fingerprint/shape coverage baseline",
+      "H42 analytical_coverage gate",
+      "Native collection unless explicitly available",
+      "runtime speed/cost/storage geometry"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一 OOD/fallback provenance 根因若影响 prediction、score、report 或 API，必须同轮收口；不能把单一 fingerprint 通过拆成精度接纳。"
+  },
+  "data_roles": {
+    "development": "fresh synthetic OOD/fallback controls and source scan",
+    "comparison": "H42 published source a43cf4e92f19e39c9f3e2e280819ea88bd0923ab",
+    "holdout": "independent unknown model/hardware/shape combinations",
+    "final_acceptance": "mechanism/generalization contract only; no Native precision unless explicitly measured"
+  },
+  "metrics": [
+    "provenance_preserved",
+    "ood_status",
+    "fallback_status",
+    "comparable_domain_gate",
+    "fingerprint_pairing",
+    "score_fail_closed"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "source_scan_runs": 0,
+    "state_matrix_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "不重复 H28 request coverage",
+    "不重复 H34 fingerprint/coverage 控制",
+    "不把 synthetic OOD 状态称为 Native 精度",
+    "fallback/unknown provenance 缺失时 fail closed",
+    "无可复现状态丢失不改源码"
+  ],
+  "selected_candidate": null,
+  "next_step": "先独立扫描 model_catalog、runtime_adapters、scenario/config fingerprint、reporting/web score 的 OOD/fallback provenance 路径，登记唯一可证伪候选。"
+}

@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_043",
+  "candidate_id": "H43_OOD_FALLBACK_PROVENANCE_BOUNDARY",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记预测精度与泛化方向；需要独立 OOD/fallback source scan、状态矩阵和配对控制后再决定是否修改。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "a43cf4e92f19e39c9f3e2e280819ea88bd0923ab"
+}

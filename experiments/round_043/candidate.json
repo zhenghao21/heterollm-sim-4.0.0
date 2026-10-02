@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_043",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H43_OOD_FALLBACK_PROVENANCE_BOUNDARY",
+    "direction": "预测精度与泛化",
+    "claim": "未知模型/硬件/shape 或条件 fallback 的 provenance 可能在 prediction、score、report/API 中丢失，导致 OOD 结果被当作可比精度。",
+    "trigger": "需要独立 source scan 和 OOD/fallback 状态矩阵；不继承 H34 全域结论。",
+    "falsifier": "未知/OOD/fallback 组合均显式标记 provenance、comparability 和 fail-closed 状态，且无误报精度通过。"
+  },
+  "parent_commit": "a43cf4e92f19e39c9f3e2e280819ea88bd0923ab",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}
