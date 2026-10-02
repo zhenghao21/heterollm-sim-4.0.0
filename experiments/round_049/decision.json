@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_049",
+  "candidate_id": "H49_NAND_E2E_REPORT_QUEUE_BOUNDARY",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记 H48 deferred E2E 面；需要一组最小真实 report/API/queue 控制后再决定是否修改。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "12b3638086f6f9efab405a5adfe7d402e552f821"
+}

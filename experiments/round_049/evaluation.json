@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_049",
+  "candidate_id": "H49_NAND_E2E_REPORT_QUEUE_BOUNDARY",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_049/",
+  "result": "pending",
+  "limitations": [
+    "H49 尚未完成 NAND E2E report/API 与跨请求 queue 控制。"
+  ]
+}

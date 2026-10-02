@@ -1,0 +1,80 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_049",
+  "status": "prepare",
+  "purpose": "nand_e2e_report_queue_followup",
+  "primary_goal": "补齐 H48 同一 NAND background/unknown 根因的两个未覆盖面：完整 report/API metadata 传播与跨请求 queue/owner E2E；不重做 H48 direct media/alias 控制。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "12b3638086f6f9efab405a5adfe7d402e552f821",
+    "role": "H48 finite negative direct NAND boundary; this round is a constrained E2E follow-up for deferred scope"
+  },
+  "hypothesis_id": "H49_NAND_E2E_REPORT_QUEUE_BOUNDARY",
+  "direction": "存储硬件建模粒度",
+  "previous_direction": "存储硬件建模粒度（H48，deferred E2E continuation）",
+  "direction_switch_reason": "H48 已完成 direct media/service/endpoint 控制但明确未覆盖 report/API 与跨请求 queue；按同一根因收口要求补一个最小 E2E 续轮，预算限制为一组同输入跨请求控制，不重跑已通过面。",
+  "recent_directions": [
+    "H47:开发工具链与可复现性（已接纳）",
+    "H48:存储硬件建模粒度（有限负结论）",
+    "H49:存储硬件建模粒度 E2E 续轮（活动）"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H45",
+    "运行速度与内存": "H46",
+    "计算成本模型": "H44",
+    "存储硬件建模粒度": "H49活动",
+    "预测精度与泛化": "H43",
+    "评估/API与可视化口径": "H42",
+    "开发工具链与可复现性": "H47"
+  },
+  "scope": {
+    "candidate": "H48 deferred endpoint→planner/event→report/API NAND metadata propagation and cross-request queue/owner conflict",
+    "include": [
+      "single request NAND metadata report",
+      "SSD/NVMe/HBF alias E2E identity",
+      "background/unknown fields in final report/API",
+      "two-request same owner queue/conflict control",
+      "failure/unsupported propagation"
+    ],
+    "exclude": [
+      "H48 direct media matrix rerun",
+      "DRAM/HBM",
+      "invented FTL/GC/die/channel values",
+      "Native accuracy"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一 H48 metadata propagation/queue 根因若影响 planner/event/report/API/error 面，必须本轮收口；若实际入口不支持则记录明确不适用，不伪造候选。"
+  },
+  "data_roles": {
+    "development": "fresh minimal E2E NAND scenario controls",
+    "comparison": "H48 published source 12b3638086f6f9efab405a5adfe7d402e552f821",
+    "holdout": "independent one/two request alias and owner controls",
+    "final_acceptance": "storage E2E mechanism only; no Native accuracy"
+  },
+  "metrics": [
+    "report_metadata_preserved",
+    "api_metadata_preserved",
+    "cross_request_queue_state",
+    "owner_conflict_fail_closed",
+    "unsupported_propagation"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "e2e_runs": 1,
+    "queue_controls": 1,
+    "retries": 0
+  },
+  "guardrails": [
+    "不重跑 H48 direct media/alias矩阵",
+    "不导入未经来源核验参数",
+    "FTL/GC timing保持unknown",
+    "未知 metadata 不得静默变零",
+    "E2E unsupported 必须记录不适用"
+  ],
+  "selected_candidate": null,
+  "next_step": "先构造一组最小真实 E2E NAND scenario，检查 report/API 与跨请求 queue/owner 传播；若入口不支持则保留有限负结论。"
+}
