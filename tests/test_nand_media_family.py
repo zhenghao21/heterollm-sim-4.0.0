@@ -149,6 +149,12 @@ def test_erase_does_not_require_write_bandwidth_but_shares_resolved_resource():
     assert endpoint.demands[0].service_ns > 0
 
 
+def test_generic_endpoint_cannot_treat_erase_as_a_write():
+    component = ComponentSpec("dram-like", "hbm", read_bandwidth_gbps=100, write_bandwidth_gbps=100)
+    with pytest.raises(ValueError, match="NAND media contract"):
+        endpoint_service(component, 262144, read=False, name="erase", operation="erase")
+
+
 def test_data_access_erase_reaches_shared_physical_service():
     service = resolve_service(_ssd())
     motion = expand_access(

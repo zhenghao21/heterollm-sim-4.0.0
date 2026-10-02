@@ -811,6 +811,8 @@ def endpoint_service(
                 "timing_evidence": "ANALYTICAL",
             },
         )
+    if operation == "erase":
+        raise ValueError("ERASE requires a NAND media contract")
     physical_service = resolve_service(component)
     latency = physical_service.read_latency_ns if read else physical_service.write_latency_ns
     granularity = _non_negative_int(component.metadata.get("transfer_granularity_bytes", 0), "transfer_granularity_bytes")
