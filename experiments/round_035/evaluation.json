@@ -1,0 +1,3 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_035", "candidate_id": "H35_EVALUATION_API_STATUS_CONTRACT", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_035/", "result": "pending", "limitations": ["H35 尚未完成 evaluation/API source scan。"]
+}

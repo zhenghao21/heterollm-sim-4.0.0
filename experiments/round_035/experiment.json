@@ -1,0 +1,23 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_035",
+  "status": "prepare",
+  "purpose": "evaluation_api_status_contract",
+  "primary_goal": "在不重开 H28 request coverage、H34 prediction identity 或 H31 semantic negative scan 的前提下，检查评估/API结果状态、失败/缺失和可视化/文本口径是否存在可复现不一致。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {"parent_commit": "6ae95b7a130ad731df2429554d5b9bb27f621ef9", "role": "H34 negative prediction/generalization scan plus H28 evaluation contract"},
+  "hypothesis_id": "H35_EVALUATION_API_STATUS_CONTRACT",
+  "direction": "评估/API与可视化口径",
+  "previous_direction": "预测精度与泛化（H34）",
+  "direction_switch_reason": "H34 预测输入/coverage 负向收口；评估/API方向自 H28 后未独立重开，H35 检查结果状态、失败/缺失和显示口径，不重复 request coverage。",
+  "recent_directions": ["H33:可复现性负向扫描", "H34:预测输入/泛化负向扫描", "H35:评估/API状态（活动）"],
+  "direction_last_checked": {"仿真器正确性与语义": "H31", "运行速度与内存": "H29", "计算成本模型": "H32", "存储硬件建模粒度": "H30", "预测精度与泛化": "H34", "评估/API与可视化口径": "H35活动（H28基础）", "开发工具链与可复现性": "H33"},
+  "scope": {"candidate": "evaluation/API result status, missing/failed cells, serialization and UI/text status consistency", "include": ["status propagation", "failure/missing coverage", "score/report API", "text/UI display", "unknown/degraded presentation"], "exclude": ["H28 request-set coverage", "H34 input fingerprints", "H30 storage", "Native accuracy claims without independent Native data"]},
+  "problem_domain_closure": {"status": "prepare", "rule": "同一评估状态根因直接影响的评分、失败/缺失、序列化、API 和可视化入口必须同轮收口；无候选保留负结论。"},
+  "data_roles": {"development": "fresh evaluation/API source scan and controlled missing/failed probes", "comparison": "parent 6ae95b7a130ad731df2429554d5b9bb27f621ef9", "holdout": "independent result status and UI/text controls", "final_acceptance": "evaluation/API mechanism only; no Native accuracy unless independently observed"},
+  "metrics": ["status_propagation", "missing_failure_explicitness", "api_serialization", "ui_text_consistency", "regression_status"],
+  "budget": {"candidate_count": 1, "full_prediction_runs": 0, "native_collection_runs": 0, "new_microbenchmark_runs": 2, "retries": 0},
+  "guardrails": ["不得重复 H28 request coverage", "不得把状态/显示单测称为精度改善", "没有 Native 时只报告评估机制", "失败/缺失不可静默当作通过"],
+  "selected_candidate": null,
+  "next_step": "完成独立 evaluation/API source scan，登记唯一可证伪候选。"
+}

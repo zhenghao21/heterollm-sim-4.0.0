@@ -1,3 +1,41 @@
 {
-  "schema": "heterollm.optimization.decision/v1", "round_id": "round_034", "candidate_id": "H34_PREDICTION_GENERALIZATION_INPUT_CONTRACT", "status": "pending", "decision": "pending", "reason": "Prepare registered prediction/generalization direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_034",
+  "candidate_id": "H34_PREDICTION_GENERALIZATION_INPUT_CONTRACT",
+  "status": "decided",
+  "decision": "reject_no_candidate",
+  "reason": "独立预测/泛化扫描确认 scenario、hardware、scheduler、mapping fingerprints 随 shape/input 变化，model/runtime coverage 与 unknown/fallback 状态显式区分；未发现新的可复现输入身份或泛化契约缺陷，未加载 Native、未改源码。",
+  "evidence": [
+    {
+      "path": "artifacts/optimization/round_034/prediction_scan.json",
+      "sha256": "6d8fe1354c8cbbdc80073a213e4ba884b20b71cebd860b8b5057234c6f97f199"
+    },
+    {
+      "path": "artifacts/optimization/round_034/prediction_scan.sha256",
+      "sha256": "cb82ca4fca12b82a3550f1b89cfb31b6ce1728a8399972632ca17e3e7c04e83e"
+    },
+    "Source scan and shape fingerprint probe exit 0",
+    "Coverage states complete/incomplete/unavailable/degraded explicit",
+    "Inherited H30 full regression: 3070 passed, 4 skipped; source unchanged"
+  ],
+  "deferred_scope": [
+    "No numerical accuracy/cross-hardware generalization claim without Native."
+  ],
+  "next_hypothesis": {
+    "id": "H35_EVALUATION_API_STATUS_CONTRACT",
+    "direction": "评估/API与可视化口径",
+    "claim": "下一轮检查评估/API结果状态、失败/缺失和可视化口径的一致性，不重复 H28 request coverage。",
+    "basis": "H34 prediction/generalization negative scan completed；评估/API方向自 H28 后未独立重开。",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "6b5520891e10e0063ed59dac6f58a96a8eb7d6cc",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "pending push of H34 negative records"
+  },
+  "process_learning": "无 Native 时只能接纳输入身份/coverage 机制结论，不能把 fingerprint 控制探针称为精度或跨硬件泛化改善。",
+  "source_identity": {
+    "source_commit": "6b5520891e10e0063ed59dac6f58a96a8eb7d6cc"
+  }
 }

@@ -11,7 +11,7 @@
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H32 | H32 独立 arithmetic/link/owner/pipeline probes 全通过，未发现排除 H27 后的新可复现公式缺陷；MMA occupancy/collective 仍明确是未实测或参数化 | 下一轮转开发工具链/可复现性；新的成本候选需更窄的执行证据 |
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H30 | H30 将已知 MemoryPosition offset 传入共享 NAND page/RMW/program 计费，并补齐 endpoint/legacy alias 可选入口；geometry 数值仍 profile-specific | 下一轮转评估/API或正确性语义；只有新的来源与实际 erase/FTL 调用链才重开存储方向 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H34（活动） | H28 收口请求集合覆盖契约；H34 重新检查输入身份、shape/hardware coverage 和 fallback 泛化边界，无 Native 时只做机制验证 | 先做独立输入/泛化 source scan；不重复 H28 请求覆盖修复 |
-| 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H22 | H22 已统一 engine/arrival 边界 | 等运行/成本方向至少各检查一轮后再重开 |
+| 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H35（活动） | H28 收口 request coverage；H35 重新检查结果状态、失败/缺失和可视化/API 一致性 | 先独立评估/API source scan；不重复 H28 request coverage |
 | 开发工具链与可复现性 | 测试隔离、缓存身份、实验记录、证据哈希、恢复 | H21-H23 记录流程 | 局部维护 | 只在证据或恢复失败时重开 |
 
 ## 轮换记录
@@ -36,5 +36,7 @@
 - H33：已登记开发工具链与可复现性方向，检查实验身份、证据哈希、恢复和基线配对链路。
 - H33：独立扫描确认 H30-H32 记录的 artifact 哈希、round/source/parent/remote 身份一致；未发现新的可复现配对或恢复缺陷，未改源码，保留环境性 `pytest-of-A` 权限警告边界。
 - H34：已登记预测精度与泛化方向，检查输入身份、shape/hardware coverage 和 fallback 泛化，不重复 H28 请求覆盖修复。
-- 当前推进点：H34 活动，等待独立 prediction/generalization source scan。
+- H34：独立扫描确认 scenario/hardware/scheduler/mapping fingerprints 随 shape/input 变化，model/runtime coverage 与 unknown/fallback 显式；无 Native 精度结论，未改源码。
+- H35：已登记评估/API与可视化口径方向，检查结果状态、失败/缺失和 UI/API 一致性，不重复 H28 request coverage。
+- 当前推进点：H35 活动，等待独立评估/API source scan。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。
