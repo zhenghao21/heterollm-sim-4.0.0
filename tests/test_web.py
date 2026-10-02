@@ -334,6 +334,83 @@ class WebApiTests(unittest.TestCase):
                     )
                     self.assertFalse(score["r0_comparison"]["passed"])
 
+    def test_direct_simulation_score_fails_closed_for_analytical_fallback(self):
+        scenario = build_reference_scenario()
+        report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in report["requests"].items()
+            }
+        }
+        report["analytical_coverage"] = {
+            "status": "complete",
+            "runtime": {
+                "prediction": {
+                    "model": "analytical",
+                    "confidence": "low",
+                    "reason": "no_measurements",
+                    "fallback_kind": "legacy_analytical",
+                    "extrapolated": False,
+                }
+            },
+        }
+        score = simulation_score_payload(
+            report,
+            scenario,
+            native_reference=native,
+            threshold_pct=25,
+            r0_reference=native,
+        )
+        self.assertEqual(score["analytical_coverage_status"], "fallback")
+        self.assertEqual(
+            score["native_comparison"]["status"],
+            "non_comparable_analytical_fallback",
+        )
+        self.assertFalse(score["native_comparison"]["passed"])
+        self.assertEqual(
+            score["r0_comparison"]["status"],
+            "non_comparable_analytical_fallback",
+        )
+        self.assertFalse(score["r0_comparison"]["passed"])
+
+    def test_direct_simulation_score_fails_closed_for_ood_provenance(self):
+        scenario = build_reference_scenario()
+        report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in report["requests"].items()
+            }
+        }
+        report["analytical_coverage"] = {
+            "status": "complete",
+            "runtime": {
+                "support_level": "out_of_domain",
+                "coverage": "metadata_only",
+            },
+        }
+        score = simulation_score_payload(
+            report,
+            scenario,
+            native_reference=native,
+            threshold_pct=25,
+        )
+        self.assertEqual(score["analytical_coverage_status"], "ood")
+        self.assertEqual(
+            score["native_comparison"]["status"],
+            "non_comparable_analytical_fallback",
+        )
+        self.assertFalse(score["native_comparison"]["passed"])
+
     def test_continuous_request_details_use_native_engine_boundary(self):
         payload = self.reference_payload()
         payload["workload"]["metadata"]["llama_cpp_runtime"] = {

@@ -75,8 +75,12 @@ FALLBACK_INDEX = """<!doctype html>
 _INCOMPLETE_ANALYTICAL_COVERAGE_STATES = frozenset(
     {"partial", "unknown", "failure", "degraded", "incomplete"}
 )
+_NON_COMPARABLE_ANALYTICAL_STATES = frozenset({"fallback", "ood"})
 _ANALYTICAL_COVERAGE_STATUS_KEYS = frozenset(
     {"status", "coverage", "coverage_status", "timing_completeness", "quality"}
+)
+_ANALYTICAL_FALLBACK_KEYS = frozenset(
+    {"reason", "fallback_kind", "confidence", "support_level", "extrapolated"}
 )
 
 
@@ -1286,9 +1290,16 @@ def ensure_valid_or_http_error(scenario: ScenarioConfig) -> None:
 def _apply_analytical_coverage_gate(
     comparison: Dict[str, Any], status: str
 ) -> Dict[str, Any]:
-    if status in _INCOMPLETE_ANALYTICAL_COVERAGE_STATES:
+    if status in (
+        _INCOMPLETE_ANALYTICAL_COVERAGE_STATES
+        | _NON_COMPARABLE_ANALYTICAL_STATES
+    ):
         comparison["comparison_status"] = comparison["status"]
-        comparison["status"] = "incomplete_analytical_coverage"
+        comparison["status"] = (
+            "incomplete_analytical_coverage"
+            if status in _INCOMPLETE_ANALYTICAL_COVERAGE_STATES
+            else "non_comparable_analytical_fallback"
+        )
         comparison["analytical_coverage_status"] = status
         comparison["passed"] = False
     return comparison
@@ -1302,6 +1313,11 @@ def _analytical_coverage_state(
             child_path = "{}/{}".format(path, key)
             if str(key).strip().lower() in _ANALYTICAL_COVERAGE_STATUS_KEYS:
                 normalized = str(child).strip().lower()
+                if str(key).strip().lower() == "coverage" and normalized in {
+                    "metadata_only",
+                    "out_of_domain",
+                }:
+                    return "ood", child_path
                 for prefix, state in (
                     ("failure", "failure"),
                     ("incomplete", "incomplete"),
@@ -1311,6 +1327,28 @@ def _analytical_coverage_state(
                 ):
                     if normalized == prefix or normalized.startswith(prefix + "_"):
                         return state, child_path
+            if str(key).strip().lower() in _ANALYTICAL_FALLBACK_KEYS:
+                normalized = str(child).strip().lower()
+                if str(key).strip().lower() == "support_level" and normalized in {
+                    "out_of_domain",
+                    "unsupported",
+                }:
+                    return "ood", child_path
+                if str(key).strip().lower() == "extrapolated" and child is True:
+                    return "fallback", child_path
+                if str(key).strip().lower() == "confidence" and normalized in {
+                    "low",
+                    "unvalidated",
+                }:
+                    return "fallback", child_path
+                if str(key).strip().lower() in {"reason", "fallback_kind"} and normalized not in {
+                    "",
+                    "none",
+                    "native",
+                    "measured",
+                    "calibrated",
+                }:
+                    return "fallback", child_path
             state, state_path = _analytical_coverage_state(child, child_path)
             if state:
                 return state, state_path
