@@ -31,8 +31,8 @@
   "publication": {
     "source_commit": "0ee89b76c19bc39751430db0b0662360ac509584",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H33 negative records"
+    "verified_remote_sha": "46ad71f6027047669d124f2585ba919c2e319b41",
+    "verification": "git push origin main exit 0; H33 negative records publication commit 46ad71f6027047669d124f2585ba919c2e319b41 matched git ls-remote before final metadata update"
   },
   "process_learning": "可复现性负向扫描必须保留环境性警告与 tracked identity 结论的边界，不把 ignored workspace 权限警告当作源码缺陷。",
   "source_identity": {
