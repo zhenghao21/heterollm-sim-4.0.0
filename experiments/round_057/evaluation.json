@@ -1,21 +1,32 @@
 {
   "accuracy_status": "not_applicable",
   "candidate_id": "H57_REPORT_SUMMARY_RESOURCE_CONSERVATION",
-  "comparison_artifact": "artifacts/optimization/round_057/",
-  "generalization_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_057/post_fix_control.json",
+  "generalization_status": "report aggregation boundary only",
   "limitations": [
-    "H57 尚未完成 report numeric aggregation/conservation 独立扫描。"
+    "post-simulation metadata fixture",
+    "non-finite fixture not separate",
+    "no Native"
   ],
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "fixed_and_verified",
   "prediction": {
-    "status": "pending"
+    "native_loaded": false,
+    "source_commit": "b0887d8b96a0e274b2a70439cd647d2ec4035e33",
+    "status": "source_fix_verified"
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "focused 1+12+41+61 passed; full 3109 passed/4 skipped",
+  "result": "candidate_accepted_development_baseline_promoted",
+  "review_artifact_sha256": "8623d9a1fa247d9e2cb19e3b60d625f91c73ad530f727044757f5b11eb345034",
   "round_id": "round_057",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
-    "status": "pending"
+    "acceptance": "negative batch metadata no longer creates negative/inconsistent summary",
+    "evidence": [
+      "artifacts/optimization/round_057/negative_resource_bytes_control.json",
+      "artifacts/optimization/round_057/post_fix_control.json",
+      "artifacts/optimization/round_057/final_review.json"
+    ],
+    "status": "accepted_engineering_report_conservation_fix"
   },
-  "status": "prepare"
+  "status": "complete"
 }

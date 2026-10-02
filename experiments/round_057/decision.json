@@ -1,12 +1,32 @@
 {
   "candidate_id": "H57_REPORT_SUMMARY_RESOURCE_CONSERVATION",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记 report summary/resource conservation 假设，等待独立 source scan 与矩阵。",
+  "changed_files": [
+    "src/heterollm_sim/reporting.py",
+    "tests/test_streaming_des.py",
+    "experiments/round_057/*.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "accept_promote_development_baseline",
+  "deferred_scope": [
+    "non-finite NaN/Infinity fixture",
+    "Native accuracy"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_057/source_scan_independent.json",
+    "artifacts/optimization/round_057/conservation_matrix_independent.json",
+    "artifacts/optimization/round_057/negative_resource_bytes_control.json",
+    "artifacts/optimization/round_057/post_fix_control.json",
+    "artifacts/optimization/round_057/final_review.json"
+  ],
+  "next_hypothesis": {
+    "claim": "切换未覆盖的执行链路，避免重复 H57/H50。",
+    "direction": "其他最长未查方向",
+    "rationale": "H57 source fix 已收口且 full regression 通过。"
+  },
+  "reason": "negative batch bytes fixture reproduced summary/event mismatch; _non_negative_int fix, post-fix control and full 3109/4 regression passed.",
+  "review_artifact_sha256": "8623d9a1fa247d9e2cb19e3b60d625f91c73ad530f727044757f5b11eb345034",
   "round_id": "round_057",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "fc5d5f99c905aa1b16eca75b3642555b95c29cfc",
-  "status": "pending"
+  "source_commit": "b0887d8b96a0e274b2a70439cd647d2ec4035e33",
+  "status": "complete"
 }

@@ -43,12 +43,16 @@
     "makespan_consistency",
     "truncation_disclosure"
   ],
-  "next_step": "先独立扫描 reporting aggregation 与 online/static summary/resource paths，再运行 conservation matrix；若未发现缺陷，保留有限负结论。",
+  "next_step": "切换其他最长未查方向；不重复 H57 conservation/H50 status.",
   "previous_direction": "开发工具链与可复现性（H56）",
   "primary_goal": "检查 static/online report 的 total_energy_pj、resource_accounted_bytes、resource_utilization、makespan 与保留事件/批次明细是否守恒，覆盖 retention/truncation 与 resource owner 聚合；不重复 H50 retention/status 或 H42 score gate。",
   "problem_domain_closure": {
-    "rule": "同一 report aggregation 根因若影响 event/resource, summary, online batch, static report, retention and API error surfaces，必须本轮收口；不适用入口显式记录。",
-    "status": "prepare"
+    "candidate": "accepted/promoted",
+    "deferred": "non-finite fixture and Native",
+    "fix": "online total_bytes uses _non_negative_int",
+    "regression": "focused and full tests passed",
+    "status": "closed_with_source_fix",
+    "trigger": "negative online batch resource metadata reached report summary without non-negative validation"
   },
   "purpose": "report_summary_resource_conservation_boundary",
   "recent_directions": [
@@ -77,6 +81,6 @@
       "truncation/report_limits"
     ]
   },
-  "selected_candidate": null,
-  "status": "prepare"
+  "selected_candidate": "online_negative_resource_bytes_not_fail_closed",
+  "status": "promote"
 }
