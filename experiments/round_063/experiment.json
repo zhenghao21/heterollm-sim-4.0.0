@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_063",
-  "hypothesis_id": "H63_TOOLCHAIN_CLOSURE_BOUNDARY",
+  "hypothesis_id": "H63_SOURCE_SCAN_HARDCODED_MODULE_HASHES",
   "direction": "开发工具链与可复现性",
   "previous_direction": "存储硬件建模粒度",
   "recent_directions": [
@@ -67,10 +67,14 @@
     ]
   },
   "problem_domain_closure": {
-    "rule": "同一记录/身份根因若影响写入、读取、并发、错误、API或回归证据，本轮一起收口。",
-    "status": "prepare"
+    "candidate": "accepted/promoted",
+    "deferred": "command_provenance missing-executable behavior remains an unselected observation",
+    "fix": "tools/source_identity.py computes commit-content hashes and verify_source_hashes fails closed",
+    "regression": "4 focused passed; simulator full regression inherited 3111 passed/4 skipped",
+    "status": "closed_with_toolchain_fix",
+    "trigger": "H62 source scan hardcoded module hashes mismatched captured Git commit content"
   },
-  "selected_candidate": null,
-  "next_step": "等待独立 source scan 与 toolchain matrix；无缺陷保留有限负结论并切换方向。",
-  "status": "prepare"
+  "selected_candidate": "H63_SOURCE_SCAN_HARDCODED_MODULE_HASHES",
+  "next_step": "切换评估/API与可视化或其他最长未查方向；不重复 H63 source identity helper/H47 command capture。",
+  "status": "promote"
 }

@@ -1,21 +1,31 @@
 {
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_063",
-  "candidate_id": "H63_TOOLCHAIN_CLOSURE_BOUNDARY",
-  "status": "prepare",
+  "candidate_id": "H63_SOURCE_SCAN_HARDCODED_MODULE_HASHES",
+  "status": "complete",
   "accuracy_status": "not_applicable",
   "generalization_status": "not_applicable",
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "fixed_and_verified",
   "prediction": {
     "native_loaded": false,
-    "status": "pending"
+    "source_commit": "a5ae5adca07f0c16f62a6d8ba85fbc8d50f40e5a",
+    "status": "toolchain_identity_verified"
   },
   "score": {
-    "status": "pending"
+    "status": "accepted_source_identity_fix",
+    "acceptance": "corrected H62 scan hashes raw Git commit contents and deliberate mismatches are rejected; sidecars remain valid",
+    "evidence": [
+      "artifacts/optimization/round_063/corrected_h62_source_scan.json",
+      "artifacts/optimization/round_063/toolchain_matrix_independent.json",
+      "artifacts/optimization/round_063/final_review.json"
+    ]
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "focused 4 passed; simulator full 3111 passed/4 skipped inherited from H62 functional source",
+  "result": "candidate_accepted_toolchain_baseline_promoted",
   "limitations": [
-    "尚未完成独立记录闭合审计"
-  ]
+    "no Native accuracy",
+    "H62 historical artifact remains preserved as negative evidence",
+    "command_provenance missing-executable observation not selected"
+  ],
+  "review_artifact_sha256": "4ae17a0d007f64083083979e083868d54ca26e1abb491214c9239b30cdab7f74"
 }

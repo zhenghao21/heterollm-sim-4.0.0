@@ -1,20 +1,59 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_063",
-  "status": "prepare",
+  "status": "accepted",
   "hypothesis": {
-    "id": "H63_TOOLCHAIN_CLOSURE_BOUNDARY",
+    "id": "H63_SOURCE_SCAN_HARDCODED_MODULE_HASHES",
     "direction": "开发工具链与可复现性",
-    "claim": "最新轮次可能存在记录 JSON/sidecar、源码身份或恢复阶段不一致，导致已通过证据无法与同一源码配对。",
-    "trigger": "H62 引入 source-fix commit 与 test-only commit 分离；需要独立检查记录是否明确标注 functional/current identity。",
-    "falsifier": "最新记录与 sidecar/source/remote 全部可解析且身份闭合，未发现可复现记录缺陷。"
+    "claim": "source scan writer 可写入与 source_commit 无关的硬编码模块 SHA，使记录无法证明测量内容来自声明版本。",
+    "trigger": "H62 source_scan three module claims mismatched raw git content at 6cea26e4 and current tree",
+    "falsifier": "regenerated scan with commit-content hashing matches every module and deliberate mismatch is rejected"
   },
   "parent_commit": "4cf07da52d4bc9683c0ba20995f6e5bf4f30750f",
-  "candidate_source_commit": null,
-  "source_sha256": null,
-  "changed_files": [],
-  "independent_evidence": [],
-  "activation_checks": [],
-  "deferred_candidates": [],
-  "tests": []
+  "candidate_source_commit": "a5ae5adca07f0c16f62a6d8ba85fbc8d50f40e5a",
+  "source_sha256": {
+    "functional_fix": "a5ae5adca07f0c16f62a6d8ba85fbc8d50f40e5a",
+    "current_head": "a5ae5adca07f0c16f62a6d8ba85fbc8d50f40e5a"
+  },
+  "changed_files": [
+    "tools/source_identity.py",
+    "tests/test_source_identity.py"
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_063/source_scan_independent.json",
+    "artifacts/optimization/round_063/source_blob_probe_provenance.json",
+    "artifacts/optimization/round_063/toolchain_matrix_independent.json",
+    "artifacts/optimization/round_063/corrected_h62_source_scan.json",
+    "artifacts/optimization/round_063/final_review.json"
+  ],
+  "activation_checks": [
+    "pre H62 claims mismatched commit content",
+    "corrected H62 scan identity_verified=true",
+    "sidecars and 20 artifact JSONs verified",
+    "deliberate mismatch regression rejected",
+    "HEAD=origin/main and referenced commits resolve"
+  ],
+  "deferred_candidates": [
+    "command_provenance missing executable/cwd behavior"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_command_provenance.py tests/test_source_identity.py -q",
+      "exit_code": 0,
+      "result": "4 passed"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m py_compile tools/source_identity.py artifacts/optimization/round_062/write_source_scan.py",
+      "exit_code": 0,
+      "result": "compiled"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "exit_code": 0,
+      "result": "inherited 3111 passed, 4 skipped; no simulator source change"
+    }
+  ],
+  "source_commit": "a5ae5adca07f0c16f62a6d8ba85fbc8d50f40e5a",
+  "review": "Independent audit reproduced hardcoded source identity defect; tracked helper and tests compute Git content hashes and fail closed.",
+  "review_artifact_sha256": "4ae17a0d007f64083083979e083868d54ca26e1abb491214c9239b30cdab7f74"
 }
