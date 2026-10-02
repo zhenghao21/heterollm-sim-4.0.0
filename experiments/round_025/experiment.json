@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_025",
-  "status": "prepare",
+  "status": "completed_negative",
   "purpose": "simulator_runtime_speed_memory",
   "primary_goal": "验证只需 aggregate summary/requests 的报告调用是否能安全复用现有 online_summary_dict，降低仿真器报告 wall time 和峰值内存。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -42,8 +42,10 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一报告聚合根因的所有读取、序列化、可视化和 API 入口必须一次收口；依赖完整 trace/history 的调用不得误走轻量路径。"
+    "status": "closed",
+    "call_sites": "所有 report_dict 生产调用均需完整字段或可视化/trace/history；没有现有 aggregate-only 调用方。",
+    "candidate": "若默认改为 summary-only 会破坏 CLI/web/run_jobs/API 契约；新增显式 API 属于独立 API 设计，不在本轮 runtime 假设内。",
+    "runtime_baseline": "H24 report-only probe 保留为基线，不宣称生产 wall-time 改善。"
   },
   "data_roles": {
     "development": "H24 runtime_baseline.json 与 fresh report call-site scan",
@@ -72,6 +74,19 @@
     "报告开销与仿真 run 开销分开测量",
     "不得把报告提速称为预测精度改善"
   ],
-  "selected_candidate": null,
-  "next_step": "完成 report_dict/online_summary_dict 调用方扫描后再决定是否修改 reporting.py 或调用方。"
+  "selected_candidate": "H25_RUNTIME_REPORT_AGGREGATE_SERIALIZATION",
+  "next_step": "H25 负向结论已收口；下一轮切换到 NAND/SSD/HBF 共享家族建模，登记 page/plane/die/queue 的最小候选。",
+  "source_identity": {
+    "source_commit": "c329c9a023971e981522e89474ddcad595b623be",
+    "scan_artifact": "artifacts/optimization/round_025/runtime_candidate_scan.json",
+    "scan_sha256": "b94be113b6ad7dbfec129c0f71e5865ec875cfe53544872f855e2a161eb9dbb3"
+  },
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "callsite_scans": 1,
+    "source_changes": 0
+  }
 }

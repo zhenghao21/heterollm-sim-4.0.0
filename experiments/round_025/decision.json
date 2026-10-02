@@ -2,10 +2,26 @@
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_025",
   "candidate_id": "H25_RUNTIME_REPORT_AGGREGATE_SERIALIZATION",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare registered a runtime/reporting hypothesis; independent call-site scan is required before source edits.",
-  "evidence": [],
+  "status": "decided",
+  "decision": "reject_no_candidate",
+  "reason": "独立调用方扫描确认 src 没有安全的 aggregate-only 生产入口；默认切换会破坏 CLI、web、run_jobs 和工具 API。H24 的 23.9x probe 不能冒充当前生产 wall-time 改善，因此保留负结论且不改源码。",
+  "evidence": [
+    "artifacts/optimization/round_025/runtime_candidate_scan.json",
+    "Artifact SHA256: b94be113b6ad7dbfec129c0f71e5865ec875cfe53544872f855e2a161eb9dbb3"
+  ],
   "deferred_scope": [],
-  "next_hypothesis": null
+  "next_hypothesis": {
+    "id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
+    "direction": "存储硬件建模粒度",
+    "claim": "SSD/NVMe/HBF 共享 NAND 家族模型需要在现有 hbf_media/PhysicalService 路径上统一暴露 page/plane/die/channel 并行和读写/擦除粒度，不先拆分三个模型或引入完整 FTL/GC。",
+    "basis": "用户定向任务与 STORAGE_MODELING_WORKPLAN；H24 已完成 DRAM/HBM 家族，NAND 家族尚未进入实际执行链路。",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "c329c9a023971e981522e89474ddcad595b623be",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "records-only negative round commit pending push"
+  },
+  "process_learning": "运行时性能候选必须有现有生产调用方；独立探针的潜在提速不能替代调用链证据。"
 }

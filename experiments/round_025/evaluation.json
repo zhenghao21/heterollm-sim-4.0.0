@@ -2,21 +2,31 @@
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_025",
   "candidate_id": "H25_RUNTIME_REPORT_AGGREGATE_SERIALIZATION",
-  "status": "pending",
+  "status": "completed",
   "prediction": {
-    "status": "pending"
+    "status": "mechanism_scan_only",
+    "artifact": "artifacts/optimization/round_025/runtime_candidate_scan.json",
+    "source_commit": "c329c9a023971e981522e89474ddcad595b623be",
+    "result": "online_summary_dict 只有定义/导出，没有现有生产调用；report_dict callers require additional fields or full report contract."
   },
   "score": {
-    "status": "pending"
+    "status": "not_scored_no_safe_callsite",
+    "result": "H24 probe 的 23.9189x 仅适用于独立 summary-only 调用，不等于当前生产路径 wall-time improvement。"
   },
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "rejected_no_candidate",
   "accuracy_status": "not_applicable",
-  "generalization_status": "pending",
-  "regression_status": "pending",
-  "comparison_artifact": "artifacts/optimization/round_025/",
-  "result": "pending",
+  "generalization_status": "not_applicable",
+  "regression_status": "inherited_source_unchanged",
+  "comparison_artifact": "artifacts/optimization/round_025/runtime_candidate_scan.json",
+  "result": "H25 负向扫描关闭当前 runtime report aggregate 假设：没有可直接替换的 aggregate-only 生产调用方，默认变更会破坏现有 API/报告契约。",
   "limitations": [
-    "H24 runtime data is a development baseline, not yet an accepted improvement.",
-    "No source change or independent call-site scan has been completed in H25."
+    "未修改源码，未新增 wall-time 提速；H24 runtime baseline 仅作为开发观测。",
+    "若未来新增显式 summary-only API，应作为独立 API/性能候选重新登记并覆盖调用方契约。"
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_025/runtime_candidate_scan.json",
+      "sha256": "b94be113b6ad7dbfec129c0f71e5865ec875cfe53544872f855e2a161eb9dbb3"
+    }
   ]
 }
