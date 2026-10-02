@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_028",
+  "candidate_id": "H28_PREDICTION_GENERALIZATION_OR_EVALUATION_CONTRACT",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare registered prediction/generalization direction; independent source scan is required before edits.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

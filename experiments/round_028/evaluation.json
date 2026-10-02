@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_028",
+  "candidate_id": "H28_PREDICTION_GENERALIZATION_OR_EVALUATION_CONTRACT",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_028/",
+  "result": "pending",
+  "limitations": [
+    "H28 尚未完成 source scan 或独立 Native 观测。"
+  ]
+}

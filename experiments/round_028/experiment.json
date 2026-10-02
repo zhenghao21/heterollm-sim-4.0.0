@@ -1,0 +1,76 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_028",
+  "status": "prepare",
+  "purpose": "prediction_generalization_or_evaluation_contract",
+  "primary_goal": "在不重开已收口成本与存储模型的前提下，检查预测输入/输出泛化或评估/API契约中的一个独立可复现问题；没有独立观测时只做机制验证。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "2e4c8262cfe964a2dc88c6cbdf9433518322fb96",
+    "role": "H27 promoted physical cost-demand conservation plus H24/H26 storage baselines"
+  },
+  "hypothesis_id": "H28_PREDICTION_GENERALIZATION_OR_EVALUATION_CONTRACT",
+  "direction": "预测精度与泛化",
+  "previous_direction": "计算成本模型（H27）",
+  "direction_switch_reason": "H27 已完成成本语义收口；按台账转向尚未完成独立验收的预测输入/输出泛化或评估契约。",
+  "recent_directions": [
+    "H25:运行速度负向扫描",
+    "H26:NAND/SSD/HBF共享模型",
+    "H27:计算成本模型物理守恒"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H23",
+    "运行速度与内存": "H25（负向）",
+    "计算成本模型": "H27",
+    "存储硬件建模粒度": "H26",
+    "预测精度与泛化": "H28活动",
+    "评估/API与可视化口径": "H22",
+    "开发工具链与可复现性": "H21-H27"
+  },
+  "scope": {
+    "candidate": "待独立扫描预测输入/shape泛化、结果语义、评估/API和未知域处理",
+    "include": [
+      "prediction input identity",
+      "shape/model/hardware coverage",
+      "fallback/unknown semantics",
+      "score/report API contract"
+    ],
+    "exclude": [
+      "Native accuracy claims without independent Native observations",
+      "H27 cost demand",
+      "H24/H26 storage contracts"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一预测/评估根因直接影响的输入、输出、泛化边界、失败/缺失和 API 必须同轮收口；无候选保留负结论。"
+  },
+  "data_roles": {
+    "development": "fresh source scan and controlled mechanisms",
+    "comparison": "parent 2e4c8262cfe964a2dc88c6cbdf9433518322fb96",
+    "holdout": "independent model/hardware/shape or API controls",
+    "final_acceptance": "only mechanism/generalization evidence unless Native data is independently collected"
+  },
+  "metrics": [
+    "input_identity",
+    "shape_generalization",
+    "unknown_fallback",
+    "evaluation_contract",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 2,
+    "retries": 0
+  },
+  "guardrails": [
+    "不得把单测通过称为精度改善",
+    "不得用历史 Native/评分结论作当前盲测",
+    "不得重开 H27/H24/H26 已收口问题",
+    "未知/域外保持显式 unknown，不静默外推"
+  ],
+  "selected_candidate": null,
+  "next_step": "完成预测/评估 source scan，登记唯一可证伪候选。"
+}

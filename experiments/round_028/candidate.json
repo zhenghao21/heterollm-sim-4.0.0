@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_028",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H28_PREDICTION_GENERALIZATION_OR_EVALUATION_CONTRACT",
+    "direction": "预测精度与泛化",
+    "claim": "某一预测输入身份、shape/hardware 泛化边界或评估/API fallback 在实际调用链中不一致，导致未知域被静默当作已验证结果或不同入口口径不一致。",
+    "trigger": "待独立 source scan；不得继承历史评分。",
+    "falsifier": "当前输入身份、fallback、域外状态和评估/API契约已有完整一致的失败/未知处理。"
+  },
+  "parent_commit": "2e4c8262cfe964a2dc88c6cbdf9433518322fb96",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}
