@@ -738,6 +738,7 @@ class EventKernelHotLoopTests(unittest.TestCase):
             max(expected_completed_end.values(), default=0.0),
         )
 
+
 class DynamicResourceCapacityTests(unittest.TestCase):
     def test_capacity_batch_rejection_is_atomic(self) -> None:
         kernel = UnifiedEventKernel()
@@ -788,6 +789,61 @@ class DynamicResourceCapacityTests(unittest.TestCase):
         self.assertIsNotNone(completion)
         self.assertEqual(completion.resource_metrics["physical"]["capacity"], 2.0)
         self.assertEqual(kernel.metrics["resource_capacities"]["physical"], 2)
+
+    def test_initial_capacity_reports_direct_owner_demands(self) -> None:
+        kernel = UnifiedEventKernel(
+            resource_capacities={"alias_a": 2},
+            resource_owners={"alias_a": "physical", "alias_b": "physical"},
+        )
+        kernel.submit((task("owner-task", demands=(demand("physical", 1.0),)),))
+        self.assertEqual(
+            kernel.step_completion().resource_metrics["physical"]["capacity"], 2.0
+        )
+        self.assertEqual(kernel.metrics["resource_capacities"]["physical"], 2)
+
+    def test_conflicting_or_invalid_capacity_batch_keeps_pending_execution(self) -> None:
+        invalid_batches = (
+            {"new": 2, "alias_a": 2, "alias_b": 3},
+            {"new": 2, "alias_a": 2, "physical": 3},
+            {"new": 2, "": 1},
+            {"new": 2, 3: 1},
+            {"new": 2, "alias_a": True},
+            {"new": 2, "alias_a": 0},
+            {"new": 2, "alias_a": -1},
+            {"new": 2, "alias_a": 1.5},
+        )
+        for batch in invalid_batches:
+            with self.subTest(batch=batch):
+                kernel = UnifiedEventKernel(resource_owners={
+                    "alias_a": "physical", "alias_b": "physical"
+                })
+                kernel.submit((task("pending", demands=(demand("alias_b", 4),)),))
+                before = repr(kernel.__dict__)
+                with self.assertRaises(ValueError):
+                    kernel.ensure_resource_capacities(batch)
+                self.assertEqual(repr(kernel.__dict__), before)
+                kernel.ensure_resource_capacities({"alias_a": 2})
+                completion = kernel.step_completion()
+                self.assertEqual((completion.start_ns, completion.end_ns), (0, 4))
+
+    def test_same_capacity_preserves_lane_history_and_rejects_redeclaration(self) -> None:
+        kernel = UnifiedEventKernel(resource_owners={"a": "p", "b": "p"})
+        kernel.ensure_resource_capacities({"a": 2})
+        # A declaration is fixed even before tasks use it.
+        before = repr(kernel.__dict__)
+        with self.assertRaisesRegex(ValueError, "capacity mismatch"):
+            kernel.ensure_resource_capacities({"new": 1, "b": 3})
+        self.assertEqual(repr(kernel.__dict__), before)
+        kernel.submit(tuple(task(str(i), demands=(demand("b", 10),)) for i in range(3)))
+        first = kernel.step()
+        lanes = kernel._resource_lane_available["p"]
+        state_before = repr(kernel.__dict__)
+        kernel.ensure_resource_capacities({"b": 2, "p": 2})
+        self.assertIs(kernel._resource_lane_available["p"], lanes)
+        self.assertEqual(repr(kernel.__dict__), state_before)
+        events = (first, kernel.step(), kernel.step())
+        self.assertEqual([event.start_ns for event in events], [0, 0, 10])
+        self.assertEqual(kernel.metrics["physical_owner_service_ns"], {"p": 30})
 
 
 if __name__ == "__main__":

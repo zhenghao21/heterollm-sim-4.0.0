@@ -768,6 +768,7 @@ class UnifiedEventKernel:
                 raise ValueError("resource capacities must be positive integers")
         # Reports must expose the effective lane count for logical aliases,
         # otherwise a two-engine owner looks overutilized on a one-lane alias.
+        capacities.update(owner_capacities)
         for logical_id, owner_id in owners.items():
             capacities.setdefault(logical_id, owner_capacities.get(owner_id, 1))
         self._l2_states = {}
@@ -964,8 +965,8 @@ class UnifiedEventKernel:
 
         A live V4 run may bootstrap its control plane first and append serving
         work later.  Capacity can be added for resources the bootstrap never
-        touched; changing the capacity of a resource with scheduling history
-        would rewrite that history and therefore fails closed.
+        touched. Existing declarations and lane counts must agree; changing
+        a resource with scheduling history would rewrite that history.
         """
 
         # Validate the complete batch before touching any live state.  Serving
@@ -1019,14 +1020,11 @@ class UnifiedEventKernel:
         # count, because completion reports expose logical resource IDs.
         for resource_id, lanes in staged_lanes.items():
             self._resource_lane_available[resource_id] = lanes
-        for resource_id, capacity in requested_by_owner.items():
-            self._owner_capacities[resource_id] = capacity
-            self.resource_capacities[resource_id] = capacity
-            for logical_id, owner_id in self.resource_owners.items():
-                if owner_id == resource_id:
-                    self.resource_capacities[logical_id] = capacity
-        for logical_id, capacity in capacity_updates.items():
-            self.resource_capacities[logical_id] = capacity
+        self._owner_capacities.update(requested_by_owner)
+        self.resource_capacities.update(requested_by_owner)
+        for logical_id, owner_id in self.resource_owners.items():
+            if owner_id in requested_by_owner:
+                self.resource_capacities[logical_id] = requested_by_owner[owner_id]
 
     def _resource_ready_ns(self, resource_id: str) -> float:
         # ``resource_available`` is maintained as the earliest free lane for

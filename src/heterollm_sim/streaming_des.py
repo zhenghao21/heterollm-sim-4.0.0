@@ -1196,7 +1196,7 @@ def execute_incremental_schedule(
         accumulator.build(
             schedule.manifest,
             retained_task_limit,
-            resource_capacities,
+            kernel.resource_capacities,
         ),
         runtime_kernel_metrics=dict(kernel.metrics),
     )
