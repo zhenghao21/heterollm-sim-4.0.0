@@ -1,0 +1,3 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_034", "candidate_id": "H34_PREDICTION_GENERALIZATION_INPUT_CONTRACT", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_034/", "result": "pending", "limitations": ["H34 尚未完成 prediction/generalization source scan。"]
+}

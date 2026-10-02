@@ -1,0 +1,8 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_034",
+  "status": "prepare",
+  "hypothesis": {"id": "H34_PREDICTION_GENERALIZATION_INPUT_CONTRACT", "direction": "预测精度与泛化", "claim": "预测输入身份、shape/hardware coverage 或域外 fallback 可能在实际执行链路中出现可复现不一致。", "trigger": "待独立 prediction/generalization source scan；不得继承 H28 历史结论。", "falsifier": "输入 fingerprint、coverage、unknown/fallback 和结果状态已在支持域内一致。"},
+  "parent_commit": "0ee89b76c19bc39751430db0b0662360ac509584",
+  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+}

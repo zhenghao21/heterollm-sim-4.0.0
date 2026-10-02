@@ -1,8 +1,34 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_033",
-  "status": "prepare",
-  "hypothesis": {"id": "H33_REPRODUCIBILITY_EVIDENCE_CONTRACT", "direction": "开发工具链与可复现性", "claim": "实验记录、证据哈希、源码身份或恢复配对链路可能存在可独立复现的不一致。", "trigger": "待独立 reproducibility source scan。", "falsifier": "四文件记录、artifact/source hashes、baseline/candidate pairing 和恢复发布核对在当前流程中已一致。"},
+  "status": "rejected_no_candidate",
+  "hypothesis": {
+    "id": "H33_REPRODUCIBILITY_EVIDENCE_CONTRACT",
+    "direction": "开发工具链与可复现性",
+    "claim": "四份记录、artifact/source hashes、阶段身份和 parent/source pairing 均一致，未发现可复现工程缺陷。",
+    "trigger": "待独立 reproducibility source scan。",
+    "falsifier": "四文件记录、artifact/source hashes、baseline/candidate pairing 和恢复发布核对在当前流程中已一致。"
+  },
   "parent_commit": "310ec74785bc817b777d7458a4bf87984124bcbd",
-  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_033/repro_scan.json",
+    "artifacts/optimization/round_033/repro_scan.sha256"
+  ],
+  "deferred_candidates": [
+    "Ignored pytest-of-A permission warning remains environmental and outside tracked evidence."
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_033/repro_scan.json",
+      "sha256": "9147d18444bba0672f8a05e7ce01c6c012fb6a5c02b1489099d196d7a4924895"
+    },
+    {
+      "path": "artifacts/optimization/round_033/repro_scan.sha256",
+      "sha256": "f769d8eb0a99274d80acf075ab8098ca8af671eb09b4d2749e6a141f0c33fd1e"
+    }
+  ]
 }
