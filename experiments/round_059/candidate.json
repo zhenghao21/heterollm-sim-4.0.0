@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "控制面 mapping fingerprint 失配或 resolver 异常可能在 validate/run-estimate/run HTTP 入口被折叠为成功或留下部分状态。",
+    "direction": "仿真器正确性与语义",
+    "falsifier": "stale/unsupported/exception 输入全部返回显式 typed error，资源和 mapping 状态不变。",
+    "id": "H59_CONTROL_PLANE_MAPPING_FAIL_CLOSED",
+    "trigger": "H45 覆盖 event rollback，尚未覆盖控制面 resolver/HTTP 入口的统一 fail-closed。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "55e41bc1ce9b6bb861a6d518bd8ad07c74eb30e4",
+  "round_id": "round_059",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

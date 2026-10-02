@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H59_CONTROL_PLANE_MAPPING_FAIL_CLOSED",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记 control-plane mapping/resolver fail-closed 假设，等待独立 source scan 与矩阵。",
+  "round_id": "round_059",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "55e41bc1ce9b6bb861a6d518bd8ad07c74eb30e4",
+  "status": "pending"
+}

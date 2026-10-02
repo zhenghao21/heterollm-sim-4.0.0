@@ -1,0 +1,78 @@
+{
+  "baseline": {
+    "parent_commit": "55e41bc1ce9b6bb861a6d518bd8ad07c74eb30e4",
+    "role": "H58 finite link/pipeline negative boundary; H45 correctness rollback historical comparator"
+  },
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "matrix_runs": 1,
+    "native_collection_runs": 0,
+    "retries": 0,
+    "source_scan_runs": 1
+  },
+  "data_roles": {
+    "comparison": "H45/H53 correctness only as non-reopened comparators",
+    "development": "fresh stale/unsupported/resolver error controls",
+    "final_acceptance": "semantic fail-closed only",
+    "holdout": "independent HTTP/state controls"
+  },
+  "direction": "仿真器正确性与语义",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H59活动",
+    "存储硬件建模粒度": "H55",
+    "开发工具链与可复现性": "H56",
+    "计算成本模型": "H58",
+    "评估/API与可视化口径": "H57",
+    "运行速度与内存": "H54",
+    "预测精度与泛化": "H51"
+  },
+  "direction_switch_reason": "H58 已收口链路/流水线成本且无源码候选；正确性方向自 H53 后未复查，选择控制面 mapping/resolver 错误入口而非重复作业生命周期。",
+  "guardrails": [
+    "不重做 H45 event rollback",
+    "不重做 H53 run_jobs",
+    "错误不得静默成功",
+    "无独立可复现缺陷不改源码"
+  ],
+  "hypothesis_id": "H59_CONTROL_PLANE_MAPPING_FAIL_CLOSED",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "metrics": [
+    "mapping_stale",
+    "resolver_error",
+    "typed_http_status",
+    "state_unchanged"
+  ],
+  "next_step": "先独立扫描 control-plane mapping/resolver error call chain，再运行 stale/unsupported/exception HTTP/state matrix。",
+  "previous_direction": "计算成本模型（H58）",
+  "primary_goal": "检查控制面 mapping fingerprint 失配、unsupported placement、resolver exception 和 HTTP validate/run-estimate 入口是否一致 fail-closed；不重复 H45 event rollback/H53 run_jobs/H50 status。",
+  "problem_domain_closure": {
+    "rule": "同一 mapping/resolver error 根因若影响 validate, estimate, run, HTTP and state mutation surfaces，必须本轮收口。",
+    "status": "prepare"
+  },
+  "purpose": "control_plane_mapping_error_boundary",
+  "recent_directions": [
+    "H57:评估/API与可视化口径（源码修复）",
+    "H58:计算成本模型（有限负结论）",
+    "H59:仿真器正确性与语义（活动）"
+  ],
+  "round_id": "round_059",
+  "schema": "heterollm.optimization.experiment/v1",
+  "scope": {
+    "candidate": "control-plane mapping fingerprint/resolver error propagation through validate/run-estimate/run APIs",
+    "exclude": [
+      "H45 event rollback",
+      "H53 run_jobs lifecycle",
+      "H50 retention/status",
+      "Native accuracy"
+    ],
+    "include": [
+      "stale mapping fingerprint",
+      "unsupported placement",
+      "resolver exception",
+      "typed HTTP error",
+      "no partial resource state"
+    ]
+  },
+  "selected_candidate": null,
+  "status": "prepare"
+}
