@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_046",
-  "status": "prepare",
+  "status": "complete_negative",
   "hypothesis": {
     "id": "H46_RUNTIME_LAZY_LOWERING_KERNEL_COST",
     "direction": "运行速度与内存",
@@ -11,9 +11,43 @@
   },
   "parent_commit": "414747a2b3cf6245dbeb1ea5606aa34fe3a231cc",
   "changed_files": [],
-  "source_sha256": null,
-  "activation_checks": [],
-  "tests": [],
-  "independent_evidence": [],
-  "deferred_candidates": []
+  "source_sha256": {
+    "source_commit": "5dbcc34d8ca7f495cfacac2ed152198e3c82c686",
+    "note": "H46 未修改源码；split profile/source scan/review 使用同一 HEAD"
+  },
+  "activation_checks": [
+    "compile_streaming_scenario baseline",
+    "lazy iter_request_task_chunks proxy with 72 chunks/7936 tasks",
+    "aggregate execute task_count/makespan and tracemalloc",
+    "source cProfile hotspot identity for clone/capture/observer/kernel",
+    "H41 retention and H36 provider cache excluded"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe artifacts/optimization/round_046/runtime_split.py",
+      "exit_code": 0,
+      "result": "runtime_split_independent.json; H46_SPLIT_CONTROL_PASS"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe artifacts/optimization/round_046/profile_hotspot.py",
+      "exit_code": 0,
+      "result": "hotspot profile exit=0; cProfile hotspot artifact"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_046/source_scan_independent.json",
+    "artifacts/optimization/round_046/source_scan_independent.sha256",
+    "artifacts/optimization/round_046/runtime_split_independent.json",
+    "artifacts/optimization/round_046/runtime_split_independent.json.sha256",
+    "artifacts/optimization/round_046/final_review.json",
+    "artifacts/optimization/round_046/final_review.json.sha256"
+  ],
+  "deferred_candidates": [
+    "H46_CHUNK_METADATA_PLAN_REUSE_BOUNDARY: bounded invariant counter first",
+    "metadata namespace/mutable alias/full output equivalence A/B",
+    "kernel-only profile separated from lazy lowering",
+    "RSS/native allocator and Native accuracy/performance"
+  ],
+  "source_commit": "5dbcc34d8ca7f495cfacac2ed152198e3c82c686",
+  "review": "独立 review 确认分段成本与源码热点身份；execute 仍包含 lazy lowering，cProfile cumulative 不能作删除证据，H46 candidate remains unproven and no source change is accepted."
 }
