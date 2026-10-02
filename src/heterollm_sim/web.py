@@ -80,7 +80,14 @@ _ANALYTICAL_COVERAGE_STATUS_KEYS = frozenset(
     {"status", "coverage", "coverage_status", "timing_completeness", "quality"}
 )
 _ANALYTICAL_FALLBACK_KEYS = frozenset(
-    {"reason", "fallback_kind", "confidence", "support_level", "extrapolated"}
+    {
+        "reason",
+        "fallback_kind",
+        "confidence",
+        "support_level",
+        "extrapolated",
+        "prediction_provenance",
+    }
 )
 
 
@@ -1340,6 +1347,16 @@ def _analytical_coverage_state(
                     "low",
                     "unvalidated",
                 }:
+                    return "fallback", child_path
+                if (
+                    str(key).strip().lower() == "prediction_provenance"
+                    and normalized
+                    in {
+                        "conditional_development_assumption",
+                        "unsupported",
+                        "unknown",
+                    }
+                ):
                     return "fallback", child_path
                 if str(key).strip().lower() in {"reason", "fallback_kind"} and normalized not in {
                     "",

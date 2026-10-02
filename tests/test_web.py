@@ -378,6 +378,37 @@ class WebApiTests(unittest.TestCase):
         )
         self.assertFalse(score["r0_comparison"]["passed"])
 
+    def test_direct_simulation_score_fails_closed_for_conditional_provenance(self):
+        scenario = build_reference_scenario()
+        report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in report["requests"].items()
+            }
+        }
+        report["analytical_coverage"] = {
+            "status": "complete",
+            "runtime": {
+                "prediction": {
+                    "prediction_provenance": "conditional_development_assumption",
+                    "accuracy_validated": False,
+                }
+            },
+        }
+        score = simulation_score_payload(
+            report, scenario, native_reference=native, threshold_pct=25
+        )
+        self.assertEqual(
+            score["native_comparison"]["status"],
+            "non_comparable_analytical_fallback",
+        )
+        self.assertFalse(score["native_comparison"]["passed"])
+
     def test_direct_simulation_score_fails_closed_for_ood_provenance(self):
         scenario = build_reference_scenario()
         report = report_dict(run_scenario(scenario))
