@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_048",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H48_NAND_BACKGROUND_QUEUE_UNKNOWN_BOUNDARY",
+    "direction": "存储硬件建模粒度",
+    "claim": "共享 NAND 家族的 background/FTL/GC、queue conflict 或 die/channel unknown 状态可能在真实访问/计费/报告链路中丢失或被当作零成本。",
+    "trigger": "需要独立 source scan、SSD/NVMe/HBF alias/state controls；不继承 H40 全域结论。",
+    "falsifier": "所有 background/unknown/queue/erase/program 状态均显式保留并在共享服务、alias、报告边界一致，且无新缺陷。"
+  },
+  "parent_commit": "dd2d7b24761e6937d38215299eaf617d35d8e49e",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}

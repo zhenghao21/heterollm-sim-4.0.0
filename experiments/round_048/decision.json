@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_048",
+  "candidate_id": "H48_NAND_BACKGROUND_QUEUE_UNKNOWN_BOUNDARY",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记 NAND 家族 background/queue/unknown 边界；需要独立 source scan 和状态矩阵后再决定是否修改。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "dd2d7b24761e6937d38215299eaf617d35d8e49e"
+}

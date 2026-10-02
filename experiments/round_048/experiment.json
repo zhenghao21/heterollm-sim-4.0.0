@@ -1,0 +1,81 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_048",
+  "status": "prepare",
+  "purpose": "nand_background_queue_unknown_boundary",
+  "primary_goal": "在 SSD/NVMe/HBF 共享 NAND 模型边界内，检查 background/GC/FTL marker、queue 冲突、die/channel unknown 和 erase/program 状态是否显式传播，不引入未经来源核验的硬件数值。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "dd2d7b24761e6937d38215299eaf617d35d8e49e",
+    "role": "H47 reproducibility toolchain fix; H40 shared NAND erase path as background, not reopened wholesale"
+  },
+  "hypothesis_id": "H48_NAND_BACKGROUND_QUEUE_UNKNOWN_BOUNDARY",
+  "direction": "存储硬件建模粒度",
+  "previous_direction": "开发工具链与可复现性（H47）",
+  "direction_switch_reason": "H47 工具链 provenance 修复完成；按用户定向存储任务和台账轮换回 NAND 家族，收口 H40 明确延期的 background/FTL/GC/die/channel unknown 与 queue 边界，不重开 H39 DRAM/HBM 或 H40 erase 主链路。",
+  "recent_directions": [
+    "H46:运行速度与内存（有限负结论）",
+    "H47:开发工具链与可复现性（已接纳）",
+    "H48:存储硬件建模粒度（活动）"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H45",
+    "运行速度与内存": "H46",
+    "计算成本模型": "H44",
+    "存储硬件建模粒度": "H48活动",
+    "预测精度与泛化": "H43",
+    "评估/API与可视化口径": "H42",
+    "开发工具链与可复现性": "H47"
+  },
+  "scope": {
+    "candidate": "shared NAND family background marker, queue conflict, erase/program state, die/channel/FTL/GC unknown provenance across hbf_media/data_motion/PhysicalService/endpoint/report",
+    "include": [
+      "background/GC/FTL marker propagation",
+      "queue waves/conflicts and resource identity",
+      "erase/program counters and state",
+      "die/channel unknown or source-qualified labels",
+      "SSD/NVMe/HBF legacy alias consistency"
+    ],
+    "exclude": [
+      "DRAM/HBM geometry",
+      "H40 erase primary path reimplementation",
+      "invented NAND die/channel/GC numeric parameters",
+      "Native accuracy"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一 NAND background/unknown queue 根因若影响 media state、DataAccess/PhysicalService、endpoint/legacy alias、report 或 error handling，必须同轮收口；未知参数必须显式保留。"
+  },
+  "data_roles": {
+    "development": "fresh NAND source scan and state/queue controls",
+    "comparison": "H47 published source dd2d7b24761e6937d38215299eaf617d35d8e49e",
+    "holdout": "independent SSD/NVMe/HBF alias and unsupported/unknown controls",
+    "final_acceptance": "storage mechanism/provenance only; no Native accuracy"
+  },
+  "metrics": [
+    "background_marker_preserved",
+    "ftl_gc_unknown",
+    "die_channel_unknown",
+    "queue_conflict_state",
+    "erase_program_state",
+    "legacy_alias_consistency"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "source_scan_runs": 0,
+    "nand_matrix_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "不重开 H39 DRAM/HBM",
+    "不重开 H40 erase 主链路",
+    "不导入未经来源核验的 die/channel/GC 数值",
+    "unknown/fallback 必须显式，不得当作零成本",
+    "无真实 NAND 执行缺陷不改源码"
+  ],
+  "selected_candidate": null,
+  "next_step": "先独立扫描 hbf_media.py、data_motion.py、PhysicalService、endpoint/legacy alias 和 reporting 的 background/queue/unknown 传播，登记唯一可证伪候选或有限负结论。"
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_048",
+  "candidate_id": "H48_NAND_BACKGROUND_QUEUE_UNKNOWN_BOUNDARY",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_048/",
+  "result": "pending",
+  "limitations": [
+    "H48 尚未完成 NAND background/queue/unknown 扫描。"
+  ]
+}
