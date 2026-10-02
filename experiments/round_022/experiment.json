@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_022",
-  "status": "prepare",
+  "status": "promote",
   "purpose": "simulator_evaluation_contract",
   "primary_goal": "make engine-boundary availability explicit and keep serving, scoring and UI latency semantics consistent",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -16,8 +16,13 @@
     "trigger": "engine_request_begin_ns unavailable while canonical arrival timestamps are available"
   },
   "problem_domain_closure": {
-    "status": "verification_pending",
-    "rule": "trace latency producer, result semantics, top-level score payload, per-request scoring, UI display and fallback/error controls as one boundary contract"
+    "status": "closed",
+    "producer": "serving engine_request_begin availability traced",
+    "semantics": "report primary_boundary dynamically selects engine only when every finished request has engine_start; otherwise arrival",
+    "score": "summary and request metrics use the declared boundary",
+    "ui": "app.js reads result_semantics.latency.primary_boundary for summary and request rows",
+    "text": "format_report prints the declared latency boundary",
+    "controls": "generic arrival-only, engine-enabled control, text export and UI syntax covered"
   },
   "data_roles": {
     "development": "artifacts/optimization/round_020/eval_candidate.json plus fresh source reproduction",
@@ -45,6 +50,24 @@
     "do not alter canonical request timestamps without evidence",
     "no native accuracy claim"
   ],
-  "next_step": "complete independent source reproduction and register one minimal boundary contract repair if falsified",
-  "selected_candidate": "H22_ONLINE_ENGINE_METRIC_FALLBACK"
+  "next_step": "freeze H22 source, commit, push origin/main and verify remote SHA; register H23 after promotion",
+  "selected_candidate": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
+  "source_identity": {
+    "parent_commit": "1f1d012264654c809d7554c8723b7fd558ea48f5",
+    "src/heterollm_sim/reporting.py": "54281b4ade0785f04e8bd4cda6ff836e7f81ae8a9311b8dd23b7b17c3b08f591",
+    "src/heterollm_sim/web.py": "9af8d9aff63724b3861af5494172ba091f00783a5d67884d20b7a2ee53b4f583",
+    "src/heterollm_sim/webui/app.js": "85e8e26611b7f408b759a2b89db55cb8920c79dd85acc4e206a122ef54ab756d",
+    "tests/test_web.py": "9226c736ca0fe60f66218c836f6b2e749aba5f3ae2f817aac580731b0e1b3c7e",
+    "independent_scan_source": "eb9fb910001b361da6ef86cf51f7f9368474c770"
+  },
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0,
+    "final_full_pytest_runs": 1,
+    "focused_runs": 2,
+    "node_check_runs": 2
+  }
 }

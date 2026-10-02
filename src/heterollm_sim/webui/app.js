@@ -19042,16 +19042,19 @@ function renderResults() {
   const throughput = asObject(summary.throughput);
   const requests = asObject(report.requests);
   const requestRows = Object.entries(requests);
-  const requestTpot = requestRows.map(([, request]) => request.engine_tpot_ns ?? request.tpot_ns).filter((value) => value != null);
+  const latency = asObject(asObject(report.result_semantics).latency);
+  const latencyBoundary = latency.primary_boundary === "engine" ? "engine" : "arrival";
+  const useEngineBoundary = latencyBoundary === "engine";
+  const boundaryLabel = useEngineBoundary ? uiText("引擎边界", "Engine boundary") : uiText("到达边界", "Arrival boundary");
+  const requestTpot = requestRows.map(([, request]) => useEngineBoundary ? (request.engine_tpot_ns ?? request.tpot_ns) : request.tpot_ns).filter((value) => value != null);
   const tpotP50 = percentile(requestTpot, 0.5);
-  const engineSummary = asObject(summary.engine_ttft_ns).p50 != null || asObject(summary.engine_e2e_ns).p50 != null;
   dom.runManifestBar.innerHTML = runManifestMarkup(report);
   dom.metricGrid.innerHTML = [
     metricCell({ text: uiText("总历时（Makespan）", "Makespan") }, formatResultDurationNs(summary.makespan_ns), resultWithUnit(summary.makespan_ns, "ns"), "is-accent"),
-    metricCell({ text: uiText("首 Token 延迟（TTFT）", "Time to First Token (TTFT)"), percentile: 50 }, formatResultDurationNs(engineSummary ? summary.engine_ttft_ns?.p50 : summary.ttft_ns?.p50), resultWithUnit(engineSummary ? summary.engine_ttft_ns?.p50 : summary.ttft_ns?.p50, "ns")),
+    metricCell({ text: uiText(`首 Token 延迟（TTFT · ${boundaryLabel}）`, `Time to First Token (TTFT) · ${boundaryLabel}`), percentile: 50 }, formatResultDurationNs(useEngineBoundary ? summary.engine_ttft_ns?.p50 : summary.ttft_ns?.p50), resultWithUnit(useEngineBoundary ? summary.engine_ttft_ns?.p50 : summary.ttft_ns?.p50, "ns")),
     metricCell({ text: uiText("Token 间延迟（TBT）", "Time Between Tokens (TBT)"), percentile: 50 }, formatResultDurationNs(summary.tbt_ns?.p50), resultWithUnit(summary.tbt_ns?.p50, "ns")),
-    metricCell({ text: uiText("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)"), percentile: 50 }, formatResultDurationNs(engineSummary ? summary.engine_tpot_ns?.p50 : tpotP50), (engineSummary ? summary.engine_tpot_ns?.p50 : tpotP50) == null ? uiText("无可用 Token 间隔", "No Token interval available") : resultWithUnit(engineSummary ? summary.engine_tpot_ns?.p50 : tpotP50, "ns")),
-    metricCell({ text: uiText("端到端延迟（E2E）", "End-to-End Latency (E2E)"), percentile: 50 }, formatResultDurationNs(engineSummary ? summary.engine_e2e_ns?.p50 : summary.e2e_ns?.p50), resultWithUnit(engineSummary ? summary.engine_e2e_ns?.p50 : summary.e2e_ns?.p50, "ns")),
+    metricCell({ text: uiText(`每输出 Token 时间（TPOT · ${boundaryLabel}）`, `Time per Output Token (TPOT) · ${boundaryLabel}`), percentile: 50 }, formatResultDurationNs(useEngineBoundary ? summary.engine_tpot_ns?.p50 : tpotP50), (useEngineBoundary ? summary.engine_tpot_ns?.p50 : tpotP50) == null ? uiText("无可用 Token 间隔", "No Token interval available") : resultWithUnit(useEngineBoundary ? summary.engine_tpot_ns?.p50 : tpotP50, "ns")),
+    metricCell({ text: uiText(`端到端延迟（E2E · ${boundaryLabel}）`, `End-to-End Latency (E2E) · ${boundaryLabel}`), percentile: 50 }, formatResultDurationNs(useEngineBoundary ? summary.engine_e2e_ns?.p50 : summary.e2e_ns?.p50), resultWithUnit(useEngineBoundary ? summary.engine_e2e_ns?.p50 : summary.e2e_ns?.p50, "ns")),
     metricCell({ text: uiText("Token 吞吐（Token Throughput）", "Token Throughput") }, formatResultRate(throughput.visible_output_tokens_per_s, "tok/s"), resultWithUnit(throughput.visible_output_tokens_per_s, "tokens/s"), "is-io"),
     metricCell({ text: uiText("请求吞吐（Request Throughput）", "Request Throughput") }, formatResultRate(throughput.requests_per_s, "req/s"), resultWithUnit(throughput.requests_per_s, "requests/s"), "is-io"),
     metricCell({ text: uiText("总能耗（Total Energy）", "Total Energy") }, formatResultEnergyPj(summary.total_energy_pj), resultWithUnit(summary.total_energy_pj, "pJ"), "is-accent"),
@@ -19190,6 +19193,9 @@ function renderCategories(report) {
 
 function renderRequestResults(requests) {
   const entries = Object.entries(requests);
+  const latency = asObject(asObject(state.report).result_semantics).latency;
+  const useEngineBoundary = asObject(latency).primary_boundary === "engine";
+  const boundaryLabel = useEngineBoundary ? uiText("引擎边界", "Engine boundary") : uiText("到达边界", "Arrival boundary");
   dom.requestResultMeta.innerHTML = uiText("{count} 个请求", "{count} requests", { count: formatResultNumber(entries.length).html });
   const dataLabel = (zh, en) => ` data-label="${escapeHtml(uiText(zh, en))}"`;
   dom.requestResultBody.innerHTML = entries.length ? entries.map(([requestId, request]) => {
@@ -19197,9 +19203,9 @@ function renderRequestResults(requests) {
     const tbtP50 = percentile(tbt, 0.5);
     const tbtP95 = percentile(tbt, 0.95);
     const arrival = formatResultDurationNs(request.arrival_ns);
-    const ttftValue = request.engine_ttft_ns ?? request.ttft_ns;
-    const tpotValue = request.engine_tpot_ns ?? request.tpot_ns;
-    const e2eValue = request.engine_e2e_ns ?? request.e2e_ns;
+    const ttftValue = useEngineBoundary ? (request.engine_ttft_ns ?? request.ttft_ns) : request.ttft_ns;
+    const tpotValue = useEngineBoundary ? (request.engine_tpot_ns ?? request.tpot_ns) : request.tpot_ns;
+    const e2eValue = useEngineBoundary ? (request.engine_e2e_ns ?? request.e2e_ns) : request.e2e_ns;
     const ttft = formatResultDurationNs(ttftValue);
     const tbt50 = formatResultDurationNs(tbtP50);
     const tbt95 = formatResultDurationNs(tbtP95);
@@ -19213,10 +19219,10 @@ function renderRequestResults(requests) {
       <td${dataLabel("状态（Status）", "Status")}><span class="request-status is-${escapeHtml(statusClass)}">${escapeHtml(status)}</span></td>
       <td${dataLabel("拒绝原因（Rejection Reason）", "Rejection Reason")} class="request-rejection-reason" title="${escapeHtml(rejectionReason)}">${escapeHtml(rejectionReason)}</td>
       <td${dataLabel("到达时间（Arrival）", "Arrival")} title="${escapeHtml(resultWithUnit(request.arrival_ns, "ns").text)}">${arrival.html}</td>
-      <td${dataLabel("首 Token 延迟（TTFT）", "Time to First Token (TTFT)")} title="${escapeHtml(resultWithUnit(ttftValue, "ns").text)}">${ttft.html}</td>
+      <td${dataLabel(`首 Token 延迟（TTFT · ${boundaryLabel}）`, `Time to First Token (TTFT) · ${boundaryLabel}`)} title="${escapeHtml(resultWithUnit(ttftValue, "ns").text)}">${ttft.html}</td>
       <td${dataLabel("Token 间延迟（TBT）p50 / p95", "Time Between Tokens (TBT) p50 / p95")} title="${escapeHtml(uiText("原始 tbt_ns 数组含 {count} 项", "Raw tbt_ns array contains {count} items", { count: formatResultNumber(tbt.length).text }))}">${tbt50.html} / ${tbt95.html}</td>
-      <td${dataLabel("每输出 Token 时间（TPOT）", "Time per Output Token (TPOT)")} title="${escapeHtml(resultWithUnit(tpotValue, "ns").text)}">${tpot.html}</td>
-      <td${dataLabel("端到端延迟（E2E）", "End-to-End Latency (E2E)")} title="${escapeHtml(resultWithUnit(e2eValue, "ns").text)}">${e2e.html}</td>
+      <td${dataLabel(`每输出 Token 时间（TPOT · ${boundaryLabel}）`, `Time per Output Token (TPOT) · ${boundaryLabel}`)} title="${escapeHtml(resultWithUnit(tpotValue, "ns").text)}">${tpot.html}</td>
+      <td${dataLabel(`端到端延迟（E2E · ${boundaryLabel}）`, `End-to-End Latency (E2E) · ${boundaryLabel}`)} title="${escapeHtml(resultWithUnit(e2eValue, "ns").text)}">${e2e.html}</td>
       <td${dataLabel("可见 Token 数（Visible Tokens）", "Visible Tokens")}>${formatResultNumber(request.visible_output_tokens).html}</td>
     </tr>`;
   }).join("") : `<tr class="empty-row"><td data-label="${escapeHtml(uiText("请求指标", "Request metrics"))}" colspan="9">${escapeHtml(uiText("报告没有请求级指标。", "The report contains no request-level metrics."))}</td></tr>`;

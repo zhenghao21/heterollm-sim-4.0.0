@@ -1784,12 +1784,55 @@ def _static_result_semantics(result: ScenarioResult) -> Dict[str, Any]:
     }
 
 
+def _online_primary_latency_boundary(serving: Any) -> str:
+    """Select one latency boundary for the whole online report.
+
+    Engine timing is usable only when every finished request has an engine
+    start marker.  A partial engine stream would otherwise mix engine and
+    arrival values under one canonical field, so the report stays arrival
+    scoped and retains any engine fields as diagnostics.
+    """
+
+    finished = tuple(
+        metric
+        for metric in serving.request_metrics.values()
+        if metric.status == RequestStatus.FINISHED
+    )
+    if finished and all(metric.engine_start_ns is not None for metric in finished):
+        return "engine"
+    return "arrival"
+
+
 def _online_result_semantics(
     result: OnlineScenarioResult,
     *,
     windows_ns: Mapping[str, Sequence[float]],
 ) -> Dict[str, Any]:
     makespan = float(result.serving.makespan_ns)
+    primary_boundary = _online_primary_latency_boundary(result.serving)
+    if primary_boundary == "engine":
+        latency = {
+            "primary_boundary": "engine",
+            "engine_start_event": "engine_request_begin",
+            "first_token_boundary": "first visible committed token",
+            "last_token_boundary": "last visible committed token",
+            "ttft": "engine_request_begin_to_first_token",
+            "tpot": "(last_token-first_token)/(visible_output_tokens-1)",
+            "e2e": "engine_request_begin_to_last_token",
+            "arrival_metrics_preserved_as": "arrival_ttft_ns/arrival_tpot_ns/arrival_e2e_ns",
+        }
+    else:
+        latency = {
+            "primary_boundary": "arrival",
+            "engine_start_event": None,
+            "first_token_boundary": "first visible committed token",
+            "last_token_boundary": "last visible committed token",
+            "ttft": "request_arrival_to_first_token",
+            "tpot": "(last_token-first_token)/(visible_output_tokens-1)",
+            "e2e": "request_arrival_to_last_token",
+            "engine_metrics_preserved_as": "engine_request_begin_ns/engine_ttft_ns/engine_tpot_ns/engine_e2e_ns",
+            "selection_reason": "not all finished requests expose engine_request_begin",
+        }
     return {
         "execution_mode": "continuous_batching",
         "arrival_process": _arrival_process_semantics(result.scenario),
@@ -1800,16 +1843,7 @@ def _online_result_semantics(
         ),
         "deadline": _deadline_semantics(result.scenario, online=True),
         "trace": _trace_semantics(result),
-        "latency": {
-            "primary_boundary": "engine",
-            "engine_start_event": "engine_request_begin",
-            "first_token_boundary": "first visible committed token",
-            "last_token_boundary": "last visible committed token",
-            "ttft": "engine_request_begin_to_first_token",
-            "tpot": "(last_token-first_token)/(visible_output_tokens-1)",
-            "e2e": "engine_request_begin_to_last_token",
-            "arrival_metrics_preserved_as": "arrival_ttft_ns/arrival_tpot_ns/arrival_e2e_ns",
-        },
+        "latency": latency,
         "throughput": {
             "primary_window": "wall_clock",
             "primary_window_ns": list(windows_ns["wall_clock"]),
@@ -5090,6 +5124,7 @@ def _online_report_core(
     all_engine_ttft: List[float] = []
     all_engine_tpot: List[float] = []
     all_engine_e2e: List[float] = []
+    primary_boundary = _online_primary_latency_boundary(serving)
     committed_total = 0
     completed = 0
     good_requests = 0
@@ -5144,16 +5179,23 @@ def _online_report_core(
             "arrival_ns": metric.arrival_ns,
             "first_token_ns": metric.first_token_ns,
             "done_ns": metric.finish_ns,
-            # Keep the arrival-boundary values available for diagnostics, but
-            # expose engine-boundary values as the canonical request metrics so
-            # the UI and Native references use one latency definition.
+            # Keep both boundaries available for diagnostics, but choose one
+            # report-wide canonical boundary so a partial engine stream cannot
+            # mix engine and arrival values in the same score contract.
             "arrival_ttft_ns": metric.ttft_ns,
             "arrival_tpot_ns": metric.tpot_ns,
             "arrival_e2e_ns": e2e,
-            "ttft_ns": engine_ttft if engine_ttft is not None else metric.ttft_ns,
+            "ttft_ns": (
+                engine_ttft if primary_boundary == "engine" else metric.ttft_ns
+            ),
             "tbt_ns": tbt,
-            "tpot_ns": engine_tpot if engine_tpot is not None else metric.tpot_ns,
-            "e2e_ns": engine_e2e if engine_e2e is not None else e2e,
+            "tpot_ns": (
+                engine_tpot if primary_boundary == "engine" else metric.tpot_ns
+            ),
+            "e2e_ns": (
+                engine_e2e if primary_boundary == "engine" else e2e
+            ),
+            "latency_boundary": primary_boundary,
             "engine_request_begin_ns": engine_start,
             "engine_ttft_ns": engine_ttft,
             "engine_tpot_ns": engine_tpot,
@@ -5204,19 +5246,22 @@ def _online_report_core(
         committed_total += metric.visible_output_tokens
         if metric.status == RequestStatus.FINISHED:
             completed += 1
-            if engine_ttft is not None:
-                all_ttft.append(engine_ttft)
-            elif metric.ttft_ns is not None:
-                all_ttft.append(metric.ttft_ns)
+            canonical_ttft = (
+                engine_ttft if primary_boundary == "engine" else metric.ttft_ns
+            )
+            if canonical_ttft is not None:
+                all_ttft.append(canonical_ttft)
             all_tbt.extend(tbt)
-            if engine_tpot is not None:
-                all_tpot.append(engine_tpot)
-            elif metric.tpot_ns is not None:
-                all_tpot.append(metric.tpot_ns)
-            if engine_e2e is not None:
-                all_e2e.append(engine_e2e)
-            elif e2e is not None:
-                all_e2e.append(e2e)
+            canonical_tpot = (
+                engine_tpot if primary_boundary == "engine" else metric.tpot_ns
+            )
+            if canonical_tpot is not None:
+                all_tpot.append(canonical_tpot)
+            canonical_e2e = (
+                engine_e2e if primary_boundary == "engine" else e2e
+            )
+            if canonical_e2e is not None:
+                all_e2e.append(canonical_e2e)
             if engine_ttft is not None:
                 all_engine_ttft.append(engine_ttft)
             if engine_tpot is not None:
@@ -5975,6 +6020,14 @@ def format_report(result: RunResult) -> str:
         "任务数：{}".format(summary["task_count"]),
         "总时长：{:.3f} ms".format(summary["makespan_ns"] / 1_000_000.0),
     ]
+    latency = data.get("result_semantics", {}).get("latency")
+    if isinstance(latency, Mapping):
+        lines.append(
+            "延迟边界：{}（{}）".format(
+                latency.get("primary_boundary", "unknown"),
+                latency.get("ttft", "未声明"),
+            )
+        )
     throughput = summary["throughput"]
     lines.append(
         "吞吐：{:.3f} 请求/秒，{:.3f} 可见 Token/秒".format(

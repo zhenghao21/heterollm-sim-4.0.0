@@ -2,21 +2,51 @@
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_022",
   "candidate_id": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
-  "status": "pending",
+  "status": "completed",
   "prediction": {
-    "status": "pending"
+    "status": "mechanism_only",
+    "baseline_artifact": "artifacts/optimization/round_022/engine_boundary_reproduction.json",
+    "candidate_artifact": "artifacts/optimization/round_022/engine_boundary_candidate.json",
+    "source_hashes": {
+      "src/heterollm_sim/reporting.py": "54281b4ade0785f04e8bd4cda6ff836e7f81ae8a9311b8dd23b7b17c3b08f591",
+      "src/heterollm_sim/web.py": "9af8d9aff63724b3861af5494172ba091f00783a5d67884d20b7a2ee53b4f583",
+      "src/heterollm_sim/webui/app.js": "85e8e26611b7f408b759a2b89db55cb8920c79dd85acc4e206a122ef54ab756d",
+      "tests/test_web.py": "9226c736ca0fe60f66218c836f6b2e749aba5f3ae2f817aac580731b0e1b3c7e"
+    }
   },
   "score": {
-    "status": "pending",
-    "reason": "evaluation contract must be fixed before any score comparison"
+    "status": "mechanism_score",
+    "summary_and_request_agree": true,
+    "arrival_p50_ns": {
+      "ttft": 225874.05833333335,
+      "tpot": 72034.58333333333,
+      "e2e": 441977.80833333335
+    },
+    "native_accuracy": "not_applicable"
   },
-  "mechanism_status": "pending_verification",
+  "mechanism_status": "accepted_fix",
   "accuracy_status": "not_applicable",
-  "generalization_status": "pending",
-  "regression_status": "pending",
-  "comparison_artifact": "artifacts/optimization/round_022/",
-  "result": "pending",
+  "generalization_status": "generic arrival-only and engine-enabled continuous paths; partial engine availability chooses arrival globally; static mode remains outside trigger",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_022/engine_boundary_candidate.json",
+  "result": "The parent mixed engine and arrival timing contracts. The candidate derives one report-wide availability-aware boundary, keeps engine fields diagnostic when unavailable, and makes score, UI and text output consume the same declared boundary.",
   "limitations": [
-    "No Native accuracy or timing claim at prepare stage"
+    "No Native timing or accuracy claim was collected; synthetic native input only exposes score routing.",
+    "Partial engine availability is conservatively arrival scoped to avoid mixed per-request contracts.",
+    "Serving SLO checks continue to use arrival/request semantics by design."
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_022/engine_boundary_scan.json",
+      "sha256": "4468416fc6fe525332d646d7f4d26ee44d3875864e2b0bc78be5a22159ca9c1b"
+    },
+    {
+      "path": "artifacts/optimization/round_022/engine_boundary_reproduction.json",
+      "sha256": "e86eb623615d5a2a5803df278ca9046e3e84dd180e28194212efea380e837c86"
+    },
+    {
+      "path": "artifacts/optimization/round_022/engine_boundary_candidate.json",
+      "sha256": "c656df27690070f5502b260cb0fe12e310aa2dc7289b2963a9207a5a635fbac0"
+    }
   ]
 }

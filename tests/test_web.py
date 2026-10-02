@@ -13,9 +13,14 @@ from unittest.mock import patch
 from heterollm_sim import __version__
 from heterollm_sim.reference import build_llama_default_scenario, build_reference_scenario
 from heterollm_sim.config import scenario_from_dict
-from heterollm_sim.reporting import report_dict, run_scenario
+from heterollm_sim.reporting import format_report, report_dict, run_scenario
 from heterollm_sim.schema_v1 import CanonicalScenario
-from heterollm_sim.web import JSON_BODY_LIMIT_BYTES, build_server, scenario_to_payload
+from heterollm_sim.web import (
+    JSON_BODY_LIMIT_BYTES,
+    build_server,
+    scenario_to_payload,
+    simulation_score_payload,
+)
 
 
 class WebApiTests(unittest.TestCase):
@@ -266,6 +271,42 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(
             report["summary"]["ttft_ns"]["p50"],
             report["summary"]["engine_ttft_ns"]["p50"],
+        )
+
+    def test_continuous_without_engine_boundary_is_explicitly_arrival_scoped(self):
+        scenario = scenario_from_dict(self.reference_payload())
+        report = report_dict(run_scenario(scenario, retention_policy="aggregate"))
+        request_id = next(iter(report["requests"]))
+        request = report["requests"][request_id]
+        latency = report["result_semantics"]["latency"]
+
+        self.assertEqual(latency["primary_boundary"], "arrival")
+        self.assertIsNone(request["engine_request_begin_ns"])
+        self.assertEqual(request["ttft_ns"], request["arrival_ttft_ns"])
+        self.assertEqual(request["e2e_ns"], request["arrival_e2e_ns"])
+        self.assertEqual(request["latency_boundary"], "arrival")
+        self.assertIn("延迟边界：arrival", format_report(run_scenario(scenario)))
+
+        native = {
+            "requests": {
+                request_id: {"ttft_ns": 1, "tpot_ns": 1, "e2e_ns": 1}
+            }
+        }
+        score = simulation_score_payload(
+            report, scenario, native_reference=native, threshold_pct=25
+        )
+        self.assertEqual(score["metrics"]["latency_boundary"], "arrival")
+        self.assertEqual(
+            score["metrics"]["ttft_p50_ns"],
+            report["summary"]["ttft_ns"]["p50"],
+        )
+        self.assertEqual(
+            score["metrics"]["e2e_p50_ns"],
+            report["summary"]["e2e_ns"]["p50"],
+        )
+        self.assertEqual(
+            score["request_metrics"][request_id]["ttft_ns"],
+            request["ttft_ns"],
         )
 
     def test_direct_simulation_score_evaluates_scheduler_and_mapping_differences(self):

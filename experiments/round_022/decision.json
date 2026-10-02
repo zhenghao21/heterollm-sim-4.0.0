@@ -2,10 +2,20 @@
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_022",
   "candidate_id": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare registered after H21 promotion; independent boundary reproduction is active.",
-  "evidence": [],
+  "status": "decided",
+  "decision": "promote",
+  "reason": "Independent scan reproduced the boundary mismatch, the minimal availability-aware repair closes reporting, score, UI and text surfaces, engine control remains valid, focused checks and final full regression pass, and no native accuracy claim is made.",
+  "evidence": [
+    "artifacts/optimization/round_022/engine_boundary_scan.json",
+    "artifacts/optimization/round_022/engine_boundary_reproduction.json",
+    "artifacts/optimization/round_022/engine_boundary_candidate.json",
+    "Final full pytest: 3036 passed, 4 skipped in 434.81s, exit 0",
+    "node --check src/heterollm_sim/webui/app.js: exit 0"
+  ],
   "deferred_scope": [],
-  "next_hypothesis": null
+  "next_hypothesis": {
+    "id": "H23_SOURCE_GROUNDED_CANDIDATE",
+    "claim": "Continue discovery outside H18 swap, H19 report attribution, H20 scheduler promotion, H21 collective bytes and H22 latency boundary domains; accept only a new independently reproducible defect.",
+    "status": "registered_needs_discovery"
+  }
 }
