@@ -216,7 +216,12 @@ def dram_service(
     return metrics, DramState(tuple(banks), tuple(channels))
 
 
-def resolve_dram_task(task: Any, states: Mapping[str, DramState]):
+def resolve_dram_task(
+    task: Any,
+    states: Mapping[str, DramState],
+    *,
+    start_ns: Optional[float] = None,
+):
     """Preview an address-aware DRAM task without mutating kernel state."""
 
     contract = task.metadata.get("dram_access")
@@ -238,7 +243,10 @@ def resolve_dram_task(task: Any, states: Mapping[str, DramState]):
         read_bandwidth_gb_s=contract["read_bandwidth_gb_s"],
         write_bandwidth_gb_s=contract["write_bandwidth_gb_s"],
         max_outstanding_requests=contract["max_outstanding_requests"],
-        start_ns=float(contract.get("start_ns", 0.0)),
+        start_ns=(
+            float(contract.get("start_ns", 0.0))
+            if start_ns is None else float(start_ns)
+        ),
         state=previous,
     )
     resource_id = str(contract.get("resource_id") or "")

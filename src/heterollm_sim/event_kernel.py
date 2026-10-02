@@ -2130,7 +2130,7 @@ class UnifiedEventKernel:
             from .dram import resolve_dram_task
             try:
                 task, state_key, next_state = resolve_dram_task(
-                    task, self._dram_states
+                    task, self._dram_states, start_ns=start_ns
                 )
             except (TypeError, ValueError, KeyError):
                 # DRAM preview is transactional just like stateful L2: an

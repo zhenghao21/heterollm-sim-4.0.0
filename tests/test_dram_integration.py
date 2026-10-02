@@ -109,3 +109,18 @@ def test_failed_dram_preview_does_not_commit_kernel_state():
         kernel.step()
     assert kernel._dram_states == {}
     assert kernel.peek_ready_key() is not None
+
+
+def test_dram_preview_uses_event_queue_start_for_refresh_epoch():
+    task = dram_task("refresh-read", 0)
+    contract = dict(task.metadata["dram_access"])
+    contract["profile"] = asdict(profile(refresh_interval_ns=10.0, refresh_duration_ns=4.0))
+    task = TaskSpec(
+        task.task_id, task.request_id, task.name, task.category,
+        earliest_start_ns=10.0, demands=task.demands,
+        metadata={"dram_access": contract},
+    )
+    kernel = UnifiedEventKernel()
+    kernel.submit((task,))
+    event = kernel.step()
+    assert event.task.metadata["dram_execution"]["refresh_wait_ns"] > 0.0
