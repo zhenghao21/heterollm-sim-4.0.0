@@ -4,16 +4,18 @@
   "candidate_id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
   "status": "pending",
   "prediction": {
-    "status": "pending"
+    "status": "pending_source_parameter_review",
+    "scan_artifact": "artifacts/optimization/round_026/nand_design_scan.json",
+    "source_commit": "93ffd4eb9c5730c2c598609c2e376dcd318b5a29"
   },
   "score": {
     "status": "pending"
   },
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "candidate_valid_pending_implementation",
   "accuracy_status": "not_applicable",
-  "generalization_status": "pending",
+  "generalization_status": "SSD/NVMe generic path and HBF cold_page boundary identified; not yet implemented",
   "regression_status": "pending",
-  "comparison_artifact": "artifacts/optimization/round_026/",
+  "comparison_artifact": "artifacts/optimization/round_026/nand_design_scan.json",
   "result": "pending",
   "limitations": [
     "H26 尚未完成 NAND source scan 或源码修改。"

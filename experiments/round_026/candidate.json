@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_026",
-  "status": "prepare",
+  "status": "verify",
   "hypothesis": {
     "id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
     "direction": "存储硬件建模粒度",
@@ -12,14 +12,28 @@
   "parent_commit": "9d87c00c328b64e70886ff299315a15b18b02137",
   "changed_files": [],
   "source_sha256": null,
-  "activation_checks": [],
+  "activation_checks": [
+    "hbf_media cold_page_v1 现有 page/plane/RMW 保持兼容",
+    "SSD/NVMe generic path lacks page/plane/die/channel geometry",
+    "one shared nand_media contract can normalize hbf_media alias",
+    "real endpoint path must carry page split/parallelism/queue",
+    "erase boundary must be explicit, not inferred"
+  ],
   "tests": [],
-  "independent_evidence": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_026/nand_design_scan.json"
+  ],
   "deferred_candidates": [
     {
       "id": "H26_NAND_FTL_GC_DETAIL",
       "status": "deferred",
       "reason": "只有独立瓶颈证据才允许扩展 FTL/GC/firmware。"
+    }
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_026/nand_design_scan.json",
+      "sha256": "693ee2c8e4eebf14cc55a98452fadb91b1a5f2c9e928e75aa072a9b99c349eeb"
     }
   ]
 }

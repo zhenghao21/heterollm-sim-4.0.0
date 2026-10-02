@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_026",
-  "status": "prepare",
+  "status": "verify",
   "purpose": "storage_nand_family_modeling",
   "primary_goal": "在不拆分 SSD/NVMe/HBF 三个模型的前提下，验证并接入一个可解释的 NAND family page/plane/die/channel 访问粒度与并行窗口。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -67,6 +67,11 @@
     "FTL/GC 只有独立瓶颈证据才加入",
     "不声称 Native 或 cycle accuracy"
   ],
-  "selected_candidate": null,
-  "next_step": "完成 NAND source scan，确认最小候选及其实际调用链。"
+  "selected_candidate": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
+  "next_step": "scan 已确认 SSD/NVMe generic 路径缺少 NAND geometry，而 HBF cold_page_v1 已有部分 page/plane；下一步独立确认参数来源并实现一个 shared nand_media contract。",
+  "source_identity": {
+    "scan_artifact": "artifacts/optimization/round_026/nand_design_scan.json",
+    "scan_sha256": "693ee2c8e4eebf14cc55a98452fadb91b1a5f2c9e928e75aa072a9b99c349eeb",
+    "observed_head": "93ffd4eb9c5730c2c598609c2e376dcd318b5a29"
+  }
 }
