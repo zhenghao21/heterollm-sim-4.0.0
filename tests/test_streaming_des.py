@@ -50,6 +50,30 @@ def _strict_reference_scenario():
 
 
 class IncrementalScheduleTests(unittest.TestCase):
+    def test_online_report_clamps_invalid_batch_resource_bytes(self) -> None:
+        scenario = _strict_reference_scenario()
+        result = run_scenario(scenario, retention_policy="aggregate")
+        self.assertTrue(result.serving.batches)
+        first = result.serving.batches[0]
+        original = float(first.cost.metadata.get("resource_accounted_bytes", 0.0))
+        mutated_metadata = dict(first.cost.metadata)
+        mutated_metadata["resource_accounted_bytes"] = -(original + 1.0)
+        mutated_batch = replace(
+            first,
+            cost=replace(first.cost, metadata=mutated_metadata),
+        )
+        mutated_serving = replace(
+            result.serving,
+            batches=(mutated_batch,) + tuple(result.serving.batches[1:]),
+        )
+        report = report_dict(replace(result, serving=mutated_serving))
+        expected = sum(
+            max(0, int(batch.cost.metadata.get("resource_accounted_bytes", 0)))
+            for batch in mutated_serving.batches
+        )
+        self.assertEqual(report["summary"]["resource_accounted_bytes"], expected)
+        self.assertGreaterEqual(report["summary"]["resource_accounted_bytes"], 0)
+
     def test_persistent_path_comparison_matches_tuple_lexicographic_order(
         self,
     ) -> None:

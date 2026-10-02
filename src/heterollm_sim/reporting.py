@@ -5336,7 +5336,7 @@ def _online_report_core(
     )
     total_energy = sum(batch.cost.energy_pj for batch in serving.batches)
     total_bytes = sum(
-        float(batch.cost.metadata.get("resource_accounted_bytes", 0.0))
+        _non_negative_int(batch.cost.metadata.get("resource_accounted_bytes"))
         for batch in serving.batches
     )
     task_count = sum(
