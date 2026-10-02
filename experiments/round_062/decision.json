@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_062",
+  "candidate_id": "H62_NAND_UNCOVERED_EXECUTION_CHAIN",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记存储硬件建模粒度方向，等待独立 source scan 与矩阵。",
+  "evidence": [],
+  "source_commit": "930a79d9415648046b5f8c6b0fdada5256cbd1eb",
+  "deferred_scope": [],
+  "next_hypothesis": null
+}\n

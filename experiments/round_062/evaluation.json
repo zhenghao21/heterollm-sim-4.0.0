@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_062",
+  "candidate_id": "H62_NAND_UNCOVERED_EXECUTION_CHAIN",
+  "status": "prepare",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "mechanism_only",
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "native_loaded": false,
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "limitations": [
+    "尚未完成独立 NAND source/matrix"
+  ]
+}\n

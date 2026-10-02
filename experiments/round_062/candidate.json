@@ -1,0 +1,20 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_062",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H62_NAND_UNCOVERED_EXECUTION_CHAIN",
+    "direction": "存储硬件建模粒度",
+    "claim": "共享 NAND geometry/访问元素可能在未覆盖执行链路中降级为 aggregate bytes，丢失 page/plane/die/channel/queue 或 read/program/erase 语义。",
+    "trigger": "H39/H40 建立模型，H48/H49 只验证 propagation；另一实际 planner/service/event/report 路径尚未独立核对。",
+    "falsifier": "独立 source/matrix 显示所有元素和守恒已进入真实执行且非法输入 fail-closed，或缺失不能稳定复现。"
+  },
+  "parent_commit": "930a79d9415648046b5f8c6b0fdada5256cbd1eb",
+  "candidate_source_commit": null,
+  "source_sha256": null,
+  "changed_files": [],
+  "independent_evidence": [],
+  "activation_checks": [],
+  "deferred_candidates": [],
+  "tests": []
+}\n

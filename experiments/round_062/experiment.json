@@ -1,0 +1,80 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_062",
+  "hypothesis_id": "H62_NAND_UNCOVERED_EXECUTION_CHAIN",
+  "direction": "存储硬件建模粒度",
+  "previous_direction": "运行速度与内存",
+  "recent_directions": [
+    "H60:预测精度与泛化（源码修复）",
+    "H61:运行速度与内存（有限负结论）",
+    "H62:存储硬件建模粒度（活动）"
+  ],
+  "direction_switch_reason": "H61 运行速度方向仅得到有限负结论；按轮换规则切换到存储硬件方向，继续用户指定的 NAND/SSD/HBF 共享模型但避开已收口 geometry/erase/propagation。",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H59",
+    "运行速度与内存": "H61",
+    "计算成本模型": "H58",
+    "存储硬件建模粒度": "H62活动",
+    "预测精度与泛化": "H60",
+    "评估/API与可视化口径": "H57",
+    "开发工具链与可复现性": "H56"
+  },
+  "primary_goal": "检查 SSD/NVMe/HBF 共享 NAND 模型中 page/plane/die/channel/queue/读写/擦除内部元素在另一实际执行链路的粒度、守恒和错误边界；不重复 H39/H40 geometry/erase、H48/H49 propagation。",
+  "purpose": "nand_uncovered_execution_granularity",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "budget": {
+    "candidate_count": 1,
+    "source_scan_runs": 1,
+    "matrix_runs": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "retries": 0
+  },
+  "metrics": [
+    "page_plane_die_channel_geometry",
+    "read_program_erase_bytes",
+    "queue_or_plane_waves",
+    "resource_conservation",
+    "invalid_fail_closed"
+  ],
+  "guardrails": [
+    "DRAM/LPDDR/HBM 视为一个共享模型",
+    "SSD/NVMe/HBF 视为一个共享 NAND 模型",
+    "不重做 H39 geometry/address",
+    "不重做 H40 erase contract",
+    "不重做 H48/H49 propagation",
+    "不导入未经来源核验的硬件数字"
+  ],
+  "data_roles": {
+    "development": "fresh NAND analytical controls",
+    "comparison": "独立同输入 source/matrix controls",
+    "holdout": "未参与候选选择的 invalid/alias controls",
+    "final_acceptance": "机制一致性与资源守恒，不声称 Native 精度"
+  },
+  "baseline": {
+    "parent_commit": "930a79d9415648046b5f8c6b0fdada5256cbd1eb",
+    "role": "H61 limited-negative runtime baseline"
+  },
+  "scope": {
+    "include": [
+      "one uncovered NAND execution chain",
+      "shared SSD/NVMe/HBF model",
+      "page/plane/die/channel/queue/read/program/erase",
+      "resource and error boundaries"
+    ],
+    "exclude": [
+      "H39 DRAM geometry",
+      "H40 NAND erase source fix",
+      "H48 background/queue propagation scan",
+      "H49 NAND E2E projection",
+      "Native accuracy"
+    ]
+  },
+  "problem_domain_closure": {
+    "rule": "同一 NAND 粒度根因若影响 profile、地址映射、访问拆分、队列/资源、错误、报告或回归表面，本轮一起收口。",
+    "status": "prepare"
+  },
+  "selected_candidate": null,
+  "next_step": "等待独立 source scan 与 NAND matrix；若无缺陷保留有限负结论并切换方向。",
+  "status": "prepare"
+}\n
