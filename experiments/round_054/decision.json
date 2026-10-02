@@ -1,12 +1,33 @@
 {
   "candidate_id": "H54_CHUNK_PLAN_REUSE_BOUNDARY",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记 chunk plan reuse 速度/内存假设，等待独立 source scan 与 fresh/reused A/B。",
+  "changed_files": [
+    "experiments/round_054/experiment.json",
+    "experiments/round_054/candidate.json",
+    "experiments/round_054/evaluation.json",
+    "experiments/round_054/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "reject_no_candidate",
+  "deferred_scope": [
+    "safe production multi-request context reuse",
+    "retention semantics under reused chunks",
+    "Native accuracy"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_054/source_scan_independent.json",
+    "artifacts/optimization/round_054/chunk_reuse_matrix_independent.json",
+    "artifacts/optimization/round_054/final_review.json",
+    "artifacts/optimization/round_054/final_review.json.sha256"
+  ],
+  "next_hypothesis": {
+    "claim": "按用户存储任务清单检查尚未覆盖的 geometry/queue/report 入口；不重复 H48/H49 direct NAND E2E。",
+    "direction": "存储硬件建模粒度或其他最长未查方向",
+    "rationale": "H54 已确认运行时已有局部缓存收益且无安全新候选；下一轮切换其他最长未查方向，避免连续速度轮次。"
+  },
+  "reason": "独立 source scan、fresh/reused chunk A/B 与 review 确认已有 CompilationContext local cache 在重复 lowering 中把约 245ms/3.68MB 降至约 32ms/1.58MB，任务/metadata/demands 与 event trace 完全等价；但这是已有 scenario-local 机制，无跨场景/进程安全证明，不能据此新增全局缓存或改源码。",
+  "review_artifact_sha256": "ec03ed49f6859838d5fb8c4b454b322c6f202984f7876669246923478e330a5c",
   "round_id": "round_054",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "b5655a86077173f3bd9c3ceb5c54d41019ecce1f",
-  "status": "pending"
+  "source_commit": "982e539167bd89b85cba620ef95a70c61ecea1de",
+  "status": "complete"
 }

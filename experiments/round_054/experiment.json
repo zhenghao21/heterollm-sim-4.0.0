@@ -43,12 +43,17 @@
     "cache_hit_miss",
     "output_retention_equivalence"
   ],
-  "next_step": "先独立扫描 CompilationContext/task segment cache 与 lazy iterator，再运行 fresh/reused A/B；无收益或不等价则保留有限负结论。",
+  "next_step": "切换其他最长未查方向；不重复 H54 A/B、H46 profile 或 H41 retention。",
   "previous_direction": "仿真器正确性与语义（H53）",
   "primary_goal": "对同一请求的 lazy chunk lowering 做有界 fresh-context/reused-context A/B，验证任务序列、metadata、makespan/retention 等价，再决定是否存在安全的计划复用或缓存优化；不重复 H41/H46 retention/profile。",
   "problem_domain_closure": {
-    "rule": "同一 chunk reuse 根因若影响 compile, lazy iterator, cache identity, output equivalence and memory/error 面，必须本轮收口；无等价证明不得修改源码。",
-    "status": "prepare"
+    "cache_scope": "CompilationContext scenario-local bounded LRU caches already exist",
+    "candidate": "none; no safe source change",
+    "deferred": "production multi-request reuse boundary and retention semantics",
+    "equivalence": "fresh/reused chunks tasks IDs/deps/metadata/demands and event trace makespan/resource busy equal",
+    "errors": "cache identity/cyclic/non-cacheable metadata boundaries explicit",
+    "performance": "repeated lowering local wall/peak-memory reduction measured; no cross-request/process proof",
+    "status": "closed_limited_negative"
   },
   "purpose": "chunk_plan_reuse_runtime_boundary",
   "recent_directions": [
@@ -76,5 +81,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }
