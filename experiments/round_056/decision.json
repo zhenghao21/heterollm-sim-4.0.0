@@ -1,12 +1,32 @@
 {
   "candidate_id": "H56_EVIDENCE_SUPERSESSION_CLOSURE",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记跨轮证据闭合假设，等待独立 source/records scan 与 closure matrix。",
+  "changed_files": [
+    "experiments/round_056/experiment.json",
+    "experiments/round_056/candidate.json",
+    "experiments/round_056/evaluation.json",
+    "experiments/round_056/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "reject_no_candidate",
+  "deferred_scope": [
+    "historical hardcoded exit metadata",
+    "ignored artifact archival policy"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_056/source_scan_independent.json",
+    "artifacts/optimization/round_056/closure_matrix_independent.json",
+    "artifacts/optimization/round_056/final_review.json",
+    "artifacts/optimization/round_056/final_review.json.sha256"
+  ],
+  "next_hypothesis": {
+    "claim": "依据轮换台账切换到尚未覆盖的仿真器执行链路，避免重复 H56 toolchain audit 与 H47 command capture。",
+    "direction": "其他最长未查功能方向",
+    "rationale": "H56 已关闭当前证据闭合问题，未形成源码候选；下一轮回到功能/性能方向。"
+  },
+  "reason": "独立 source scan、closure matrix 与 review 审计 round_048..055：四份 JSON 全解析，24 个引用 artifact sidecar 全匹配，当前 review/source 引用闭合，4 个 superseded/prior hash 均在显式 provenance，外部失配为 0。H51 records-only SHA 修复已单独提交，未修改功能源码，因此不保留源码候选。",
+  "review_artifact_sha256": "343c29cfffc0b8bdeaeb0863ad6483500deace2fe8f296aee18903ca08909fdd",
   "round_id": "round_056",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "ec48c20eabeb2f5723d980d1bb91c36079241f0e",
-  "status": "pending"
+  "source_commit": "fffe5103fb0fbe41e91187a58b110362e4b4d536",
+  "status": "complete"
 }
