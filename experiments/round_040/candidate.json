@@ -1,1 +1,61 @@
-{"schema":"heterollm.optimization.candidate/v1","round_id":"round_040","status":"prepare","hypothesis":{"id":"H40_NAND_FAMILY_PAGE_PLANE_ACCESS_CONTRACT","direction":"存储硬件建模粒度","claim":"当前SSD/HBF/NAND可能只有page aggregate/RMW路径，plane/die/program/erase/queue粒度未完整进入共享真实访问链路。","trigger":"待独立NAND/HBF/SSD source scan；不继承H26/H30历史结论。","falsifier":"新鲜源码和受控访问显示共享NAND profile已正确拆分page、表达program/erase、plane/die并行和队列/后台状态。"},"parent_commit":"3295667cee61e134c504e80b1f2ef5ba70e0a3db","changed_files":[],"source_sha256":null,"activation_checks":[],"tests":[],"independent_evidence":[],"deferred_candidates":[]}
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_040",
+  "status": "complete",
+  "hypothesis": {
+    "id": "H40_NAND_FAMILY_PAGE_PLANE_ACCESS_CONTRACT",
+    "direction": "存储硬件建模粒度",
+    "claim": "当前SSD/HBF/NAND可能只有page aggregate/RMW路径，plane/die/program/erase/queue粒度未完整进入共享真实访问链路。",
+    "trigger": "待独立NAND/HBF/SSD source scan；不继承H26/H30历史结论。",
+    "falsifier": "新鲜源码和受控访问显示共享NAND profile已正确拆分page、表达program/erase、plane/die并行和队列/后台状态。"
+  },
+  "parent_commit": "3295667cee61e134c504e80b1f2ef5ba70e0a3db",
+  "changed_files": [
+    "src/heterollm_sim/hbf_media.py",
+    "src/heterollm_sim/data_motion.py",
+    "tests/test_nand_media_family.py"
+  ],
+  "source_sha256": {
+    "src/heterollm_sim/hbf_media.py": "21ccc53dbc339ccaf4e713f123a2e6167be9b5c5c596f5d485636bce4e41a290",
+    "src/heterollm_sim/data_motion.py": "13370401fbeec01a7995aba6159032ec70b6985e14e72dedbb179f8bb1235785",
+    "tests/test_nand_media_family.py": "0e73ab5b974fde828f87326207aee5abf97694a78f142fc9c8d0af36dc5e017a"
+  },
+  "activation_checks": [
+    "ERASE operation reaches shared nand_media/PhysicalService/endpoint/DataAccess paths",
+    "erase block rounding, physical bytes, operation count, latency and queue waves",
+    "legacy hbf_media_service accepts operation/background",
+    "zero write bandwidth does not short-circuit ERASE",
+    "endpoint and resolved PhysicalService use same resource id",
+    "background marker explicit without GC/FTL invented cost"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_nand_media_family.py tests/test_data_motion.py tests/test_communication.py",
+      "exit_code": 0,
+      "result": "84 passed in 0.24s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "exit_code": 0,
+      "result": "3103 passed, 4 skipped in 433.99s (0:07:13)"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_040/fresh_nand_scan.json",
+    "artifacts/optimization/round_040/fresh_nand_scan.sha256",
+    "artifacts/optimization/round_040/nand_candidate_probe.json",
+    "artifacts/optimization/round_040/nand_candidate_probe.sha256",
+    "artifacts/optimization/round_040/full_regression_result.json",
+    "artifacts/optimization/round_040/final_review.json",
+    "artifacts/optimization/round_040/final_review_postfix.json"
+  ],
+  "deferred_candidates": [
+    "die/channel调度维度",
+    "FTL/GC完整状态",
+    "后台工作成本",
+    "Native accuracy/performance"
+  ],
+  "candidate_source_commit": "e1f542595e28608142ceee4ae9901dc8eb326544",
+  "review": "两个高优先级入口不一致已修复：legacy alias透传、zero-write erase、resolved resource统一、generic endpoint无NAND contract显式拒绝；final postfix review待落盘。",
+  "source_commit": "e1f542595e28608142ceee4ae9901dc8eb326544"
+}
