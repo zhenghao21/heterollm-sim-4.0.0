@@ -31,8 +31,8 @@
   "publication": {
     "source_commit": "6b5520891e10e0063ed59dac6f58a96a8eb7d6cc",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H34 negative records"
+    "verified_remote_sha": "915b13250660ada7898c26835c2166f650dd86cb",
+    "verification": "git push origin main exit 0; H34 negative records publication commit 915b13250660ada7898c26835c2166f650dd86cb matched git ls-remote before final metadata update"
   },
   "process_learning": "无 Native 时只能接纳输入身份/coverage 机制结论，不能把 fingerprint 控制探针称为精度或跨硬件泛化改善。",
   "source_identity": {
