@@ -1,0 +1,8 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_037",
+  "status": "prepare",
+  "hypothesis": {"id": "H37_EXECUTION_RESOURCE_SEMANTIC_CONTRACT", "direction": "仿真器正确性与语义", "claim": "窄执行资源/调度路径可能存在 owner、capacity、dependency 或失败状态语义不一致。", "trigger": "待独立 execution/resource source scan；不得继承 H31 全域负向结论。", "falsifier": "受控 owner/capacity/dependency/error probes 在支持域内均显式守恒。"},
+  "parent_commit": "e62cfbe6b9275d778ebd6f0b6e81cd35d1748def",
+  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+}

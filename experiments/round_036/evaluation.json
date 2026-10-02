@@ -1,3 +1,38 @@
 {
-  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_036", "candidate_id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_036/", "result": "pending", "limitations": ["H36 尚未完成 runtime execution source scan。"]
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_036",
+  "candidate_id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY",
+  "status": "completed",
+  "prediction": {
+    "status": "engineering_runtime_scan_only",
+    "artifact": "artifacts/optimization/round_036/runtime_execution_scan.json",
+    "source_commit": "e62cfbe6b9275d778ebd6f0b6e81cd35d1748def",
+    "result": "Continuous/static controls and explicit provider reuse measurements completed."
+  },
+  "score": {
+    "status": "not_scored_no_safe_production_candidate",
+    "result": "Explicit provider reuse: 0.16137s→0.04243s with identical makespan/batches; fresh provider 0.15530s. No production caller safely reusable without new cache lifetime contract.",
+    "native_accuracy": "not_applicable"
+  },
+  "mechanism_status": "rejected_no_candidate",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "not_applicable",
+  "regression_status": "inherited_source_unchanged",
+  "comparison_artifact": "artifacts/optimization/round_036/runtime_execution_scan.json",
+  "result": "H36 runtime scan retains measured controls and rejects speculative provider cache promotion.",
+  "limitations": [
+    "No Native latency claim.",
+    "No source modified; H30 regression inherited.",
+    "Provider cache bound exists per explicit provider, but shared production lifetime/eviction contract is absent."
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_036/runtime_execution_scan.json",
+      "sha256": "3471dcccae7bfe64cbeb9689bf0f9f6709d476ad4ffdffdcc612a3fb1120e589"
+    },
+    {
+      "path": "artifacts/optimization/round_036/run_scan.py",
+      "sha256": "cc59d69072dd7655009dc7fbe0093abc7b1e38a409c1d32a30c8fee19c456633"
+    }
+  ]
 }

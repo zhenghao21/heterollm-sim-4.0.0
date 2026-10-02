@@ -1,0 +1,3 @@
+{
+  "schema": "heterollm.optimization.decision/v1", "round_id": "round_037", "candidate_id": "H37_EXECUTION_RESOURCE_SEMANTIC_CONTRACT", "status": "pending", "decision": "pending", "reason": "Prepare registered execution/resource semantic direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+}

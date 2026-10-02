@@ -1,3 +1,43 @@
 {
-  "schema": "heterollm.optimization.decision/v1", "round_id": "round_036", "candidate_id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY", "status": "pending", "decision": "pending", "reason": "Prepare registered runtime execution direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_036",
+  "candidate_id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY",
+  "status": "decided",
+  "decision": "reject_no_candidate",
+  "reason": "独立 run_scenario/retention/memory controls通过；同一显式 TopologyAwareBatchCostProvider 复用可将8请求 continuous wall time 0.16137s降至0.04243s，但 web/run_jobs/普通 run_scenario 生产入口每次构造新 provider，没有安全既有调用方可直接接入；引入共享缓存需新增生命周期/淘汰/场景身份契约，因此本轮不改源码。",
+  "evidence": [
+    {
+      "path": "artifacts/optimization/round_036/runtime_execution_scan.json",
+      "sha256": "3471dcccae7bfe64cbeb9689bf0f9f6709d476ad4ffdffdcc612a3fb1120e589"
+    },
+    {
+      "path": "artifacts/optimization/round_036/run_scan.py",
+      "sha256": "cc59d69072dd7655009dc7fbe0093abc7b1e38a409c1d32a30c8fee19c456633"
+    },
+    "Continuous 1x64x4 median 0.08137s, peak 3050345 bytes",
+    "Continuous 8x128x16 median 0.15831s, peak 5908083 bytes",
+    "Static exact/streaming/aggregate makespan equal; retained tasks 553/553/0",
+    "Provider reuse and fresh-provider controls exit 0",
+    "Inherited H30 full regression: 3070 passed, 4 skipped; source unchanged"
+  ],
+  "deferred_scope": [
+    "Bounded shared provider cache is a separate API/runtime candidate requiring explicit lifetime/eviction/identity design."
+  ],
+  "next_hypothesis": {
+    "id": "H37_EXECUTION_RESOURCE_SEMANTIC_CONTRACT",
+    "direction": "仿真器正确性与语义",
+    "claim": "下一轮检查尚未覆盖的执行资源/调度语义边界，不重复 H31 negative scan 或 H36 runtime cache candidate。",
+    "basis": "H36 runtime negative scan completed；correctness direction can inspect a narrower resource/scheduler execution path.",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "e62cfbe6b9275d778ebd6f0b6e81cd35d1748def",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "pending push of H36 negative records"
+  },
+  "process_learning": "运行时提速候选必须到达真实生产调用方；独立 provider reuse 的潜在收益不能替代生命周期/身份/淘汰契约。",
+  "source_identity": {
+    "source_commit": "e62cfbe6b9275d778ebd6f0b6e81cd35d1748def"
+  }
 }

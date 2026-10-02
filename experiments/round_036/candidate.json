@@ -1,8 +1,34 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_036",
-  "status": "prepare",
-  "hypothesis": {"id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY", "direction": "运行速度与内存", "claim": "实际 run_scenario/批处理执行路径可能存在可独立测量的 wall-time 或峰值内存候选。", "trigger": "待独立 runtime execution source scan；不得继承 H29 CLI-only 结论。", "falsifier": "执行/批处理/retention 路径无可复现开销候选，或候选无法保持结果等价。"},
+  "status": "rejected_no_candidate",
+  "hypothesis": {
+    "id": "H36_RUNTIME_EXECUTION_BATCH_MEMORY",
+    "direction": "运行速度与内存",
+    "claim": "Provider reuse materially speeds repeated explicit-provider runs, but production run_scenario/run_jobs/web paths construct providers per run; no safe existing production callsite supports promoting source change.",
+    "trigger": "待独立 runtime execution source scan；不得继承 H29 CLI-only 结论。",
+    "falsifier": "执行/批处理/retention 路径无可复现开销候选，或候选无法保持结果等价。"
+  },
   "parent_commit": "6ae95b7a130ad731df2429554d5b9bb27f621ef9",
-  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_036/runtime_execution_scan.json",
+    "artifacts/optimization/round_036/run_scan.py"
+  ],
+  "deferred_candidates": [
+    "A bounded shared provider cache would require a new lifetime/eviction and scenario identity contract; not added speculatively."
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_036/runtime_execution_scan.json",
+      "sha256": "3471dcccae7bfe64cbeb9689bf0f9f6709d476ad4ffdffdcc612a3fb1120e589"
+    },
+    {
+      "path": "artifacts/optimization/round_036/run_scan.py",
+      "sha256": "cc59d69072dd7655009dc7fbe0093abc7b1e38a409c1d32a30c8fee19c456633"
+    }
+  ]
 }
