@@ -1,12 +1,32 @@
 {
   "candidate_id": "H53_RUN_JOB_CANCEL_CLEANUP_BOUNDARY",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记后台作业生命周期清理假设，等待独立 source scan 与控制矩阵。",
+  "changed_files": [
+    "experiments/round_053/experiment.json",
+    "experiments/round_053/candidate.json",
+    "experiments/round_053/evaluation.json",
+    "experiments/round_053/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "reject_no_candidate",
+  "deferred_scope": [
+    "full heavy-load scenario cancellation",
+    "browser transport timing"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_053/source_scan_independent.json",
+    "artifacts/optimization/round_053/lifecycle_matrix_independent.json",
+    "artifacts/optimization/round_053/final_review.json",
+    "artifacts/optimization/round_053/final_review.json.sha256"
+  ],
+  "next_hypothesis": {
+    "claim": "检查新的 runtime path 是否有安全可证伪的 metadata/trace overhead 或缓存边界；不重复 H41/H46 retention/profile 结论。",
+    "direction": "运行速度与内存",
+    "rationale": "H53 已收口正确性生命周期；运行速度方向自 H46 后未复查，按轮换切换。"
+  },
+  "reason": "独立 source scan、RunJobManager 生命周期矩阵和 review 确认取消/失败/完成/未知/重复/关闭路径状态与清理显式，focused 5 passed；未发现新的 registry/HTTP/cleanup 语义缺陷，不修改功能源码。",
+  "review_artifact_sha256": "4cc7c4ddbd75899776856d0b2135d1588289c65721394cb9a38d7a2a81d22f91",
   "round_id": "round_053",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "f6ca922815c896ce189aa838d8b4a62ecb1ea9f5",
-  "status": "pending"
+  "source_commit": "dcdfb574ca63f732b2d8f3248b09b77f19086b03",
+  "status": "complete"
 }

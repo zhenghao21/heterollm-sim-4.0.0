@@ -43,12 +43,17 @@
     "typed_http_status",
     "retention_after_cancel"
   ],
-  "next_step": "先独立扫描 run_jobs/job registry/HTTP cancellation call chain，再执行一组取消/异常/重复/未知 job 控制；若无缺陷，保留有限负结论。",
+  "next_step": "切换运行速度/内存或其他最长未查方向；不重复 H53 lifecycle matrix、H45 event rollback 或 H37 capacity batch。",
   "previous_direction": "计算成本模型（H52）",
   "primary_goal": "检查后台 run job 的取消、异常、超时和 HTTP 错误路径是否释放 registry/locks/temporary state，并保持 report/API typed error 契约；不重复 H45 资源回滚/ready-heap/retention 扫描或 H42 coverage gate。",
   "problem_domain_closure": {
-    "rule": "同一 job lifecycle 根因若影响 submit, execute, cancel, failure, registry and API error surfaces，必须本轮收口；未支持入口明确记录不适用。",
-    "status": "prepare"
+    "api": "unknown trace/cancel return explicit RunJobTraceError/HTTP error",
+    "cancel": "queued/running cancellation reaches cancelled terminal state; duplicate terminal cancel idempotent",
+    "candidate": "none; no reproducible lifecycle defect",
+    "deferred": "full scenario cancellation under heavy load and browser transport",
+    "failure": "cancelled/failed/completed states and error cleanup distinct",
+    "registry": "active/history limits and terminal pruning explicit",
+    "status": "closed_limited_negative"
   },
   "purpose": "run_job_cancellation_error_cleanup_boundary",
   "recent_directions": [
@@ -76,5 +81,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }

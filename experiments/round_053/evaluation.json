@@ -1,21 +1,32 @@
 {
   "accuracy_status": "not_applicable",
   "candidate_id": "H53_RUN_JOB_CANCEL_CLEANUP_BOUNDARY",
-  "comparison_artifact": "artifacts/optimization/round_053/",
-  "generalization_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_053/lifecycle_matrix_independent.json",
+  "generalization_status": "limited_to RunJobManager and typed API lifecycle controls",
   "limitations": [
-    "H53 尚未完成 run_jobs 生命周期与取消/异常独立扫描。"
+    "no full heavy-load scenario",
+    "no Native",
+    "H45 event rollback not reopened"
   ],
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "negative_scan_passed_limited",
   "prediction": {
-    "status": "pending"
+    "native_loaded": false,
+    "source_commit": "dcdfb574ca63f732b2d8f3248b09b77f19086b03",
+    "status": "run_job_lifecycle_controls_complete"
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "source unchanged; focused 5 passed; H47 full 3108 passed/4 skipped inherited",
+  "result": "no_candidate_retained_finite_negative",
+  "review_artifact_sha256": "4cc7c4ddbd75899776856d0b2135d1588289c65721394cb9a38d7a2a81d22f91",
   "round_id": "round_053",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
-    "status": "pending"
+    "acceptance": "cancel/failure/completed/unknown/duplicate/shutdown states remain explicit and cleanup is bounded",
+    "evidence": [
+      "artifacts/optimization/round_053/source_scan_independent.json",
+      "artifacts/optimization/round_053/lifecycle_matrix_independent.json",
+      "artifacts/optimization/round_053/final_review.json"
+    ],
+    "status": "finite_negative_correctness_scan"
   },
-  "status": "prepare"
+  "status": "complete"
 }
