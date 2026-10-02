@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_024",
+  "candidate_id": "H24_DRAM_FAMILY_GRANULARITY",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_review",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_024/",
+  "result": "pending",
+  "limitations": [
+    "No source change or Native measurement at prepare stage"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_024",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H24_DRAM_FAMILY_GRANULARITY",
+    "direction": "存储硬件建模粒度",
+    "claim": "A shared DRAM family profile can expose transaction/burst granularity and queue/parallel limits to the existing memory service for DDR/LPDDR/HBM without duplicating models or inventing undocumented geometry.",
+    "trigger": "pending independent source review of HBMProfile/HostMemoryProfile and data_motion.memory_service path",
+    "falsifier": "existing service already models the relevant granularity for all DRAM variants or a shared profile would double-count traffic/latency"
+  },
+  "parent_commit": "596653218420d828ac61d9b221417b12dd630f9d",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": [
+    {
+      "id": "H24_NAND_FAMILY_GRANULARITY",
+      "status": "deferred_until_DRAM_review",
+      "reason": "SSD/NVMe/HBF share NAND model; do not mix their controller/page details into DRAM candidate"
+    }
+  ]
+}

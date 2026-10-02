@@ -1,0 +1,67 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_024",
+  "status": "prepare",
+  "purpose": "storage_modeling_and_runtime_speed",
+  "primary_goal": "start the directed storage-family modeling work while producing an honest simulator runtime/memory baseline",
+  "direction": "存储硬件建模粒度",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "596653218420d828ac61d9b221417b12dd630f9d",
+    "role": "H23 negative discovery baseline plus simplified DRAM/NAND family workplan"
+  },
+  "previous_direction": "正确性与语义（H23负向扫描）",
+  "direction_switch_reason": "用户要求切换到未覆盖的存储硬件建模和运行速度方向；先建立DRAM/HBM共用模型，NAND/SSD/HBF后续共用模型，且不回到正确性缺口扫描。",
+  "recent_directions": [
+    "H21:仿真器正确性/集合通信",
+    "H22:评估/API边界",
+    "H23:有限执行链路负向发现"
+  ],
+  "direction_last_checked": {
+    "正确性与语义": "H23",
+    "运行速度与内存": "未完成",
+    "计算成本模型": "未完成",
+    "存储硬件建模粒度": "新任务，未开始",
+    "预测精度与泛化": "未完成独立验收",
+    "评估/API与可视化": "H22",
+    "工具链与可复现性": "H21-H23"
+  },
+  "scope": {
+    "task_1": "DRAM family profile for DDR/LPDDR/HBM using shared cost/access model",
+    "task_2": "NAND family profile for SSD/NVMe/HBF after task_1 review",
+    "runtime_baseline": "measure simulator wall time and memory without source changes"
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "task 1 and runtime baseline are separate candidates; do not implement NAND/FTL/GC in this round unless a verified bottleneck requires it"
+  },
+  "data_roles": {
+    "development": "current source and fresh runtime/DRAM source scans",
+    "comparison": "parent 596653218420d828ac61d9b221417b12dd630f9d",
+    "holdout": "DRAM profile controls and runtime repeated measurements",
+    "final_acceptance": "pending independent review"
+  },
+  "metrics": [
+    "dram_profile_granularity",
+    "dram_byte_and_queue_conservation",
+    "simulator_wall_time",
+    "simulator_peak_memory",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 2,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 2,
+    "retries": 0
+  },
+  "guardrails": [
+    "DRAM/HBM must reuse one family model",
+    "NAND/SSD/HBF not implemented until DRAM candidate review closes",
+    "do not claim cycle accuracy from aggregate bandwidth/queue parameters",
+    "runtime speed means simulator wall time, separate from modeled latency",
+    "no Native accuracy claim in this round"
+  ],
+  "selected_candidate": null,
+  "next_step": "complete DRAM shared-model review and runtime baseline before source changes"
+}

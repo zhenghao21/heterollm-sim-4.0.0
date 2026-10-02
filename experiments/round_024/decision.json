@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_024",
+  "candidate_id": "H24_DRAM_FAMILY_GRANULARITY",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare registered the shared DRAM family task and separate runtime baseline; independent review is active.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}
