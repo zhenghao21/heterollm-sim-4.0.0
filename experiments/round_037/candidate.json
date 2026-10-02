@@ -1,8 +1,36 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_037",
-  "status": "prepare",
-  "hypothesis": {"id": "H37_EXECUTION_RESOURCE_SEMANTIC_CONTRACT", "direction": "仿真器正确性与语义", "claim": "窄执行资源/调度路径可能存在 owner、capacity、dependency 或失败状态语义不一致。", "trigger": "待独立 execution/resource source scan；不得继承 H31 全域负向结论。", "falsifier": "受控 owner/capacity/dependency/error probes 在支持域内均显式守恒。"},
-  "parent_commit": "e62cfbe6b9275d778ebd6f0b6e81cd35d1748def",
-  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+  "status": "complete",
+  "hypothesis": {
+    "id": "H37_CAPACITY_UPDATE_PARTIAL_COMMIT_ALIAS_STALENESS",
+    "direction": "仿真器正确性与语义",
+    "claim": "ensure_resource_capacities在批量声明时逐项写入，且owner alias/物理owner容量报告可能分裂。",
+    "trigger": "supplemental_dynamic_scan复现partial commit和alias stale；生产调用者为serving.py:5295、streaming_des.py:1097。",
+    "falsifier": "批量非法后项保持完整状态、所有alias/physical owner报告一致、已声明容量漂移拒绝。"
+  },
+  "parent_commit": "1916534cb509b976b3509ada444f1809c2328ccc",
+  "candidate_source_commit": "working-tree candidate committed as 262fa907ef76a2c7642a286650e29ec53c57b2fb",
+  "changed_files": ["src/heterollm_sim/event_kernel.py", "tests/test_event_kernel.py"],
+  "source_sha256": {
+    "src/heterollm_sim/event_kernel.py": "b678e3fcdd61502abdd814ebd6b88a9e15ba0c5256675f7a1139220d221c4c48",
+    "tests/test_event_kernel.py": "270380d75105fecf2a0670bf1f530eefc71dcae79534d12bf4b106924016049d"
+  },
+  "activation_checks": [
+    "非法后项批量拒绝时new不写入public/owner/lane状态",
+    "alias_a声明容量后alias_b和physical owner同步",
+    "alias与physical owner的step_completion和metrics容量均为2"
+  ],
+  "tests": [
+    {"command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_event_kernel.py -k DynamicResourceCapacity", "exit_code": 0, "result": "3 passed, 10 deselected in 0.13s"},
+    {"command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_event_kernel.py tests/test_runtime_mechanics.py tests/test_dataflow_regressions.py tests/test_clean_path.py tests/test_llama_engine_start.py tests/test_end_to_end.py", "exit_code": 0, "result": "59 passed in 1.69s"},
+    {"command": ".venv\\Scripts\\python.exe -m pytest -q", "exit_code": 0, "result": "3073 passed, 4 skipped in 435.31s (0:07:15)"}
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_037/supplemental_dynamic_scan.json",
+    "artifacts/optimization/round_037/candidate_dynamic_capacity_probe.json",
+    "artifacts/optimization/round_037/full_regression_result.json"
+  ],
+  "review": "独立审查确认两阶段原子提交、别名同步、物理owner报告一致；当前策略也拒绝已声明但未调度owner的容量漂移。",
+  "deferred_candidates": ["更广泛未知错误全域扫描", "Native精度验收", "可变容量API"]
 }
