@@ -61,6 +61,57 @@ def test_production_run_mixes_one_decode_with_63_prompt_rows():
     assert result.manifest.metadata["control_plane"]["placement_fingerprint"] == fingerprint["input_fingerprint"]
 
 
+def test_mixed_batching_honors_priority_promotion_before_decode():
+    rows = {}
+    for mixed in (False, True):
+        base = authored(output_tokens=4)
+        workload = base.workload
+        requests = (
+            replace(
+                workload.requests[0],
+                request_id="a",
+                arrival_ns=0.0,
+                priority=0,
+                prompt_tokens=1,
+                output_tokens=6,
+            ),
+            replace(
+                workload.requests[1],
+                request_id="b",
+                arrival_ns=250.0,
+                priority=10,
+                prompt_tokens=8,
+                output_tokens=2,
+            ),
+        )
+        scheduler = replace(
+            workload.scheduler,
+            max_num_batched_tokens=1,
+            max_num_ubatch_tokens=1,
+            prefill_chunk_tokens=1,
+            mixed_phase_batching=mixed,
+            policy="decode_first",
+        )
+        case = replace(
+            base,
+            workload=replace(
+                workload,
+                requests=requests,
+                request_count=2,
+                scheduler=scheduler,
+            ),
+        )
+        result = run_scenario(case)
+        rows[mixed] = result.serving
+
+    assert rows[True].request_metrics["b"].first_token_ns == pytest.approx(
+        rows[False].request_metrics["b"].first_token_ns
+    )
+    assert rows[True].request_metrics["b"].finish_ns == pytest.approx(
+        rows[False].request_metrics["b"].finish_ns
+    )
+
+
 def test_extending_first_output_does_not_delay_later_prompt_until_first_finishes():
     short = run_scenario(lower(authored(8))).serving
     long = run_scenario(lower(authored(32))).serving

@@ -1,0 +1,67 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_020",
+  "status": "review",
+  "purpose": "simulator_correctness",
+  "primary_goal": "honor priority/deadline/aging promotion when mixed phase batching shares a token budget",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "599104aecdb51a4a61aa82be39c3b5a4cd33cbdc",
+    "role": "H19 promoted report/UI contract baseline"
+  },
+  "hypothesis_id": "H20_MIXED_BATCH_PRIORITY_PROMOTION",
+  "scope": {
+    "operator": "serving._select_cohort mixed_phase_batching scheduler selection",
+    "phase": "decode/prefill cohort choice under shared max_num_batched_tokens",
+    "trigger": "best non-decode rank strictly outranks best decode rank while mixed batching is enabled"
+  },
+  "problem_domain_closure": {
+    "selection": "fixed: promoted non-decode phase is reserved before mixed decode",
+    "budget": "fixed: remaining token/sequence budget can fill decode; no-promotion path preserved",
+    "controls": "existing equal-rank mixed tests plus priority control passed; deadline/aging rank smoke observed",
+    "evaluation": "priority request TTFT/finish parity with non-mixed control",
+    "api": "online report consumes corrected request scheduling order through existing path",
+    "error": "no new error path; failed cohort construction falls back to existing decode/non-decode selection"
+  },
+  "data_roles": {
+    "development": "artifacts/optimization/round_020/mixed_priority_candidate.json and fresh post-fix reproduction",
+    "comparison": "parent 599104a control with mixed_phase_batching false/true",
+    "holdout": "existing mixed batching, single-slot, hybrid, deadline/priority scheduler tests",
+    "final_acceptance": "pending final full regression"
+  },
+  "metrics": [
+    "candidate_reproducibility",
+    "mechanism_conservation",
+    "control_behavior",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 3,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "do not revisit closed H18 swap or H19 legacy report domains",
+    "do not create a candidate without a real trigger and falsifier",
+    "preserve historical score shielding",
+    "no native accuracy claim without native observation"
+  ],
+  "next_step": "promote after final records, commit, push, and remote verification",
+  "selected_candidate": "H20_MIXED_BATCH_PRIORITY_PROMOTION",
+  "budget_used": {
+    "candidate_count": 3,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "source_identity": {
+    "parent_commit": "599104aecdb51a4a61aa82be39c3b5a4cd33cbdc",
+    "working_tree_files": {
+      "src/heterollm_sim/serving.py": "2bac8dce10c996233dfbb1fafc6d31a205f17f29ef9aabf6d540d5e387d680b6",
+      "tests/test_llama_mixed_batching.py": "1d24d77088ef1432722474b9ab0724a9436ac3a1d2e8c3607d49ac289496578c"
+    }
+  }
+}

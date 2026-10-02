@@ -10906,6 +10906,48 @@ class _OnlineRuntime:
             best_decode_rank is None or best_non_decode_rank < best_decode_rank
         )
         if self.plan.scheduler.mixed_phase_batching and decode:
+            if serve_non_decode:
+                promoted = self._prefill_cohort(
+                    recompute if serve_recompute else prefill,
+                    recompute=serve_recompute,
+                )
+                if promoted is not None:
+                    budget = (
+                        self.plan.scheduler.max_num_batched_tokens
+                        - sum(item.token_count for item in promoted.items)
+                    )
+                    sequence_budget = (
+                        self.plan.scheduler.max_num_seqs
+                        - len(set(promoted.request_ids))
+                    )
+                    if budget > 0 and sequence_budget > 0:
+                        decode_cohort = self._decode_cohort(
+                            decode,
+                            token_budget=budget,
+                            sequence_budget=sequence_budget,
+                            protected_request_ids=promoted.request_ids,
+                        )
+                    else:
+                        decode_cohort = None
+                    if decode_cohort is None:
+                        return promoted
+                    mixed_items = list(decode_cohort.items) + list(
+                        promoted.items
+                    )
+                    return BatchCohort(
+                        "cohort-{:06d}".format(len(self.batches)),
+                        "mixed",
+                        self.now,
+                        tuple(mixed_items),
+                        (
+                            self.plan.mtp.proposal_cost_scale
+                            if any(item.phase == "mtp" for item in mixed_items)
+                            else 1.0
+                        ),
+                        self._resource_snapshot(mixed_items)
+                        if self.resource_policy.enabled
+                        else {},
+                    )
             decode_cohort = self._decode_cohort(decode)
             if decode_cohort is not None:
                 mixed_items: List[BatchItem] = list(decode_cohort.items)

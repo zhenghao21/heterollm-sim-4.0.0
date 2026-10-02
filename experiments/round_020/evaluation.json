@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_020",
+  "candidate_id": "H20_MIXED_BATCH_PRIORITY_PROMOTION",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "scheduler correctness round; no native timing truth used"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "acceptance is deterministic scheduler behavior and regression; no native accuracy score"
+  },
+  "mechanism_status": "accepted_fix",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "priority promotion covered; deadline/aging share rank path and passed smoke; source-qualified generating-row ordering remains a stated boundary",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_020/mixed_priority_candidate.json",
+  "result": "The parent mixed branch consumed the full token budget with decode despite a strictly better non-decode rank. The fix reserves promoted prefill/recompute first and uses remaining budget for decode; priority request timing now matches the non-mixed control and all regressions pass.",
+  "limitations": [
+    "No native timing or accuracy measurement was collected.",
+    "The fix targets generic mixed scheduler rank promotion; source-qualified native generating-row ordering remains separately bounded.",
+    "Collective padding and online engine-boundary candidates remain deferred independent roots."
+  ]
+}

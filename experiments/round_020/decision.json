@@ -1,0 +1,40 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_020",
+  "candidate_id": "H20_MIXED_BATCH_PRIORITY_PROMOTION",
+  "status": "decided",
+  "decision": "promote",
+  "reason": "A real valid ScenarioConfig reproduced priority inversion in mixed batching. The minimal reservation fix preserves no-promotion decode-first behavior, passes focused controls and full regression, and has no native accuracy claim.",
+  "evidence": [
+    "artifacts/optimization/round_020/mixed_priority_candidate.json",
+    "artifacts/optimization/round_020/mixed_priority_post_fix.json",
+    "src/heterollm_sim/serving.py",
+    "tests/test_llama_mixed_batching.py",
+    "3029 passed, 4 skipped in final full pytest"
+  ],
+  "deferred_scope": [
+    {
+      "id": "H20_ONLINE_ENGINE_METRIC_FALLBACK",
+      "status": "candidate_for_followup",
+      "artifact": "artifacts/optimization/round_020/eval_candidate.json",
+      "reason": "independent evaluation-boundary root cause, deferred to keep one H20 scheduler root cause"
+    },
+    {
+      "id": "H20_COLLECTIVE_ELEMENT_PADDING_BYTE_CONSERVATION",
+      "status": "candidate_for_followup",
+      "artifact": "artifacts/optimization/round_020/planner_candidate.json",
+      "reason": "independent collective byte-conservation root cause, deferred to keep one H20 scheduler root cause"
+    },
+    {
+      "id": "H20_SWAP_RESTORE_PROMPT_CAPACITY_ROLLBACK",
+      "status": "rejected_duplicate_unreachable",
+      "artifact": "artifacts/optimization/round_020/runtime_candidate.json",
+      "reason": "requires monkeypatched ensure_capacity=False and overlaps H18 swap transaction domain; real successful resume calls ensure_capacity(0)"
+    }
+  ],
+  "next_hypothesis": {
+    "id": "H21_SOURCE_GROUNDED_CANDIDATE",
+    "claim": "Continue discovery outside the closed H18 swap, H19 legacy report, and H20 mixed priority domains; accept only a new independently reproducible execution or evaluation defect.",
+    "status": "registered_needs_discovery"
+  }
+}
