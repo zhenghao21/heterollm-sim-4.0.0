@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_023",
-  "status": "prepare",
+  "status": "completed_negative",
   "purpose": "simulator_source_discovery",
   "primary_goal": "discover one new independently reproducible simulator execution or evaluation defect outside the closed H18-H22 domains",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -16,8 +16,13 @@
     "trigger": "pending evidence"
   },
   "problem_domain_closure": {
-    "status": "discovery_pending",
-    "rule": "do not invent a candidate; register only after independent reproduction and falsifier"
+    "status": "closed_negative",
+    "event_kernel": "no new defect reproduced",
+    "metrics": "no new defect reproduced",
+    "streaming_des": "smoke preserved expected timing/resource behavior",
+    "kv_pool": "prefix reuse observation lacks an explicit reachable/compatible ownership contract; deferred as an observation, not a defect",
+    "api": "int() permissiveness observation did not reach a core execution or accounting defect",
+    "regression": "focused and smoke controls passed"
   },
   "data_roles": {
     "development": "fresh source scan and current tests",
@@ -43,6 +48,20 @@
     "retain negative conclusions",
     "no native accuracy claim without independent measurement"
   ],
-  "next_step": "complete independent discovery scan",
-  "selected_candidate": null
+  "next_step": "retain H22 parent; do not create a new candidate without an explicit DynamicKVPool ownership contract or another independently reproducible defect",
+  "selected_candidate": null,
+  "source_identity": {
+    "scan_parent_commit": "9d8623184345ad2dc12ff89152e13d8e347c97b5",
+    "scan_artifact_sha256": "733bbfd546e281ee10382971e37d1a124e6de8814b8b8c2f7b17d6aaa1d2468e",
+    "source_modified_by_scan": false
+  },
+  "budget_used": {
+    "candidate_count": 0,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0,
+    "focused_tests": 1,
+    "independent_smoke_runs": 1
+  }
 }

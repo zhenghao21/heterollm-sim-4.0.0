@@ -1,18 +1,40 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_023",
-  "status": "discovery_pending",
+  "status": "rejected_no_reproducible_defect",
   "hypothesis": {
     "id": "H23_SOURCE_GROUNDED_CANDIDATE",
-    "claim": "pending independent reproduction",
-    "trigger": "pending",
-    "falsifier": "pending"
+    "claim": "No new defect was accepted after independent scan outside H18-H22.",
+    "trigger": "event_kernel/metrics/streaming_des/kv_pool/serving/mtp execution surfaces were inspected",
+    "falsifier": "a fresh independently reproducible invariant violation would reopen discovery"
   },
   "parent_commit": "9d8623184345ad2dc12ff89152e13d8e347c97b5",
   "changed_files": [],
   "source_sha256": null,
-  "activation_checks": [],
-  "tests": [],
-  "independent_evidence": [],
-  "deferred_candidates": []
+  "activation_checks": [
+    "closed H18-H22 domains excluded",
+    "focused tests pass",
+    "multi-lane/MTP smoke pass",
+    "uncertain DynamicKVPool ownership observation retained without defect claim"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_event_kernel.py tests/test_dataflow_regressions.py tests/test_kv_pool.py tests/test_mtp.py tests/test_runtime_mechanics.py",
+      "result": "58 passed; exit code 0; independent agent command"
+    },
+    {
+      "command": "independent multi-lane + MTP smoke",
+      "result": "exit code 0; makespan=30, dma_utilization=0.8333333333, accepted_total=6, committed=16"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_023/execution_scan.json"
+  ],
+  "deferred_candidates": [
+    {
+      "id": "OBS_DYNAMIC_KV_PREFIX_REUSE_OWNERSHIP",
+      "status": "observation_needs_contract_evidence",
+      "reason": "prefix reuse path did not revalidate request_component/compatible_components, but no explicit attach ownership contract or reachable failing scenario was found"
+    }
+  ]
 }

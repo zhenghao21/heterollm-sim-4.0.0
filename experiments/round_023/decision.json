@@ -2,10 +2,25 @@
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_023",
   "candidate_id": "H23_SOURCE_GROUNDED_CANDIDATE",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Discovery is active; no defect is accepted without independent reproduction.",
-  "evidence": [],
-  "deferred_scope": [],
+  "status": "decided",
+  "decision": "reject_no_candidate",
+  "reason": "Independent scan found no reproducible new core defect outside H18-H22; retain the parent baseline and preserve two contract-dependent observations without promoting them to bugs.",
+  "evidence": [
+    "artifacts/optimization/round_023/execution_scan.json",
+    "58 passed focused tests",
+    "multi-lane + MTP smoke exit 0"
+  ],
+  "deferred_scope": [
+    {
+      "id": "OBS_DYNAMIC_KV_PREFIX_REUSE_OWNERSHIP",
+      "status": "observation_needs_contract_evidence",
+      "reason": "No explicit prefix attach ownership contract or failing reachable scenario; do not open a repair round yet."
+    },
+    {
+      "id": "OBS_PERMISSIVE_INT_INPUTS",
+      "status": "observation_needs_schema_contract",
+      "reason": "No demonstrated wrong execution/resource accounting from accepted integer-like input."
+    }
+  ],
   "next_hypothesis": null
 }
