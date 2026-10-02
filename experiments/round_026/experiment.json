@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_026",
-  "status": "verify",
+  "status": "promoted",
   "purpose": "storage_nand_family_modeling",
   "primary_goal": "在不拆分 SSD/NVMe/HBF 三个模型的前提下，验证并接入一个可解释的 NAND family page/plane/die/channel 访问粒度与并行窗口。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -37,8 +37,12 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一 NAND 根因必须同时检查 page split、read/program/erase、plane/die parallelism、queue/错误边界、API/metadata 与回归；若现有模型已覆盖则保留负结论。"
+    "status": "closed_with_explicit_boundary",
+    "contract": "optional nand_media_v1 reaches SSD/high_io_ssd/NVMe/HBF PhysicalService.price and endpoint_service; legacy hbf_media aliases remain compatible.",
+    "accounting": "page split, host transaction/request queue, read/program latency, unaligned write RMW, physical_planes cap media_parallelism and physical byte/energy accounting are covered.",
+    "presets": "standard SSD/NVMe/HBF presets remain generic by design; no universal page/plane/die/channel defaults are inferred without source-backed geometry.",
+    "unsupported": "die/channel/block/erase/FTL/GC remain unknown or unsupported; no host erase workload invented.",
+    "controls": "generic SSD baseline, explicit SSD/NVMe candidate, non-default page=8192, legacy HBF, HBF integration, DRAM isolation and invalid contracts covered."
   },
   "data_roles": {
     "development": "fresh NAND source scan、hbf_media 与 SSD/NVMe presets/test controls",
@@ -68,10 +72,51 @@
     "不声称 Native 或 cycle accuracy"
   ],
   "selected_candidate": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
-  "next_step": "scan 已确认 SSD/NVMe generic 路径缺少 NAND geometry，而 HBF cold_page_v1 已有部分 page/plane；下一步独立确认参数来源并实现一个 shared nand_media contract。",
+  "next_step": "H26 已发布；下一轮切换到计算成本模型方向，寻找独立的 GEMM/归约/内存/链路成本候选；NAND preset activation 和 erase/FTL 只有新来源/调用链证据时重开。",
   "source_identity": {
-    "scan_artifact": "artifacts/optimization/round_026/nand_design_scan.json",
-    "scan_sha256": "e80a4aa68b71cbdbd55708bb788893319f9498a385af637c75ac79ce902b164d",
-    "observed_head": "93ffd4eb9c5730c2c598609c2e376dcd318b5a29"
+    "source_commit": "bba3c79af7c65b9c2a4eae7a40d36871d7eb1837",
+    "source_hashes": {
+      "src/heterollm_sim/hbf_media.py": "7df3d3c7d5dea2cb36e12de94fdb58a0a8db893ecea35b5d80c82ed463e7c375",
+      "src/heterollm_sim/data_motion.py": "9a7b0294c87307b454a0d15d8403e4a0f9b5f256747f5dd0b462a38ee617fcc3",
+      "src/heterollm_sim/ir.py": "fd176e6464f9f30cdacd105c64f6622c8d78dcc58761c55fde83368104c6b121",
+      "tests/test_nand_media_family.py": "bce7c6a1b8c7c5837622bcc2d26e80d3a98210b5bf703f3840f43ec245e3c5fa"
+    },
+    "focused_tests": "131 passed in 0.71s; exit code 0",
+    "full_pytest": "3057 passed, 4 skipped in 430.67s (0:07:10); exit code 0",
+    "artifact_hashes": [
+      {
+        "path": "artifacts/optimization/round_026/nand_design_scan.json",
+        "sha256": "773f9495d0d53f0ba0c7409b61a5c2b8c2c1d2f5c14bb8d15cb45f88ce7e4462"
+      },
+      {
+        "path": "artifacts/optimization/round_026/nand_implementation_review.json",
+        "sha256": "96639b7a7a790cb818943c4fb9e312a22624fa21c3525238061f384d0751a458"
+      },
+      {
+        "path": "artifacts/optimization/round_026/nand_compare.py",
+        "sha256": "5bba0feb8d72152eaadd79d8f1fbb8e35b1a2310c7cd1d27948f7a11ca7745e4"
+      },
+      {
+        "path": "artifacts/optimization/round_026/nand_probe_baseline.json",
+        "sha256": "5a5e380c3672226f51364b5d03527cd4687cc12c1834ccac10553f2349a7b528"
+      },
+      {
+        "path": "artifacts/optimization/round_026/nand_probe_candidate.json",
+        "sha256": "d89cc63ff9f4b8658c211c90a2d64a092a04bf8dd91a065ca7baeb2d188ad6c8"
+      },
+      {
+        "path": "artifacts/optimization/round_026/nand_probe_score.json",
+        "sha256": "966b3238ba614805b25eb47fa19f3292053a6dc3592103400b6310d11edbfc13"
+      }
+    ]
+  },
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 2,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 2,
+    "focused_runs": 3,
+    "final_full_pytest_runs": 1,
+    "independent_review_processes": 2
   }
 }

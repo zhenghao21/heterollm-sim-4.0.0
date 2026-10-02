@@ -36,4 +36,4 @@
 - 原始 Native、模型权重、CUDA/llama.cpp 源码和证据不作为缓存清理。
 - 源码/测试用现有工具；不新增平行评分框架。四个实验记录可以引用既有产物，不重复保存巨型输入。
 - 当前独立流程起始代码：`ea6848c05a46537e3367753ce8487958a258bca5`。这只是可恢复的工程起点，不是已验证的精度基线。
-- 轮次记录目录：`experiments/round_<id>/`；本地预测与日志目录：`artifacts/optimization/round_<id>/`。当前完成轮次为 `round_025`，下一登记假设见其 `decision.json`。
+- 轮次记录目录：`experiments/round_<id>/`；本地预测与日志目录：`artifacts/optimization/round_<id>/`。当前完成轮次为 `round_026`，下一登记假设见其 `decision.json`。

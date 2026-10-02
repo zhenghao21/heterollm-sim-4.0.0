@@ -2,13 +2,43 @@
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_026",
   "candidate_id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "独立 source scan 发现 SSD/NVMe generic service 与 HBF cold_page_v1 之间存在同根因建模断层；候选可执行但尚未修改源码。",
+  "status": "decided",
+  "decision": "promote",
+  "reason": "独立 source scan、独立 review、baseline/candidate 两进程 probe、focused 131 passed 与最终全量 3057 passed/4 skipped 支持接纳；默认 generic storage 与 legacy HBF 行为保护通过。没有 Native 精度、cycle accuracy 或 die/channel/erase 结论。",
   "evidence": [
     "artifacts/optimization/round_026/nand_design_scan.json",
-    "SHA256: e80a4aa68b71cbdbd55708bb788893319f9498a385af637c75ac79ce902b164d"
+    "artifacts/optimization/round_026/nand_implementation_review.json",
+    "artifacts/optimization/round_026/nand_compare.py",
+    "artifacts/optimization/round_026/nand_probe_baseline.json",
+    "artifacts/optimization/round_026/nand_probe_candidate.json",
+    "artifacts/optimization/round_026/nand_probe_score.json",
+    "Focused: 131 passed in 0.71s; exit code 0",
+    "Final full pytest: 3057 passed, 4 skipped in 430.67s (0:07:10); exit code 0"
   ],
-  "deferred_scope": [],
-  "next_hypothesis": null
+  "deferred_scope": [
+    {
+      "id": "H26_NAND_PRESET_GEOMETRY",
+      "status": "deferred",
+      "reason": "需要 profile-specific page/plane/die/channel 来源；不推断通用默认。"
+    },
+    {
+      "id": "H26_NAND_ERASE_FTL_GC",
+      "status": "deferred",
+      "reason": "当前无 erase endpoint/FTL/GC 调用链。"
+    }
+  ],
+  "next_hypothesis": {
+    "id": "H27_COMPUTE_COST_MODEL_MEMORY_QUEUE",
+    "direction": "计算成本模型",
+    "claim": "在现有 GEMM/归约/内存/链路成本链路中寻找一个独立可复现的 shape/并发/资源守恒缺口，优先处理未系统性检查的计算成本模型。",
+    "basis": "H25 runtime 负向、H26 NAND 共享 contract 已收口；计算成本模型方向仍未完成系统性轮次。",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "bba3c79af7c65b9c2a4eae7a40d36871d7eb1837",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "source commits and final records pending push"
+  },
+  "process_learning": "对存储内部 geometry 保持 opt-in/profile-specific；没有来源时保留 unknown，不用端到端时延反推 die/channel/erase。"
 }

@@ -2,28 +2,62 @@
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_026",
   "candidate_id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
-  "status": "pending",
+  "status": "completed",
   "prediction": {
-    "status": "pending_source_parameter_review",
-    "scan_artifact": "artifacts/optimization/round_026/nand_design_scan.json",
-    "source_commit": "93ffd4eb9c5730c2c598609c2e376dcd318b5a29"
+    "status": "mechanism_only",
+    "baseline_artifact": "artifacts/optimization/round_026/nand_probe_baseline.json",
+    "candidate_artifact": "artifacts/optimization/round_026/nand_probe_candidate.json",
+    "score_artifact": "artifacts/optimization/round_026/nand_probe_score.json",
+    "source_commit": "bba3c79af7c65b9c2a4eae7a40d36871d7eb1837",
+    "observed": {
+      "generic_ssd_bytes_moved": 1,
+      "explicit_nand_page_8192_bytes_moved": 16384,
+      "candidate_service_ns": 1615.84,
+      "baseline_service_ns": 0.08,
+      "page_and_rmw_activated": true
+    }
   },
   "score": {
-    "status": "pending"
+    "status": "mechanism_score",
+    "result": "独立进程 baseline/candidate 证明 generic SSD 行为保持，显式 nand_media_v1 在 page=8192 的 1B 写请求上产生 16KiB 物理 RMW 计费；这是机制/工程变化，不是 Native 精度或 wall-time 提升。",
+    "native_accuracy": "not_applicable"
   },
-  "mechanism_status": "candidate_valid_pending_implementation",
+  "mechanism_status": "accepted_fix",
   "accuracy_status": "not_applicable",
-  "generalization_status": "SSD/NVMe generic path and HBF cold_page boundary identified; not yet implemented",
-  "regression_status": "pending",
-  "comparison_artifact": "artifacts/optimization/round_026/nand_design_scan.json",
-  "result": "pending",
+  "generalization_status": "SSD/high_io_ssd/NVMe/HBF explicit contracts share one NAND service; standard presets remain generic; die/channel/block/erase unsupported",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_026/nand_probe_score.json",
+  "result": "H26 将现有 HBF cold-page path 最小泛化为可选 nand_media_v1，共享 SSD/NVMe/HBF page/RMW/program/plane/queue accounting，保留 generic preset 和 legacy alias。",
   "limitations": [
-    "H26 尚未完成 NAND source scan 或源码修改。"
+    "无 Native NAND/SSD/HBF 时序或精度数据；参数仍是显式 analytical/provenance profile。",
+    "die/channel/block/erase/FTL/GC 未建模，因当前没有稳定来源或实际 erase 调用链。",
+    "标准 presets 未默认激活新 contract；默认行为保持兼容，需 profile-specific geometry 才能开启。"
   ],
   "final_evidence_hashes": [
     {
       "path": "artifacts/optimization/round_026/nand_design_scan.json",
-      "sha256": "e80a4aa68b71cbdbd55708bb788893319f9498a385af637c75ac79ce902b164d"
+      "sha256": "773f9495d0d53f0ba0c7409b61a5c2b8c2c1d2f5c14bb8d15cb45f88ce7e4462"
+    },
+    {
+      "path": "artifacts/optimization/round_026/nand_implementation_review.json",
+      "sha256": "96639b7a7a790cb818943c4fb9e312a22624fa21c3525238061f384d0751a458"
+    },
+    {
+      "path": "artifacts/optimization/round_026/nand_compare.py",
+      "sha256": "5bba0feb8d72152eaadd79d8f1fbb8e35b1a2310c7cd1d27948f7a11ca7745e4"
+    },
+    {
+      "path": "artifacts/optimization/round_026/nand_probe_baseline.json",
+      "sha256": "5a5e380c3672226f51364b5d03527cd4687cc12c1834ccac10553f2349a7b528"
+    },
+    {
+      "path": "artifacts/optimization/round_026/nand_probe_candidate.json",
+      "sha256": "d89cc63ff9f4b8658c211c90a2d64a092a04bf8dd91a065ca7baeb2d188ad6c8"
+    },
+    {
+      "path": "artifacts/optimization/round_026/nand_probe_score.json",
+      "sha256": "966b3238ba614805b25eb47fa19f3292053a6dc3592103400b6310d11edbfc13"
     }
-  ]
+  ],
+  "published_source_commit": "bba3c79af7c65b9c2a4eae7a40d36871d7eb1837"
 }
