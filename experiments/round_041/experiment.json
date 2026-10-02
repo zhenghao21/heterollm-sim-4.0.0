@@ -1,0 +1,23 @@
+{
+  "schema":"heterollm.optimization.experiment/v1",
+  "round_id":"round_041",
+  "status":"prepare",
+  "purpose":"runtime_speed_memory_profile",
+  "primary_goal":"在H40 NAND operation根因收口后，独立测量仿真器自身运行wall-time、峰值内存、批处理吞吐与保留策略开销，区分仿真器开销和被模拟系统结果，不先假设需要缓存或并行改动。",
+  "method":"prepare -> verify -> predict -> score -> review -> promote",
+  "baseline":{"parent_commit":"4681832bbd63e0c4b68fd999ffe4baeb54f81d0f","role":"H40 NAND发布源码；H36旧runtime扫描只作待验证背景，不继承其provider cache结论"},
+  "hypothesis_id":"H41_RUNTIME_EXECUTION_WALLTIME_MEMORY_HOTSPOT",
+  "direction":"运行速度与内存",
+  "previous_direction":"存储硬件建模粒度-NAND家族（H40）",
+  "direction_switch_reason":"H40已完成NAND erase入口收口；按用户要求离开存储字段方向，先用独立基准查找仿真器运行速度/内存实际热点，不重复H29文本路径或H36 provider cache扫描。",
+  "recent_directions":["H39:存储硬件建模粒度-DRAM家族","H40:存储硬件建模粒度-NAND家族","H41:运行速度与内存（活动）"],
+  "direction_last_checked":{"仿真器正确性与语义":"H37","运行速度与内存":"H41活动（H36背景）","计算成本模型":"H38","存储硬件建模粒度":"H40","预测精度与泛化":"H34","评估/API与可视化口径":"H35","开发工具链与可复现性":"H33"},
+  "scope":{"candidate":"真实run_scenario/execute schedule/retention/compiled paths的仿真器wall-time、峰值内存和可复用结构","include":["small/medium task graph wall-time","peak tracemalloc/psutil if available","exact/streaming/aggregate retention","compiled vs incremental execution","task count scaling","makespan/output equivalence"],"exclude":["H36 speculative provider cache","H29 CLI report_dict reuse","target system latency accuracy","Native accuracy","NAND/DRAM geometry"]},
+  "problem_domain_closure":{"status":"prepare","rule":"同一运行热点根因直接影响执行入口、批处理、图编译、retention、内存生命周期和输出等价性必须同轮收口；若只有测量无缺陷保留负结论。"},
+  "data_roles":{"development":"fresh isolated-process runtime benchmarks","comparison":"H40发布源码4681832","holdout":"independent task-count/retention/scaling controls","final_acceptance":"simulator engineering metrics only; no system accuracy"},
+  "metrics":["wall_time_seconds","peak_memory_bytes","tasks_per_second","retention_equivalence","makespan_equivalence","rss_or_tracemalloc"],
+  "budget":{"candidate_count":1,"full_prediction_runs":0,"native_collection_runs":0,"new_microbenchmark_runs":3,"retries":0},
+  "guardrails":["不继承H36 provider cache收益","不把单元测试通过称为速度改善","不把目标模型makespan变化称为仿真器速度","基线/候选独立进程、同输入、重复测量并报告噪声","无真实热点不改源码"],
+  "selected_candidate":null,
+  "next_step":"完成独立runtime wall-time/peak-memory benchmark和源码调用链扫描，登记唯一可证伪候选或有限负结论。"
+}

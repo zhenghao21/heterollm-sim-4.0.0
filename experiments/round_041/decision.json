@@ -1,0 +1,1 @@
+{"schema":"heterollm.optimization.decision/v1","round_id":"round_041","candidate_id":"H41_RUNTIME_EXECUTION_WALLTIME_MEMORY_HOTSPOT","status":"pending","decision":"pending","reason":"Prepare已登记运行速度/内存方向；需要独立隔离进程基准和源码扫描后再决定是否修改。","evidence":[],"deferred_scope":[],"next_hypothesis":null}
