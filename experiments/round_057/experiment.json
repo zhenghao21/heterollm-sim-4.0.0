@@ -1,0 +1,82 @@
+{
+  "baseline": {
+    "parent_commit": "fc5d5f99c905aa1b16eca75b3642555b95c29cfc",
+    "role": "H56 finite negative evidence closure; H50 report/API status historical comparator"
+  },
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "matrix_runs": 1,
+    "native_collection_runs": 0,
+    "retries": 0,
+    "source_scan_runs": 1
+  },
+  "data_roles": {
+    "comparison": "H50 status matrix only as non-reopened comparator",
+    "development": "fresh static/online summary conservation controls",
+    "final_acceptance": "metric conservation only; no Native accuracy",
+    "holdout": "independent owner/retention/truncation controls"
+  },
+  "direction": "评估、API与可视化口径",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H53",
+    "存储硬件建模粒度": "H55",
+    "开发工具链与可复现性": "H56",
+    "计算成本模型": "H52",
+    "评估/API与可视化口径": "H57活动",
+    "运行速度与内存": "H54",
+    "预测精度与泛化": "H51"
+  },
+  "direction_switch_reason": "H56 已关闭记录闭合且无源码候选；评估/API方向自 H50 后未检查摘要与事件资源守恒，切换到指标聚合/截断边界，不重开状态矩阵。",
+  "guardrails": [
+    "不重做 H50 retention/status",
+    "不重做 H42 score coverage gate",
+    "截断时不得把 retained sum 冒充 total",
+    "无独立可复现缺陷不改源码"
+  ],
+  "hypothesis_id": "H57_REPORT_SUMMARY_RESOURCE_CONSERVATION",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "metrics": [
+    "energy_conservation",
+    "bytes_conservation",
+    "resource_utilization",
+    "makespan_consistency",
+    "truncation_disclosure"
+  ],
+  "next_step": "先独立扫描 reporting aggregation 与 online/static summary/resource paths，再运行 conservation matrix；若未发现缺陷，保留有限负结论。",
+  "previous_direction": "开发工具链与可复现性（H56）",
+  "primary_goal": "检查 static/online report 的 total_energy_pj、resource_accounted_bytes、resource_utilization、makespan 与保留事件/批次明细是否守恒，覆盖 retention/truncation 与 resource owner 聚合；不重复 H50 retention/status 或 H42 score gate。",
+  "problem_domain_closure": {
+    "rule": "同一 report aggregation 根因若影响 event/resource, summary, online batch, static report, retention and API error surfaces，必须本轮收口；不适用入口显式记录。",
+    "status": "prepare"
+  },
+  "purpose": "report_summary_resource_conservation_boundary",
+  "recent_directions": [
+    "H55:存储硬件建模粒度（有限负结论）",
+    "H56:开发工具链与可复现性（有限负结论）",
+    "H57:评估/API与可视化口径（活动）"
+  ],
+  "round_id": "round_057",
+  "schema": "heterollm.optimization.experiment/v1",
+  "scope": {
+    "candidate": "report summary/resource aggregation conservation across static/online and retention policies",
+    "exclude": [
+      "H50 status/trace fidelity",
+      "H42 analytical coverage",
+      "H55 DRAM task metadata",
+      "Native accuracy",
+      "new scoring framework"
+    ],
+    "include": [
+      "total_energy_pj",
+      "resource_accounted_bytes",
+      "resource_utilization",
+      "makespan",
+      "retained task/batch event sums",
+      "owner alias aggregation",
+      "truncation/report_limits"
+    ]
+  },
+  "selected_candidate": null,
+  "status": "prepare"
+}

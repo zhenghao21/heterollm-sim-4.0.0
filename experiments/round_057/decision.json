@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H57_REPORT_SUMMARY_RESOURCE_CONSERVATION",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记 report summary/resource conservation 假设，等待独立 source scan 与矩阵。",
+  "round_id": "round_057",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "fc5d5f99c905aa1b16eca75b3642555b95c29cfc",
+  "status": "pending"
+}

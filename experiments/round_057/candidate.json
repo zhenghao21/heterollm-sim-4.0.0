@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "report 摘要的 bytes/energy/resource utilization/makespan 可能在 retention、owner alias 或在线批次聚合中与事件明细不守恒，或截断后误标为完整。",
+    "direction": "评估、API与可视化口径",
+    "falsifier": "static/online 各 retention 下 summary 与完整事件/批次可核对，截断明确报告 limits，owner 聚合不重复。",
+    "id": "H57_REPORT_SUMMARY_RESOURCE_CONSERVATION",
+    "trigger": "H50 已确认 status/retention fidelity，但未独立验证 numeric summary 与 event/resource conservation。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "fc5d5f99c905aa1b16eca75b3642555b95c29cfc",
+  "round_id": "round_057",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

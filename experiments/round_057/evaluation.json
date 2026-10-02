@@ -1,0 +1,21 @@
+{
+  "accuracy_status": "not_applicable",
+  "candidate_id": "H57_REPORT_SUMMARY_RESOURCE_CONSERVATION",
+  "comparison_artifact": "artifacts/optimization/round_057/",
+  "generalization_status": "pending",
+  "limitations": [
+    "H57 尚未完成 report numeric aggregation/conservation 独立扫描。"
+  ],
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "round_id": "round_057",
+  "schema": "heterollm.optimization.evaluation/v1",
+  "score": {
+    "status": "pending"
+  },
+  "status": "prepare"
+}
