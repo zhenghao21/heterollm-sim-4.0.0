@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_046",
+  "candidate_id": "H46_RUNTIME_LAZY_LOWERING_KERNEL_COST",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_046/",
+  "result": "pending",
+  "limitations": [
+    "H46 尚未完成分段运行时 profile。"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_046",
+  "status": "prepare",
+  "purpose": "runtime_lazy_lowering_kernel_profile",
+  "primary_goal": "分离测量 execute 内 lazy request chunk lowering、UnifiedEventKernel.step、streaming observers/metadata clone 和 retention 语义的仿真器运行成本，避免 H41 混合 profile 的错误归因。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "414747a2b3cf6245dbeb1ea5606aa34fe3a231cc",
+    "role": "H45 failure rollback finite negative; H41 mixed compile/execute and retention scan only as background"
+  },
+  "hypothesis_id": "H46_RUNTIME_LAZY_LOWERING_KERNEL_COST",
+  "direction": "运行速度与内存",
+  "previous_direction": "仿真器正确性与语义（H45）",
+  "direction_switch_reason": "H45 正确性/语义失败回滚扫描完成；按 H41 review 明确延期项切回运行速度/内存，专门分离 lazy chunk lowering、kernel step 和 observer 成本，不重复 H41 retention tradeoff 或 H36 provider cache。",
+  "recent_directions": [
+    "H44:计算成本模型（有限负结论）",
+    "H45:仿真器正确性与语义（有限负结论）",
+    "H46:运行速度与内存（活动）"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H45",
+    "运行速度与内存": "H46活动",
+    "计算成本模型": "H44",
+    "存储硬件建模粒度": "H40",
+    "预测精度与泛化": "H43",
+    "评估/API与可视化口径": "H42",
+    "开发工具链与可复现性": "H33"
+  },
+  "scope": {
+    "candidate": "execute_incremental_schedule lazy chunk lowering vs UnifiedEventKernel.step and observer/metadata costs",
+    "include": [
+      "compile_streaming_scenario baseline",
+      "request chunk iteration/lowering",
+      "kernel step/submit/ready key",
+      "streaming observers and coverage",
+      "metadata clone/capture",
+      "wall time/cProfile/tracemalloc with same task graph"
+    ],
+    "exclude": [
+      "H41 exact/streaming/aggregate retention semantic conclusion",
+      "H36 provider cache",
+      "target Native accuracy",
+      "storage/cost model formulas"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一 runtime hotspot 根因若影响 lazy lowering、kernel step、observer、metadata、memory 或 output equivalence，必须同轮收口；只有保留策略语义或缺少安全不变量可明确延期。"
+  },
+  "data_roles": {
+    "development": "fresh isolated-process split profiles",
+    "comparison": "H45 published source 414747a2b3cf6245dbeb1ea5606aa34fe3a231cc",
+    "holdout": "independent task-count/retention/scaling controls",
+    "final_acceptance": "simulator engineering metrics only; no system accuracy"
+  },
+  "metrics": [
+    "compile_seconds",
+    "lazy_lowering_seconds",
+    "kernel_step_self_seconds",
+    "observer_seconds",
+    "metadata_clone_seconds",
+    "tracemalloc_peak_bytes",
+    "task_count_makespan"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "profile_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "不继承 H36 provider cache 收益",
+    "不重复 H41 retention 语义负向扫描",
+    "cProfile 不把 cumulative time 当可删除证据",
+    "同输入同 task graph、独立进程、报告噪声",
+    "无安全候选不改源码"
+  ],
+  "selected_candidate": null,
+  "next_step": "先独立写入分段 profile 与源码 hotspot scan，区分 compile/lazy lowering/kernel/observer/metadata/retention 成本，登记唯一可证伪候选或有限负结论。"
+}

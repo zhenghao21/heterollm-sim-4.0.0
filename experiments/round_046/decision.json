@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_046",
+  "candidate_id": "H46_RUNTIME_LAZY_LOWERING_KERNEL_COST",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记 H41 review 延期的 lazy lowering/kernel 成本分离；需要独立 profile 和输出等价控制后再决定是否修改。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "414747a2b3cf6245dbeb1ea5606aa34fe3a231cc"
+}

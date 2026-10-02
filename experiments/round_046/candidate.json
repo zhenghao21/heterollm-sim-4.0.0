@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_046",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H46_RUNTIME_LAZY_LOWERING_KERNEL_COST",
+    "direction": "运行速度与内存",
+    "claim": "H41 混合 profile 中 planner lazy chunk lowering 与 UnifiedEventKernel.step/observer 成本可能被混在一起，导致安全缓存或删除候选无法归因。",
+    "trigger": "需要独立分段 profile、同输入 task_count/makespan 控制和源码 hotspot scan；不继承 H41 混合 cProfile 为因果证据。",
+    "falsifier": "分段测量显示 lazy lowering/kernel/observer/metadata 成本均无稳定独立热点，或任何复用都会改变 retention/output/资源语义。"
+  },
+  "parent_commit": "414747a2b3cf6245dbeb1ea5606aa34fe3a231cc",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}
