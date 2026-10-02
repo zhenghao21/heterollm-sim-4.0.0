@@ -8,10 +8,10 @@
   "evidence": [
     "artifacts/optimization/round_021/collective_verify.json",
     "artifacts/optimization/round_021/collective_controls.json",
-    "artifacts/optimization/round_021/candidate_reproduction.json",
-    "artifacts/optimization/round_021/patch_review_final.json",
-    "3035 passed, 4 skipped in final full pytest; exit code 0",
-    "experiments/round_021/candidate_reproduction.json"
+    "artifacts/optimization/round_021/paired_baseline.json",
+    "artifacts/optimization/round_021/paired_candidate.json",
+    "artifacts/optimization/round_021/independent_final_review.json",
+    "Final full pytest: 3035 passed, 4 skipped in 431.13s, exit 0"
   ],
   "deferred_scope": [
     {
@@ -26,5 +26,13 @@
     "claim": "When engine-boundary timestamps are unavailable, reporting, scoring and UI must select and declare one consistent arrival or engine boundary instead of mixing null engine summaries with canonical arrival fallback.",
     "basis": "H20 deferred evaluation review found a real generic continuous path with engine fields null and canonical arrival fallback.",
     "status": "registered_for_next_round"
-  }
+  },
+  "publication": {
+    "source_commit": "439aa21eaffb07d1e6e9153ca118522530249d48",
+    "remote": "origin/main",
+    "verified_remote_sha": "439aa21eaffb07d1e6e9153ca118522530249d48",
+    "verified_utc": "2026-10-02T06:12:14Z",
+    "evidence_note": "git push origin main exit 0; git rev-parse HEAD and git ls-remote origin refs/heads/main both returned this SHA; subsequent record-only commit carries these evidence corrections"
+  },
+  "process_learning": "Wait for independent review findings and their focused fixes to close before freezing source and launching the full suite. Do not rerun the full suite for records-only or test-only bookkeeping edits when the implementation has not changed."
 }

@@ -27,8 +27,8 @@
   "data_roles": {
     "development": "artifacts/optimization/round_020/planner_candidate.json plus fresh source reproduction",
     "comparison": "parent 0d23fb6 baseline",
-    "holdout": "divisible, byte-width, collective-kind, no-shape and remote-placement controls",
-    "final_acceptance": "final full repository regression on frozen candidate"
+    "holdout": "none: all shape and byte-width controls were used in development/regression; no blind accuracy holdout claimed",
+    "final_acceptance": "engineering regression only; no independent Native prediction acceptance"
   },
   "metrics": [
     "logical_vs_physical_payload_bytes",
@@ -51,20 +51,36 @@
     "preserve ring/tree semantics and divisible controls",
     "no native performance or accuracy claim"
   ],
-  "next_step": "commit and push origin/main; verify remote SHA; register H22 separately",
+  "next_step": "H21 completed and source published; next wakeup registers H22 from decision.json.",
   "selected_candidate": "H21_COLLECTIVE_ELEMENT_PADDING_BYTE_CONSERVATION",
   "budget_used": {
     "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
     "microbenchmark_runs": 0,
-    "retries": 0
+    "retries": 0,
+    "mechanism_pair_processes": 2,
+    "parent_full_pytest_runs": 5,
+    "subagent_full_pytest_runs_interrupted": 1,
+    "reproduction_harness_repairs": 2
   },
   "source_identity": {
     "parent_commit": "0d23fb6eb99d4c037a401a1d808a35b114cc84a2",
     "planner_sha256": "19105a994a48f56c772b123e81b7071592a2444749ce8b1955981f052cd1a4e4",
     "test_parallel_sha256": "84d6eaa1320122a6b77fa3d3eb813914a17423f6d1c9c39e75338d5b10fd4698",
     "test_projection_sha256": "a04fffe10ca46c938c2995fbadfc153bcba48709d2972c02e12fa08eb61b78a4",
-    "final_full_pytest": "3035 passed, 4 skipped in 431.13s; exit code 0"
-  }
+    "final_full_pytest": "3035 passed, 4 skipped in 431.13s; exit code 0",
+    "source_commit": "439aa21eaffb07d1e6e9153ca118522530249d48",
+    "reviewed_blobs": {
+      "src/heterollm_sim/planner.py": "1d011be3d864397a95347383c3d2683be1769883",
+      "src/heterollm_sim/communication.py": "e72a36bba21480267d1e91677e03d984a15865bd",
+      "src/heterollm_sim/parallel.py": "1565b428127a9f13348a2dbce622e9d5d9c9dd43",
+      "tests/test_parallel.py": "1e231d37ab213246529ba9d9371704e994855f08",
+      "tests/test_physical_projection_invocations.py": "e7b70c48ed5afe168b4c194743b5abfe250b0778"
+    }
+  },
+  "budget_deviations": [
+    "Full tests were launched before all independent review fixes settled, causing four superseded parent runs. Final accepted run is 3035 passed / 4 skipped in 431.13s. No full suite is needed for the subsequent records-only change.",
+    "Post-publication pairing harness first failed import tests (exit 1), then rejected an explicit tree setting for MoE all_to_all (exit 1); set repository import path and use production auto selection for the tree-sized full scenario. Both repaired processes exited 0. No simulator source changed."
+  ]
 }
