@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_044",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H44_MMA_COLLECTIVE_FULL_KERNEL_COST_CONTRACT",
+    "direction": "计算成本模型",
+    "claim": "MMA、collective 或 full-kernel 聚合可能在 shape、单位、并发上界或 owner 计费链路存在未覆盖缺口。",
+    "trigger": "需要独立 source scan、解析真值和失败格矩阵；不继承 H38 全域结论。",
+    "falsifier": "新鲜源码和受控输入显示这些子域均有单位守恒、有限并发边界、owner 计费一致和 unsupported fail-closed。"
+  },
+  "parent_commit": "0b3f678be39a26c5e9b536b024fb5acb094aa17b",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}

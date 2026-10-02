@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_044",
+  "candidate_id": "H44_MMA_COLLECTIVE_FULL_KERNEL_COST_CONTRACT",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记 H38 未覆盖的 MMA/collective/full-kernel 成本子域；需要独立 source scan、解析真值和失败格矩阵后再决定是否修改。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "0b3f678be39a26c5e9b536b024fb5acb094aa17b"
+}

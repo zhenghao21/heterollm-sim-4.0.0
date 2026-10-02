@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_044",
+  "candidate_id": "H44_MMA_COLLECTIVE_FULL_KERNEL_COST_CONTRACT",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_044/",
+  "result": "pending",
+  "limitations": [
+    "H44 尚未完成 MMA/collective/full-kernel 成本扫描。"
+  ]
+}
