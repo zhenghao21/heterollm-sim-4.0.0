@@ -9,7 +9,7 @@
 | 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H23 | H23 在有限执行链路上为负结论；不能视为全域关闭 | 只有新的契约证据或独立复现才能重开 |
 | 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H29 | H29 收口 CLI 文本路径重复 `report_dict` 构建；独立父/候选探针约 49.3% 报告路径 wall-time 降低，输出等价 | 下一轮转存储硬件建模粒度；一般 report cache 仍需独立失效/内存证据 |
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H27 | serialized/overlapped backing demand 已修复并通过机制回归；完整套件仅有无关 Windows SQLite 文件锁瞬态失败 | 下一轮转到预测精度/泛化或评估/API，避免重复成本模型 |
-| 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H26 | H24 接入 DRAM/HBM 共享 aggregate lane；H26 接入 opt-in NAND page/RMW/plane/queue；标准 presets、die/channel/block/erase/FTL/GC 保持明确延期 | 只有 profile-specific geometry 或实际 erase/FTL 调用链证据出现时重开；下一轮先转计算成本模型 |
+| 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H30（活动） | H24 接入 DRAM/HBM 共享 aggregate lane；H26 接入 opt-in NAND page/RMW/plane/queue；die/channel/block/erase/FTL/GC 仍延期，H30 正在检查 geometry/地址映射调用链 | 先以独立来源和实际执行链路确认一个 profile-specific geometry 候选；保持 SSD/HBF 同一 NAND 家族 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H28 | H28 收口请求集合覆盖契约：部分 Native 参考返回 `partial_reference` 并 fail-closed；无 Native 精度结论 | 下一轮转运行速度/内存；保持无 Native 时只做机制验证 |
 | 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H22 | H22 已统一 engine/arrival 边界 | 等运行/成本方向至少各检查一轮后再重开 |
 | 开发工具链与可复现性 | 测试隔离、缓存身份、实验记录、证据哈希、恢复 | H21-H23 记录流程 | 局部维护 | 只在证据或恢复失败时重开 |

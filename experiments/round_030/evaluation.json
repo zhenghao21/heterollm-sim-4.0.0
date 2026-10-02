@@ -1,0 +1,15 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_030",
+  "candidate_id": "H30_NAND_GEOMETRY_ADDRESS_MAPPING",
+  "status": "pending",
+  "prediction": {"status": "pending"},
+  "score": {"status": "pending"},
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_030/",
+  "result": "pending",
+  "limitations": ["H30 尚未完成 geometry source scan 或独立 NAND 地址映射证据。"]
+}

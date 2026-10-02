@@ -1,0 +1,79 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_030",
+  "status": "prepare",
+  "purpose": "storage_hardware_model_granularity",
+  "primary_goal": "在 SSD/HBF/NVMe 共享 NAND 家族边界内，检查现有 opt-in page/RMW/program/plane/queue 路径是否缺少有来源的 geometry 或地址映射执行链路；DRAM/HBM 不拆成第二套模型。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "4e4efb625ed5b12a5c554e781b35e35df575640c",
+    "role": "H29 promoted CLI report serialization reuse plus H26 NAND shared-family baseline"
+  },
+  "hypothesis_id": "H30_NAND_GEOMETRY_ADDRESS_MAPPING",
+  "direction": "存储硬件建模粒度",
+  "previous_direction": "运行速度与内存（H29）",
+  "direction_switch_reason": "H29 已收口运行时重复报告构建；用户要求继续深化存储内部元素，H26 明确留下 geometry/address mapping 与 die/channel/block/erase/FTL/GC 延期边界。",
+  "recent_directions": [
+    "H28:预测/评估请求覆盖契约",
+    "H29:CLI报告序列化运行时",
+    "H30:NAND家族几何与地址映射（活动）"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H23",
+    "运行速度与内存": "H29",
+    "计算成本模型": "H27",
+    "存储硬件建模粒度": "H30活动（H26基础）",
+    "预测精度与泛化": "H28",
+    "评估/API与可视化口径": "H28",
+    "开发工具链与可复现性": "H21-H29"
+  },
+  "scope": {
+    "candidate": "NAND 家族 profile-specific geometry、地址映射、访问拆分与真实资源计费调用链",
+    "include": [
+      "page/plane/die/channel geometry where independently sourced",
+      "address decomposition and page boundary splitting",
+      "queue/conflict/resource owner conservation",
+      "SSD/HBF/NVMe shared-family aliases"
+    ],
+    "exclude": [
+      "DRAM/HBM second model",
+      "un sourced JEDEC parameter invention",
+      "full FTL/GC/erase model without an actual execution path",
+      "H29 report serialization",
+      "Native accuracy claims"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一 NAND geometry 根因直接影响的 schema、profile、地址映射、访问拆分、队列/冲突、错误/unknown 和资源计费必须同轮收口；没有候选保留负结论。"
+  },
+  "data_roles": {
+    "development": "fresh source scan and authoritative JEDEC/vendor geometry references",
+    "comparison": "parent 4e4efb625ed5b12a5c554e781b35e35df575640c",
+    "holdout": "independent geometry/profile controls and unknown-domain controls",
+    "final_acceptance": "mechanism/resource conservation and regression; no Native accuracy unless independently observed"
+  },
+  "metrics": [
+    "geometry_source_identity",
+    "address_split_conservation",
+    "queue_conflict_accounting",
+    "profile_family_scope",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 2,
+    "retries": 0
+  },
+  "guardrails": [
+    "SSD/HBF/NVMe 共享 NAND 家族，不拆为互相重复的模型",
+    "DRAM/HBM 仍保持共享存储家族边界",
+    "没有独立来源的 geometry 保持 unknown/parameterized",
+    "不得把机制守恒测试称为 Native 精度改善",
+    "不得为了增加轮数虚构 die/channel/block/erase/FTL/GC 缺口"
+  ],
+  "selected_candidate": null,
+  "next_step": "完成独立 storage source scan，登记唯一可证伪候选。"
+}

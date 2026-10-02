@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_030",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H30_NAND_GEOMETRY_ADDRESS_MAPPING",
+    "direction": "存储硬件建模粒度",
+    "claim": "NAND 家族现有 page/RMW/program/plane/queue 模型在一个实际 profile-specific geometry 或地址映射执行链路上仍有可证伪缺口。",
+    "trigger": "待独立 source scan 与来源核对；不得继承 H26 的正向结论扩大支持域。",
+    "falsifier": "现有 profile geometry、地址拆分、队列/冲突和资源计费已在支持域内闭合，或缺少可审计来源/实际调用链。"
+  },
+  "parent_commit": "4e4efb625ed5b12a5c554e781b35e35df575640c",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}

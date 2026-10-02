@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_030",
+  "candidate_id": "H30_NAND_GEOMETRY_ADDRESS_MAPPING",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare registered NAND family geometry direction; independent source scan and authoritative parameter check are required before edits.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}
