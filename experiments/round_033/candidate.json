@@ -1,0 +1,8 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_033",
+  "status": "prepare",
+  "hypothesis": {"id": "H33_REPRODUCIBILITY_EVIDENCE_CONTRACT", "direction": "开发工具链与可复现性", "claim": "实验记录、证据哈希、源码身份或恢复配对链路可能存在可独立复现的不一致。", "trigger": "待独立 reproducibility source scan。", "falsifier": "四文件记录、artifact/source hashes、baseline/candidate pairing 和恢复发布核对在当前流程中已一致。"},
+  "parent_commit": "310ec74785bc817b777d7458a4bf87984124bcbd",
+  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+}

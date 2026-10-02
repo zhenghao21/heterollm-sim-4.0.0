@@ -8,7 +8,7 @@
 |---|---|---:|---|---|
 | 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H31 | H31 重新扫描 Web/serving/reporting/资源 fail-closed 路径，未发现新的可复现错误到成功折叠；保留有限负结论 | 下一轮转计算成本模型；新的语义候选需有更窄的独立复现 |
 | 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H29 | H29 收口 CLI 文本路径重复 `report_dict` 构建；独立父/候选探针约 49.3% 报告路径 wall-time 降低，输出等价 | 下一轮转存储硬件建模粒度；一般 report cache 仍需独立失效/内存证据 |
-| 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H32（活动） | H27 修复了 serialized/overlapped backing demand；H32 重新检查其他 shape/并发/owner 成本守恒 | 先做独立成本 source scan 和受控公式探针，不重复 H27 |
+| 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H32 | H32 独立 arithmetic/link/owner/pipeline probes 全通过，未发现排除 H27 后的新可复现公式缺陷；MMA occupancy/collective 仍明确是未实测或参数化 | 下一轮转开发工具链/可复现性；新的成本候选需更窄的执行证据 |
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H30 | H30 将已知 MemoryPosition offset 传入共享 NAND page/RMW/program 计费，并补齐 endpoint/legacy alias 可选入口；geometry 数值仍 profile-specific | 下一轮转评估/API或正确性语义；只有新的来源与实际 erase/FTL 调用链才重开存储方向 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H28 | H28 收口请求集合覆盖契约：部分 Native 参考返回 `partial_reference` 并 fail-closed；无 Native 精度结论 | 下一轮转运行速度/内存；保持无 Native 时只做机制验证 |
 | 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H22 | H22 已统一 engine/arrival 边界 | 等运行/成本方向至少各检查一轮后再重开 |
@@ -32,5 +32,7 @@
 - H31：已登记正确性/语义方向，检查独立执行链路中的错误、缺失和 unknown 边界，不重复 H30 存储 geometry。
 - H31：独立扫描未发现新的可复现错误到成功折叠；Web typed errors、Native coverage fail-closed、serving/reporting unknown/degraded/incomplete 和资源 fail-closed 路径均保留有限负结论，未改源码。
 - H32：已登记计算成本模型方向，检查 shape/并发/owner 守恒，避免重复 H27 已收口的 backing demand。
-- 当前推进点：H32 活动，等待独立成本模型 source scan。
+- H32：独立成本扫描未发现新缺陷；GEMM/reduction shape bytes、链路单位、owner capacity/physical service 和 finite pipeline bounds 全部通过解析探针，未改源码，保留 MMA occupancy/collective 未实测边界。
+- H33：已登记开发工具链与可复现性方向，检查实验身份、证据哈希、恢复和基线配对链路。
+- 当前推进点：H33 活动，等待独立可复现性 source scan。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。

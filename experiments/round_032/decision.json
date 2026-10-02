@@ -1,3 +1,57 @@
 {
-  "schema": "heterollm.optimization.decision/v1", "round_id": "round_032", "candidate_id": "H32_COMPUTE_COST_MODEL_SHAPE_CONSERVATION", "status": "pending", "decision": "pending", "reason": "Prepare registered compute cost-model direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_032",
+  "candidate_id": "H32_COMPUTE_COST_MODEL_SHAPE_CONSERVATION",
+  "status": "decided",
+  "decision": "reject_no_candidate",
+  "reason": "独立成本模型扫描和 arithmetic/links analytical probes 均通过：GEMM useful ops/shape bytes、reduction bytes/dependency、RouteHop 单位、owner capacity/physical service 和 finite pipeline bounds 守恒；排除 H27/H30/H31 后没有新的可复现缺陷，未改源码。",
+  "evidence": [
+    {
+      "path": "artifacts/optimization/round_032/cost_scan.json",
+      "sha256": "6f1f131c77fd01e6462a45604c949da7d80cc1be2c5e9794563d7d8873ae3da2"
+    },
+    {
+      "path": "artifacts/optimization/round_032/probe_cost.py",
+      "sha256": "67ced9607a79740c676817719b170bf43d32a12345ada5cba74860fc27e2e009"
+    },
+    {
+      "path": "artifacts/optimization/round_032/probe_arithmetic.json",
+      "sha256": "02194eb7cd2baed3e1154a752ef81244926ba76f9d28063f5303e1082fd1ce04"
+    },
+    {
+      "path": "artifacts/optimization/round_032/probe_links.json",
+      "sha256": "a75c08c026b60838485020e8e0a1423d6dddee7692ae6f26d4a7a5ec49d8f932"
+    },
+    "All probe commands exit 0",
+    "GEMM/reduction/link/owner/pipeline checks all_passed=true",
+    "Inherited H30 full regression: 3070 passed, 4 skipped; source unchanged"
+  ],
+  "deferred_scope": [
+    "MMA wave utilization remains analytical occupancy proxy; collective topology remains parameterized without Native validation."
+  ],
+  "next_hypothesis": {
+    "id": "H33_REPRODUCIBILITY_EVIDENCE_CONTRACT",
+    "direction": "开发工具链与可复现性",
+    "claim": "下一轮检查实验身份、证据哈希、恢复和基线配对链路中是否存在可独立复现的工程缺陷。",
+    "basis": "H32 成本模型负向收口；工具链方向自 H21-H31 仅维护记录，最长未做独立候选扫描。",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "310ec74785bc817b777d7458a4bf87984124bcbd",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "pending push of H32 negative records"
+  },
+  "process_learning": "成本模型负向扫描必须保留通过的守恒面和未实测代理，不能把解析守恒扩展成 Native/硬件精度结论。",
+  "source_identity": {
+    "source_commit": "310ec74785bc817b777d7458a4bf87984124bcbd",
+    "source_hashes": {
+      "src/heterollm_sim/cost_models.py": "9b63242c148f9cdae9545dd571e730bf1a636aa4ab0748be8b1701ed80aff8d1",
+      "src/heterollm_sim/communication.py": "7f85bd9e364f2e7481cef4204784491d56c01813f94ec5ed6f2c01e535f3d50c",
+      "src/heterollm_sim/data_motion.py": "98d1e41c960e0e9767e6ffc9365677c7318afc4bf739c8d2138f1c76cfc24436",
+      "src/heterollm_sim/planner.py": "19105a994a48f56c772b123e81b7071592a2444749ce8b1955981f052cd1a4e4",
+      "src/heterollm_sim/contracts.py": "ec65514059ca2abccc166efd1e8fb576f6afd8f9b9e27b62ee00d55dae58834c",
+      "src/heterollm_sim/event_kernel.py": "a959aeabd60ac38ace87e196448e5748d21d57975cf816fa7b9a398e6047d617"
+    }
+  }
 }
