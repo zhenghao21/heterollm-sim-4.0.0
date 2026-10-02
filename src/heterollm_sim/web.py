@@ -72,6 +72,12 @@ FALLBACK_INDEX = """<!doctype html>
 </body>
 </html>
 """.encode("utf-8")
+_INCOMPLETE_ANALYTICAL_COVERAGE_STATES = frozenset(
+    {"partial", "unknown", "failure", "degraded", "incomplete"}
+)
+_ANALYTICAL_COVERAGE_STATUS_KEYS = frozenset(
+    {"status", "coverage", "coverage_status", "timing_completeness", "quality"}
+)
 
 
 @dataclass(frozen=True)
@@ -1277,6 +1283,47 @@ def ensure_valid_or_http_error(scenario: ScenarioConfig) -> None:
         )
 
 
+def _apply_analytical_coverage_gate(
+    comparison: Dict[str, Any], status: str
+) -> Dict[str, Any]:
+    if status in _INCOMPLETE_ANALYTICAL_COVERAGE_STATES:
+        comparison["comparison_status"] = comparison["status"]
+        comparison["status"] = "incomplete_analytical_coverage"
+        comparison["analytical_coverage_status"] = status
+        comparison["passed"] = False
+    return comparison
+
+
+def _analytical_coverage_state(
+    value: Any, path: str = "analytical_coverage"
+) -> Tuple[str, str]:
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            child_path = "{}/{}".format(path, key)
+            if str(key).strip().lower() in _ANALYTICAL_COVERAGE_STATUS_KEYS:
+                normalized = str(child).strip().lower()
+                for prefix, state in (
+                    ("failure", "failure"),
+                    ("incomplete", "incomplete"),
+                    ("degraded", "degraded"),
+                    ("partial", "partial"),
+                    ("unknown", "unknown"),
+                ):
+                    if normalized == prefix or normalized.startswith(prefix + "_"):
+                        return state, child_path
+            state, state_path = _analytical_coverage_state(child, child_path)
+            if state:
+                return state, state_path
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            state, state_path = _analytical_coverage_state(
+                child, "{}/{}".format(path, index)
+            )
+            if state:
+                return state, state_path
+    return "", ""
+
+
 def simulation_score_payload(
     report: Mapping[str, Any],
     scenario: ScenarioConfig,
@@ -1297,6 +1344,14 @@ def simulation_score_payload(
         summary = {}
     if not isinstance(requests, Mapping):
         requests = {}
+    analytical_coverage = report.get("analytical_coverage")
+    if not isinstance(analytical_coverage, Mapping):
+        analytical_coverage = None
+    analytical_coverage_status, analytical_coverage_status_path = (
+        _analytical_coverage_state(analytical_coverage)
+        if analytical_coverage is not None
+        else ("", "")
+    )
     throughput = summary.get("throughput", {})
     latency_semantics = report.get("result_semantics", {})
     latency_semantics = (
@@ -1394,6 +1449,11 @@ def simulation_score_payload(
             if isinstance(item, Mapping)
         },
     }
+    if analytical_coverage is not None:
+        score["analytical_coverage"] = to_primitive(analytical_coverage)
+        if analytical_coverage_status:
+            score["analytical_coverage_status"] = analytical_coverage_status
+            score["analytical_coverage_status_path"] = analytical_coverage_status_path
     score["native_input_fingerprint"] = stable_hash(to_primitive(native_reference))
     hardware_input = hardware_input_payload(scenario)
     score["hardware_input_fingerprint"] = stable_hash(hardware_input)
@@ -1413,6 +1473,9 @@ def simulation_score_payload(
         threshold_pct,
         scheduler=scenario.workload.scheduler,
         mapping=effective_mapping,
+    )
+    comparison = _apply_analytical_coverage_gate(
+        comparison, analytical_coverage_status
     )
     score["native_comparison"] = comparison
     if isinstance(r0_reference, Mapping):
@@ -1438,6 +1501,9 @@ def simulation_score_payload(
             threshold_pct,
             scheduler=r0_scheduler,
             mapping=r0_mapping,
+        )
+        score["r0_comparison"] = _apply_analytical_coverage_gate(
+            score["r0_comparison"], analytical_coverage_status
         )
     score["status"] = comparison["status"]
     return score

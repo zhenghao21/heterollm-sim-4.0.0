@@ -291,6 +291,49 @@ class WebApiTests(unittest.TestCase):
             1,
         )
 
+    def test_direct_simulation_score_fails_closed_for_incomplete_analytical_coverage(self):
+        scenario = build_reference_scenario()
+        report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in report["requests"].items()
+            }
+        }
+        for state in ("partial", "unknown", "failure", "degraded", "incomplete"):
+            for coverage in (
+                {"status": state},
+                {"runtime": {"status": state}},
+            ):
+                with self.subTest(state=state, coverage=coverage):
+                    state_report = dict(report)
+                    state_report["analytical_coverage"] = coverage
+                    score = simulation_score_payload(
+                        state_report,
+                        scenario,
+                        native_reference=native,
+                        threshold_pct=25,
+                        r0_reference=native,
+                    )
+                    self.assertEqual(
+                        score["analytical_coverage_status"],
+                        state,
+                    )
+                    self.assertEqual(
+                        score["native_comparison"]["status"],
+                        "incomplete_analytical_coverage",
+                    )
+                    self.assertFalse(score["native_comparison"]["passed"])
+                    self.assertEqual(
+                        score["r0_comparison"]["status"],
+                        "incomplete_analytical_coverage",
+                    )
+                    self.assertFalse(score["r0_comparison"]["passed"])
+
     def test_continuous_request_details_use_native_engine_boundary(self):
         payload = self.reference_payload()
         payload["workload"]["metadata"]["llama_cpp_runtime"] = {
