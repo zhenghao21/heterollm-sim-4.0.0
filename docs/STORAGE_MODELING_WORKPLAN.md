@@ -1,74 +1,73 @@
-# 存储硬件建模定向工作计划
+# 存储硬件建模定向任务
 
-本计划是“存储硬件建模粒度”方向下的两个定向任务。它们不能与普通正确性修复混成一个候选：任务一建立有来源的结构事实，任务二才把结构事实接入访问、排队和成本模型。
+存储建模按两种**介质家族**推进，而不是为 DDR、HBM、SSD、HBF 各写一套模型：
 
-## 适用范围和证据边界
+- DDR、LPDDR、HBM 都是 DRAM 家族，复用一个 DRAM 访问和成本模型；
+- SATA/NVMe SSD、NAND 设备和 HBF 都是 NAND 家族，复用一个 NAND 介质模型；
+- 家族变体只提供接口、组织方式和控制器差异，不复制底层介质逻辑。
 
-覆盖以下存储介质：
+目标是让存储访问的粒度和并行度进入真实的访问、排队和成本链路。未知字段保持 `unknown`，参数化字段必须标为 `parameterized`；不为未公开的内部结构填入看似精确的默认值。
 
-- 易失性内存：DDR4/DDR5、LPDDR、HBM2E/HBM3/HBM3E/HBM4（按实际可取得的标准版本和产品资料分层）。
-- 非易失性存储：NAND Flash、企业级 SSD、NVMe SSD、CXL Type-3 中的存储介质，以及项目已有的 HBF 组件。
-- 项目中的 HBF 不默认存在 JEDEC 内部阵列标准。HBF 的主来源应是 OCP HBF Architecture Specification；底层 NAND 接口、可靠性或产品参数再分别引用 ONFI、JEDEC 或厂商公开资料。OCP v0.7.0 是架构规范，不是已量产器件的独立实测数据。
+来源优先级为公开 JEDEC/OCP/ONFI 规范、厂商数据表或编程手册、可复现实验论文、最后才是明确标注的参数化假设。JEDEC 正文若需要登录或授权，只记录标准号、版本、公开摘要和获取状态。HBF 的主来源是 OCP HBF 架构规范；不要把 HBF 宣传资料当成量产器件实测。
 
-来源优先级：
+## 任务一：统一 DRAM 家族的粒度和成本模型
 
-1. 公开的 JEDEC/OCP/ONFI 规范或正式勘误；
-2. 芯片、封装、SSD 或控制器厂商的数据表、产品手册和编程手册；
-3. 有明确实验方法的论文或公开测量；
-4. 参数化假设，只能作为未证实配置，不能伪装成器件事实。
+### 最小模型
 
-JEDEC 文档若需要登录、付费或授权，记录标准编号、版本、可见摘要和获取状态；缺失正文的字段保留 `unknown`，不能从容量、带宽或端到端时延反推 plane、bank、page 或 die 数量。
+复用一个 DRAM 模型，至少支持这些可选参数：
 
-## 定向任务一：建立分层存储结构和来源目录
+- channel/sub-channel；
+- rank 或等价逻辑分区；
+- bank/bank-group（来源没有时为 `unknown`）；
+- burst 或最小传输字节；
+- row hit、row miss、读写切换、刷新和控制器队列；
+- channel/bank 并行度、读写带宽和时序参数。
 
-目标是把现有“一个 memory component + 容量/带宽”抽象扩展为可审计的层级结构。此任务只建立事实、单位、来源和不确定性，不改变运行时调度。
+DDR/LPDDR/HBM 的区别放入 profile：
 
-每类器件至少调查并区分：
+- DDR/LPDDR：模块/封装接口、channel/sub-channel、rank、bank-group 和刷新配置；
+- HBM：stack、channel、pseudo-channel、封装带宽和接口组织；不能强行套用 DDR DIMM 的 rank 语义；
+- 三者共享 DRAM 的 row/bank/burst/读写切换/刷新/队列成本逻辑。
 
-| 介质 | 需要调查的内部层级和粒度 |
-|---|---|
-| DDR/LPDDR DRAM | channel、sub-channel、rank、bank group、bank、row/column；burst length、访问/传输粒度、读写方向、刷新、时序约束、控制器队列 |
-| HBM | stack、base/die、channel、pseudo-channel、独立端口、burst/最小传输单位、堆叠带宽分配、读写方向和可公开的 bank/时序字段；未公开字段保持 unknown |
-| NAND/SSD | controller、host channel、package、die、CE/LUN、plane、block、page、页读/编程/块擦除；page read/program/erase 粒度、multi-plane、并行度、FTL、GC、磨损和队列 |
-| HBF | base die、NAND/core-die stack、host channel、plane、block、page、AXI/UCIe 接口、对齐与小写合并、program/erase 约束、可靠性和遥测；以 OCP 规范为主，不冒充 JEDEC 事实 |
+### 接入和验证
 
-交付物：
+同一个 DRAM 访问入口必须使用 profile 解析地址、拆分 burst、选择 channel/bank、产生队列等待，并把读写切换、刷新和冲突成本计入资源账本。先覆盖整 burst、跨 burst、row hit/miss、读写混合、channel 饱和和刷新控制；旧的 aggregate DRAM/HBM preset 必须继续工作。
 
-- 一个版本化的 storage geometry schema，明确 `known`、`derived`、`parameterized`、`unknown` 四类状态；
-- 每个 preset 的层级、容量守恒、带宽守恒、单位和来源 URL/标准号；
-- 不能确定时的显式限制和待补资料清单；
-- geometry 读取 API 与序列化兼容测试；旧的 aggregate preset 必须能继续加载。
+验收只要求证明：访问字节守恒、burst 拆分正确、并行 channel 不重复收费、旧 profile 与新 profile 的控制行为可解释。没有独立设备测量时，只报告机制一致性和仿真 wall time/内存，不声称 Native 精度改善。
 
-任务一的验收条件：同一个字段不能同时以“厂商事实”和“参数假设”出现；容量、通道、die、plane、page 的推导必须有公式和独立来源；没有来源的字段不能进入精确预测路径。
+## 任务二：统一 NAND 家族的粒度和成本模型
 
-## 定向任务二：把层级结构接入访问和成本模型
+### 最小模型
 
-目标是让存储层级实际影响仿真器的访问拆分、排队、冲突、资源计费和结果解释，而不是只增加 metadata。
+复用一个 NAND 模型，至少支持这些可选参数：
 
-至少覆盖：
+- channel、package/die、plane、block、page；
+- page read、program、block erase 的粒度和成本；
+- page boundary、plane/die 并行和顺序 program 约束；
+- host 访问粒度、队列深度和后台工作标记。
 
-- 地址到 channel/rank/bank/plane/die/page 的可复现映射；
-- 读、写、刷新、program、erase 的不同粒度和方向成本；
-- page boundary、row/bank conflict、plane conflict、die/queue 并行和控制器队列；
-- SSD/NAND 的 FTL、GC、写放大、后台擦除和 host/device queue；
-- HBF 的 page 对齐、小写合并、顺序 program、host channel 并行和 UCIe/AXI 到 base die 的边界；
-- DMA、PCIe/CXL/UCIe/内存控制器等外部链路与内部介质成本的分层计费，避免同一 payload 重复收费；
-- 输出每次访问的 logical bytes、physical bytes、page/program/erase 次数、排队等待、冲突原因、命中的层级和证据来源。
+SSD/HBF 的区别放入 profile：
 
-任务二的验收方法：
+- SATA/NVMe SSD：控制器、FTL、host/device queue、GC 和写放大；没有来源时把 FTL/GC 建模为显式参数或关闭，不推断内部实现；
+- HBF：base die、NAND/core-die stack、AXI/UCIe 主机边界、page 对齐、小写合并、host channel 并行和顺序 program；以 OCP 规格中已公开的字段为准；
+- 两者共享 NAND 的 page/block/plane/die 访问和 program/erase 成本逻辑。
 
-1. 先用解析场景验证容量、page 数、plane 并行和写放大守恒；
-2. 用同一 geometry 的 aggregate 模型作为控制，比较层级模型的 wall time、峰值内存、队列等待和资源账本；
-3. 为每类介质准备整页、跨页、跨 plane、读写混合、队列饱和、刷新/GC 触发和空闲控制；
-4. 若有独立设备或论文测量，再做成对延迟/吞吐误差；没有实测时只报告机制一致性，不称为精度改善；
-5. 最终回归必须覆盖旧 aggregate preset、已有 HBM/HBF 架构组合和不支持/未知字段的 fail-closed 行为。
+### 接入和验证
 
-任务二的禁止事项：不能用端到端目标时延反推内部 page/plane 数；不能把 HBF 的架构规格当成量产器件实测；不能为未公开的 DRAM/HBM bank 或 SSD NAND geometry 填入看似精确的默认值。
+同一个 NAND 访问入口必须按 page/block/plane/die 拆分访问，区分 read/program/erase，表达队列等待和并行度，并输出 logical bytes、physical bytes、page/program/erase 次数、等待时间和触发原因。先覆盖整页、跨页、跨 plane、读写混合、队列饱和和后台工作控制；旧 SSD/HBF aggregate preset 必须继续加载。
 
-## 执行顺序
+验收只要求证明：page 和 block 守恒、跨页拆分正确、program/erase 不被当成普通 read、并行度和写放大不重复计费、未知字段 fail-closed。没有独立设备或论文测量时，只报告机制一致性和仿真工程指标。
 
-1. 先做任务一的 schema、来源目录和当前 preset 盘点；
-2. 独立审查任务一的字段来源、单位和守恒公式；
-3. 选择一个有完整来源的介质作为任务二第一条执行链，优先已有 HBM 或 HBF preset；
-4. 接入运行时和成本模型，补控制场景后再扩展到其他介质；
-5. 两个任务分别记录为独立候选，但只有任务一稳定后任务二才允许修改实际计费链路。
+## 统一边界
+
+- 不先建立四个独立模型，也不为每个供应商复制一套 planner/cost model；使用一个家族模型加 profile。
+- 不在第一阶段建完整 DRAM 控制器、SSD FTL 或 NAND 固件仿真；只有独立证据证明它们是主要误差来源时，才增加最小必要状态。
+- 不用端到端时延反推 page、plane、bank、die 或 queue 参数。
+- 两个任务可以分别验收，但都必须到达真实访问/计费链路；只增加 metadata 不算完成。
+
+## 顺序
+
+1. 先盘点现有 DRAM/HBM/SSD/HBF aggregate preset，给字段标来源和证据状态；
+2. 完成任务一的最小 DRAM family profile 和访问控制；
+3. 独立审查任务一后，再完成任务二的最小 NAND family profile 和访问控制；
+4. 最后才考虑 FTL/GC、刷新策略或更细的 bank/plane 状态，并以实际瓶颈证据决定是否加入。
