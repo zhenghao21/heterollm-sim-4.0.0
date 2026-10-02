@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_027",
-  "status": "prepare",
+  "status": "promoted",
   "purpose": "simulator_compute_cost_model",
   "primary_goal": "系统检查尚未覆盖的 GEMM、归约、内存、链路和并发成本公式，寻找一个可独立复现且进入真实计费链路的 shape/资源守恒缺口。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -43,8 +43,10 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一成本根因直接影响的公式、单位、shape、并发、计费、错误/API 和回归必须在同轮收口；没有候选则记录负结论并切换方向。"
+    "status": "closed",
+    "formula": "serialized/overlapped backing service physical bytes and energy now flow into ResourceDemand and cache metadata; analytical payload semantics unchanged.",
+    "scope": "GPU/CPU pure memory and GEMM paths sharing _estimate_typed_roofline/_cache_memory_demands; reduction, communication, planner and owner paths scanned.",
+    "unrelated": "kernel_calibration sqlite file-lock test failed in full suite but passed isolated; unrelated to H27."
   },
   "data_roles": {
     "development": "fresh source scan and analytical controls",
@@ -72,6 +74,34 @@
     "不重复 H24/H26 已收口存储 contract",
     "保持未知参数显式 unknown/parameterized"
   ],
-  "selected_candidate": null,
-  "next_step": "完成成本模型 source scan，登记唯一可证伪候选。"
+  "selected_candidate": "H27_SERIALIZED_MEMORY_PHYSICAL_DEMAND_CONSERVATION",
+  "next_step": "H27 已发布；下一轮切换到预测精度/泛化或评估/API方向，由台账决定。",
+  "source_identity": {
+    "source_commit": "f6457f07f8f44b1d8c70d4a12ee637a65d1cbdfd",
+    "source_hashes": {
+      "src/heterollm_sim/cost_models.py": "9b63242c148f9cdae9545dd571e730bf1a636aa4ab0748be8b1701ed80aff8d1",
+      "tests/test_cost_model_physical_demand.py": "42d750e5885912e915eedc82d0f35c3b1a71f70942ce356b6524eb394db7aae7"
+    },
+    "focused_tests": "302 passed in 6.18s; exit code 0",
+    "full_without_unrelated": "2912 passed, 4 skipped in 395.00s; exit code 0",
+    "isolated_unrelated": "1 passed in 0.44s; exit code 0",
+    "artifact_hashes": [
+      {
+        "path": "artifacts/optimization/round_027/cost_model_scan.json",
+        "sha256": "7373c5c4cbc291233fc455b0df342979aef1cd6b52edefa478bfb03f7a55fd57"
+      },
+      {
+        "path": "artifacts/optimization/round_027/cost_model_repro.json",
+        "sha256": "7d585aed62cbc4825149a937a1ffba480a84ed82041474a0ad475146ee1890d5"
+      },
+      {
+        "path": "artifacts/optimization/round_027/cost_model_candidate_repro.json",
+        "sha256": "68a529be224649b9d61529eb4718f4e652c1afce5cd80ce640326f801861e653"
+      },
+      {
+        "path": "artifacts/optimization/round_027/reproduce_cost_model_candidate.py",
+        "sha256": "45c4bc4f04a65afe27ed60425c56920e3e582c26910120c23d05bb35657adfa9"
+      }
+    ]
+  }
 }
