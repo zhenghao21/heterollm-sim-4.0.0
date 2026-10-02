@@ -1,12 +1,30 @@
 {
   "candidate_id": "H60_RUNTIME_SUPPORT_DOMAIN",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记 runtime support-domain 传播假设，等待独立 source scan 与矩阵。",
+  "changed_files": [
+    "src/heterollm_sim/web.py",
+    "tests/test_web.py",
+    "experiments/round_060/*.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "accept_promote_development_baseline",
+  "deferred_scope": [
+    "Native accuracy"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_060/source_scan_independent.json",
+    "artifacts/optimization/round_060/runtime_support_matrix_independent.json",
+    "artifacts/optimization/round_060/post_fix_support_control.json",
+    "artifacts/optimization/round_060/final_review.json"
+  ],
+  "next_hypothesis": {
+    "claim": "切换未覆盖执行链路，避免重复 H60 support-domain/H51 provenance/H43 fallback。",
+    "direction": "其他最长未查方向",
+    "rationale": "H60 source fix 已收口并通过 full regression。"
+  },
+  "reason": "H60 source scan and matrix reproduced conditional_development_assumption/accuracy_validated=false being scored compared/passed. Minimal web.py fallback gate recognizes prediction_provenance conditional/unsupported/unknown; post-fix control is non_comparable_analytical_fallback/passed=false and web/full regression passed.",
+  "review_artifact_sha256": "f175e2da3b0071e2a805fc37c7784d41ddfb4a0dbd46b563b93558b2877f4b6a",
   "round_id": "round_060",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "42e76d30403ecd1682510279148eb25bcb3ff020",
-  "status": "pending"
+  "source_commit": "d9f40e432a07172cd3defdcca690b324f08ca1c7",
+  "status": "complete"
 }

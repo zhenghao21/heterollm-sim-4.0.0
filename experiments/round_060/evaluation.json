@@ -1,21 +1,31 @@
 {
   "accuracy_status": "not_applicable",
   "candidate_id": "H60_RUNTIME_SUPPORT_DOMAIN",
-  "comparison_artifact": "artifacts/optimization/round_060/",
-  "generalization_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_060/post_fix_support_control.json",
+  "generalization_status": "score/report provenance gate only; no Native",
   "limitations": [
-    "H60 尚未完成 runtime support-domain 独立扫描。"
+    "minimal report fixture",
+    "no Native accuracy"
   ],
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "fixed_and_verified",
   "prediction": {
-    "status": "pending"
+    "native_loaded": false,
+    "source_commit": "d9f40e432a07172cd3defdcca690b324f08ca1c7",
+    "status": "source_fix_verified"
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "web 42 passed; full 3110 passed/4 skipped",
+  "result": "candidate_accepted_development_baseline_promoted",
+  "review_artifact_sha256": "f175e2da3b0071e2a805fc37c7784d41ddfb4a0dbd46b563b93558b2877f4b6a",
   "round_id": "round_060",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
-    "status": "pending"
+    "acceptance": "conditional/unsupported/unknown provenance cannot be compared/passed; supported controls preserved",
+    "evidence": [
+      "artifacts/optimization/round_060/runtime_support_matrix_independent.json",
+      "artifacts/optimization/round_060/post_fix_support_control.json",
+      "artifacts/optimization/round_060/final_review.json"
+    ],
+    "status": "accepted_prediction_provenance_gate_fix"
   },
-  "status": "prepare"
+  "status": "complete"
 }

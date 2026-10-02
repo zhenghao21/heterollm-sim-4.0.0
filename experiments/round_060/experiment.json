@@ -43,12 +43,16 @@
     "comparability",
     "api_provenance"
   ],
-  "next_step": "先独立扫描 runtime_adapters/model_catalog/score/report/API support domain，再运行 support/coverage matrix。",
+  "next_step": "切换其他最长未查方向；不重复 H60 support matrix/H51 provenance/H43 fallback.",
   "previous_direction": "仿真器正确性与语义（H59）",
   "primary_goal": "检查 runtime adapter/model catalog 的 support_level、coverage、unsupported capability 和 conditional assumption 是否在 prediction/score/report/API 链路保持可比性；不重复 H51 fingerprint/mismatch 或 H43 fallback gate。",
   "problem_domain_closure": {
-    "rule": "同一 runtime support-domain 根因若影响 adapter, catalog, prediction, score, report and API surfaces，必须本轮收口。",
-    "status": "prepare"
+    "candidate": "accepted/promoted",
+    "deferred": "Native accuracy",
+    "fix": "web.py analytical fallback state recognizes prediction_provenance conditional/unsupported/unknown",
+    "regression": "focused web 42 passed; full 3110 passed/4 skipped",
+    "status": "closed_with_source_fix",
+    "trigger": "conditional_development_assumption provenance and accuracy_validated=false were ignored by score fallback gate"
   },
   "purpose": "runtime_support_domain_provenance_boundary",
   "recent_directions": [
@@ -76,6 +80,6 @@
       "fail-closed comparability"
     ]
   },
-  "selected_candidate": null,
-  "status": "prepare"
+  "selected_candidate": "conditional_prediction_provenance_not_score_gated",
+  "status": "promote"
 }

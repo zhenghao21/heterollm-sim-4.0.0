@@ -1,7 +1,18 @@
 {
-  "activation_checks": [],
-  "changed_files": [],
-  "deferred_candidates": [],
+  "activation_checks": [
+    "pre conditional provenance compared/passed=true",
+    "post non_comparable_analytical_fallback/passed=false",
+    "supported/text_backbone controls unchanged",
+    "full regression 3110/4"
+  ],
+  "candidate_source_commit": "d9f40e432a07172cd3defdcca690b324f08ca1c7",
+  "changed_files": [
+    "src/heterollm_sim/web.py",
+    "tests/test_web.py"
+  ],
+  "deferred_candidates": [
+    "Native accuracy"
+  ],
   "hypothesis": {
     "claim": "runtime adapter/model catalog 的 unsupported、conditional assumption 或 coverage 状态可能在 prediction/score/report/API 中丢失，导致不可比结果被当作支持域内。",
     "direction": "预测精度与泛化",
@@ -9,11 +20,38 @@
     "id": "H60_RUNTIME_SUPPORT_DOMAIN",
     "trigger": "H51 仅覆盖 provenance/fingerprint；H43 仅覆盖 fallback/OOD gate。"
   },
-  "independent_evidence": [],
-  "parent_commit": "42e76d30403ecd1682510279148eb25bcb3ff020",
+  "independent_evidence": [
+    "artifacts/optimization/round_060/source_scan_independent.json",
+    "artifacts/optimization/round_060/runtime_support_matrix_independent.json",
+    "artifacts/optimization/round_060/post_fix_support_control.json",
+    "artifacts/optimization/round_060/final_review.json"
+  ],
+  "parent_commit": "053b8c2e821663211f5f4c74f7946ca67c7111ab",
+  "review": "source scan/matrix reproduced conditional provenance gate gap; minimal web.py gate and test fix post-fix fail-closed; accepted.",
+  "review_artifact_sha256": "f175e2da3b0071e2a805fc37c7784d41ddfb4a0dbd46b563b93558b2877f4b6a",
   "round_id": "round_060",
   "schema": "heterollm.optimization.candidate/v1",
-  "source_sha256": null,
-  "status": "prepare",
-  "tests": []
+  "source_commit": "d9f40e432a07172cd3defdcca690b324f08ca1c7",
+  "source_sha256": {
+    "functional_fix": "prediction_provenance conditional/unsupported/unknown enters fallback gate",
+    "source_commit": "d9f40e432a07172cd3defdcca690b324f08ca1c7"
+  },
+  "status": "accepted",
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_web.py -k \"simulation_score or conditional_provenance\" -q",
+      "exit_code": 0,
+      "result": "9 passed, 33 deselected"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_web.py -q",
+      "exit_code": 0,
+      "result": "42 passed"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m pytest -q",
+      "exit_code": 0,
+      "result": "3110 passed, 4 skipped"
+    }
+  ]
 }
