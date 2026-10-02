@@ -1,0 +1,30 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_021",
+  "candidate_id": "H21_COLLECTIVE_ELEMENT_PADDING_BYTE_CONSERVATION",
+  "status": "decided",
+  "decision": "promote",
+  "reason": "Independent mechanism verification, focused controls, final full regression (3035 passed, 4 skipped), and final source review support promotion. No native accuracy claim is made.",
+  "evidence": [
+    "artifacts/optimization/round_021/collective_verify.json",
+    "artifacts/optimization/round_021/collective_controls.json",
+    "artifacts/optimization/round_021/candidate_reproduction.json",
+    "artifacts/optimization/round_021/patch_review_final.json",
+    "3035 passed, 4 skipped in final full pytest; exit code 0",
+    "experiments/round_021/candidate_reproduction.json"
+  ],
+  "deferred_scope": [
+    {
+      "id": "H20_ONLINE_ENGINE_METRIC_FALLBACK",
+      "status": "candidate_for_followup",
+      "artifact": "artifacts/optimization/round_020/eval_candidate.json",
+      "reason": "independent evaluation-boundary contract; keep separate from collective byte conservation and register as H22"
+    }
+  ],
+  "next_hypothesis": {
+    "id": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
+    "claim": "When engine-boundary timestamps are unavailable, reporting, scoring and UI must select and declare one consistent arrival or engine boundary instead of mixing null engine summaries with canonical arrival fallback.",
+    "basis": "H20 deferred evaluation review found a real generic continuous path with engine fields null and canonical arrival fallback.",
+    "status": "registered_for_next_round"
+  }
+}

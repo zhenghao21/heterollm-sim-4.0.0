@@ -8086,8 +8086,110 @@ def _add_collective_tasks(
     *,
     tensor_elements: Optional[int] = None,
     element_bits: int = 8,
+    physical_shard_bytes: Optional[int] = None,
     metadata: Optional[Mapping[str, object]] = None,
 ) -> str:
+    if (
+        isinstance(tensor_bytes, bool)
+        or not isinstance(tensor_bytes, int)
+        or tensor_bytes < 0
+    ):
+        raise ValueError("tensor_bytes must be a non-negative integer")
+    if (
+        isinstance(element_bits, bool)
+        or not isinstance(element_bits, int)
+        or element_bits <= 0
+    ):
+        raise ValueError("element_bits must be a positive integer")
+    if (
+        physical_shard_bytes is not None
+        and (
+            isinstance(physical_shard_bytes, bool)
+            or not isinstance(physical_shard_bytes, int)
+            or physical_shard_bytes < 0
+        )
+    ):
+        raise ValueError(
+            "physical_shard_bytes must be a non-negative integer"
+        )
+    if tensor_elements is not None and (
+        isinstance(tensor_elements, bool)
+        or not isinstance(tensor_elements, int)
+        or tensor_elements < 0
+    ):
+        raise ValueError("tensor_elements must be a non-negative integer")
+    if tensor_elements is not None:
+        declared_bytes = (tensor_elements * element_bits + 7) // 8
+        if declared_bytes != tensor_bytes:
+            raise ValueError(
+                "tensor_elements and element_bits describe {} bytes, not {}"
+                .format(declared_bytes, tensor_bytes)
+            )
+
+    # ``tensor_bytes`` is the logical aggregate tensor size used by the
+    # collective protocol.  An all-gather producer sends one physical shard,
+    # while a reduction producer owns the complete input tensor; the protocol
+    # itself must carry all padded shards.  Keep these quantities separate so
+    # placement transfers preserve the producer's ownership contract.
+    rank_input_bytes = tensor_bytes
+    transport_tensor_bytes = tensor_bytes
+    normalized_kind = kind.strip().lower().replace("-", "_")
+    if (
+        len(ranks) > 1
+        and normalized_kind in {"all_reduce", "reduce_scatter"}
+        and tensor_elements is None
+        and tensor_bytes > 0
+    ):
+        inferred_elements = (
+            tensor_bytes * 8 + element_bits - 1
+        ) // element_bits
+        declared_bytes = (inferred_elements * element_bits + 7) // 8
+        if declared_bytes != tensor_bytes:
+            raise ValueError(
+                "tensor_bytes and element_bits describe {} bytes, not {}"
+                .format(declared_bytes, tensor_bytes)
+            )
+    if (
+        len(ranks) > 1
+        and physical_shard_bytes is not None
+        and physical_shard_bytes * len(ranks) < tensor_bytes
+    ):
+        raise ValueError(
+            "physical_shard_bytes cannot be smaller than the logical aggregate"
+        )
+    if len(ranks) > 1 and physical_shard_bytes is not None:
+        if normalized_kind == "all_gather":
+            rank_input_bytes = physical_shard_bytes
+            transport_tensor_bytes = physical_shard_bytes * len(ranks)
+        else:
+            # Reduction producers hold the complete tensor; only the
+            # collective's padded transport is participant-aggregated.
+            rank_input_bytes = physical_shard_bytes * len(ranks)
+            transport_tensor_bytes = rank_input_bytes
+    elif len(ranks) > 1 and normalized_kind in {
+        "all_reduce", "reduce_scatter"
+    } and tensor_bytes > 0:
+        reduction_elements = tensor_elements
+        if reduction_elements is None:
+            reduction_elements = (
+                tensor_bytes * 8 + element_bits - 1
+            ) // element_bits
+        if reduction_elements > 0:
+            shard = shard_extent(
+                reduction_elements,
+                len(ranks),
+                0,
+                allow_padding=plan.allow_padding,
+            )
+            rank_input_bytes = (
+                shard.local_size * element_bits + 7
+            ) // 8
+            transport_tensor_bytes = rank_input_bytes * len(ranks)
+            rank_input_bytes = transport_tensor_bytes
+    elif len(ranks) > 1 and normalized_kind == "all_gather" and tensor_elements is not None:
+        raise ValueError(
+            "all_gather with tensor_elements requires physical_shard_bytes"
+        )
     rank_value_components: Dict[int, str] = {}
     collective_dependencies = tuple(dependencies)
     if len(ranks) == 1:
@@ -8110,7 +8212,7 @@ def _add_collective_tasks(
                         router,
                         source_component,
                         rank.component_id,
-                        tensor_bytes,
+                        rank_input_bytes,
                         dependencies,
                         name="{}.rank{:03d}.input_to_collective".format(
                             name, rank.rank
@@ -8136,7 +8238,7 @@ def _add_collective_tasks(
         router,
         kind,
         components,
-        tensor_bytes,
+        transport_tensor_bytes,
         algorithm=plan.collective_algorithm,
         routing_policy=plan.routing_policy,
     )
@@ -8147,36 +8249,19 @@ def _add_collective_tasks(
         and tensor_bytes > 0
         and len(ranks) > 1
     ):
-        if (
-            isinstance(element_bits, bool)
-            or not isinstance(element_bits, int)
-            or element_bits <= 0
-        ):
-            raise ValueError("element_bits must be a positive integer")
         if tensor_elements is None:
             reduction_elements = (
                 tensor_bytes * 8 + element_bits - 1
             ) // element_bits
         else:
-            if (
-                isinstance(tensor_elements, bool)
-                or not isinstance(tensor_elements, int)
-                or tensor_elements < 0
-            ):
-                raise ValueError(
-                    "tensor_elements must be a non-negative integer"
-                )
             reduction_elements = tensor_elements
-        declared_bytes = (
-            reduction_elements * element_bits + 7
-        ) // 8
-        if declared_bytes != tensor_bytes:
-            raise ValueError(
-                "tensor_elements and element_bits describe {} bytes, not {}"
-                .format(declared_bytes, tensor_bytes)
-            )
 
     base_metadata = dict(metadata or {})
+    if transport_tensor_bytes != tensor_bytes:
+        base_metadata.setdefault("collective_logical_bytes", tensor_bytes)
+        base_metadata.setdefault(
+            "collective_physical_bytes", transport_tensor_bytes
+        )
     prior = collective_dependencies
     if not collective.rounds:
         final = _add_join(
@@ -8188,7 +8273,7 @@ def _add_collective_tasks(
                 "collective_kind": normalized_kind,
                 "algorithm": "local",
                 "planned_algorithm": collective.algorithm,
-                "bytes": tensor_bytes,
+                "bytes": transport_tensor_bytes,
                 **base_metadata,
             }),
         )
@@ -14572,6 +14657,21 @@ def _compile_parallel_mtp_proposer(
                         ends,
                         tensor_elements=lane_count * output_width,
                         element_bits=_activation_storage_bits(layer, scenario),
+                        physical_shard_bytes=(
+                            _activation_bytes(
+                                layer,
+                                lane_count
+                                * shard_extent(
+                                    output_width,
+                                    plan.tp_degree,
+                                    0,
+                                    allow_padding=plan.allow_padding,
+                                ).local_size,
+                                scenario=scenario,
+                            )
+                            if collective_kind == "all_gather"
+                            else None
+                        ),
                         metadata={
                             **operator_metadata,
                             "event_kind": operator.op_kind + "_collective",
@@ -18803,6 +18903,11 @@ def _compile_parallel_moe(
         tp_ranks,
         _activation_bytes(layer, token_batch * layer.num_experts, scenario=scenario),
         router_ends,
+        physical_shard_bytes=_activation_bytes(
+            layer,
+            max(1, token_batch * expert_score_shard.local_size),
+            scenario=scenario,
+        ),
         metadata={"layer_id": layer.layer_id, "stage": stage},
     )
     routed_tokens = token_batch * layer.experts_per_token
@@ -19924,6 +20029,11 @@ def _compile_parallel_lm_head(
         ends,
         tensor_elements=max(1, token_batch) * vocabulary_size,
         element_bits=logit_bits,
+        physical_shard_bytes=int(
+            math.ceil(
+                max(1, token_batch) * vocab_shard.local_size * logit_bits / 8.0
+            )
+        ),
         metadata={
             "stage": stage,
             "phase": phase,

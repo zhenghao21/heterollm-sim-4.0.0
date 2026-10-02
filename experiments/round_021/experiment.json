@@ -1,0 +1,70 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_021",
+  "status": "promoted",
+  "purpose": "simulator_correctness",
+  "primary_goal": "verify and repair physical byte conservation between element-padded collective reductions and communication payloads",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "0d23fb6eb99d4c037a401a1d808a35b114cc84a2",
+    "role": "H20 promoted mixed-batching scheduler baseline"
+  },
+  "hypothesis_id": "H21_COLLECTIVE_ELEMENT_PADDING_BYTE_CONSERVATION",
+  "scope": {
+    "operator": "planner._add_collective_tasks and communication.plan_collective",
+    "phase": "collective transfer byte planning versus element-level physical padding",
+    "trigger": "tensor elements not divisible by participant count with element_bits greater than 8"
+  },
+  "problem_domain_closure": {
+    "status": "closed",
+    "shape_padding": "fixed and validated for typed reductions; real local shard bytes supplied at LM head, MoE router and MTP auxiliary all_gather callers",
+    "transport": "ring/tree collective payload uses physical aggregate bytes while logical bytes remain metadata",
+    "placement": "all_gather uses local shard input transfers; all_reduce/reduce_scatter retain complete producer input transfers",
+    "validation": "negative/type, explicit shape-byte mismatch, inferred typed mismatch and undersized physical payloads fail closed",
+    "controls": "divisible, int8/int4, no-shape even FP16, TP1/local and remote producer controls covered",
+    "api": "all_to_all remains byte-only because no producer shape contract was found"
+  },
+  "data_roles": {
+    "development": "artifacts/optimization/round_020/planner_candidate.json plus fresh source reproduction",
+    "comparison": "parent 0d23fb6 baseline",
+    "holdout": "divisible, byte-width, collective-kind, no-shape and remote-placement controls",
+    "final_acceptance": "final full repository regression on frozen candidate"
+  },
+  "metrics": [
+    "logical_vs_physical_payload_bytes",
+    "collective_transfer_conservation",
+    "reduction_demand_conservation",
+    "rank_input_transfer_conservation",
+    "control_behavior",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "do not change logical tensor accounting",
+    "do not apply element padding when no shape contract is provided except typed reduction inference",
+    "preserve ring/tree semantics and divisible controls",
+    "no native performance or accuracy claim"
+  ],
+  "next_step": "commit and push origin/main; verify remote SHA; register H22 separately",
+  "selected_candidate": "H21_COLLECTIVE_ELEMENT_PADDING_BYTE_CONSERVATION",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "source_identity": {
+    "parent_commit": "0d23fb6eb99d4c037a401a1d808a35b114cc84a2",
+    "planner_sha256": "19105a994a48f56c772b123e81b7071592a2444749ce8b1955981f052cd1a4e4",
+    "test_parallel_sha256": "84d6eaa1320122a6b77fa3d3eb813914a17423f6d1c9c39e75338d5b10fd4698",
+    "test_projection_sha256": "a04fffe10ca46c938c2995fbadfc153bcba48709d2972c02e12fa08eb61b78a4",
+    "final_full_pytest": "3035 passed, 4 skipped in 431.13s; exit code 0"
+  }
+}

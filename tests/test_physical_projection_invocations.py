@@ -548,6 +548,63 @@ class PhysicalProjectionInvocationTests(unittest.TestCase):
                 task.metadata["modeled_memory_write_bytes"], output_bytes
             )
 
+    def test_shape_aware_collective_uses_element_padded_transport_bytes(self):
+        schedule = compile_scenario(
+            _scenario(
+                _full_layer(_attention_execution_descriptors()),
+                capability=True,
+                tp_degree=3,
+            )
+        )
+        collective = next(
+            task
+            for task in schedule.tasks
+            if task.metadata.get("event_kind") == "collective"
+            and task.metadata.get("collective_kind") == "all_reduce"
+            and task.name.endswith("attention_all_reduce.local")
+        )
+        assert collective.metadata["collective_logical_bytes"] == 256
+        assert collective.metadata["collective_physical_bytes"] == 258
+        assert collective.metadata["bytes"] == 258
+        divisible = compile_scenario(
+            _scenario(
+                _full_layer(_attention_execution_descriptors()),
+                capability=True,
+                tp_degree=1,
+            )
+        )
+        divisible_collective = next(
+            task
+            for task in divisible.tasks
+            if task.metadata.get("event_kind") == "collective"
+            and task.metadata.get("collective_kind") == "all_reduce"
+            and task.name.endswith("attention_all_reduce.local")
+        )
+        assert divisible_collective.metadata["bytes"] == 256
+        assert "collective_physical_bytes" not in divisible_collective.metadata
+
+    def test_lm_head_all_gather_uses_padded_local_vocab_shards(self):
+        schedule = compile_scenario(
+            _scenario(
+                _full_layer(_attention_execution_descriptors()),
+                capability=True,
+                vocabulary=10,
+                tp_degree=3,
+            )
+        )
+        collective = next(
+            task
+            for task in schedule.tasks
+            if task.metadata.get("event_kind") == "lm_head_all_gather"
+            and task.name.endswith("lm_head_all_gather.local")
+        )
+        # 10 logits at FP16 are 20 logical bytes.  Each TP rank owns a
+        # four-column shard (8 bytes per row for one token), so the aggregate
+        # physical contract is 24 bytes after element padding.
+        assert collective.metadata["collective_logical_bytes"] == 20
+        assert collective.metadata["collective_physical_bytes"] == 24
+        assert collective.metadata["bytes"] == 24
+
     def test_q8_conversion_counts_only_declared_projection_calls_and_excludes_head(self):
         schedule = compile_scenario(
             _scenario(

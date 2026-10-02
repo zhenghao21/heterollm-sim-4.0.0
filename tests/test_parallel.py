@@ -398,6 +398,194 @@ class ParallelPlanTests(unittest.TestCase):
                         routing_policy="lowest_latency",
                     )
 
+    def test_shape_aware_all_gather_requires_and_uses_rank_local_payload(self):
+        scenario = _two_gpu_nvlink_scenario(ParallelSpec(tp_degree=2))
+        plan = build_parallel_plan(scenario)
+        builder = _TaskBuilder(scenario.workload.requests[0])
+        rank_sources = []
+        for rank in plan.tp_group(0):
+            source = builder.add(
+                "gather_source_rank{:03d}".format(rank.rank),
+                TaskCategory.COMPUTE,
+                (),
+                dependencies=(),
+            )
+            builder.record_rank_value(source, rank.rank, "cim0")
+            rank_sources.append(source)
+        _add_collective_tasks(
+            builder,
+            scenario,
+            TopologyRouter(scenario.hardware),
+            plan,
+            "shape_aware_gather",
+            "all_gather",
+            plan.tp_group(0),
+            30,
+            tuple(rank_sources),
+            tensor_elements=15,
+            element_bits=16,
+            physical_shard_bytes=16,
+        )
+        collective_transfers = [
+            task
+            for task in builder.tasks
+            if task.metadata.get("event_kind") == "collective_transfer"
+        ]
+        self.assertTrue(collective_transfers)
+        self.assertEqual(
+            {task.metadata["bytes"] for task in collective_transfers},
+            {16, 32},
+        )
+        self.assertEqual(
+            {task.metadata["collective_logical_bytes"] for task in collective_transfers},
+            {30},
+        )
+        self.assertEqual(
+            {task.metadata["collective_physical_bytes"] for task in collective_transfers},
+            {32},
+        )
+        input_transfers = [
+            task
+            for task in builder.tasks
+            if ".input_to_collective." in task.name
+        ]
+        self.assertTrue(input_transfers)
+        self.assertEqual(
+            {task.metadata["bytes"] for task in input_transfers},
+            {16},
+        )
+
+    def test_shape_aware_collective_rejects_contradictory_logical_bytes(self):
+        scenario = _two_gpu_nvlink_scenario(ParallelSpec(tp_degree=2))
+        plan = build_parallel_plan(scenario)
+        with self.assertRaisesRegex(ValueError, "describe 30 bytes, not 31"):
+            _add_collective_tasks(
+                _TaskBuilder(scenario.workload.requests[0]),
+                scenario,
+                TopologyRouter(scenario.hardware),
+                plan,
+                "contradictory_shape",
+                "all_gather",
+                plan.tp_group(0),
+                31,
+                (),
+                tensor_elements=15,
+                element_bits=16,
+                physical_shard_bytes=16,
+            )
+        with self.assertRaisesRegex(
+            ValueError, "cannot be smaller than the logical aggregate"
+        ):
+            _add_collective_tasks(
+                _TaskBuilder(scenario.workload.requests[0]),
+                scenario,
+                TopologyRouter(scenario.hardware),
+                plan,
+                "undersized_shape",
+                "all_gather",
+                plan.tp_group(0),
+                30,
+                (),
+                tensor_elements=15,
+                element_bits=16,
+                physical_shard_bytes=1,
+            )
+        with self.assertRaisesRegex(
+            ValueError, "cannot be smaller than the logical aggregate"
+        ):
+            _add_collective_tasks(
+                _TaskBuilder(scenario.workload.requests[0]),
+                scenario,
+                TopologyRouter(scenario.hardware),
+                plan,
+                "undersized_reduction",
+                "all_reduce",
+                plan.tp_group(0),
+                64,
+                (),
+                tensor_elements=32,
+                element_bits=16,
+                physical_shard_bytes=0,
+            )
+
+    def test_reduction_infers_element_padding_when_shape_is_omitted(self):
+        scenario = _two_gpu_nvlink_scenario(ParallelSpec(tp_degree=2))
+        plan = build_parallel_plan(scenario)
+        builder = _TaskBuilder(scenario.workload.requests[0])
+        _add_collective_tasks(
+            builder,
+            scenario,
+            TopologyRouter(scenario.hardware),
+            plan,
+            "inferred_reduction",
+            "all_reduce",
+            plan.tp_group(0),
+            18,
+            (),
+            element_bits=16,
+        )
+        collective_transfers = [
+            task
+            for task in builder.tasks
+            if task.metadata.get("event_kind") == "collective_transfer"
+        ]
+        self.assertTrue(collective_transfers)
+        self.assertEqual(
+            {task.metadata["bytes"] for task in collective_transfers},
+            {20},
+        )
+        with self.assertRaisesRegex(ValueError, "describe 22 bytes, not 21"):
+            _add_collective_tasks(
+                _TaskBuilder(scenario.workload.requests[0]),
+                scenario,
+                TopologyRouter(scenario.hardware),
+                plan,
+                "invalid_inferred_reduction",
+                "all_reduce",
+                plan.tp_group(0),
+                21,
+                (),
+                element_bits=16,
+            )
+
+    def test_reduction_remote_inputs_keep_full_tensor_payload(self):
+        scenario = _two_gpu_nvlink_scenario(ParallelSpec(tp_degree=2))
+        plan = build_parallel_plan(scenario)
+        builder = _TaskBuilder(scenario.workload.requests[0])
+        rank_sources = []
+        for rank in plan.tp_group(0):
+            source = builder.add(
+                "remote_source_rank{:03d}".format(rank.rank),
+                TaskCategory.COMPUTE,
+                (),
+                dependencies=(),
+            )
+            builder.record_rank_value(source, rank.rank, "cim0")
+            rank_sources.append(source)
+        _add_collective_tasks(
+            builder,
+            scenario,
+            TopologyRouter(scenario.hardware),
+            plan,
+            "remote_reduction",
+            "all_reduce",
+            plan.tp_group(0),
+            64,
+            tuple(rank_sources),
+            tensor_elements=32,
+            element_bits=16,
+        )
+        input_transfers = [
+            task
+            for task in builder.tasks
+            if ".input_to_collective." in task.name
+        ]
+        self.assertTrue(input_transfers)
+        self.assertEqual(
+            {task.metadata["bytes"] for task in input_transfers},
+            {64},
+        )
+
     def test_collective_reduction_cost_tracks_reduction_and_hbm_profiles(self):
         scenario = _two_gpu_nvlink_scenario(ParallelSpec(tp_degree=2))
 

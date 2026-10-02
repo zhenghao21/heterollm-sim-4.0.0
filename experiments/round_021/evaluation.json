@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_021",
+  "candidate_id": "H21_COLLECTIVE_ELEMENT_PADDING_BYTE_CONSERVATION",
+  "status": "completed",
+  "prediction": {
+    "status": "mechanism_only",
+    "result": "parent tree upward transfers 131073/131073/131072/131072 bytes for a 131076-byte physical reduction; candidate uses 131076 aggregate physical payload; direct candidate reproduction records 258 vs 256 bytes for TP3 non-divisible attention control"
+  },
+  "score": {
+    "status": "mechanism_score",
+    "result": "logical/physical payload and reduction-demand conservation pass candidate controls; no native timing truth loaded"
+  },
+  "mechanism_status": "accepted_fix",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "typed reductions, LM head/MoE router/MTP auxiliary all_gather, divisible and byte-width controls covered; all_to_all remains byte-only by explicit boundary",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_021/candidate_reproduction.json",
+  "result": "The parent lost element padding at the communication boundary. The candidate preserves logical accounting, carries physical aggregate bytes through ring/tree planning, uses local shard bytes for all_gather producer transfers, and preserves complete inputs for reduction producers. Final frozen-source repository regression passed 3035 tests with 4 skips.",
+  "limitations": [
+    "No native timing or accuracy measurement was collected.",
+    "Physical shard upper bounds cannot be inferred without a producer shape/storage contract; the lower bound and typed logical checks are enforced.",
+    "H20 engine-boundary evaluation candidate remains independent and deferred."
+  ]
+}
