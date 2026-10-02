@@ -44,12 +44,17 @@
     "report_visibility",
     "invalid_fail_closed"
   ],
-  "next_step": "先独立扫描 memory_service/endpoint/planner/event/report/API metadata chain，再运行 DRAM/HBM refresh/row/queue 控制矩阵；若未发现缺陷，保留有限负结论。",
+  "next_step": "切换其他最长未查方向；不重复 H55 propagation matrix、H39 direct geometry/refresh 或 H48/H49 NAND。",
   "previous_direction": "运行速度与内存（H54）",
   "primary_goal": "检查 DRAM/HBM 共享 memory model 的 refresh、row hit/miss/conflict、burst/channel/bank/queue metadata 是否进入 endpoint/planner/event/resource/report/API 实际链路；不重做 H39 direct geometry/access matrix，不拆分 DRAM/HBM 家族。",
   "problem_domain_closure": {
-    "rule": "同一 DRAM/HBM metadata propagation 根因若影响 service, endpoint, planner, event, resource accounting, report/API and errors，必须本轮收口；不适用入口显式记录。",
-    "status": "prepare"
+    "candidate": "none; no reproducible source defect",
+    "deferred": "versioned top-level DRAM report contract and full planner scenario",
+    "endpoint_event": "dram_access and physical bytes/energy/owner/queue/row/refresh markers reach endpoint/resource/event",
+    "errors": "invalid profile/operation/transaction settings fail-closed",
+    "report": "generic report does not project arbitrary DRAM task metadata; retained task events can carry it",
+    "service": "HBM/HostMemoryProfile share memory_service with transaction/parallel/outstanding metadata",
+    "status": "closed_limited_negative"
   },
   "purpose": "dram_hbm_refresh_report_queue_boundary",
   "recent_directions": [
@@ -78,5 +83,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }

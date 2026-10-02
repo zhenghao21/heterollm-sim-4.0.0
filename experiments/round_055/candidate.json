@@ -1,7 +1,19 @@
 {
-  "activation_checks": [],
+  "activation_checks": [
+    "shared HBM/HostMemory service metadata",
+    "dram_access endpoint/resource/event propagation",
+    "physical bytes/energy/owner/queue",
+    "row/refresh/turnaround markers",
+    "invalid profile/operation fail-closed",
+    "generic report projection boundary"
+  ],
+  "candidate_source_commit": "773a940f6e28a23c44b73824ea993d729d8937b8",
   "changed_files": [],
-  "deferred_candidates": [],
+  "deferred_candidates": [
+    "versioned top-level DRAM report fields",
+    "full planner scenario propagation",
+    "JEDEC numeric calibration"
+  ],
   "hypothesis": {
     "claim": "DRAM/HBM 共享模型中的 refresh/row/queue/burst/channel/bank metadata 可能在真实计费、资源或报告链路中丢失或被当作零成本。",
     "direction": "存储硬件建模粒度",
@@ -9,11 +21,35 @@
     "id": "H55_DRAM_HBM_REFRESH_REPORT_QUEUE_BOUNDARY",
     "trigger": "H39 已覆盖 direct geometry/access/queue/refresh 结构，但未覆盖完整 report/API propagation。"
   },
-  "independent_evidence": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_055/source_scan_independent.json",
+    "artifacts/optimization/round_055/source_scan_independent.sha256",
+    "artifacts/optimization/round_055/dram_hbm_matrix_independent.json",
+    "artifacts/optimization/round_055/dram_hbm_matrix_independent.json.sha256",
+    "artifacts/optimization/round_055/final_review.json",
+    "artifacts/optimization/round_055/final_review.json.sha256"
+  ],
   "parent_commit": "5d499dc64ff1112ae543342169aaa42a748ebaa8",
+  "review": "独立 scan、DRAM/HBM focused 61 passed 与 review 确认共享 metadata/resource/event 链路显式；generic report 顶层缺字段是产品契约边界，不是静默错误，未修改源码。",
+  "review_artifact_sha256": "0fe2b7d6bf3343b3d7971860c847df3634ed53dec3c45b60fd74b067df23f71f",
   "round_id": "round_055",
   "schema": "heterollm.optimization.candidate/v1",
-  "source_sha256": null,
-  "status": "prepare",
-  "tests": []
+  "source_commit": "773a940f6e28a23c44b73824ea993d729d8937b8",
+  "source_sha256": {
+    "note": "H55 未修改源码；scan/matrix/review 同一功能源码身份",
+    "source_commit": "773a940f6e28a23c44b73824ea993d729d8937b8"
+  },
+  "status": "complete_negative",
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_dram_integration.py tests/test_dram_family_parallel_lanes.py tests/test_data_motion.py -q",
+      "exit_code": 0,
+      "result": "61 passed"
+    },
+    {
+      "command": "independent DRAM/HBM source scan",
+      "exit_code": 0,
+      "result": "shared propagation and invalid controls verified"
+    }
+  ]
 }

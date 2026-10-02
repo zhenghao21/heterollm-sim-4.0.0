@@ -1,12 +1,34 @@
 {
   "candidate_id": "H55_DRAM_HBM_REFRESH_REPORT_QUEUE_BOUNDARY",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记 DRAM/HBM shared-model metadata propagation 假设，等待独立 source scan 与矩阵。",
+  "changed_files": [
+    "experiments/round_055/experiment.json",
+    "experiments/round_055/candidate.json",
+    "experiments/round_055/evaluation.json",
+    "experiments/round_055/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "reject_no_candidate",
+  "deferred_scope": [
+    "versioned top-level DRAM report fields",
+    "full planner scenario propagation",
+    "JEDEC numeric calibration",
+    "Native accuracy"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_055/source_scan_independent.json",
+    "artifacts/optimization/round_055/dram_hbm_matrix_independent.json",
+    "artifacts/optimization/round_055/final_review.json",
+    "artifacts/optimization/round_055/final_review.json.sha256"
+  ],
+  "next_hypothesis": {
+    "claim": "按台账切换到尚未覆盖的功能或成本执行链路，避免重复 H55 DRAM/HBM propagation 与 H39/H48/H49 storage direct controls。",
+    "direction": "其他最长未查方向",
+    "rationale": "H55 已收口 DRAM/HBM propagation，未形成源码候选；存储方向的当前假设关闭后应轮换到其他最长未查方向。"
+  },
+  "reason": "独立 source scan、当前 DRAM/HBM propagation matrix（61 passed）和 review 确认 shared memory_service、dram_access、physical bytes/energy、owner/queue、row/refresh/turnaround 元数据在 endpoint/resource/event 链路显式，非法 profile/operation fail-closed；generic report 顶层不投影任意 dram task metadata 是现有产品契约边界，未发现安全源码缺陷，不修改功能源码。",
+  "review_artifact_sha256": "0fe2b7d6bf3343b3d7971860c847df3634ed53dec3c45b60fd74b067df23f71f",
   "round_id": "round_055",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "5d499dc64ff1112ae543342169aaa42a748ebaa8",
-  "status": "pending"
+  "source_commit": "773a940f6e28a23c44b73824ea993d729d8937b8",
+  "status": "complete"
 }
