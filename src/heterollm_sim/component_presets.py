@@ -328,6 +328,7 @@ def _hbm_cost_profile_template(
     write_latency_ns: float = 40.0,
     transaction_bytes: int = 256,
     max_outstanding_requests: int = 32,
+    parallel_lanes: int = 1,
 ) -> Tuple[Dict[str, Any], Dict[str, str]]:
     bandwidth_gb_s = bandwidth_gbps / 8.0
     profile = {
@@ -339,6 +340,7 @@ def _hbm_cost_profile_template(
         "write_latency_ns": write_latency_ns,
         "transaction_bytes": transaction_bytes,
         "max_outstanding_requests": max_outstanding_requests,
+        "parallel_lanes": parallel_lanes,
         "read_bandwidth_gb_s": bandwidth_gb_s,
         "write_bandwidth_gb_s": bandwidth_gb_s,
     }
@@ -353,6 +355,7 @@ def _hbm_cost_profile_template(
         "write_latency_ns": "A_ANALYTICAL editable HBM service-latency default; JEDEC does not specify end-to-end controller latency",
         "transaction_bytes": "A_ANALYTICAL simulator transaction granularity",
         "max_outstanding_requests": "A_ANALYTICAL simulator queue-overlap default",
+        "parallel_lanes": "A_ANALYTICAL aggregate DRAM service-lane parameter",
     }
     return profile, basis
 
@@ -366,6 +369,7 @@ def _host_memory_cost_profile_template(
     write_latency_ns: float = 100.0,
     transaction_bytes: int = 256,
     max_outstanding_requests: int = 32,
+    parallel_lanes: int = 1,
 ) -> Tuple[Dict[str, Any], Dict[str, str]]:
     bandwidth_gb_s = bandwidth_gbps / 8.0
     profile = {
@@ -378,6 +382,7 @@ def _host_memory_cost_profile_template(
         "write_latency_ns": write_latency_ns,
         "transaction_bytes": transaction_bytes,
         "max_outstanding_requests": max_outstanding_requests,
+        "parallel_lanes": parallel_lanes,
         "read_bandwidth_gb_s": bandwidth_gb_s,
         "write_bandwidth_gb_s": bandwidth_gb_s,
     }
@@ -393,6 +398,7 @@ def _host_memory_cost_profile_template(
         "write_latency_ns": "A_ANALYTICAL editable CPU-visible LPDDR service-latency default; product page does not publish end-to-end latency",
         "transaction_bytes": "A_ANALYTICAL simulator transaction granularity",
         "max_outstanding_requests": "A_ANALYTICAL simulator queue-overlap default",
+        "parallel_lanes": "A_ANALYTICAL aggregate memory service-lane parameter",
     }
     return profile, basis
 

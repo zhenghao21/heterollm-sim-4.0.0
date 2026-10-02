@@ -585,6 +585,7 @@ class ScenarioConfig:
                 ("write_latency_ns", "write_latency_ns"),
                 ("transfer_granularity_bytes", "transaction_bytes"),
                 ("max_outstanding_requests", "max_outstanding_requests"),
+                ("parallel_lanes", "parallel_lanes"),
             ):
                 if metadata_name in component.metadata and not hbf_contract:
                     updates[profile_name] = component.metadata[metadata_name]
@@ -682,6 +683,7 @@ class ScenarioConfig:
                 "write_latency_ns": profile.write_latency_ns,
                 "transaction_bytes": profile.transaction_bytes,
                 "max_outstanding_requests": profile.max_outstanding_requests,
+                "parallel_lanes": profile.parallel_lanes,
                 "energy_pj_per_byte": profile.energy_pj_per_byte,
                 "latency_scope": "memory_service",
                 "service_model": getattr(profile, "service_model", metadata.get("memory_service_model", "analytical")),
@@ -2225,7 +2227,7 @@ def _hbm_profile_from_dict(data: Mapping[str, Any]) -> HBMProfile:
             values[field_name] = _number(
                 values[field_name], "HBM profile {}".format(field_name)
             )
-    for field_name in ("transaction_bytes", "max_outstanding_requests"):
+    for field_name in ("transaction_bytes", "max_outstanding_requests", "parallel_lanes"):
         if field_name in values:
             values[field_name] = _integer(values[field_name], "HBM profile {}".format(field_name))
     for field_name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
@@ -2248,7 +2250,7 @@ def _host_memory_profile_from_dict(
                 values[field_name],
                 "host-memory profile {}".format(field_name),
             )
-    for field_name in ("transaction_bytes", "max_outstanding_requests"):
+    for field_name in ("transaction_bytes", "max_outstanding_requests", "parallel_lanes"):
         if field_name in values:
             values[field_name] = _integer(values[field_name], "host-memory profile {}".format(field_name))
     for field_name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
@@ -2709,7 +2711,7 @@ def _bind_local_rtx5080_hardware_presets(data: Mapping[str, Any]) -> Mapping[str
         profile_id = str(component.get("cost_profile_id", ""))
         profile = dict(dict(registries.get(profile_key, {})).get(profile_id, {}))
         template = dict(dict(preset.get("metadata", {})).get("cost_profile_template", {}))
-        for field in ("bandwidth_gb_s", "read_latency_ns", "write_latency_ns", "transaction_bytes", "max_outstanding_requests"):
+        for field in ("bandwidth_gb_s", "read_latency_ns", "write_latency_ns", "transaction_bytes", "max_outstanding_requests", "parallel_lanes"):
             if field in template:
                 profile[field] = template[field]
         component_id = str(component.get("component_id", "memory"))
@@ -2794,6 +2796,7 @@ def _bind_local_memory_link_sources(data: Mapping[str, Any]) -> Mapping[str, Any
                 ("write_latency_ns", "write_latency_ns"),
                 ("transaction_bytes", "transfer_granularity_bytes"),
                 ("max_outstanding_requests", "max_outstanding_requests"),
+                ("parallel_lanes", "parallel_lanes"),
             ):
                 if profile_name not in profile:
                     continue

@@ -1552,6 +1552,7 @@ class HBMProfile:
     max_outstanding_requests: int = 32
     read_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
     write_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
+    parallel_lanes: int = 1
 
     def __post_init__(self) -> None:
         if self.service_model not in {"analytical", "serialized", "overlapped"}:
@@ -1569,6 +1570,7 @@ class HBMProfile:
         _require_non_negative("write_latency_ns", self.write_latency_ns)
         _require_positive_int("transaction_bytes", self.transaction_bytes)
         _require_positive_int("max_outstanding_requests", self.max_outstanding_requests)
+        _require_positive_int("parallel_lanes", self.parallel_lanes)
         _require_non_negative("energy_pj_per_byte", self.energy_pj_per_byte)
         if not self.resource_id:
             raise ValueError("resource_id must not be empty")
@@ -1620,6 +1622,7 @@ class HBMProfile:
             write_latency_ns=self.write_latency_ns,
             transaction_bytes=self.transaction_bytes,
             max_outstanding_requests=self.max_outstanding_requests,
+            parallel_lanes=self.parallel_lanes,
             service_model=self.service_model,
         )
 
@@ -1641,6 +1644,7 @@ class HostMemoryProfile:
     max_outstanding_requests: int = 32
     read_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
     write_bandwidth_gb_s: Optional[float] = field(default=None, metadata={"omit_none": True})
+    parallel_lanes: int = 1
 
     def __post_init__(self) -> None:
         if self.service_model not in {"analytical", "serialized", "overlapped"}:
@@ -1658,6 +1662,7 @@ class HostMemoryProfile:
         _require_non_negative("write_latency_ns", self.write_latency_ns)
         _require_positive_int("transaction_bytes", self.transaction_bytes)
         _require_positive_int("max_outstanding_requests", self.max_outstanding_requests)
+        _require_positive_int("parallel_lanes", self.parallel_lanes)
         _require_non_negative("energy_pj_per_byte", self.energy_pj_per_byte)
         if not self.resource_id or not self.name:
             raise ValueError("resource and profile names must not be empty")
@@ -1710,6 +1715,7 @@ class HostMemoryProfile:
             write_latency_ns=self.write_latency_ns,
             transaction_bytes=self.transaction_bytes,
             max_outstanding_requests=self.max_outstanding_requests,
+            parallel_lanes=self.parallel_lanes,
             service_model=self.service_model,
         )
 

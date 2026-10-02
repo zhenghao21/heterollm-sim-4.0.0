@@ -82,12 +82,14 @@ def memory_service(
     write_latency_ns: float = 0.0,
     transaction_bytes: int = 256,
     max_outstanding_requests: int = 32,
+    parallel_lanes: int = 1,
     service_model: str = "analytical",
 ) -> Mapping[str, object]:
     """Analytical bandwidth/latency envelope for one resolved payload stream.
 
-    Reads and writes share the outstanding-request window.  Request-slot time
-    divided by that window is an optimistic concurrency bound, not a schedule.
+    Reads and writes share an aggregate request window of
+    ``max_outstanding_requests * parallel_lanes``.  Request-slot time divided
+    by that window is an optimistic concurrency bound, not a schedule.
     A nonempty direction also cannot complete before its single-request latency.
     Bandwidth and these bounds overlap (max, not sum).  Zero latency reproduces
     the historical payload/BW model exactly, including partial transactions.
@@ -109,6 +111,7 @@ def memory_service(
     _non_negative(write_latency_ns, "write_latency_ns")
     _positive_int(transaction_bytes, "transaction_bytes")
     _positive_int(max_outstanding_requests, "max_outstanding_requests")
+    _positive_int(parallel_lanes, "parallel_lanes")
     logical_read_bytes, logical_write_bytes = read_bytes, write_bytes
     if service_model != "analytical":
         read_bytes = ((read_bytes + transaction_bytes - 1) // transaction_bytes) * transaction_bytes
@@ -117,7 +120,8 @@ def memory_service(
     read_transactions = (read_bytes + transaction_bytes - 1) // transaction_bytes
     write_transactions = (write_bytes + transaction_bytes - 1) // transaction_bytes
     transaction_count = read_transactions + write_transactions
-    effective_outstanding = min(max_outstanding_requests, transaction_count)
+    request_window = max_outstanding_requests * parallel_lanes
+    effective_outstanding = min(request_window, transaction_count)
     read_bandwidth_service_ns = read_bytes / read_bw if read_bytes else 0.0
     write_bandwidth_service_ns = write_bytes / write_bw if write_bytes else 0.0
     # One shared controller: directions add; preserve exact legacy rounding
@@ -143,8 +147,8 @@ def memory_service(
         raise ValueError("memory_service_model must be analytical, serialized or overlapped")
     if service_model != "analytical":
         latency_service_ns = (
-            math.ceil(read_transactions / max_outstanding_requests) * read_latency_ns
-            + math.ceil(write_transactions / max_outstanding_requests) * write_latency_ns
+            math.ceil(read_transactions / request_window) * read_latency_ns
+            + math.ceil(write_transactions / request_window) * write_latency_ns
         )
     service_ns = (bandwidth_service_ns + latency_service_ns
                   if service_model == "serialized" else max(bandwidth_service_ns, latency_service_ns))
@@ -172,7 +176,7 @@ def memory_service(
         ),
         queue_wait_ns=0.0,
         request_window_utilization=(
-            min(1.0, transaction_count / float(max_outstanding_requests))
+            min(1.0, transaction_count / float(request_window))
             if transaction_count else 0.0
         ),
         bottleneck=bottleneck,
@@ -196,9 +200,11 @@ def memory_service(
         "write_transactions": write_transactions,
         "transaction_count": transaction_count,
         "max_outstanding_requests": max_outstanding_requests,
+        "parallel_lanes": parallel_lanes,
+        "request_window": request_window,
         "effective_outstanding": effective_outstanding,
-        "outstanding_basis": "configured_limit_capped_by_transaction_count",
-        "concurrency_assumption": "independent_requests_shared_read_write_window",
+        "outstanding_basis": "configured_limit_times_parallel_lanes_capped_by_transaction_count",
+        "concurrency_assumption": "independent_requests_shared_read_write_window_across_aggregate_lanes",
         "read_latency_ns": read_latency_ns,
         "write_latency_ns": write_latency_ns,
         "bandwidth_gb_s": bandwidth_gb_s,
@@ -238,6 +244,7 @@ class PhysicalService:
     write_latency_ns: float = 0.0
     transaction_granularity: int = 256
     queue_depth: int = 1
+    parallel_lanes: int = 1
     latency_scope: str = "service"
     efficiency: float = 1.0
     service_model: str = "analytical"
@@ -254,6 +261,7 @@ class PhysicalService:
         _non_negative(self.write_latency_ns, "write_latency_ns")
         _positive_int(self.transaction_granularity, "transaction_granularity")
         _positive_int(self.queue_depth, "queue_depth")
+        _positive_int(self.parallel_lanes, "parallel_lanes")
         if not 0 < float(self.efficiency) <= 1:
             raise ValueError("efficiency must be in (0, 1]")
 
@@ -291,6 +299,7 @@ class PhysicalService:
             write_latency_ns=self.write_latency_ns,
             transaction_bytes=transaction_bytes or self.transaction_granularity,
             max_outstanding_requests=self.queue_depth,
+            parallel_lanes=self.parallel_lanes,
             service_model=model,
         )
         if self.component is not None:
@@ -502,6 +511,7 @@ def resolve_service(
         write_latency_ns=_non_negative(parameter("write_latency_ns", default=0.0), "write_latency_ns"),
         transaction_granularity=granularity or 256,
         queue_depth=parameter("max_outstanding_requests", "queue_depth", default=32 if component.is_active_memory else 1),
+        parallel_lanes=parameter("parallel_lanes", default=1),
         efficiency=efficiency,
         service_model=model,
         storage_id=str(metadata.get("physical_storage_id") or component.component_id),
@@ -735,13 +745,15 @@ def endpoint_service(
         transaction_count = math.ceil(byte_count / granularity)
         transferred_bytes = transaction_count * granularity
     max_outstanding = physical_service.queue_depth
-    latency_batches = math.ceil(transaction_count / max_outstanding) if transaction_count else 0
+    parallel_lanes = physical_service.parallel_lanes
+    request_window = max_outstanding * parallel_lanes
+    latency_batches = math.ceil(transaction_count / request_window) if transaction_count else 0
     service_model = physical_service.service_model
     if service_model == "analytical":
         transferred_bytes = byte_count
         granularity = physical_service.transaction_granularity
         transaction_count = math.ceil(byte_count / granularity)
-        latency_batches = math.ceil(transaction_count / max_outstanding) if transaction_count else 0
+        latency_batches = math.ceil(transaction_count / request_window) if transaction_count else 0
     bandwidth_gb_s = physical_service.read_bandwidth_gb_s if read else physical_service.write_bandwidth_gb_s
     billed = physical_service.price(
         AccessKind.READ if read else AccessKind.WRITE, byte_count,
@@ -768,7 +780,7 @@ def endpoint_service(
         bandwidth_ceiling_gb_s=bandwidth_gb_s,
         queue_wait_ns=0.0,
         request_window_utilization=min(
-            1.0, transaction_count / float(max_outstanding)
+            1.0, transaction_count / float(request_window)
         ) if transaction_count else 0.0,
         bottleneck=bottleneck,
     )
@@ -791,6 +803,9 @@ def endpoint_service(
             "transfer_granularity_bytes": granularity,
             "transactions": transaction_count,
             "max_outstanding_requests": max_outstanding,
+            "parallel_lanes": parallel_lanes,
+            "request_window": request_window,
+            "effective_outstanding": billed["effective_outstanding"],
             "latency_batches": latency_batches,
             "latency_ns": latency,
             "physical_kind": component.normalized_kind,
