@@ -1,12 +1,12 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_047",
-  "status": "prepare",
+  "status": "promote",
   "purpose": "reproducibility_command_identity_audit",
   "primary_goal": "独立审计实验命令返回码是否实际捕获、artifact sidecar/payload/source identity 是否闭合、四份 JSON 与活动轮次是否可恢复，避免把记录值误称实测证据。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "baseline": {
-    "parent_commit": "20012fd593dc816d79d78b577383fcfb3ef806bd",
+    "parent_commit": "00f3f1b7fd087b4fc96695ffe0f004a2354418f7",
     "role": "H46 runtime split finite negative; H33 reproducibility scan as historical background only"
   },
   "hypothesis_id": "H47_REPRODUCIBILITY_COMMAND_IDENTITY_CONTRACT",
@@ -43,12 +43,16 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一记录身份/可复现根因若影响命令、artifact、源码配对、四份 JSON 或恢复流程，必须同轮收口；仅文档质量限制需保留负结论。"
+    "status": "closed_limited_positive",
+    "audit": "round039-046 four JSON and 33/33 checked sidecars closed; source_scan auxiliary records explicitly marked incomplete",
+    "capture": "new wrapper captures real child returncode, raw output hashes/base64, timeout and per-record sidecar",
+    "recovery": "current HEAD/origin and active four-record round identity auditable",
+    "candidate": "accepted as reproducibility toolchain fix in 9adfa7edca27269966c92ed2454b784fe0d3a269",
+    "deferred": "historical records remain metadata-only for hardcoded exit_code; existing artifacts not rewritten"
   },
   "data_roles": {
     "development": "fresh audit of round 039-046 records and wrapper probes",
-    "comparison": "H46 published source 20012fd593dc816d79d78b577383fcfb3ef806bd",
+    "comparison": "H46 published source 00f3f1b7fd087b4fc96695ffe0f004a2354418f7",
     "holdout": "independent subprocess success/failure capture controls",
     "final_acceptance": "reproducibility contract only; no simulator accuracy"
   },
@@ -64,8 +68,8 @@
     "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
-    "audit_runs": 0,
-    "recovery_controls": 0,
+    "audit_runs": 2,
+    "recovery_controls": 1,
     "retries": 0
   },
   "guardrails": [
@@ -74,6 +78,6 @@
     "不重复 H33 已完成的有限身份扫描而扩展为无边界审计",
     "无真实恢复/命令缺陷不改功能源码"
   ],
-  "selected_candidate": null,
-  "next_step": "先独立审计近期轮次 artifacts 与四份 JSON，运行最小成功/失败 subprocess capture control，登记唯一可证伪工具链候选或有限负结论。"
+  "selected_candidate": "H47_COMMAND_RECORDS_LACK_PROCESS_OUTPUT_BINDING",
+  "next_step": "轮换到其他最长未查功能方向；不重复 H47 provenance audit，历史 exit_code 仅按记录元数据使用。"
 }

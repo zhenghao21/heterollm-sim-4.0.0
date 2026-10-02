@@ -2,11 +2,44 @@
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_047",
   "candidate_id": "H47_REPRODUCIBILITY_COMMAND_IDENTITY_CONTRACT",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare 已登记可复现性与命令身份审计；需要独立 subprocess capture、hash/record closure 和恢复控制后再决定是否改工具链。",
-  "evidence": [],
-  "deferred_scope": [],
-  "next_hypothesis": null,
-  "source_commit": "20012fd593dc816d79d78b577383fcfb3ef806bd"
+  "status": "complete",
+  "decision": "accept",
+  "reason": "独立审计确认历史 round039–046 关键 sidecar/source/记录闭合，且新 command provenance wrapper 真实捕获成功/失败 returncode、raw stdout/stderr hash/base64、timeout 与每记录 sidecar；focused 2 passed、全量3108/4通过。该修复改善新实验可复现性，不改变仿真器预测精度。",
+  "evidence": [
+    "artifacts/optimization/round_047/source_scan_independent.json",
+    "artifacts/optimization/round_047/source_scan_independent.sha256",
+    "artifacts/optimization/round_047/repro_audit_independent.json",
+    "artifacts/optimization/round_047/repro_audit_independent.json.sha256",
+    "artifacts/optimization/round_047/command_capture_control.json",
+    "artifacts/optimization/round_047/command_capture_control.json.sha256",
+    "artifacts/optimization/round_047/final_review.json",
+    "artifacts/optimization/round_047/final_review.json.sha256",
+    "artifacts/optimization/round_047/focused_regression_result.json",
+    "artifacts/optimization/round_047/full_regression_result.json"
+  ],
+  "deferred_scope": [
+    "historical hardcoded exit_code metadata limitation",
+    "auxiliary source_scan records without source/artifact fields",
+    "sensitive-output policy",
+    "Native accuracy/performance"
+  ],
+  "next_hypothesis": {
+    "direction": "其他最长未查功能方向",
+    "claim": "依据方向台账选择尚未覆盖且不同于 H47 工具链的功能执行链路，避免重复 provenance 审计。",
+    "rationale": "H47 已完成新命令 provenance wrapper 与记录闭合修复，下一轮回到未查仿真器功能方向。"
+  },
+  "source_commit": "9adfa7edca27269966c92ed2454b784fe0d3a269",
+  "changed_files": [
+    "tools/command_provenance.py",
+    "tests/test_command_provenance.py",
+    "experiments/round_047/experiment.json",
+    "experiments/round_047/candidate.json",
+    "experiments/round_047/evaluation.json",
+    "experiments/round_047/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "source_sha256": {
+    "tools/command_provenance.py": "97b08f698d09bebde2fe408a37961cab9f7505ed712258d56f2f89737712f1cf",
+    "tests/test_command_provenance.py": "aefd7f9300cc027ba2f87667dd1f0eac4310c72c61af065f4da2bd3ee351577e"
+  }
 }
