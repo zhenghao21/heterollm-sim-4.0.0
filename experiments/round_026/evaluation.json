@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_026",
+  "candidate_id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_026/",
+  "result": "pending",
+  "limitations": [
+    "H26 尚未完成 NAND source scan 或源码修改。"
+  ]
+}

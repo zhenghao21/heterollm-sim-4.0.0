@@ -1,0 +1,72 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_026",
+  "status": "prepare",
+  "purpose": "storage_nand_family_modeling",
+  "primary_goal": "在不拆分 SSD/NVMe/HBF 三个模型的前提下，验证并接入一个可解释的 NAND family page/plane/die/channel 访问粒度与并行窗口。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "9d87c00c328b64e70886ff299315a15b18b02137",
+    "role": "H24 DRAM/HBM shared-lane promotion plus H25 runtime negative scan"
+  },
+  "hypothesis_id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
+  "direction": "存储硬件建模粒度",
+  "previous_direction": "运行速度与内存（H25 负向扫描）",
+  "direction_switch_reason": "H25 证伪现有 aggregate-only 生产调用后不改源码；按用户定向任务转向尚未进入真实执行链路的 NAND/SSD/HBF 共享家族。",
+  "recent_directions": [
+    "H23:正确性/工具链负向发现",
+    "H24:DRAM/HBM 存储家族",
+    "H25:运行速度/报告调用链负向"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H23",
+    "运行速度与内存": "H25（负向）",
+    "计算成本模型": "未完成系统性轮次",
+    "存储硬件建模粒度": "H24；H26活动",
+    "预测精度与泛化": "未完成独立验收",
+    "评估/API与可视化口径": "H22",
+    "开发工具链与可复现性": "H21-H25"
+  },
+  "scope": {
+    "family": "SSD/NVMe/NAND/HBF 使用一个 NAND family model，变体只保留 profile 差异",
+    "candidate": "现有 hbf_media/PhysicalService/endpoint_service 是否可统一承载 page/plane/die/channel 与读/program/erase 粒度、并行窗口和 host queue",
+    "exclude": [
+      "完整 FTL/GC/firmware",
+      "新增三个独立介质模型",
+      "DRAM/HBM lane 回改"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一 NAND 根因必须同时检查 page split、read/program/erase、plane/die parallelism、queue/错误边界、API/metadata 与回归；若现有模型已覆盖则保留负结论。"
+  },
+  "data_roles": {
+    "development": "fresh NAND source scan、hbf_media 与 SSD/NVMe presets/test controls",
+    "comparison": "parent 9d87c00c328b64e70886ff299315a15b18b02137",
+    "holdout": "page-aligned/unaligned、read/program/erase、plane/die parallelism、HBF cold_page and generic storage controls",
+    "final_acceptance": "工程/机制回归；无 Native 精度验收"
+  },
+  "metrics": [
+    "page_and_command_granularity",
+    "plane_die_parallelism",
+    "host_media_queue_conservation",
+    "read_program_erase_cost",
+    "storage_regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 2,
+    "retries": 0
+  },
+  "guardrails": [
+    "SSD/NVMe/HBF 只复用一个 NAND family model",
+    "不要把 DRAM parallel_lanes 复制到 NAND",
+    "只在真实执行/计费链路找到缺口后改源码",
+    "FTL/GC 只有独立瓶颈证据才加入",
+    "不声称 Native 或 cycle accuracy"
+  ],
+  "selected_candidate": null,
+  "next_step": "完成 NAND source scan，确认最小候选及其实际调用链。"
+}

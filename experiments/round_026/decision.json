@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_026",
+  "candidate_id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare registered the shared NAND family candidate; independent source scan is required before edits.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

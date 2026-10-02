@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_026",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H26_NAND_FAMILY_PAGE_PLANE_GRANULARITY",
+    "direction": "存储硬件建模粒度",
+    "claim": "一个共享 NAND family profile 可以把 page/plane/die/channel 粒度和读/program/erase 并行窗口接入现有 PhysicalService/hbf_media/endpoint_service 链路，同时保持 SSD/NVMe/HBF 变体差异为 profile 参数。",
+    "trigger": "待独立扫描 hbf_media、PhysicalService、SSD/NVMe/HBF presets 与 storage tests；当前只知道 HBF 已有 cold_page_v1。",
+    "falsifier": "现有 hbf_media/PhysicalService 已完整表达 page/plane/die/channel，或 SSD/NVMe/HBF 不能共享执行/计费路径，或新增字段会重复计费/影响 DRAM。"
+  },
+  "parent_commit": "9d87c00c328b64e70886ff299315a15b18b02137",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": [
+    {
+      "id": "H26_NAND_FTL_GC_DETAIL",
+      "status": "deferred",
+      "reason": "只有独立瓶颈证据才允许扩展 FTL/GC/firmware。"
+    }
+  ]
+}
