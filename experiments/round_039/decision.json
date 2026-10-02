@@ -4,16 +4,25 @@
   "candidate_id": "H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT",
   "status": "complete",
   "decision": "accept",
-  "reason": "独立扫描复现geometry未到达memory_service；候选增加一个共享DRAM family DramProfile和执行时preview/commit controller，显式endpoint地址进入row/bank/channel/burst、读写切换、refresh和队列metrics；旧aggregate路径保留unknown fallback。96个定向测试与全套3098 passed/4 skipped。",
+  "reason": "独立postfix review确认queued start_ns/refresh风险修复；显式endpoint路径接纳，shared queue/rank/stack/bank-group/planner E2E保留延期，不宣称完整DRAM/HBM controller。",
   "evidence": [
     "artifacts/optimization/round_039/fresh_dram_scan.json",
     "artifacts/optimization/round_039/dram_sources.json",
     "artifacts/optimization/round_039/integration_review.json",
     "artifacts/optimization/round_039/dram_candidate_probe.json",
     "artifacts/optimization/round_039/full_regression_result.json",
-    "artifacts/optimization/round_039/final_review.json"
+    "artifacts/optimization/round_039/final_review_postfix.json",
+    "artifacts/optimization/round_039/final_review_postfix.json"
   ],
-  "deferred_scope": [],
+  "deferred_scope": [
+    "跨任务DRAM controller queue occupancy",
+    "rank/stack/bank-group/sub-channel字段",
+    "planner编译到最终报告独立E2E",
+    "未核验JEDEC数值",
+    "tFAW/tRRD/tCCD/timing-group cycle accuracy",
+    "NAND家族",
+    "Native accuracy/performance"
+  ],
   "next_hypothesis": {
     "direction": "存储硬件建模粒度-NAND家族",
     "claim": "统一SSD/HBF/NAND模型是否把page/plane/die/program/erase/queue和写放大接入真实访问/计费链路。",
@@ -33,14 +42,16 @@
     "experiments/round_039/decision.json",
     "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
   ],
-  "source_commit": "e49a8905b2b407cbf4a24bffd85cc8d8cbd15aa7",
+  "source_commit": "d85f820f9a97ec27bfd6915df387935dc7e44ce0",
   "source_sha256": {
-    "src/heterollm_sim/dram.py": "1c3fd46fecc782c9ac63f76d7811438bee52d7f58934f1b72ab362b78ab43e49",
-    "src/heterollm_sim/event_kernel.py": "bc7546b15e909155db2fdd2eb28e8fbecfcb6b9ca2f1c845b8e0d203b6e9e7bb",
+    "src/heterollm_sim/dram.py": "8652e4696c10e08d5d5680c09da012ba74c2a0d4c6ef8adaf00ad4d242b0eda7",
+    "src/heterollm_sim/event_kernel.py": "d3d1f7fefd34c161e7d6fbcac03f27ff63e07ec045179f08a3440e9880f7b4f1",
     "src/heterollm_sim/data_motion.py": "592b66a7c3cab086f631c2b0d11dd5b1a2693a1faf502649ba0cd13498b877a4",
     "src/heterollm_sim/planner.py": "0287ddb90be2b2abba1913fe35a5feb018a7f5636ac5af63933f166d2f32a53e",
     "src/heterollm_sim/communication.py": "13cfb64e78864aa983fd981de850c8154590d782459a8db2297eaefd0b3b4f2b",
     "tests/test_dram.py": "9ae14fc5941b9c2c4400e1434a1172458b2eac9aa3c8c3681f54bd7fb3353c99",
-    "tests/test_dram_integration.py": "8473b9d00c9a66255c061bd97339e737cdd06d8be9c64978d030a717742ddd38"
-  }
+    "tests/test_dram_integration.py": "5c0823143aa6149b8d6ce7a5c95a7964773e702dcead7314aa831f5d7171c3be"
+  },
+  "candidate_source_commit": "d85f820f9a97ec27bfd6915df387935dc7e44ce0",
+  "review_artifact_sha256": "af9cd136354af74eeaf9082890b6e327305b408434ce7de704ed3bd17fd5ac38"
 }

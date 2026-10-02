@@ -7,7 +7,7 @@
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "baseline": {
     "parent_commit": "a112aba42d38cfbf674f7c5424432a6a86ec98c9",
-    "role": "H38计算成本有限负向扫描发布源码；H30旧存储结论仅作待验证背景，不继承其结论"
+    "role": "H38计算成本有限负向扫描发布源码；H39候选源码d85f820；H30旧存储结论仅作待验证背景"
   },
   "hypothesis_id": "H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT",
   "direction": "存储硬件建模粒度",
@@ -89,5 +89,5 @@
     "不加载Native，不把单测通过称为精度改善"
   ],
   "selected_candidate": "H39_DRAM_GEOMETRY_NOT_REACHED_BY_MEMORY_SERVICE",
-  "next_step": "轮换到NAND家族（SSD/HBF共同模型），先独立检查page/plane/die/program/erase真实调用链；不继续扩展DRAM微架构未声明项。"
+  "next_step": "轮换到NAND家族（SSD/HBF共同模型），独立检查page/plane/die/program/erase/queue真实调用链。"
 }
