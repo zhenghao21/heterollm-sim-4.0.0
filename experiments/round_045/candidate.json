@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_045",
-  "status": "prepare",
+  "status": "complete_negative",
   "hypothesis": {
     "id": "H45_EXECUTION_FAILURE_ROLLBACK_CONTRACT",
     "direction": "仿真器正确性与语义",
@@ -11,9 +11,44 @@
   },
   "parent_commit": "5be7a5be431c31a720cc0a3cc08a2dd58ef83364",
   "changed_files": [],
-  "source_sha256": null,
-  "activation_checks": [],
-  "tests": [],
-  "independent_evidence": [],
-  "deferred_candidates": []
+  "source_sha256": {
+    "source_commit": "61603e124fd4eb1b54d6b847f39b4c57a5f3aeb5",
+    "note": "H45 未修改源码；source scan/failure matrix/final review 使用同一 HEAD"
+  },
+  "activation_checks": [
+    "duplicate/cycle/owner-conflict/unavailable dependency fail before state commit",
+    "failure snapshot equality for active/ready/lease/metrics/resource clocks/busy/queue",
+    "ready heap successful a→b and nonnegative queue wait",
+    "unsupported retention fail-closed through execute_incremental_schedule and run_scenario",
+    "streaming exact/aggregate success with task_count/makespan equality"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m py_compile artifacts/optimization/round_045/failure_matrix.py",
+      "exit_code": 0,
+      "result": "compile succeeded"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe artifacts/optimization/round_045/failure_matrix.py",
+      "exit_code": 0,
+      "result": "failure_matrix_independent.json; H45_DIRECT_FAILURE_CONTROLS_PASS"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_045/source_scan_independent.json",
+    "artifacts/optimization/round_045/source_scan_independent.sha256",
+    "artifacts/optimization/round_045/failure_matrix_independent.json",
+    "artifacts/optimization/round_045/failure_matrix_independent.json.sha256",
+    "artifacts/optimization/round_045/final_review.json",
+    "artifacts/optimization/round_045/final_review.json.sha256"
+  ],
+  "deferred_candidates": [
+    "HTTP transport/status/error JSON independent control",
+    "custom DRAM/L2 resolver exception injection",
+    "owner alias lease release",
+    "long streaming failure scenario",
+    "Native accuracy/performance"
+  ],
+  "source_commit": "61603e124fd4eb1b54d6b847f39b4c57a5f3aeb5",
+  "review": "独立复核确认失败快照、ready heap、lease/queue/owner、retention 与错误传播边界；没有安全源码候选，明确保留 HTTP transport 和 resolver 注入限制。"
 }

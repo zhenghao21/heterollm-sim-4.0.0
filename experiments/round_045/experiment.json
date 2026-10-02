@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_045",
-  "status": "prepare",
+  "status": "promote",
   "purpose": "execution_failure_rollback_semantics",
   "primary_goal": "独立检查 event kernel/streaming execution 在 dispatch 失败、资源冲突、ready heap、lease/queue 回滚和错误报告/API边界是否保持一致，避免失败路径部分提交或被渲染为成功。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -45,8 +45,14 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一失败根因若影响 preview/commit、ready/queue、lease/owner、streaming report 或 API error，必须同轮收口；不适用面明确延期。"
+    "status": "closed_limited_negative",
+    "submit": "duplicate/cycle/owner-conflict/unavailable dependency fail before commit",
+    "rollback": "active/ready/lease/metrics/resource clocks/busy/queue snapshots unchanged on failure",
+    "ready_heap": "successful a→b progression and nonnegative queue wait",
+    "streaming": "exact/aggregate success and retention differences preserved",
+    "error_report": "source scan confirms typed failure propagation; HTTP transport not independently started",
+    "candidate": "none; no reproducible failure rollback defect",
+    "deferred": "custom DRAM/L2 resolver exceptions, HTTP transport, owner alias lease release and long streaming failure"
   },
   "data_roles": {
     "development": "fresh injected-failure and conflict controls",
@@ -66,7 +72,7 @@
     "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
-    "failure_matrix_runs": 0,
+    "failure_matrix_runs": 1,
     "api_controls": 0,
     "retries": 0
   },
@@ -78,5 +84,5 @@
     "无可复现语义缺陷不改源码"
   ],
   "selected_candidate": null,
-  "next_step": "先独立扫描 event_kernel、streaming_des、engine、reporting/web 的 failure/rollback 调用链，构造成功与注入失败成对状态矩阵，登记唯一可证伪候选。"
+  "next_step": "轮换到运行速度/内存或其他最长未查方向；不重复 H45 failure rollback 扫描。"
 }
