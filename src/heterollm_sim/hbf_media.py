@@ -249,7 +249,18 @@ def nand_media_service(
     }
 
 
-def hbf_media_service(component, byte_count, read: bool) -> dict:
+def hbf_media_service(
+    component,
+    byte_count,
+    read: bool,
+    *,
+    page_offset_bytes=None,
+) -> dict:
     """Compatibility alias for the legacy HBF cold-page entrypoint."""
 
-    return nand_media_service(component, byte_count, read)
+    return nand_media_service(
+        component,
+        byte_count,
+        read,
+        page_offset_bytes=page_offset_bytes,
+    )

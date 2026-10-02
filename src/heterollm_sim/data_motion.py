@@ -692,7 +692,12 @@ class EndpointService:
 
 
 def endpoint_service(
-    component: ComponentSpec, byte_count: int, *, read: bool, name: str
+    component: ComponentSpec,
+    byte_count: int,
+    *,
+    read: bool,
+    name: str,
+    page_offset_bytes: Optional[int] = None,
 ) -> Optional[EndpointService]:
     _non_negative_int(byte_count, "byte_count")
     bandwidth = float(component.directional_bandwidth_gbps("read" if read else "write"))
@@ -727,7 +732,12 @@ def endpoint_service(
         if byte_count == 0:
             return None
         from .hbf_media import nand_media_service
-        media = nand_media_service(component, byte_count, read)
+        media = nand_media_service(
+            component,
+            byte_count,
+            read,
+            page_offset_bytes=page_offset_bytes,
+        )
         physical_bytes = media["physical_read_bytes"] if read else media["physical_bytes"]
         return EndpointService(
             name="{}.{}.{}.cold_page".format(name, component.component_id, direction),

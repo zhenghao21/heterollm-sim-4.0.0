@@ -829,9 +829,20 @@ class TopologyRouter:
 
     @staticmethod
     def _endpoint_phase(
-        component: ComponentSpec, byte_count: int, *, read: bool, name: str
+        component: ComponentSpec,
+        byte_count: int,
+        *,
+        read: bool,
+        name: str,
+        page_offset_bytes: Optional[int] = None,
     ) -> Optional[TransferPhase]:
-        service = endpoint_service(component, byte_count, read=read, name=name)
+        service = endpoint_service(
+            component,
+            byte_count,
+            read=read,
+            name=name,
+            page_offset_bytes=page_offset_bytes,
+        )
         if service is None:
             return None
         return TransferPhase(service.name, service.demands, service.metadata)

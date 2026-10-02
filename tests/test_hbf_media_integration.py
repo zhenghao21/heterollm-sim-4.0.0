@@ -40,6 +40,14 @@ def test_endpoint_charges_physical_page_and_preserves_host_request():
     assert phase.metadata["hbf_media"]["page_read_latency_ns"] == 4_000.0
 
 
+def test_endpoint_page_offset_is_optional_and_splits_known_crossing_page():
+    phase = TopologyRouter._endpoint_phase(
+        hbf(), 128, read=True, name="weight", page_offset_bytes=4032
+    )
+    assert phase.metadata["hbf_media"]["address_scope"] == "known_page_offset"
+    assert phase.metadata["physical_bytes"] == 8192
+
+
 def test_partial_write_charges_rmw_and_program_without_free_ack():
     phase = TopologyRouter._endpoint_phase(hbf(), 1, read=False, name="kv")
     assert phase.metadata["hbf_media"]["rmw_read_operations"] == 1
