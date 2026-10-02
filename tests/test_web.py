@@ -253,6 +253,44 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(score["candidate_dimensions"], ["scheduler", "mapping"])
         self.assertTrue(score["input_fingerprint"])
 
+    def test_direct_simulation_score_fails_closed_for_partial_native_reference(self):
+        scenario = build_reference_scenario()
+        native_report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in native_report["requests"].items()
+            }
+        }
+        native["requests"]["native-only-request"] = {
+            "ttft_ns": 1,
+            "tpot_ns": 1,
+            "e2e_ns": 1,
+        }
+        payload = self.reference_payload()
+        status, _, result = self.json_request(
+            "POST",
+            "/api/simulate-score",
+            payload={"scenario": payload, "native": native, "threshold_pct": 25},
+        )
+        self.assertEqual(status, 200)
+        score = result["simulation_score"]
+        comparison = score["native_comparison"]
+        self.assertEqual(score["status"], "partial_reference")
+        self.assertEqual(comparison["status"], "partial_reference")
+        self.assertFalse(comparison["passed"])
+        self.assertEqual(comparison["request_coverage"]["candidate_request_count"], 1)
+        self.assertEqual(comparison["request_coverage"]["native_request_count"], 2)
+        self.assertEqual(comparison["request_coverage"]["matched_request_count"], 1)
+        self.assertEqual(
+            comparison["request_coverage"]["unmatched_native_request_count"],
+            1,
+        )
+
     def test_continuous_request_details_use_native_engine_boundary(self):
         payload = self.reference_payload()
         payload["workload"]["metadata"]["llama_cpp_runtime"] = {

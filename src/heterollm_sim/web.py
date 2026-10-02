@@ -1485,6 +1485,19 @@ def _compare_ui_simulation_to_native(
     native_requests = native_reference.get("requests", {})
     if not isinstance(native_requests, Mapping):
         native_requests = {}
+    simulated_request_ids = set(simulated_requests)
+    native_request_ids = set(native_requests)
+    matched_request_ids = simulated_request_ids & native_request_ids
+    unmatched_simulated_request_ids = simulated_request_ids - native_request_ids
+    unmatched_native_request_ids = native_request_ids - simulated_request_ids
+    request_coverage = {
+        "candidate_request_count": len(simulated_request_ids),
+        "native_request_count": len(native_request_ids),
+        "matched_request_count": len(matched_request_ids),
+        "unmatched_candidate_request_count": len(unmatched_simulated_request_ids),
+        "unmatched_native_request_count": len(unmatched_native_request_ids),
+        "complete": not unmatched_simulated_request_ids and not unmatched_native_request_ids,
+    }
     metric_names = ("ttft_ns", "tpot_ns", "e2e_ns")
     rows = []
     for request_id, simulated in simulated_requests.items():
@@ -1509,6 +1522,7 @@ def _compare_ui_simulation_to_native(
         return {
             "status": "insufficient_native_reference",
             "matched_requests": 0,
+            "request_coverage": request_coverage,
             "metrics": {},
             "threshold_pct": threshold_pct,
         }
@@ -1528,6 +1542,16 @@ def _compare_ui_simulation_to_native(
     passed = None
     if threshold_pct is not None and aggregate:
         passed = all(item["max_absolute_percentage_error_pct"] < threshold_pct for item in aggregate.values())
+    comparison_status = (
+        "compared"
+        if request_coverage["complete"]
+        else "partial_reference"
+    )
+    if comparison_status == "partial_reference" and passed is not None:
+        # A partial native set is not an exact evaluation.  Keep the metric
+        # rows for diagnosis, but fail closed until a caller supplies a
+        # separately defined subset contract.
+        passed = False
     native_scheduler = native_reference.get("scheduler")
     native_mapping = native_reference.get("mapping", native_reference.get("placement"))
     structural = {}
@@ -1550,8 +1574,9 @@ def _compare_ui_simulation_to_native(
             "changed": candidate_fingerprint != native_fingerprint,
         }
     return {
-        "status": "compared",
+        "status": comparison_status,
         "matched_requests": len(rows),
+        "request_coverage": request_coverage,
         "threshold_pct": threshold_pct,
         "passed": passed,
         "metrics": aggregate,
