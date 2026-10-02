@@ -1,21 +1,32 @@
 {
   "accuracy_status": "not_applicable",
   "candidate_id": "H52_COLLECTIVE_EVENT_BILLING_BOUNDARY",
-  "comparison_artifact": "artifacts/optimization/round_052/",
-  "generalization_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_052/collective_matrix_independent.json",
+  "generalization_status": "limited_to analytical HBM topology/collective route controls",
   "limitations": [
-    "H52 尚未完成 collective planner/event/resource 独立扫描。"
+    "analytical topology only",
+    "no Native bandwidth/accuracy",
+    "H44 static formulas and H38 baseline not reopened"
   ],
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "negative_scan_passed_limited",
   "prediction": {
-    "status": "pending"
+    "native_loaded": false,
+    "source_commit": "6cdf5fc4c2db47f88a7554f663b10a8f4074781e",
+    "status": "collective_event_controls_complete"
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "source unchanged; H47 full 3108 passed/4 skipped inherited; no repeat required",
+  "result": "no_candidate_retained_finite_negative",
+  "review_artifact_sha256": "d95b8ee316c4f1883632a22e1947d26a8aa613f67df57913ba43be50ac5e2d1b",
   "round_id": "round_052",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
-    "status": "pending"
+    "acceptance": "ring/tree/auto event demands preserve bytes and energy; owner/capacity and invalid controls explicit",
+    "evidence": [
+      "artifacts/optimization/round_052/source_scan_independent.json",
+      "artifacts/optimization/round_052/collective_matrix_independent.json",
+      "artifacts/optimization/round_052/final_review.json"
+    ],
+    "status": "finite_negative_collective_billing_scan"
   },
-  "status": "prepare"
+  "status": "complete"
 }

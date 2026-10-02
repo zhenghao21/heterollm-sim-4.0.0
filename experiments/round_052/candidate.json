@@ -1,7 +1,16 @@
 {
-  "activation_checks": [],
+  "activation_checks": [
+    "ring/tree/auto actual collective tasks",
+    "bytes/energy conservation across route demands",
+    "owner/capacity metrics",
+    "invalid algorithm/duplicate/negative/tree-all_to_all fail closed"
+  ],
+  "candidate_source_commit": "6cdf5fc4c2db47f88a7554f663b10a8f4074781e",
   "changed_files": [],
-  "deferred_candidates": [],
+  "deferred_candidates": [
+    "Native bandwidth/accuracy",
+    "authoritative topology calibration"
+  ],
   "hypothesis": {
     "claim": "collective 的 analytical bytes/energy/phase 可能在实际 planner/event/resource 计费链路中丢失、重复或未受 owner/capacity 约束。",
     "direction": "计算成本模型",
@@ -9,11 +18,35 @@
     "id": "H52_COLLECTIVE_EVENT_BILLING_BOUNDARY",
     "trigger": "H44 只完成静态公式/边界矩阵，明确延期实际 planner/event E2E 与非法 dtype/zero-shape。"
   },
-  "independent_evidence": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_052/source_scan_independent.json",
+    "artifacts/optimization/round_052/source_scan_independent.sha256",
+    "artifacts/optimization/round_052/collective_matrix_independent.json",
+    "artifacts/optimization/round_052/collective_matrix_independent.json.sha256",
+    "artifacts/optimization/round_052/final_review.json",
+    "artifacts/optimization/round_052/final_review.json.sha256"
+  ],
   "parent_commit": "b00523f9efc3f71ffc187458275952df413c09b4",
+  "review": "独立 scan、4-HBM event matrix 与复核确认 collective bytes/energy/phase/owner/capacity 守恒及非法输入 fail-closed，未形成源码候选。",
+  "review_artifact_sha256": "d95b8ee316c4f1883632a22e1947d26a8aa613f67df57913ba43be50ac5e2d1b",
   "round_id": "round_052",
   "schema": "heterollm.optimization.candidate/v1",
-  "source_sha256": null,
-  "status": "prepare",
-  "tests": []
+  "source_commit": "6cdf5fc4c2db47f88a7554f663b10a8f4074781e",
+  "source_sha256": {
+    "note": "H52 未修改源码；scan/matrix/review 同一功能源码身份",
+    "source_commit": "6cdf5fc4c2db47f88a7554f663b10a8f4074781e"
+  },
+  "status": "complete_negative",
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe artifacts/optimization/round_052/collective_matrix.py",
+      "exit_code": 0,
+      "result": "HBM ring/tree/auto event matrix completed"
+    },
+    {
+      "command": "independent collective planner source scan",
+      "exit_code": 0,
+      "result": "lowering/resource/error paths verified"
+    }
+  ]
 }

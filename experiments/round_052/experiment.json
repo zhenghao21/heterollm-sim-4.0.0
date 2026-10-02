@@ -43,12 +43,17 @@
     "phase_max",
     "invalid_input_fail_closed"
   ],
-  "next_step": "先独立扫描 collective planner/event/resource 调用链，再运行一组实际 lowering/计费矩阵；若未发现缺陷，保留有限负结论。",
+  "next_step": "切换仿真器正确性与语义或其他最长未查方向；不重复 H52 event matrix、H44 static collective 或 H38 baseline。",
   "previous_direction": "预测精度与泛化（H51）",
   "primary_goal": "检查 collective 的解析 bytes/energy/phase 是否真正进入 planner/event/resource 计费链路，覆盖 ring/tree/auto、owner/capacity、非法 grid/dtype/shape；不重复 H44 静态公式矩阵。",
   "problem_domain_closure": {
-    "rule": "同一 collective billing 根因若影响 formula, lowering, event, resource, error 与 report 面，必须本轮收口；不适用入口显式记录。",
-    "status": "prepare"
+    "candidate": "none; no reproducible source defect",
+    "deferred": "Native bandwidth/accuracy and non-analytical topology calibration",
+    "errors": "bad algorithm, duplicate/negative participants/bytes, invalid all_to_all tree fail closed",
+    "lowering": "ring/tree/auto round/chunk route demands reach event tasks",
+    "planner": "collective kind/participants/bytes/algorithm validation explicit",
+    "resource": "bytes/energy conserved; owner/capacity metrics exposed",
+    "status": "closed_limited_negative"
   },
   "purpose": "collective_event_billing_boundary",
   "recent_directions": [
@@ -75,5 +80,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }
