@@ -30,8 +30,8 @@
   "publication": {
     "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H28 source and records"
+    "verified_remote_sha": "3100d55874a00a13f180b1703dcf1fa82fd06a81",
+    "verification": "git push origin main exit 0; local HEAD and git ls-remote origin refs/heads/main matched at 3100d55874a00a13f180b1703dcf1fa82fd06a81"
   },
   "process_learning": "评估结果必须同时暴露请求集合覆盖与逐行误差；完整集合与部分集合的状态不可共享 compared。",
   "source_identity": {
