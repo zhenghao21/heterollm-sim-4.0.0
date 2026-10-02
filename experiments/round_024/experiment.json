@@ -1,67 +1,96 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_024",
-  "status": "prepare",
-  "purpose": "storage_modeling_and_runtime_speed",
-  "primary_goal": "start the directed storage-family modeling work while producing an honest simulator runtime/memory baseline",
-  "direction": "�洢Ӳ����ģ����",
+  "status": "promoted",
+  "purpose": "storage_modeling",
+  "primary_goal": "在不拆分 DRAM/HBM 模型的前提下，把可解释的聚合并行度接入真实内存服务链路，并建立仿真器运行速度/内存的独立基线。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "baseline": {
     "parent_commit": "596653218420d828ac61d9b221417b12dd630f9d",
-    "role": "H23 negative discovery baseline plus simplified DRAM/NAND family workplan"
+    "role": "H23 negative discovery baseline plus simplified two-family storage workplan"
   },
-  "previous_direction": "��ȷ�������壨H23����ɨ�裩",
-  "direction_switch_reason": "�û�Ҫ���л���δ���ǵĴ洢Ӳ����ģ�������ٶȷ����Ƚ���DRAM/HBM����ģ�ͣ�NAND/SSD/HBF��������ģ�ͣ��Ҳ��ص���ȷ��ȱ��ɨ�衣",
+  "hypothesis_id": "H24_DRAM_FAMILY_PARALLEL_LANES",
+  "previous_direction": "开发工具链与可复现性（H23负向扫描）",
+  "direction": "存储硬件建模粒度",
+  "direction_switch_reason": "用户要求切换到存储硬件内部粒度，并同时补齐此前缺失的运行速度/内存观测；本轮先收口 DRAM/HBM 共享模型，运行时优化另登记 H25。",
   "recent_directions": [
-    "H21:��������ȷ��/����ͨ��",
-    "H22:����/API�߽�",
-    "H23:����ִ����·������"
+    "H21:开发工具链/正确性收口",
+    "H22:评估/API边界",
+    "H23:有限执行链路负向发现"
   ],
   "direction_last_checked": {
-    "��ȷ��������": "H23",
-    "�����ٶ����ڴ�": "δ���",
-    "����ɱ�ģ��": "δ���",
-    "�洢Ӳ����ģ����": "������δ��ʼ",
-    "Ԥ�⾫���뷺��": "δ��ɶ�������",
-    "����/API����ӻ�": "H22",
-    "��������ɸ�����": "H21-H23"
+    "仿真器正确性与语义": "H23",
+    "运行速度与内存": "H24（基线）",
+    "计算成本模型": "未完成系统性轮次",
+    "存储硬件建模粒度": "H24",
+    "预测精度与泛化": "未完成独立验收",
+    "评估/API与可视化口径": "H22",
+    "开发工具链与可复现性": "H21-H23"
   },
   "scope": {
-    "task_1": "DRAM family profile for DDR/LPDDR/HBM using shared cost/access model",
-    "task_2": "NAND family profile for SSD/NVMe/HBF after task_1 review",
-    "runtime_baseline": "measure simulator wall time and memory without source changes"
+    "task_1": "HBMProfile/HostMemoryProfile 共享 DRAM-family aggregate parallel_lanes；DDR/LPDDR/HBM 不增加独立 DRAMProfile",
+    "task_2": "NAND/SSD/HBF 共享家族模型延期到后续独立轮次",
+    "runtime_baseline": "独立测量 1x64x4、8x128x16、16x256x32 的仿真 wall time、报告开销和 tracemalloc 峰值"
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "task 1 and runtime baseline are separate candidates; do not implement NAND/FTL/GC in this round unless a verified bottleneck requires it"
+    "status": "closed",
+    "profile": "HBMProfile 与 HostMemoryProfile 默认 parallel_lanes=1，保持旧 memory_service 数值；显式 lane 只表示聚合服务窗口。",
+    "service": "memory_service 使用 request_window=max_outstanding_requests*parallel_lanes，保持 logical/physical bytes、transaction_bytes 与 bandwidth 计费不变。",
+    "config": "profile parser、legacy conflict 检查、preset template、_bind_memory_services 均透传 lane。",
+    "endpoint": "PhysicalService/resolve_service/endpoint_service 真实携带 lane、request_window、effective_outstanding。",
+    "controls": "HBM/HostMemory roundtrip、lane 1/2/4、非法值、serialized/overlapped、HBF cold_page_v1 控制已覆盖。",
+    "runtime": "仅完成基线与只读报告优化探针，未把 report_dict 候选混入 DRAM 根因。"
   },
   "data_roles": {
-    "development": "current source and fresh runtime/DRAM source scans",
+    "development": "新鲜 DRAM source trace、独立 runtime profile 与机制 probe",
     "comparison": "parent 596653218420d828ac61d9b221417b12dd630f9d",
-    "holdout": "DRAM profile controls and runtime repeated measurements",
-    "final_acceptance": "pending independent review"
+    "holdout": "lane=1/2/4、HBM/HostMemory、配置 roundtrip 与 HBF cold_page controls；仅作机制验证，不是盲测精度数据",
+    "final_acceptance": "工程/机制回归；无 Native 精度验收"
   },
   "metrics": [
     "dram_profile_granularity",
-    "dram_byte_and_queue_conservation",
+    "dram_byte_and_bandwidth_conservation",
+    "aggregate_request_window",
+    "endpoint_latency_bound",
     "simulator_wall_time",
     "simulator_peak_memory",
     "regression_status"
   ],
   "budget": {
-    "candidate_count": 2,
+    "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
     "new_microbenchmark_runs": 2,
     "retries": 0
   },
   "guardrails": [
-    "DRAM/HBM must reuse one family model",
-    "NAND/SSD/HBF not implemented until DRAM candidate review closes",
-    "do not claim cycle accuracy from aggregate bandwidth/queue parameters",
-    "runtime speed means simulator wall time, separate from modeled latency",
-    "no Native accuracy claim in this round"
+    "DRAM/HBM 必须复用一个 family model",
+    "NAND/SSD/HBF 不在本轮实现",
+    "不把 aggregate lane 称为 cycle-accurate bank/channel 调度",
+    "runtime wall time 与 modeled latency 分开",
+    "不做 Native accuracy claim"
   ],
-  "selected_candidate": null,
-  "next_step": "complete DRAM shared-model review and runtime baseline before source changes"
+  "selected_candidate": "H24_DRAM_FAMILY_PARALLEL_LANES",
+  "next_step": "H24 已发布；下一轮登记 H25 运行速度与内存候选，验证 aggregate report 是否可安全走 online_summary_dict；随后再进入 NAND 家族。",
+  "source_identity": {
+    "source_commit": "36d0ebf",
+    "source_hashes": {
+      "src/heterollm_sim/cost_models.py": "a980fcfa49724b3cb160d75302728eb0234c2f14cf6ab5d1e9e7fe3aea702377",
+      "src/heterollm_sim/data_motion.py": "6d4f9626c777bd2115ab3d49fb60a800ef3fabcbf79aa7cad55f16a3737d168e",
+      "src/heterollm_sim/config.py": "0b1986397aa347ca56580a1e91673ae572aa242f059f4c87da5032c2138c5b2e",
+      "src/heterollm_sim/component_presets.py": "c4ef9b30d0ab7b52c3177848cb9b06a5acaff5bc195e551785b5745c702b402a",
+      "tests/test_dram_family_parallel_lanes.py": "0d8e2c2aef2d075c38b95a92e8059140ed53ba915477f744cde96ea8e1f057e8"
+    },
+    "focused_tests": "222 passed in 18.37s; exit code 0",
+    "full_pytest": "3048 passed, 4 skipped in 843.29s (14:03); exit code 0"
+  },
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 2,
+    "mechanism_pair_processes": 2,
+    "focused_runs": 3,
+    "final_full_pytest_runs": 1
+  }
 }
