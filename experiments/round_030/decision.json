@@ -29,8 +29,8 @@
   "publication": {
     "source_commit": "28e360aa097e1c0ded8513198ad3e45693285132",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H30 source and records"
+    "verified_remote_sha": "4f799aacc80404568f1f31f7ec4a896a82217d29",
+    "verification": "git push origin main exit 0; source and H30 records publication commit 4f799aacc80404568f1f31f7ec4a896a82217d29 matched git ls-remote before final metadata update"
   },
   "process_learning": "存储 geometry 只有在地址 provenance 到达实际计费入口后才有意义；未知地址应保留 unknown， profile-specific 数值不能推广为家族默认。",
   "source_identity": {
