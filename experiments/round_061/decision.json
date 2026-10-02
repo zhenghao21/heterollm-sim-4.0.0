@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_061",
+  "candidate_id": "H61_RUNTIME_UNCOVERED_CHAIN",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记运行速度与内存方向，等待独立 source scan/profile。",
+  "evidence": [],
+  "source_commit": "cf6f99c2b148d01b043577565d179da943c5277e",
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

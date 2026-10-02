@@ -1,0 +1,20 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_061",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H61_RUNTIME_UNCOVERED_CHAIN",
+    "direction": "运行速度与内存",
+    "claim": "未覆盖实际执行链路可能重复物化 metadata/JSON 或派生报告，增加仿真器 wall time/peak memory 而不改变输出与资源语义。",
+    "trigger": "H46/H54 已排除 chunk/reuse 局部路径；其他 API/catalog/report 调用仍未独立 profile。",
+    "falsifier": "独立父/候选在等价输出、task/makespan/resource 保护下无稳定可重复 runtime 或内存开销，或优化需改变语义。"
+  },
+  "parent_commit": "cf6f99c2b148d01b043577565d179da943c5277e",
+  "candidate_source_commit": null,
+  "source_sha256": null,
+  "changed_files": [],
+  "independent_evidence": [],
+  "activation_checks": [],
+  "deferred_candidates": [],
+  "tests": []
+}
