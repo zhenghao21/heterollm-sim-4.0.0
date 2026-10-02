@@ -25,8 +25,8 @@
   "publication": {
     "source_commit": "f6457f07f8f44b1d8c70d4a12ee637a65d1cbdfd",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push"
+    "verified_remote_sha": "3aecada",
+    "verification": "git push origin main exit 0; source and H27 records published, local HEAD and git ls-remote matched after publication"
   },
   "process_learning": "ResourceDemand 明确 physical scope；保留 logical 字段供报告和守恒诊断。"
 }
