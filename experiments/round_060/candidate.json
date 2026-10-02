@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "runtime adapter/model catalog 的 unsupported、conditional assumption 或 coverage 状态可能在 prediction/score/report/API 中丢失，导致不可比结果被当作支持域内。",
+    "direction": "预测精度与泛化",
+    "falsifier": "support_level/coverage/unsupported/conditional/accuracy_validated 状态全链路保留并 fail-closed。",
+    "id": "H60_RUNTIME_SUPPORT_DOMAIN",
+    "trigger": "H51 仅覆盖 provenance/fingerprint；H43 仅覆盖 fallback/OOD gate。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "42e76d30403ecd1682510279148eb25bcb3ff020",
+  "round_id": "round_060",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

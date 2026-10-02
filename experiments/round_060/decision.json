@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H60_RUNTIME_SUPPORT_DOMAIN",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记 runtime support-domain 传播假设，等待独立 source scan 与矩阵。",
+  "round_id": "round_060",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "42e76d30403ecd1682510279148eb25bcb3ff020",
+  "status": "pending"
+}
