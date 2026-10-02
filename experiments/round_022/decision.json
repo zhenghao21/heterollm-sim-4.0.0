@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_022",
+  "candidate_id": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare registered after H21 promotion; independent boundary reproduction is active.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

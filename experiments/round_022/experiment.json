@@ -1,0 +1,50 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_022",
+  "status": "prepare",
+  "purpose": "simulator_evaluation_contract",
+  "primary_goal": "make engine-boundary availability explicit and keep serving, scoring and UI latency semantics consistent",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "1f1d012264654c809d7554c8723b7fd558ea48f5",
+    "role": "H21 collective payload conservation source baseline plus records-only publication commit"
+  },
+  "hypothesis_id": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
+  "scope": {
+    "operator": "serving/reporting/web result_semantics and simulation_score_payload engine versus arrival boundary",
+    "phase": "generic continuous online request metric reporting and scoring",
+    "trigger": "engine_request_begin_ns unavailable while canonical arrival timestamps are available"
+  },
+  "problem_domain_closure": {
+    "status": "verification_pending",
+    "rule": "trace latency producer, result semantics, top-level score payload, per-request scoring, UI display and fallback/error controls as one boundary contract"
+  },
+  "data_roles": {
+    "development": "artifacts/optimization/round_020/eval_candidate.json plus fresh source reproduction",
+    "comparison": "parent 1f1d012 source",
+    "holdout": "engine-boundary available path, arrival-only path, missing/failed request controls",
+    "final_acceptance": "pending independent review; no native accuracy claim unless source semantics and paired measurements support it"
+  },
+  "metrics": [
+    "boundary_availability",
+    "semantics_consistency",
+    "score_payload_consistency",
+    "ui_consistency",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "do not relabel arrival fallback as engine timing",
+    "preserve valid engine-boundary paths",
+    "do not alter canonical request timestamps without evidence",
+    "no native accuracy claim"
+  ],
+  "next_step": "complete independent source reproduction and register one minimal boundary contract repair if falsified",
+  "selected_candidate": "H22_ONLINE_ENGINE_METRIC_FALLBACK"
+}

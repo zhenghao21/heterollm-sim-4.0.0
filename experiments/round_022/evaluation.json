@@ -1,0 +1,22 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_022",
+  "candidate_id": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending",
+    "reason": "evaluation contract must be fixed before any score comparison"
+  },
+  "mechanism_status": "pending_verification",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_022/",
+  "result": "pending",
+  "limitations": [
+    "No Native accuracy or timing claim at prepare stage"
+  ]
+}

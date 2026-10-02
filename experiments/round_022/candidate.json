@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_022",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H22_ONLINE_ENGINE_METRIC_FALLBACK",
+    "claim": "When engine-boundary timestamps are unavailable, primary_boundary must explicitly select arrival or engine and all summaries, scores and UI values must use that selected boundary consistently.",
+    "trigger": "generic continuous request path with engine_request_begin_ns/engine_ttft_ns/engine_e2e_ns null while canonical arrival values exist",
+    "expected_baseline": "result semantics declares engine while top-level engine summary is null and per-request scoring falls back to canonical arrival values",
+    "falsifier": "engine fields are always available in the claimed path, or all downstream consumers already honor one explicit availability-aware boundary"
+  },
+  "parent_commit": "1f1d012264654c809d7554c8723b7fd558ea48f5",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_020/eval_candidate.json"
+  ],
+  "deferred_candidates": []
+}
