@@ -1,0 +1,8 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_032",
+  "status": "prepare",
+  "hypothesis": {"id": "H32_COMPUTE_COST_MODEL_SHAPE_CONSERVATION", "direction": "计算成本模型", "claim": "尚未覆盖的成本公式可能在 shape、并发或 owner 守恒上存在可证伪缺口。", "trigger": "待独立 cost source scan；不得继承 H27 正向结论扩大覆盖。", "falsifier": "公式、单位、shape scaling、并发上界和 owner 计费在支持域内已闭合。"},
+  "parent_commit": "ca99e417b8379aba449d2813fd153d54488c64f0",
+  "changed_files": [], "source_sha256": null, "activation_checks": [], "tests": [], "independent_evidence": [], "deferred_candidates": []
+}

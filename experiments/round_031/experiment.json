@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_031",
-  "status": "prepare",
+  "status": "completed",
   "purpose": "simulator_correctness_semantic_contract",
   "primary_goal": "在不重开 H30 NAND offset 计费、H29 runtime 或 H28 评估契约的前提下，检查实际执行链路中错误、缺失输入和 unknown/fallback 状态是否被静默当作成功。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -13,7 +13,11 @@
   "direction": "仿真器正确性与语义",
   "previous_direction": "存储硬件建模粒度（H30）",
   "direction_switch_reason": "H30 已收口已知 NAND page offset；按方向轮换回到长期未检查的执行错误/缺失/unknown 语义，不重开存储模型。",
-  "recent_directions": ["H29:运行速度与内存", "H30:存储硬件页偏移与地址映射", "H31:执行错误/unknown语义（活动）"],
+  "recent_directions": [
+    "H29:运行速度与内存",
+    "H30:存储硬件页偏移与地址映射",
+    "H31:执行错误/unknown语义（活动）"
+  ],
   "direction_last_checked": {
     "仿真器正确性与语义": "H31活动（H23后重新检查）",
     "运行速度与内存": "H29",
@@ -25,14 +29,71 @@
   },
   "scope": {
     "candidate": "实际执行/调度/资源报告链路的 unknown、缺失、失败和回退状态",
-    "include": ["invalid or incomplete input", "resource/accounting failure", "unknown fallback", "error propagation", "API/report status"],
-    "exclude": ["H30 NAND geometry", "H29 report serialization", "Native accuracy claims", "invented performance multipliers"]
+    "include": [
+      "invalid or incomplete input",
+      "resource/accounting failure",
+      "unknown fallback",
+      "error propagation",
+      "API/report status"
+    ],
+    "exclude": [
+      "H30 NAND geometry",
+      "H29 report serialization",
+      "Native accuracy claims",
+      "invented performance multipliers"
+    ]
   },
-  "problem_domain_closure": {"status": "prepare", "rule": "同一语义根因直接影响的输入校验、执行状态、资源账本、异常传播和结果 API 必须同轮收口；无候选保留负结论。"},
-  "data_roles": {"development": "fresh source scan and controlled invalid/unknown execution probes", "comparison": "parent 32235698761ecf1060d01531e5481fd82a4fbe93", "holdout": "independent error and fallback controls", "final_acceptance": "correctness/semantic mechanism and regression only; no Native accuracy"},
-  "metrics": ["error_propagation", "unknown_explicitness", "resource_accounting_status", "api_status", "regression_status"],
-  "budget": {"candidate_count": 1, "full_prediction_runs": 0, "native_collection_runs": 0, "new_microbenchmark_runs": 2, "retries": 0},
-  "guardrails": ["不得把单测通过称为精度改善", "不得重开 H30/H29/H28 已收口问题", "unknown/域外保持显式状态", "不为增加轮数虚构缺陷"],
+  "problem_domain_closure": {
+    "status": "closed_negative",
+    "scope": "web API input/errors, native comparison coverage, serving/reporting unknown/degraded/incomplete propagation, resource/storage fail-closed paths",
+    "result": "No new reproducible error-to-success collapse; retain negative conclusion and do not modify source."
+  },
+  "data_roles": {
+    "development": "fresh source scan and controlled invalid/unknown execution probes",
+    "comparison": "parent 32235698761ecf1060d01531e5481fd82a4fbe93",
+    "holdout": "independent error and fallback controls",
+    "final_acceptance": "correctness/semantic mechanism and regression only; no Native accuracy"
+  },
+  "metrics": [
+    "error_propagation",
+    "unknown_explicitness",
+    "resource_accounting_status",
+    "api_status",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 2,
+    "retries": 0
+  },
+  "guardrails": [
+    "不得把单测通过称为精度改善",
+    "不得重开 H30/H29/H28 已收口问题",
+    "unknown/域外保持显式状态",
+    "不为增加轮数虚构缺陷"
+  ],
   "selected_candidate": null,
-  "next_step": "完成独立 correctness/semantic source scan，登记唯一可证伪候选。"
+  "next_step": "H31 negative scan published; next direction switches to compute cost model discovery.",
+  "source_identity": {
+    "source_commit": "ca99e417b8379aba449d2813fd153d54488c64f0",
+    "source_hashes": {
+      "src/heterollm_sim/web.py": "bf9365b96e884f6b966d5edb31feb92180299a2efd63522f9ce3d106fa574c67",
+      "src/heterollm_sim/reporting.py": "3c03f3d2c450c6ab87c06d60ee807291ebd4305c00e1c369a37cb7d81f898b8b",
+      "src/heterollm_sim/serving.py": "2bac8dce10c996233dfbb1fafc6d31a205f17f29ef9aabf6d540d5e387d680b6"
+    },
+    "scan": "typed error/unknown source scan and empty-native probe exit 0",
+    "full_regression": "inherited from H30 because source unchanged: 3070 passed, 4 skipped in 433.98s",
+    "artifact_hashes": [
+      {
+        "path": "artifacts/optimization/round_031/semantic_scan.json",
+        "sha256": "99b1db88b7f29b960097d15e24cba2763573c437ee49d01c5255087fb67286ad"
+      },
+      {
+        "path": "artifacts/optimization/round_031/semantic_scan.sha256",
+        "sha256": "15df2fb8d096dfec8363a54697c423751547816251863492a3a755b138af9562"
+      }
+    ]
+  }
 }

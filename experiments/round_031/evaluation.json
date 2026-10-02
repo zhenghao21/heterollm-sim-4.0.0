@@ -1,3 +1,38 @@
 {
-  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_031", "candidate_id": "H31_EXECUTION_UNKNOWN_ERROR_SEMANTICS", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_031/", "result": "pending", "limitations": ["H31 尚未完成 correctness/semantic source scan。"]
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_031",
+  "candidate_id": "H31_EXECUTION_UNKNOWN_ERROR_SEMANTICS",
+  "status": "completed",
+  "prediction": {
+    "status": "mechanism_scan_only",
+    "artifact": "artifacts/optimization/round_031/semantic_scan.json",
+    "source_commit": "ca99e417b8379aba449d2813fd153d54488c64f0",
+    "result": "typed errors, incomplete/unknown/degraded propagation and resource fail-closed guards found; no new collapse"
+  },
+  "score": {
+    "status": "not_scored_no_candidate",
+    "result": "Empty native probe returned insufficient_native_reference with complete=false and unmatched counts; no semantic false success reproduced.",
+    "native_accuracy": "not_applicable"
+  },
+  "mechanism_status": "rejected_no_candidate",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "not_applicable",
+  "regression_status": "inherited_source_unchanged",
+  "comparison_artifact": "artifacts/optimization/round_031/semantic_scan.json",
+  "result": "H31 closes the current correctness/semantic scan as a finite negative conclusion; no source change justified.",
+  "limitations": [
+    "No Native target loaded.",
+    "No source modified; H30 final regression is inherited because source identity is unchanged.",
+    "Long-tail unknown/degraded branches remain candidates only when a narrower executable reproducer appears."
+  ],
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_031/semantic_scan.json",
+      "sha256": "99b1db88b7f29b960097d15e24cba2763573c437ee49d01c5255087fb67286ad"
+    },
+    {
+      "path": "artifacts/optimization/round_031/semantic_scan.sha256",
+      "sha256": "15df2fb8d096dfec8363a54697c423751547816251863492a3a755b138af9562"
+    }
+  ]
 }

@@ -1,0 +1,23 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_032",
+  "status": "prepare",
+  "purpose": "compute_cost_model_shape_conservation",
+  "primary_goal": "在不重开 H27 serialized/overlapped backing demand、H30 NAND 或 H31 语义负向结论的前提下，检查其他 GEMM/归约/链路/并发成本公式中的 shape、单位和 resource owner 守恒。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {"parent_commit": "ca99e417b8379aba449d2813fd153d54488c64f0", "role": "H31 negative semantic scan plus H27 promoted cost-demand conservation"},
+  "hypothesis_id": "H32_COMPUTE_COST_MODEL_SHAPE_CONSERVATION",
+  "direction": "计算成本模型",
+  "previous_direction": "仿真器正确性与语义（H31）",
+  "direction_switch_reason": "H31 负向语义扫描已收口；按轮换转回最长未复查的成本模型方向，但明确排除 H27 已修复 backing demand。",
+  "recent_directions": ["H30:存储硬件页偏移与地址映射", "H31:执行错误/unknown语义负向", "H32:成本 shape/owner 守恒（活动）"],
+  "direction_last_checked": {"仿真器正确性与语义": "H31", "运行速度与内存": "H29", "计算成本模型": "H32活动（H27基础）", "存储硬件建模粒度": "H30", "预测精度与泛化": "H28", "评估/API与可视化口径": "H28", "开发工具链与可复现性": "H21-H31"},
+  "scope": {"candidate": "GEMM/归约/链路/并发成本公式和资源 owner 守恒", "include": ["shape scaling", "unit/byte accounting", "parallel/concurrency bounds", "owner and queue accounting", "analytical controls"], "exclude": ["H27 backing physical demand", "H30 NAND geometry", "H31 error semantics", "Native accuracy claims", "unexplained end-to-end multiplier fitting"]},
+  "problem_domain_closure": {"status": "prepare", "rule": "同一成本公式根因直接影响的 shape、单位、并发、owner、计费和报告元数据必须同轮收口；无候选保留负结论。"},
+  "data_roles": {"development": "fresh cost source scan and controlled analytical probes", "comparison": "parent ca99e417b8379aba449d2813fd153d54488c64f0", "holdout": "independent shape/parallelism controls", "final_acceptance": "mechanism/cost conservation only; no Native accuracy"},
+  "metrics": ["shape_scaling", "unit_consistency", "owner_conservation", "parallel_cost_bound", "regression_status"],
+  "budget": {"candidate_count": 1, "full_prediction_runs": 0, "native_collection_runs": 0, "new_microbenchmark_runs": 2, "retries": 0},
+  "guardrails": ["不得重复 H27 backing demand", "不得以端到端时延反推倍率", "不得把单测通过称为精度改善", "未知参数保持 unknown/parameterized"],
+  "selected_candidate": null,
+  "next_step": "完成独立 cost-model source scan，登记唯一可证伪候选。"
+}

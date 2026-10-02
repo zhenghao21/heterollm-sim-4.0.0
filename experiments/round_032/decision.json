@@ -1,0 +1,3 @@
+{
+  "schema": "heterollm.optimization.decision/v1", "round_id": "round_032", "candidate_id": "H32_COMPUTE_COST_MODEL_SHAPE_CONSERVATION", "status": "pending", "decision": "pending", "reason": "Prepare registered compute cost-model direction; independent source scan is required before edits.", "evidence": [], "deferred_scope": [], "next_hypothesis": null
+}

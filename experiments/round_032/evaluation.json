@@ -1,0 +1,3 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1", "round_id": "round_032", "candidate_id": "H32_COMPUTE_COST_MODEL_SHAPE_CONSERVATION", "status": "pending", "prediction": {"status": "pending"}, "score": {"status": "pending"}, "mechanism_status": "pending_scan", "accuracy_status": "not_applicable", "generalization_status": "pending", "regression_status": "pending", "comparison_artifact": "artifacts/optimization/round_032/", "result": "pending", "limitations": ["H32 尚未完成 cost-model source scan。"]
+}
