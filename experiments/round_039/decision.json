@@ -1,0 +1,1 @@
+{"schema":"heterollm.optimization.decision/v1","round_id":"round_039","candidate_id":"H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT","status":"pending","decision":"pending","reason":"Prepare已登记统一DRAM家族存储建模方向；需要独立来源/源码/访问探针后再决定最小实现。","evidence":[],"deferred_scope":[],"next_hypothesis":null}
