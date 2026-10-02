@@ -20,8 +20,8 @@
   "publication": {
     "source_commit": "c329c9a023971e981522e89474ddcad595b623be",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "records-only negative round commit pending push"
+    "verified_remote_sha": "6a3de312af2f504286f0cb5584d3bb668ee2b1c7",
+    "verification": "git push origin main exit 0; local HEAD and git ls-remote origin refs/heads/main matched after the negative-round records commit"
   },
   "process_learning": "运行时性能候选必须有现有生产调用方；独立探针的潜在提速不能替代调用链证据。"
 }
