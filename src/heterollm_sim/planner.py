@@ -6103,7 +6103,7 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
     backing = next((d for d in phase.demands if d.resource_id == local.resource_id), None)
     if backing is None or not (read_bytes or write_bytes):
         return phase
-    from .data_motion import resolve_service
+    from .data_motion import AccessKind, resolve_service
     profile = _resolve_component_profile(scenario, storage)
     service = resolve_service(_component(scenario, storage), profile)
     cache = dict(phase.metadata.get("cache", {}))
@@ -6119,14 +6119,52 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
     bandwidth_meta = phase.metadata.get("hbm_bandwidth", {})
     bandwidth = float(bandwidth_meta.get("shape_effective_hbm_bandwidth_gb_s", local.effective_bandwidth_gb_s))
     local_service = local.memory_service(reads - moved_reads, writes - moved_writes, bandwidth_gb_s=bandwidth)
-    remote_service = profile.memory_service(moved_reads, moved_writes)
+    # Directly exposed storage must use the component's physical billing
+    # contract.  Calling HostMemoryProfile.memory_service here bypasses the
+    # NAND/HBF page, plane, queue and read/program latency model even though
+    # endpoint_service correctly routes the same component through
+    # PhysicalService.price().
+    page_offset = phase.metadata.get("page_offset_bytes")
+    if not isinstance(page_offset, int) or isinstance(page_offset, bool) or page_offset < 0:
+        page_offset = None
+    read_bill = (
+        dict(service.price(AccessKind.READ, moved_reads, page_offset_bytes=page_offset))
+        if moved_reads else None
+    )
+    write_bill = (
+        dict(service.price(AccessKind.WRITE, moved_writes, page_offset_bytes=page_offset))
+        if moved_writes else None
+    )
+    remote_service = dict(read_bill or write_bill or {})
+    if read_bill is not None and write_bill is not None:
+        for key in ("service_ns", "physical_bytes", "energy_pj", "host_transfer_bytes",
+                    "physical_read_bytes", "physical_write_bytes", "read_operations",
+                    "program_operations", "erase_operations", "command_count",
+                    "media_command_count"):
+            values = [bill.get(key) for bill in (read_bill, write_bill)
+                      if isinstance(bill.get(key), (int, float)) and not isinstance(bill.get(key), bool)]
+            if values:
+                remote_service[key] = sum(values)
+        remote_service["operation"] = "read_write"
+        remote_service["read_service_ns"] = read_bill.get("service_ns", 0.0)
+        remote_service["write_service_ns"] = write_bill.get("service_ns", 0.0)
+    remote_physical_bytes = sum(
+        int(bill.get("physical_bytes", amount))
+        for bill, amount in ((read_bill, moved_reads), (write_bill, moved_writes))
+        if bill is not None
+    )
+    remote_energy_pj = sum(
+        float(bill.get("energy_pj", 0.0))
+        for bill in (read_bill, write_bill)
+        if bill is not None
+    )
     remaining = reads + writes - moved_reads - moved_writes
     demands = [replace(d, service_ns=float(local_service["service_ns"]), bytes_moved=remaining,
                        energy_pj=remaining * local.energy_pj_per_byte)
                if d is backing else d for d in phase.demands]
     demands.append(ResourceDemand(service.resource_id, float(remote_service["service_ns"]),
-                                  bytes_moved=moved_reads + moved_writes,
-                                  energy_pj=(moved_reads + moved_writes) * profile.energy_pj_per_byte))
+                                  bytes_moved=remote_physical_bytes,
+                                  energy_pj=remote_energy_pj))
     # Reference edges expose this same controller. Independent links still carry bytes.
     for source, target, amount in ((storage, rank.component_id, moved_reads),
                                    (rank.component_id, storage, moved_writes)):
@@ -6144,7 +6182,8 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
         "direct_memory_access": {"component_id": storage, "physical_owner": service.physical_owner,
             "resource_id": service.resource_id, "read_bytes": moved_reads, "write_bytes": moved_writes,
             "access_kind": "READ_WRITE" if moved_reads and moved_writes else "READ" if moved_reads else "WRITE",
-            "memory_service": remote_service, "local_read_bytes": reads - moved_reads,
+            "memory_service": remote_service, "physical_bytes": remote_physical_bytes,
+            "energy_pj": remote_energy_pj, "local_read_bytes": reads - moved_reads,
             "local_write_bytes": writes - moved_writes}})
 
 

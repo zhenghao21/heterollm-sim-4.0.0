@@ -24,6 +24,30 @@ def _case(bandwidth=10.0, latency=100.0, direct=True):
                 "hbm1": {"device_id": "gpu0", "access": "direct"}}} if direct else {}))
 
 
+def _nand_case():
+    case = _case()
+    component = case.hardware.get_component("hbm1")
+    nand_media = {
+        "version": "nand_media_v1",
+        "host_transaction_bytes": 64,
+        "host_max_request_bytes": 4096,
+        "media_page_bytes": 8192,
+        "command_queue_depth": 4,
+        "media_parallelism": 1,
+        "page_read_latency_ns": 1000.0,
+        "page_program_latency_ns": 2000.0,
+        "physical_planes": 1,
+        "physical_dies": 2,
+        "physical_channels": 1,
+        "access_pattern": "contiguous_page_aligned",
+    }
+    component = replace(component, metadata={**component.metadata, "nand_media": nand_media})
+    return replace(case, hardware=replace(case.hardware, components=tuple(
+        component if item.component_id == "hbm1" else item
+        for item in case.hardware.components
+    )))
+
+
 def _gemm_tasks(case, request_id="r"):
     workload = GemmWorkload(m=1, k=1024, n=1024, activation_bits=16, weight_bits=16,
                             accumulator_bits=32)
@@ -84,3 +108,19 @@ def test_direct_kv_read_has_hbf_service_without_hbm_scratch():
     assert task_id == task.task_id
     assert any(d.resource_id == "hbf.memory" and d.bytes_moved == 4096 for d in task.demands)
     assert not any(d.resource_id == "gpu0.hbm" and d.bytes_moved == 4096 for d in task.demands)
+
+
+def test_direct_nand_read_uses_page_geometry_and_media_latency():
+    tasks, workload = _gemm_tasks(_nand_case())
+    matrix = next(t for t in tasks if t.metadata.get("phase") == "gpu_gemm")
+    audit = matrix.metadata["phase_metadata"]["direct_memory_access"]
+    bill = audit["memory_service"]
+    assert bill["operation"] == "read"
+    assert bill["media_page_bytes"] == 8192
+    assert bill["pages_touched"] == workload.weight_bytes // 8192
+    assert bill["page_read_latency_ns"] == 1000.0
+    assert bill["media_waves"] == workload.weight_bytes // 8192
+    direct = next(d for d in matrix.demands if d.resource_id == audit["resource_id"])
+    assert direct.service_ns == bill["service_ns"]
+    assert direct.bytes_moved == bill["physical_bytes"]
+    assert direct.service_ns > 600000.0
