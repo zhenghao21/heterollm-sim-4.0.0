@@ -7,7 +7,7 @@
 | 方向 | 关注内容 | 最近完成轮次 | 当前状态 | 下一步要求 |
 |---|---|---:|---|---|
 | 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H37 | H37 收口动态容量批量原子性、物理 owner/alias 报告同步及 streaming 后置容量传递；声明容量不可漂移 | 下一轮轮换到运行速度/内存或计算成本模型；不重复本轮容量契约 |
-| 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H36（活动） | H29 收口 CLI 文本路径重复 `report_dict` 构建；H36 重新检查 run_scenario/批处理执行和内存路径 | 先取得独立 wall-time/峰值内存候选或负结论，不重复 CLI 修复 |
+| 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H41 | H29 收口 CLI 文本路径重复 `report_dict` 构建；H36 检查 provider reuse 但无安全生产调用方；H41 分离 compile/execute 后确认 retention 成本是语义开销，未发现安全删除/缓存候选 | 下一轮切换评估/API；若重开本方向，先做有界 metadata/coverage 不变量控制，不重复 H41 混合 profile |
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H38 | H38 新鲜 memory/GEMM/reduction 单位与 shape 控制、owner 重复拒绝和 data-motion 约束通过；MMA/collective/full kernel 仍未覆盖 | 下一轮转存储硬件建模粒度；不把有限负向扫描扩展为全域正确 |
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H40 | H40 已把共享 NAND ERASE operation 接入 PhysicalService、endpoint、DataAccess 和 legacy HBF alias；page/RMW/program/plane/queue旧链路保持；未公开 die/channel/FTL/GC 继续unknown | 下一轮轮换到运行速度/内存或评估/API；没有新来源与真实瓶颈不继续制造NAND字段轮次 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H34（活动） | H28 收口请求集合覆盖契约；H34 重新检查输入身份、shape/hardware coverage 和 fallback 泛化边界，无 Native 时只做机制验证 | 先做独立输入/泛化 source scan；不重复 H28 请求覆盖修复 |
@@ -46,4 +46,5 @@
 - H38：切换计算成本模型，独立扫描以 1/1024/10000000B memory service、M=2/K=3/N=4 GEMM、input=100/output=10 reduction 和 physical-owner 重复 demand 为控制；未发现新可复现缺陷，131 个成本/并行/data-motion 回归通过，无源码修改、Native 或性能改善结论；MMA/collective/full kernel 延期。
 - H39：按官方可访问资料确认DDR5 bank/subchannel、HBM channel/pseudo-channel概念边界，不导入未经核验数值；修复共享DRAM family的显式地址访问入口，支持burst/channel/bank/row、row hit/miss/conflict、读写切换、refresh、queue与immutable preview/commit状态，并让endpoint/planner/event kernel真实执行。定向96 passed，全量3098 passed/4 skipped；无Native精度结论，cycle accuracy与未声明时序延期。下一步切换NAND家族。
 - H40：独立扫描确认SSD/NVMe/HBF共享NAND路径已有page offset、RMW/program、physical_planes和queue，但缺少erase operation与background marker；新增共享ERASE contract、block rounding、erase count/latency/physical bytes、legacy alias透传、zero-write入口和resolved resource统一，并对无NAND contract的generic endpoint fail-closed。定向85 passed，全量3103 passed/4 skipped；无Native精度结论，FTL/GC和die/channel调度延期。下一步轮换运行速度/内存或评估/API。
+- H41：独立运行速度/内存扫描先发现 `streaming_des.observe`、metadata clone/capture 等热点，但独立复核确认 event kernel、双 observer、EXACT history materialization 和 metadata namespace 隔离都承载不同契约；分段 profile 将 compile/lowering 与 execute 分离，compile 中位约 4.21ms，medium 7936-task execute 为 exact 0.54882s、streaming 0.46550s、aggregate 0.43693s，三者 task_count/makespan 相同而 retained tasks 为 7936/2000/0，tracemalloc 峰值按 retention 语义为 60,800,556/22,549,905/12,614,158B。未发现可安全删除或生产缓存候选，未改源码、未加载 Native；保留 bounded metadata/coverage reuse 为后续可证伪候选，下一轮切换评估/API。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。

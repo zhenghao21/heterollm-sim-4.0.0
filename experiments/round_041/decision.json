@@ -1,1 +1,24 @@
-{"schema":"heterollm.optimization.decision/v1","round_id":"round_041","candidate_id":"H41_RUNTIME_EXECUTION_WALLTIME_MEMORY_HOTSPOT","status":"pending","decision":"pending","reason":"Prepare已登记运行速度/内存方向；需要独立隔离进程基准和源码扫描后再决定是否修改。","evidence":[],"deferred_scope":[],"next_hypothesis":null}
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_041",
+  "candidate_id": "H41_RUNTIME_EXECUTION_WALLTIME_MEMORY_HOTSPOT",
+  "status": "complete",
+  "decision": "reject_no_candidate",
+  "reason": "独立剖析定位了 Python 热点；分段控制确认 compile/lowering 中位约 0.00421s，而 medium execute exact/streaming/aggregate 中位约 0.54882/0.46550/0.43693s，三者 task_count=7936、makespan=5397034.186204737ns，retained tasks=7936/2000/0。event kernel、双 observer、history materialization 与 metadata namespace 隔离均有独立语义；没有安全删除、缓存或可宣称性能改善的源码候选。",
+  "evidence": [
+    "artifacts/optimization/round_041/fresh_runtime_scan.json",
+    "artifacts/optimization/round_041/profile_scan_independent.json",
+    "artifacts/optimization/round_041/profile_review.json",
+    "artifacts/optimization/round_041/profile_split_independent.json",
+    "artifacts/optimization/round_041/profile_split_independent.json.sha256"
+  ],
+  "deferred_scope": [
+    "H41_PER_TASK_METADATA_COVERAGE_RECOMPUTATION remains unproven; only reopen with bounded invariant and full output-contract controls"
+  ],
+  "next_hypothesis": {
+    "direction": "评估/API与可视化口径",
+    "claim": "检查 partial/unknown/failure/retention 状态是否在 API、报告和可视化边界一致，并保持失败格与部分参考不可被渲染为通过。",
+    "rationale": "H41 运行速度/内存方向已完成分段负向扫描，下一轮轮换到长期未深入的评估/API方向。"
+  },
+  "source_commit": "ca3591132c46d54703981c084dd98cf165855b32"
+}

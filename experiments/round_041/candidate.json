@@ -1,1 +1,72 @@
-{"schema":"heterollm.optimization.candidate/v1","round_id":"round_041","status":"prepare","hypothesis":{"id":"H41_RUNTIME_EXECUTION_WALLTIME_MEMORY_HOTSPOT","direction":"运行速度与内存","claim":"实际仿真执行链可能在task graph lowering、compiled/incremental执行或retention内存生命周期存在可测热点。","trigger":"待独立隔离进程基准；不继承H36 provider cache结论。","falsifier":"不同task规模、retention和executor路径无稳定仿真器wall-time/峰值内存热点，或改动无法保持输出等价。"},"parent_commit":"4681832bbd63e0c4b68fd999ffe4baeb54f81d0f","changed_files":[],"source_sha256":null,"activation_checks":[],"tests":[],"independent_evidence":[],"deferred_candidates":[]}
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_041",
+  "status": "complete_negative",
+  "hypothesis": {
+    "id": "H41_RUNTIME_EXECUTION_WALLTIME_MEMORY_HOTSPOT",
+    "direction": "运行速度与内存",
+    "claim": "实际仿真执行链可能在task graph lowering、compiled/incremental执行或retention内存生命周期存在可测热点。",
+    "trigger": "待独立隔离进程基准；不继承H36 provider cache结论。",
+    "falsifier": "不同task规模、retention和executor路径无稳定仿真器wall-time/峰值内存热点，或改动无法保持输出等价。"
+  },
+  "parent_commit": "4681832bbd63e0c4b68fd999ffe4baeb54f81d0f",
+  "changed_files": [],
+  "source_sha256": {
+    "source_commit": "ca3591132c46d54703981c084dd98cf165855b32",
+    "note": "H41 未修改源码；分段 profile 与复核均使用同一 HEAD"
+  },
+  "activation_checks": [
+    "独立进程 small/medium continuous run_scenario wall-time/peak tracemalloc",
+    "独立进程 static exact/streaming/aggregate retention wall-time/peak tracemalloc/retained tasks",
+    "独立分段 compile_streaming_scenario 与 execute_incremental_schedule，4 条命令均 exit=0",
+    "task_count/makespan 控制与 H29 report_dict、H36 provider cache 排除"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_041/bench_runtime.py",
+      "exit_code": 0,
+      "result": "fresh_runtime_scan.json"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_041/profile_hotspot.py",
+      "exit_code": 0,
+      "result": "hotspot_profile.json"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_041/profile_split.py --phase compile",
+      "exit_code": 0,
+      "result": "compile probe in profile_split_independent.json"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_041/profile_split.py --phase execute --retention exact",
+      "exit_code": 0,
+      "result": "exact probe in profile_split_independent.json"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_041/profile_split.py --phase execute --retention streaming",
+      "exit_code": 0,
+      "result": "streaming probe in profile_split_independent.json"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_041/profile_split.py --phase execute --retention aggregate",
+      "exit_code": 0,
+      "result": "aggregate probe in profile_split_independent.json"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_041/fresh_runtime_scan.json",
+    "artifacts/optimization/round_041/fresh_runtime_scan.json.sha256",
+    "artifacts/optimization/round_041/profile_scan_independent.json",
+    "artifacts/optimization/round_041/profile_scan_independent.sha256",
+    "artifacts/optimization/round_041/profile_review.json",
+    "artifacts/optimization/round_041/profile_review.json.sha256",
+    "artifacts/optimization/round_041/profile_split_independent.json",
+    "artifacts/optimization/round_041/profile_split_independent.json.sha256"
+  ],
+  "deferred_candidates": [
+    "H41_PER_TASK_METADATA_COVERAGE_RECOMPUTATION：先做有界不变量/计数控制，再验证 namespace、mutable alias、coverage 和完整报告等价性",
+    "Native/system accuracy"
+  ],
+  "source_commit": "ca3591132c46d54703981c084dd98cf165855b32",
+  "review": "分段 profile 将 compile/lowering 与 execute 分离；event kernel、双 observer、EXACT history 和 metadata clone/capture 均有独立语义。execute 的 exact/streaming/aggregate 只在保留数量与内存上按契约不同，未证明可删除工作或安全生产缓存。"
+}
