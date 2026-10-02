@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H58_LINK_PIPELINE_COST_FINITE",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记 link/pipeline finite cost 假设，等待独立 source scan 与矩阵。",
+  "round_id": "round_058",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "ff6a7c2bb443d1c823a604d2a27ec7e1321f5dfe",
+  "status": "pending"
+}

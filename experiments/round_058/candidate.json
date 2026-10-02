@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "链路/流水线服务的 latency/bandwidth/energy/queue 参数可能允许非 finite/负值或在 owner/capacity 透传时失守，导致 event cost 非法。",
+    "direction": "计算成本模型",
+    "falsifier": "service/demand/event cost 均 finite non-negative，owner/capacity 守恒，非法输入 fail-closed。",
+    "id": "H58_LINK_PIPELINE_COST_FINITE",
+    "trigger": "H52 只覆盖 collective 实际计费，未覆盖 LinkService/transfer pipeline 的 finite/error 边界。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "ff6a7c2bb443d1c823a604d2a27ec7e1321f5dfe",
+  "round_id": "round_058",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

@@ -1,0 +1,21 @@
+{
+  "accuracy_status": "not_applicable",
+  "candidate_id": "H58_LINK_PIPELINE_COST_FINITE",
+  "comparison_artifact": "artifacts/optimization/round_058/",
+  "generalization_status": "pending",
+  "limitations": [
+    "H58 尚未完成 LinkService/transfer pipeline source scan 与矩阵。"
+  ],
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "round_id": "round_058",
+  "schema": "heterollm.optimization.evaluation/v1",
+  "score": {
+    "status": "pending"
+  },
+  "status": "prepare"
+}
