@@ -1,21 +1,31 @@
 {
   "accuracy_status": "not_applicable",
   "candidate_id": "H59_CONTROL_PLANE_MAPPING_FAIL_CLOSED",
-  "comparison_artifact": "artifacts/optimization/round_059/",
-  "generalization_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_059/control_plane_matrix_independent.json",
+  "generalization_status": "limited_to control-plane web/validation entry points",
   "limitations": [
-    "H59 尚未完成 control-plane mapping/resolver 独立扫描。"
+    "custom resolver exception not separately fabricated",
+    "no Native"
   ],
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "negative_scan_passed_limited",
   "prediction": {
-    "status": "pending"
+    "native_loaded": false,
+    "source_commit": "f560fccd57f3c61edd3346132dd33a2dbec36a8c",
+    "status": "control_plane_error_controls_complete"
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "focused 7 passed; H57 full 3109/4 inherited",
+  "result": "no_candidate_retained_finite_negative",
+  "review_artifact_sha256": "d84148685995bdfb94438a3105b9fc09770fa9018c51ea2712540e005102526b",
   "round_id": "round_059",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
-    "status": "pending"
+    "acceptance": "stale/unsupported/resolver errors remain diagnosed and typed 422; no state mutation",
+    "evidence": [
+      "artifacts/optimization/round_059/source_scan_independent.json",
+      "artifacts/optimization/round_059/control_plane_matrix_independent.json",
+      "artifacts/optimization/round_059/final_review.json"
+    ],
+    "status": "finite_negative_correctness_scan"
   },
-  "status": "prepare"
+  "status": "complete"
 }

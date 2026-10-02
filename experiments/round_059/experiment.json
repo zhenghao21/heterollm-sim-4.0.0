@@ -42,12 +42,17 @@
     "typed_http_status",
     "state_unchanged"
   ],
-  "next_step": "先独立扫描 control-plane mapping/resolver error call chain，再运行 stale/unsupported/exception HTTP/state matrix。",
+  "next_step": "切换其他最长未查方向；不重复 H59 control matrix/H45 rollback/H53 run_jobs.",
   "previous_direction": "计算成本模型（H58）",
   "primary_goal": "检查控制面 mapping fingerprint 失配、unsupported placement、resolver exception 和 HTTP validate/run-estimate 入口是否一致 fail-closed；不重复 H45 event rollback/H53 run_jobs/H50 status。",
   "problem_domain_closure": {
-    "rule": "同一 mapping/resolver error 根因若影响 validate, estimate, run, HTTP and state mutation surfaces，必须本轮收口。",
-    "status": "prepare"
+    "api": "run/run-estimate typed invalid_scenario 422 fail-closed",
+    "candidate": "none; no reproducible source defect",
+    "deferred": "custom resolver exception and Native",
+    "mapping": "stale/missing/schema mismatch fingerprints exposed",
+    "state": "no execution/state mutation on invalid entry",
+    "status": "closed_limited_negative",
+    "validation": "unsupported placement/resolver/parser errors enter diagnostics"
   },
   "purpose": "control_plane_mapping_error_boundary",
   "recent_directions": [
@@ -74,5 +79,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }

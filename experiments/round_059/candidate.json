@@ -1,7 +1,17 @@
 {
-  "activation_checks": [],
+  "activation_checks": [
+    "stale/missing/schema mapping state",
+    "validate diagnostics",
+    "typed run/run-estimate invalid_scenario 422",
+    "unsupported placement/resolver fail-closed",
+    "state unchanged"
+  ],
+  "candidate_source_commit": "f560fccd57f3c61edd3346132dd33a2dbec36a8c",
   "changed_files": [],
-  "deferred_candidates": [],
+  "deferred_candidates": [
+    "custom resolver exception fixture",
+    "Native"
+  ],
   "hypothesis": {
     "claim": "控制面 mapping fingerprint 失配或 resolver 异常可能在 validate/run-estimate/run HTTP 入口被折叠为成功或留下部分状态。",
     "direction": "仿真器正确性与语义",
@@ -9,11 +19,30 @@
     "id": "H59_CONTROL_PLANE_MAPPING_FAIL_CLOSED",
     "trigger": "H45 覆盖 event rollback，尚未覆盖控制面 resolver/HTTP 入口的统一 fail-closed。"
   },
-  "independent_evidence": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_059/source_scan_independent.json",
+    "artifacts/optimization/round_059/source_scan_independent.sha256",
+    "artifacts/optimization/round_059/control_plane_matrix_independent.json",
+    "artifacts/optimization/round_059/control_plane_matrix_independent.json.sha256",
+    "artifacts/optimization/round_059/final_review.json",
+    "artifacts/optimization/round_059/final_review.json.sha256"
+  ],
   "parent_commit": "55e41bc1ce9b6bb861a6d518bd8ad07c74eb30e4",
+  "review": "独立 scan、focused 7-pass control matrix 与 review 确认 mapping/resolver errors 在 validate/run/run-estimate typed fail-closed，未形成源码候选。",
+  "review_artifact_sha256": "d84148685995bdfb94438a3105b9fc09770fa9018c51ea2712540e005102526b",
   "round_id": "round_059",
   "schema": "heterollm.optimization.candidate/v1",
-  "source_sha256": null,
-  "status": "prepare",
-  "tests": []
+  "source_commit": "f560fccd57f3c61edd3346132dd33a2dbec36a8c",
+  "source_sha256": {
+    "note": "H59 未修改源码；scan/matrix/review 同一源码身份",
+    "source_commit": "f560fccd57f3c61edd3346132dd33a2dbec36a8c"
+  },
+  "status": "complete_negative",
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_web.py -k \"fingerprint or run_estimate or validate or placement\" -q",
+      "exit_code": 0,
+      "result": "7 passed, 34 deselected"
+    }
+  ]
 }
