@@ -1,0 +1,18 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_023",
+  "status": "discovery_pending",
+  "hypothesis": {
+    "id": "H23_SOURCE_GROUNDED_CANDIDATE",
+    "claim": "pending independent reproduction",
+    "trigger": "pending",
+    "falsifier": "pending"
+  },
+  "parent_commit": "9d8623184345ad2dc12ff89152e13d8e347c97b5",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}

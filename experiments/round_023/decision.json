@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_023",
+  "candidate_id": "H23_SOURCE_GROUNDED_CANDIDATE",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Discovery is active; no defect is accepted without independent reproduction.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_023",
+  "candidate_id": "H23_SOURCE_GROUNDED_CANDIDATE",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_discovery",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_023/",
+  "result": "pending",
+  "limitations": [
+    "No candidate selected at prepare stage"
+  ]
+}
