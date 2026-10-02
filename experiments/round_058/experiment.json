@@ -43,12 +43,16 @@
     "pipeline_bounds",
     "invalid_fail_closed"
   ],
-  "next_step": "先独立扫描 LinkService/transfer pipeline source，再运行 finite/owner/capacity 矩阵。",
+  "next_step": "切换其他最长未查方向；不重复 H58 link matrix/H52 collective/H57 report fix.",
   "previous_direction": "评估、API与可视化口径（H57）",
   "primary_goal": "检查 LinkService/transfer pipeline 的 service_ns、bytes_moved、energy_pj、owner/capacity 和非法 finite 输入是否进入实际 event/resource 计费链路；不重复 H52 collective 或 H57 report aggregation。",
   "problem_domain_closure": {
-    "rule": "同一 link/pipeline cost 根因若影响 service, demand, event, owner, capacity and error surfaces，必须本轮收口。",
-    "status": "prepare"
+    "candidate": "none; no reproducible source defect",
+    "deferred": "Native bandwidth/accuracy",
+    "errors": "bandwidth/latency/energy/queue/bytes/buffer/credits invalid values fail-closed",
+    "event": "owner inflight capacity and pipeline bounds reach event controls",
+    "service": "LinkService/RouteHop finite service/demand validation explicit",
+    "status": "closed_limited_negative"
   },
   "purpose": "link_pipeline_cost_finite_boundary",
   "recent_directions": [
@@ -75,5 +79,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }

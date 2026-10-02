@@ -1,7 +1,16 @@
 {
-  "activation_checks": [],
+  "activation_checks": [
+    "finite LinkService/RouteHop demands",
+    "owner inflight capacity",
+    "pipeline bounds",
+    "bytes/energy conservation",
+    "invalid finite/queue/buffer/credits fail-closed"
+  ],
+  "candidate_source_commit": "d859ae52a1b0f9d3e37346ca1eb3c4b6144afbe5",
   "changed_files": [],
-  "deferred_candidates": [],
+  "deferred_candidates": [
+    "Native bandwidth/accuracy"
+  ],
   "hypothesis": {
     "claim": "链路/流水线服务的 latency/bandwidth/energy/queue 参数可能允许非 finite/负值或在 owner/capacity 透传时失守，导致 event cost 非法。",
     "direction": "计算成本模型",
@@ -9,11 +18,35 @@
     "id": "H58_LINK_PIPELINE_COST_FINITE",
     "trigger": "H52 只覆盖 collective 实际计费，未覆盖 LinkService/transfer pipeline 的 finite/error 边界。"
   },
-  "independent_evidence": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_058/source_scan_independent.json",
+    "artifacts/optimization/round_058/source_scan_independent.sha256",
+    "artifacts/optimization/round_058/link_pipeline_matrix_independent.json",
+    "artifacts/optimization/round_058/link_pipeline_matrix_independent.json.sha256",
+    "artifacts/optimization/round_058/final_review.json",
+    "artifacts/optimization/round_058/final_review.json.sha256"
+  ],
   "parent_commit": "ff6a7c2bb443d1c823a604d2a27ec7e1321f5dfe",
+  "review": "独立 scan、8-task pipeline matrix 与 review 确认 finite service/demand、owner/capacity、bounds 和非法输入 fail-closed，未形成源码候选。",
+  "review_artifact_sha256": "4b1f421b93434f5fc851d7e286127f70fe71406410efe5ca0ba82351592ee863",
   "round_id": "round_058",
   "schema": "heterollm.optimization.candidate/v1",
-  "source_sha256": null,
-  "status": "prepare",
-  "tests": []
+  "source_commit": "d859ae52a1b0f9d3e37346ca1eb3c4b6144afbe5",
+  "source_sha256": {
+    "note": "H58 未修改源码；scan/matrix/review 同一源码身份",
+    "source_commit": "d859ae52a1b0f9d3e37346ca1eb3c4b6144afbe5"
+  },
+  "status": "complete_negative",
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m py_compile artifacts/optimization/round_058/link_pipeline_matrix.py",
+      "exit_code": 0,
+      "result": "compile succeeded"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe artifacts/optimization/round_058/link_pipeline_matrix.py",
+      "exit_code": 0,
+      "result": "link/pipeline matrix completed"
+    }
+  ]
 }

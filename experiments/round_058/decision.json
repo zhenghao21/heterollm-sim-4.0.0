@@ -1,12 +1,31 @@
 {
   "candidate_id": "H58_LINK_PIPELINE_COST_FINITE",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记 link/pipeline finite cost 假设，等待独立 source scan 与矩阵。",
+  "changed_files": [
+    "experiments/round_058/experiment.json",
+    "experiments/round_058/candidate.json",
+    "experiments/round_058/evaluation.json",
+    "experiments/round_058/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "reject_no_candidate",
+  "deferred_scope": [
+    "Native bandwidth/accuracy"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_058/source_scan_independent.json",
+    "artifacts/optimization/round_058/link_pipeline_matrix_independent.json",
+    "artifacts/optimization/round_058/final_review.json",
+    "artifacts/optimization/round_058/final_review.json.sha256"
+  ],
+  "next_hypothesis": {
+    "claim": "按轮换台账切换未覆盖的执行链路，避免重复 H58 link pipeline/H52 collective/H57 report fix。",
+    "direction": "其他最长未查方向",
+    "rationale": "H58 已收口链路/流水线成本边界，未形成源码候选。"
+  },
+  "reason": "独立 source scan、8-task link/pipeline matrix 与 review 确认 finite service_ns/bytes/energy、owner inflight capacity 和 lower/upper bounds 守恒，非法 bandwidth/latency/energy/queue/bytes/buffer/credits 均 fail-closed，未发现源码缺陷，不修改功能源码。",
+  "review_artifact_sha256": "4b1f421b93434f5fc851d7e286127f70fe71406410efe5ca0ba82351592ee863",
   "round_id": "round_058",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "ff6a7c2bb443d1c823a604d2a27ec7e1321f5dfe",
-  "status": "pending"
+  "source_commit": "d859ae52a1b0f9d3e37346ca1eb3c4b6144afbe5",
+  "status": "complete"
 }
