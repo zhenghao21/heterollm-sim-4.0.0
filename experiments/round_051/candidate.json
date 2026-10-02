@@ -30,6 +30,7 @@
   ],
   "parent_commit": "c99c61549c6caea71de79a3e7b72f340d1b25f02",
   "review": "source scan、matching/mismatched provenance matrix与只读复核确认指纹/支持域字段存在；报告 A + 场景 B 的直接函数配对属于调用方契约边界，当前公开 API 不暴露该错配入口，未修改源码。",
+  "review_artifact_sha256": "1ab11ce652765bbfe3345810caccdf11cc8cdb31ea96b327af985b7d8d8c31aa",
   "round_id": "round_051",
   "schema": "heterollm.optimization.candidate/v1",
   "source_commit": "1a88f256829a9be568f819d58c6f74b85d1a427f",

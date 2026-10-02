@@ -25,6 +25,7 @@
     "rationale": "H51 已收口 prediction provenance；成本模型方向自 H44 后未复查，继续轮换避免重复评估/API或存储扫描。"
   },
   "reason": "source scan 与 provenance matrix 确认 prediction/support fingerprints、runtime/config provenance 以及 unknown/incomplete/failure/degraded fail-closed；直接将 report A 与 scenario B 配对会被 compact score 函数接受，但当前 API 契约要求同请求生成并没有外部 identity 字段，暂不引入未定义的 guard。",
+  "review_artifact_sha256": "1ab11ce652765bbfe3345810caccdf11cc8cdb31ea96b327af985b7d8d8c31aa",
   "round_id": "round_051",
   "schema": "heterollm.optimization.decision/v1",
   "source_commit": "1a88f256829a9be568f819d58c6f74b85d1a427f",
