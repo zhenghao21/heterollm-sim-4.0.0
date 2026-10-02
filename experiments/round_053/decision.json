@@ -24,7 +24,7 @@
     "rationale": "H53 已收口正确性生命周期；运行速度方向自 H46 后未复查，按轮换切换。"
   },
   "reason": "独立 source scan、RunJobManager 生命周期矩阵和 review 确认取消/失败/完成/未知/重复/关闭路径状态与清理显式，focused 5 passed；未发现新的 registry/HTTP/cleanup 语义缺陷，不修改功能源码。",
-  "review_artifact_sha256": "4cc7c4ddbd75899776856d0b2135d1588289c65721394cb9a38d7a2a81d22f91",
+  "review_artifact_sha256": "8ceec136662c263c46f27d2e173150727f883290928f6714cf5748adcd9b5d97",
   "round_id": "round_053",
   "schema": "heterollm.optimization.decision/v1",
   "source_commit": "dcdfb574ca63f732b2d8f3248b09b77f19086b03",

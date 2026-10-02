@@ -16,7 +16,7 @@
   },
   "regression_status": "source unchanged; focused 5 passed; H47 full 3108 passed/4 skipped inherited",
   "result": "no_candidate_retained_finite_negative",
-  "review_artifact_sha256": "4cc7c4ddbd75899776856d0b2135d1588289c65721394cb9a38d7a2a81d22f91",
+  "review_artifact_sha256": "8ceec136662c263c46f27d2e173150727f883290928f6714cf5748adcd9b5d97",
   "round_id": "round_053",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
