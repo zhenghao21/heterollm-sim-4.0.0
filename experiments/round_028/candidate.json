@@ -1,19 +1,92 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_028",
-  "status": "prepare",
+  "status": "verified",
   "hypothesis": {
-    "id": "H28_PREDICTION_GENERALIZATION_OR_EVALUATION_CONTRACT",
+    "id": "H28_PARTIAL_NATIVE_REQUEST_MATCH_ACCEPTED",
     "direction": "预测精度与泛化",
-    "claim": "某一预测输入身份、shape/hardware 泛化边界或评估/API fallback 在实际调用链中不一致，导致未知域被静默当作已验证结果或不同入口口径不一致。",
-    "trigger": "待独立 source scan；不得继承历史评分。",
-    "falsifier": "当前输入身份、fallback、域外状态和评估/API契约已有完整一致的失败/未知处理。"
+    "claim": "只有请求集合完整时才允许比较器返回 compared/passed=true；集合不完整必须显式 partial_reference 并 fail closed。",
+    "trigger": "独立 source scan 和 synthetic probe 复现 simulated r1 对 native r1+r2 时 status=compared、passed=true。",
+    "falsifier": "完整集合和部分集合均能显式区分，且不再把部分匹配误报为通过。"
   },
-  "parent_commit": "2e4c8262cfe964a2dc88c6cbdf9433518322fb96",
-  "changed_files": [],
-  "source_sha256": null,
-  "activation_checks": [],
-  "tests": [],
-  "independent_evidence": [],
-  "deferred_candidates": []
+  "parent_commit": "c190f08ac6fd95932813e86a65650ca3c495fc84",
+  "changed_files": [
+    "src/heterollm_sim/web.py",
+    "tests/test_web.py"
+  ],
+  "source_sha256": "a1146ce938413229c36b0ccbeec3076086a79345",
+  "activation_checks": [
+    {
+      "check": "partial request set through /api/simulate-score",
+      "result": "status=partial_reference; passed=false; coverage 1 candidate / 2 native",
+      "exit_code": 0,
+      "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7"
+    },
+    {
+      "check": "complete request set through /api/simulate-score",
+      "result": "status=compared; passed=true under exact synthetic match",
+      "exit_code": 0,
+      "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest tests/test_web.py -q",
+      "result": "38 passed in 5.85s; exit code 0",
+      "exit_code": 0,
+      "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7"
+    },
+    {
+      "command": "pytest tests/test_evaluation_contract.py tests/test_replay_request_contract.py tests/test_predict_stable_native_dataset.py -q",
+      "result": "225 passed in 40.69s; exit code 0",
+      "exit_code": 0,
+      "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7"
+    },
+    {
+      "command": "pytest --ignore=tests/test_kernel_calibration.py -q",
+      "result": "2913 passed, 4 skipped in 393.93s; exit code 0",
+      "exit_code": 0,
+      "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7"
+    },
+    {
+      "command": "pytest tests/test_kernel_calibration.py::test_sqlite_connections_are_closed_after_loader -q",
+      "result": "1 passed in 0.48s; exit_code 0",
+      "exit_code": 0,
+      "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7"
+    },
+    {
+      "command": "pytest -q",
+      "result": "3066 passed, 4 skipped, 1 unrelated WinError 32 failure in 446.53s; exit code 1",
+      "exit_code": 1,
+      "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_028/prediction_scan.json",
+    "artifacts/optimization/round_028/prediction_compare_baseline.json",
+    "artifacts/optimization/round_028/prediction_compare_candidate.json",
+    "artifacts/optimization/round_028/reproduce_h28_compare.py"
+  ],
+  "deferred_candidates": [
+    "UI currently shows matched count but not unmatched counts; API contract exposes full request_coverage and no UI redesign was required for this root cause."
+  ],
+  "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7",
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_028/prediction_scan.json",
+      "sha256": "72330ec0779ce3a4638348fa9379ec66e8909cad77dd15295c29ade1249f66d3"
+    },
+    {
+      "path": "artifacts/optimization/round_028/prediction_compare_baseline.json",
+      "sha256": "341532163855e777312ab18316227ce9ea0576c3a23a6709ba9bf93daf5883fc"
+    },
+    {
+      "path": "artifacts/optimization/round_028/prediction_compare_candidate.json",
+      "sha256": "36442bb9fbf993ced208bf7d6742dc82655b23985eddc1fa6665f954cfab7f48"
+    },
+    {
+      "path": "artifacts/optimization/round_028/reproduce_h28_compare.py",
+      "sha256": "bd3371c2d552f8ef232383b10048ab722cbd7d8f78c71a719355cb52ec685496"
+    }
+  ]
 }

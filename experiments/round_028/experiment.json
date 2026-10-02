@@ -1,18 +1,18 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_028",
-  "status": "prepare",
+  "status": "promoted",
   "purpose": "prediction_generalization_or_evaluation_contract",
-  "primary_goal": "在不重开已收口成本与存储模型的前提下，检查预测输入/输出泛化或评估/API契约中的一个独立可复现问题；没有独立观测时只做机制验证。",
+  "primary_goal": "修复 Native 参考请求集合不完整时的评估/API误报，并明确请求覆盖边界；没有独立 Native 观测时不宣称预测精度改善。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "baseline": {
-    "parent_commit": "2e4c8262cfe964a2dc88c6cbdf9433518322fb96",
+    "parent_commit": "c190f08ac6fd95932813e86a65650ca3c495fc84",
     "role": "H27 promoted physical cost-demand conservation plus H24/H26 storage baselines"
   },
   "hypothesis_id": "H28_PREDICTION_GENERALIZATION_OR_EVALUATION_CONTRACT",
   "direction": "预测精度与泛化",
   "previous_direction": "计算成本模型（H27）",
-  "direction_switch_reason": "H27 已完成成本语义收口；按台账转向尚未完成独立验收的预测输入/输出泛化或评估契约。",
+  "direction_switch_reason": "H27 已完成成本语义收口；按台账转向预测/评估契约，先处理可独立复现的请求覆盖误报。",
   "recent_directions": [
     "H25:运行速度负向扫描",
     "H26:NAND/SSD/HBF共享模型",
@@ -23,44 +23,53 @@
     "运行速度与内存": "H25（负向）",
     "计算成本模型": "H27",
     "存储硬件建模粒度": "H26",
-    "预测精度与泛化": "H28活动",
-    "评估/API与可视化口径": "H22",
-    "开发工具链与可复现性": "H21-H27"
+    "预测精度与泛化": "H28",
+    "评估/API与可视化口径": "H28（请求覆盖契约）",
+    "开发工具链与可复现性": "H21-H28"
   },
   "scope": {
-    "candidate": "待独立扫描预测输入/shape泛化、结果语义、评估/API和未知域处理",
+    "candidate": "比较器和 /api/simulate-score 的请求集合覆盖、缺失参考和结果状态传播",
     "include": [
-      "prediction input identity",
-      "shape/model/hardware coverage",
-      "fallback/unknown semantics",
-      "score/report API contract"
+      "simulated/native request identity sets",
+      "matched and unmatched request counts",
+      "partial reference status and pass gate",
+      "insufficient reference compatibility",
+      "score API status propagation"
     ],
     "exclude": [
       "Native accuracy claims without independent Native observations",
       "H27 cost demand",
-      "H24/H26 storage contracts"
+      "H24/H26 storage contracts",
+      "UI redesign beyond existing status propagation"
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一预测/评估根因直接影响的输入、输出、泛化边界、失败/缺失和 API 必须同轮收口；无候选保留负结论。"
+    "status": "closed",
+    "root_cause": "比较器只遍历 simulated request IDs，Native 多出的请求被静默忽略，零误差子集可误报完整通过。",
+    "surfaces": {
+      "input_identity": "request ID set coverage computed",
+      "comparison": "partial sets return partial_reference and fail closed when threshold is present",
+      "missing_reference": "existing insufficient_native_reference retained when no comparable metric rows exist",
+      "api": "comparison status propagates to top-level simulation_score.status",
+      "regression": "focused and full-with-known-unrelated checks passed"
+    },
+    "known_limit": "完全无交集且没有可比较行仍返回 insufficient_native_reference；request_coverage 明确暴露双方不匹配，且不会产生 passed=true。"
   },
   "data_roles": {
-    "development": "fresh source scan and controlled mechanisms",
-    "comparison": "parent 2e4c8262cfe964a2dc88c6cbdf9433518322fb96",
-    "holdout": "independent model/hardware/shape or API controls",
-    "final_acceptance": "only mechanism/generalization evidence unless Native data is independently collected"
+    "development": "fresh source scan and synthetic controlled comparison probe",
+    "comparison": "parent c190f08 baseline in detached worktree",
+    "holdout": "complete-set and partial-set API controls; no Native target loaded",
+    "final_acceptance": "evaluation contract and engineering regression only; Native accuracy not applicable"
   },
   "metrics": [
-    "input_identity",
-    "shape_generalization",
-    "unknown_fallback",
-    "evaluation_contract",
+    "request_set_coverage",
+    "partial_reference_fail_closed",
+    "evaluation_status_propagation",
     "regression_status"
   ],
   "budget": {
     "candidate_count": 1,
-    "full_prediction_runs": 0,
+    "full_prediction_runs": 2,
     "native_collection_runs": 0,
     "new_microbenchmark_runs": 2,
     "retries": 0
@@ -69,8 +78,37 @@
     "不得把单测通过称为精度改善",
     "不得用历史 Native/评分结论作当前盲测",
     "不得重开 H27/H24/H26 已收口问题",
-    "未知/域外保持显式 unknown，不静默外推"
+    "未知/域外保持显式 unknown 或 partial_reference，不静默外推"
   ],
-  "selected_candidate": null,
-  "next_step": "完成预测/评估 source scan，登记唯一可证伪候选。"
+  "selected_candidate": "H28_PARTIAL_NATIVE_REQUEST_MATCH_ACCEPTED",
+  "next_step": "完成 H28 发布后，下一轮切换运行速度与内存方向，检查实际仿真执行链路的 wall time/峰值内存候选。",
+  "source_identity": {
+    "source_commit": "40fee8ba9d3bde083069c6c19c91a82003901ac7",
+    "source_hashes": {
+      "src/heterollm_sim/web.py": "a1146ce938413229c36b0ccbeec3076086a79345",
+      "tests/test_web.py": "0022cb456349cb2e75ce1ed28ce5234292a712b8"
+    },
+    "focused_tests": "tests/test_web.py: 38 passed in 5.85s; exit code 0; related evaluation/replay/native dataset: 225 passed in 40.69s; exit code 0",
+    "full_suite": "3066 passed, 4 skipped, 1 unrelated Windows SQLite WinError 32 failure in 446.53s; exit code 1",
+    "full_without_unrelated": "2913 passed, 4 skipped in 393.93s; exit code 0",
+    "isolated_unrelated": "1 passed in 0.48s; exit code 0",
+    "artifact_hashes": [
+      {
+        "path": "artifacts/optimization/round_028/prediction_scan.json",
+        "sha256": "72330ec0779ce3a4638348fa9379ec66e8909cad77dd15295c29ade1249f66d3"
+      },
+      {
+        "path": "artifacts/optimization/round_028/prediction_compare_baseline.json",
+        "sha256": "341532163855e777312ab18316227ce9ea0576c3a23a6709ba9bf93daf5883fc"
+      },
+      {
+        "path": "artifacts/optimization/round_028/prediction_compare_candidate.json",
+        "sha256": "36442bb9fbf993ced208bf7d6742dc82655b23985eddc1fa6665f954cfab7f48"
+      },
+      {
+        "path": "artifacts/optimization/round_028/reproduce_h28_compare.py",
+        "sha256": "bd3371c2d552f8ef232383b10048ab722cbd7d8f78c71a719355cb52ec685496"
+      }
+    ]
+  }
 }
