@@ -31,8 +31,8 @@
   "publication": {
     "source_commit": "ca99e417b8379aba449d2813fd153d54488c64f0",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H31 negative records"
+    "verified_remote_sha": "fa7cc7ae48156bfdbf66e899d4d30af4e13c613e",
+    "verification": "git push origin main exit 0; H31 negative records publication commit fa7cc7ae48156bfdbf66e899d4d30af4e13c613e matched git ls-remote before final metadata update"
   },
   "process_learning": "负向语义扫描必须保留候选触发域和有限边界，不把未复现的长尾 fallback 当作缺陷或全域关闭。",
   "source_identity": {
