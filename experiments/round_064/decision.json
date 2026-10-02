@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_064",
+  "candidate_id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记评估/API与可视化方向，等待独立 source scan 与矩阵。",
+  "evidence": [],
+  "source_commit": "23b56f67e4f44f1663a4044c9be14055372f32d5",
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

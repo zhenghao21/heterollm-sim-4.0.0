@@ -1,0 +1,77 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_064",
+  "hypothesis_id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
+  "direction": "评估/API与可视化口径",
+  "previous_direction": "开发工具链与可复现性",
+  "recent_directions": [
+    "H62:存储硬件建模粒度（源码修复）",
+    "H63:开发工具链与可复现性（源码工具修复）",
+    "H64:评估/API与可视化口径（活动）"
+  ],
+  "direction_switch_reason": "H63 source identity 已收口；按轮换规则切换到长期未复查的评估/API方向，避开 H42/H50/H57 已完成的 coverage/status/report bytes。",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H59",
+    "运行速度与内存": "H61",
+    "计算成本模型": "H58",
+    "存储硬件建模粒度": "H62",
+    "预测精度与泛化": "H60",
+    "评估/API与可视化口径": "H64活动",
+    "开发工具链与可复现性": "H63"
+  },
+  "primary_goal": "检查未覆盖 score/report/API/visualization 执行链路的结果边界、失败/缺失、序列化和可视化 fidelity 一致性；不重复 H42/H50/H57。",
+  "purpose": "evaluation_api_uncovered_boundary",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "budget": {
+    "candidate_count": 1,
+    "source_scan_runs": 1,
+    "matrix_runs": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "retries": 0
+  },
+  "metrics": [
+    "score_status",
+    "failure_missing_boundary",
+    "serialization_fidelity",
+    "api_contract",
+    "visualization_projection"
+  ],
+  "guardrails": [
+    "不重做 H42 analytical_coverage gate",
+    "不重做 H50 retention/status matrix",
+    "不重做 H57 report resource bytes",
+    "不把单测通过称为精度改善",
+    "不加载 Native accuracy"
+  ],
+  "data_roles": {
+    "development": "fresh score/report/API synthetic controls",
+    "comparison": "独立同输入 source/matrix controls",
+    "holdout": "未参与候选选择的 failure/serialization controls",
+    "final_acceptance": "评估边界一致性 only"
+  },
+  "baseline": {
+    "parent_commit": "23b56f67e4f44f1663a4044c9be14055372f32d5",
+    "role": "H63 accepted source identity baseline"
+  },
+  "scope": {
+    "include": [
+      "one uncovered score/report/API/visualization chain",
+      "failure/missing status",
+      "serialization and UI fidelity"
+    ],
+    "exclude": [
+      "H42 coverage",
+      "H50 retention/status",
+      "H57 resource bytes",
+      "Native accuracy"
+    ]
+  },
+  "problem_domain_closure": {
+    "rule": "同一评估边界根因若影响 score、report、API、序列化、可视化或回归触发面，本轮一起收口。",
+    "status": "prepare"
+  },
+  "selected_candidate": null,
+  "next_step": "等待独立 source scan 与评估矩阵；无缺陷保留有限负结论并切换方向。",
+  "status": "prepare"
+}

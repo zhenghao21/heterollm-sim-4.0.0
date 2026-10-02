@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_064",
+  "candidate_id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
+  "status": "prepare",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "not_applicable",
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "native_loaded": false,
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "limitations": [
+    "尚未完成独立评估/API source/matrix"
+  ]
+}

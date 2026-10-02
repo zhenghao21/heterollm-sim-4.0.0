@@ -1,0 +1,20 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_064",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
+    "direction": "评估/API与可视化口径",
+    "claim": "未覆盖评估链路可能把失败/缺失/部分结果序列化或投影为可比较/成功，或在 API/UI 之间丢失边界。",
+    "trigger": "H42/H50/H57 已分别收口 coverage/status/bytes，其他 score/report/API projection 尚未独立核对。",
+    "falsifier": "独立 source/matrix 显示状态、失败、缺失和序列化在 score/report/API/UI 全链路一致，未发现新缺陷。"
+  },
+  "parent_commit": "23b56f67e4f44f1663a4044c9be14055372f32d5",
+  "candidate_source_commit": null,
+  "source_sha256": null,
+  "changed_files": [],
+  "independent_evidence": [],
+  "activation_checks": [],
+  "deferred_candidates": [],
+  "tests": []
+}
