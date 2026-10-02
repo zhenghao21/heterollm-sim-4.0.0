@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_044",
-  "status": "prepare",
+  "status": "promote",
   "purpose": "cost_model_mma_collective_full_kernel",
   "primary_goal": "独立检查 MMA、collective、full-kernel 及 shape/单位/并发/owner 守恒是否进入实际计算成本、资源计费和评分链路，补齐 H38 未覆盖子域。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
@@ -44,8 +44,14 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一成本根因若影响 formula、shape dispatch、parallel/owner accounting、resource billing 或 failure handling，必须同轮收口；未覆盖面须明确延期。"
+    "status": "closed_limited_negative",
+    "dispatch": "dtype/shape/calibration/layout unsupported cells fail closed",
+    "lowering": "MMA/full-kernel ResourceDemand units and phase max checks passed",
+    "collective": "ring/tree/auto planning, participant and algorithm validation passed",
+    "owner": "independent owner alias probe and conflict checks passed",
+    "billing": "planner/event end-to-end queue/owner billing not exercised; explicitly deferred",
+    "candidate": "none; no reproducible cost-model defect",
+    "deferred": "zero/negative shape and dtype matrix, explicit bytes conservation equation, planner/event E2E"
   },
   "data_roles": {
     "development": "fresh analytical controls and source scan",
@@ -65,8 +71,8 @@
     "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
-    "source_scan_runs": 0,
-    "cost_matrix_runs": 0,
+    "source_scan_runs": 1,
+    "cost_matrix_runs": 1,
     "retries": 0
   },
   "guardrails": [
@@ -77,5 +83,5 @@
     "owner/parallel accounting must conserve"
   ],
   "selected_candidate": null,
-  "next_step": "先独立扫描 cost_models、kernel_model、communication、parallel、planner/event billing 的 MMA/collective/full-kernel 调用链，登记唯一可证伪候选。"
+  "next_step": "轮换到仿真器正确性与语义；检查调度/资源失败、未知状态和错误处理的实际执行链路，不重复 H44 成本扫描。"
 }
