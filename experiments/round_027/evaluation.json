@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_027",
+  "candidate_id": "H27_COMPUTE_COST_MODEL_MEMORY_QUEUE",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_027/",
+  "result": "pending",
+  "limitations": [
+    "H27 尚未完成成本模型 source scan 或候选实现。"
+  ]
+}

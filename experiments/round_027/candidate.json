@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_027",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H27_COMPUTE_COST_MODEL_MEMORY_QUEUE",
+    "direction": "计算成本模型",
+    "claim": "某一 GEMM/归约/内存/链路成本公式在 shape 或并发变化下没有守恒地进入实际计费链路，导致可复现的机制偏差；需要独立源码和解析控制确认。",
+    "trigger": "待 source scan；不得继承 H24/H26 的历史候选结论。",
+    "falsifier": "公式已覆盖目标 shape/并发和 owner 守恒，或观察差异来自合法 profile/协议边界。"
+  },
+  "parent_commit": "9c2b21a6811fca1517df1922eee45a3eaaf417f4",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}

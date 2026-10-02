@@ -1,0 +1,11 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_027",
+  "candidate_id": "H27_COMPUTE_COST_MODEL_MEMORY_QUEUE",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare registered the cost-model direction; independent source scan is required before edits.",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

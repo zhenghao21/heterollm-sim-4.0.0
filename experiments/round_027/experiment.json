@@ -1,0 +1,77 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_027",
+  "status": "prepare",
+  "purpose": "simulator_compute_cost_model",
+  "primary_goal": "系统检查尚未覆盖的 GEMM、归约、内存、链路和并发成本公式，寻找一个可独立复现且进入真实计费链路的 shape/资源守恒缺口。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "9c2b21a6811fca1517df1922eee45a3eaaf417f4",
+    "role": "H26 promoted shared opt-in NAND media accounting plus H24 DRAM/HBM family baseline"
+  },
+  "hypothesis_id": "H27_COMPUTE_COST_MODEL_MEMORY_QUEUE",
+  "direction": "计算成本模型",
+  "previous_direction": "存储硬件建模粒度（H26）",
+  "direction_switch_reason": "H26 已完成 NAND 共享路径；计算成本模型仍无系统性轮次，按台账转向 GEMM/归约/内存/链路公式与 shape/并发守恒。",
+  "recent_directions": [
+    "H24:DRAM/HBM 存储模型",
+    "H25:运行速度负向扫描",
+    "H26:NAND/SSD/HBF 共享模型"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H23",
+    "运行速度与内存": "H25（负向）",
+    "计算成本模型": "H27活动",
+    "存储硬件建模粒度": "H26",
+    "预测精度与泛化": "未完成独立验收",
+    "评估/API与可视化口径": "H22",
+    "开发工具链与可复现性": "H21-H26"
+  },
+  "scope": {
+    "candidate": "待独立扫描 GEMM/归约/内存/链路成本公式、shape/并发和资源 owner 守恒",
+    "include": [
+      "cost_models.py",
+      "planner.py",
+      "communication.py",
+      "data_motion.py",
+      "control_plane_planner.py"
+    ],
+    "exclude": [
+      "Native accuracy",
+      "再次修改已收口 DRAM/NAND contract",
+      "没有触发证据的全局重构"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一成本根因直接影响的公式、单位、shape、并发、计费、错误/API 和回归必须在同轮收口；没有候选则记录负结论并切换方向。"
+  },
+  "data_roles": {
+    "development": "fresh source scan and analytical controls",
+    "comparison": "parent 9c2b21a6811fca1517df1922eee45a3eaaf417f4",
+    "holdout": "shape/parallelism controls not used to invent parameters",
+    "final_acceptance": "mechanism/engineering regression; no Native accuracy unless independent evidence appears"
+  },
+  "metrics": [
+    "cost_formula_conservation",
+    "shape_scaling",
+    "parallel_resource_accounting",
+    "unit_consistency",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 2,
+    "retries": 0
+  },
+  "guardrails": [
+    "不以端到端时延反推倍率",
+    "不把单测通过称为精度改善",
+    "不重复 H24/H26 已收口存储 contract",
+    "保持未知参数显式 unknown/parameterized"
+  ],
+  "selected_candidate": null,
+  "next_step": "完成成本模型 source scan，登记唯一可证伪候选。"
+}
