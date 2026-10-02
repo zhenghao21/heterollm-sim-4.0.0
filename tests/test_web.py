@@ -291,6 +291,33 @@ class WebApiTests(unittest.TestCase):
             1,
         )
 
+    def test_direct_simulation_score_fails_closed_for_missing_metric_reference(self):
+        scenario = build_reference_scenario()
+        report = report_dict(run_scenario(scenario))
+        native = {
+            "requests": {
+                request_id: {
+                    key: request.get(key)
+                    for key in ("ttft_ns", "tpot_ns", "e2e_ns")
+                    if key in request
+                }
+                for request_id, request in report["requests"].items()
+            }
+        }
+        for request in native["requests"].values():
+            request.pop("tpot_ns", None)
+        score = simulation_score_payload(
+            report,
+            scenario,
+            native_reference=native,
+            threshold_pct=25,
+        )
+        comparison = score["native_comparison"]
+        self.assertEqual(comparison["status"], "incomplete_metric_reference")
+        self.assertFalse(comparison["passed"])
+        self.assertTrue(any(item["metric"] == "tpot_ns" for item in comparison["missing_metrics"]))
+        self.assertIn("ttft_ns", comparison["metrics"])
+
     def test_direct_simulation_score_fails_closed_for_incomplete_analytical_coverage(self):
         scenario = build_reference_scenario()
         report = report_dict(run_scenario(scenario))

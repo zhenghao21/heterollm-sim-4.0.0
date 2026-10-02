@@ -1621,10 +1621,24 @@ def _compare_ui_simulation_to_native(
     }
     metric_names = ("ttft_ns", "tpot_ns", "e2e_ns")
     rows = []
+    missing_metrics = []
     for request_id, simulated in simulated_requests.items():
         native = native_requests.get(request_id)
         if not isinstance(native, Mapping):
             continue
+        required_metrics = ["ttft_ns", "e2e_ns"]
+        visible_output_tokens = simulated.get("visible_output_tokens")
+        simulated_tpot = simulated.get("tpot_ns")
+        if (
+            isinstance(simulated_tpot, (int, float))
+            and not isinstance(simulated_tpot, bool)
+            and simulated_tpot > 0
+        ) or (
+            isinstance(visible_output_tokens, int)
+            and not isinstance(visible_output_tokens, bool)
+            and visible_output_tokens > 1
+        ):
+            required_metrics.append("tpot_ns")
         metrics = {}
         for metric in metric_names:
             sim_value = simulated.get(metric)
@@ -1637,6 +1651,13 @@ def _compare_ui_simulation_to_native(
                     "absolute_percentage_error_pct": ape,
                     **({"passed": ape < threshold_pct} if threshold_pct is not None else {}),
                 }
+            elif metric in required_metrics:
+                missing_metrics.append({
+                    "request_id": request_id,
+                    "metric": metric,
+                    "simulated_present": isinstance(sim_value, (int, float)) and not isinstance(sim_value, bool),
+                    "native_present": isinstance(native_value, (int, float)) and not isinstance(native_value, bool) and native_value > 0,
+                })
         if metrics:
             rows.append({"request_id": request_id, "metrics": metrics})
     if not rows:
@@ -1668,6 +1689,9 @@ def _compare_ui_simulation_to_native(
         if request_coverage["complete"]
         else "partial_reference"
     )
+    if missing_metrics:
+        comparison_status = "incomplete_metric_reference"
+        passed = False
     if comparison_status == "partial_reference" and passed is not None:
         # A partial native set is not an exact evaluation.  Keep the metric
         # rows for diagnosis, but fail closed until a caller supplies a
@@ -1700,6 +1724,7 @@ def _compare_ui_simulation_to_native(
         "request_coverage": request_coverage,
         "threshold_pct": threshold_pct,
         "passed": passed,
+        "missing_metrics": missing_metrics,
         "metrics": aggregate,
         "requests": rows,
         "structural_dimensions": structural,
