@@ -37,8 +37,8 @@
   "publication": {
     "source_commit": "bba3c79af7c65b9c2a4eae7a40d36871d7eb1837",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "source commits and final records pending push"
+    "verified_remote_sha": "4824499",
+    "verification": "git push origin main exit 0; source commits through bba3c79 and H26 records were published, local HEAD and git ls-remote matched after publication"
   },
   "process_learning": "对存储内部 geometry 保持 opt-in/profile-specific；没有来源时保留 unknown，不用端到端时延反推 die/channel/erase。"
 }
