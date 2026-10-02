@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H51_PREDICTION_PROVENANCE_SHAPE",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记预测/泛化方向的 provenance/support-domain 假设，等待独立 source scan 与矩阵。",
+  "round_id": "round_051",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "c99c61549c6caea71de79a3e7b72f340d1b25f02",
+  "status": "pending"
+}

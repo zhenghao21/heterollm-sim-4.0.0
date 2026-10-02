@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "prediction 的输入身份、支持域与 provenance 可能在 score/report/API 链路被丢失或 mismatched shape/hardware 仍被当作可比。",
+    "direction": "预测精度与泛化",
+    "falsifier": "独立 shape/hardware identities 与 support/provenance 在 score/report/API 保持，mismatch/unknown fail-closed。",
+    "id": "H51_PREDICTION_PROVENANCE_SHAPE",
+    "trigger": "H43 仅覆盖 nested fallback/OOD gate，H34 覆盖 fingerprint generation；需要新的传播/序列化控制。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "c99c61549c6caea71de79a3e7b72f340d1b25f02",
+  "round_id": "round_051",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

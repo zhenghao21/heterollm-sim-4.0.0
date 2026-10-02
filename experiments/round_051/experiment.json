@@ -1,0 +1,80 @@
+{
+  "baseline": {
+    "parent_commit": "c99c61549c6caea71de79a3e7b72f340d1b25f02",
+    "role": "H50 finite negative evaluation/API boundary; H43 fallback provenance and H34 fingerprint controls are historical comparators only"
+  },
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "matrix_runs": 1,
+    "native_collection_runs": 0,
+    "retries": 0,
+    "source_scan_runs": 1
+  },
+  "data_roles": {
+    "comparison": "H43 published fallback gate only as non-reopened comparator",
+    "development": "fresh paired shape/hardware synthetic controls",
+    "final_acceptance": "comparability/provenance mechanism only; no Native accuracy",
+    "holdout": "independent mismatched fingerprint/provenance controls"
+  },
+  "direction": "预测精度与泛化",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H45",
+    "存储硬件建模粒度": "H49",
+    "开发工具链与可复现性": "H47",
+    "计算成本模型": "H44",
+    "评估/API与可视化口径": "H50",
+    "运行速度与内存": "H46",
+    "预测精度与泛化": "H51活动"
+  },
+  "direction_switch_reason": "H50 已收口 retention/status/API 投影且无源码候选；预测/泛化方向自 H43 后未复查，切换检查支持域与 provenance 在评分入口的实际传播。",
+  "guardrails": [
+    "不重做 H43 fallback/OOD gate",
+    "不重做 H34 fingerprint generation",
+    "unknown/metadata-only 不得变成 compared/passed",
+    "无独立可复现缺陷不改源码"
+  ],
+  "hypothesis_id": "H51_PREDICTION_PROVENANCE_SHAPE",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "metrics": [
+    "fingerprint_preservation",
+    "support_domain_state",
+    "comparability_status",
+    "mismatch_fail_closed",
+    "api_serialization"
+  ],
+  "next_step": "先独立扫描 score/report/API prediction provenance 与 shape/hardware mismatch 入口；若无缺陷，保留有限负结论并切换其他方向。",
+  "previous_direction": "评估、API与可视化口径（H50）",
+  "primary_goal": "检查 prediction 输入身份、支持域与 provenance 在 score/report/API 链路中的保持和跨 shape/hardware 控制；不重复 H43 fallback/OOD gate 或 H34 fingerprint generation。",
+  "problem_domain_closure": {
+    "rule": "同一 prediction provenance 根因若影响 generation, score, report, API 与 fallback/error 面，必须本轮收口；无法触发的入口记录不适用。",
+    "status": "prepare"
+  },
+  "purpose": "prediction_provenance_generalization_boundary",
+  "recent_directions": [
+    "H49:存储硬件建模粒度 E2E（有限负结论）",
+    "H50:评估/API与可视化口径（有限负结论）",
+    "H51:预测精度与泛化（活动）"
+  ],
+  "round_id": "round_051",
+  "schema": "heterollm.optimization.experiment/v1",
+  "scope": {
+    "candidate": "prediction provenance/support-domain preservation across score payload, report serialization, and API for independent shape/hardware identities",
+    "exclude": [
+      "H43 nested fallback/OOD gate",
+      "H34 fingerprint generation",
+      "H42 analytical_coverage gate",
+      "Native accuracy unless available",
+      "new scoring framework"
+    ],
+    "include": [
+      "input/model/runtime/hardware fingerprints",
+      "support_level and provenance propagation",
+      "shape/hardware mismatch controls",
+      "score/report/API comparability state",
+      "unknown/metadata-only preservation"
+    ]
+  },
+  "selected_candidate": null,
+  "status": "prepare"
+}

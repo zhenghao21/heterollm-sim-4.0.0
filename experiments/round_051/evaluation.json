@@ -1,0 +1,21 @@
+{
+  "accuracy_status": "not_applicable",
+  "candidate_id": "H51_PREDICTION_PROVENANCE_SHAPE",
+  "comparison_artifact": "artifacts/optimization/round_051/",
+  "generalization_status": "pending",
+  "limitations": [
+    "H51 尚未完成 prediction provenance 与 shape/hardware mismatch 独立扫描。"
+  ],
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "round_id": "round_051",
+  "schema": "heterollm.optimization.evaluation/v1",
+  "score": {
+    "status": "pending"
+  },
+  "status": "prepare"
+}
