@@ -73,7 +73,13 @@ def validate_hbf_media(component):
 def _ceil(value, unit):
     return (value + unit - 1) // unit
 
-def nand_media_service(component, byte_count, read: bool) -> dict:
+def nand_media_service(
+    component,
+    byte_count,
+    read: bool,
+    *,
+    page_offset_bytes=None,
+) -> dict:
     validate_nand_media(component)
     c, field_name = _media_contract(component)
     if c is None:
@@ -82,13 +88,33 @@ def nand_media_service(component, byte_count, read: bool) -> dict:
         raise ValueError("byte_count must be a non-negative integer")
     if not isinstance(read, bool):
         raise ValueError("read must be bool")
+    if page_offset_bytes is not None and (
+        isinstance(page_offset_bytes, bool)
+        or not isinstance(page_offset_bytes, int)
+        or page_offset_bytes < 0
+    ):
+        raise ValueError("page_offset_bytes must be a non-negative integer")
     page, host_tx = c["media_page_bytes"], c["host_transaction_bytes"]
     host_bytes = _ceil(byte_count, host_tx) * host_tx if byte_count else 0
-    nominal = _ceil(byte_count, page) if byte_count else 0
+    known_offset = page_offset_bytes is not None
+    offset = (page_offset_bytes % page) if known_offset else 0
+    nominal = _ceil(offset + byte_count, page) if byte_count else 0
     unknown = c["access_pattern"] == "unknown_alignment_conservative"
     # A 64B-aligned request can start at most 4096-64B before a page end.
-    pages = (_ceil(byte_count + page - host_tx, page) if unknown and byte_count else nominal)
-    rmw = 0 if read else (min(2, pages) if unknown else int(bool(byte_count % page)))
+    pages = (
+        _ceil(byte_count + page - host_tx, page)
+        if unknown and byte_count
+        else nominal
+    )
+    if read or not byte_count:
+        rmw = 0
+    elif unknown:
+        rmw = min(2, pages)
+    elif known_offset:
+        end_offset = offset + byte_count
+        rmw = int(offset > 0) + int(end_offset % page != 0)
+    else:
+        rmw = int(bool(byte_count % page))
     physical_read = pages * page if read else rmw * page
     physical_write = 0 if read else pages * page
     read_ops, program_ops = (pages, 0) if read else (rmw, pages)
@@ -180,6 +206,9 @@ def nand_media_service(component, byte_count, read: bool) -> dict:
         "host_transaction_bytes": c["host_transaction_bytes"],
         "host_max_request_bytes": c["host_max_request_bytes"],
         "media_page_bytes": c["media_page_bytes"],
+        "page_offset_bytes": page_offset_bytes,
+        "address_scope": "known_page_offset" if known_offset else "unknown",
+        "pages_touched": pages,
         "command_queue_depth": c["command_queue_depth"],
         "media_parallelism": c["media_parallelism"],
         "physical_planes": planes,

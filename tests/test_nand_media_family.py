@@ -1,7 +1,15 @@
 import pytest
 
 from heterollm_sim.cost_models import HBMProfile
-from heterollm_sim.data_motion import endpoint_service, resolve_service
+from heterollm_sim.data_motion import (
+    READ,
+    WRITE,
+    DataAccess,
+    MemoryPosition,
+    endpoint_service,
+    expand_access,
+    resolve_service,
+)
 from heterollm_sim.hbf_media import nand_media_service, validate_nand_media
 from heterollm_sim.ir import ComponentSpec
 
@@ -64,6 +72,34 @@ def test_shared_nand_plane_cap_and_queue_are_effective():
     assert wide["effective_parallelism"] == 16
     assert narrow["effective_parallelism"] == 1
     assert wide["service_ns"] < narrow["service_ns"]
+
+
+def test_known_data_access_offset_splits_nand_page_and_rmw():
+    component = _ssd()
+    service = resolve_service(component)
+    aligned_read = expand_access(
+        DataAccess("aligned-read", READ, 128, source=MemoryPosition("ssd0", 0)),
+        {"ssd0": service},
+    )
+    crossing_read = expand_access(
+        DataAccess("crossing-read", READ, 128, source=MemoryPosition("ssd0", 4032)),
+        {"ssd0": service},
+    )
+    aligned_write = expand_access(
+        DataAccess("aligned-write", WRITE, 128, target=MemoryPosition("ssd0", 0)),
+        {"ssd0": service},
+    )
+    crossing_write = expand_access(
+        DataAccess("crossing-write", WRITE, 128, target=MemoryPosition("ssd0", 4032)),
+        {"ssd0": service},
+    )
+
+    assert aligned_read.phases[0].physical_bytes == 4096
+    assert crossing_read.phases[0].physical_bytes == 8192
+    assert aligned_write.phases[0].physical_bytes == 8192
+    assert crossing_write.phases[0].physical_bytes == 16384
+    assert crossing_read.phases[0].service_ns > aligned_read.phases[0].service_ns
+    assert crossing_write.phases[0].service_ns > aligned_write.phases[0].service_ns
 
 
 def test_legacy_hbf_alias_and_dram_path_remain_separate():

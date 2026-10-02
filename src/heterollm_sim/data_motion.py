@@ -269,12 +269,22 @@ class PhysicalService:
     def bandwidth_gb_s(self) -> float:
         return min(self.read_bandwidth_gb_s, self.write_bandwidth_gb_s)
 
-    def price(self, kind: AccessKind, byte_count: int, *, transaction_bytes: Optional[int] = None, service_model: Optional[str] = None) -> Mapping[str, object]:
+    def price(
+        self,
+        kind: AccessKind,
+        byte_count: int,
+        *,
+        transaction_bytes: Optional[int] = None,
+        service_model: Optional[str] = None,
+        page_offset_bytes: Optional[int] = None,
+    ) -> Mapping[str, object]:
         kind = AccessKind(kind)
         _non_negative_int(byte_count, "byte_count")
         if kind is AccessKind.COPY:
             raise ValueError("COPY must be expanded before billing")
         read = kind is AccessKind.READ
+        if page_offset_bytes is not None:
+            _non_negative_int(page_offset_bytes, "page_offset_bytes")
         bandwidth = self.read_bandwidth_gb_s if read else self.write_bandwidth_gb_s
         if byte_count and bandwidth <= 0:
             raise ValueError(f"storage service {self.service_id} requires a positive {kind.value.lower()} bandwidth")
@@ -282,7 +292,12 @@ class PhysicalService:
                 and (self.component.metadata.get("nand_media") is not None
                      or self.component.metadata.get("hbf_media") is not None)):
             from .hbf_media import nand_media_service
-            return nand_media_service(self.component, byte_count, read)
+            return nand_media_service(
+                self.component,
+                byte_count,
+                read,
+                page_offset_bytes=page_offset_bytes,
+            )
         model = self.service_model if service_model is None else service_model
         if model not in {"analytical", "serialized", "overlapped"}:
             raise ValueError("memory_service_model must be analytical, serialized or overlapped")
@@ -586,7 +601,11 @@ def expand_access(
 
     def phase(kind: AccessKind, position: MemoryPosition, deps: Tuple[str, ...]) -> MotionPhase:
         service = services[position.service_id]
-        bill = service.price(kind, access.byte_count)
+        bill = service.price(
+            kind,
+            access.byte_count,
+            page_offset_bytes=position.offset_bytes,
+        )
         return MotionPhase(access.operation_id, kind, service.service_id, service.physical_owner,
                            service.resource_id, access.byte_count, float(bill["service_ns"]), deps,
                            physical_bytes=int(bill.get("physical_bytes", access.byte_count)),
