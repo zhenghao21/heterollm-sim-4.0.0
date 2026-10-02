@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_045",
+  "candidate_id": "H45_EXECUTION_FAILURE_ROLLBACK_CONTRACT",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记执行失败回滚语义方向；需要独立失败注入、成功控制和状态矩阵后再决定是否修改。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "5be7a5be431c31a720cc0a3cc08a2dd58ef83364"
+}

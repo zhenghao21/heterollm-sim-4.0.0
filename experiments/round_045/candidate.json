@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_045",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H45_EXECUTION_FAILURE_ROLLBACK_CONTRACT",
+    "direction": "仿真器正确性与语义",
+    "claim": "执行失败或资源冲突可能在 event kernel/streaming 状态、ready heap、lease/queue、owner alias 或报告/API 中部分提交，导致失败被误报为成功或后续运行受污染。",
+    "trigger": "需要独立失败注入、成功控制和状态矩阵；不继承 H37/H31 全域结论。",
+    "falsifier": "失败注入后所有事务状态、队列/lease/owner 计数和错误边界均回滚或显式失败，成功控制与基线一致。"
+  },
+  "parent_commit": "5be7a5be431c31a720cc0a3cc08a2dd58ef83364",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}

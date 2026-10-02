@@ -1,0 +1,82 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_045",
+  "status": "prepare",
+  "purpose": "execution_failure_rollback_semantics",
+  "primary_goal": "独立检查 event kernel/streaming execution 在 dispatch 失败、资源冲突、ready heap、lease/queue 回滚和错误报告/API边界是否保持一致，避免失败路径部分提交或被渲染为成功。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "5be7a5be431c31a720cc0a3cc08a2dd58ef83364",
+    "role": "H44 cost model finite negative; H37 capacity atomicity and H31 broad error scans excluded background"
+  },
+  "hypothesis_id": "H45_EXECUTION_FAILURE_ROLLBACK_CONTRACT",
+  "direction": "仿真器正确性与语义",
+  "previous_direction": "计算成本模型（H44）",
+  "direction_switch_reason": "H44 已完成 MMA/collective/full-kernel 成本扫描；按轮换规则切换正确性/语义，专门检查失败注入后的事务回滚与状态传播，不重复 H37 容量批量提交或 H31 全域错误扫描。",
+  "recent_directions": [
+    "H43:预测精度与泛化（已接纳）",
+    "H44:计算成本模型（有限负结论）",
+    "H45:仿真器正确性与语义（活动）"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H45活动",
+    "运行速度与内存": "H41",
+    "计算成本模型": "H44",
+    "存储硬件建模粒度": "H40",
+    "预测精度与泛化": "H43",
+    "评估/API与可视化口径": "H42",
+    "开发工具链与可复现性": "H33"
+  },
+  "scope": {
+    "candidate": "event_kernel dispatch/preview/commit failure、ready heap/queue/lease rollback、streaming result status、resource owner/alias release、error/report/API propagation",
+    "include": [
+      "unsupported or conflicting task dispatch",
+      "resource reservation conflict and rollback",
+      "ready heap/queue state after failure",
+      "lease/busy counters and owner aliases",
+      "streaming exact/aggregate error/report state",
+      "HTTP/API failure mapping if same root cause"
+    ],
+    "exclude": [
+      "H37 ensure_resource_capacities batch atomicity",
+      "H31 broad Web typed errors/Native coverage",
+      "H42 analytical coverage gate",
+      "cost model formula and storage geometry"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一失败根因若影响 preview/commit、ready/queue、lease/owner、streaming report 或 API error，必须同轮收口；不适用面明确延期。"
+  },
+  "data_roles": {
+    "development": "fresh injected-failure and conflict controls",
+    "comparison": "H44 published source 5be7a5be431c31a720cc0a3cc08a2dd58ef83364",
+    "holdout": "independent success/control/failure combinations",
+    "final_acceptance": "semantic contract only; no Native accuracy"
+  },
+  "metrics": [
+    "rollback_state_equality",
+    "ready_heap_preserved",
+    "lease_queue_conservation",
+    "owner_alias_release",
+    "error_status_propagation",
+    "success_control_unchanged"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "failure_matrix_runs": 0,
+    "api_controls": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "不重复 H37 capacity batch atomicity",
+    "不重复 H31 broad error scan",
+    "失败格不得部分提交后报告成功",
+    "成功控制必须保持原输出",
+    "无可复现语义缺陷不改源码"
+  ],
+  "selected_candidate": null,
+  "next_step": "先独立扫描 event_kernel、streaming_des、engine、reporting/web 的 failure/rollback 调用链，构造成功与注入失败成对状态矩阵，登记唯一可证伪候选。"
+}

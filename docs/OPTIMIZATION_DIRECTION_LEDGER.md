@@ -6,7 +6,7 @@
 
 | 方向 | 关注内容 | 最近完成轮次 | 当前状态 | 下一步要求 |
 |---|---|---:|---|---|
-| 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H37 | H37 收口动态容量批量原子性、物理 owner/alias 报告同步及 streaming 后置容量传递；声明容量不可漂移 | 下一轮轮换到运行速度/内存或计算成本模型；不重复本轮容量契约 |
+| 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H45（活动） | H37 收口动态容量批量原子性、物理 owner/alias 报告同步及 streaming 后置容量传递；H45 转向执行失败时的事务回滚、ready 状态、lease/queue 和错误报告传播 | 先独立失败注入与状态矩阵扫描；不重复 H37 容量批量提交或 H31 全域错误负向扫描 |
 | 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H41 | H29 收口 CLI 文本路径重复 `report_dict` 构建；H36 检查 provider reuse 但无安全生产调用方；H41 分离 compile/execute 后确认 retention 成本是语义开销，未发现安全删除/缓存候选 | 下一轮切换评估/API；若重开本方向，先做有界 metadata/coverage 不变量控制，不重复 H41 混合 profile |
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H44 | H38 收口 memory/GEMM/reduction 单位、owner 重复拒绝和 data-motion 约束；H44 对 MMA/collective/full-kernel 做了边界、单位、并发和 owner 负向扫描，未发现新候选 | 下一轮切换仿真器正确性与语义；不重复 H44 负向扫描或 H38 基线 |
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H40 | H40 已把共享 NAND ERASE operation 接入 PhysicalService、endpoint、DataAccess 和 legacy HBF alias；page/RMW/program/plane/queue旧链路保持；未公开 die/channel/FTL/GC 继续unknown | 下一轮轮换到运行速度/内存或评估/API；没有新来源与真实瓶颈不继续制造NAND字段轮次 |
@@ -53,4 +53,5 @@
 - H43：独立 OOD/fallback 矩阵复现 `coverage=complete` 但 nested `prediction.reason=no_measurements`、`confidence=low`、`fallback_kind`、`support_level=out_of_domain`、`coverage=metadata_only` 或 `extrapolated=true` 仍为 `compared/passed=true`；修复为递归识别 fallback/OOD provenance，让 native 与 R0 评分返回 `non_comparable_analytical_fallback/passed=false`，measured/native、fallback none、高置信度和无 coverage 维持兼容。定向60 passed，全量3106 passed/4 skipped；无 Native 加载，不构成精度改善结论。下一轮切换计算成本模型。
 - H44：已登记计算成本模型方向，独立检查 MMA、collective、full-kernel 及 shape/单位/并发/owner 守恒是否进入实际成本、资源计费和评分链路；明确排除 H38 已覆盖的 memory/GEMM/reduction 基线，先做解析真值和失败格控制，不把单测通过称成本模型或精度改善。
 - H44：独立 source scan 与成本矩阵确认 MMA 六个边界 shape 的 tile/wave、fused full-kernel useful_ops/bytes/phase-max/energy/owner、collective ring/tree/auto 和 duplicate/unknown/all_to_all-tree 失败格均保持显式守恒或 fail-closed；未发现可复现成本缺陷，collective bytes 仅是解析通信包络，不是 Native 带宽或精度结论。未修改源码、未加载 Native；planner/event 端到端 queue/owner billing、bytes 显式守恒式和非法 dtype/zero-shape 矩阵延期。下一轮切换仿真器正确性与语义。
+- H45：已登记仿真器正确性与语义方向，独立检查 event kernel/streaming execution 在 dispatch 失败、资源冲突、ready heap、lease/queue 回滚和错误报告/API 边界是否保持一致；明确排除 H37 容量批量提交和 H31 已完成的 Web/Native coverage 错误扫描，先做失败注入和状态矩阵，不把单测通过称为语义修复。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。
