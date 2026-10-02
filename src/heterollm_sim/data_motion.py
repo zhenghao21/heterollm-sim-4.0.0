@@ -278,9 +278,11 @@ class PhysicalService:
         bandwidth = self.read_bandwidth_gb_s if read else self.write_bandwidth_gb_s
         if byte_count and bandwidth <= 0:
             raise ValueError(f"storage service {self.service_id} requires a positive {kind.value.lower()} bandwidth")
-        if self.component is not None and self.component.metadata.get("hbf_media") is not None:
-            from .hbf_media import hbf_media_service
-            return hbf_media_service(self.component, byte_count, read)
+        if (self.component is not None
+                and (self.component.metadata.get("nand_media") is not None
+                     or self.component.metadata.get("hbf_media") is not None)):
+            from .hbf_media import nand_media_service
+            return nand_media_service(self.component, byte_count, read)
         model = self.service_model if service_model is None else service_model
         if model not in {"analytical", "serialized", "overlapped"}:
             raise ValueError("memory_service_model must be analytical, serialized or overlapped")
@@ -700,11 +702,13 @@ def endpoint_service(
     # keep one logical endpoint demand: a shared physical owner cannot
     # accept two demands from the same task, and the diagnostic metadata
     # retains RMW read bytes for write requests.
-    if component.normalized_kind == "hbf" and component.metadata.get("hbf_media") is not None:
+    if (component.normalized_kind in OFFLOAD_STORAGE_COMPONENT_KINDS
+            and (component.metadata.get("nand_media") is not None
+                 or component.metadata.get("hbf_media") is not None)):
         if byte_count == 0:
             return None
-        from .hbf_media import hbf_media_service
-        media = hbf_media_service(component, byte_count, read)
+        from .hbf_media import nand_media_service
+        media = nand_media_service(component, byte_count, read)
         physical_bytes = media["physical_read_bytes"] if read else media["physical_bytes"]
         return EndpointService(
             name="{}.{}.{}.cold_page".format(name, component.component_id, direction),
@@ -720,7 +724,9 @@ def endpoint_service(
                 "bytes": byte_count,
                 "transferred_bytes": media["host_transfer_bytes"],
                 "physical_bytes": media["physical_bytes"],
-                "hbf_media": media,
+                "nand_media": media,
+                **({"hbf_media": media}
+                   if component.metadata.get("hbf_media") is not None else {}),
                 "transfer_granularity_bytes": media["media_page_bytes"],
                 "transactions": media["command_count"],
                 "max_outstanding_requests": media["command_queue_depth"],
@@ -731,7 +737,7 @@ def endpoint_service(
                 "latency_service_ns": media["media_read_service_ns"] if read else media["service_ns"],
                 "physical_kind": component.normalized_kind,
                 "access_mode": component.metadata.get("access_mode", "default"),
-                "memory_service_model": "cold_page_v1",
+                "memory_service_model": media["version"],
                 "timing_evidence": "ANALYTICAL",
             },
         )

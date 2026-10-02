@@ -1,4 +1,4 @@
-"""Small analytical cold-page model for opt-in HBF media endpoints."""
+"""Small analytical cold-page model for opt-in NAND media endpoints."""
 import math
 from numbers import Real
 from collections.abc import Mapping
@@ -18,21 +18,34 @@ def _num(value, name, positive=False, nonnegative=False):
         raise ValueError(f"{name} must be a finite {qualifier}number")
     return value
 
-def validate_hbf_media(component):
-    contract = getattr(component, "metadata", {}).get("hbf_media")
+def _media_contract(component):
+    metadata = getattr(component, "metadata", {})
+    contract = metadata.get("nand_media")
+    field_name = "nand_media"
+    if contract is None:
+        contract = metadata.get("hbf_media")
+        field_name = "hbf_media"
+    return contract, field_name
+
+
+def validate_nand_media(component):
+    contract, field_name = _media_contract(component)
     if contract is None:
         return None
     if not isinstance(contract, Mapping):
-        raise ValueError("hbf_media must be a mapping")
+        raise ValueError("{} must be a mapping".format(field_name))
     unknown = set(contract) - _ALLOWED
     if unknown:
-        raise ValueError(f"unknown hbf_media keys: {sorted(unknown)}")
+        raise ValueError(f"unknown {field_name} keys: {sorted(unknown)}")
     missing = _REQ - set(contract)
     if missing:
-        raise ValueError(f"missing hbf_media keys: {sorted(missing)}")
-    if (contract["version"] != "cold_page_v1"
-            or contract["host_transaction_bytes"] != 64
-            or contract["media_page_bytes"] != 4096):
+        raise ValueError(f"missing {field_name} keys: {sorted(missing)}")
+    version = contract["version"]
+    if version not in {"cold_page_v1", "nand_media_v1"}:
+        raise ValueError("unsupported NAND media contract version")
+    if (version == "cold_page_v1"
+            and (contract["host_transaction_bytes"] != 64
+                 or contract["media_page_bytes"] != 4096)):
         raise ValueError("unsupported cold_page_v1 granularity")
     for key in ("host_transaction_bytes", "host_max_request_bytes", "media_page_bytes", "command_queue_depth", "media_parallelism"):
         if isinstance(contract[key], bool) or not isinstance(contract[key], int) or contract[key] <= 0:
@@ -42,7 +55,7 @@ def validate_hbf_media(component):
             or contract["host_max_request_bytes"] % contract["host_transaction_bytes"]):
         raise ValueError("host_max_request_bytes must be a host-transaction multiple no larger than one media page")
     qd = contract["command_queue_depth"]
-    if not 256 <= qd <= 16384 or qd & (qd - 1):
+    if version == "cold_page_v1" and (not 256 <= qd <= 16384 or qd & (qd - 1)):
         raise ValueError("command_queue_depth must be a power of two in [256, 16384]")
     for key in ("page_read_latency_ns", "page_program_latency_ns"):
         _num(contract[key], key, True)
@@ -51,14 +64,20 @@ def validate_hbf_media(component):
     if "physical_planes" in contract and (isinstance(contract["physical_planes"], bool) or not isinstance(contract["physical_planes"], int) or contract["physical_planes"] <= 0):
         raise ValueError("physical_planes must be a positive integer")
 
+
+def validate_hbf_media(component):
+    """Compatibility validator for the legacy HBF contract name."""
+
+    return validate_nand_media(component)
+
 def _ceil(value, unit):
     return (value + unit - 1) // unit
 
-def hbf_media_service(component, byte_count, read: bool) -> dict:
-    validate_hbf_media(component)
-    c = getattr(component, "metadata", {}).get("hbf_media")
+def nand_media_service(component, byte_count, read: bool) -> dict:
+    validate_nand_media(component)
+    c, field_name = _media_contract(component)
     if c is None:
-        raise ValueError("hbf_media contract is required")
+        raise ValueError("nand_media or hbf_media contract is required")
     if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count < 0:
         raise ValueError("byte_count must be a non-negative integer")
     if not isinstance(read, bool):
@@ -156,10 +175,11 @@ def hbf_media_service(component, byte_count, read: bool) -> dict:
     )
 
     return {
-        "version": "cold_page_v1",
-        "host_transaction_bytes": 64,
+        "version": c["version"],
+        "contract_field": field_name,
+        "host_transaction_bytes": c["host_transaction_bytes"],
         "host_max_request_bytes": c["host_max_request_bytes"],
-        "media_page_bytes": 4096,
+        "media_page_bytes": c["media_page_bytes"],
         "command_queue_depth": c["command_queue_depth"],
         "media_parallelism": c["media_parallelism"],
         "physical_planes": planes,
@@ -198,3 +218,9 @@ def hbf_media_service(component, byte_count, read: bool) -> dict:
         "cache_policy": "cold_no_persistent_cache",
         "write_completion": "media_program_complete",
     }
+
+
+def hbf_media_service(component, byte_count, read: bool) -> dict:
+    """Compatibility alias for the legacy HBF cold-page entrypoint."""
+
+    return nand_media_service(component, byte_count, read)

@@ -1898,11 +1898,13 @@ class ComponentSpec:
                         "HBF memory requires explicit write_buffer_bytes=0 "
                         "(write-through); buffered writes are not modeled"
                     )
-            if self.metadata.get("hbf_media") is not None:
-                # Keep the page contract opt-in and fail closed at IR load, not
-                # after a long scenario has already been compiled.
-                from .hbf_media import validate_hbf_media
-                validate_hbf_media(self)
+        if (self.normalized_kind in OFFLOAD_STORAGE_COMPONENT_KINDS
+                and (self.metadata.get("hbf_media") is not None
+                     or self.metadata.get("nand_media") is not None)):
+            # Keep the page contract opt-in and fail closed at IR load, not
+            # after a long scenario has already been compiled.
+            from .hbf_media import validate_nand_media
+            validate_nand_media(self)
         if self.package_id:
             _require_name(self.package_id, "package_id")
         if self.die_id:
