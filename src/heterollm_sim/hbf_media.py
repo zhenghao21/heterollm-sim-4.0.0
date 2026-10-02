@@ -6,7 +6,10 @@ from collections.abc import Mapping
 from .memory_service import realtime_memory_metrics
 
 _REQ = {"version", "host_transaction_bytes", "host_max_request_bytes", "media_page_bytes", "command_queue_depth", "media_parallelism", "page_read_latency_ns", "page_program_latency_ns", "access_pattern"}
-_ALLOWED = _REQ | {"physical_planes"}
+_ALLOWED = _REQ | {
+    "physical_planes", "erase_block_bytes", "erase_latency_ns",
+    "background_work", "physical_dies", "physical_channels",
+}
 _PATTERNS = {"contiguous_page_aligned", "unknown_alignment_conservative"}
 
 def _num(value, name, positive=False, nonnegative=False):
@@ -63,6 +66,19 @@ def validate_nand_media(component):
         raise ValueError("unsupported access_pattern")
     if "physical_planes" in contract and (isinstance(contract["physical_planes"], bool) or not isinstance(contract["physical_planes"], int) or contract["physical_planes"] <= 0):
         raise ValueError("physical_planes must be a positive integer")
+    if "physical_dies" in contract and (isinstance(contract["physical_dies"], bool) or not isinstance(contract["physical_dies"], int) or contract["physical_dies"] <= 0):
+        raise ValueError("physical_dies must be a positive integer")
+    if "physical_channels" in contract and (isinstance(contract["physical_channels"], bool) or not isinstance(contract["physical_channels"], int) or contract["physical_channels"] <= 0):
+        raise ValueError("physical_channels must be a positive integer")
+    has_erase_geometry = "erase_block_bytes" in contract or "erase_latency_ns" in contract
+    if has_erase_geometry and not {"erase_block_bytes", "erase_latency_ns"}.issubset(contract):
+        raise ValueError("erase_block_bytes and erase_latency_ns must be supplied together")
+    if "erase_block_bytes" in contract and (isinstance(contract["erase_block_bytes"], bool) or not isinstance(contract["erase_block_bytes"], int) or contract["erase_block_bytes"] <= 0):
+        raise ValueError("erase_block_bytes must be a positive integer")
+    if "erase_latency_ns" in contract:
+        _num(contract["erase_latency_ns"], "erase_latency_ns", True)
+    if "background_work" in contract and not isinstance(contract["background_work"], Mapping):
+        raise ValueError("background_work must be a mapping when supplied")
 
 
 def validate_hbf_media(component):
@@ -76,9 +92,11 @@ def _ceil(value, unit):
 def nand_media_service(
     component,
     byte_count,
-    read: bool,
+    read: bool = False,
     *,
     page_offset_bytes=None,
+    operation=None,
+    background_work=None,
 ) -> dict:
     validate_nand_media(component)
     c, field_name = _media_contract(component)
@@ -88,6 +106,13 @@ def nand_media_service(
         raise ValueError("byte_count must be a non-negative integer")
     if not isinstance(read, bool):
         raise ValueError("read must be bool")
+    operation = ("read" if read else "program") if operation is None else str(operation).lower()
+    if operation not in {"read", "program", "erase"}:
+        raise ValueError("operation must be read, program or erase")
+    if operation == "read" and not read:
+        raise ValueError("read operation requires read=True")
+    if operation == "program" and read:
+        raise ValueError("program operation requires read=False")
     if page_offset_bytes is not None and (
         isinstance(page_offset_bytes, bool)
         or not isinstance(page_offset_bytes, int)
@@ -95,6 +120,35 @@ def nand_media_service(
     ):
         raise ValueError("page_offset_bytes must be a non-negative integer")
     page, host_tx = c["media_page_bytes"], c["host_transaction_bytes"]
+    if operation == "erase":
+        block_bytes = c.get("erase_block_bytes")
+        erase_latency = c.get("erase_latency_ns")
+        if block_bytes is None or erase_latency is None:
+            raise ValueError("erase requires erase_block_bytes and erase_latency_ns")
+        operations = _ceil(byte_count, block_bytes) if byte_count else 0
+        planes = c.get("physical_planes", c["media_parallelism"])
+        parallel = min(c["media_parallelism"], planes, c["command_queue_depth"])
+        waves = _ceil(operations, parallel) if operations else 0
+        physical = operations * block_bytes
+        erase_ns = waves * erase_latency
+        marker = c.get("background_work") if background_work is None else background_work
+        return {
+            "version": c["version"], "contract_field": field_name,
+            "operation": "erase", "address_scope": "block_parameterized",
+            "host_transfer_bytes": 0, "physical_read_bytes": 0,
+            "physical_write_bytes": physical, "physical_bytes": physical,
+            "pages_touched": 0, "read_operations": 0, "program_operations": 0,
+            "erase_operations": operations, "media_command_count": operations,
+            "command_count": operations, "effective_parallelism": parallel,
+            "media_waves": waves, "media_erase_service_ns": erase_ns,
+            "service_ns": erase_ns, "background_work": marker or {},
+            "physical_planes": planes,
+            "physical_dies": c.get("physical_dies", "unknown"),
+            "physical_channels": c.get("physical_channels", "unknown"),
+            "write_completion": "block_erase_complete",
+            "timing_diagnostics": "parameterized NAND block erase; no FTL/GC simulation",
+            "profile_evidence": "analytical/no hardware validated",
+        }
     host_bytes = _ceil(byte_count, host_tx) * host_tx if byte_count else 0
     known_offset = page_offset_bytes is not None
     offset = (page_offset_bytes % page) if known_offset else 0
@@ -106,7 +160,7 @@ def nand_media_service(
         if unknown and byte_count
         else nominal
     )
-    if read or not byte_count:
+    if operation == "read" or not byte_count:
         rmw = 0
     elif unknown:
         rmw = min(2, pages)
@@ -130,7 +184,7 @@ def nand_media_service(
     parallel = min(c["media_parallelism"], planes, c["command_queue_depth"])
     rwaves = _ceil(read_ops, parallel) if read_ops else 0
     pwaves = _ceil(program_ops, parallel) if program_ops else 0
-    direction = "read" if read else "write"
+    direction = "read" if operation == "read" else "write"
     # A zero-byte request has no bandwidth requirement; otherwise each used
     # direction must have a finite positive physical-media cap.
     if host_bytes:
@@ -144,7 +198,7 @@ def nand_media_service(
                "component.write_bandwidth_gbps", True) if physical_write else 1.0
     read_ns = rwaves * c["page_read_latency_ns"] + 8.0 * physical_read / rbw
     program_ns = pwaves * c["page_program_latency_ns"] + 8.0 * physical_write / wbw
-    media_ns = read_ns if read else read_ns + program_ns
+    media_ns = read_ns if operation == "read" else read_ns + program_ns
     host_waves = _ceil(host_command_count, c["command_queue_depth"]) if host_command_count else 0
     host_ns = 8.0 * host_bytes / host_bw if host_bytes else 0.0
     read_energy_rate = _num(getattr(component, "metadata", {}).get("read_energy_pj_per_byte", 0.0),
@@ -215,6 +269,11 @@ def nand_media_service(
         "page_read_latency_ns": c["page_read_latency_ns"],
         "page_program_latency_ns": c["page_program_latency_ns"],
         "access_pattern": c["access_pattern"],
+        "operation": operation,
+        "erase_operations": 0,
+        "background_work": background_work if background_work is not None else c.get("background_work", {}),
+        "physical_dies": c.get("physical_dies", "unknown"),
+        "physical_channels": c.get("physical_channels", "unknown"),
         "host_transfer_bytes": host_bytes,
         "physical_read_bytes": physical_read,
         "physical_write_bytes": physical_write,
@@ -255,6 +314,8 @@ def hbf_media_service(
     read: bool,
     *,
     page_offset_bytes=None,
+    operation=None,
+    background_work=None,
 ) -> dict:
     """Compatibility alias for the legacy HBF cold-page entrypoint."""
 
@@ -263,4 +324,6 @@ def hbf_media_service(
         byte_count,
         read,
         page_offset_bytes=page_offset_bytes,
+        operation=operation,
+        background_work=background_work,
     )

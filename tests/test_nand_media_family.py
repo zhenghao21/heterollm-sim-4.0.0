@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from heterollm_sim.cost_models import HBMProfile
@@ -26,6 +28,8 @@ def _contract(**updates):
         "page_program_latency_ns": 200,
         "access_pattern": "contiguous_page_aligned",
         "physical_planes": 2,
+        "erase_block_bytes": 262144,
+        "erase_latency_ns": 1500.0,
     }
     value.update(updates)
     return value
@@ -118,6 +122,46 @@ def test_legacy_hbf_alias_and_dram_path_remain_separate():
     assert "nand_media" not in profile.memory_service(4096)
 
 
+def test_shared_nand_erase_is_distinct_and_background_is_reported():
+    component = _ssd(background_work={"gc": "unknown"})
+    media = nand_media_service(
+        component, 262144, False, operation="erase",
+        background_work={"gc": "explicit"},
+    )
+    assert media["operation"] == "erase"
+    assert media["erase_operations"] == 1
+    assert media["physical_bytes"] == 262144
+    assert media["background_work"] == {"gc": "explicit"}
+    endpoint = endpoint_service(component, 262144, read=False, name="erase", operation="erase")
+    assert endpoint.metadata["operation"] == "erase"
+    assert endpoint.demands[0].bytes_moved == 262144
+    legacy = __import__("heterollm_sim.hbf_media", fromlist=["hbf_media_service"]).hbf_media_service(
+        component, 262144, False, operation="erase", background_work={"gc": "explicit"}
+    )
+    assert legacy["erase_operations"] == 1
+
+
+def test_erase_does_not_require_write_bandwidth_but_shares_resolved_resource():
+    component = replace(_ssd(), write_bandwidth_gbps=0)
+    endpoint = endpoint_service(component, 262144, read=False, name="erase", operation="erase")
+    service = resolve_service(component)
+    assert endpoint.demands[0].resource_id == service.resource_id
+    assert endpoint.demands[0].service_ns > 0
+
+
+def test_data_access_erase_reaches_shared_physical_service():
+    service = resolve_service(_ssd())
+    motion = expand_access(
+        DataAccess(
+            "erase", "ERASE", 262144,
+            target=MemoryPosition("ssd0"),
+        ),
+        {"ssd0": service},
+    )
+    assert motion.phases[0].kind.value == "ERASE"
+    assert motion.phases[0].physical_bytes == 262144
+
+
 @pytest.mark.parametrize(
     "changes",
     [
@@ -126,7 +170,7 @@ def test_legacy_hbf_alias_and_dram_path_remain_separate():
         {"command_queue_depth": 0},
         {"media_parallelism": True},
         {"physical_planes": 0},
-        {"erase_latency_ns": 1},
+        {"erase_latency_ns": -1},
     ],
 )
 def test_shared_nand_contract_rejects_unknown_or_invalid_fields(changes):

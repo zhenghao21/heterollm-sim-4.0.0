@@ -21,6 +21,7 @@ class AccessKind(str, Enum):
     READ = "READ"
     WRITE = "WRITE"
     COPY = "COPY"
+    ERASE = "ERASE"
 
 
 # Short names are convenient for planners and preserve the wording in the
@@ -286,7 +287,7 @@ class PhysicalService:
         if page_offset_bytes is not None:
             _non_negative_int(page_offset_bytes, "page_offset_bytes")
         bandwidth = self.read_bandwidth_gb_s if read else self.write_bandwidth_gb_s
-        if byte_count and bandwidth <= 0:
+        if byte_count and kind is not AccessKind.ERASE and bandwidth <= 0:
             raise ValueError(f"storage service {self.service_id} requires a positive {kind.value.lower()} bandwidth")
         if (self.component is not None
                 and (self.component.metadata.get("nand_media") is not None
@@ -297,7 +298,15 @@ class PhysicalService:
                 byte_count,
                 read,
                 page_offset_bytes=page_offset_bytes,
+                operation=(
+                    "read" if kind is AccessKind.READ
+                    else "erase" if kind is AccessKind.ERASE
+                    else "program"
+                ),
+                background_work=self.component.metadata.get("background_work"),
             )
+        if kind is AccessKind.ERASE:
+            raise ValueError("ERASE requires a NAND media contract")
         model = self.service_model if service_model is None else service_model
         if model not in {"analytical", "serialized", "overlapped"}:
             raise ValueError("memory_service_model must be analytical, serialized or overlapped")
@@ -406,7 +415,7 @@ class DataAccess:
         _non_negative_int(self.byte_count, "byte_count")
         if kind is AccessKind.READ and self.source is None:
             raise ValueError("READ requires source")
-        if kind is AccessKind.WRITE and self.target is None:
+        if kind in (AccessKind.WRITE, AccessKind.ERASE) and self.target is None:
             raise ValueError("WRITE requires target")
         if kind is AccessKind.COPY and (self.source is None or self.target is None):
             raise ValueError("COPY requires source and target")
@@ -615,6 +624,8 @@ def expand_access(
         phases = (phase(AccessKind.READ, access.source, access.dependencies),)
     elif access.kind is AccessKind.WRITE:
         phases = (phase(AccessKind.WRITE, access.target, access.dependencies),)
+    elif access.kind is AccessKind.ERASE:
+        phases = (phase(AccessKind.ERASE, access.target, access.dependencies),)
     else:
         read = phase(AccessKind.READ, access.source, access.dependencies)
         deps = access.dependencies + (read.operation_id + ".read",)
@@ -699,10 +710,18 @@ def endpoint_service(
     name: str,
     page_offset_bytes: Optional[int] = None,
     dram_address_bytes: Optional[int] = None,
+    operation: Optional[str] = None,
 ) -> Optional[EndpointService]:
     _non_negative_int(byte_count, "byte_count")
+    operation = ("read" if read else "program") if operation is None else str(operation).lower()
+    if operation not in {"read", "program", "erase"}:
+        raise ValueError("operation must be read, program or erase")
+    if operation == "read" and not read:
+        raise ValueError("read operation requires read=True")
+    if operation == "program" and read:
+        raise ValueError("program operation requires read=False")
     bandwidth = float(component.directional_bandwidth_gbps("read" if read else "write"))
-    if bandwidth <= 0:
+    if bandwidth <= 0 and operation != "erase":
         # Offload media are active transfer endpoints.  Silently omitting
         # a missing direction used to make an HBF with unknown write
         # bandwidth accept state/KV writes at zero cost.  Active HBM/DRAM
@@ -711,6 +730,7 @@ def endpoint_service(
         # transfer uses an unknown direction.
         if (
             byte_count > 0
+            and operation != "erase"
             and component.normalized_kind
             in OFFLOAD_STORAGE_COMPONENT_KINDS
         ):
@@ -720,7 +740,7 @@ def endpoint_service(
                 "for this transfer".format(component.component_id, direction)
             )
         return None
-    direction = "read" if read else "write"
+    direction = "read" if operation == "read" else "erase" if operation == "erase" else "write"
     # Opt-in OCP-style cold-page accounting.  The link still carries the
     # host-visible request bytes; this endpoint demand charges the
     # physical page traffic and media latency separately.  We intentionally
@@ -733,11 +753,31 @@ def endpoint_service(
         if byte_count == 0:
             return None
         from .hbf_media import nand_media_service
+        if operation == "erase":
+            media = nand_media_service(
+                component, byte_count, False,
+                page_offset_bytes=page_offset_bytes, operation="erase",
+                background_work=component.metadata.get("background_work"),
+            )
+            return EndpointService(
+                name="{}.{}.{}.erase".format(name, component.component_id, direction),
+                demands=(ResourceDemand(
+                    resource_id=resolve_service(component).resource_id,
+                    service_ns=media["service_ns"],
+                    bytes_moved=media["physical_bytes"],
+                ),),
+                metadata={"event_kind": "memory_erase", "component_id": component.component_id,
+                          "bytes": byte_count, "physical_bytes": media["physical_bytes"],
+                          "nand_media": media, "operation": "erase",
+                          "background_work": media.get("background_work", {})},
+            )
         media = nand_media_service(
             component,
             byte_count,
             read,
             page_offset_bytes=page_offset_bytes,
+            operation=operation,
+            background_work=component.metadata.get("background_work"),
         )
         physical_bytes = media["physical_read_bytes"] if read else media["physical_bytes"]
         return EndpointService(
