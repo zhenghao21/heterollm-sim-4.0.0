@@ -1,11 +1,46 @@
 {
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_030",
-  "candidate_id": "H30_NAND_GEOMETRY_ADDRESS_MAPPING",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare registered NAND family geometry direction; independent source scan and authoritative parameter check are required before edits.",
-  "evidence": [],
-  "deferred_scope": [],
-  "next_hypothesis": null
+  "candidate_id": "H30_NAND_ADDRESS_OFFSET_MAPPING_ACCEPTED",
+  "status": "decided",
+  "decision": "promote",
+  "reason": "独立 source scan 与 DataAccess probe 复现 NAND 共享服务丢弃已知 page offset；最小修复沿现有链路传递 offset，并补齐 endpoint/legacy alias 可选入口。父/候选 128B@0/4032 探针验证 READ 4096→8192、WRITE 8192→16384，focused 83 passed，完整套件 3070 passed/4 skipped。",
+  "evidence": [
+    "artifacts/optimization/round_030/storage_scan.json",
+    "artifacts/optimization/round_030/storage_scan.sha256",
+    "artifacts/optimization/round_030/offset_probe_baseline.json",
+    "artifacts/optimization/round_030/offset_probe_candidate.json",
+    "artifacts/optimization/round_030/reproduce_h30_offset.py",
+    "Focused storage/data-motion: 83 passed in 0.31s; exit code 0",
+    "Full suite: 3070 passed, 4 skipped in 433.98s; exit code 0",
+    "Independent source review: core and endpoint/alias boundaries closed"
+  ],
+  "deferred_scope": [
+    "No universal die/channel/block/erase/FTL/GC model without source-backed executable profile.",
+    "MemoryPosition default 0 compatibility convention remains explicit."
+  ],
+  "next_hypothesis": {
+    "id": "H31_EVALUATION_OR_SEMANTIC_CONTRACT",
+    "direction": "评估/API与可视化口径",
+    "claim": "下一轮切换评估/API或正确性语义方向，检查独立执行链路中的错误/缺失/边界契约，不重复 H30 存储模型。",
+    "basis": "H30 已收口已知 NAND page offset；按方向轮换离开存储硬件。",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "28e360aa097e1c0ded8513198ad3e45693285132",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "pending push of H30 source and records"
+  },
+  "process_learning": "存储 geometry 只有在地址 provenance 到达实际计费入口后才有意义；未知地址应保留 unknown， profile-specific 数值不能推广为家族默认。",
+  "source_identity": {
+    "source_commit": "28e360aa097e1c0ded8513198ad3e45693285132",
+    "source_hashes": {
+      "src/heterollm_sim/hbf_media.py": "7cccdebd1b5024d24f2ab15117c5f8d3c434002b",
+      "src/heterollm_sim/data_motion.py": "94bdcf84ae057dcd7ba0804385bead3e6c06972b",
+      "src/heterollm_sim/communication.py": "3e30c129d40cd546efdb66547aa6d915a8a8ea62",
+      "tests/test_nand_media_family.py": "e1737ac14605876b0123ce46f33b6088c4470f43",
+      "tests/test_hbf_media_integration.py": "720f8459e375ee3790c49e74029b9dac69c9022b"
+    }
+  }
 }

@@ -1,15 +1,58 @@
 {
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_030",
-  "candidate_id": "H30_NAND_GEOMETRY_ADDRESS_MAPPING",
-  "status": "pending",
-  "prediction": {"status": "pending"},
-  "score": {"status": "pending"},
-  "mechanism_status": "pending_scan",
+  "candidate_id": "H30_NAND_ADDRESS_OFFSET_MAPPING_ACCEPTED",
+  "status": "completed",
+  "prediction": {
+    "status": "mechanism_only",
+    "baseline_artifact": "artifacts/optimization/round_030/offset_probe_baseline.json",
+    "candidate_artifact": "artifacts/optimization/round_030/offset_probe_candidate.json",
+    "source_commit": "28e360aa097e1c0ded8513198ad3e45693285132",
+    "baseline_result": "offset ignored: READ 4096/4096, WRITE 8192/8192",
+    "candidate_result": "offset-aware: READ 4096/8192, WRITE 8192/16384"
+  },
+  "score": {
+    "status": "mechanism_score",
+    "result": "Known offset page splitting and RMW/program bytes are conserved; endpoint/alias optional entrypoints preserve no-address behavior.",
+    "native_accuracy": "not_applicable"
+  },
+  "mechanism_status": "accepted_fix",
   "accuracy_status": "not_applicable",
-  "generalization_status": "pending",
-  "regression_status": "pending",
-  "comparison_artifact": "artifacts/optimization/round_030/",
-  "result": "pending",
-  "limitations": ["H30 尚未完成 geometry source scan 或独立 NAND 地址映射证据。"]
+  "generalization_status": "verified across shared SSD/NVMe/HBF NAND service path and endpoint wrapper; no Native data",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_030/offset_probe_candidate.json",
+  "result": "H30 propagates known NAND page offsets into actual access billing without adding a second storage family model.",
+  "limitations": [
+    "No Native accuracy or device cycle-accuracy measurement.",
+    "Geometry numbers remain profile-specific/parameterized; no universal die/channel/block/erase/FTL/GC defaults were introduced.",
+    "MemoryPosition default 0 remains an existing known-offset convention; direct endpoint calls without an offset remain unknown."
+  ],
+  "review": {
+    "status": "approved",
+    "reviewer": "h28_review",
+    "result": "Core cross-page formula, RMW/program conservation, COPY phase propagation and compatibility boundaries reviewed; endpoint/legacy optional offset surfaces added and focused tests passed."
+  },
+  "published_source_commit": "28e360aa097e1c0ded8513198ad3e45693285132",
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_030/storage_scan.json",
+      "sha256": "3101e14d476247f1400122e0c7080ac46235d22373941b493de450b182587f37"
+    },
+    {
+      "path": "artifacts/optimization/round_030/storage_scan.sha256",
+      "sha256": "a63e5aa0b213161345ccf876badad8d61ac9ce2a04d7547a3b0914f070516fc5"
+    },
+    {
+      "path": "artifacts/optimization/round_030/offset_probe_baseline.json",
+      "sha256": "ccc66d6d6838aec0174f090b60ce2c5df621a81b01546dc79319a9bd1a33abe2"
+    },
+    {
+      "path": "artifacts/optimization/round_030/offset_probe_candidate.json",
+      "sha256": "794a827137e472b5a8b1e77b93460c1b0e5dd8da567b6617f4f89fdc790efa31"
+    },
+    {
+      "path": "artifacts/optimization/round_030/reproduce_h30_offset.py",
+      "sha256": "26f1350a3a696f2138a44d34dae1b7a99558357e7eec42d760f50d960c523a82"
+    }
+  ]
 }
