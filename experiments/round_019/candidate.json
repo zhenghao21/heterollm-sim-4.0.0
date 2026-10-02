@@ -7,7 +7,7 @@
     "claim": "When legacy_single has one published cache component, static report usage and peak maps should attribute aggregate resident pages to that component.",
     "trigger": "build_reference_scenario with static scheduler and report_dict",
     "expected_baseline": "kv_capacity_bytes_by_component has hbm0 while kv_used_bytes_by_component and kv_peak_bytes_by_component are empty despite nonzero peak_used_bytes",
-    "observed": "inherited candidate from round_018; fresh verification pending",
+    "observed": "Parent 5ee5692 baseline reproduced the empty component maps; candidate fallback now emits hbm0 used/peak equal to the aggregate peak and preserves control layouts.",
     "falsifier": "legacy report contract explicitly excludes component usage or component attribution cannot be derived without changing aggregate execution"
   },
   "parent_commit": "5ee569252b8b7878f9804bd6e615af53a3139734",
