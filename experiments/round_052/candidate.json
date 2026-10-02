@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "collective 的 analytical bytes/energy/phase 可能在实际 planner/event/resource 计费链路中丢失、重复或未受 owner/capacity 约束。",
+    "direction": "计算成本模型",
+    "falsifier": "ring/tree/auto 实际任务需求守恒、能量/phase 透传、owner/capacity 正确，非法输入 fail-closed。",
+    "id": "H52_COLLECTIVE_EVENT_BILLING_BOUNDARY",
+    "trigger": "H44 只完成静态公式/边界矩阵，明确延期实际 planner/event E2E 与非法 dtype/zero-shape。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "b00523f9efc3f71ffc187458275952df413c09b4",
+  "round_id": "round_052",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

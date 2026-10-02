@@ -1,0 +1,21 @@
+{
+  "accuracy_status": "not_applicable",
+  "candidate_id": "H52_COLLECTIVE_EVENT_BILLING_BOUNDARY",
+  "comparison_artifact": "artifacts/optimization/round_052/",
+  "generalization_status": "pending",
+  "limitations": [
+    "H52 尚未完成 collective planner/event/resource 独立扫描。"
+  ],
+  "mechanism_status": "pending_scan",
+  "prediction": {
+    "status": "pending"
+  },
+  "regression_status": "pending",
+  "result": "pending",
+  "round_id": "round_052",
+  "schema": "heterollm.optimization.evaluation/v1",
+  "score": {
+    "status": "pending"
+  },
+  "status": "prepare"
+}

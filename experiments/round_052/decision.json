@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H52_COLLECTIVE_EVENT_BILLING_BOUNDARY",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记 collective 实际计费链路假设，等待独立 source scan 与事件矩阵。",
+  "round_id": "round_052",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "b00523f9efc3f71ffc187458275952df413c09b4",
+  "status": "pending"
+}
