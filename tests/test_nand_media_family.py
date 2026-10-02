@@ -23,10 +23,10 @@ def _contract(**updates):
     return value
 
 
-def _ssd(**metadata):
+def _ssd(kind="ssd", **metadata):
     return ComponentSpec(
         "ssd0",
-        "ssd",
+        kind,
         read_bandwidth_gbps=100,
         write_bandwidth_gbps=100,
         metadata={"nand_media": _contract(**metadata)},
@@ -46,6 +46,8 @@ def test_shared_nand_contract_reaches_ssd_endpoint_and_preserves_pages():
     assert media["rmw_read_operations"] == 1
     assert endpoint.demands[0].bytes_moved == 16384
     assert service.price("WRITE", 64)["physical_bytes"] == 16384
+    nvme = endpoint_service(_ssd(kind="nvme"), 4096, read=True, name="read")
+    assert nvme.metadata["memory_service_model"] == "nand_media_v1"
 
 
 def test_shared_nand_plane_cap_and_queue_are_effective():

@@ -41,7 +41,7 @@ ACTIVE_MEMORY_COMPONENT_KINDS = frozenset(
     }
 )
 OFFLOAD_STORAGE_COMPONENT_KINDS = frozenset(
-    {"hbf", "ssd", "high_io_ssd"}
+    {"hbf", "ssd", "high_io_ssd", "nvme"}
 )
 STORAGE_COMPONENT_KINDS = (
     ACTIVE_MEMORY_COMPONENT_KINDS | OFFLOAD_STORAGE_COMPONENT_KINDS
