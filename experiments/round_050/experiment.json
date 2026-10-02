@@ -43,12 +43,17 @@
     "visualization_state",
     "failure_closed_form"
   ],
-  "next_step": "先独立扫描 report_dict/online report/report_api/visualization 与 retention 状态入口；若未发现缺陷，保留有限负结论并转下一方向。",
+  "next_step": "切换预测精度与泛化或其他最长未查方向；不重复 H50 retention/status matrix、H42 coverage gate、H49 NAND projection。",
   "previous_direction": "存储硬件建模粒度（H49）",
   "primary_goal": "检查 static/online report、retention、failure/degraded/incomplete 与 visualization/API 的状态投影是否一致；不重复 H42 analytical_coverage gate 或 H49 NAND metadata projection。",
   "problem_domain_closure": {
-    "rule": "同一 status projection 根因若影响 execution result、report、API、visualization 与 error 面，必须本轮收口；不适用入口需显式记录。",
-    "status": "prepare"
+    "candidate": "none; no reproducible source defect",
+    "deferred": "browser rendering, Native accuracy, new product-level top-level fields",
+    "errors": "invalid placement returns typed HttpError 422 invalid_scenario",
+    "execution": "static exact/streaming/aggregate and online aggregate controls complete",
+    "retention": "trace_fidelity/visualization fidelity/report_limits/pagination aligned with retention",
+    "status": "closed_limited_negative",
+    "status_gate": "partial/unknown/failure/degraded/incomplete remain incomplete_analytical_coverage and passed=false"
   },
   "purpose": "evaluation_api_visualization_status_boundary",
   "recent_directions": [
@@ -75,5 +80,5 @@
     ]
   },
   "selected_candidate": null,
-  "status": "prepare"
+  "status": "promote"
 }

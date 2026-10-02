@@ -1,7 +1,18 @@
 {
-  "activation_checks": [],
+  "activation_checks": [
+    "static exact/streaming/aggregate retention projections",
+    "online aggregate acceptance and exact/streaming typed rejection",
+    "report_limits and visualization pagination/truncation",
+    "partial/unknown/failure/degraded/incomplete fail-closed status gate",
+    "invalid placement typed HttpError 422"
+  ],
+  "candidate_source_commit": "49ade3dd478fd981f49b4763fa6272a1a8ac77c2",
   "changed_files": [],
-  "deferred_candidates": [],
+  "deferred_candidates": [
+    "browser rendering/accessibility",
+    "Native accuracy",
+    "new top-level product fields"
+  ],
   "hypothesis": {
     "claim": "execution result 在 exact/streaming/aggregate retention 与 static/online report/API/visualization 投影中可能丢失 failure/degraded/incomplete/partial 状态或不一致。",
     "direction": "评估、API与可视化口径",
@@ -9,11 +20,34 @@
     "id": "H50_RETENTION_STATUS_PROJECTION",
     "trigger": "H42 仅覆盖 analytical_coverage 评分 gate，H49 发现 aggregate projection 依赖 retention；需要独立状态矩阵。"
   },
-  "independent_evidence": [],
+  "independent_evidence": [
+    "artifacts/optimization/round_050/source_scan_independent.json",
+    "artifacts/optimization/round_050/source_scan_independent.sha256",
+    "artifacts/optimization/round_050/status_matrix_independent.json",
+    "artifacts/optimization/round_050/status_matrix_independent.json.sha256",
+    "artifacts/optimization/round_050/final_review.json",
+    "artifacts/optimization/round_050/final_review.json.sha256"
+  ],
   "parent_commit": "ddbbcb8e6f34390c84becd62f863cf1741cf1e89",
+  "review": "独立 source scan、状态矩阵与复核确认 static/online retention、visualization、失败状态和 typed HTTP 错误边界一致；未发现安全源码候选。",
   "round_id": "round_050",
   "schema": "heterollm.optimization.candidate/v1",
-  "source_sha256": null,
-  "status": "prepare",
-  "tests": []
+  "source_commit": "49ade3dd478fd981f49b4763fa6272a1a8ac77c2",
+  "source_sha256": {
+    "note": "H50 未修改源码；source scan/status matrix/review 同一源码身份",
+    "source_commit": "49ade3dd478fd981f49b4763fa6272a1a8ac77c2"
+  },
+  "status": "complete_negative",
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m py_compile artifacts/optimization/round_050/status_matrix.py",
+      "exit_code": 0,
+      "result": "compile succeeded"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe artifacts/optimization/round_050/status_matrix.py",
+      "exit_code": 0,
+      "result": "independent retention/status matrix completed"
+    }
+  ]
 }

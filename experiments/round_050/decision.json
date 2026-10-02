@@ -1,12 +1,32 @@
 {
   "candidate_id": "H50_RETENTION_STATUS_PROJECTION",
-  "decision": "pending",
-  "deferred_scope": [],
-  "evidence": [],
-  "next_hypothesis": null,
-  "reason": "Prepare 已登记评估/API方向的 retention/status projection 假设，等待独立 source scan 与状态矩阵。",
+  "changed_files": [
+    "experiments/round_050/experiment.json",
+    "experiments/round_050/candidate.json",
+    "experiments/round_050/evaluation.json",
+    "experiments/round_050/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "decision": "reject_no_candidate",
+  "deferred_scope": [
+    "browser rendering/accessibility",
+    "Native accuracy",
+    "new product-level top-level fields"
+  ],
+  "evidence": [
+    "artifacts/optimization/round_050/source_scan_independent.json",
+    "artifacts/optimization/round_050/status_matrix_independent.json",
+    "artifacts/optimization/round_050/final_review.json",
+    "artifacts/optimization/round_050/final_review.json.sha256"
+  ],
+  "next_hypothesis": {
+    "claim": "检查独立输入身份、模型/硬件/shape 支持域与 fallback/OOD provenance 是否在新的真实执行入口保持可比。",
+    "direction": "预测精度与泛化",
+    "rationale": "H43 之后预测/泛化方向未复查；H50 已收口评估/API边界，下一轮切换方向而非重复状态矩阵。"
+  },
+  "reason": "独立 source scan、retention/status 矩阵与 review 确认 static exact/streaming/aggregate 与 online aggregate 的 fidelity、limits、visualization 和 typed API 错误边界一致；不完整/失败状态均 passed=false，未发现新源码缺陷，因此不修改功能源码。",
   "round_id": "round_050",
   "schema": "heterollm.optimization.decision/v1",
-  "source_commit": "ddbbcb8e6f34390c84becd62f863cf1741cf1e89",
-  "status": "pending"
+  "source_commit": "49ade3dd478fd981f49b4763fa6272a1a8ac77c2",
+  "status": "complete"
 }

@@ -1,21 +1,32 @@
 {
   "accuracy_status": "not_applicable",
   "candidate_id": "H50_RETENTION_STATUS_PROJECTION",
-  "comparison_artifact": "artifacts/optimization/round_050/",
-  "generalization_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_050/status_matrix_independent.json",
+  "generalization_status": "limited_to_static/online report and typed API controls",
   "limitations": [
-    "H50 尚未完成 retention/status/report/API/visualization 独立扫描。"
+    "no browser rendering",
+    "no Native accuracy",
+    "synthetic status controls do not fabricate execution failure traces",
+    "H42 analytical coverage gate not reopened as a new candidate"
   ],
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "negative_scan_passed_limited",
   "prediction": {
-    "status": "pending"
+    "native_loaded": false,
+    "source_commit": "49ade3dd478fd981f49b4763fa6272a1a8ac77c2",
+    "status": "retention_status_controls_complete"
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "source unchanged; H47 full 3108 passed/4 skipped inherited; no repeat required",
+  "result": "no_candidate_retained_finite_negative",
   "round_id": "round_050",
   "schema": "heterollm.optimization.evaluation/v1",
   "score": {
-    "status": "pending"
+    "acceptance": "retention/status/report/API/visualization projections align; invalid and incomplete states fail closed",
+    "evidence": [
+      "artifacts/optimization/round_050/source_scan_independent.json",
+      "artifacts/optimization/round_050/status_matrix_independent.json",
+      "artifacts/optimization/round_050/final_review.json"
+    ],
+    "status": "finite_negative_evaluation_api_scan"
   },
-  "status": "prepare"
+  "status": "complete"
 }
