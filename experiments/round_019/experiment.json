@@ -1,0 +1,70 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_019",
+  "status": "review",
+  "purpose": "simulator_correctness",
+  "primary_goal": "repair the legacy_single static KV report contract so published per-component capacity has matching used/peak attribution",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "5ee569252b8b7878f9804bd6e615af53a3139734",
+    "role": "H18 promoted runtime swap atomicity baseline"
+  },
+  "hypothesis_id": "H19_STATIC_KV_REPORT_LEGACY_COMPONENT_USAGE",
+  "scope": {
+    "operator": "reporting._static_kv_report and webui KV capacity analysis",
+    "phase": "legacy_single static report serialization and component rows",
+    "trigger": "static report publishes cache component capacity while aggregate KV peak usage is nonzero and component byte map is empty"
+  },
+  "problem_domain_closure": {
+    "report_write": "fixed: legacy_single fallback maps cache_component to bytes_per_page",
+    "report_read": "verified: existing UI union/free calculation receives numeric used/peak",
+    "api_contract": "verified: static POST /api/run preserves both component maps",
+    "control": "partitioned llama_static_layer and paged_pool maps remain unchanged",
+    "regression": "fixed path, partitioned/pool controls, API and full suite verified"
+  },
+  "data_roles": {
+    "development": "artifacts/optimization/round_018/planner_discovery.json and fresh H19 reproductions",
+    "comparison": "parent 5ee5692 output on identical ScenarioConfig",
+    "holdout": "partitioned/paged pool controls and full existing reporting/UI tests",
+    "final_acceptance": "pending independent verification"
+  },
+  "metrics": [
+    "kv_capacity_bytes_by_component",
+    "kv_used_bytes_by_component",
+    "kv_peak_bytes_by_component",
+    "component_row_symmetry",
+    "aggregate_peak_conservation",
+    "regression_status"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "new_microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "preserve aggregate execution and legacy capacity semantics",
+    "do not synthesize component ownership for multi-component partitioned layouts",
+    "keep UI free/used rows numerically consistent",
+    "do not claim native latency or accuracy improvement"
+  ],
+  "next_step": "promote after final focused/full verification, commit, push, and remote SHA check",
+  "selected_candidate": "H19_STATIC_KV_REPORT_LEGACY_COMPONENT_USAGE",
+  "budget_used": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "microbenchmark_runs": 0,
+    "retries": 0
+  },
+  "source_identity": {
+    "parent_commit": "5ee569252b8b7878f9804bd6e615af53a3139734",
+    "working_tree_files": {
+      "src/heterollm_sim/reporting.py": "372510a4df36a97bbc9572e5675698b6849a2ef7a680c6142636dd8efd08d7cc",
+      "tests/test_kv_layout_contract.py": "46321b46156bef14f4fc570de04cde852f4b8cb577c9f1e82e505d66b9315f29",
+      "tests/test_web.py": "3d240edf300c68b777393875e6d5f1198bee6a2fd165382907f2e30c69b4636b"
+    },
+    "parent_source_sha": "same as parent commit before H19 edit"
+  }
+}

@@ -484,6 +484,25 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(payload["kv_cache"]["tokens_per_page"], 16)
         self.assertGreater(payload["scheduler"]["total_batches"], 0)
 
+    def test_static_run_endpoint_attributes_legacy_kv_usage_by_component(self):
+        scenario = self.reference_payload()
+        scenario["workload"]["scheduler"]["mode"] = "static"
+        status, _, payload = self.json_request(
+            "POST", "/api/run", payload=scenario
+        )
+
+        self.assertEqual(status, 200)
+        kv = payload["kv_cache"]
+        self.assertEqual(kv["kv_layout_mode"], "legacy_single")
+        self.assertEqual(
+            kv["kv_used_bytes_by_component"],
+            {"hbm0": kv["peak_used_bytes"]},
+        )
+        self.assertEqual(
+            kv["kv_peak_bytes_by_component"],
+            {"hbm0": kv["peak_used_bytes"]},
+        )
+
     def test_run_endpoint_pages_visualization_without_wrapping_scenario(self):
         status, _, payload = self.json_request(
             "POST",

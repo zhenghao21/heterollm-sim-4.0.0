@@ -1,0 +1,59 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_019",
+  "status": "verified",
+  "hypothesis": {
+    "id": "H19_STATIC_KV_REPORT_LEGACY_COMPONENT_USAGE",
+    "claim": "When legacy_single has one published cache component, static report usage and peak maps should attribute aggregate resident pages to that component.",
+    "trigger": "build_reference_scenario with static scheduler and report_dict",
+    "expected_baseline": "kv_capacity_bytes_by_component has hbm0 while kv_used_bytes_by_component and kv_peak_bytes_by_component are empty despite nonzero peak_used_bytes",
+    "observed": "inherited candidate from round_018; fresh verification pending",
+    "falsifier": "legacy report contract explicitly excludes component usage or component attribution cannot be derived without changing aggregate execution"
+  },
+  "parent_commit": "5ee569252b8b7878f9804bd6e615af53a3139734",
+  "changed_files": [
+    "src/heterollm_sim/reporting.py",
+    "tests/test_kv_layout_contract.py",
+    "tests/test_web.py"
+  ],
+  "activation_checks": [
+    "parent commit reproduction confirmed capacity hbm0 with empty used/peak maps and nonzero aggregate peak",
+    "legacy_single fallback emits hbm0 used/peak equal to aggregate peak without changing bytes_per_page or capacity",
+    "llama_static_layer and paged_pool controls retain their existing component-map semantics",
+    "POST /api/run static output preserves component maps and JSON serialization",
+    "UI renderRuntime receives numeric used/free inputs through existing union logic"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_kv_layout_contract.py tests/test_streaming_des.py",
+      "result": "17 passed in 1.85s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_memory_tier_placement.py tests/test_webui_runtime_contract.py tests/test_component_timeseries.py",
+      "result": "65 passed in 3.18s"
+    },
+    {
+      "command": "node --test tests/webui_kv_layout.test.cjs",
+      "result": "8 passed in 80.45ms"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_web.py -k \"run_endpoint_returns_report_dict or static_run_endpoint_attributes_legacy_kv_usage_by_component\"",
+      "result": "2 passed, 34 deselected in 1.13s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "result": "3027 passed, 4 skipped in 433.11s (0:07:13); exit code 0; API test was additionally run after collection"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_019/report_reproduction.json",
+    "artifacts/optimization/round_019/ui_closure.json",
+    "artifacts/optimization/round_019/independent_scan.json"
+  ],
+  "deferred_candidates": [],
+  "source_sha256": "372510a4df36a97bbc9572e5675698b6849a2ef7a680c6142636dd8efd08d7cc"
+}

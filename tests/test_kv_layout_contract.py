@@ -2,6 +2,7 @@ from dataclasses import replace
 
 from heterollm_sim.llama_scenario import apply_llama_runtime_config
 from heterollm_sim.reference import build_reference_scenario
+from heterollm_sim.reporting import report_dict, run_scenario
 from heterollm_sim.runtime_adapters import LlamaCppRuntimeConfig
 from heterollm_sim.serving import compile_serving_plan, simulate_online
 
@@ -12,6 +13,28 @@ def test_legacy_json_keeps_single_component_contract():
     assert plan.kv_policy.layout_mode == "legacy_single"
     assert plan.kv_layer_components == {}
     assert plan.kv_capacity_bytes_by_component == {"hbm0": plan.kv_policy.capacity_bytes}
+
+
+def test_static_legacy_report_attributes_usage_to_cache_component():
+    scenario = build_reference_scenario()
+    scenario = replace(
+        scenario,
+        workload=replace(
+            scenario.workload,
+            scheduler=replace(scenario.workload.scheduler, mode="static"),
+        ),
+    )
+    payload = report_dict(run_scenario(scenario, retention_policy="exact"))["kv_cache"]
+    assert payload["kv_layout_mode"] == "legacy_single"
+    assert payload["kv_capacity_bytes_by_component"] == {
+        "hbm0": payload["capacity_bytes"]
+    }
+    assert payload["kv_used_bytes_by_component"] == {
+        "hbm0": payload["peak_used_bytes"]
+    }
+    assert payload["kv_peak_bytes_by_component"] == {
+        "hbm0": payload["peak_used_bytes"]
+    }
 
 
 def test_runtime_adapter_exposes_native_layer_kv_contract():

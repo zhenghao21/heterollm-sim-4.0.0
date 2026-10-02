@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_019",
+  "candidate_id": "H19_STATIC_KV_REPORT_LEGACY_COMPONENT_USAGE",
+  "status": "completed",
+  "prediction": {
+    "status": "not_applicable",
+    "reason": "simulator report/UI correctness round; no native timing or accuracy prediction"
+  },
+  "score": {
+    "status": "not_applicable",
+    "reason": "acceptance uses paired contract invariants and regression; no native truth"
+  },
+  "mechanism_status": "accepted_fix",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "legacy_single only; llama_static_layer and paged_pool controls verified unchanged",
+  "regression_status": "passed",
+  "comparison_artifact": "artifacts/optimization/round_019/report_reproduction.json",
+  "result": "Parent baseline reproduced an asymmetric component report. The fallback derives one component quantum only for legacy_single with a declared cache component; API/UI now show numeric used and free values while aggregate execution remains unchanged.",
+  "limitations": [
+    "No native timing or accuracy measurement was collected.",
+    "Component-level usage remains intentionally unavailable for dynamic paged_pool because aggregate peak pages do not identify page owners.",
+    "The static API test was run separately after the full-suite collection; source code was unchanged between those checks."
+  ]
+}

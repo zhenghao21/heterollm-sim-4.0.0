@@ -1,0 +1,31 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_019",
+  "candidate_id": "H19_STATIC_KV_REPORT_LEGACY_COMPONENT_USAGE",
+  "status": "decided",
+  "decision": "promote",
+  "reason": "Independent parent reproduction, reporting/UI/API closure, control-layout checks, and regression all support the minimal legacy_single attribution fallback. It fixes a known report contract gap without changing aggregate execution or multi-component allocation semantics.",
+  "evidence": [
+    "artifacts/optimization/round_019/report_reproduction.json",
+    "artifacts/optimization/round_019/ui_closure.json",
+    "artifacts/optimization/round_019/independent_scan.json",
+    "src/heterollm_sim/reporting.py",
+    "tests/test_kv_layout_contract.py",
+    "tests/test_web.py",
+    "3027 passed, 4 skipped in final full pytest",
+    "2 passed static/continuous /api/run focused tests"
+  ],
+  "deferred_scope": [
+    {
+      "id": "PAGED_POOL_COMPONENT_USAGE",
+      "status": "verified_not_a_bug",
+      "reason": "dynamic page ownership cannot be inferred from aggregate static peak pages",
+      "artifact": "artifacts/optimization/round_019/independent_scan.json"
+    }
+  ],
+  "next_hypothesis": {
+    "id": "H20_NEXT_SOURCE_GROUNDED_CANDIDATE",
+    "claim": "Continue discovery outside the closed legacy_single reporting/UI contract; select only a new independently reproducible execution or evaluation defect.",
+    "status": "registered_needs_discovery"
+  }
+}

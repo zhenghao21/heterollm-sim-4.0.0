@@ -5600,6 +5600,21 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
     )
     component_bytes = getattr(kv_policy, "component_bytes_per_page", {})
     component_bytes = component_bytes if isinstance(component_bytes, Mapping) else {}
+    # Legacy single-component KV publishes capacity by cache component but
+    # does not populate the partitioned-layout byte map.  Attribute the
+    # aggregate page quantum to that one declared component so the static
+    # report keeps capacity, used, peak, and free values on the same scope.
+    layout_mode = getattr(kv_policy, "layout_mode", "legacy_single")
+    legacy_cache_component = getattr(kv_policy, "cache_component", None)
+    if (
+        not component_bytes
+        and layout_mode == "legacy_single"
+        and isinstance(legacy_cache_component, str)
+        and legacy_cache_component
+    ):
+        component_bytes = {
+            legacy_cache_component: int(kv_policy.bytes_per_page)
+        }
     layer_components = getattr(kv_policy, "kv_layer_components", {})
     layer_components = layer_components if isinstance(layer_components, Mapping) else {}
     layer_bytes_per_token = getattr(kv_policy, "kv_layer_bytes_per_token", {})
