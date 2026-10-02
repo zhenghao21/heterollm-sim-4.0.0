@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_063",
+  "candidate_id": "H63_TOOLCHAIN_CLOSURE_BOUNDARY",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记开发工具链与可复现性方向，等待独立 source scan 与矩阵。",
+  "evidence": [],
+  "source_commit": "4cf07da52d4bc9683c0ba20995f6e5bf4f30750f",
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

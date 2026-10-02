@@ -1,0 +1,76 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_063",
+  "hypothesis_id": "H63_TOOLCHAIN_CLOSURE_BOUNDARY",
+  "direction": "开发工具链与可复现性",
+  "previous_direction": "存储硬件建模粒度",
+  "recent_directions": [
+    "H61:运行速度与内存（有限负结论）",
+    "H62:存储硬件建模粒度（源码修复）",
+    "H63:开发工具链与可复现性（活动）"
+  ],
+  "direction_switch_reason": "H62 direct NAND billing 已收口；按轮换规则切换到长期未复查的工具链/可复现性方向，避开 H47 已完成的命令捕获总体审计。",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H59",
+    "运行速度与内存": "H61",
+    "计算成本模型": "H58",
+    "存储硬件建模粒度": "H62",
+    "预测精度与泛化": "H60",
+    "评估/API与可视化口径": "H57",
+    "开发工具链与可复现性": "H63活动"
+  },
+  "primary_goal": "检查最新轮次四份 JSON、artifact sidecar、源码 SHA、远端 SHA、换行/JSON 可解析性和恢复边界是否存在新的可复现闭合缺陷；不把历史记录限制冒充源码问题。",
+  "purpose": "toolchain_evidence_closure",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "budget": {
+    "candidate_count": 1,
+    "source_scan_runs": 1,
+    "matrix_runs": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "retries": 0
+  },
+  "metrics": [
+    "json_parse",
+    "sidecar_match",
+    "source_identity",
+    "remote_identity",
+    "recovery_closure"
+  ],
+  "guardrails": [
+    "不重做 H47 command_provenance wrapper 逻辑",
+    "不修改仿真器功能源码除非记录缺陷真正影响执行",
+    "不把单测通过称为精度/性能改善",
+    "不重跑已通过且未受影响的全量回归"
+  ],
+  "data_roles": {
+    "development": "fresh round 060-062 records and artifacts",
+    "comparison": "independent read-only closure matrix",
+    "holdout": "new round 063 evidence not used to choose candidate",
+    "final_acceptance": "record/toolchain reproducibility only"
+  },
+  "baseline": {
+    "parent_commit": "4cf07da52d4bc9683c0ba20995f6e5bf4f30750f",
+    "role": "H62 accepted direct NAND billing baseline"
+  },
+  "scope": {
+    "include": [
+      "round 060-062 four JSON",
+      "artifact SHA sidecars",
+      "current source/remote identity",
+      "restore and stage closure"
+    ],
+    "exclude": [
+      "H47 child returncode capture implementation",
+      "functional simulator behavior",
+      "Native accuracy"
+    ]
+  },
+  "problem_domain_closure": {
+    "rule": "同一记录/身份根因若影响写入、读取、并发、错误、API或回归证据，本轮一起收口。",
+    "status": "prepare"
+  },
+  "selected_candidate": null,
+  "next_step": "等待独立 source scan 与 toolchain matrix；无缺陷保留有限负结论并切换方向。",
+  "status": "prepare"
+}

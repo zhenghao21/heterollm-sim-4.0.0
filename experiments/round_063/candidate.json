@@ -1,0 +1,20 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_063",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H63_TOOLCHAIN_CLOSURE_BOUNDARY",
+    "direction": "开发工具链与可复现性",
+    "claim": "最新轮次可能存在记录 JSON/sidecar、源码身份或恢复阶段不一致，导致已通过证据无法与同一源码配对。",
+    "trigger": "H62 引入 source-fix commit 与 test-only commit 分离；需要独立检查记录是否明确标注 functional/current identity。",
+    "falsifier": "最新记录与 sidecar/source/remote 全部可解析且身份闭合，未发现可复现记录缺陷。"
+  },
+  "parent_commit": "4cf07da52d4bc9683c0ba20995f6e5bf4f30750f",
+  "candidate_source_commit": null,
+  "source_sha256": null,
+  "changed_files": [],
+  "independent_evidence": [],
+  "activation_checks": [],
+  "deferred_candidates": [],
+  "tests": []
+}
