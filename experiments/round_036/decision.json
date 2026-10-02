@@ -33,8 +33,8 @@
   "publication": {
     "source_commit": "e62cfbe6b9275d778ebd6f0b6e81cd35d1748def",
     "remote": "origin/main",
-    "verified_remote_sha": null,
-    "verification": "pending push of H36 negative records"
+    "verified_remote_sha": "4da9b6c111cc2395421aa11176b6bb35be91e435",
+    "verification": "git push origin main exit 0; H36 negative records publication commit 4da9b6c111cc2395421aa11176b6bb35be91e435 matched git ls-remote before final metadata update"
   },
   "process_learning": "运行时提速候选必须到达真实生产调用方；独立 provider reuse 的潜在收益不能替代生命周期/身份/淘汰契约。",
   "source_identity": {
