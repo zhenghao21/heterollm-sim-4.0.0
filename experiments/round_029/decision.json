@@ -1,11 +1,44 @@
 {
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_029",
-  "candidate_id": "H29_RUNTIME_WALLTIME_MEMORY_EXECUTION_CHAIN",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare registered runtime speed/memory direction; independent source scan is required before edits.",
-  "evidence": [],
-  "deferred_scope": [],
-  "next_hypothesis": null
+  "candidate_id": "H29_CLI_REPORT_SERIALIZATION_REUSE",
+  "status": "decided",
+  "decision": "promote",
+  "reason": "独立 runtime scan 定位 CLI 文本报告重复 report_dict；父版本/候选独立进程 probe 将静态 exact report+format 中位数从 123.2554ms 降至 62.5194ms，文本输出 SHA 完全一致。CLI/报告 focused 54 与 32 项均通过，完整套件 3068 passed/4 skipped。",
+  "evidence": [
+    "artifacts/optimization/round_029/runtime_scan.json",
+    "artifacts/optimization/round_029/_run_scan.py",
+    "artifacts/optimization/round_029/candidate_probe_baseline.json",
+    "artifacts/optimization/round_029/candidate_probe_candidate.json",
+    "artifacts/optimization/round_029/reproduce_h29_candidate.py",
+    "Focused CLI/reporting/web/end-to-end: 54 passed in 6.18s; exit code 0",
+    "Focused streaming/component/CLI reuse: 32 passed in 3.17s; exit code 0",
+    "Full suite: 3068 passed, 4 skipped in 438.18s; exit code 0",
+    "Independent review: no compatibility blocker"
+  ],
+  "deferred_scope": [
+    "No unbounded general report cache; lifetime/invalidity remains unaccepted outside CLI."
+  ],
+  "next_hypothesis": {
+    "id": "H30_NAND_GEOMETRY_ADDRESS_MAPPING",
+    "direction": "存储硬件建模粒度",
+    "claim": "NAND 家族（SSD/HBF/NVMe）仍有 profile-specific geometry 与地址映射/访问拆分的可证伪执行链路候选；保持 SSD/HBF 同一介质家族，不拆成两个模型。",
+    "basis": "H26 仅接入 opt-in page/RMW/program/plane/queue；die/channel/block/erase/FTL/GC 明确延期，用户要求继续深化存储内部元素。",
+    "status": "registered_for_next_round"
+  },
+  "publication": {
+    "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348",
+    "remote": "origin/main",
+    "verified_remote_sha": null,
+    "verification": "pending push of H29 source and records"
+  },
+  "process_learning": "报告函数应支持调用方复用已生成 payload；性能改动必须与输出等价性同时验收。",
+  "source_identity": {
+    "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348",
+    "source_hashes": {
+      "src/heterollm_sim/reporting.py": "304c6a320c374bd0e1a0ddfe846df6b11c63c600",
+      "src/heterollm_sim/cli.py": "436680611a5a2456dc9b6c89300c33a566fe693c",
+      "tests/test_cli_report_reuse.py": "2d97d376a869e184220e1356fb0e8207a9dac0dc"
+    }
+  }
 }

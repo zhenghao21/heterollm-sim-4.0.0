@@ -1,19 +1,92 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_029",
-  "status": "prepare",
+  "status": "verified",
   "hypothesis": {
-    "id": "H29_RUNTIME_WALLTIME_MEMORY_EXECUTION_CHAIN",
+    "id": "H29_CLI_REPORT_SERIALIZATION_REUSE",
     "direction": "运行速度与内存",
-    "claim": "实际仿真执行链路存在可独立测量的 wall-time 或峰值内存开销，且能在保持报告等价性的前提下最小修复。",
-    "trigger": "待独立 runtime source scan；不得继承 H25 aggregate 负向结论。",
-    "falsifier": "现有执行链路在控制输入和保留策略下无可重复运行时/内存差异，或候选无法保持结果等价。"
+    "claim": "CLI 文本报告路径复用已有 report_dict payload 可避免第二次完整构建，并保持文本/JSON/文件输出等价。",
+    "trigger": "独立 runtime scan 找到 report_dict 重复调用；父版本静态 exact 文本路径中重复构建中位数 123.2554ms。",
+    "falsifier": "复用 payload 改变输出、破坏 format_report 旧调用、或候选没有可重复运行时收益。"
   },
-  "parent_commit": "4e22ea31c2152091c30528d31b9a6505bce620f7",
-  "changed_files": [],
-  "source_sha256": null,
-  "activation_checks": [],
-  "tests": [],
-  "independent_evidence": [],
-  "deferred_candidates": []
+  "parent_commit": "5f79543582592fcb67aac31a2b25d8717a832bf8",
+  "changed_files": [
+    "src/heterollm_sim/reporting.py",
+    "src/heterollm_sim/cli.py",
+    "tests/test_cli_report_reuse.py"
+  ],
+  "source_sha256": "304c6a320c374bd0e1a0ddfe846df6b11c63c600",
+  "activation_checks": [
+    {
+      "check": "candidate probe static exact report+format path",
+      "result": "median 62.5194ms vs baseline 123.2554ms; reduction 49.3%; text payload SHA identical",
+      "exit_code": 0,
+      "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348"
+    },
+    {
+      "check": "CLI --output text branch",
+      "result": "report_dict called once and format_report receives same payload",
+      "exit_code": 0,
+      "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348"
+    },
+    {
+      "check": "format_report compatibility",
+      "result": "data=None retains old internal report_dict behavior",
+      "exit_code": 0,
+      "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348"
+    }
+  ],
+  "tests": [
+    {
+      "command": "pytest CLI/reporting/web/end-to-end focused groups",
+      "result": "54 passed in 6.18s; exit code 0",
+      "exit_code": 0,
+      "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348"
+    },
+    {
+      "command": "pytest streaming/component/end-to-end/CLI reuse groups",
+      "result": "32 passed in 3.17s; exit code 0",
+      "exit_code": 0,
+      "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348"
+    },
+    {
+      "command": "pytest -q",
+      "result": "3068 passed, 4 skipped in 438.18s; exit code 0",
+      "exit_code": 0,
+      "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_029/runtime_scan.json",
+    "artifacts/optimization/round_029/_run_scan.py",
+    "artifacts/optimization/round_029/candidate_probe_baseline.json",
+    "artifacts/optimization/round_029/candidate_probe_candidate.json",
+    "artifacts/optimization/round_029/reproduce_h29_candidate.py"
+  ],
+  "deferred_candidates": [
+    "No general report cache; repeated report_dict outside CLI remains a separate candidate requiring lifetime/invalidity policy."
+  ],
+  "source_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348",
+  "final_evidence_hashes": [
+    {
+      "path": "artifacts/optimization/round_029/runtime_scan.json",
+      "sha256": "1abe585e70edc04debd266775a9e0982cc67bee8868899350e95ee14790988d2"
+    },
+    {
+      "path": "artifacts/optimization/round_029/_run_scan.py",
+      "sha256": "fdad78dc5c55c14ce1d8ca6f607a64f7bc1323163f61485a368fa308fbdf46ee"
+    },
+    {
+      "path": "artifacts/optimization/round_029/candidate_probe_baseline.json",
+      "sha256": "c094ba864d61dd57d59ba144402cde9918de0f46940175af61b2ff9cbb534c5b"
+    },
+    {
+      "path": "artifacts/optimization/round_029/candidate_probe_candidate.json",
+      "sha256": "951789f1fc685ff90fc662d59b7f05173030263d350c31f7a8b820dd7c8aa525"
+    },
+    {
+      "path": "artifacts/optimization/round_029/reproduce_h29_candidate.py",
+      "sha256": "67964ad2bf60de47b07876e363a4c118bdbdba71442271d42443d198f3afd0de"
+    }
+  ]
 }
