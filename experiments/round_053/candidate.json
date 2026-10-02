@@ -1,0 +1,19 @@
+{
+  "activation_checks": [],
+  "changed_files": [],
+  "deferred_candidates": [],
+  "hypothesis": {
+    "claim": "后台 run job 在取消、异常或超时后可能残留 registry/locks/temporary state，或通过 API 把失败/取消误报为成功。",
+    "direction": "仿真器正确性与语义",
+    "falsifier": "取消/异常/超时均清理 registry，状态可重复读取且 HTTP typed envelope 保持；重复/未知 job fail-closed。",
+    "id": "H53_RUN_JOB_CANCEL_CLEANUP_BOUNDARY",
+    "trigger": "H45 覆盖 event kernel failure rollback 但未覆盖 run_jobs 生命周期与 HTTP transport。"
+  },
+  "independent_evidence": [],
+  "parent_commit": "f6ca922815c896ce189aa838d8b4a62ecb1ea9f5",
+  "round_id": "round_053",
+  "schema": "heterollm.optimization.candidate/v1",
+  "source_sha256": null,
+  "status": "prepare",
+  "tests": []
+}

@@ -1,0 +1,80 @@
+{
+  "baseline": {
+    "parent_commit": "f6ca922815c896ce189aa838d8b4a62ecb1ea9f5",
+    "role": "H52 finite negative collective billing; H45 failure rollback historical comparator"
+  },
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "matrix_runs": 1,
+    "native_collection_runs": 0,
+    "retries": 0,
+    "source_scan_runs": 1
+  },
+  "data_roles": {
+    "comparison": "H45 failure rollback only as non-reopened comparator",
+    "development": "fresh local run-job cancellation/error controls",
+    "final_acceptance": "lifecycle semantics only; no Native accuracy",
+    "holdout": "independent duplicate/unknown/cancel/exception controls"
+  },
+  "direction": "仿真器正确性与语义",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H53活动",
+    "存储硬件建模粒度": "H49",
+    "开发工具链与可复现性": "H47",
+    "计算成本模型": "H52",
+    "评估/API与可视化口径": "H50",
+    "运行速度与内存": "H46",
+    "预测精度与泛化": "H51"
+  },
+  "direction_switch_reason": "H52 已收口 collective 实际计费且无源码候选；正确性方向自 H45 后未复查，且 H45 明确延期 HTTP transport、自定义异常和后台任务清理，切换到运行作业生命周期。",
+  "guardrails": [
+    "不重做 H45 event rollback/ready heap",
+    "不重做 H42/H50 report scoring/retention",
+    "取消/异常状态不得静默当成功",
+    "无独立可复现缺陷不改源码"
+  ],
+  "hypothesis_id": "H53_RUN_JOB_CANCEL_CLEANUP_BOUNDARY",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "metrics": [
+    "registry_cleanup",
+    "cancel_idempotence",
+    "exception_cleanup",
+    "typed_http_status",
+    "retention_after_cancel"
+  ],
+  "next_step": "先独立扫描 run_jobs/job registry/HTTP cancellation call chain，再执行一组取消/异常/重复/未知 job 控制；若无缺陷，保留有限负结论。",
+  "previous_direction": "计算成本模型（H52）",
+  "primary_goal": "检查后台 run job 的取消、异常、超时和 HTTP 错误路径是否释放 registry/locks/temporary state，并保持 report/API typed error 契约；不重复 H45 资源回滚/ready-heap/retention 扫描或 H42 coverage gate。",
+  "problem_domain_closure": {
+    "rule": "同一 job lifecycle 根因若影响 submit, execute, cancel, failure, registry and API error surfaces，必须本轮收口；未支持入口明确记录不适用。",
+    "status": "prepare"
+  },
+  "purpose": "run_job_cancellation_error_cleanup_boundary",
+  "recent_directions": [
+    "H51:预测精度与泛化（有限负结论）",
+    "H52:计算成本模型（有限负结论）",
+    "H53:仿真器正确性与语义（活动）"
+  ],
+  "round_id": "round_053",
+  "schema": "heterollm.optimization.experiment/v1",
+  "scope": {
+    "candidate": "run_jobs background lifecycle cancellation/exception/timeout cleanup and typed API status",
+    "exclude": [
+      "H45 event kernel rollback/ready heap",
+      "H42 analytical coverage",
+      "H50 retention fidelity",
+      "new job framework"
+    ],
+    "include": [
+      "job registry state",
+      "cancel event and worker exit",
+      "exception cleanup",
+      "timeout/HTTP error envelope",
+      "duplicate job/unknown job controls",
+      "result retention after cancellation"
+    ]
+  },
+  "selected_candidate": null,
+  "status": "prepare"
+}

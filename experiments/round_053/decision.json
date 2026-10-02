@@ -1,0 +1,12 @@
+{
+  "candidate_id": "H53_RUN_JOB_CANCEL_CLEANUP_BOUNDARY",
+  "decision": "pending",
+  "deferred_scope": [],
+  "evidence": [],
+  "next_hypothesis": null,
+  "reason": "Prepare 已登记后台作业生命周期清理假设，等待独立 source scan 与控制矩阵。",
+  "round_id": "round_053",
+  "schema": "heterollm.optimization.decision/v1",
+  "source_commit": "f6ca922815c896ce189aa838d8b4a62ecb1ea9f5",
+  "status": "pending"
+}
