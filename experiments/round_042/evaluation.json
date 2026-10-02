@@ -2,20 +2,31 @@
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_042",
   "candidate_id": "H42_EVALUATION_STATE_BOUNDARY",
-  "status": "pending",
+  "status": "complete",
   "prediction": {
-    "status": "pending"
+    "status": "engineering_contract_fix_verified",
+    "native_loaded": false,
+    "source_commit": "61026579c7ad451695c6fe862d00d2c9be170be1"
   },
   "score": {
-    "status": "pending"
+    "status": "state_boundary_fail_closed",
+    "acceptance": "analytical_coverage preserved; incomplete/unknown/failure/degraded/partial states cannot pass native or R0 score; absent coverage remains compatible",
+    "evidence": [
+      "artifacts/optimization/round_042/state_matrix_pre_fix.json",
+      "artifacts/optimization/round_042/state_matrix_independent.json",
+      "artifacts/optimization/round_042/fix_review.json"
+    ]
   },
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "fixed_and_reviewed",
   "accuracy_status": "not_applicable",
-  "generalization_status": "pending",
-  "regression_status": "pending",
-  "comparison_artifact": "artifacts/optimization/round_042/",
-  "result": "pending",
+  "generalization_status": "limited_to_explicit_coverage_status_shapes_and_existing report paths",
+  "regression_status": "focused 58 passed; full 3104 passed/4 skipped",
+  "comparison_artifact": "artifacts/optimization/round_042/state_matrix_independent.json",
+  "result": "accepted_engineering_contract_fix_no_precision_claim",
   "limitations": [
-    "H42 尚未完成状态矩阵和 API/报告/可视化边界验证。"
+    "未加载 Native，不提供预测精度或泛化改善结论",
+    "状态矩阵使用 synthetic coverage states，并以真实 report retention/serde/API 路径做控制",
+    "可视化浏览器渲染未重新执行；payload fidelity/trace_source/limitations contract 未改动",
+    "source_scan_independent.json 早期 raw web.py hash 与 clean baseline 不一致，仅保留发现上下文，不作为身份配对证据"
   ]
 }

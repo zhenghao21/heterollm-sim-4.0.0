@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_042",
-  "status": "prepare",
+  "status": "complete",
   "hypothesis": {
     "id": "H42_EVALUATION_STATE_BOUNDARY",
     "direction": "评估、API与可视化口径",
@@ -9,11 +9,56 @@
     "trigger": "需要独立 source scan 与状态矩阵复现；不继承 H35 基础状态扫描作为全域证明。",
     "falsifier": "所有声明状态在序列化、报告、API、trace/visualization 边界保持同义且失败/部分状态始终 fail closed。"
   },
-  "parent_commit": "0a366c83de7725679c03ad26c0402c2616d0bc3a",
-  "changed_files": [],
-  "source_sha256": null,
-  "activation_checks": [],
-  "tests": [],
-  "independent_evidence": [],
-  "deferred_candidates": []
+  "parent_commit": "e839285e11661e8993b4cca9eae99182b745c69c",
+  "changed_files": [
+    "src/heterollm_sim/web.py",
+    "tests/test_web.py"
+  ],
+  "source_sha256": {
+    "src/heterollm_sim/web.py": "8f659dced2f35fe4d56d2a6ba766f8f06c4b935970c58edd49768e5363530a78",
+    "tests/test_web.py": "2e27ddd5b7785638bb46869ca6074b576969b522eea4154e7bda6c34691eaa0c",
+    "hash_basis": "git blob bytes; Windows working-tree CRLF normalized by Git"
+  },
+  "activation_checks": [
+    "report analytical_coverage retained in score payload and canonical serialization",
+    "top-level and nested runtime/component coverage states partial/unknown/failure/degraded/incomplete",
+    "native and R0 comparisons fail closed with incomplete_analytical_coverage/passed=false",
+    "absence of analytical_coverage preserves compared/passed behavior",
+    "partial native request coverage remains fail closed"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m py_compile tests/test_web.py src/heterollm_sim/web.py",
+      "exit_code": 0,
+      "result": "compile succeeded"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m pytest tests/test_web.py tests/test_serde.py tests/test_v12_web_errors.py tests/test_streaming_des.py -q",
+      "exit_code": 0,
+      "result": "58 passed in 6.29s"
+    },
+    {
+      "command": ".venv\\\\Scripts\\\\python.exe -m pytest -q",
+      "exit_code": 0,
+      "result": "3104 passed, 4 skipped in 436.73s (0:07:16)"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_042/state_matrix_pre_fix.json",
+    "artifacts/optimization/round_042/state_matrix_pre_fix.json.sha256",
+    "artifacts/optimization/round_042/state_matrix_independent.json",
+    "artifacts/optimization/round_042/state_matrix_independent.json.sha256",
+    "artifacts/optimization/round_042/fix_review.json",
+    "artifacts/optimization/round_042/fix_review.json.sha256",
+    "artifacts/optimization/round_042/focused_regression_result.json",
+    "artifacts/optimization/round_042/full_regression_result.json"
+  ],
+  "deferred_candidates": [
+    "Native accuracy and target-system precision",
+    "browser rendering replay beyond existing payload contract",
+    "supplemental source_scan_independent.json raw web.py hash did not match clean baseline and is retained only as discovery context"
+  ],
+  "source_commit": "61026579c7ad451695c6fe862d00d2c9be170be1",
+  "candidate_source_commit": "61026579c7ad451695c6fe862d00d2c9be170be1",
+  "review": "独立 review 确认 commit/blob 身份、top/runtime/component/conflicting/absent coverage、native/R0 双路径和无 coverage 兼容行为；状态矩阵 pre/post 由 e839→6102657 对应，失败格从 compared/passed=true 变为 incomplete_analytical_coverage/passed=false。"
 }

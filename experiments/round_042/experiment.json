@@ -1,12 +1,12 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_042",
-  "status": "prepare",
+  "status": "promote",
   "purpose": "evaluation_api_visualization_boundary",
   "primary_goal": "核对 retention、partial、unknown、failure、degraded、incomplete 状态从执行结果到 serde、report_dict、HTTP API 和 trace/visualization payload 的一致性，防止状态丢失或失败格被误报为通过。",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "baseline": {
-    "parent_commit": "0a366c83de7725679c03ad26c0402c2616d0bc3a",
+    "parent_commit": "e839285e11661e8993b4cca9eae99182b745c69c",
     "role": "H41 运行速度/内存有限负结论后的发布记录；H35 基础状态扫描仅作已验证背景，不继承其全域结论"
   },
   "hypothesis_id": "H42_EVALUATION_STATE_BOUNDARY",
@@ -44,12 +44,18 @@
     ]
   },
   "problem_domain_closure": {
-    "status": "prepare",
-    "rule": "同一状态传播根因若同时影响执行结果、序列化、报告、HTTP API、trace 或 visualization，必须同轮收口；只有独立根因或不适用面可延期。"
+    "status": "closed",
+    "execution_result": "analytical_coverage state is preserved into score payload",
+    "serialization": "canonical serde retains coverage status and passed field",
+    "reporting": "retention fidelity/source/completeness fields preserved",
+    "api": "native and R0 score paths fail closed for incomplete analytical coverage",
+    "visualization": "existing fidelity/trace_source/limitations/pagination retained; no new UI source change",
+    "candidate": "accepted and promoted in source commit 61026579c7ad451695c6fe862d00d2c9be170be1",
+    "deferred": "no Native precision evidence; source scan supplemental hash mismatch excluded from identity proof"
   },
   "data_roles": {
     "development": "fresh synthetic state-matrix controls and source-path scan",
-    "comparison": "H41 published records at source 0a366c83de7725679c03ad26c0402c2616d0bc3a",
+    "comparison": "H41 published records plus H42 parent e839285e11661e8993b4cca9eae99182b745c69c",
     "holdout": "independent state combinations and API/report boundary controls",
     "final_acceptance": "engineering contract only; no Native precision"
   },
@@ -65,8 +71,8 @@
     "candidate_count": 1,
     "full_prediction_runs": 0,
     "native_collection_runs": 0,
-    "state_matrix_runs": 0,
-    "api_control_runs": 0,
+    "state_matrix_runs": 2,
+    "api_control_runs": 1,
     "retries": 0
   },
   "guardrails": [
@@ -76,6 +82,6 @@
     "失败、部分、unknown、incomplete 不得被渲染为 passed",
     "未复现状态丢失不改源码"
   ],
-  "selected_candidate": null,
-  "next_step": "先对 reporting.py、serde.py、web.py、serving.py 与 webui trace/visualization payload 做独立状态矩阵和调用链扫描，登记唯一可证伪候选。"
+  "selected_candidate": "H42_EVALUATION_STATE_BOUNDARY",
+  "next_step": "轮换到预测精度与泛化；先独立检查 input/scenario/hardware/shape identity 与 fallback/OOD 边界，不把工程状态修复称精度改善。"
 }

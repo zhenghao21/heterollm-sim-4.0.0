@@ -2,11 +2,42 @@
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_042",
   "candidate_id": "H42_EVALUATION_STATE_BOUNDARY",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare 已登记评估/API与可视化口径方向；需要独立 source scan、状态矩阵和边界控制后再决定是否修改。",
-  "evidence": [],
-  "deferred_scope": [],
-  "next_hypothesis": null,
-  "source_commit": "0a366c83de7725679c03ad26c0402c2616d0bc3a"
+  "status": "complete",
+  "decision": "accept",
+  "reason": "独立 pre/post 状态矩阵复现并修复 score API 状态丢失：pre-fix 五种 coverage state 均为 compared/passed=true 且不返回 analytical_coverage；post-fix 均返回 incomplete_analytical_coverage/passed=false，native 与 R0 同时受 gate，absence 兼容；focused 58 与全量3104/4回归通过。",
+  "evidence": [
+    "artifacts/optimization/round_042/state_matrix_pre_fix.json",
+    "artifacts/optimization/round_042/state_matrix_pre_fix.json.sha256",
+    "artifacts/optimization/round_042/state_matrix_independent.json",
+    "artifacts/optimization/round_042/state_matrix_independent.json.sha256",
+    "artifacts/optimization/round_042/fix_review.json",
+    "artifacts/optimization/round_042/fix_review.json.sha256",
+    "artifacts/optimization/round_042/focused_regression_result.json",
+    "artifacts/optimization/round_042/full_regression_result.json"
+  ],
+  "deferred_scope": [
+    "Native/target-system accuracy and precision",
+    "browser rendering beyond payload contract",
+    "source_scan_independent raw hash mismatch is excluded from identity proof"
+  ],
+  "next_hypothesis": {
+    "direction": "预测精度与泛化",
+    "claim": "检查 scenario/model/hardware/shape/scheduler/mapping identity、fallback 与 OOD/unknown 边界是否保持输入配对，不将工程契约修复当作精度改善。",
+    "rationale": "H42 已完成评估/API状态边界修复，按方向轮换切换到长期未深入的预测精度/泛化。"
+  },
+  "source_commit": "61026579c7ad451695c6fe862d00d2c9be170be1",
+  "changed_files": [
+    "src/heterollm_sim/web.py",
+    "tests/test_web.py",
+    "experiments/round_042/experiment.json",
+    "experiments/round_042/candidate.json",
+    "experiments/round_042/evaluation.json",
+    "experiments/round_042/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "source_sha256": {
+    "src/heterollm_sim/web.py": "8f659dced2f35fe4d56d2a6ba766f8f06c4b935970c58edd49768e5363530a78",
+    "tests/test_web.py": "2e27ddd5b7785638bb46869ca6074b576969b522eea4154e7bda6c34691eaa0c"
+  },
+  "candidate_source_commit": "61026579c7ad451695c6fe862d00d2c9be170be1"
 }
