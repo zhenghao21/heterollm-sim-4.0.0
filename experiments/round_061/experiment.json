@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_061",
-  "hypothesis_id": "H61_RUNTIME_UNCOVERED_CHAIN",
+  "hypothesis_id": "H61_ONLINE_REPORT_METADATA_REUSE",
   "direction": "运行速度与内存",
   "previous_direction": "预测精度与泛化",
   "recent_directions": [
@@ -19,7 +19,7 @@
     "评估/API与可视化口径": "H57",
     "开发工具链与可复现性": "H56"
   },
-  "primary_goal": "独立测量未覆盖实际执行链路的仿真器 wall time 与峰值内存，优先检查 catalog/API/report 序列化或批处理物化是否存在可安全消除的重复工作；不将被模拟系统预测结果混入仿真器开销。",
+  "primary_goal": "对在线报告序列化中重复合并 batch metadata 的局部缓存做独立 runtime/内存 A/B；仅评价仿真器开销，不涉及目标系统精度。",
   "purpose": "runtime_overhead_uncovered_execution_chain",
   "method": "prepare -> verify -> predict -> score -> review -> promote",
   "budget": {
@@ -57,10 +57,10 @@
   },
   "scope": {
     "include": [
-      "one uncovered runtime execution chain",
-      "wall time",
-      "peak memory",
-      "output/task/resource equivalence"
+      "report_dict(OnlineScenarioResult) -> _online_report_dict",
+      "_sim_subtarget_batch_metadata four read-only projections",
+      "wall time and tracemalloc peak",
+      "report digest/task/makespan/resource equivalence"
     ],
     "exclude": [
       "H29 CLI report reuse",
@@ -71,10 +71,14 @@
     ]
   },
   "problem_domain_closure": {
-    "rule": "同一 runtime overhead 根因若影响调用、物化、序列化、错误和回归表面，本轮一起收口。",
-    "status": "prepare"
+    "candidate": "rejected_limited_negative",
+    "deferred": "larger production-scale repeated A/B and API concurrency safety",
+    "fix": "none",
+    "regression": "source unchanged from H60; inherited 3110 passed/4 skipped, no new source tests",
+    "status": "closed_negative",
+    "trigger": "instrumented local cache reduced helper calls but did not improve wall/peak memory"
   },
-  "selected_candidate": null,
-  "next_step": "等待独立 source scan 与 profile；若无可安全候选，保留有限负结论并切换方向。",
-  "status": "prepare"
+  "selected_candidate": "H61_ONLINE_REPORT_METADATA_REUSE",
+  "next_step": "切换存储硬件建模粒度 H62；保留 H61 大规模重复 A/B 为有界延期，不重复当前尺度。",
+  "status": "promote"
 }

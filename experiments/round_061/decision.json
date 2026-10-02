@@ -1,12 +1,26 @@
 {
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_061",
-  "candidate_id": "H61_RUNTIME_UNCOVERED_CHAIN",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare 已登记运行速度与内存方向，等待独立 source scan/profile。",
-  "evidence": [],
-  "source_commit": "cf6f99c2b148d01b043577565d179da943c5277e",
-  "deferred_scope": [],
-  "next_hypothesis": null
+  "candidate_id": "H61_ONLINE_REPORT_METADATA_REUSE",
+  "status": "complete",
+  "decision": "reject_limited_negative",
+  "reason": "Independent source scan found four read-only metadata projections. Instrumented local cache preserved digest and reduced helper calls, but single probe was 22.3214ms baseline vs 23.37235ms cached and +13560/+13568/+27136B peak at scale n=8/32/64; no stable runtime or memory improvement, so no source change or promotion.",
+  "evidence": [
+    "artifacts/optimization/round_061/source_scan_independent.json",
+    "artifacts/optimization/round_061/runtime_online_metadata_candidate.json",
+    "artifacts/optimization/round_061/runtime_online_metadata_scale.json",
+    "artifacts/optimization/round_061/final_review.json",
+    "artifacts/optimization/round_061/profile_independent.json"
+  ],
+  "source_commit": "4a8bbb96a0f7dd9484b1baccbc87e19f5b058269",
+  "deferred_scope": [
+    "larger production-scale repeated A/B",
+    "API concurrency safety"
+  ],
+  "next_hypothesis": {
+    "claim": "切换到存储硬件建模粒度，检查 NAND/SSD/HBF 已有 page/plane/die/channel contract 的另一实际执行链路；不重复 H48/H49 propagation 或 H55 DRAM/HBM propagation。",
+    "direction": "存储硬件建模粒度",
+    "rationale": "H61 运行速度方向仅得到有限负结论，storage direction is longest unchecked and is user-directed."
+  },
+  "review_artifact_sha256": "bfcfda26799f75fa8745192bdad1940d9c9221184575ca320babaea245900f35"
 }

@@ -1,21 +1,34 @@
 {
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_061",
-  "candidate_id": "H61_RUNTIME_UNCOVERED_CHAIN",
-  "status": "prepare",
+  "candidate_id": "H61_ONLINE_REPORT_METADATA_REUSE",
+  "status": "complete",
   "accuracy_status": "not_applicable",
   "generalization_status": "not_applicable",
-  "mechanism_status": "pending_scan",
+  "mechanism_status": "reproduced_no_source_defect",
   "prediction": {
     "native_loaded": false,
-    "status": "pending"
+    "source_commit": "4a8bbb96a0f7dd9484b1baccbc87e19f5b058269",
+    "status": "instrumented_runtime_probe_only"
   },
   "score": {
-    "status": "pending"
+    "status": "candidate_rejected_limited_negative",
+    "acceptance": "digest/task/makespan/resource equivalent, but wall/peak memory not improved at n=8/32/64",
+    "evidence": [
+      "artifacts/optimization/round_061/runtime_online_metadata_candidate.json",
+      "artifacts/optimization/round_061/runtime_online_metadata_scale.json",
+      "artifacts/optimization/round_061/final_review.json",
+      "artifacts/optimization/round_061/profile_independent.json"
+    ]
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "source unchanged; inherited H60 full 3110 passed/4 skipped; no new source regression required",
+  "result": "candidate_rejected_limited_negative",
   "limitations": [
-    "尚未完成独立 runtime profile"
-  ]
+    "bounded one-sample scale rows",
+    "larger production-scale repeated A/B not run",
+    "API concurrency safety not measured",
+    "no Native accuracy",
+    "model-catalog profile is supplemental negative scan, not a second candidate"
+  ],
+  "review_artifact_sha256": "bfcfda26799f75fa8745192bdad1940d9c9221184575ca320babaea245900f35"
 }

@@ -1,20 +1,57 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_061",
-  "status": "prepare",
+  "status": "rejected_limited_negative",
   "hypothesis": {
-    "id": "H61_RUNTIME_UNCOVERED_CHAIN",
+    "id": "H61_ONLINE_REPORT_METADATA_REUSE",
     "direction": "运行速度与内存",
-    "claim": "未覆盖实际执行链路可能重复物化 metadata/JSON 或派生报告，增加仿真器 wall time/peak memory 而不改变输出与资源语义。",
-    "trigger": "H46/H54 已排除 chunk/reuse 局部路径；其他 API/catalog/report 调用仍未独立 profile。",
-    "falsifier": "独立父/候选在等价输出、task/makespan/resource 保护下无稳定可重复 runtime 或内存开销，或优化需改变语义。"
+    "claim": "同一 OnlineScenarioResult 的四个只读投影重复构造合并 metadata；按 batch identity 做 report-local cache 可减少临时分配而不改变输出。",
+    "trigger": "source scan confirmed four call sites and no downstream mutation",
+    "falsifier": "cached digest differs, mutation observed, or wall/peak fails to improve at bounded scales"
   },
-  "parent_commit": "cf6f99c2b148d01b043577565d179da943c5277e",
-  "candidate_source_commit": null,
-  "source_sha256": null,
+  "parent_commit": "4a8bbb96a0f7dd9484b1baccbc87e19f5b058269",
+  "candidate_source_commit": "4a8bbb96a0f7dd9484b1baccbc87e19f5b058269",
+  "source_sha256": {
+    "source_commit": "4a8bbb96a0f7dd9484b1baccbc87e19f5b058269",
+    "source_changed": false
+  },
   "changed_files": [],
-  "independent_evidence": [],
-  "activation_checks": [],
-  "deferred_candidates": [],
-  "tests": []
+  "independent_evidence": [
+    "artifacts/optimization/round_061/source_scan_independent.json",
+    "artifacts/optimization/round_061/runtime_online_metadata_candidate.json",
+    "artifacts/optimization/round_061/runtime_online_metadata_scale.json",
+    "artifacts/optimization/round_061/final_review.json",
+    "artifacts/optimization/round_061/profile_independent.json"
+  ],
+  "activation_checks": [
+    "report_digest_equal=true for all probes",
+    "helper calls 224->56 and scale 16/16/32->4/4/8",
+    "wall/peak no stable improvement",
+    "no source edit",
+    "source unchanged; inherited full regression 3110 passed/4 skipped",
+    "supplemental model-catalog profile: 147 IDs; no safe cache/delete candidate"
+  ],
+  "deferred_candidates": [
+    "larger production-scale repeated A/B",
+    "API concurrency safety"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m py_compile artifacts/optimization/round_061/runtime_online_metadata_candidate.py",
+      "exit_code": 0,
+      "result": "compiled"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_061/runtime_online_metadata_candidate.py",
+      "exit_code": 0,
+      "result": "digest equal; no stable wall/peak improvement"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_061/runtime_online_metadata_scale.py",
+      "exit_code": 0,
+      "result": "n=8/32/64 digest equal; no stable wall/peak improvement"
+    }
+  ],
+  "review": "Independent source scan/review confirmed output equivalence but no stable wall/peak memory gain; candidate rejected with bounded negative conclusion.",
+  "review_artifact_sha256": "bfcfda26799f75fa8745192bdad1940d9c9221184575ca320babaea245900f35"
 }
