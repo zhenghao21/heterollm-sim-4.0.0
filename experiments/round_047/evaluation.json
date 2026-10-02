@@ -1,0 +1,21 @@
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_047",
+  "candidate_id": "H47_REPRODUCIBILITY_COMMAND_IDENTITY_CONTRACT",
+  "status": "pending",
+  "prediction": {
+    "status": "pending"
+  },
+  "score": {
+    "status": "pending"
+  },
+  "mechanism_status": "pending_scan",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "pending",
+  "regression_status": "pending",
+  "comparison_artifact": "artifacts/optimization/round_047/",
+  "result": "pending",
+  "limitations": [
+    "H47 尚未完成命令身份与恢复审计。"
+  ]
+}

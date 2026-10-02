@@ -1,0 +1,19 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_047",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H47_REPRODUCIBILITY_COMMAND_IDENTITY_CONTRACT",
+    "direction": "开发工具链与可复现性",
+    "claim": "近期实验记录可能把脚本写入的 exit_code、工作树换行哈希或不完整四份 JSON 交叉引用当成实际可复现证据，导致轮次无法独立恢复或错误宣称测试完成。",
+    "trigger": "需要独立审计与真实 subprocess success/failure capture；不继承 H33 全域结论。",
+    "falsifier": "近期轮次所有 sidecar、source/blob、命令返回码、记录交叉引用和恢复状态均可由独立命令重建。"
+  },
+  "parent_commit": "20012fd593dc816d79d78b577383fcfb3ef806bd",
+  "changed_files": [],
+  "source_sha256": null,
+  "activation_checks": [],
+  "tests": [],
+  "independent_evidence": [],
+  "deferred_candidates": []
+}

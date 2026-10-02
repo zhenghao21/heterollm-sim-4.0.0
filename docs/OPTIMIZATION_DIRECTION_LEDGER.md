@@ -12,7 +12,7 @@
 | 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H40 | H40 已把共享 NAND ERASE operation 接入 PhysicalService、endpoint、DataAccess 和 legacy HBF alias；page/RMW/program/plane/queue旧链路保持；未公开 die/channel/FTL/GC 继续unknown | 下一轮轮换到运行速度/内存或评估/API；没有新来源与真实瓶颈不继续制造NAND字段轮次 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H43 | H28 收口请求集合覆盖契约；H34 检查 fingerprint、shape/hardware coverage 和 fallback 泛化边界；H43 修复 coverage=complete 时 nested prediction fallback/OOD provenance 仍可 passed 的评分边界 | 下一轮切换计算成本模型；不重复 H43 fallback gate、H34 fingerprint 控制或声称 Native 精度改善 |
 | 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H42 | H28 收口 request coverage；H35 检查 partial/empty reference、HttpError 和基础报告/UI 状态；H42 修复 score API 丢失 analytical_coverage 并把 failure/degraded/incomplete 误报为 passed 的边界 | 下一轮切换预测精度/泛化；不重复 H42 coverage gate 或 H35 基础状态控制 |
-| 开发工具链与可复现性 | 测试隔离、缓存身份、实验记录、证据哈希、恢复 | H21-H23 记录流程 | 局部维护 | 只在证据或恢复失败时重开 |
+| 开发工具链与可复现性 | 测试隔离、缓存身份、实验记录、证据哈希、恢复 | H47（活动） | H33 核对过 H30-H32 记录身份；近期 H41-H46 review 反复发现 artifact exit_code 字段为记录值、源码/换行身份和恢复边界需要显式核对；H47 检查命令捕获、SHA 配对和恢复闭合 | 先独立审计命令返回码捕获、source/blob identity、sidecar、记录闭合和可恢复检查点；不重复功能方向扫描 |
 
 ## 轮换记录
 
@@ -57,4 +57,5 @@
 - H45：独立 source scan、failure matrix 与 review 均确认 duplicate/cycle/owner-conflict/unavailable-dependency 在提交前失败，失败前后 active/ready heap/lease/metrics/resource/queue 快照一致，ready heap 成功控制保持 a→b，unsupported retention 显式失败，streaming exact/aggregate 成功且 makespan/task_count 一致；未发现新的失败部分提交或误报成功候选。未修改源码、未加载 Native；HTTP transport、自定义 DRAM/L2 resolver 异常和有效 owner alias lease release 仍延期。下一轮切换运行速度/内存或其他最长未查方向。
 - H46：已登记运行速度与内存方向，针对 H41 review 指出的 lazy `iter_request_task_chunks` 与 `UnifiedEventKernel.step` 混合归因，独立测量 lowering、kernel/observer、metadata clone 和 retention 语义的实际成本；明确排除 H41 已完成的 exact/streaming/aggregate retention 负向结论与 H36 provider cache。
 - H46：独立分段 profile 与 review 将 compile median 约 3.601ms、lazy lowering median 635.223ms（72 chunks/7936 tasks/7.23MB tracemalloc）和 aggregate execute median 423.986ms（7936 tasks、makespan 5397034.1862ns、12.53MB tracemalloc）分开；cProfile 仍包含 execute 内 lazy lowering，稳定 metadata clone/capture、observer、coverage 和 kernel step 热点仅登记为 `H46_CHUNK_METADATA_PLAN_REUSE_BOUNDARY` 待证伪候选。无 A/B、不变性计数器、namespace/alias/output 等价证明，未改源码、未加载 Native。下一轮切换其他最长未查方向。
+- H47：已登记开发工具链与可复现性方向，审计近期实验记录中命令返回码是否实际捕获、artifact sidecar 与 payload 是否闭合、Git blob/工作树换行身份是否可配对、四份 JSON 与活动轮次能否恢复；明确排除功能源码方向，若只发现记录质量限制则保留负结论，不制造仿真器候选。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。

@@ -1,0 +1,79 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_047",
+  "status": "prepare",
+  "purpose": "reproducibility_command_identity_audit",
+  "primary_goal": "独立审计实验命令返回码是否实际捕获、artifact sidecar/payload/source identity 是否闭合、四份 JSON 与活动轮次是否可恢复，避免把记录值误称实测证据。",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "baseline": {
+    "parent_commit": "20012fd593dc816d79d78b577383fcfb3ef806bd",
+    "role": "H46 runtime split finite negative; H33 reproducibility scan as historical background only"
+  },
+  "hypothesis_id": "H47_REPRODUCIBILITY_COMMAND_IDENTITY_CONTRACT",
+  "direction": "开发工具链与可复现性",
+  "previous_direction": "运行速度与内存（H46）",
+  "direction_switch_reason": "H46 runtime 分段扫描完成有限负结论；按方向台账切换到最长未查的开发工具链与可复现性，针对近期 review 反复出现的 hardcoded exit_code、Git blob/working-tree 和恢复边界做独立审计。",
+  "recent_directions": [
+    "H45:仿真器正确性与语义（有限负结论）",
+    "H46:运行速度与内存（有限负结论）",
+    "H47:开发工具链与可复现性（活动）"
+  ],
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H45",
+    "运行速度与内存": "H46",
+    "计算成本模型": "H44",
+    "存储硬件建模粒度": "H40",
+    "预测精度与泛化": "H43",
+    "评估/API与可视化口径": "H42",
+    "开发工具链与可复现性": "H47活动"
+  },
+  "scope": {
+    "candidate": "experiment artifacts command provenance, exit-code capture, source/blob identity, sidecar hashes, four-record closure and recovery checkpoints",
+    "include": [
+      "actual subprocess return-code capture vs hardcoded fields",
+      "artifact bytes/sidecar and payload hash closure",
+      "Git HEAD/origin/source module/blob identity and CRLF normalization",
+      "experiment/candidate/evaluation/decision cross references",
+      "active round recovery and no duplicate rerun controls"
+    ],
+    "exclude": [
+      "simulator functional source changes",
+      "Native accuracy",
+      "runtime/cost/storage model scans"
+    ]
+  },
+  "problem_domain_closure": {
+    "status": "prepare",
+    "rule": "同一记录身份/可复现根因若影响命令、artifact、源码配对、四份 JSON 或恢复流程，必须同轮收口；仅文档质量限制需保留负结论。"
+  },
+  "data_roles": {
+    "development": "fresh audit of round 039-046 records and wrapper probes",
+    "comparison": "H46 published source 20012fd593dc816d79d78b577383fcfb3ef806bd",
+    "holdout": "independent subprocess success/failure capture controls",
+    "final_acceptance": "reproducibility contract only; no simulator accuracy"
+  },
+  "metrics": [
+    "captured_exit_code",
+    "artifact_hash_closure",
+    "source_blob_match",
+    "record_cross_reference",
+    "recovery_state",
+    "duplicate_rerun_protection"
+  ],
+  "budget": {
+    "candidate_count": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "audit_runs": 0,
+    "recovery_controls": 0,
+    "retries": 0
+  },
+  "guardrails": [
+    "不把 artifact JSON 中硬编码 exit_code 当作真实捕获",
+    "不把 CRLF/LF 差异误作源码漂移",
+    "不重复 H33 已完成的有限身份扫描而扩展为无边界审计",
+    "无真实恢复/命令缺陷不改功能源码"
+  ],
+  "selected_candidate": null,
+  "next_step": "先独立审计近期轮次 artifacts 与四份 JSON，运行最小成功/失败 subprocess capture control，登记唯一可证伪工具链候选或有限负结论。"
+}

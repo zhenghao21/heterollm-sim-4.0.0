@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_047",
+  "candidate_id": "H47_REPRODUCIBILITY_COMMAND_IDENTITY_CONTRACT",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记可复现性与命令身份审计；需要独立 subprocess capture、hash/record closure 和恢复控制后再决定是否改工具链。",
+  "evidence": [],
+  "deferred_scope": [],
+  "next_hypothesis": null,
+  "source_commit": "20012fd593dc816d79d78b577383fcfb3ef806bd"
+}
