@@ -1,1 +1,41 @@
-{"schema":"heterollm.optimization.evaluation/v1","round_id":"round_039","candidate_id":"H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT","status":"pending","prediction":{"status":"pending"},"score":{"status":"pending"},"mechanism_status":"pending_scan","accuracy_status":"not_applicable","generalization_status":"pending","regression_status":"pending","comparison_artifact":"artifacts/optimization/round_039/","result":"pending","limitations":["H39尚未完成DRAM/HBM真实访问链路扫描。"]}
+{
+  "schema": "heterollm.optimization.evaluation/v1",
+  "round_id": "round_039",
+  "candidate_id": "H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT",
+  "status": "complete",
+  "prediction": {
+    "status": "mechanism_verified",
+    "native_loaded": false,
+    "source_commit": "e49a8905b2b407cbf4a24bffd85cc8d8cbd15aa7",
+    "source_sha256": {
+      "src/heterollm_sim/dram.py": "1c3fd46fecc782c9ac63f76d7811438bee52d7f58934f1b72ab362b78ab43e49",
+      "src/heterollm_sim/event_kernel.py": "bc7546b15e909155db2fdd2eb28e8fbecfcb6b9ca2f1c845b8e0d203b6e9e7bb",
+      "src/heterollm_sim/data_motion.py": "592b66a7c3cab086f631c2b0d11dd5b1a2693a1faf502649ba0cd13498b877a4",
+      "src/heterollm_sim/planner.py": "0287ddb90be2b2abba1913fe35a5feb018a7f5636ac5af63933f166d2f32a53e",
+      "src/heterollm_sim/communication.py": "13cfb64e78864aa983fd981de850c8154590d782459a8db2297eaefd0b3b4f2b",
+      "tests/test_dram.py": "9ae14fc5941b9c2c4400e1434a1172458b2eac9aa3c8c3681f54bd7fb3353c99",
+      "tests/test_dram_integration.py": "8473b9d00c9a66255c061bd97339e737cdd06d8be9c64978d030a717742ddd38"
+    }
+  },
+  "score": {
+    "status": "mechanism_score_only",
+    "acceptance": "参数化DRAM family controller进入显式endpoint/event执行和报告；aggregate fallback保持兼容；无Native精度分数",
+    "evidence": [
+      "artifacts/optimization/round_039/dram_candidate_probe.json",
+      "artifacts/optimization/round_039/integration_review.json",
+      "artifacts/optimization/round_039/full_regression_result.json"
+    ]
+  },
+  "mechanism_status": "fixed_and_verified_limited",
+  "accuracy_status": "not_applicable",
+  "generalization_status": "limited_to_explicit_address_endpoint_profiles",
+  "regression_status": "3098 passed, 4 skipped",
+  "comparison_artifact": "artifacts/optimization/round_039/",
+  "result": "accepted_for_development_baseline",
+  "limitations": [
+    "参数值必须由调用方/来源提供，未插入JEDEC未经核验数值。",
+    "模型是分析型burst envelope，不是cycle accuracy，未建模tFAW/tRRD/tCCD/timing-group。",
+    "无地址aggregate入口只标记unknown，不声称row/bank精度。",
+    "没有Native设备观测，因此没有预测精度结论。"
+  ]
+}

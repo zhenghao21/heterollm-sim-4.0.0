@@ -9,7 +9,7 @@
 | 仿真器正确性与语义 | 状态、调度、资源守恒、错误、报告契约、API | H37 | H37 收口动态容量批量原子性、物理 owner/alias 报告同步及 streaming 后置容量传递；声明容量不可漂移 | 下一轮轮换到运行速度/内存或计算成本模型；不重复本轮容量契约 |
 | 运行速度与内存 | 仿真 wall time、峰值内存、图编译、缓存、批处理吞吐 | H36（活动） | H29 收口 CLI 文本路径重复 `report_dict` 构建；H36 重新检查 run_scenario/批处理执行和内存路径 | 先取得独立 wall-time/峰值内存候选或负结论，不重复 CLI 修复 |
 | 计算成本模型 | GEMM、归约、内存、链路、kernel、并发和 shape 泛化 | H38 | H38 新鲜 memory/GEMM/reduction 单位与 shape 控制、owner 重复拒绝和 data-motion 约束通过；MMA/collective/full kernel 仍未覆盖 | 下一轮转存储硬件建模粒度；不把有限负向扫描扩展为全域正确 |
-| 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H30 | H30 将已知 MemoryPosition offset 传入共享 NAND page/RMW/program 计费，并补齐 endpoint/legacy alias 可选入口；geometry 数值仍 profile-specific | 下一轮转评估/API或正确性语义；只有新的来源与实际 erase/FTL 调用链才重开存储方向 |
+| 存储硬件建模粒度 | DRAM 家族（DDR/LPDDR/HBM）和 NAND 家族（SSD/NVMe/HBF）的共享介质模型、变体 profile、访问粒度、队列和内部成本 | H39 | H39 已把显式地址 DRAM profile 接入 endpoint→TaskSpec→event kernel preview/commit；无地址入口保留 aggregate_unknown；NAND 尚未重开 | 下一轮继续存储方向但切换 NAND 家族；按SSD/HBF共享模型检查page/plane/die/program/erase/queue真实调用链 |
 | 预测精度与泛化 | Native 成对误差、跨模型/硬件/shape 泛化 | H34（活动） | H28 收口请求集合覆盖契约；H34 重新检查输入身份、shape/hardware coverage 和 fallback 泛化边界，无 Native 时只做机制验证 | 先做独立输入/泛化 source scan；不重复 H28 请求覆盖修复 |
 | 评估、API 与可视化口径 | 结果边界、评分、失败/缺失、序列化、UI、文本 | H35（活动） | H28 收口 request coverage；H35 重新检查结果状态、失败/缺失和可视化/API 一致性 | 先独立评估/API source scan；不重复 H28 request coverage |
 | 开发工具链与可复现性 | 测试隔离、缓存身份、实验记录、证据哈希、恢复 | H21-H23 记录流程 | 局部维护 | 只在证据或恢复失败时重开 |
@@ -44,4 +44,5 @@
 - H37：已登记更窄的执行资源/调度语义方向，避免重复 H31 全域负向扫描。
 - H37：独立补充扫描复现 `ensure_resource_capacities` 后项失败造成部分提交、owner alias 容量陈旧；修复为整批先校验再提交，constructor 补齐物理 owner 容量，streaming 汇总改用 live kernel 容量；新增 direct-owner、alias、三种 retention、live kernel 及并发利用率控制。focused 74 passed，全量 3089 passed/4 skipped，无 Native 精度结论。
 - H38：切换计算成本模型，独立扫描以 1/1024/10000000B memory service、M=2/K=3/N=4 GEMM、input=100/output=10 reduction 和 physical-owner 重复 demand 为控制；未发现新可复现缺陷，131 个成本/并行/data-motion 回归通过，无源码修改、Native 或性能改善结论；MMA/collective/full kernel 延期。
+- H39：按官方可访问资料确认DDR5 bank/subchannel、HBM channel/pseudo-channel概念边界，不导入未经核验数值；修复共享DRAM family的显式地址访问入口，支持burst/channel/bank/row、row hit/miss/conflict、读写切换、refresh、queue与immutable preview/commit状态，并让endpoint/planner/event kernel真实执行。定向96 passed，全量3098 passed/4 skipped；无Native精度结论，cycle accuracy与未声明时序延期。下一步切换NAND家族。
 - 新增存储硬件定向计划：任务一建立有来源的分层 geometry schema 和参数目录；任务二把 geometry 接入地址映射、访问拆分、队列/冲突、读写/擦除成本和资源计费。详见 [STORAGE_MODELING_WORKPLAN.md](STORAGE_MODELING_WORKPLAN.md)。

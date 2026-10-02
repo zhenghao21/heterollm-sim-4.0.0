@@ -1,1 +1,46 @@
-{"schema":"heterollm.optimization.decision/v1","round_id":"round_039","candidate_id":"H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT","status":"pending","decision":"pending","reason":"Prepare已登记统一DRAM家族存储建模方向；需要独立来源/源码/访问探针后再决定最小实现。","evidence":[],"deferred_scope":[],"next_hypothesis":null}
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_039",
+  "candidate_id": "H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT",
+  "status": "complete",
+  "decision": "accept",
+  "reason": "独立扫描复现geometry未到达memory_service；候选增加一个共享DRAM family DramProfile和执行时preview/commit controller，显式endpoint地址进入row/bank/channel/burst、读写切换、refresh和队列metrics；旧aggregate路径保留unknown fallback。96个定向测试与全套3098 passed/4 skipped。",
+  "evidence": [
+    "artifacts/optimization/round_039/fresh_dram_scan.json",
+    "artifacts/optimization/round_039/dram_sources.json",
+    "artifacts/optimization/round_039/integration_review.json",
+    "artifacts/optimization/round_039/dram_candidate_probe.json",
+    "artifacts/optimization/round_039/full_regression_result.json",
+    "artifacts/optimization/round_039/final_review.json"
+  ],
+  "deferred_scope": [],
+  "next_hypothesis": {
+    "direction": "存储硬件建模粒度-NAND家族",
+    "claim": "统一SSD/HBF/NAND模型是否把page/plane/die/program/erase/queue和写放大接入真实访问/计费链路。",
+    "rationale": "用户要求SSD与HBF共享一个NAND模型；H39只处理DRAM家族，按Workplan独立审查后再进入NAND。"
+  },
+  "changed_files": [
+    "src/heterollm_sim/dram.py",
+    "src/heterollm_sim/event_kernel.py",
+    "src/heterollm_sim/data_motion.py",
+    "src/heterollm_sim/planner.py",
+    "src/heterollm_sim/communication.py",
+    "tests/test_dram.py",
+    "tests/test_dram_integration.py",
+    "experiments/round_039/experiment.json",
+    "experiments/round_039/candidate.json",
+    "experiments/round_039/evaluation.json",
+    "experiments/round_039/decision.json",
+    "docs/OPTIMIZATION_DIRECTION_LEDGER.md"
+  ],
+  "source_commit": "e49a8905b2b407cbf4a24bffd85cc8d8cbd15aa7",
+  "source_sha256": {
+    "src/heterollm_sim/dram.py": "1c3fd46fecc782c9ac63f76d7811438bee52d7f58934f1b72ab362b78ab43e49",
+    "src/heterollm_sim/event_kernel.py": "bc7546b15e909155db2fdd2eb28e8fbecfcb6b9ca2f1c845b8e0d203b6e9e7bb",
+    "src/heterollm_sim/data_motion.py": "592b66a7c3cab086f631c2b0d11dd5b1a2693a1faf502649ba0cd13498b877a4",
+    "src/heterollm_sim/planner.py": "0287ddb90be2b2abba1913fe35a5feb018a7f5636ac5af63933f166d2f32a53e",
+    "src/heterollm_sim/communication.py": "13cfb64e78864aa983fd981de850c8154590d782459a8db2297eaefd0b3b4f2b",
+    "tests/test_dram.py": "9ae14fc5941b9c2c4400e1434a1172458b2eac9aa3c8c3681f54bd7fb3353c99",
+    "tests/test_dram_integration.py": "8473b9d00c9a66255c061bd97339e737cdd06d8be9c64978d030a717742ddd38"
+  }
+}

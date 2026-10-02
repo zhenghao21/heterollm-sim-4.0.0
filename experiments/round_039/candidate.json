@@ -1,1 +1,70 @@
-{"schema":"heterollm.optimization.candidate/v1","round_id":"round_039","status":"prepare","hypothesis":{"id":"H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT","direction":"存储硬件建模粒度","claim":"当前DRAM/HBM可能只有aggregate bandwidth metadata，内部channel/bank/burst/row/queue机制未完整进入真实访问与计费链路。","trigger":"待独立DRAM/HBM source scan；不继承H30 NAND或H24/H38结论。","falsifier":"新鲜源码和受控访问显示统一DRAM profile已正确拆分burst、维护队列/row/turnaround/refresh并进入资源账本。"},"parent_commit":"a112aba42d38cfbf674f7c5424432a6a86ec98c9","changed_files":[],"source_sha256":null,"activation_checks":[],"tests":[],"independent_evidence":[],"deferred_candidates":[]}
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_039",
+  "status": "complete",
+  "hypothesis": {
+    "id": "H39_DRAM_FAMILY_GEOMETRY_ACCESS_CONTRACT",
+    "direction": "存储硬件建模粒度",
+    "claim": "当前DRAM/HBM可能只有aggregate bandwidth metadata，内部channel/bank/burst/row/queue机制未完整进入真实访问与计费链路。",
+    "trigger": "待独立DRAM/HBM source scan；不继承H30 NAND或H24/H38结论。",
+    "falsifier": "新鲜源码和受控访问显示统一DRAM profile已正确拆分burst、维护队列/row/turnaround/refresh并进入资源账本。"
+  },
+  "parent_commit": "a112aba42d38cfbf674f7c5424432a6a86ec98c9",
+  "changed_files": [
+    "src/heterollm_sim/dram.py",
+    "src/heterollm_sim/event_kernel.py",
+    "src/heterollm_sim/data_motion.py",
+    "src/heterollm_sim/planner.py",
+    "src/heterollm_sim/communication.py",
+    "tests/test_dram.py",
+    "tests/test_dram_integration.py"
+  ],
+  "source_sha256": {
+    "src/heterollm_sim/dram.py": "1c3fd46fecc782c9ac63f76d7811438bee52d7f58934f1b72ab362b78ab43e49",
+    "src/heterollm_sim/event_kernel.py": "bc7546b15e909155db2fdd2eb28e8fbecfcb6b9ca2f1c845b8e0d203b6e9e7bb",
+    "src/heterollm_sim/data_motion.py": "592b66a7c3cab086f631c2b0d11dd5b1a2693a1faf502649ba0cd13498b877a4",
+    "src/heterollm_sim/planner.py": "0287ddb90be2b2abba1913fe35a5feb018a7f5636ac5af63933f166d2f32a53e",
+    "src/heterollm_sim/communication.py": "13cfb64e78864aa983fd981de850c8154590d782459a8db2297eaefd0b3b4f2b",
+    "tests/test_dram.py": "9ae14fc5941b9c2c4400e1434a1172458b2eac9aa3c8c3681f54bd7fb3353c99",
+    "tests/test_dram_integration.py": "8473b9d00c9a66255c061bd97339e737cdd06d8be9c64978d030a717742ddd38"
+  },
+  "activation_checks": [
+    "endpoint显式dram_profile+dram_address_bytes生成dram_access合同并到达event_kernel",
+    "DramState immutable preview；dispatch失败恢复ready heap且不提交状态",
+    "channel→bank→column→row burst拆分、row hit/miss/conflict、读写切换、refresh和queue metrics",
+    "planner direct-memory保留endpoint metadata；coherent_dma遇dram_access禁用折叠",
+    "无地址旧aggregate入口标记aggregate_unknown并保持旧行为"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q tests/test_dram.py tests/test_dram_integration.py tests/test_data_motion.py tests/test_communication.py tests/test_event_kernel.py tests/test_runtime_mechanics.py",
+      "exit_code": 0,
+      "result": "96 passed in 0.30s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "exit_code": 0,
+      "result": "3098 passed, 4 skipped in 433.03s (0:07:13)"
+    }
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_039/fresh_dram_scan.json",
+    "artifacts/optimization/round_039/fresh_dram_scan.sha256",
+    "artifacts/optimization/round_039/dram_sources.json",
+    "artifacts/optimization/round_039/dram_sources.sha256",
+    "artifacts/optimization/round_039/integration_review.json",
+    "artifacts/optimization/round_039/dram_candidate_probe.json",
+    "artifacts/optimization/round_039/dram_candidate_probe.sha256",
+    "artifacts/optimization/round_039/full_regression_result.json",
+    "artifacts/optimization/round_039/full_regression_result.sha256",
+    "artifacts/optimization/round_039/final_review.json"
+  ],
+  "deferred_candidates": [
+    "未声明的tFAW/tRRD/tCCD/timing-group",
+    "完整cycle accuracy",
+    "无地址GEMM/elementwise/reduction的伪造row状态",
+    "NAND家族建模"
+  ],
+  "candidate_source_commit": "e49a8905b2b407cbf4a24bffd85cc8d8cbd15aa7",
+  "review": "候选已通过架构审查边界：一个共享DRAM家族模型，显式地址才启用controller，聚合入口保留unknown fallback；最终独立代码审查待写入final_review.json。"
+}
