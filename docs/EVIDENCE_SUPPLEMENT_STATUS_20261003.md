@@ -126,6 +126,13 @@
 - 同策略 report/metadata hash 在重复进程中完全相等；跨策略 task_count 与 makespan 完全相等，保留任务数严格符合 exact=全部、streaming=min(total,2000)、aggregate=0。wall/RSS 只作仿真器工程观测，未形成稳定源码候选。
 - 结论：H41 的 retention 语义与真实前端可复现性已补足为有限负结论；不同 retention 的 report/trace 差异是输出契约，不能强行归一成全报告等价，也没有 Web/run_jobs/global cache 或 Native 精度结论。
 
+### H28/H34/H43/H51/H60/H64 Native 成对精度 readiness 阻塞
+
+- 补证记录：[experiments/round_064/supplement_20261003_native_readiness.json](../experiments/round_064/supplement_20261003_native_readiness.json)，SHA-256 `c45c3379d689098759b3aa9e321dffbd354f2603531d0f797d70d44d93cd4e74`；readiness artifact `native_readiness_scan.json` SHA-256 `232d44383ebda29371e4f552913670238c4651df57c2b8c5587fb1541374b173`。
+- 已核对当前源码 `0dd393025a78952499474364f17f53bf03f179e5`、Native 可执行文件与模型文件的 SHA；真实入口 `tools/native_llama_compare.py` / `tools/native_error_matrix.py` 仅执行 `--help`，命令退出码均为 0，未运行 Native 计时。
+- 当前没有同一模型/硬件/shape/runtime/timer 边界下的 simulator↔Native 成对 TTFT/TPOT/E2E、APE、覆盖、回退和留出数据；历史 freeze 为 `development_post_selection` 且 `blind_evaluation=false`，源码身份早于当前 HEAD，不能复用为盲测或当前精度证据。
+- 结论：H28/H34/H43/H51/H60/H64 均为 `blocked_no_current_same_source_native_pair`。本补证只证明数据与入口阻塞，不证明精度改善；下一步必须先冻结当前 workload/runtime 合约，再独立运行 simulator 与 Native 成对数据。
+
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
 - H29 的收益目前只属于 CLI 文本前端；H36 校正后只保留 wall/output 等价证据且无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 与进程树 RSS 校正，仍无稳定收益；H41 已补 retention 前端边界并保留有限负结论。

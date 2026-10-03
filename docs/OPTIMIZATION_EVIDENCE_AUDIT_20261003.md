@@ -31,9 +31,9 @@
 
 ### P0：预测精度与泛化只在有 Native 时成立
 
-`H28、H34、H43、H51、H60、H64` 当前主要证明 request coverage、fingerprint、fallback/OOD、provenance 和不误报通过。它们没有独立 Native 精度证据。
+`H28、H34、H43、H51、H60、H64` 当前主要证明 request coverage、fingerprint、fallback/OOD、provenance 和不误报通过。Native readiness 补证已核对当前可执行文件/模型身份，但没有同一当前源码、模型、硬件、shape、runtime 的成对数据；这些轮次仍没有独立 Native 精度证据。
 
-若用户需要“准确率改善”结论，必须冻结父版本和修复版本，使用同模型、同硬件、同 shape、同 runtime、同请求批次成对运行 simulator 与 Native，逐场景保存 TTFT、TPOT、E2E 的 signed error、absolute error、APE，中位数/P90/最大值、失败/回退，并留出一个模型或硬件配置。H64 的 `incomplete_metric_reference` 只能证明评估门控正确，不能证明误差变小。
+若用户需要“准确率改善”结论，必须冻结父版本和修复版本，使用同模型、同硬件、同 shape、同 runtime、同请求批次成对运行 simulator 与 Native，逐场景保存 TTFT、TPOT、E2E 的 signed error、absolute error、APE，中位数/P90/最大值、失败/回退，并留出一个模型或硬件配置。当前 readiness 记录确认历史 development freeze 不是当前盲测，不能复用；H64 的 `incomplete_metric_reference` 只能证明评估门控正确，不能证明误差变小。
 
 ### P1：运行速度和内存必须做重复的前端 A/B
 
