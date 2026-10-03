@@ -47,3 +47,5 @@ H66 是部分实现和选定 NAND read 前端/API 证据，DRAM 与 NAND 两个�
 - 没有完成 TTFT/TPOT/E2E signed error、absolute ms、APE；synthetic/oracle/API 相等性和测试通过只支持相应机制/工程域。
 
 四份 JSON 已增加 completion_review_20261003 并更正 overall_task_status=incomplete；原始记录副本保留在 artifacts/optimization/round_066/completion_correction_20261003。后续继续原授权下的剩余建模/真实前端验证和观测配对工作，不由方向轮换关闭尚未完成的用户任务。
+
+- H67：存储硬件建模粒度方向；完成 DRAM/HBM 组织 profile（subchannel、rank、bank-group、stack/pseudo-channel）与 NAND channel/die/plane、page/program/erase、sequential program、跨请求 queue 的共享执行链。新增真实 `compile_scenario→run_scenario→report_dict→/api/run→/api/run-jobs` workload：380 tasks、10 DRAM contracts、3 NAND read/program/erase probes；Python/API/job ledger 一致。DRAM ledger 保留 burst/row/refresh/queue/owner/physical bytes，NAND ledger 保留 page/organization/mapping/program/erase/queue/owner/physical bytes。定向与相关回归 393 passed；Native 方向复用项目已有 counter-proven Qwen2.5 pair 对当前 simulator replay，TTFT/TPOT/E2E APE 为 12.641%/21.693%/15.696%，绝对误差为 3.839/3.357/7.196ms；只支持一个有效 pair 的限定结论，不外推泛化。当前新 Native probe 因 semantic proof/extractor drift 保留为 diagnostic，headline fields 不纳入正式误差。下一步若要发布跨模型泛化结论，增加独立有效 Native cells；不要把当前一对 replay 当泛化证明。

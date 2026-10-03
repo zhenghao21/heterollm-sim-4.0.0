@@ -1,0 +1,28 @@
+{
+  "schema": "heterollm.candidate/v1",
+  "round_id": "round_067",
+  "parent_head": "39cc25a988038ec60f7293bcc506f271249cb243",
+  "candidate_head": "b721ee0d2ff2fdb548212d16076a652e877753f0",
+  "changes": [
+    "DramProfile organization coordinates and lane state",
+    "NAND channel/die/plane mapping, program ordering, cross-request queue state",
+    "event-kernel transactional dram_access/nand_access",
+    "retention-independent dram_traffic and NAND organization/queue ledgers",
+    "authored storage_probe lowering into compile/run/report/API",
+    "PhysicalService.price_batch"
+  ],
+  "activation": {
+    "frontend_compile_tasks": 380,
+    "dram_access_tasks": 10,
+    "nand_access_tasks": 3,
+    "storage_probe_tasks": 3,
+    "dram_report_task_count": 10,
+    "nand_report_task_count": 58
+  },
+  "tests": {
+    "focused": 393,
+    "frontend_runner": "passed",
+    "diff_check": "passed",
+    "py_compile": "passed"
+  }
+}

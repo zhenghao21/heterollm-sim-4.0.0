@@ -1,0 +1,75 @@
+{
+  "schema": "heterollm.experiment/v1",
+  "round_id": "round_067",
+  "hypothesis_id": "H67_DRAM_NAND_FAMILY_EXECUTION_AND_NATIVE_REPLAY",
+  "created_utc": "2026-10-03T00:00:00Z",
+  "direction": "storage_hardware_modeling_granularity",
+  "previous_round": "round_066",
+  "previous_direction": "storage_hardware_modeling_granularity",
+  "direction_switch_reason": "用户明确要求继续完成DRAM/NAND剩余建模、真实执行链和误差分析；H66明确延期这些边界。",
+  "primary_goal": "把DRAM/HBM与NAND/SSD/HBF共享模型的组织、访问、队列、计费、报告/API和可复用Native误差配对一次性收口。",
+  "scope": {
+    "dram": [
+      "channel/subchannel",
+      "rank",
+      "bank-group",
+      "burst",
+      "row hit/miss",
+      "read/write timing",
+      "refresh",
+      "queue",
+      "HBM stack/pseudo-channel"
+    ],
+    "nand": [
+      "page/block",
+      "channel/die/plane mapping",
+      "page boundary/RMW",
+      "read/program/erase",
+      "sequential program",
+      "cross-request queue",
+      "owner/resource/physical bytes",
+      "report/API"
+    ]
+  },
+  "inputs": {
+    "frontend_workload": "work/round_067/frontend_attempt/scenario.json",
+    "native_reference": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\engine_contract_probe_engine_v3.json",
+      "sha256": "7d177c41818315c2bcdbd85e68d697bcd5ba7945bec1857214da4b93c43505b5"
+    },
+    "native_replay": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\work\\round_067_native_replay_error.json",
+      "sha256": "1777ca238cbf8c4b1f6c5956101a8514397962ade4d68c64eef550a4b3089b8e"
+    },
+    "source_head": "b721ee0d2ff2fdb548212d16076a652e877753f0"
+  },
+  "data_roles": {
+    "frontend": "mechanism_and_execution_evidence",
+    "native_reference": "historical_independent_counter_proven_observation_reused_as_fixed_answer",
+    "native_replay": "current_tree_simulator_prediction_scored_against_fixed_native",
+    "current_native_probe": "development_diagnostic_only_semantic_proof_unverified"
+  },
+  "scoring": {
+    "metrics": [
+      "signed_error_ms",
+      "absolute_error_ms",
+      "signed_error_pct",
+      "APE_pct"
+    ],
+    "boundary": "engine TTFT/TPOT/E2E from counter-proven artifact",
+    "aggregation": "single valid pair; no fabricated median/P90",
+    "missing_and_failure": "retain explicit blocked/invalid statuses"
+  },
+  "budget": {
+    "native_new_runs": 1,
+    "frontend_runs": 2,
+    "focused_test_runs": 3,
+    "full_pytest_required": true
+  },
+  "protection_rules": [
+    "no synthetic self-reference accuracy",
+    "no unknown geometry invention",
+    "no FTL/GC timing claim",
+    "no broad generalization from one pair"
+  ]
+}

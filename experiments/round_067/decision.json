@@ -1,0 +1,51 @@
+{
+  "schema": "heterollm.decision/v1",
+  "round_id": "round_067",
+  "decision": "accept_modeling_and_execution_chain; retain_accuracy_as_limited_replay_evidence",
+  "overall_task_status": "complete_with_limited_native_accuracy_scope",
+  "promote": {
+    "implementation": "development_baseline",
+    "accuracy": "not_generalized_release_claim"
+  },
+  "basis": [
+    "DRAM and NAND family mechanisms execute through planner/event/report/API",
+    "frontend workload activates DRAM and read/program/erase NAND paths",
+    "Python and HTTP reports are equal",
+    "counter-proven Native observation reused directly and scored against current simulator"
+  ],
+  "accuracy_summary": {
+    "ttft_ms": {
+      "native_ms": 30.369,
+      "simulator_ms": 34.20799687985553,
+      "signed_error_ms": 3.8389968798555287,
+      "absolute_error_ms": 3.8389968798555287,
+      "signed_error_pct": 12.641169876701666,
+      "ape_pct": 12.641169876701666,
+      "status": "measured"
+    },
+    "tpot_ms": {
+      "native_ms": 15.473,
+      "simulator_ms": 18.829557647867396,
+      "signed_error_ms": 3.3565576478673957,
+      "absolute_error_ms": 3.3565576478673957,
+      "signed_error_pct": 21.69299843512826,
+      "ape_pct": 21.69299843512826,
+      "status": "measured"
+    },
+    "e2e_ms": {
+      "native_ms": 45.842,
+      "simulator_ms": 53.037554527722925,
+      "signed_error_ms": 7.195554527722926,
+      "absolute_error_ms": 7.195554527722926,
+      "signed_error_pct": 15.696423645833354,
+      "ape_pct": 15.696423645833354,
+      "status": "measured"
+    }
+  },
+  "remaining_limits": [
+    "broaden Native valid pairs for generalization",
+    "obtain current extractor semantic proof if current fresh measurements are to become headline",
+    "FTL/GC and cycle accuracy remain outside first-stage workplan"
+  ],
+  "next_step": "Keep round_067 implementation as baseline; any broader accuracy claim requires additional valid independent Native cells, not synthetic self-reference."
+}

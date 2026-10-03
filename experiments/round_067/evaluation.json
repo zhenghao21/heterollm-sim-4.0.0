@@ -1,0 +1,71 @@
+{
+  "schema": "heterollm.evaluation/v1",
+  "round_id": "round_067",
+  "implementation_status": "complete_for_declared_dram_nand_family_scope",
+  "mechanism_status": "passed",
+  "frontend_status": "passed",
+  "report_api_status": "passed",
+  "regression_status": "393 focused tests passed; frontend Python/API/job ledgers equal",
+  "native_accuracy": {
+    "status": "one_valid_historical_pair_replayed_on_current_simulator",
+    "reference": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\development\\engine_contract_probe_engine_v3.json",
+      "sha256": "7d177c41818315c2bcdbd85e68d697bcd5ba7945bec1857214da4b93c43505b5"
+    },
+    "coverage": {
+      "native_cases": 1,
+      "valid_cases": 1,
+      "failed_cases": 0,
+      "fallback_cases": 0,
+      "note": "Native timing is reused from an existing counter-proven artifact; only simulator prediction was rerun on the current working tree."
+    },
+    "metrics": {
+      "ttft_ms": {
+        "native_ms": 30.369,
+        "simulator_ms": 34.20799687985553,
+        "signed_error_ms": 3.8389968798555287,
+        "absolute_error_ms": 3.8389968798555287,
+        "signed_error_pct": 12.641169876701666,
+        "ape_pct": 12.641169876701666,
+        "status": "measured"
+      },
+      "tpot_ms": {
+        "native_ms": 15.473,
+        "simulator_ms": 18.829557647867396,
+        "signed_error_ms": 3.3565576478673957,
+        "absolute_error_ms": 3.3565576478673957,
+        "signed_error_pct": 21.69299843512826,
+        "ape_pct": 21.69299843512826,
+        "status": "measured"
+      },
+      "e2e_ms": {
+        "native_ms": 45.842,
+        "simulator_ms": 53.037554527722925,
+        "signed_error_ms": 7.195554527722926,
+        "absolute_error_ms": 7.195554527722926,
+        "signed_error_pct": 15.696423645833354,
+        "ape_pct": 15.696423645833354,
+        "status": "measured"
+      }
+    },
+    "identity": {
+      "model_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+      "hardware_fingerprint": "f320170cd468255451f9f1fb1586ff1be4ddde9303f4a4c85be8d5542dc50977",
+      "runtime_fingerprint": "bd4ce9acc140c0c6c04f2f292eff0479b4020b83b78b7b9cc68799b363baf57c",
+      "prompt_fingerprint": "122ea038de7998e04ad114e934753a64101d5e21a69cd83bdb3737d28f83e3e4"
+    },
+    "interpretation": "正式误差来自已有 counter_proven Native 观测与当前源码 simulator replay；Native测量独立于simulator源码。仅有1个有效pair，不外推泛化。"
+  },
+  "current_native_diagnostic": {
+    "status": "semantic_proof_unverified",
+    "artifact": "work/round_067_native_proof_probe.json",
+    "headline_error_fields": "null",
+    "client_diagnostic_fields": "present_but_secondary"
+  },
+  "limits": [
+    "NAND timing remains analytical/parameterized; no FTL/GC firmware model",
+    "DRAM/NAND physical values are not device-calibrated",
+    "one valid Native pair does not establish cross-model/hardware generalization",
+    "current Native probe runtime/extractor drift prevents headline use"
+  ]
+}

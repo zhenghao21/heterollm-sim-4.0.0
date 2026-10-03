@@ -176,3 +176,12 @@ H66 是部分实现和选定 NAND read 前端/API 证据，DRAM 与 NAND 两个�
 - 没有完成 TTFT/TPOT/E2E signed error、absolute ms、APE；synthetic/oracle/API 相等性和测试通过只支持相应机制/工程域。
 
 四份 JSON 已增加 completion_review_20261003 并更正 overall_task_status=incomplete；原始记录副本保留在 artifacts/optimization/round_066/completion_correction_20261003。后续继续原授权下的剩余建模/真实前端验证和观测配对工作，不由方向轮换关闭尚未完成的用户任务。
+
+## H67：DRAM/NAND 家族建模与成对误差重放（2026-10-03）
+
+- 真实前端证据：`work/round_067/frontend_attempt/result.json`，来源代码提交 `b721ee0d2ff2fdb548212d16076a652e877753f0`；compile 380 tasks、10 个 DRAM contract、3 个 NAND probe（read/program/erase），Python report、HTTP `/api/run` 和 `/api/run-jobs` 的 DRAM/NAND ledger 完全一致。
+- DRAM ledger：10 tasks、5200 bursts、logical/physical bytes 332800、row hit 3664、row miss 1536、refresh wait 436462.019ns、queue wait 288ns；organization profile 显式保留 2 subchannel、2 rank、4 bank-group、2 stack、2 pseudo-channel。
+- NAND ledger：read/program/erase operation counts、跨页/跨 block offset、2 channel×2 die×2 plane mapping、sequential program、queue requests、host/media queue wait、owner/resource、physical bytes 和 parameter evidence 均保留；参数为 analytical/parameterized，不是设备校准。
+- Native 数据角色更正：项目已有 `artifacts/native_compare.json`、`artifacts/native_error_matrix.json` 和 counter-proven `artifacts/development/engine_contract_probe_engine_v3.json`，不是“没有 Native 参考”。本轮复用最后一个文件作为固定独立答案，仅重跑当前 simulator；结果见 `work/round_067_native_replay_error.json`，TTFT/TPOT/E2E signed/absolute/APE 为 3.839ms/3.839ms/12.641%、3.357ms/3.357ms/21.693%、7.196ms/7.196ms/15.696%。这是单个有效 pair 的 replay evidence，不是跨模型/硬件泛化。
+- `work/round_067_native_proof_probe.json` 是当前可执行文件的真实 8-token probe，但 semantic proof 的 runtime/extractor identity drift 使 engine headline error fields 保持 null；client timing 只作 secondary diagnostic。
+- 验证：相关 DRAM/NAND/planner/report/API 回归 393 passed；frontend runner 返回 passed。未把 synthetic/oracle/self-reference 当 Native 精度证据。
