@@ -62,6 +62,24 @@
 
 ## 仍未补足的关键边界
 
+## 第三批补证（当前自动任务）
+
+### H62 direct billing 激活性扫描
+
+- 摘要：[batch3/storage/summary.json](../artifacts/optimization/evidence_supplement_20261003_batch3/storage/summary.json)，SHA-256 `9ffc0825f421b8f7961dd963e9d5c0c1798698bc06b809e5ad38cfc2a59b5ec9`。
+- 对 parent `6cea26e4d554543306fdd98dbc5857b2045e80ad` 与 candidate `26d040303b719ef029ef3306341353b5c2d31110` 做 source scan 和同输入隔离执行。
+- 正式触发条件已核对：direct storage/device 匹配、local backing demand/resource、读写字节非零、GPU rank GEMM 路径。
+- 两版本 control-plane placement 和 compile 均成功，任务数均为 377，但 `direct_memory_access_count=0`、`nand_task_count=0`，状态均为 `not_activated`。
+- 结论：保留 H62 direct billing 的正式触发边界；没有伪造激活，也没有新增因果收益结论。
+
+### H52 collective 成本模型激活性扫描
+
+- 摘要：[batch3/cost_model/summary.json](../artifacts/optimization/evidence_supplement_20261003_batch3/cost_model/summary.json)，SHA-256 `613d5a6184a9327f202960825b1ee1d71d464f24a4752f5176d56d03c9daecd0`。
+- parent `b00523f9` 与 candidate `6cdf5fc4` 的正式 reference planner/event/report 两侧均完成 326 tasks，HTTP `/api/run` 均返回 200；但 28 个 collective rows 都是 local zero-demand。
+- 尝试 `tp_degree=4` 时两版本均因 reference topology 只有一个 compute component 而 `ScenarioValidationError`，这是明确的拓扑阻塞。
+- 独立 `plan_collective` route oracle：ring/tree/auto、4 个 participant、4096 B all-reduce 均为 24576 B，等于 `4096×2×(4−1)`；非法算法、负 bytes、重复 participant、owner capacity 冲突和 duplicate demand 均 fail-closed。
+- 结论：保留 collective 本地 oracle 和 topology blocker；不把 local direct matrix 写成正式端到端 collective 证据，不声称 Native 带宽或性能改善。
+
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
 - H29 的收益目前只属于 CLI 文本前端；H36/H41/H46/H54/H61 仍缺同等级独立进程、重复批次、输出等价和 RSS 证据。
