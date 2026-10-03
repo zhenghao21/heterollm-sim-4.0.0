@@ -652,7 +652,7 @@ def _sum_batch_dram_traffic(result: OnlineScenarioResult) -> Dict[str, Any]:
         **{key: (int(value) if key not in {"queue_wait_ns", "refresh_wait_ns", "turnaround_wait_ns", "service_ns"} else value)
            for key, value in numeric.items()},
         "resource_totals": dict(sorted(resources.items())),
-        "owner_ids": tuple(sorted({str(row.get("owner", "unknown")) for row in resources.values()})),
+        "owner_ids": sorted({str(row.get("owner", "unknown")) for row in resources.values()}),
         "organization_profiles": profiles, "organization_profile_limit": 32,
         "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
     }

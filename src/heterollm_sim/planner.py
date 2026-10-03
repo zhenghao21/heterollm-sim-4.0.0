@@ -25739,7 +25739,7 @@ def _summarize_dram_task_traffic(
         "schema_version": "heterollm.dram-traffic/v1", "task_count": count,
         **totals, "logical_bytes": totals["logical_read_bytes"] + totals["logical_write_bytes"],
         "resource_totals": dict(sorted(resources.items())),
-        "owner_ids": tuple(sorted({str(row["owner"]) for row in resources.values()})),
+        "owner_ids": sorted({str(row["owner"]) for row in resources.values()}),
         "organization_profiles": organizations, "organization_profile_limit": 32,
         "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
     }
