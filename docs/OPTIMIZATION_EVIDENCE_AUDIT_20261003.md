@@ -40,7 +40,7 @@
 `H29、H36、H41、H46、H54、H61` 不能把单次局部 profile 当作仿真器性能改善。
 
 - `H29` 已补 120 个独立 CLI 子进程、60 对 AB/BA、每规模 20 对，并记录 wall/RSS/stdout 等价：small/medium/large wall 中位改善约 5.82%/10.79%/12.34%；medium/large RSS 中位改善约 12.27%/18.34%，small RSS 不接纳为改善。结论仍限定为 CLI 文本前端，不外推 web/run_jobs 或目标系统 latency。
-- `H36` provider reuse 0.16137s → 0.04243s，但没有安全生产调用方；需要 provider 生命周期、并发、eviction 和真实前端 A/B。
+- `H36` 已补 20 对独立 run_scenario 冷/暖 provider 进程 AB/BA，三规模 wall 中位数暖路径下降约 57.90%/74.37%/74.19%，report/makespan/task 结果 20/20 等价；RSS 小/中无稳定改善，大规模约 -1.85%。暖路径仍只是显式 provider 控制，没有安全共享生产生命周期、并发、eviction 或场景身份契约，不晋升生产候选。
 - `H41/H46` 只是热点剖析，没有可安全优化的候选、完整 TaskResult/report 等价和 RSS。
 - `H54` fresh/reused 有 245.4ms → 32.35ms、3.68MB → 1.58MB，但仍缺随机批次、淘汰、并发和生产入口。
 - `H61` n=8/32/64 仅一次量级，缓存候选有的更慢且峰值更高；不能外推为稳定负结论，也不能宣称改善。
@@ -76,7 +76,7 @@
 1. **H42/H50/H57/H64 的剩余状态边界**：H65 的 primitive serialization 已闭合，继续补缺失/失败/coverage 的 report/API 投影，不重做 H65。
 2. **H62/H39/H40/H48/H49/H55/H24/H26/H30**：H62 已有当前版本前端机制证据，下一步补 known-offset 跨页激活、HTTP/report projection 和父/候选 A/B，随后扩展其它存储轮次。
 3. **回看 H37/H45/H53/H59**：H27/H38/H44/H52/H58 的当前成本前端边界已记录；后续只在新增 topology、跨请求或失败回滚触发面实际存在时补测，不能重复已通过的单 compute/单链路路径。
-4. **H29/H41/H46/H54/H61/H36**：做重复独立性能 A/B，严格区分仿真器自身 wall/RSS 和被模拟系统延迟。
+4. **H41/H46/H61**：做重复独立性能 A/B，严格区分仿真器自身 wall/RSS 和被模拟系统延迟；H36 已完成本批独立前端 A/B，保持 no-safe-production-callsite 边界。
 5. **H28/H34/H43/H51/H60/H64**：如果确实要发布预测质量结论，再运行 Native 成对误差和留出泛化；否则保持“门控/证据边界修复”。
 
 三份机器审计产物已保存到忽略的 artifacts 目录：
@@ -85,7 +85,7 @@
 - `audit_frontend_eval.json` SHA-256 `e0171ea7cd8978a536760c165bb607adb2111294d4ad79df96dc8cfff30cbfaa`
 - `audit_perf_accuracy.json` SHA-256 `6b9641846f82475e0c8e42178f476ca97b1f15ebb6394284defeaf56b2040b34`
 
-初始审计本身没有执行补测；补证阶段实际执行的 H65/H29/H62/H27 命令和退出码已写入对应 artifacts 与 [EVIDENCE_SUPPLEMENT_STATUS_20261003.md](EVIDENCE_SUPPLEMENT_STATUS_20261003.md)。H65 的自动推进已暂停，后续应由用户逐项批准或继续手动选择。
+初始审计本身没有执行补测；补证阶段实际执行的 H65/H29/H62/H27/H36 命令和退出码已写入对应 artifacts 与 [EVIDENCE_SUPPLEMENT_STATUS_20261003.md](EVIDENCE_SUPPLEMENT_STATUS_20261003.md)。H65 的自动推进已暂停，后续应由用户逐项批准或继续手动选择。
 
 ## 第二批补证结果
 

@@ -1,0 +1,167 @@
+{
+  "schema": "heterollm.optimization.supplement/v1",
+  "round_id": "round_036",
+  "supplement_id": "supplement_20261003_frontend_ab",
+  "phase": "prepare->verify->predict->score->review->promote",
+  "direction": "运行速度与内存",
+  "primary_goal": "在真实 run_scenario 前端中，以独立进程比较默认冷 provider 与同场景显式 provider 预热复用的仿真器 wall/RSS；确认输出/TaskResult 报告等价，并保留无安全生产缓存调用方的边界。",
+  "hypothesis": "TopologyAwareBatchCostProvider 在同一不可变场景显式复用时可降低重复 run_scenario 的仿真器构建 wall time；若结果等价但无共享生命周期、淘汰和场景身份契约，则只能作为局部工程证据。",
+  "source_identity": {
+    "current_source_commit": "111e58f2bd110ca3db4b02f6ff9ef20dc018d3cb",
+    "historical_h36_parent_commit": "e62cfbe6b9275d778ebd6f0b6e81cd35d1748def",
+    "measured_parent_mode": "cold default run_scenario (provider constructed internally)",
+    "measured_candidate_mode": "warm explicit TopologyAwareBatchCostProvider (one warm-up, measured second run)",
+    "source_changed": false,
+    "source_candidate_commit": "111e58f2bd110ca3db4b02f6ff9ef20dc018d3cb",
+    "module_paths": {
+      "src/heterollm_sim/reporting.py": {
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f",
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528"
+      },
+      "src/heterollm_sim/serving.py": {
+        "content_sha256": "2bac8dce10c996233dfbb1fafc6d31a205f17f29ef9aabf6d540d5e387d680b6",
+        "git_blob_sha": "124c0229c7ae3a6e989d7aec32b806ea269a457a"
+      },
+      "src/heterollm_sim/planner.py": {
+        "content_sha256": "0469eb1227fbda68c4241c32010bf7652e6c966a48ce2fa4792a9adcd75451d2",
+        "git_blob_sha": "8b9c24624488ca6a73e80aab53eba0a5e91e7c16"
+      },
+      "src/heterollm_sim/reference.py": {
+        "content_sha256": "ccd9262069936655059adf99c346c2295f84c001a2b0c6a93d33f00f299c6bdb",
+        "git_blob_sha": "97661edcb71bde5c8dda356e53f6cd8cf7d16ab2"
+      }
+    }
+  },
+  "data_roles": {
+    "development": "same deterministic build_reference_scenario workload and provider cache controls",
+    "comparison": "20 independent cold/warm process pairs, alternating AB/BA across three request scales",
+    "holdout": "request scale distribution: 7 pairs 1x64x4, 7 pairs 8x128x16, 6 pairs 16x128x16; all requests share fixed IDs/input within pair",
+    "final_acceptance": "engineering runtime/memory only; no Native accuracy or production cache promotion"
+  },
+  "input_contract": {
+    "loads": [
+      [
+        1,
+        64,
+        4
+      ],
+      [
+        8,
+        128,
+        16
+      ],
+      [
+        16,
+        128,
+        16
+      ]
+    ],
+    "requests_fixed": true,
+    "retention_policy": "aggregate",
+    "cold": "default run_scenario with provider constructed internally",
+    "warm": "explicit TopologyAwareBatchCostProvider, one unmeasured warm-up then measured second run",
+    "independent_processes": true,
+    "pair_order": "alternating AB/BA"
+  },
+  "entrypoint": {
+    "cold": "build_reference_scenario -> run_scenario(scenario, retention_policy=aggregate) -> report_dict",
+    "warm": "build_reference_scenario -> TopologyAwareBatchCostProvider(scenario) -> warm run_scenario -> measured run_scenario(batch_lowerer=provider) -> report_dict",
+    "real_frontend": true,
+    "native_loaded": false
+  },
+  "commands": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m py_compile artifacts/optimization/round_036/h36_frontend_ab.py",
+      "exit_code": 0,
+      "role": "syntax verification"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_036/h36_frontend_ab.py",
+      "exit_code": 0,
+      "role": "20 independent AB/BA process pairs; artifact written successfully"
+    },
+    {
+      "command": "git rev-parse HEAD",
+      "exit_code": 0,
+      "role": "source identity"
+    }
+  ],
+  "artifact": {
+    "path": "artifacts/optimization/round_036/h36_frontend_ab_results.json",
+    "sha256": "cb10d43fa49bc130f69edab4aaf6fef699f0ddc25100906e2a86c7bab3ad112f",
+    "script_path": "artifacts/optimization/round_036/h36_frontend_ab.py",
+    "script_sha256": "b4ce79d420c480997cb81d73b16fecc4e18d17ecd964f00226726c47d838699a"
+  },
+  "observations": {
+    "aggregate": {
+      "pair_count": 20,
+      "return_codes_zero": true,
+      "output_equivalent": true,
+      "warm_wall_lower_median_pairs": 20,
+      "warm_rss_lower_median_pairs": 8
+    },
+    "by_load": {
+      "1x64x4": {
+        "pair_count": 7,
+        "cold_wall_median_s": 0.08749870001338422,
+        "warm_wall_median_s": 0.03683470003306866,
+        "wall_delta_median_pct": -57.90257452118232,
+        "cold_wall_p90_s": 0.08931978000327945,
+        "warm_wall_p90_s": 0.038261099997907874,
+        "cold_peak_rss_median_bytes": 6098944,
+        "warm_peak_rss_median_bytes": 6103040,
+        "rss_delta_median_pct": 0.0671591672263272,
+        "all_output_equivalent": true,
+        "all_return_codes_zero": true
+      },
+      "8x128x16": {
+        "pair_count": 7,
+        "cold_wall_median_s": 0.16780079994350672,
+        "warm_wall_median_s": 0.04300479998346418,
+        "wall_delta_median_pct": -74.37151670436461,
+        "cold_wall_p90_s": 0.17018780000507833,
+        "warm_wall_p90_s": 0.04685531998984516,
+        "cold_peak_rss_median_bytes": 6103040,
+        "warm_peak_rss_median_bytes": 6103040,
+        "rss_delta_median_pct": 0.0,
+        "all_output_equivalent": true,
+        "all_return_codes_zero": true
+      },
+      "16x128x16": {
+        "pair_count": 6,
+        "cold_wall_median_s": 0.17845925001893193,
+        "warm_wall_median_s": 0.046058549953158945,
+        "wall_delta_median_pct": -74.19099881442244,
+        "cold_wall_p90_s": 0.18153530004201457,
+        "warm_wall_p90_s": 0.04676554998150095,
+        "cold_peak_rss_median_bytes": 6215680.0,
+        "warm_peak_rss_median_bytes": 6100992.0,
+        "rss_delta_median_pct": -1.8451400329489331,
+        "all_output_equivalent": true,
+        "all_return_codes_zero": true
+      }
+    },
+    "output_equivalence": "All 20/20 pair report_dict JSON hashes, makespan_ns, batch_count and request_count equal; all 40 children exit 0.",
+    "wall_metric": "Measured run_scenario wall seconds inside each child; parent process wall and peak RSS also collected in artifact pairs.",
+    "rss_metric": "Parent polled independent child process RSS with psutil; median RSS is process-level engineering memory, not Native memory."
+  },
+  "decision": {
+    "status": "evidence_only_no_candidate",
+    "finding": "暖显式 provider 在三个规模均降低 measured run wall median（约 -57.90%、-74.37%、-74.19%），所有输出和 makespan 等价；RSS 仅大规模约 -1.85%，小规模约 +0.07%、中规模持平，不能称稳定内存改善。",
+    "acceptance": "接纳为 context-local provider reuse 的独立前端工程证据；拒绝晋升生产候选，因为普通 run_scenario/run_jobs/Web 没有已定义共享 provider 生命周期、场景身份和淘汰契约。",
+    "source_modified": false,
+    "native_accuracy": "not measured"
+  },
+  "uncovered": [
+    "没有安全的跨请求/Web/run_jobs/global provider cache 调用方；暖路径仅显式 provider 控制，不是新增生产机制。",
+    "没有 provider eviction、并发竞争、跨场景隔离或生命周期压力测试。",
+    "没有 Native/真实硬件 latency、TTFT/TPOT/E2E 或预测精度数据。",
+    "RSS 采样为父进程轮询，非系统级 peak working set；不把小/中规模 RSS 视为改善。",
+    "不重复 H54 CompilationContext 复用批次；本批针对 H36 provider 显式 reuse 入口。"
+  ],
+  "next_basis": {
+    "direction": "计算成本模型",
+    "reason": "H36 已完成真实前端性能边界；无安全缓存候选，切换到仍待补 H44/H52/H58 等成本链路，不重复同一 provider reuse 扫描。"
+  },
+  "status": "complete_frontend_engineering_evidence_no_safe_production_candidate"
+}
