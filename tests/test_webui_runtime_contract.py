@@ -1,4 +1,5 @@
 """V4 report-to-frontend contract for runtime-owned, read-only placement."""
+import json
 from dataclasses import replace
 
 import pytest
@@ -8,6 +9,20 @@ from heterollm_sim.reference import build_reference_scenario
 from heterollm_sim.reporting import report_dict, run_scenario
 from heterollm_sim.serde import to_primitive
 from heterollm_sim.web import scenario_to_payload, validation_payload
+
+
+def test_online_aggregate_report_is_json_roundtrip_stable():
+    result = run_scenario(build_reference_scenario(), retention_policy="aggregate")
+    report = report_dict(result)
+    ledger = report["summary"]["simulated_subtargets"]["hardware_phase_ledger"]
+
+    assert isinstance(ledger["guardrails"], list)
+    encoded = json.dumps(report, allow_nan=False, sort_keys=True)
+    decoded = json.loads(encoded)
+    assert decoded == report
+    assert decoded["summary"]["simulated_subtargets"]["hardware_phase_ledger"][
+        "guardrails"
+    ] == ledger["guardrails"]
 
 
 @pytest.mark.parametrize("mode", ["static", "continuous"])

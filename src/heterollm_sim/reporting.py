@@ -4738,11 +4738,11 @@ def _sim_hardware_phase_ledger(
         "owner_residency": owner_payload,
         "runtime_controller": controller_payload,
         "causal_quality": causal_payload,
-        "guardrails": (
+        "guardrails": [
             "aggregate current-V4 facts only; timeline details are omitted",
             "controller observed bytes may overlap bulk traffic and remain separately labeled",
             "owner transfer rows count service batches and bytes; batch totals own duration",
-        ),
+        ],
     }
 
 
