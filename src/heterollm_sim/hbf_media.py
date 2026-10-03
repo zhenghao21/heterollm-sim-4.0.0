@@ -9,8 +9,14 @@ _REQ = {"version", "host_transaction_bytes", "host_max_request_bytes", "media_pa
 _ALLOWED = _REQ | {
     "physical_planes", "erase_block_bytes", "erase_latency_ns",
     "background_work", "physical_dies", "physical_channels",
+    "source", "parameter_evidence",
 }
 _PATTERNS = {"contiguous_page_aligned", "unknown_alignment_conservative"}
+_EVIDENCE_STATUSES = {"parameterized", "sourced", "unknown"}
+_PARAMETER_KEYS = _REQ | {
+    "physical_planes", "erase_block_bytes", "erase_latency_ns",
+    "background_work", "physical_dies", "physical_channels",
+}
 
 def _num(value, name, positive=False, nonnegative=False):
     if (isinstance(value, bool) or not isinstance(value, Real)
@@ -29,6 +35,30 @@ def _media_contract(component):
         contract = metadata.get("hbf_media")
         field_name = "hbf_media"
     return contract, field_name
+
+
+def _parameter_evidence(contract):
+    """Return provenance without implying an unverified device measurement."""
+    source = contract.get("source")
+    supplied = contract.get("parameter_evidence", {})
+    result = {}
+    for name in sorted(_PARAMETER_KEYS):
+        present = name in contract
+        value = contract.get(name, "unknown")
+        item = supplied.get(name, {})
+        status = (
+            item.get("status", "parameterized")
+            if isinstance(item, Mapping) and item
+            else ("parameterized" if present else "unknown")
+        )
+        entry = {"value": value, "status": status}
+        item_source = item.get("source") if isinstance(item, Mapping) else None
+        if item_source is not None:
+            entry["source"] = item_source
+        elif source is not None:
+            entry["source"] = source
+        result[name] = entry
+    return result
 
 
 def validate_nand_media(component):
@@ -79,6 +109,41 @@ def validate_nand_media(component):
         _num(contract["erase_latency_ns"], "erase_latency_ns", True)
     if "background_work" in contract and not isinstance(contract["background_work"], Mapping):
         raise ValueError("background_work must be a mapping when supplied")
+    if "source" in contract and (
+        not isinstance(contract["source"], str) or not contract["source"].strip()
+    ):
+        raise ValueError("source must be non-empty text when supplied")
+    evidence = contract.get("parameter_evidence", {})
+    if not isinstance(evidence, Mapping):
+        raise ValueError("parameter_evidence must be a mapping when supplied")
+    unknown_evidence = set(evidence) - (_PARAMETER_KEYS | {"memory_access_offset_bytes"})
+    if unknown_evidence:
+        raise ValueError(
+            "unknown parameter_evidence keys: {}".format(sorted(unknown_evidence))
+        )
+    for name, item in evidence.items():
+        if not isinstance(item, Mapping):
+            raise ValueError("parameter_evidence[{}] must be a mapping".format(name))
+        status = item.get("status", "parameterized")
+        if status not in _EVIDENCE_STATUSES:
+            raise ValueError(
+                "parameter_evidence[{}].status must be parameterized, sourced or unknown".format(name)
+            )
+        if name in _PARAMETER_KEYS and name not in contract and status != "unknown":
+            raise ValueError(
+                "parameter_evidence[{}] cannot assert an omitted parameter".format(name)
+            )
+        item_source = item.get("source")
+        if item_source is not None and (
+            not isinstance(item_source, str) or not item_source.strip()
+        ):
+            raise ValueError("parameter_evidence[{}].source must be non-empty text".format(name))
+        if status == "sourced" and not (item_source or contract.get("source")):
+            raise ValueError(
+                "parameter_evidence[{}] sourced status requires source".format(name)
+            )
+    if "erase_block_bytes" in contract and contract["erase_block_bytes"] % contract["media_page_bytes"]:
+        raise ValueError("erase_block_bytes must be a media_page_bytes multiple")
 
 
 def validate_hbf_media(component):
@@ -125,16 +190,24 @@ def nand_media_service(
         erase_latency = c.get("erase_latency_ns")
         if block_bytes is None or erase_latency is None:
             raise ValueError("erase requires erase_block_bytes and erase_latency_ns")
-        operations = _ceil(byte_count, block_bytes) if byte_count else 0
-        planes = c.get("physical_planes", c["media_parallelism"])
-        parallel = min(c["media_parallelism"], planes, c["command_queue_depth"])
+        known_offset = page_offset_bytes is not None
+        block_offset = page_offset_bytes % block_bytes if known_offset else 0
+        operations = _ceil(block_offset + byte_count, block_bytes) if byte_count else 0
+        declared_planes = c.get("physical_planes")
+        parallel = min(
+            c["media_parallelism"],
+            declared_planes if declared_planes is not None else c["media_parallelism"],
+            c["command_queue_depth"],
+        )
         waves = _ceil(operations, parallel) if operations else 0
         physical = operations * block_bytes
         erase_ns = waves * erase_latency
         marker = c.get("background_work") if background_work is None else background_work
         return {
             "version": c["version"], "contract_field": field_name,
-            "operation": "erase", "address_scope": "block_parameterized",
+            "operation": "erase",
+            "address_scope": "known_block_offset" if known_offset else "block_parameterized",
+            "block_offset_bytes": block_offset if known_offset else None,
             "host_transfer_bytes": 0, "physical_read_bytes": 0,
             "physical_write_bytes": physical, "physical_bytes": physical,
             "pages_touched": 0, "read_operations": 0, "program_operations": 0,
@@ -142,31 +215,48 @@ def nand_media_service(
             "command_count": operations, "effective_parallelism": parallel,
             "media_waves": waves, "media_erase_service_ns": erase_ns,
             "service_ns": erase_ns, "background_work": marker or {},
-            "physical_planes": planes,
+            "physical_planes": declared_planes if declared_planes is not None else "unknown",
+            "parallelism_basis": (
+                "declared_media_parallelism_and_physical_plane_cap"
+                if declared_planes is not None
+                else "declared_media_parallelism_without_physical_plane_cap"
+            ),
             "physical_dies": c.get("physical_dies", "unknown"),
             "physical_channels": c.get("physical_channels", "unknown"),
             "write_completion": "block_erase_complete",
             "timing_diagnostics": "parameterized NAND block erase; no FTL/GC simulation",
             "profile_evidence": "analytical/no hardware validated",
+            **({"source": c["source"]} if c.get("source") else {}),
+            "parameter_evidence": {
+                **_parameter_evidence(c),
+                "memory_access_offset_bytes": {
+                    "value": page_offset_bytes if known_offset else "unknown",
+                    "status": "parameterized" if known_offset else "unknown",
+                    **({"source": c["source"]} if c.get("source") else {}),
+                },
+            },
         }
     host_bytes = _ceil(byte_count, host_tx) * host_tx if byte_count else 0
     known_offset = page_offset_bytes is not None
     offset = (page_offset_bytes % page) if known_offset else 0
     nominal = _ceil(offset + byte_count, page) if byte_count else 0
-    unknown = c["access_pattern"] == "unknown_alignment_conservative"
+    unknown = (
+        c["access_pattern"] == "unknown_alignment_conservative"
+        and not known_offset
+    )
     # A 64B-aligned request can start at most 4096-64B before a page end.
     pages = (
         _ceil(byte_count + page - host_tx, page)
-        if unknown and byte_count
+        if unknown and not known_offset and byte_count
         else nominal
     )
     if operation == "read" or not byte_count:
         rmw = 0
-    elif unknown:
-        rmw = min(2, pages)
     elif known_offset:
         end_offset = offset + byte_count
-        rmw = int(offset > 0) + int(end_offset % page != 0)
+        rmw = min(pages, int(offset > 0) + int(end_offset % page != 0))
+    elif unknown:
+        rmw = min(2, pages)
     else:
         rmw = int(bool(byte_count % page))
     physical_read = pages * page if read else rmw * page
@@ -180,8 +270,12 @@ def nand_media_service(
     media_command_count = read_ops + program_ops
     # Omitted planes means no additional physical bottleneck: the declared
     # media_parallelism remains effective. An explicit smaller plane count caps it.
-    planes = c.get("physical_planes", c["media_parallelism"])
-    parallel = min(c["media_parallelism"], planes, c["command_queue_depth"])
+    declared_planes = c.get("physical_planes")
+    parallel = min(
+        c["media_parallelism"],
+        declared_planes if declared_planes is not None else c["media_parallelism"],
+        c["command_queue_depth"],
+    )
     rwaves = _ceil(read_ops, parallel) if read_ops else 0
     pwaves = _ceil(program_ops, parallel) if program_ops else 0
     direction = "read" if operation == "read" else "write"
@@ -265,7 +359,12 @@ def nand_media_service(
         "pages_touched": pages,
         "command_queue_depth": c["command_queue_depth"],
         "media_parallelism": c["media_parallelism"],
-        "physical_planes": planes,
+        "physical_planes": declared_planes if declared_planes is not None else "unknown",
+        "parallelism_basis": (
+            "declared_media_parallelism_and_physical_plane_cap"
+            if declared_planes is not None
+            else "declared_media_parallelism_without_physical_plane_cap"
+        ),
         "page_read_latency_ns": c["page_read_latency_ns"],
         "page_program_latency_ns": c["page_program_latency_ns"],
         "access_pattern": c["access_pattern"],
@@ -303,6 +402,15 @@ def nand_media_service(
         "energy_pj": energy,
         "timing_diagnostics": "analytical conservative model; serialized host transfer plus media waves and bandwidth",
         "profile_evidence": "analytical/no hardware validated",
+        **({"source": c["source"]} if c.get("source") else {}),
+        "parameter_evidence": {
+            **_parameter_evidence(c),
+            "memory_access_offset_bytes": {
+                "value": page_offset_bytes if known_offset else "unknown",
+                "status": "parameterized" if known_offset else "unknown",
+                **({"source": c["source"]} if c.get("source") else {}),
+            },
+        },
         "cache_policy": "cold_no_persistent_cache",
         "write_completion": "media_program_complete",
     }

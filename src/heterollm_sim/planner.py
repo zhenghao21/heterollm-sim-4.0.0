@@ -130,7 +130,7 @@ from .final_layer_output_selection import (
     resolve_declaration as _resolve_final_output_declaration,
     model_declaration as _model_final_output_declaration,
 )
-from .serde import stable_hash
+from .serde import stable_hash, to_primitive
 from .llama_gpu_invocations import (
     SOURCE_KEY as _GPU_INVOCATION_KEY,
     gpu_invocation_group as _gpu_invocation_group,
@@ -6198,6 +6198,7 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
             "resource_id": service.resource_id, "read_bytes": moved_reads, "write_bytes": moved_writes,
             "access_kind": "READ_WRITE" if moved_reads and moved_writes else "READ" if moved_reads else "WRITE",
             "memory_service": remote_service, "physical_bytes": remote_physical_bytes,
+            "read_service": read_bill, "write_service": write_bill,
             "energy_pj": remote_energy_pj, "local_read_bytes": reads - moved_reads,
             "local_write_bytes": writes - moved_writes}})
 
@@ -6205,7 +6206,14 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
 def _add_direct_state_access(builder, scenario, router, storage, device, byte_count,
                              dependencies, *, name, read, metadata):
     from .data_motion import endpoint_service
-    service = endpoint_service(_component(scenario, storage), byte_count, read=read, name=name)
+    operation = str(metadata.get("operation", "read" if read else "program")).lower()
+    if operation == "erase":
+        raise ValueError("direct state access does not support erase")
+    offset = metadata.get("source_offset_bytes" if read else "target_offset_bytes")
+    if offset is None:
+        offset = metadata.get("page_offset_bytes")
+    service = endpoint_service(_component(scenario, storage), byte_count, read=read,
+        name=name, page_offset_bytes=offset, operation=operation)
     demands = list(service.demands if service else ())
     source, target = (storage, device) if read else (device, storage)
     for hop in router.route(source, target, byte_count):
@@ -12974,8 +12982,13 @@ def _add_kv_access(
         from .data_motion import endpoint_service
         is_read = metadata.get("memory_direction") == "read"
         # Attention owns the read demand; append has its own physical store.
+        offset = metadata.get(
+            "source_offset_bytes" if is_read else "target_offset_bytes",
+            metadata.get("page_offset_bytes"),
+        )
         service = endpoint_service(
-            _component(scenario, owner), byte_count, read=is_read, name=name)
+            _component(scenario, owner), byte_count, read=is_read, name=name,
+            page_offset_bytes=offset)
         demands = list(service.demands if service else ())
         if not is_read:
             for hop in router.route(rank.component_id, owner, byte_count, policy=plan.routing_policy):
@@ -25163,6 +25176,10 @@ def _estimate_serving_cohort_cost(
             "coverage_references": _analytical_coverage_references(
                 lowering.schedule.tasks
             ),
+            "storage_traffic": _summarize_nand_task_traffic(
+                lowering.schedule.tasks,
+                resource_owners=lowering.schedule.resource_owners,
+            ),
             "linear_state_bytes": summary.linear_state_bytes,
             "host_orchestration_ns": host_orchestration_ns,
             "device_execution_ns": max(
@@ -25313,6 +25330,125 @@ def _resource_busy_by_direction(
         direction: dict(sorted(values.items()))
         for direction, values in rows.items()
         if values
+    }
+
+
+def _summarize_nand_task_traffic(
+    tasks: Sequence[TaskSpec],
+    *,
+    resource_owners: Optional[Mapping[str, str]] = None,
+) -> Mapping[str, object]:
+    """Project explicit NAND endpoint accounting into serving batch metadata.
+
+    Aggregate serving reports do not retain the full task DAG. Keep a compact
+    physical/logical ledger so page geometry and operation semantics remain
+    auditable through ``run_scenario`` and HTTP without pretending to expose a
+    task trace.
+    """
+
+    numeric_fields = (
+        "logical_bytes",
+        "host_transfer_bytes",
+        "physical_bytes",
+        "physical_read_bytes",
+        "physical_write_bytes",
+        "pages_touched",
+        "media_waves",
+        "read_operations",
+        "program_operations",
+        "erase_operations",
+        "rmw_read_operations",
+        "service_ns",
+        "energy_pj",
+    )
+    totals = {field: 0.0 for field in numeric_fields}
+    operation_counts: Dict[str, int] = {}
+    resource_totals: Dict[str, Dict[str, object]] = {}
+    profiles = set()
+    background_markers: List[object] = []
+    owners = dict(resource_owners or {})
+    task_count = 0
+    for task in tasks:
+        phase_metadata = task.metadata.get("phase_metadata", {})
+        phase_metadata = phase_metadata if isinstance(phase_metadata, Mapping) else {}
+        direct = task.metadata.get("direct_memory_access")
+        if not isinstance(direct, Mapping):
+            direct = phase_metadata.get("direct_memory_access", {})
+        direct = direct if isinstance(direct, Mapping) else {}
+        raw = task.metadata.get("nand_media")
+        if not isinstance(raw, Mapping):
+            raw = task.metadata.get("hbf_media")
+        raw_rows = [raw] if isinstance(raw, Mapping) else []
+        if direct:
+            for key in ("read_service", "write_service"):
+                bill = direct.get(key)
+                if isinstance(bill, Mapping):
+                    raw_rows.append(bill)
+            if len(raw_rows) == 0 and isinstance(direct.get("memory_service"), Mapping):
+                raw_rows.append(direct["memory_service"])
+        if not raw_rows:
+            continue
+        task_count += 1
+        logical = direct.get("read_bytes", 0) + direct.get("write_bytes", 0)
+        if not isinstance(logical, (int, float)) or isinstance(logical, bool):
+            logical = task.metadata.get("logical_bytes", task.metadata.get("bytes", 0))
+        totals["logical_bytes"] += float(logical or 0)
+        for raw in raw_rows:
+            operation = str(raw.get("operation", "unknown"))
+            operation_counts[operation] = operation_counts.get(operation, 0) + 1
+            evidence = raw.get("profile_evidence")
+            if evidence:
+                profiles.add(str(evidence))
+            marker = raw.get("background_work")
+            if isinstance(marker, Mapping):
+                marker = to_primitive(marker)
+                if marker not in background_markers and len(background_markers) < 32:
+                    background_markers.append(marker)
+            for field in numeric_fields:
+                if field == "logical_bytes":
+                    continue
+                value = raw.get(field, 0)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    totals[field] += float(value)
+        for demand in task.demands:
+            resource_id = str(demand.resource_id)
+            row = resource_totals.setdefault(resource_id, {
+                "owner": owners.get(resource_id, task.metadata.get("physical_owner", "unknown")),
+                "bytes_moved": 0,
+                "service_ns": 0.0,
+                "energy_pj": 0.0,
+            })
+            row["bytes_moved"] += int(demand.bytes_moved)
+            row["service_ns"] += float(demand.service_ns)
+            row["energy_pj"] += float(demand.energy_pj)
+    if not task_count:
+        return {"schema_version": "heterollm.nand-traffic/v1", "task_count": 0}
+    integer_fields = {
+        field: int(round(totals[field]))
+        for field in numeric_fields
+        if field not in {"service_ns", "energy_pj"}
+    }
+    return {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": task_count,
+        **integer_fields,
+        "service_ns": totals["service_ns"],
+        "energy_pj": totals["energy_pj"],
+        "operation_counts": dict(sorted(operation_counts.items())),
+        "resource_totals": {
+            resource_id: {
+                **row,
+                "bytes_moved": int(row["bytes_moved"]),
+            }
+            for resource_id, row in sorted(resource_totals.items())
+        },
+        "owner_ids": tuple(sorted({str(row["owner"]) for row in resource_totals.values()})),
+        "profile_evidence": tuple(sorted(profiles)),
+        "background_work": background_markers,
+        "accounting_semantics": (
+            "host_transfer_bytes is logical host payload; physical_* and pages/waves "
+            "are NAND media accounting; service_ns/energy_pj are analytical"
+        ),
     }
 
 

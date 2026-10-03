@@ -169,6 +169,62 @@ def test_data_access_erase_reaches_shared_physical_service():
 
 
 @pytest.mark.parametrize(
+    "offset,count,pages,rmw",
+    [(64, 64, 1, 1), (64, 4032, 1, 1), (64, 4096, 2, 2),
+     (0, 4096, 1, 0), (4032, 128, 2, 2), (4096, 4096, 1, 0)],
+)
+def test_known_offset_prices_distinct_partial_pages(offset, count, pages, rmw):
+    component = _ssd(access_pattern="unknown_alignment_conservative")
+    bill = nand_media_service(component, count, False, page_offset_bytes=offset)
+    assert bill["pages_touched"] == pages
+    assert bill["rmw_read_operations"] == rmw
+    assert bill["physical_bytes"] == (pages + rmw) * 4096
+    assert bill["address_scope"] == "known_page_offset"
+
+
+def test_known_erase_offset_counts_crossed_blocks_through_physical_service():
+    component = _ssd(physical_planes=1)
+    service = resolve_service(component)
+    aligned = service.price("ERASE", 128, page_offset_bytes=0)
+    crossing = service.price("ERASE", 128, page_offset_bytes=262144 - 64)
+    assert aligned["erase_operations"] == 1
+    assert crossing["erase_operations"] == 2
+    assert crossing["physical_bytes"] == 2 * 262144
+    assert crossing["media_erase_service_ns"] == 2 * aligned["media_erase_service_ns"]
+    assert crossing["address_scope"] == "known_block_offset"
+    assert crossing["block_offset_bytes"] == 262144 - 64
+
+
+def test_parameter_evidence_is_explicit_and_missing_geometry_stays_unknown():
+    legacy = nand_media_service(_ssd(), 64, True)
+    assert legacy["parameter_evidence"]["media_page_bytes"]["status"] == "parameterized"
+    assert legacy["parameter_evidence"]["physical_dies"]["status"] == "unknown"
+    sourced = nand_media_service(_ssd(
+        source="analysis protocol v1",
+        parameter_evidence={"media_page_bytes": {"status": "sourced", "source": "device datasheet section 4"}},
+    ), 64, True)
+    assert sourced["parameter_evidence"]["media_page_bytes"] == {
+        "value": 4096, "status": "sourced", "source": "device datasheet section 4",
+    }
+    assert sourced["parameter_evidence"]["command_queue_depth"]["status"] == "parameterized"
+    assert sourced["parameter_evidence"]["command_queue_depth"]["source"] == "analysis protocol v1"
+    assert sourced["source"] == "analysis protocol v1"
+    assert sourced["profile_evidence"] == "analytical/no hardware validated"
+
+
+@pytest.mark.parametrize("changes", [
+    {"erase_block_bytes": 4095}, {"erase_block_bytes": 4097},
+    {"source": ""}, {"parameter_evidence": []},
+    {"parameter_evidence": {"media_page_bytes": {"status": "measured"}}},
+    {"parameter_evidence": {"media_page_bytes": {"status": "verified", "source": "x"}}},
+    {"parameter_evidence": {"not_a_parameter": {"status": "parameterized"}}},
+])
+def test_nand_geometry_and_evidence_fail_closed(changes):
+    with pytest.raises(ValueError):
+        _ssd(**changes)
+
+
+@pytest.mark.parametrize(
     "changes",
     [
         {"version": "unknown"},

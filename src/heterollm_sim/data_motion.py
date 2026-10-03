@@ -286,6 +286,10 @@ class PhysicalService:
         read = kind is AccessKind.READ
         if page_offset_bytes is not None:
             _non_negative_int(page_offset_bytes, "page_offset_bytes")
+        if page_offset_bytes is None and self.component is not None:
+            page_offset_bytes = self.component.metadata.get("memory_access_offset_bytes")
+            if page_offset_bytes is not None:
+                _non_negative_int(page_offset_bytes, "memory_access_offset_bytes")
         bandwidth = self.read_bandwidth_gb_s if read else self.write_bandwidth_gb_s
         if byte_count and kind is not AccessKind.ERASE and bandwidth <= 0:
             raise ValueError(f"storage service {self.service_id} requires a positive {kind.value.lower()} bandwidth")
@@ -713,6 +717,13 @@ def endpoint_service(
     operation: Optional[str] = None,
 ) -> Optional[EndpointService]:
     _non_negative_int(byte_count, "byte_count")
+    address_source = "explicit_access" if page_offset_bytes is not None else "unknown"
+    if page_offset_bytes is None:
+        page_offset_bytes = component.metadata.get("memory_access_offset_bytes")
+        if page_offset_bytes is not None:
+            address_source = "parameterized_repeated_access_start"
+    if page_offset_bytes is not None:
+        _non_negative_int(page_offset_bytes, "page_offset_bytes")
     operation = ("read" if read else "program") if operation is None else str(operation).lower()
     if operation not in {"read", "program", "erase"}:
         raise ValueError("operation must be read, program or erase")
@@ -769,6 +780,7 @@ def endpoint_service(
                 metadata={"event_kind": "memory_erase", "component_id": component.component_id,
                           "bytes": byte_count, "physical_bytes": media["physical_bytes"],
                           "nand_media": media, "operation": "erase",
+                          "address_source": address_source,
                           "background_work": media.get("background_work", {})},
             )
         media = nand_media_service(
@@ -795,6 +807,7 @@ def endpoint_service(
                 "transferred_bytes": media["host_transfer_bytes"],
                 "physical_bytes": media["physical_bytes"],
                 "nand_media": media,
+                "address_source": address_source,
                 **({"hbf_media": media}
                    if component.metadata.get("hbf_media") is not None else {}),
                 "transfer_granularity_bytes": media["media_page_bytes"],
@@ -854,6 +867,7 @@ def endpoint_service(
         address = (
             dram_address_bytes
             if dram_address_bytes is not None
+            else page_offset_bytes if page_offset_bytes is not None
             else component.metadata.get("dram_address_bytes")
         )
         if address is not None:

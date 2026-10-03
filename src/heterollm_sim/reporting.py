@@ -534,6 +534,78 @@ def _sum_batch_coverage_references(
     }
 
 
+def _sum_batch_storage_traffic(
+    result: OnlineScenarioResult,
+) -> Dict[str, Any]:
+    """Merge bounded NAND ledgers emitted by each online batch."""
+
+    numeric = {
+        "task_count": 0,
+        "logical_bytes": 0,
+        "host_transfer_bytes": 0,
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "pages_touched": 0,
+        "media_waves": 0,
+        "read_operations": 0,
+        "program_operations": 0,
+        "erase_operations": 0,
+        "rmw_read_operations": 0,
+        "service_ns": 0.0,
+        "energy_pj": 0.0,
+    }
+    operations: Dict[str, int] = {}
+    resources: Dict[str, Dict[str, Any]] = {}
+    profiles: List[str] = []
+    backgrounds: List[Any] = []
+    for batch in result.serving.batches:
+        ledger = batch.cost.metadata.get("storage_traffic", {})
+        if not isinstance(ledger, Mapping) or not ledger.get("task_count"):
+            continue
+        for key in numeric:
+            value = ledger.get(key, 0)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                numeric[key] += value
+        for operation, count in (ledger.get("operation_counts", {}) or {}).items():
+            if isinstance(count, int) and not isinstance(count, bool):
+                operations[str(operation)] = operations.get(str(operation), 0) + count
+        for resource_id, raw in (ledger.get("resource_totals", {}) or {}).items():
+            if not isinstance(raw, Mapping):
+                continue
+            row = resources.setdefault(str(resource_id), {
+                "owner": raw.get("owner", "unknown"),
+                "bytes_moved": 0,
+                "service_ns": 0.0,
+                "energy_pj": 0.0,
+            })
+            row["bytes_moved"] += int(raw.get("bytes_moved", 0) or 0)
+            row["service_ns"] += float(raw.get("service_ns", 0.0) or 0.0)
+            row["energy_pj"] += float(raw.get("energy_pj", 0.0) or 0.0)
+        for value in ledger.get("profile_evidence", ()) or ():
+            if str(value) not in profiles and len(profiles) < 32:
+                profiles.append(str(value))
+        for value in ledger.get("background_work", ()) or ():
+            if value not in backgrounds and len(backgrounds) < 32:
+                backgrounds.append(to_primitive(value))
+    if not numeric["task_count"]:
+        return {"schema_version": "heterollm.nand-traffic/v1", "task_count": 0}
+    return {
+        "schema_version": "heterollm.nand-traffic/v1",
+        **{key: (int(value) if key not in {"service_ns", "energy_pj"} else value)
+           for key, value in numeric.items()},
+        "operation_counts": dict(sorted(operations.items())),
+        "resource_totals": dict(sorted(resources.items())),
+        "owner_ids": tuple(sorted({str(row["owner"]) for row in resources.values()})),
+        "profile_evidence": tuple(sorted(profiles)),
+        "background_work": backgrounds,
+        "accounting_semantics": (
+            "host_transfer_bytes is logical host payload; physical_* and pages/waves "
+            "are NAND media accounting; service_ns/energy_pj are analytical"
+        ),
+    }
+
+
 def _model_coverage(scenario: ScenarioConfig) -> Dict[str, Any]:
     execution_view = _execution_view(scenario)
     layers = tuple(item.layer for item in execution_view.layer_instances)
@@ -5339,6 +5411,7 @@ def _online_report_core(
         _non_negative_int(batch.cost.metadata.get("resource_accounted_bytes"))
         for batch in serving.batches
     )
+    storage_traffic = _sum_batch_storage_traffic(result)
     task_count = sum(
         int(batch.cost.metadata.get("task_count", 0))
         for batch in serving.batches
@@ -5370,6 +5443,7 @@ def _online_report_core(
         ),
         "total_energy_pj": total_energy,
         "resource_accounted_bytes": total_bytes,
+        "storage_traffic": storage_traffic,
         "throughput": {
             "requests_per_s": completed / wall_seconds if wall_seconds else 0.0,
             "visible_output_tokens_per_s": (
@@ -5469,6 +5543,7 @@ def _online_report_dict(
     serving = result.serving
     category_time = _sum_batch_metadata(result, "category_time_ns")
     critical_time = _sum_batch_metadata(result, "critical_path_category_ns")
+    storage_traffic = _sum_batch_storage_traffic(result)
     analytical_coverage = {
         "evidence": "analytical",
         "calibration_version": ANALYTICAL_MODEL_VERSION,
@@ -5503,6 +5578,7 @@ def _online_report_dict(
         "resource_utilization": core.resource_utilization,
         "category_time_ns": category_time,
         "critical_path_category_ns": critical_time,
+        "storage_traffic": storage_traffic,
         "scheduler": to_primitive(serving.scheduler_metrics),
         "owner_residency": to_primitive(serving.owner_residency_metrics),
         "kv_cache": {
@@ -5982,6 +6058,7 @@ def _report_dict_in_context(
             "event_bytes": dict(sorted(state_event_bytes.items())),
         },
         "analytical_coverage": analytical_coverage,
+        "storage_traffic": to_primitive(execution.storage_traffic),
         "visualization": _visualization_payload(result, options),
         "component_timeseries": _component_timeseries(result),
         "report_limits": {

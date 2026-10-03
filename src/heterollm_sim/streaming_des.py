@@ -34,6 +34,7 @@ from .planner import (
     RequestTaskChunk,
     StreamingScheduleIR,
     _compilation_scope,
+    _summarize_nand_task_traffic,
     iter_request_task_chunks,
 )
 
@@ -63,6 +64,7 @@ class ScheduleExecutionResult:
     retention_policy: RetentionPolicy
     retained_task_limit: Optional[int]
     runtime_kernel_metrics: Mapping[str, object] = field(default_factory=dict)
+    storage_traffic: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -658,13 +660,76 @@ class _TaskHistory:
         )
 
 
+def _merge_storage_traffic(target: Dict[str, object], source: Mapping[str, object]) -> None:
+    """Merge one bounded NAND ledger into the retention-independent total."""
+
+    if not source.get("task_count"):
+        return
+    if not target:
+        target.update({
+            "schema_version": "heterollm.nand-traffic/v1",
+            "task_count": 0,
+            "logical_bytes": 0,
+            "host_transfer_bytes": 0,
+            "physical_bytes": 0,
+            "physical_read_bytes": 0,
+            "physical_write_bytes": 0,
+            "pages_touched": 0,
+            "media_waves": 0,
+            "read_operations": 0,
+            "program_operations": 0,
+            "erase_operations": 0,
+            "rmw_read_operations": 0,
+            "service_ns": 0.0,
+            "energy_pj": 0.0,
+            "operation_counts": {},
+            "resource_totals": {},
+            "profile_evidence": [],
+            "background_work": [],
+        })
+    for key in (
+        "task_count", "logical_bytes", "host_transfer_bytes", "physical_bytes",
+        "physical_read_bytes", "physical_write_bytes", "pages_touched", "media_waves",
+        "read_operations", "program_operations", "erase_operations", "rmw_read_operations",
+        "service_ns", "energy_pj",
+    ):
+        target[key] = target.get(key, 0) + source.get(key, 0)
+    operation_counts = target["operation_counts"]
+    for key, value in (source.get("operation_counts", {}) or {}).items():
+        operation_counts[str(key)] = operation_counts.get(str(key), 0) + int(value)
+    resource_totals = target["resource_totals"]
+    for resource_id, raw in (source.get("resource_totals", {}) or {}).items():
+        row = resource_totals.setdefault(str(resource_id), {
+            "owner": raw.get("owner", "unknown"),
+            "bytes_moved": 0,
+            "service_ns": 0.0,
+            "energy_pj": 0.0,
+        })
+        row["bytes_moved"] += int(raw.get("bytes_moved", 0) or 0)
+        row["service_ns"] += float(raw.get("service_ns", 0.0) or 0.0)
+        row["energy_pj"] += float(raw.get("energy_pj", 0.0) or 0.0)
+    for key in ("profile_evidence", "background_work"):
+        values = target[key]
+        for value in source.get(key, ()) or ():
+            if value not in values and len(values) < 32:
+                values.append(value)
+    target["owner_ids"] = sorted({str(row["owner"]) for row in resource_totals.values()})
+    target["profile_evidence"] = sorted(target["profile_evidence"])
+    target["accounting_semantics"] = (
+        "host_transfer_bytes is logical host payload; physical_* and pages/waves "
+        "are NAND media accounting; service_ns/energy_pj are analytical"
+    )
+
+
 class _ResultAccumulator:
     def __init__(
         self,
         retention_policy: RetentionPolicy,
         retained_task_limit: int,
+        resource_owners: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.retention_policy = RetentionPolicy(retention_policy)
+        self.resource_owners = dict(resource_owners or {})
         self.history = _TaskHistory(self.retention_policy, retained_task_limit)
         self.critical = _CriticalPathAccumulator()
         self.requests: Dict[str, _RequestMetricsAccumulator] = {}
@@ -681,12 +746,19 @@ class _ResultAccumulator:
         self.kv_phase_bytes: Dict[Tuple[str, str, str], int] = {}
         self.state_event_counts: Dict[str, int] = {}
         self.state_event_bytes: Dict[str, int] = {}
+        self.storage_traffic: Dict[str, object] = {}
         self.coverage: Dict[str, Dict[str, object]] = {}
         self.task_count = 0
         self.makespan_ns = 0.0
 
     def register_chunk(self, chunk: RequestTaskChunk) -> None:
         self.critical.register_chunk(chunk)
+        _merge_storage_traffic(
+            self.storage_traffic,
+            _summarize_nand_task_traffic(
+                chunk.tasks, resource_owners=self.resource_owners
+            ),
+        )
         grouped: Dict[
             Tuple[str, str, str, object, object], Dict[str, object]
         ] = {}
@@ -1022,6 +1094,7 @@ class _ResultAccumulator:
                 if self.retention_policy is RetentionPolicy.STREAMING
                 else None
             ),
+            storage_traffic=dict(self.storage_traffic),
         )
 
 
@@ -1085,8 +1158,10 @@ def execute_incremental_schedule(
         metadata={"retention_policy": retention_policy.value},
     )
 
-    accumulator = _ResultAccumulator(retention_policy, retained_task_limit)
     resource_owners = dict(getattr(schedule, "resource_owners", {}))
+    accumulator = _ResultAccumulator(
+        retention_policy, retained_task_limit, resource_owners=resource_owners
+    )
     kernel = execution_kernel or UnifiedEventKernel(resource_owners=resource_owners)
     if resource_owners != dict(kernel.resource_owners):
         raise ValueError("live kernel physical resource owners differ from schedule")

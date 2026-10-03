@@ -1898,6 +1898,13 @@ class ComponentSpec:
                         "HBF memory requires explicit write_buffer_bytes=0 "
                         "(write-through); buffered writes are not modeled"
                     )
+        access_offset = self.metadata.get("memory_access_offset_bytes")
+        if access_offset is not None and (
+            isinstance(access_offset, bool)
+            or not isinstance(access_offset, int)
+            or access_offset < 0
+        ):
+            raise ValueError("memory_access_offset_bytes must be a non-negative integer")
         if (self.normalized_kind in OFFLOAD_STORAGE_COMPONENT_KINDS
                 and (self.metadata.get("hbf_media") is not None
                      or self.metadata.get("nand_media") is not None)):

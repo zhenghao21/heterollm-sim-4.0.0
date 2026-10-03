@@ -34,7 +34,11 @@ def test_qd_limits_media_waves_and_omitted_planes_do_not_force_serial():
     assert hbf_media_service(wide, 1024 * 4096, True)["service_ns"] < hbf_media_service(narrow, 1024 * 4096, True)["service_ns"]
     omitted = component(hbf_media={"physical_planes": None, "media_parallelism": 96})
     omitted.metadata["hbf_media"].pop("physical_planes")
-    assert hbf_media_service(omitted, 96 * 4096, True)["effective_parallelism"] == 96
+    omitted_bill = hbf_media_service(omitted, 96 * 4096, True)
+    assert omitted_bill["effective_parallelism"] == 96
+    assert omitted_bill["physical_planes"] == "unknown"
+    assert omitted_bill["parameter_evidence"]["physical_planes"]["status"] == "unknown"
+    assert omitted_bill["parallelism_basis"] == "declared_media_parallelism_without_physical_plane_cap"
     one_plane_small_qd = component(hbf_media={"physical_planes": 1, "command_queue_depth": 256})
     one_plane_large_qd = component(hbf_media={"physical_planes": 1, "command_queue_depth": 1024})
     assert hbf_media_service(one_plane_small_qd, 1024 * 4096, True)["service_ns"] == hbf_media_service(one_plane_large_qd, 1024 * 4096, True)["service_ns"]
@@ -83,3 +87,12 @@ def test_invalid_energy(energy):
     c.metadata["read_energy_pj_per_byte"] = energy
     with pytest.raises(ValueError):
         hbf_media_service(c, 64, True)
+
+
+def test_legacy_hbf_known_offset_overrides_conservative_alignment():
+    c = component(hbf_media={"access_pattern": "unknown_alignment_conservative"})
+    read = hbf_media_service(c, 4096, True, page_offset_bytes=0)
+    write = hbf_media_service(c, 64, False, page_offset_bytes=64)
+    assert read["pages_touched"] == 1
+    assert write["rmw_read_operations"] == 1
+    assert write["physical_bytes"] == 8192
