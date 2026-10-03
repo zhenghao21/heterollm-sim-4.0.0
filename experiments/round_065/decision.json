@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.optimization.decision/v1",
+  "round_id": "round_065",
+  "candidate_id": "H65_ONLINE_REPORT_PRIMITIVE_SERIALIZATION",
+  "status": "pending",
+  "decision": "pending",
+  "reason": "Prepare 已登记 H64 延期的 online report primitive serialization 候选，等待独立 source scan 与矩阵。",
+  "evidence": [],
+  "source_commit": "9a4d39a814a213b4af91307f9881769bb8adf0b8",
+  "deferred_scope": [],
+  "next_hypothesis": null
+}

@@ -1,0 +1,78 @@
+{
+  "schema": "heterollm.optimization.experiment/v1",
+  "round_id": "round_065",
+  "hypothesis_id": "H65_ONLINE_REPORT_PRIMITIVE_SERIALIZATION",
+  "direction": "评估/API与可视化口径",
+  "previous_direction": "评估/API与可视化口径",
+  "recent_directions": [
+    "H63:开发工具链与可复现性（源码工具修复）",
+    "H64:评估/API与可视化口径（score gate 修复）",
+    "H65:评估/API与可视化口径（延期 serialization 候选）"
+  ],
+  "direction_switch_reason": "H64 明确保留了 reporting.py tuple/list 容器边界作为独立延期根因；H65 在同一方向的第二轮内收口该候选，不重复 H64 web metric completeness。",
+  "direction_last_checked": {
+    "仿真器正确性与语义": "H59",
+    "运行速度与内存": "H61",
+    "计算成本模型": "H58",
+    "存储硬件建模粒度": "H62",
+    "预测精度与泛化": "H60",
+    "评估/API与可视化口径": "H65活动",
+    "开发工具链与可复现性": "H63"
+  },
+  "primary_goal": "修复并验证 online report_dict JSON roundtrip 的 primitive container 一致性：hardware_phase_ledger.guardrails 在直接 report payload 中应与 JSON/API 数组语义一致。",
+  "purpose": "online_report_primitive_serialization",
+  "method": "prepare -> verify -> predict -> score -> review -> promote",
+  "budget": {
+    "candidate_count": 1,
+    "source_scan_runs": 1,
+    "matrix_runs": 1,
+    "full_prediction_runs": 0,
+    "native_collection_runs": 0,
+    "retries": 0
+  },
+  "metrics": [
+    "json_roundtrip_equal",
+    "guardrails_type",
+    "api_report_parity",
+    "score_status"
+  ],
+  "guardrails": [
+    "不重做 H64 web score metric completeness",
+    "不重做 H42/H50 retention/status",
+    "不重做 H57 report bytes",
+    "不把 JSON roundtrip 修复称为精度改善",
+    "不加载 Native accuracy"
+  ],
+  "data_roles": {
+    "development": "fresh online report synthetic control",
+    "comparison": "independent pre/post serialization matrix",
+    "holdout": "static/API score controls",
+    "final_acceptance": "report/API primitive serialization only"
+  },
+  "baseline": {
+    "parent_commit": "9a4d39a814a213b4af91307f9881769bb8adf0b8",
+    "role": "H64 accepted score metric gate baseline"
+  },
+  "scope": {
+    "include": [
+      "reporting.py _sim_hardware_phase_ledger guardrails",
+      "online report_dict direct JSON roundtrip",
+      "HTTP API parity",
+      "static/score serialization controls"
+    ],
+    "exclude": [
+      "H64 web comparator",
+      "H42 coverage",
+      "H50 retention/status",
+      "H57 resource bytes",
+      "Native accuracy"
+    ]
+  },
+  "problem_domain_closure": {
+    "rule": "同一 online primitive serialization 根因若影响 report、score、API、可视化和回归触发面，本轮一起收口。",
+    "status": "prepare"
+  },
+  "selected_candidate": null,
+  "next_step": "等待独立 source scan 与 serialization matrix；若无缺陷保留有限负结论并切换方向。",
+  "status": "prepare"
+}

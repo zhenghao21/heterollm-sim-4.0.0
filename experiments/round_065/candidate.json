@@ -1,0 +1,20 @@
+{
+  "schema": "heterollm.optimization.candidate/v1",
+  "round_id": "round_065",
+  "status": "prepare",
+  "hypothesis": {
+    "id": "H65_ONLINE_REPORT_PRIMITIVE_SERIALIZATION",
+    "direction": "评估/API与可视化口径",
+    "claim": "online report_dict 直接返回 tuple guardrails，JSON roundtrip 后为 list，导致 Python report consumers 与 API primitive contract 不一致。",
+    "trigger": "H64 matrix online_json_roundtrip=false at /summary/simulated_subtargets/hardware_phase_ledger/guardrails",
+    "falsifier": "post-fix direct report_dict roundtrip equal and guardrails is list while static/API/score controls remain unchanged"
+  },
+  "parent_commit": "9a4d39a814a213b4af91307f9881769bb8adf0b8",
+  "candidate_source_commit": null,
+  "source_sha256": null,
+  "changed_files": [],
+  "independent_evidence": [],
+  "activation_checks": [],
+  "deferred_candidates": [],
+  "tests": []
+}
