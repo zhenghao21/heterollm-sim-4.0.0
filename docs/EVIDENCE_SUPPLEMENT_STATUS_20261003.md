@@ -80,6 +80,14 @@
 - 独立 `plan_collective` route oracle：ring/tree/auto、4 个 participant、4096 B all-reduce 均为 24576 B，等于 `4096×2×(4−1)`；非法算法、负 bytes、重复 participant、owner capacity 冲突和 duplicate demand 均 fail-closed。
 - 结论：保留 collective 本地 oracle 和 topology blocker；不把 local direct matrix 写成正式端到端 collective 证据，不声称 Native 带宽或性能改善。
 
+### H54 context-local reuse 运行速度/内存补证
+
+- 摘要：[batch3/performance/summary.json](../artifacts/optimization/evidence_supplement_20261003_batch3/performance/summary.json)，SHA-256 `89309d19594ee8b61c87cd422b15a78ddf70e744ebb1f1a4b81ac0ec3ec35bc7`。
+- 使用 H54 源码 `982e539167bd89b85cba620ef95a70c61ecea1de`，fresh/reused 两种模式，small/medium/large 三种规模，各 20 对 AB/BA，共 120 个独立子进程；全部退出码为 0，120 个 provenance JSON 和 sidecar 全部匹配。
+- wall time：small `263.565→34.730 ms`（-86.82%）、medium `2110.427→290.366 ms`（-86.24%）、large `4239.655→584.133 ms`（-86.22%）。RSS：-2.54%/-4.26%/-3.58%；tracemalloc：-57.39%/-37.12%/-36.94%。
+- 每对 task signature、metadata、demands、report、trace、makespan 和 resource busy 完全相等。
+- 结论：确认 `CompilationContext` 场景内复用有稳定工程收益；由于没有跨请求/Web/run_jobs/global cache 的安全生产调用方，本批不晋升新源码候选，也不写成生产级优化或 Native 精度改善。
+
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
 - H29 的收益目前只属于 CLI 文本前端；H36/H41/H46/H54/H61 仍缺同等级独立进程、重复批次、输出等价和 RSS 证据。

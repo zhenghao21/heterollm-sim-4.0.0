@@ -13,3 +13,10 @@
 - H62 parent/candidate真实run_scenario+HTTP A/B已完成但修复点未激活，父候选输出完全相同，保留为路径健康/不足以接纳收益。
 - H27 parent/candidate成本计费A/B已完成，serialized/overlapped中ResourceDemand物理匹配提升（GEMM 52→54、memory 3→6、reduction 0→15），makespan不变，接纳机制因果差异。
 - H64缺失指标门控真实HTTP A/B已完成，parent错误通过、candidate fail-closed；H42/H43/H60仍无正式前端触发面。
+
+
+## 2026-10-03 第三批补证更新
+
+- H62 direct activation scan确认正式条件和当前 workload边界，direct_memory_access_count=0、nand_task_count=0，未产生收益晋升。
+- H52 collective scan确认当前 topology 只有一个 compute component，正式多参与者 collective 被精确阻塞；本地 route oracle通过但不构成E2E。
+- H54 context-local reuse完成120进程/60对AB-BA，wall和内存收益稳定但没有生产安全调用方，不晋升新源码候选。

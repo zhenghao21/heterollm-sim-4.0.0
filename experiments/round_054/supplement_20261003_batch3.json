@@ -1,0 +1,30 @@
+{
+  "schema": "heterollm.optimization.evidence_supplement/v3",
+  "round_id": "round_054",
+  "supplement_id": "H54_CONTEXT_LOCAL_REUSE_PERF_20261003_BATCH3",
+  "status": "complete_limited_no_new_candidate",
+  "source_commit": "982e539167bd89b85cba620ef95a70c61ecea1de",
+  "protocol": "artifacts/optimization/evidence_supplement_20261003_batch3/performance/protocol.json",
+  "protocol_sha256": "44dddd5731dc8b52e676a54e7c9b39df72394b4ffe80c88b4efaf3a7babca691",
+  "summary": "artifacts/optimization/evidence_supplement_20261003_batch3/performance/summary.json",
+  "summary_sha256": "89309d19594ee8b61c87cd422b15a78ddf70e744ebb1f1a4b81ac0ec3ec35bc7",
+  "raw_results_sha256": "7ad7ee2adfb8ab6620ee09d71c3a141d4491e5b2988efd5f46ceecf10f28319d",
+  "measurements": {
+    "independent_processes": 120,
+    "pairs": 60,
+    "returncode_all_zero": true,
+    "provenance_sidecars_all_match": true,
+    "scales": {
+      "small_1_request": {"wall_percent": -86.82, "rss_percent": -2.54, "tracemalloc_percent": -57.39},
+      "medium_8_requests": {"wall_percent": -86.24, "rss_percent": -4.26, "tracemalloc_percent": -37.12},
+      "large_16_requests": {"wall_percent": -86.22, "rss_percent": -3.58, "tracemalloc_percent": -36.94}
+    },
+    "output_equivalence": "task signature, metadata, demands, report hash, trace hash, makespan and resource busy all equal per pair"
+  },
+  "decision": "retain_context_local_engineering_gain_no_new_candidate",
+  "limitations": [
+    "No production-safe cross-request/Web/run_jobs/global cache caller was identified.",
+    "No Native or target-system latency accuracy.",
+    "No new source candidate promoted."
+  ]
+}
