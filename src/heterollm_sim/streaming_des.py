@@ -35,6 +35,7 @@ from .planner import (
     StreamingScheduleIR,
     _compilation_scope,
     _summarize_nand_task_traffic,
+    _summarize_dram_task_traffic,
     iter_request_task_chunks,
 )
 
@@ -65,6 +66,7 @@ class ScheduleExecutionResult:
     retained_task_limit: Optional[int]
     runtime_kernel_metrics: Mapping[str, object] = field(default_factory=dict)
     storage_traffic: Mapping[str, object] = field(default_factory=dict)
+    dram_traffic: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -676,6 +678,9 @@ def _merge_storage_traffic(target: Dict[str, object], source: Mapping[str, objec
             "physical_write_bytes": 0,
             "pages_touched": 0,
             "media_waves": 0,
+            "queue_wait_ns": 0.0,
+            "host_queue_wait_ns": 0.0,
+            "media_queue_wait_ns": 0.0,
             "read_operations": 0,
             "program_operations": 0,
             "erase_operations": 0,
@@ -686,11 +691,13 @@ def _merge_storage_traffic(target: Dict[str, object], source: Mapping[str, objec
             "resource_totals": {},
             "profile_evidence": [],
             "background_work": [],
+            "organization_profiles": [],
         })
     for key in (
         "task_count", "logical_bytes", "host_transfer_bytes", "physical_bytes",
         "physical_read_bytes", "physical_write_bytes", "pages_touched", "media_waves",
         "read_operations", "program_operations", "erase_operations", "rmw_read_operations",
+        "queue_wait_ns", "host_queue_wait_ns", "media_queue_wait_ns",
         "service_ns", "energy_pj",
     ):
         target[key] = target.get(key, 0) + source.get(key, 0)
@@ -708,7 +715,7 @@ def _merge_storage_traffic(target: Dict[str, object], source: Mapping[str, objec
         row["bytes_moved"] += int(raw.get("bytes_moved", 0) or 0)
         row["service_ns"] += float(raw.get("service_ns", 0.0) or 0.0)
         row["energy_pj"] += float(raw.get("energy_pj", 0.0) or 0.0)
-    for key in ("profile_evidence", "background_work"):
+    for key in ("profile_evidence", "background_work", "organization_profiles"):
         values = target[key]
         for value in source.get(key, ()) or ():
             if value not in values and len(values) < 32:
@@ -717,7 +724,42 @@ def _merge_storage_traffic(target: Dict[str, object], source: Mapping[str, objec
     target["profile_evidence"] = sorted(target["profile_evidence"])
     target["accounting_semantics"] = (
         "host_transfer_bytes is logical host payload; physical_* and pages/waves "
-        "are NAND media accounting; service_ns/energy_pj are analytical"
+        "are NAND media accounting; queue_wait_ns separates host/media queue waits; "
+        "service_ns/energy_pj are analytical"
+    )
+
+
+def _merge_dram_traffic(target: Dict[str, object], source: Mapping[str, object]) -> None:
+    """Merge resolved DRAM counters before retention can discard task rows."""
+    if not source.get("task_count"):
+        return
+    numeric = (
+        "task_count", "logical_read_bytes", "logical_write_bytes", "physical_read_bytes",
+        "physical_write_bytes", "physical_bytes", "burst_count", "row_hits", "row_misses",
+        "row_conflicts", "read_write_switches", "queue_wait_ns", "refresh_wait_ns",
+        "turnaround_wait_ns", "service_ns", "logical_bytes",
+    )
+    if not target:
+        target.update({"schema_version": "heterollm.dram-traffic/v1", **{key: 0 for key in numeric},
+                       "resource_totals": {}, "organization_profiles": []})
+    for key in numeric:
+        target[key] = target.get(key, 0) + source.get(key, 0)
+    rows = target["resource_totals"]
+    for resource_id, raw in (source.get("resource_totals", {}) or {}).items():
+        row = rows.setdefault(str(resource_id), {"owner": raw.get("owner", "unknown"),
+                                                   "bytes_moved": 0, "service_ns": 0.0,
+                                                   "energy_pj": 0.0})
+        row["bytes_moved"] += int(raw.get("bytes_moved", 0) or 0)
+        row["service_ns"] += float(raw.get("service_ns", 0.0) or 0.0)
+        row["energy_pj"] += float(raw.get("energy_pj", 0.0) or 0.0)
+    profiles = target["organization_profiles"]
+    for value in source.get("organization_profiles", ()) or ():
+        if value not in profiles and len(profiles) < 32:
+            profiles.append(value)
+    target["owner_ids"] = sorted({str(row.get("owner", "unknown")) for row in rows.values()})
+    target["accounting_semantics"] = source.get(
+        "accounting_semantics",
+        "resolved analytical burst bytes and controller waits; no device accuracy claim",
     )
 
 
@@ -747,6 +789,7 @@ class _ResultAccumulator:
         self.state_event_counts: Dict[str, int] = {}
         self.state_event_bytes: Dict[str, int] = {}
         self.storage_traffic: Dict[str, object] = {}
+        self.dram_traffic: Dict[str, object] = {}
         self.coverage: Dict[str, Dict[str, object]] = {}
         self.task_count = 0
         self.makespan_ns = 0.0
@@ -759,6 +802,8 @@ class _ResultAccumulator:
                 chunk.tasks, resource_owners=self.resource_owners
             ),
         )
+        # Resolved media/DRAM state is only available after kernel.step().
+        # Input contracts remain counted above for legacy endpoint paths.
         grouped: Dict[
             Tuple[str, str, str, object, object], Dict[str, object]
         ] = {}
@@ -850,6 +895,16 @@ class _ResultAccumulator:
         resource_predecessors: Mapping[str, Mapping[str, object]],
         resource_lanes: Optional[Mapping[str, int]] = None,
     ) -> None:
+        if isinstance(task.metadata.get("nand_execution"), Mapping):
+            _merge_storage_traffic(
+                self.storage_traffic,
+                _summarize_nand_task_traffic((task,), resource_owners=self.resource_owners),
+            )
+        if isinstance(task.metadata.get("dram_execution"), Mapping):
+            _merge_dram_traffic(
+                self.dram_traffic,
+                _summarize_dram_task_traffic((task,), resource_owners=self.resource_owners),
+            )
         self.task_count += 1
         self.makespan_ns = max(self.makespan_ns, end_ns)
         self.history.append(
@@ -1095,6 +1150,7 @@ class _ResultAccumulator:
                 else None
             ),
             storage_traffic=dict(self.storage_traffic),
+            dram_traffic=dict(self.dram_traffic),
         )
 
 

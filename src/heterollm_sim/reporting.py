@@ -548,6 +548,9 @@ def _sum_batch_storage_traffic(
         "physical_write_bytes": 0,
         "pages_touched": 0,
         "media_waves": 0,
+        "queue_wait_ns": 0.0,
+        "host_queue_wait_ns": 0.0,
+        "media_queue_wait_ns": 0.0,
         "read_operations": 0,
         "program_operations": 0,
         "erase_operations": 0,
@@ -559,6 +562,7 @@ def _sum_batch_storage_traffic(
     resources: Dict[str, Dict[str, Any]] = {}
     profiles: List[str] = []
     backgrounds: List[Any] = []
+    organizations: List[Any] = []
     for batch in result.serving.batches:
         ledger = batch.cost.metadata.get("storage_traffic", {})
         if not isinstance(ledger, Mapping) or not ledger.get("task_count"):
@@ -588,21 +592,69 @@ def _sum_batch_storage_traffic(
         for value in ledger.get("background_work", ()) or ():
             if value not in backgrounds and len(backgrounds) < 32:
                 backgrounds.append(to_primitive(value))
+        for value in ledger.get("organization_profiles", ()) or ():
+            value = to_primitive(value)
+            if value not in organizations and len(organizations) < 32:
+                organizations.append(value)
     if not numeric["task_count"]:
         return {"schema_version": "heterollm.nand-traffic/v1", "task_count": 0}
     return {
         "schema_version": "heterollm.nand-traffic/v1",
-        **{key: (int(value) if key not in {"service_ns", "energy_pj"} else value)
+        **{key: (int(value) if key not in {"service_ns", "energy_pj", "queue_wait_ns", "host_queue_wait_ns", "media_queue_wait_ns"} else value)
            for key, value in numeric.items()},
         "operation_counts": dict(sorted(operations.items())),
         "resource_totals": dict(sorted(resources.items())),
         "owner_ids": tuple(sorted({str(row["owner"]) for row in resources.values()})),
         "profile_evidence": tuple(sorted(profiles)),
         "background_work": backgrounds,
+        "organization_profiles": organizations,
+        "organization_profile_limit": 32,
         "accounting_semantics": (
             "host_transfer_bytes is logical host payload; physical_* and pages/waves "
             "are NAND media accounting; service_ns/energy_pj are analytical"
         ),
+    }
+
+
+def _sum_batch_dram_traffic(result: OnlineScenarioResult) -> Dict[str, Any]:
+    """Merge resolved DRAM ledger emitted by online cohort execution."""
+    numeric = {
+        "task_count": 0, "logical_read_bytes": 0, "logical_write_bytes": 0,
+        "physical_read_bytes": 0, "physical_write_bytes": 0, "physical_bytes": 0,
+        "logical_bytes": 0, "burst_count": 0, "row_hits": 0, "row_misses": 0,
+        "row_conflicts": 0, "read_write_switches": 0, "queue_wait_ns": 0.0,
+        "refresh_wait_ns": 0.0, "turnaround_wait_ns": 0.0, "service_ns": 0.0,
+    }
+    resources: Dict[str, Dict[str, Any]] = {}
+    profiles: List[Any] = []
+    for batch in result.serving.batches:
+        ledger = batch.cost.metadata.get("dram_traffic", {})
+        if not isinstance(ledger, Mapping) or not ledger.get("task_count"):
+            continue
+        for key in numeric:
+            value = ledger.get(key, 0)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                numeric[key] += value
+        for resource_id, raw in (ledger.get("resource_totals", {}) or {}).items():
+            if not isinstance(raw, Mapping):
+                continue
+            row = resources.setdefault(str(resource_id), {"owner": raw.get("owner", "unknown"),
+                                                            "bytes_moved": 0, "service_ns": 0.0,
+                                                            "energy_pj": 0.0})
+            row["bytes_moved"] += int(raw.get("bytes_moved", 0) or 0)
+            row["service_ns"] += float(raw.get("service_ns", 0.0) or 0.0)
+            row["energy_pj"] += float(raw.get("energy_pj", 0.0) or 0.0)
+        for value in ledger.get("organization_profiles", ()) or ():
+            if value not in profiles and len(profiles) < 32:
+                profiles.append(to_primitive(value))
+    return {
+        "schema_version": "heterollm.dram-traffic/v1",
+        **{key: (int(value) if key not in {"queue_wait_ns", "refresh_wait_ns", "turnaround_wait_ns", "service_ns"} else value)
+           for key, value in numeric.items()},
+        "resource_totals": dict(sorted(resources.items())),
+        "owner_ids": tuple(sorted({str(row.get("owner", "unknown")) for row in resources.values()})),
+        "organization_profiles": profiles, "organization_profile_limit": 32,
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
     }
 
 
@@ -5412,6 +5464,7 @@ def _online_report_core(
         for batch in serving.batches
     )
     storage_traffic = _sum_batch_storage_traffic(result)
+    dram_traffic = _sum_batch_dram_traffic(result)
     task_count = sum(
         int(batch.cost.metadata.get("task_count", 0))
         for batch in serving.batches
@@ -5444,6 +5497,7 @@ def _online_report_core(
         "total_energy_pj": total_energy,
         "resource_accounted_bytes": total_bytes,
         "storage_traffic": storage_traffic,
+        "dram_traffic": dram_traffic,
         "throughput": {
             "requests_per_s": completed / wall_seconds if wall_seconds else 0.0,
             "visible_output_tokens_per_s": (
@@ -5544,6 +5598,7 @@ def _online_report_dict(
     category_time = _sum_batch_metadata(result, "category_time_ns")
     critical_time = _sum_batch_metadata(result, "critical_path_category_ns")
     storage_traffic = _sum_batch_storage_traffic(result)
+    dram_traffic = _sum_batch_dram_traffic(result)
     analytical_coverage = {
         "evidence": "analytical",
         "calibration_version": ANALYTICAL_MODEL_VERSION,
@@ -5579,6 +5634,7 @@ def _online_report_dict(
         "category_time_ns": category_time,
         "critical_path_category_ns": critical_time,
         "storage_traffic": storage_traffic,
+        "dram_traffic": dram_traffic,
         "scheduler": to_primitive(serving.scheduler_metrics),
         "owner_residency": to_primitive(serving.owner_residency_metrics),
         "kv_cache": {
@@ -6059,6 +6115,7 @@ def _report_dict_in_context(
         },
         "analytical_coverage": analytical_coverage,
         "storage_traffic": to_primitive(execution.storage_traffic),
+        "dram_traffic": to_primitive(execution.dram_traffic),
         "visualization": _visualization_payload(result, options),
         "component_timeseries": _component_timeseries(result),
         "report_limits": {

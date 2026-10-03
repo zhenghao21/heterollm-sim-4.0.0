@@ -773,6 +773,7 @@ class UnifiedEventKernel:
             capacities.setdefault(logical_id, owner_capacities.get(owner_id, 1))
         self._l2_states = {}
         self._dram_states = {}
+        self._nand_states = {}
         self._tasks: Dict[str, TaskSpec] = {}
         self._indegree: Dict[str, int] = {}
         self._dependents: Dict[str, List[str]] = {}
@@ -1622,6 +1623,7 @@ class UnifiedEventKernel:
             self.resource_owners
             or any("stateful_l2" in task.metadata for task in chunk)
             or any("dram_access" in task.metadata for task in chunk)
+            or any("nand_access" in task.metadata for task in chunk)
         ):
             if not layout.matches_structure(chunk):
                 raise ValueError("task graph does not match compiled structure")
@@ -2126,6 +2128,7 @@ class UnifiedEventKernel:
         else:
             demands = self._sorted_demands[task_id]
         dram_commit = None
+        nand_commit = None
         if "dram_access" in task.metadata:
             from .dram import resolve_dram_task
             try:
@@ -2139,6 +2142,17 @@ class UnifiedEventKernel:
                 heapq.heappush(self._ready_heap, queued)
                 raise
             dram_commit = (state_key, next_state)
+            demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
+        if "nand_access" in task.metadata:
+            from .hbf_media import resolve_nand_task
+            try:
+                task, state_key, next_state = resolve_nand_task(
+                    task, self._nand_states, start_ns=start_ns
+                )
+            except (TypeError, ValueError, KeyError):
+                heapq.heappush(self._ready_heap, queued)
+                raise
+            nand_commit = (state_key, next_state)
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
         isfinite = math.isfinite
         timing_is_finite = isfinite(start_ns)
@@ -2160,6 +2174,8 @@ class UnifiedEventKernel:
         self._tasks.pop(task_id)
         if dram_commit is not None:
             self._dram_states[dram_commit[0]] = dram_commit[1]
+        if nand_commit is not None:
+            self._nand_states[nand_commit[0]] = nand_commit[1]
         self._dependency_ready.pop(task_id)
         self._resource_groups.pop(task_id)
         self._sorted_demands.pop(task_id)

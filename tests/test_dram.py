@@ -100,3 +100,32 @@ def test_zero_timing_is_valid_with_evidence_and_output_is_finite():
     p = profile(**{name: 0.0 for name in ("t_rcd_ns", "t_rp_ns", "t_ras_ns", "read_latency_ns", "write_latency_ns", "read_to_write_ns", "write_to_read_ns", "read_recovery_ns", "write_recovery_ns", "refresh_interval_ns", "refresh_duration_ns")})
     metrics, _ = service(p, [{"operation": "read", "offset_bytes": 0, "byte_count": 16}])
     assert math.isfinite(metrics["service_ns"])
+
+
+def test_optional_dram_organization_coordinates_are_mapped_without_double_charging():
+    p = profile(
+        channels=2,
+        banks_per_channel=8,
+        subchannels_per_channel=2,
+        ranks_per_channel=2,
+        bank_groups_per_channel=4,
+        stack_count=2,
+        pseudo_channels_per_channel=2,
+        refresh_interval_ns=0,
+        refresh_duration_ns=0,
+    )
+    metrics, state = service(p, [{"operation": "read", "offset_bytes": 0, "byte_count": 16 * 256}])
+    assert metrics["lane_count"] == 16
+    assert metrics["physical_bytes"] == 16 * 256
+    assert len(state.channels) == 16
+    assert len(state.banks) == 16 * 2 * 8
+    assert {row["stack"] for row in metrics["boundaries"]} == {0, 1}
+    assert {row["subchannel"] for row in metrics["boundaries"]} == {0, 1}
+    assert {row["pseudo_channel"] for row in metrics["boundaries"]} == {0, 1}
+    assert {row["rank"] for row in metrics["boundaries"]} == {0, 1}
+    assert {row["bank_group"] for row in metrics["boundaries"]} == {0, 1}
+
+
+def test_unknown_bank_group_geometry_remains_unknown():
+    metrics, _ = service(profile(refresh_interval_ns=0, refresh_duration_ns=0), [{"operation": "read", "offset_bytes": 0, "byte_count": 16}])
+    assert metrics["boundaries"][0]["bank_group"] is None

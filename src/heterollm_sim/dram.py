@@ -7,7 +7,7 @@ the caller and evidence is required for the profile.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional, Tuple
 
 
@@ -46,10 +46,43 @@ class DramProfile:
     evidence: str
     aggregate_policy: str = "unknown"
     max_bursts_per_access: int = 65536
+    # Optional organization fields. Defaults preserve the original DRAM
+    # contract; HBM can use stack/pseudo-channel fields without adopting
+    # DDR DIMM rank semantics.
+    subchannels_per_channel: int = 1
+    ranks_per_channel: int = 1
+    bank_groups_per_channel: Optional[int] = None
+    banks_per_bank_group: Optional[int] = None
+    stack_count: int = 1
+    hbm_stacks: Optional[int] = None
+    pseudo_channels_per_channel: int = 1
+    provenance: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        for name in ("channels", "banks_per_channel", "burst_bytes", "row_bytes", "max_bursts_per_access"):
+        for name in (
+            "channels", "banks_per_channel", "burst_bytes", "row_bytes",
+            "max_bursts_per_access", "subchannels_per_channel",
+            "ranks_per_channel", "stack_count", "pseudo_channels_per_channel",
+        ):
             _pos_int(name, getattr(self, name))
+        if self.hbm_stacks is not None:
+            _pos_int("hbm_stacks", self.hbm_stacks)
+            if self.stack_count != 1 and self.stack_count != self.hbm_stacks:
+                raise ValueError("stack_count and hbm_stacks disagree")
+            object.__setattr__(self, "stack_count", self.hbm_stacks)
+        for name in ("bank_groups_per_channel", "banks_per_bank_group"):
+            value = getattr(self, name)
+            if value is not None:
+                _pos_int(name, value)
+        if self.bank_groups_per_channel is not None:
+            if self.banks_per_channel % self.bank_groups_per_channel:
+                raise ValueError("banks_per_channel must divide evenly into bank groups")
+            expected = self.banks_per_channel // self.bank_groups_per_channel
+            if self.banks_per_bank_group is not None and self.banks_per_bank_group != expected:
+                raise ValueError("banks_per_bank_group disagrees with banks_per_channel")
+            object.__setattr__(self, "banks_per_bank_group", expected)
+        if not isinstance(self.provenance, Mapping):
+            raise ValueError("provenance must be a mapping")
         if self.row_bytes < self.burst_bytes or self.row_bytes % self.burst_bytes:
             raise ValueError("row_bytes must be a multiple of burst_bytes")
         for name in ("t_rcd_ns", "t_rp_ns", "t_ras_ns", "read_latency_ns", "write_latency_ns", "read_to_write_ns", "write_to_read_ns", "read_recovery_ns", "write_recovery_ns", "refresh_interval_ns", "refresh_duration_ns"):
@@ -85,30 +118,56 @@ class DramState:
     channels: Tuple[_ChannelState, ...]
 
 
+def _lane_count(profile: DramProfile) -> int:
+    return (
+        profile.stack_count
+        * profile.channels
+        * profile.subchannels_per_channel
+        * profile.pseudo_channels_per_channel
+    )
+
+
 def _initial_state(profile: DramProfile) -> DramState:
+    lanes = _lane_count(profile)
     return DramState(
-        tuple(_BankState() for _ in range(profile.channels * profile.banks_per_channel)),
-        tuple(_ChannelState() for _ in range(profile.channels)),
+        tuple(_BankState() for _ in range(lanes * profile.ranks_per_channel * profile.banks_per_channel)),
+        tuple(_ChannelState() for _ in range(lanes)),
     )
 
 
 def _validate_state(profile: DramProfile, state: DramState) -> None:
     if not isinstance(state, DramState):
         raise TypeError("state must be DramState or None")
-    if len(state.banks) != profile.channels * profile.banks_per_channel or len(state.channels) != profile.channels:
+    lanes = _lane_count(profile)
+    if len(state.banks) != lanes * profile.ranks_per_channel * profile.banks_per_channel or len(state.channels) != lanes:
         raise ValueError("state geometry does not match profile")
 
 
-def _address(profile: DramProfile, burst_index: int) -> Tuple[int, int, int, int]:
-    # Explicit stripe order: channel -> bank -> column -> row.
+def _address(profile: DramProfile, burst_index: int) -> Tuple[int, int, int, int, int, Optional[int], int, int, int]:
+    """Map a burst to explicit stack/lane/rank/bank coordinates."""
     per_row = profile.row_bytes // profile.burst_bytes
-    channel = burst_index % profile.channels
-    bank_linear = burst_index // profile.channels
+    lanes = _lane_count(profile)
+    lane_linear = burst_index % lanes
+    lane_rest = lane_linear
+    pseudo = lane_rest % profile.pseudo_channels_per_channel
+    lane_rest //= profile.pseudo_channels_per_channel
+    subchannel = lane_rest % profile.subchannels_per_channel
+    lane_rest //= profile.subchannels_per_channel
+    channel = lane_rest % profile.channels
+    stack = lane_rest // profile.channels
+    bank_linear = burst_index // lanes
+    rank = bank_linear % profile.ranks_per_channel
+    bank_linear //= profile.ranks_per_channel
     bank = bank_linear % profile.banks_per_channel
     column_linear = bank_linear // profile.banks_per_channel
     column = column_linear % per_row
     row = column_linear // per_row
-    return channel, bank, column, row
+    bank_group = (
+        bank // profile.banks_per_bank_group
+        if profile.bank_groups_per_channel is not None and profile.banks_per_bank_group
+        else None
+    )
+    return stack, channel, subchannel, pseudo, rank, bank_group, bank, column, row
 
 
 def dram_service(
@@ -151,7 +210,50 @@ def dram_service(
     _validate_state(profile, previous)
     banks = list(previous.banks)
     channels = list(previous.channels)
-    metrics = {"model": "dram_addressed_burst_v1", "aggregate_policy": profile.aggregate_policy, "evidence": profile.evidence, "logical_read_bytes": 0, "logical_write_bytes": 0, "physical_read_bytes": 0, "physical_write_bytes": 0, "burst_count": total_bursts, "row_hits": 0, "row_misses": 0, "row_conflicts": 0, "turnaround_ns": 0.0, "refresh_wait_ns": 0.0, "queue_wait_ns": 0.0, "bank_busy_ns": 0.0, "channel_busy_ns": 0.0}
+    metrics = {
+        # Keep the established model identity for callers; the additional
+        # organization coordinates are additive metadata.
+        "model": "dram_addressed_burst_v1",
+        "model_version": 2,
+        "aggregate_policy": profile.aggregate_policy,
+        "evidence": profile.evidence,
+        "provenance": dict(profile.provenance),
+        "organization_provenance": {
+            name: (
+                "unknown" if value is None else
+                str(profile.provenance.get(name, "parameterized"))
+            )
+            for name, value in (
+                ("subchannels_per_channel", profile.subchannels_per_channel),
+                ("ranks_per_channel", profile.ranks_per_channel),
+                ("bank_groups_per_channel", profile.bank_groups_per_channel),
+                ("banks_per_bank_group", profile.banks_per_bank_group),
+                ("stack_count", profile.stack_count),
+                ("hbm_stacks", profile.stack_count),
+                ("pseudo_channels_per_channel", profile.pseudo_channels_per_channel),
+            )
+        },
+        "lane_count": _lane_count(profile),
+        "stack_count": profile.stack_count,
+        "channels_per_stack": profile.channels,
+        "subchannels_per_channel": profile.subchannels_per_channel,
+        "pseudo_channels_per_channel": profile.pseudo_channels_per_channel,
+        "ranks_per_channel": profile.ranks_per_channel,
+        "bank_groups_per_channel": profile.bank_groups_per_channel,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "burst_count": total_bursts,
+        "row_hits": 0,
+        "row_misses": 0,
+        "row_conflicts": 0,
+        "turnaround_ns": 0.0,
+        "refresh_wait_ns": 0.0,
+        "queue_wait_ns": 0.0,
+        "bank_busy_ns": 0.0,
+        "channel_busy_ns": 0.0,
+    }
     boundaries = []
     bursts_seen = 0
     finish = float(start_ns)
@@ -159,13 +261,24 @@ def dram_service(
         metrics["logical_read_bytes" if operation == "read" else "logical_write_bytes"] += count
         physical = bursts * profile.burst_bytes
         metrics["physical_read_bytes" if operation == "read" else "physical_write_bytes"] += physical
-        bw = read_bw / profile.channels if operation == "read" else write_bw / profile.channels
+        bw = read_bw / _lane_count(profile) if operation == "read" else write_bw / _lane_count(profile)
         burst_data_ns = profile.burst_bytes / bw
         for ordinal in range(bursts):
             index = first + ordinal
-            channel_id, bank_id, column, row = _address(profile, index)
-            bank_index = channel_id * profile.banks_per_channel + bank_id
-            bank, channel = banks[bank_index], channels[channel_id]
+            (
+                stack_id, channel_id, subchannel_id, pseudo_channel_id,
+                rank_id, bank_group_id, bank_id, column, row,
+            ) = _address(profile, index)
+            lane_id = (
+                ((stack_id * profile.channels + channel_id)
+                 * profile.subchannels_per_channel + subchannel_id)
+                * profile.pseudo_channels_per_channel + pseudo_channel_id
+            )
+            bank_index = (
+                (lane_id * profile.ranks_per_channel + rank_id)
+                * profile.banks_per_channel + bank_id
+            )
+            bank, channel = banks[bank_index], channels[lane_id]
             now = max(float(start_ns), bank.bank_ready_ns, channel.bus_ready_ns)
             if profile.refresh_interval_ns:
                 epoch = int(math.floor(now / profile.refresh_interval_ns))
@@ -174,11 +287,12 @@ def dram_service(
                     wait = max(0.0, boundary - now) if now < boundary else profile.refresh_duration_ns
                     refresh_end = (boundary if now < boundary else now) + profile.refresh_duration_ns
                     metrics["refresh_wait_ns"] += wait + profile.refresh_duration_ns
-                    for b in range(profile.banks_per_channel):
-                        banks[channel_id * profile.banks_per_channel + b] = _BankState()
+                    lane_base = lane_id * profile.ranks_per_channel * profile.banks_per_channel
+                    for b in range(profile.ranks_per_channel * profile.banks_per_channel):
+                        banks[lane_base + b] = _BankState()
                     bank = banks[bank_index]
                     channel = _ChannelState(refresh_end, None, epoch + 1)
-                    channels[channel_id] = channel
+                    channels[lane_id] = channel
                     now = refresh_end
             command_ready = max(now, bank.bank_ready_ns)
             if bank.open_row == row:
@@ -202,13 +316,27 @@ def dram_service(
             data_end = data_start + (profile.read_latency_ns if operation == "read" else profile.write_latency_ns) + burst_data_ns
             recovery = profile.read_recovery_ns if operation == "read" else profile.write_recovery_ns
             banks[bank_index] = _BankState(bank.open_row, bank.activation_ns, data_end + recovery)
-            channels[channel_id] = _ChannelState(data_end, operation, channel.refresh_epoch)
+            channels[lane_id] = _ChannelState(data_end, operation, channel.refresh_epoch)
             metrics["queue_wait_ns"] += max(0.0, data_start - max(activate if bank.open_row == row else command_ready, channel.bus_ready_ns))
             metrics["bank_busy_ns"] += data_end - data_start + recovery
             metrics["channel_busy_ns"] += data_end - max(data_start, channel.bus_ready_ns)
             finish = max(finish, data_end)
             if len(boundaries) < 128:
-                boundaries.append({"burst_index": index, "channel": channel_id, "bank": bank_id, "column": column, "row": row, "operation": operation, "start_ns": data_start, "end_ns": data_end})
+                boundaries.append({
+                    "burst_index": index,
+                    "stack": stack_id,
+                    "channel": channel_id,
+                    "subchannel": subchannel_id,
+                    "pseudo_channel": pseudo_channel_id,
+                    "rank": rank_id,
+                    "bank_group": bank_group_id,
+                    "bank": bank_id,
+                    "column": column,
+                    "row": row,
+                    "operation": operation,
+                    "start_ns": data_start,
+                    "end_ns": data_end,
+                })
             bursts_seen += 1
     metrics["physical_bytes"] = metrics["physical_read_bytes"] + metrics["physical_write_bytes"]
     metrics["service_ns"] = max(0.0, finish - float(start_ns))

@@ -2,6 +2,7 @@
 import math
 from numbers import Real
 from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 
 from .memory_service import realtime_memory_metrics
 
@@ -9,6 +10,7 @@ _REQ = {"version", "host_transaction_bytes", "host_max_request_bytes", "media_pa
 _ALLOWED = _REQ | {
     "physical_planes", "erase_block_bytes", "erase_latency_ns",
     "background_work", "physical_dies", "physical_channels",
+    "program_order",
     "source", "parameter_evidence",
 }
 _PATTERNS = {"contiguous_page_aligned", "unknown_alignment_conservative"}
@@ -16,6 +18,7 @@ _EVIDENCE_STATUSES = {"parameterized", "sourced", "unknown"}
 _PARAMETER_KEYS = _REQ | {
     "physical_planes", "erase_block_bytes", "erase_latency_ns",
     "background_work", "physical_dies", "physical_channels",
+    "program_order",
 }
 
 def _num(value, name, positive=False, nonnegative=False):
@@ -109,6 +112,10 @@ def validate_nand_media(component):
         _num(contract["erase_latency_ns"], "erase_latency_ns", True)
     if "background_work" in contract and not isinstance(contract["background_work"], Mapping):
         raise ValueError("background_work must be a mapping when supplied")
+    if "program_order" in contract and contract["program_order"] not in {
+        "sequential", "unspecified", "unknown",
+    }:
+        raise ValueError("program_order must be sequential, unspecified or unknown")
     if "source" in contract and (
         not isinstance(contract["source"], str) or not contract["source"].strip()
     ):
@@ -154,6 +161,236 @@ def validate_hbf_media(component):
 def _ceil(value, unit):
     return (value + unit - 1) // unit
 
+
+def _topology(c):
+    """Return explicit NAND dimensions and their bounded media slots.
+
+    ``media_parallelism`` remains the controller-side cap.  Explicit
+    channel/die/plane counts add physical slots; omitted dimensions stay
+    unknown and therefore do not invent an additional cap.
+    """
+    dimensions = {
+        name: c.get(name)
+        for name in ("physical_channels", "physical_dies", "physical_planes")
+    }
+    known = [value for value in dimensions.values() if value is not None]
+    slots = 1
+    for value in known:
+        slots *= value
+    return (
+        dimensions,
+        slots,
+        "explicit_channel_die_plane_product"
+        if known else "controller_parallelism_only_unknown_topology",
+    )
+
+
+def _address_mapping(c, page_offset_bytes, pages, page):
+    dimensions, _slots, _basis = _topology(c)
+    known = page_offset_bytes is not None
+    start_page = page_offset_bytes // page if known else None
+    if not known or not pages:
+        return {
+            "address_mapping": "unknown_offset" if not known else "empty",
+            "first_page": start_page,
+            "last_page": (start_page + pages - 1) if start_page is not None else None,
+            "mapped_channels": "unknown" if dimensions["physical_channels"] is None else 0,
+            "mapped_dies": "unknown" if dimensions["physical_dies"] is None else 0,
+            "mapped_planes": "unknown" if dimensions["physical_planes"] is None else 0,
+            "mapping_basis": "page_index_modulo_channel_die_plane" if known else "unknown_page_offset",
+        }
+    channels = dimensions["physical_channels"]
+    dies = dimensions["physical_dies"]
+    planes = dimensions["physical_planes"]
+    mapped = {"channels": set(), "dies": set(), "planes": set()}
+    for index in range(start_page, start_page + pages):
+        if channels is not None:
+            mapped["channels"].add(index % channels)
+        if dies is not None:
+            mapped["dies"].add((index // (channels or 1)) % dies)
+        if planes is not None:
+            mapped["planes"].add((index // ((channels or 1) * (dies or 1))) % planes)
+    return {
+        "address_mapping": "known_page_index",
+        "first_page": start_page,
+        "last_page": start_page + pages - 1,
+        "mapped_channels": sorted(mapped["channels"]) if channels is not None else "unknown",
+        "mapped_dies": sorted(mapped["dies"]) if dies is not None else "unknown",
+        "mapped_planes": sorted(mapped["planes"]) if planes is not None else "unknown",
+        "mapping_basis": "page_index_modulo_channel_die_plane",
+    }
+
+
+@dataclass(frozen=True)
+class NANDQueueState:
+    """Immutable cross-request readiness for explicit NAND media slots."""
+
+    ready_ns: Mapping[str, float] = field(default_factory=dict)
+
+
+def _queue_coordinate(c, page_index):
+    channels = c["physical_channels"]
+    dies = c["physical_dies"]
+    planes = c["physical_planes"]
+    channel = page_index % channels
+    die = (page_index // channels) % dies
+    plane = (page_index // (channels * dies)) % planes
+    return "channel={};die={};plane={}".format(channel, die, plane)
+
+
+def nand_media_service_batch(component, requests, *, start_ns=0.0, state=None):
+    """Price a small NAND batch with cross-request slot queues.
+
+    This is intentionally a queue envelope, not an FTL.  It requires explicit
+    channel/die/plane dimensions and page offsets so an unknown physical route
+    cannot be silently scheduled onto a made-up owner.
+    """
+    validate_nand_media(component)
+    contract, _field_name = _media_contract(component)
+    if any(
+        contract.get(name) is None
+        for name in ("physical_channels", "physical_dies", "physical_planes")
+    ):
+        raise ValueError(
+            "nand queue scheduling requires physical_channels, physical_dies "
+            "and physical_planes"
+        )
+    if isinstance(start_ns, bool) or not isinstance(start_ns, Real) or not math.isfinite(float(start_ns)) or start_ns < 0:
+        raise ValueError("start_ns must be a finite non-negative number")
+    if state is None:
+        state = NANDQueueState()
+    if not isinstance(state, NANDQueueState):
+        raise TypeError("state must be NANDQueueState or None")
+    if not isinstance(requests, (tuple, list)):
+        raise TypeError("requests must be a tuple or list")
+    ready = {str(key): float(value) for key, value in state.ready_ns.items()}
+    for value in ready.values():
+        if not math.isfinite(value) or value < 0:
+            raise ValueError("NANDQueueState.ready_ns values must be finite non-negative numbers")
+    cursor = float(start_ns)
+    batch_end = cursor
+    rows = []
+    totals = {"logical_bytes": 0, "physical_bytes": 0, "service_ns": 0.0, "queue_wait_ns": 0.0}
+    operation_counts = {}
+    for request in requests:
+        if not isinstance(request, Mapping):
+            raise ValueError("NAND queue request must be a mapping")
+        operation = str(request.get("operation", "")).lower()
+        if operation not in {"read", "program", "erase"}:
+            raise ValueError("NAND queue operation must be read, program or erase")
+        count = request.get("byte_count")
+        offset = request.get("page_offset_bytes")
+        if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+            raise ValueError("NAND queue byte_count must be a positive integer")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("NAND queue page_offset_bytes must be a non-negative integer")
+        bill = nand_media_service(
+            component,
+            count,
+            operation == "read",
+            page_offset_bytes=offset,
+            operation=operation,
+        )
+        page = contract["media_page_bytes"]
+        if operation == "erase":
+            block = contract.get("erase_block_bytes")
+            if block is None:
+                raise ValueError("NAND queue erase requires erase_block_bytes")
+            first = offset // block
+            slot_count = bill["erase_operations"]
+            pages_per_block = block // page
+            coordinates = [
+                _queue_coordinate(contract, first * pages_per_block + index * pages_per_block)
+                for index in range(slot_count)
+            ]
+        else:
+            first = offset // page
+            slot_count = bill["pages_touched"]
+            coordinates = [_queue_coordinate(contract, first + index) for index in range(slot_count)]
+        # A request touching several pages waits for the slowest selected slot.
+        wait = max((ready.get(key, 0.0) - cursor for key in set(coordinates)), default=0.0)
+        wait = max(0.0, wait)
+        begin = cursor + wait
+        end = begin + float(bill["service_ns"])
+        for key in set(coordinates):
+            ready[key] = end
+        row = dict(bill)
+        row.update({
+            "queue_wait_ns": wait,
+            "queue_start_ns": begin,
+            "queue_end_ns": end,
+            "queue_resources": tuple(sorted(set(coordinates))),
+        })
+        rows.append(row)
+        totals["logical_bytes"] += count
+        totals["physical_bytes"] += int(bill.get("physical_bytes", 0))
+        totals["service_ns"] += float(bill["service_ns"])
+        totals["queue_wait_ns"] += wait
+        operation_counts[operation] = operation_counts.get(operation, 0) + 1
+        batch_end = max(batch_end, end)
+    return {
+        "model": "nand_media_queue_v1",
+        "requests": tuple(rows),
+        "request_count": len(rows),
+        "logical_bytes": totals["logical_bytes"],
+        "physical_bytes": totals["physical_bytes"],
+        "service_ns": totals["service_ns"],
+        "queue_wait_ns": totals["queue_wait_ns"],
+        "end_ns": batch_end,
+        "operation_counts": dict(sorted(operation_counts.items())),
+        "queue_resources": tuple(sorted(ready)),
+        "physical_owner": str(
+            getattr(component, "metadata", {}).get("physical_owner")
+            or getattr(component, "component_id", "unknown")
+        ),
+        "physical_resource_id": str(
+            getattr(component, "metadata", {}).get("memory_resource_id")
+            or getattr(component, "metadata", {}).get("physical_owner")
+            or getattr(component, "component_id", "unknown")
+        ),
+        "queue_depth": contract["command_queue_depth"],
+        "topology": {
+            name: contract[name]
+            for name in ("physical_channels", "physical_dies", "physical_planes")
+        },
+        "profile_evidence": "analytical/no hardware validated",
+    }, NANDQueueState(ready_ns=dict(sorted(ready.items())))
+
+
+def resolve_nand_task(task, states, *, start_ns=0.0):
+    """Preview a queued endpoint without committing event-kernel state."""
+    contract = task.metadata.get("nand_access")
+    if not isinstance(contract, Mapping):
+        return task, None, None
+    component = contract.get("component")
+    if not isinstance(component, Mapping):
+        raise ValueError("nand_access.component must be a mapping")
+    from types import SimpleNamespace
+    component = SimpleNamespace(**component)
+    resource_id = str(contract.get("resource_id") or "")
+    state_key = str(contract.get("state_key") or "")
+    if not resource_id or not state_key:
+        raise ValueError("nand_access resource_id and state_key must be non-empty")
+    if all(demand.resource_id != resource_id for demand in task.demands):
+        raise ValueError("nand_access.resource_id must name a task demand")
+    metrics, next_state = nand_media_service_batch(
+        component,
+        contract.get("requests"),
+        start_ns=start_ns,
+        state=states.get(state_key),
+    )
+    service_ns = max(0.0, metrics["end_ns"] - start_ns)
+    return replace(
+        task,
+        demands=tuple(
+            replace(demand, service_ns=service_ns)
+            if demand.resource_id == resource_id else demand
+            for demand in task.demands
+        ),
+        metadata={**task.metadata, "nand_execution": metrics},
+    ), state_key, next_state
+
+
 def nand_media_service(
     component,
     byte_count,
@@ -193,15 +430,17 @@ def nand_media_service(
         known_offset = page_offset_bytes is not None
         block_offset = page_offset_bytes % block_bytes if known_offset else 0
         operations = _ceil(block_offset + byte_count, block_bytes) if byte_count else 0
-        declared_planes = c.get("physical_planes")
+        dimensions, topology_slots, topology_basis = _topology(c)
+        declared_planes = dimensions["physical_planes"]
         parallel = min(
             c["media_parallelism"],
-            declared_planes if declared_planes is not None else c["media_parallelism"],
+            topology_slots if topology_basis.startswith("explicit") else c["media_parallelism"],
             c["command_queue_depth"],
         )
         waves = _ceil(operations, parallel) if operations else 0
         physical = operations * block_bytes
         erase_ns = waves * erase_latency
+        queue_wait_ns = max(0, waves - 1) * erase_latency
         marker = c.get("background_work") if background_work is None else background_work
         return {
             "version": c["version"], "contract_field": field_name,
@@ -214,8 +453,12 @@ def nand_media_service(
             "erase_operations": operations, "media_command_count": operations,
             "command_count": operations, "effective_parallelism": parallel,
             "media_waves": waves, "media_erase_service_ns": erase_ns,
+            "queue_wait_ns": queue_wait_ns,
+            "queue_saturated": bool(operations and operations > parallel),
             "service_ns": erase_ns, "background_work": marker or {},
             "physical_planes": declared_planes if declared_planes is not None else "unknown",
+            "addressable_media_slots": topology_slots if topology_basis.startswith("explicit") else "unknown",
+            "topology_basis": topology_basis,
             "parallelism_basis": (
                 "declared_media_parallelism_and_physical_plane_cap"
                 if declared_planes is not None
@@ -223,6 +466,16 @@ def nand_media_service(
             ),
             "physical_dies": c.get("physical_dies", "unknown"),
             "physical_channels": c.get("physical_channels", "unknown"),
+            "physical_owner": str(
+                getattr(component, "metadata", {}).get("physical_owner")
+                or getattr(component, "component_id", "unknown")
+            ),
+            "physical_resource_id": str(
+                getattr(component, "metadata", {}).get("memory_resource_id")
+                or getattr(component, "metadata", {}).get("physical_owner")
+                or getattr(component, "component_id", "unknown")
+            ),
+            "program_order": c.get("program_order", "unknown"),
             "write_completion": "block_erase_complete",
             "timing_diagnostics": "parameterized NAND block erase; no FTL/GC simulation",
             "profile_evidence": "analytical/no hardware validated",
@@ -270,14 +523,17 @@ def nand_media_service(
     media_command_count = read_ops + program_ops
     # Omitted planes means no additional physical bottleneck: the declared
     # media_parallelism remains effective. An explicit smaller plane count caps it.
-    declared_planes = c.get("physical_planes")
+    dimensions, topology_slots, topology_basis = _topology(c)
+    declared_planes = dimensions["physical_planes"]
     parallel = min(
         c["media_parallelism"],
-        declared_planes if declared_planes is not None else c["media_parallelism"],
+        topology_slots if topology_basis.startswith("explicit") else c["media_parallelism"],
         c["command_queue_depth"],
     )
+    program_order = c.get("program_order", "unknown")
+    program_parallel = 1 if program_order == "sequential" and program_ops else parallel
     rwaves = _ceil(read_ops, parallel) if read_ops else 0
-    pwaves = _ceil(program_ops, parallel) if program_ops else 0
+    pwaves = _ceil(program_ops, program_parallel) if program_ops else 0
     direction = "read" if operation == "read" else "write"
     # A zero-byte request has no bandwidth requirement; otherwise each used
     # direction must have a finite positive physical-media cap.
@@ -295,6 +551,11 @@ def nand_media_service(
     media_ns = read_ns if operation == "read" else read_ns + program_ns
     host_waves = _ceil(host_command_count, c["command_queue_depth"]) if host_command_count else 0
     host_ns = 8.0 * host_bytes / host_bw if host_bytes else 0.0
+    host_queue_wait_ns = max(0, host_waves - 1) * (host_ns / host_waves if host_waves else 0.0)
+    media_queue_wait_ns = (
+        max(0, rwaves - 1) * c["page_read_latency_ns"]
+        + max(0, pwaves - 1) * c["page_program_latency_ns"]
+    )
     read_energy_rate = _num(getattr(component, "metadata", {}).get("read_energy_pj_per_byte", 0.0),
                              "read_energy_pj_per_byte", nonnegative=True)
     write_energy_rate = _num(getattr(component, "metadata", {}).get("write_energy_pj_per_byte", 0.0),
@@ -360,6 +621,8 @@ def nand_media_service(
         "command_queue_depth": c["command_queue_depth"],
         "media_parallelism": c["media_parallelism"],
         "physical_planes": declared_planes if declared_planes is not None else "unknown",
+        "addressable_media_slots": topology_slots if topology_basis.startswith("explicit") else "unknown",
+        "topology_basis": topology_basis,
         "parallelism_basis": (
             "declared_media_parallelism_and_physical_plane_cap"
             if declared_planes is not None
@@ -369,10 +632,25 @@ def nand_media_service(
         "page_program_latency_ns": c["page_program_latency_ns"],
         "access_pattern": c["access_pattern"],
         "operation": operation,
+        "program_order": program_order,
+        "program_parallelism": program_parallel,
+        "program_order_constraint": (
+            "one_page_at_a_time" if program_order == "sequential" else
+            "not_declared" if program_order in {"unknown", "unspecified"} else "unknown"
+        ),
         "erase_operations": 0,
         "background_work": background_work if background_work is not None else c.get("background_work", {}),
         "physical_dies": c.get("physical_dies", "unknown"),
         "physical_channels": c.get("physical_channels", "unknown"),
+        "physical_owner": str(
+            getattr(component, "metadata", {}).get("physical_owner")
+            or getattr(component, "component_id", "unknown")
+        ),
+        "physical_resource_id": str(
+            getattr(component, "metadata", {}).get("memory_resource_id")
+            or getattr(component, "metadata", {}).get("physical_owner")
+            or getattr(component, "component_id", "unknown")
+        ),
         "host_transfer_bytes": host_bytes,
         "physical_read_bytes": physical_read,
         "physical_write_bytes": physical_write,
@@ -384,7 +662,13 @@ def nand_media_service(
         "rmw_read_operations": rmw,
         "effective_parallelism": parallel,
         "media_waves": rwaves + pwaves,
+        "read_waves": rwaves,
+        "program_waves": pwaves,
         "host_waves": host_waves,
+        "host_queue_wait_ns": host_queue_wait_ns,
+        "media_queue_wait_ns": media_queue_wait_ns,
+        "queue_wait_ns": host_queue_wait_ns + media_queue_wait_ns,
+        "queue_saturated": bool(media_command_count > parallel or host_command_count > c["command_queue_depth"]),
         "media_read_service_ns": read_ns,
         "media_program_service_ns": program_ns,
         "host_service_ns": host_ns,
@@ -413,6 +697,7 @@ def nand_media_service(
         },
         "cache_policy": "cold_no_persistent_cache",
         "write_completion": "media_program_complete",
+        **_address_mapping(c, page_offset_bytes, pages, page),
     }
 
 

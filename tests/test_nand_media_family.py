@@ -12,7 +12,7 @@ from heterollm_sim.data_motion import (
     expand_access,
     resolve_service,
 )
-from heterollm_sim.hbf_media import nand_media_service, validate_nand_media
+from heterollm_sim.hbf_media import NANDQueueState, nand_media_service, nand_media_service_batch, validate_nand_media
 from heterollm_sim.ir import ComponentSpec
 
 
@@ -210,6 +210,83 @@ def test_parameter_evidence_is_explicit_and_missing_geometry_stays_unknown():
     assert sourced["parameter_evidence"]["command_queue_depth"]["source"] == "analysis protocol v1"
     assert sourced["source"] == "analysis protocol v1"
     assert sourced["profile_evidence"] == "analytical/no hardware validated"
+
+
+def test_explicit_channel_die_plane_mapping_limits_parallel_media_slots():
+    component = _ssd(
+        physical_channels=2,
+        physical_dies=2,
+        physical_planes=2,
+        media_parallelism=16,
+        command_queue_depth=32,
+    )
+    bill = nand_media_service(component, 8 * 4096, True, page_offset_bytes=0)
+    assert bill["addressable_media_slots"] == 8
+    assert bill["effective_parallelism"] == 8
+    assert bill["mapped_channels"] == [0, 1]
+    assert bill["mapped_dies"] == [0, 1]
+    assert bill["mapped_planes"] == [0, 1]
+    assert bill["mapping_basis"] == "page_index_modulo_channel_die_plane"
+
+
+def test_sequential_program_order_is_charged_as_one_page_at_a_time():
+    component = _ssd(
+        physical_planes=4,
+        media_parallelism=4,
+        program_order="sequential",
+    )
+    bill = nand_media_service(component, 4 * 4096, False, page_offset_bytes=0)
+    assert bill["program_parallelism"] == 1
+    assert bill["program_waves"] == 4
+    assert bill["program_order_constraint"] == "one_page_at_a_time"
+
+
+def test_cross_request_nand_queue_state_tracks_mapped_physical_slot():
+    component = _ssd(physical_channels=2, physical_dies=1, physical_planes=1,
+                     media_parallelism=2)
+    first, state = nand_media_service_batch(component, ({
+        "operation": "read", "byte_count": 4096, "page_offset_bytes": 0,
+    },))
+    second, next_state = nand_media_service_batch(component, ({
+        "operation": "read", "byte_count": 4096, "page_offset_bytes": 0,
+    },), state=state)
+    assert first["queue_wait_ns"] == 0
+    assert second["queue_wait_ns"] > 0
+    assert second["requests"][0]["queue_resources"] == ("channel=0;die=0;plane=0",)
+    assert next_state.ready_ns["channel=0;die=0;plane=0"] > state.ready_ns["channel=0;die=0;plane=0"]
+
+
+def test_cross_request_queue_rejects_unknown_topology_or_offset():
+    with pytest.raises(ValueError, match="requires physical_channels"):
+        nand_media_service_batch(_ssd(), ({"operation": "read", "byte_count": 4096, "page_offset_bytes": 0},))
+    component = _ssd(physical_channels=1, physical_dies=1, physical_planes=1)
+    with pytest.raises(ValueError, match="page_offset_bytes"):
+        nand_media_service_batch(component, ({"operation": "read", "byte_count": 4096},))
+
+
+def test_resolved_physical_service_exposes_nand_batch_queue():
+    service = resolve_service(_ssd(physical_channels=1, physical_dies=1, physical_planes=1))
+    report, _state = service.price_batch(({
+        "operation": "program", "byte_count": 4096, "page_offset_bytes": 0,
+    },))
+    assert report["operation_counts"] == {"program": 1}
+    assert report["physical_bytes"] == 4096
+
+
+def test_known_nand_endpoint_contract_resolves_in_event_kernel():
+    from heterollm_sim.contracts import TaskSpec, TaskCategory
+    from heterollm_sim.event_kernel import UnifiedEventKernel
+    endpoint = endpoint_service(
+        _ssd(physical_channels=1, physical_dies=1, physical_planes=1),
+        4096, read=True, name="read", page_offset_bytes=0,
+    )
+    task = TaskSpec("nand-read", "r0", "read", TaskCategory.MEMORY,
+                    demands=endpoint.demands, metadata=endpoint.metadata)
+    kernel = UnifiedEventKernel()
+    kernel.submit((task,))
+    event = kernel.step()
+    assert event.task.metadata["nand_execution"]["request_count"] == 1
+    assert event.task.metadata["nand_execution"]["physical_bytes"] == 4096
 
 
 @pytest.mark.parametrize("changes", [

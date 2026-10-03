@@ -342,6 +342,18 @@ class PhysicalService:
     def bill(self, kind: AccessKind, byte_count: int) -> float:
         return float(self.price(kind, byte_count)["service_ns"])
 
+    def price_batch(self, requests, *, start_ns=0.0, state=None):
+        """Price an explicit NAND request batch and return its next queue state."""
+        if self.component is None or not (
+            self.component.metadata.get("nand_media") is not None
+            or self.component.metadata.get("hbf_media") is not None
+        ):
+            raise ValueError("price_batch requires a NAND media contract")
+        from .hbf_media import nand_media_service_batch
+        return nand_media_service_batch(
+            self.component, requests, start_ns=start_ns, state=state
+        )
+
 
 @dataclass(frozen=True)
 class LinkService:
@@ -770,6 +782,25 @@ def endpoint_service(
                 page_offset_bytes=page_offset_bytes, operation="erase",
                 background_work=component.metadata.get("background_work"),
             )
+            physical_service = resolve_service(component)
+            media_contract = component.metadata.get("nand_media", component.metadata.get("hbf_media", {}))
+            nand_access = None
+            if page_offset_bytes is not None and all(
+                media_contract.get(key) is not None
+                for key in ("physical_channels", "physical_dies", "physical_planes")
+            ):
+                nand_access = {
+                    "component": {
+                        "component_id": component.component_id,
+                        "read_bandwidth_gbps": component.read_bandwidth_gbps,
+                        "write_bandwidth_gbps": component.write_bandwidth_gbps,
+                        "metadata": dict(component.metadata),
+                    },
+                    "requests": ({"operation": "erase", "byte_count": byte_count,
+                                  "page_offset_bytes": page_offset_bytes},),
+                    "resource_id": physical_service.resource_id,
+                    "state_key": physical_service.physical_owner,
+                }
             return EndpointService(
                 name="{}.{}.{}.erase".format(name, component.component_id, direction),
                 demands=(ResourceDemand(
@@ -781,7 +812,8 @@ def endpoint_service(
                           "bytes": byte_count, "physical_bytes": media["physical_bytes"],
                           "nand_media": media, "operation": "erase",
                           "address_source": address_source,
-                          "background_work": media.get("background_work", {})},
+                          "background_work": media.get("background_work", {}),
+                          **({"nand_access": nand_access} if nand_access else {})},
             )
         media = nand_media_service(
             component,
@@ -792,10 +824,29 @@ def endpoint_service(
             background_work=component.metadata.get("background_work"),
         )
         physical_bytes = media["physical_read_bytes"] if read else media["physical_bytes"]
+        physical_service = resolve_service(component)
+        media_contract = component.metadata.get("nand_media", component.metadata.get("hbf_media", {}))
+        nand_access = None
+        if page_offset_bytes is not None and all(
+            media_contract.get(key) is not None
+            for key in ("physical_channels", "physical_dies", "physical_planes")
+        ):
+            nand_access = {
+                "component": {
+                    "component_id": component.component_id,
+                    "read_bandwidth_gbps": component.read_bandwidth_gbps,
+                    "write_bandwidth_gbps": component.write_bandwidth_gbps,
+                    "metadata": dict(component.metadata),
+                },
+                "requests": ({"operation": operation, "byte_count": byte_count,
+                              "page_offset_bytes": page_offset_bytes},),
+                "resource_id": physical_service.resource_id,
+                "state_key": physical_service.physical_owner,
+            }
         return EndpointService(
             name="{}.{}.{}.cold_page".format(name, component.component_id, direction),
             demands=(ResourceDemand(
-                resource_id="component.{}.{}".format(component.component_id, direction),
+                resource_id=physical_service.resource_id,
                 service_ns=media["service_ns"],
                 bytes_moved=physical_bytes,
                 energy_pj=media["energy_pj"],
@@ -819,9 +870,15 @@ def endpoint_service(
                 "bandwidth_service_ns": media["host_service_ns"],
                 "latency_service_ns": media["media_read_service_ns"] if read else media["service_ns"],
                 "physical_kind": component.normalized_kind,
+                "physical_service_id": physical_service.service_id,
+                "physical_owner": physical_service.physical_owner,
+                "physical_resource_id": physical_service.resource_id,
+                "queue_depth": media["command_queue_depth"],
+                "effective_parallelism": media["effective_parallelism"],
                 "access_mode": component.metadata.get("access_mode", "default"),
                 "memory_service_model": media["version"],
                 "timing_evidence": "ANALYTICAL",
+                **({"nand_access": nand_access} if nand_access else {}),
             },
         )
     if operation == "erase":

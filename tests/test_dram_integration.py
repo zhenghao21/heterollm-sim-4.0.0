@@ -124,3 +124,33 @@ def test_dram_preview_uses_event_queue_start_for_refresh_epoch():
     kernel.submit((task,))
     event = kernel.step()
     assert event.task.metadata["dram_execution"]["refresh_wait_ns"] > 0.0
+
+
+def test_extended_dram_profile_reaches_endpoint_and_event_kernel():
+    extended = profile(
+        channels=2,
+        banks_per_channel=8,
+        subchannels_per_channel=2,
+        ranks_per_channel=2,
+        bank_groups_per_channel=4,
+        hbm_stacks=2,
+        pseudo_channels_per_channel=2,
+        refresh_interval_ns=0,
+        refresh_duration_ns=0,
+        provenance={"hbm_stacks": "parameterized test geometry"},
+    )
+    component_spec = ComponentSpec(
+        "dram-ext", "hbm", ports=(PortSpec("host", "HBM", "device", bandwidth_gbps=800.0),),
+        read_bandwidth_gbps=800.0, write_bandwidth_gbps=800.0,
+        metadata={"memory_service_owner": "dram-ext.controller", "dram_profile": asdict(extended), "dram_address_bytes": 0},
+    )
+    service = endpoint_service(component_spec, 16, read=True, name="extended")
+    task = TaskSpec("extended", "request", "extended", TaskCategory.MEMORY,
+                    demands=service.demands, metadata={"dram_access": service.metadata["dram_access"]})
+    kernel = UnifiedEventKernel(resource_capacities={"hbm.channel": 1})
+    kernel.submit((task,))
+    event = kernel.step()
+    report = event.task.metadata["dram_execution"]
+    assert report["lane_count"] == 16
+    assert report["boundaries"][0]["stack"] == 0
+    assert report["organization_provenance"]["hbm_stacks"] == "parameterized test geometry"

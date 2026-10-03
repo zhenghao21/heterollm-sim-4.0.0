@@ -3762,6 +3762,7 @@ class _TaskBuilder:
             predecessor = self.previous if dependency is None else dependency
             dependency_ids = (predecessor,) if predecessor else ()
         demands, bound_metadata = _route_resident_memory_demands(demands, dict(metadata or {}))
+        bound_metadata = _attach_planned_dram_access(bound_metadata, demands)
         self.tasks.append(
             TaskSpec(
                 task_id=task_id,
@@ -6183,6 +6184,8 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
     # endpoint_service correctly routes the same component through
     # PhysicalService.price().
     page_offset = phase.metadata.get("page_offset_bytes")
+    if page_offset is None:
+        page_offset = _component(scenario, storage).metadata.get("dram_address_bytes")
     if not isinstance(page_offset, int) or isinstance(page_offset, bool) or page_offset < 0:
         page_offset = None
     read_bill = (
@@ -6236,6 +6239,24 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
             previous, service_ns=previous.service_ns + demand.service_ns,
             bytes_moved=previous.bytes_moved + demand.bytes_moved,
             energy_pj=previous.energy_pj + demand.energy_pj)
+    dram_access = None
+    dram_profile = _component(scenario, storage).metadata.get("dram_profile")
+    if isinstance(dram_profile, Mapping) and isinstance(page_offset, int) and not isinstance(page_offset, bool) and page_offset >= 0:
+        accesses = []
+        if moved_reads:
+            accesses.append({"operation": "read", "offset_bytes": page_offset, "byte_count": moved_reads})
+        if moved_writes:
+            accesses.append({"operation": "write", "offset_bytes": page_offset, "byte_count": moved_writes})
+        if accesses:
+            dram_access = {
+                "profile": dict(dram_profile),
+                "accesses": tuple(accesses),
+                "read_bandwidth_gb_s": service.read_bandwidth_gb_s,
+                "write_bandwidth_gb_s": service.write_bandwidth_gb_s,
+                "max_outstanding_requests": service.queue_depth,
+                "resource_id": service.resource_id,
+                "state_key": service.physical_owner,
+            }
     return replace(phase, demands=tuple(merged.values()), metadata={**phase.metadata,
         "direct_memory_access": {"component_id": storage, "physical_owner": service.physical_owner,
             "resource_id": service.resource_id, "read_bytes": moved_reads, "write_bytes": moved_writes,
@@ -6243,7 +6264,68 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
             "memory_service": remote_service, "physical_bytes": remote_physical_bytes,
             "read_service": read_bill, "write_service": write_bill,
             "energy_pj": remote_energy_pj, "local_read_bytes": reads - moved_reads,
-            "local_write_bytes": writes - moved_writes}})
+            "local_write_bytes": writes - moved_writes,
+            **({"dram_access": dram_access, "dram_address_scope": "explicit"}
+               if dram_access is not None else {})}})
+
+
+def _attach_planned_dram_access(metadata, demands):
+    """Promote an explicit component DRAM profile into a task contract.
+
+    Some local GPU backing paths use the regular HBM cost service and never
+    call ``endpoint_service``. When authoring supplied a component profile and
+    address, retain that contract at the task boundary so the event kernel can
+    apply the same address-aware DRAM preview.
+    """
+    if "dram_access" in metadata:
+        return metadata
+    context = _COMPILATION_CONTEXT.get()
+    if context is None:
+        return metadata
+    from .data_motion import resolve_service
+    candidate_ids = []
+    for key in ("direct_memory_component", "weight_source_component", "input_component",
+                "source_component", "target_component"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value not in candidate_ids:
+            candidate_ids.append(value)
+    phase_metadata = metadata.get("phase_metadata")
+    if isinstance(phase_metadata, Mapping):
+        for key in ("direct_memory_component", "weight_source_component", "input_component",
+                    "source_component", "target_component"):
+            value = phase_metadata.get(key)
+            if isinstance(value, str) and value not in candidate_ids:
+                candidate_ids.append(value)
+    for component_id in candidate_ids:
+        component = context.scenario.hardware.get_component(component_id)
+        profile = component.metadata.get("dram_profile")
+        address = component.metadata.get("dram_address_bytes")
+        if not isinstance(profile, Mapping) or not isinstance(address, int) or isinstance(address, bool) or address < 0:
+            continue
+        service = resolve_service(component)
+        positive = [d for d in demands if d.bytes_moved > 0 and d.resource_id == service.resource_id]
+        if not positive:
+            # A local profile is only safe to bind when the task actually
+            # carries the component's physical resource demand; do not attach
+            # a DRAM contract to an unrelated compute demand.
+            continue
+        demand = max(positive, key=lambda item: item.bytes_moved)
+        direction = str(metadata.get("memory_direction", "")).lower()
+        if direction not in {"read", "write"} and isinstance(phase_metadata, Mapping):
+            direction = str(phase_metadata.get("memory_direction", "")).lower()
+        if direction not in {"read", "write"}:
+            direction = "read"
+        access = {"operation": direction, "offset_bytes": address, "byte_count": int(demand.bytes_moved)}
+        contract = {
+            "profile": dict(profile), "accesses": (access,),
+            "read_bandwidth_gb_s": service.read_bandwidth_gb_s,
+            "write_bandwidth_gb_s": service.write_bandwidth_gb_s,
+            "max_outstanding_requests": service.queue_depth,
+            "resource_id": demand.resource_id,
+            "state_key": service.physical_owner,
+        }
+        return {**metadata, "dram_access": contract, "dram_address_scope": "explicit"}
+    return metadata
 
 
 def _add_direct_state_access(builder, scenario, router, storage, device, byte_count,
@@ -11247,6 +11329,9 @@ def _add_rank_gemm(
                     "operator_class": OperatorClass.GEMM.value,
                 },
                 "phase_metadata": effective_phase_metadata,
+                **({"dram_access": effective_phase_metadata["dram_access"],
+                    "dram_address_scope": effective_phase_metadata.get("dram_address_scope", "explicit")}
+                   if "dram_access" in effective_phase_metadata else {}),
                 "analytical_ops": sum(
                     demand.work_units for demand in demands
                 ),
@@ -11783,6 +11868,9 @@ def _add_rank_fused_attention(
                 "input_component": activation_source,
                 "cost_model": dict(estimate.metadata),
                 "phase_metadata": effective_phase_metadata,
+                **({"dram_access": effective_phase_metadata["dram_access"],
+                    "dram_address_scope": effective_phase_metadata.get("dram_address_scope", "explicit")}
+                   if "dram_access" in effective_phase_metadata else {}),
                 "analytical_ops": sum(
                     demand.work_units for demand in demands
                 ),
@@ -14161,6 +14249,42 @@ def _compile_parallel_request(
     )
 
 
+def _append_storage_probe_tasks(
+    builder: _TaskBuilder, scenario: ScenarioConfig, dependency: str
+) -> str:
+    """Lower authored NAND probes through the normal endpoint/event path."""
+    rows = scenario.workload.metadata.get("storage_probe")
+    if not isinstance(rows, (list, tuple)) or not rows:
+        return dependency
+    from .data_motion import endpoint_service
+    previous = dependency
+    for index, raw in enumerate(rows):
+        if not isinstance(raw, Mapping):
+            raise ValueError("storage_probe entries must be mappings")
+        component = scenario.hardware.get_component(str(raw.get("component_id", "")))
+        operation = str(raw.get("operation", "read")).lower()
+        byte_count = int(raw.get("byte_count", 0))
+        service = endpoint_service(
+            component,
+            byte_count,
+            read=operation == "read",
+            name="storage_probe.{}".format(index),
+            page_offset_bytes=raw.get("page_offset_bytes"),
+            operation=operation,
+        )
+        if service is None:
+            raise ValueError("storage_probe entry produced no endpoint service")
+        previous = builder.add(
+            "storage_probe.{}".format(index),
+            TaskCategory.MEMORY,
+            service.demands,
+            dependencies=(previous,),
+            metadata={**service.metadata, "storage_probe": dict(raw)},
+            advance=False,
+        )
+    return previous
+
+
 def _iter_parallel_request_task_chunks(
     scenario: ScenarioConfig, request: RequestSpec
 ) -> Iterator[RequestTaskChunk]:
@@ -14250,6 +14374,7 @@ def _iter_parallel_request_task_chunks(
         end = _emit_parallel_token(builder, scenario, plan, 0, (end,))
         next_token = 1
 
+    end = _append_storage_probe_tasks(builder, scenario, end)
     yield RequestTaskChunk(builder.drain(), end)
 
     mtp = _mtp_configuration(scenario)
@@ -25220,7 +25345,11 @@ def _estimate_serving_cohort_cost(
                 lowering.schedule.tasks
             ),
             "storage_traffic": _summarize_nand_task_traffic(
-                lowering.schedule.tasks,
+                summary.execution_records,
+                resource_owners=lowering.schedule.resource_owners,
+            ),
+            "dram_traffic": _summarize_dram_task_traffic(
+                summary.execution_records,
                 resource_owners=lowering.schedule.resource_owners,
             ),
             "linear_state_bytes": summary.linear_state_bytes,
@@ -25397,6 +25526,9 @@ def _summarize_nand_task_traffic(
         "physical_write_bytes",
         "pages_touched",
         "media_waves",
+        "queue_wait_ns",
+        "host_queue_wait_ns",
+        "media_queue_wait_ns",
         "read_operations",
         "program_operations",
         "erase_operations",
@@ -25409,20 +25541,28 @@ def _summarize_nand_task_traffic(
     resource_totals: Dict[str, Dict[str, object]] = {}
     profiles = set()
     background_markers: List[object] = []
+    organizations: List[object] = []
     owners = dict(resource_owners or {})
     task_count = 0
     for task in tasks:
+        # A known-offset endpoint carries a transactional nand_access contract;
+        # its resolved nand_execution is merged at kernel observation time.
+        # Do not count the pre-resolution bill a second time.
+        if "nand_access" in task.metadata and "nand_execution" not in task.metadata:
+            continue
         phase_metadata = task.metadata.get("phase_metadata", {})
         phase_metadata = phase_metadata if isinstance(phase_metadata, Mapping) else {}
         direct = task.metadata.get("direct_memory_access")
         if not isinstance(direct, Mapping):
             direct = phase_metadata.get("direct_memory_access", {})
         direct = direct if isinstance(direct, Mapping) else {}
-        raw = task.metadata.get("nand_media")
+        raw = task.metadata.get("nand_execution")
+        if not isinstance(raw, Mapping):
+            raw = task.metadata.get("nand_media")
         if not isinstance(raw, Mapping):
             raw = task.metadata.get("hbf_media")
         raw_rows = [raw] if isinstance(raw, Mapping) else []
-        if direct:
+        if direct and not isinstance(task.metadata.get("nand_execution"), Mapping):
             direct_rows = []
             for key in ("read_service", "write_service"):
                 bill = direct.get(key)
@@ -25444,13 +25584,21 @@ def _summarize_nand_task_traffic(
             if isinstance(value, (int, float)) and not isinstance(value, bool)
         )
         if logical <= 0:
-            logical = task.metadata.get("logical_bytes", task.metadata.get("bytes", 0))
+            logical = raw_rows[0].get(
+                "logical_bytes",
+                task.metadata.get("logical_bytes", task.metadata.get("bytes", 0)),
+            )
         if not isinstance(logical, (int, float)) or isinstance(logical, bool):
             logical = 0
         totals["logical_bytes"] += float(logical or 0)
         for raw in raw_rows:
             operation = str(raw.get("operation", "unknown"))
-            operation_counts[operation] = operation_counts.get(operation, 0) + 1
+            declared_operations = raw.get("operation_counts", {}) or {}
+            if not declared_operations:
+                operation_counts[operation] = operation_counts.get(operation, 0) + 1
+            for operation_name, operation_count in declared_operations.items():
+                if isinstance(operation_count, (int, float)) and not isinstance(operation_count, bool):
+                    operation_counts[str(operation_name)] = operation_counts.get(str(operation_name), 0) + int(operation_count)
             evidence = raw.get("profile_evidence")
             if evidence:
                 profiles.add(str(evidence))
@@ -25459,16 +25607,37 @@ def _summarize_nand_task_traffic(
                 marker = to_primitive(marker)
                 if marker not in background_markers and len(background_markers) < 32:
                     background_markers.append(marker)
+            organization = {
+                key: to_primitive(raw[key])
+                for key in (
+                    "version", "contract_field", "media_page_bytes", "erase_block_bytes",
+                    "physical_channels", "physical_dies", "physical_planes",
+                    "addressable_media_slots", "effective_parallelism", "command_queue_depth",
+                    "topology_basis", "mapping_basis", "address_mapping", "address_scope",
+                    "mapped_channels", "mapped_dies", "mapped_planes", "program_order",
+                    "program_order_constraint", "program_parallelism", "queue_resources",
+                    "parameter_evidence", "profile_evidence",
+                )
+                if key in raw
+            }
+            if isinstance(raw.get("requests"), (list, tuple)):
+                organization["queue_requests"] = to_primitive(raw["requests"][:32])
+            if organization not in organizations and len(organizations) < 32:
+                organizations.append(organization)
             for field in numeric_fields:
                 if field == "logical_bytes":
                     continue
                 value = raw.get(field, 0)
                 if isinstance(value, (int, float)) and not isinstance(value, bool):
                     totals[field] += float(value)
+        task_owner = next(
+            (raw.get("physical_owner") for raw in raw_rows if raw.get("physical_owner")),
+            task.metadata.get("physical_owner", "unknown"),
+        )
         for demand in task.demands:
             resource_id = str(demand.resource_id)
             row = resource_totals.setdefault(resource_id, {
-                "owner": owners.get(resource_id, task.metadata.get("physical_owner", "unknown")),
+                "owner": owners.get(resource_id, task_owner),
                 "bytes_moved": 0,
                 "service_ns": 0.0,
                 "energy_pj": 0.0,
@@ -25481,7 +25650,10 @@ def _summarize_nand_task_traffic(
     integer_fields = {
         field: int(round(totals[field]))
         for field in numeric_fields
-        if field not in {"service_ns", "energy_pj"}
+        if field not in {
+            "service_ns", "energy_pj", "queue_wait_ns",
+            "host_queue_wait_ns", "media_queue_wait_ns",
+        }
     }
     return {
         "schema_version": "heterollm.nand-traffic/v1",
@@ -25489,6 +25661,9 @@ def _summarize_nand_task_traffic(
         **integer_fields,
         "service_ns": totals["service_ns"],
         "energy_pj": totals["energy_pj"],
+        "queue_wait_ns": totals["queue_wait_ns"],
+        "host_queue_wait_ns": totals["host_queue_wait_ns"],
+        "media_queue_wait_ns": totals["media_queue_wait_ns"],
         "operation_counts": dict(sorted(operation_counts.items())),
         "resource_totals": {
             resource_id: {
@@ -25500,10 +25675,73 @@ def _summarize_nand_task_traffic(
         "owner_ids": tuple(sorted({str(row["owner"]) for row in resource_totals.values()})),
         "profile_evidence": tuple(sorted(profiles)),
         "background_work": background_markers,
+        "organization_profiles": organizations,
+        "organization_profile_limit": 32,
         "accounting_semantics": (
             "host_transfer_bytes is logical host payload; physical_* and pages/waves "
             "are NAND media accounting; service_ns/energy_pj are analytical"
         ),
+    }
+
+
+def _summarize_dram_task_traffic(
+    tasks: Sequence[TaskSpec],
+    *,
+    resource_owners: Optional[Mapping[str, str]] = None,
+) -> Mapping[str, object]:
+    """Retain resolved DRAM bytes, waits and organization before trace eviction."""
+
+    numeric_fields = (
+        "logical_read_bytes", "logical_write_bytes", "physical_read_bytes",
+        "physical_write_bytes", "physical_bytes", "burst_count", "row_hits",
+        "row_misses", "row_conflicts", "read_write_switches", "queue_wait_ns",
+        "refresh_wait_ns", "turnaround_wait_ns", "service_ns",
+    )
+    totals = {key: 0 for key in numeric_fields}
+    organizations: List[object] = []
+    resources: Dict[str, Dict[str, object]] = {}
+    owners = dict(resource_owners or {})
+    count = 0
+    for task in tasks:
+        raw = task.metadata.get("dram_execution")
+        if not isinstance(raw, Mapping):
+            continue
+        count += 1
+        for key in numeric_fields:
+            value = raw.get(key, 0)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                totals[key] += value
+        organization = {
+            key: to_primitive(raw[key])
+            for key in ("model", "lane_count", "organization", "organization_provenance",
+                        "organization_semantics", "profile_evidence", "evidence")
+            if key in raw
+        }
+        contract = task.metadata.get("dram_access", {})
+        if isinstance(contract, Mapping):
+            profile = contract.get("profile", {})
+            if isinstance(profile, Mapping):
+                organization["profile"] = to_primitive(profile)
+            resource_id = str(contract.get("resource_id", "unknown"))
+            owner = str(contract.get("state_key", owners.get(resource_id, "unknown")))
+        else:
+            resource_id, owner = "unknown", "unknown"
+        if organization not in organizations and len(organizations) < 32:
+            organizations.append(organization)
+        row = resources.setdefault(resource_id, {"owner": owner, "bytes_moved": 0,
+                                                  "service_ns": 0.0, "energy_pj": 0.0})
+        for demand in task.demands:
+            if str(demand.resource_id) == resource_id:
+                row["bytes_moved"] += int(demand.bytes_moved)
+                row["service_ns"] += float(demand.service_ns)
+                row["energy_pj"] += float(demand.energy_pj)
+    return {
+        "schema_version": "heterollm.dram-traffic/v1", "task_count": count,
+        **totals, "logical_bytes": totals["logical_read_bytes"] + totals["logical_write_bytes"],
+        "resource_totals": dict(sorted(resources.items())),
+        "owner_ids": tuple(sorted({str(row["owner"]) for row in resources.values()})),
+        "organization_profiles": organizations, "organization_profile_limit": 32,
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
     }
 
 
