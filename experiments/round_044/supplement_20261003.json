@@ -1,0 +1,113 @@
+{
+  "schema": "heterollm.optimization.evidence_supplement/v3",
+  "round_id": "round_044",
+  "supplement_id": "H44_FRONTEND_MMA_COLLECTIVE_FULL_KERNEL_20261003",
+  "status": "complete_limited_mechanism",
+  "direction": "计算成本模型",
+  "purpose": "补充 H44 先前仅解析矩阵缺少的真实 planner→event/resource→report_dict 前端证据；不修改源码、不声称 Native 精度或性能改善。",
+  "parent_source_sha": "3a23a4e2b8cc89cad9422f6a8c205186be74870f",
+  "candidate_source_sha": "3a23a4e2b8cc89cad9422f6a8c205186be74870f",
+  "source_identity": {
+    "git_head": "3a23a4e2b8cc89cad9422f6a8c205186be74870f",
+    "origin_main": "3a23a4e2b8cc89cad9422f6a8c205186be74870f",
+    "source_edited": false,
+    "modules": {
+      "src/heterollm_sim/cost_models.py": {
+        "content_sha256": "9b63242c148f9cdae9545dd571e730bf1a636aa4ab0748be8b1701ed80aff8d1",
+        "git_blob_sha": "d6cb3daebd0bcb1c9844632bfbd3a5c5e133e4af"
+      },
+      "src/heterollm_sim/communication.py": {
+        "content_sha256": "13cfb64e78864aa983fd981de850c8154590d782459a8db2297eaefd0b3b4f2b",
+        "git_blob_sha": "57d8559b63e966df65bc8ed663957a1dcba6a23c"
+      },
+      "src/heterollm_sim/planner.py": {
+        "content_sha256": "0469eb1227fbda68c4241c32010bf7652e6c966a48ce2fa4792a9adcd75451d2",
+        "git_blob_sha": "8b9c24624488ca6a73e80aab53eba0a5e91e7c16"
+      },
+      "src/heterollm_sim/engine.py": {
+        "content_sha256": "93a5c854de9df960951bb67d40adacb389cd9335c36844b0892c82ac3c3c4537",
+        "git_blob_sha": "381b1d65ef0d427671ad03c7698745c064379fb6"
+      },
+      "src/heterollm_sim/reporting.py": {
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f",
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528"
+      },
+      "src/heterollm_sim/reference.py": {
+        "content_sha256": "ccd9262069936655059adf99c346c2295f84c001a2b0c6a93d33f00f299c6bdb",
+        "git_blob_sha": "97661edcb71bde5c8dda356e53f6cd8cf7d16ab2"
+      }
+    }
+  },
+  "input": {
+    "entrypoint": "build_reference_scenario → compile_scenario → simulate_schedule → run_scenario(retention_policy=aggregate) → report_dict",
+    "scenario_name": "gpu-8hbm-ucie-sram-cim-reference",
+    "retention_policy": "aggregate",
+    "data_role": "evidence_supplement_development",
+    "input_hash": "see h44_frontend_mma_collective.json input_identity.scenario_payload_sha256"
+  },
+  "commands": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m py_compile artifacts/optimization/evidence_supplement_20261003/cost_model/run_h44_frontend.py",
+      "exit_code": 0,
+      "role": "syntax verification"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe tools/command_provenance.py --output artifacts/optimization/evidence_supplement_20261003/cost_model/h44_frontend_provenance.json --cwd . -- .venv\\Scripts\\python.exe artifacts/optimization/evidence_supplement_20261003/cost_model/run_h44_frontend.py",
+      "exit_code": 0,
+      "role": "independent child process frontend measurement",
+      "provenance": "artifacts/optimization/evidence_supplement_20261003/cost_model/h44_frontend_provenance.json"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "artifacts/optimization/evidence_supplement_20261003/cost_model/h44_frontend_mma_collective.json",
+      "sha256": "8ac83e8479360702c8051fe5d9be9f959758524961407b7f0761709d2c61937e",
+      "role": "frontend matrix and report boundary"
+    },
+    {
+      "path": "artifacts/optimization/evidence_supplement_20261003/cost_model/h44_frontend_mma_collective.json.sha256",
+      "sha256": "509837bfe694e2864d29f83f340aee14cf78dff1cb7b5a263db4f51774e48bf7",
+      "role": "artifact sidecar"
+    },
+    {
+      "path": "artifacts/optimization/evidence_supplement_20261003/cost_model/h44_frontend_provenance.json",
+      "sha256": "fa48483d5d7bae3c4939f834aede6b1a76c00e8a22f6d81d15e28c8780de4569",
+      "role": "command returncode/stdout/stderr provenance"
+    },
+    {
+      "path": "artifacts/optimization/evidence_supplement_20261003/cost_model/h44_frontend_provenance.json.sha256",
+      "sha256": "f62849b248e91c5d39dcec825595aa91aecd7bccfe65af0c9d6a4c4fc84a7dc2",
+      "role": "provenance sidecar"
+    }
+  ],
+  "results": {
+    "schedule_task_count": 326,
+    "trace_task_count": 326,
+    "trace_makespan_ns": 223915.48190045252,
+    "fused_attention_tasks": 12,
+    "fused_attention_active_tasks": 12,
+    "fused_attention_reached_event_resource_report": true,
+    "mma_gemm_tasks": 96,
+    "mma_gemm_active_tasks": 96,
+    "mma_gemm_reached_event_resource_report": true,
+    "collective_tasks": 28,
+    "collective_active_tasks": 0,
+    "collective_status": "not_activated_local_zero_demand",
+    "report_dict_boundary": "report_dict payload includes summary/task_count/makespan/resource_accounted_bytes/total_energy_pj; report_sha256 recorded in artifact"
+  },
+  "mechanism_decision": {
+    "status": "confirmed_limited",
+    "accept": "MMA and fused-attention analytical cost metadata reaches real planner task demands, event trace and report_dict; owner/resource and service/bytes rows retained.",
+    "defer": "Collective planner/event traffic remains unactivated by one-compute reference topology; local synchronization rows are zero-demand and cannot support bandwidth claim."
+  },
+  "accuracy_status": "not_evaluated_no_native",
+  "performance_status": "not_evaluated_no_independent_ab",
+  "generalization_status": "limited_to_reference_scenario_and_aggregate_retention",
+  "limitations": [
+    "No parent/candidate A/B because no source change.",
+    "No Native/device paired observation; analytical costs do not establish latency accuracy.",
+    "No independent wall/RSS performance benchmark.",
+    "No multi-compute topology, so collective bytes/bandwidth remain uncovered beyond local zero-demand blocker."
+  ],
+  "next_step": "保留 collective topology blocker；后续若补 H44 需先提供多 compute/rank reference topology，再重复同输入并记录 real collective event/resource/report。"
+}
