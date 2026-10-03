@@ -91,5 +91,14 @@
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
 - H29 的收益目前只属于 CLI 文本前端；H36/H41/H46/H54/H61 仍缺同等级独立进程、重复批次、输出等价和 RSS 证据。
-- H27 已完成真实 planner/event/resource/report/API A/B；H38/H44/H52/H58 仍需各自进入真实计费链路，解析矩阵不能替代前端计费证据。
+- H27 已完成真实 planner/event/resource/report/API A/B；H38/H44/H52 仍需各自进入真实计费链路，H58 已完成 routed LinkService 前端机制补证但无候选差异；解析矩阵不能替代前端计费证据。
 - H28/H34/H43/H51/H60/H64：若要声称预测精度或泛化改善，必须补同模型/硬件/shape/runtime 的 Native 成对 TTFT/TPOT/E2E 误差、留出和退化统计；当前记录均不构成精度改善。
+
+### H58：LinkService/transfer pipeline 真实前端补证（本批）
+
+- 补证记录：[experiments/round_058/supplement_20261003_frontend.json](../experiments/round_058/supplement_20261003_frontend.json)，记录 SHA-256 `cd1273e063318f6824a0a0b2c8cdbdca7fd6de1fc188457f66e29808869d236a`，sidecar 同目录。
+- 同输入隔离执行 parent `d859ae52a1b0f9d3e37346ca1eb3c4b6144afbe5` 与 candidate `3a23a4e2b8cc89cad9422f6a8c205186be74870f`：`build_reference_scenario → resident_access_path=topology → compile_scenario → simulate_schedule → run_scenario(aggregate) → report_dict`，两命令均退出码 0。
+- 真实路由激活：每侧 326 tasks、96 个 routed resident-memory tasks；`link.gpu-hbm0.gpu0->hbm0`/反向资源、`bytes_moved=444096520`、`energy_pj=1731888883.1`，compiled makespan `429064.203125 ns`。task/report/result SHA 及 resource busy 全部同输入相等。
+- 结论：H58 链路 finite/owner/capacity 成本路径已进入真实 compile→event→run→report 前端；parent/candidate 无差异，没有源码候选或因果收益，不能外推 Native 带宽/延迟、仿真器速度或预测精度。未覆盖多链路/多请求竞争、HTTP `/api/run` 和真实硬件观测。
+- 机器产物（忽略目录）：`artifacts/optimization/round_058/frontend_link_billing_supplement.json` SHA-256 `5fdd88cb07a0caf80010226df43114d448a7c733e10ca61172b9d5952437d84a`；父/候选 raw JSON SHA 均 `b8585e0b31a8ea65636f7b8478905225d9a222d1fd8307529d52aaf2867e1de7`。
+

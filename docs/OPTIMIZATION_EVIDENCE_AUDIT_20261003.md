@@ -49,7 +49,7 @@
 
 ### P1：成本模型必须进入 planner/event/resource/report
 
-`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。H27 已补 `compile_scenario → simulate_schedule → run_scenario → report_dict`，确认 memory/GEMM/reduction 的 bytes/energy/service/owner/queue 守恒与非法控制，但 HTTP 和 Native 仍未覆盖；其它成本轮次仍待同等级前端证据。
+`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。H27 已补 `compile_scenario → simulate_schedule → run_scenario → report_dict`，确认 memory/GEMM/reduction 的 bytes/energy/service/owner/queue 守恒与非法控制；H58 本批已补 routed LinkService 的同级 compile→event→run→report 机制 A/B，但 parent/candidate 无差异。H27/H58 仍未有 Native，H38/H44/H52 仍待各自前端 workload。
 
 补测应通过真实 planner/event/run_scenario 产生 GEMM、reduction、MMA、collective、link/transfer workload，比较 logical/physical bytes、energy、owner capacity、queue/phase、makespan 和最终 report。覆盖 shape、并发、zero/invalid dtype/size、duplicate owner。Native 带宽/延迟只有有独立硬件观测才可报告。
 
@@ -95,3 +95,4 @@
 - 第二批机器摘要：H62 `c043c22e1a6f8e890ab01590db82afd396f474c271c7af8689de1ccb45b9c170`；H27 `9778ad14893442dda20f96ee174fbdf38ab6f47d2c431b395736efde6add99e0`；H64 `03a0b06bc1727eb824f9f932984e4f45572ecc49353b4ed19b15b1ce213467ab`。所有结果均没有加载真实 Native。
 
 - 第三批 H54 已完成 120 个独立进程和 60 对 AB/BA；context-local reuse 在 small/medium/large 的 wall time 分别下降 86.82%/86.24%/86.22%，输出和 report/trace 完全等价，RSS 与 tracemalloc 也下降。由于没有跨请求、Web、run_jobs 或全局缓存的安全生产调用方，结论限定为局部工程收益，不晋升新源码候选。
+
