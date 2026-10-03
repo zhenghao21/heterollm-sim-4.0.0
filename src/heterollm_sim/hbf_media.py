@@ -270,7 +270,15 @@ def nand_media_service_batch(component, requests, *, start_ns=0.0, state=None):
     cursor = float(start_ns)
     batch_end = cursor
     rows = []
-    totals = {"logical_bytes": 0, "physical_bytes": 0, "service_ns": 0.0, "queue_wait_ns": 0.0}
+    totals = {
+        "logical_bytes": 0, "host_transfer_bytes": 0, "physical_bytes": 0,
+        "physical_read_bytes": 0, "physical_write_bytes": 0,
+        "pages_touched": 0, "media_waves": 0, "read_operations": 0,
+        "program_operations": 0, "erase_operations": 0,
+        "rmw_read_operations": 0, "service_ns": 0.0, "energy_pj": 0.0,
+        "queue_wait_ns": 0.0, "host_queue_wait_ns": 0.0,
+        "media_queue_wait_ns": 0.0,
+    }
     operation_counts = {}
     for request in requests:
         if not isinstance(request, Mapping):
@@ -323,9 +331,17 @@ def nand_media_service_batch(component, requests, *, start_ns=0.0, state=None):
         })
         rows.append(row)
         totals["logical_bytes"] += count
+        for key in totals:
+            if key in {"logical_bytes", "physical_bytes", "queue_wait_ns", "service_ns"}:
+                continue
+            value = bill.get(key, 0)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                totals[key] += value
         totals["physical_bytes"] += int(bill.get("physical_bytes", 0))
         totals["service_ns"] += float(bill["service_ns"])
         totals["queue_wait_ns"] += wait
+        totals["host_queue_wait_ns"] += float(bill.get("host_queue_wait_ns", 0.0) or 0.0)
+        totals["media_queue_wait_ns"] += float(bill.get("media_queue_wait_ns", 0.0) or 0.0)
         operation_counts[operation] = operation_counts.get(operation, 0) + 1
         batch_end = max(batch_end, end)
     return {
@@ -333,9 +349,21 @@ def nand_media_service_batch(component, requests, *, start_ns=0.0, state=None):
         "requests": tuple(rows),
         "request_count": len(rows),
         "logical_bytes": totals["logical_bytes"],
+        "host_transfer_bytes": totals["host_transfer_bytes"],
         "physical_bytes": totals["physical_bytes"],
+        "physical_read_bytes": totals["physical_read_bytes"],
+        "physical_write_bytes": totals["physical_write_bytes"],
+        "pages_touched": totals["pages_touched"],
+        "media_waves": totals["media_waves"],
+        "read_operations": totals["read_operations"],
+        "program_operations": totals["program_operations"],
+        "erase_operations": totals["erase_operations"],
+        "rmw_read_operations": totals["rmw_read_operations"],
         "service_ns": totals["service_ns"],
+        "energy_pj": totals["energy_pj"],
         "queue_wait_ns": totals["queue_wait_ns"],
+        "host_queue_wait_ns": totals["host_queue_wait_ns"],
+        "media_queue_wait_ns": totals["media_queue_wait_ns"],
         "end_ns": batch_end,
         "operation_counts": dict(sorted(operation_counts.items())),
         "queue_resources": tuple(sorted(ready)),
