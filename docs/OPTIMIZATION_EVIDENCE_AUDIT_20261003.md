@@ -1,6 +1,6 @@
 # 仿真器历史优化证据审计（2026-10-03）
 
-本审计覆盖 `round_001` 至 `round_065` 的四份机器记录、方向台账、Git 提交、`artifacts/optimization/round_*` 证据和已有测试记录。审计基线源码为 `bae6f9c8f11280feeb0db0eb05079827bde7b5fd`；工作区未发现功能源码改动，`pytest-of-A` 目录权限警告单独记录。用户要求已暂停定时推进，`llm` heartbeat automation 已删除；H65 仍是一个尚未收口的人工检查点。
+本审计覆盖 `round_001` 至 `round_065` 的四份机器记录、方向台账、Git 提交、`artifacts/optimization/round_*` 证据和已有测试记录。初始审计基线源码为 `bae6f9c8f11280feeb0db0eb05079827bde7b5fd`；补证后 H65 候选提交为 `4efc351c77e189b18a11680eb615c443bd8a92e9`，记录收口提交为 `dfb0dd9bca4eb7b2edc30689eedb9dd8bf2e4320`，均已推送并核对 `origin/main`。`pytest-of-A` 目录权限警告单独记录。用户要求已暂停定时推进，`llm` heartbeat automation 已删除；H65 已收口，补证状态详见 [EVIDENCE_SUPPLEMENT_STATUS_20261003.md](EVIDENCE_SUPPLEMENT_STATUS_20261003.md)。
 
 这次审计得到的结论很明确：历史轮次大多证明了局部机制或错误状态，少数证明了真实 API/report 链路，几乎没有轮次证明了预测精度，也没有足够轮次证明仿真器自身的稳定速度或内存改善。全量 pytest 通过只能证明工程回归，不能证明性能、Native 误差或用户可见收益。
 
@@ -15,17 +15,17 @@
 
 ### P0：存储硬件必须走真实前端链路
 
-`H24、H26、H30、H39、H40、H48、H49、H55、H62` 都需要补一次统一的存储前端矩阵。当前证据主要是 `PhysicalService`、`nand_media_service`、地址/擦除/队列控制、元数据传播或 H62 direct billing 探针。它们还不能证明完整请求经过 endpoint → planner → event → report/API 后仍使用同一模型。
+`H24、H26、H30、H39、H40、H48、H49、H55、H62` 都需要统一的存储前端矩阵。H62 已补 `plan_runtime_placement → run_scenario → simulate_online → report_dict` 的两 profile 机制证据，但仍未覆盖 HTTP、known-offset 跨页前端激活或父/候选 A/B；其它轮次仍不能因局部 `PhysicalService`、`nand_media_service`、地址/擦除/队列控制而视为完整请求闭合。
 
 最小补测应把 DRAM/HBM 视为一个家族、SSD/NVMe/HBF/NAND 视为一个家族，分别选至少两个 profile，使用同一 `run_scenario`/`run_jobs` 输入覆盖页内、跨页、跨 plane、read、program/write、erase、queue conflict 和非法参数。对 baseline/candidate 或 profile A/B 保存 TaskResult、makespan、resource bytes、energy、owner、queue、metadata、`report_dict` 和 HTTP JSON。没有真实设备/Native 时，结论只能写成“前端机制已验证”；若要写硬件准确性，另做 E3 设备成对误差。
 
-`H62` 已修复 direct HBF/NAND billing，但目前仍是 direct planner probe；必须补 `llama_backend_memory → planner → event → report/API` 的完整请求路径。`H48/H49/H55` 仍有跨请求 queue、report/API projection 或 DRAM/HBM 传播边界，不能因为负向矩阵通过就视为整个存储方向已闭合。
+`H62` 已修复 direct HBF/NAND billing，并补到 `plan_runtime_placement → run_scenario → simulate_online → report_dict`；当前结果只能接纳为机制/守恒证据，因 known-offset 跨页未在 `run_scenario` 激活、HTTP 未启动、父/候选 A/B 未重跑，不能写成修复收益或硬件准确率。`H48/H49/H55` 仍有跨请求 queue、report/API projection 或 DRAM/HBM 传播边界，不能因为负向矩阵通过就视为整个存储方向已闭合。
 
 ### P0：评估、API、可视化和误差口径
 
-`H19、H22、H28、H42、H43、H50、H57、H60、H64、H65` 需要真实 report/API/serialization roundtrip。当前 H64 已修复缺失 TTFT/TPOT/E2E 指标仍 `compared/passed=true` 的门控缺陷；H65 发现的 online `report_dict` 中 `hardware_phase_ledger.guardrails` tuple → JSON list 仍未修复，也没有收口。
+`H19、H22、H28、H42、H43、H50、H57、H60、H64、H65` 需要真实 report/API/serialization roundtrip。当前 H64 已修复缺失 TTFT/TPOT/E2E 指标仍 `compared/passed=true` 的门控缺陷；H65 已修复 online `report_dict` 中 `hardware_phase_ledger.guardrails` tuple → JSON list 的直接 payload 漂移，并以 focused/full 回归和独立 report/API 矩阵收口。其余轮次的状态/误差边界仍不能外推为精度改善。
 
-最小补测需要构造 complete、partial、empty、missing metric、unknown、failure、incomplete、analytical fallback、OOD 和负值 guardrail 输入，实际调用 score/report/API/trace/visualization，执行 JSON encode/decode，再比较 HTTP status、`status`、`passed`、coverage、missing/limits、report hash 和 UI/trace payload。H65 先单独修复并回归 tuple/list 容器契约，再继续其它评估结论。浏览器可视化只有在要宣称页面显示正确或无障碍时才需要启动浏览器；API/report roundtrip 是当前必需证据。
+最小补测需要构造 complete、partial、empty、missing metric、unknown、failure、incomplete、analytical fallback、OOD 和负值 guardrail 输入，实际调用 score/report/API/trace/visualization，执行 JSON encode/decode，再比较 HTTP status、`status`、`passed`、coverage、missing/limits、report hash 和 UI/trace payload。H65 已完成其中的 report/API primitive roundtrip；浏览器可视化只有在要宣称页面显示正确或无障碍时才需要启动浏览器，其余状态矩阵仍是待补证据。
 
 这些轮次不能把 fail-closed 语义改善写成 accuracy gain。若要证明预测质量，必须再做 E3 Native 成对 TTFT/TPOT/E2E 误差，不能复用 synthetic reference。
 
@@ -39,7 +39,7 @@
 
 `H29、H36、H41、H46、H54、H61` 不能把单次局部 profile 当作仿真器性能改善。
 
-- `H29` 有 CLI 短跑 123.2554ms → 62.5194ms 和文本 hash 等价，但只有 3 样本/变体，缺 RSS、生产 `run_scenario`/API 和重复批次。
+- `H29` 已补 120 个独立 CLI 子进程、60 对 AB/BA、每规模 20 对，并记录 wall/RSS/stdout 等价：small/medium/large wall 中位改善约 5.82%/10.79%/12.34%；medium/large RSS 中位改善约 12.27%/18.34%，small RSS 不接纳为改善。结论仍限定为 CLI 文本前端，不外推 web/run_jobs 或目标系统 latency。
 - `H36` provider reuse 0.16137s → 0.04243s，但没有安全生产调用方；需要 provider 生命周期、并发、eviction 和真实前端 A/B。
 - `H41/H46` 只是热点剖析，没有可安全优化的候选、完整 TaskResult/report 等价和 RSS。
 - `H54` fresh/reused 有 245.4ms → 32.35ms、3.68MB → 1.58MB，但仍缺随机批次、淘汰、并发和生产入口。
@@ -49,7 +49,7 @@
 
 ### P1：成本模型必须进入 planner/event/resource/report
 
-`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。
+`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。H27 已补 `compile_scenario → simulate_schedule → run_scenario → report_dict`，确认 memory/GEMM/reduction 的 bytes/energy/service/owner/queue 守恒与非法控制，但 HTTP 和 Native 仍未覆盖；其它成本轮次仍待同等级前端证据。
 
 补测应通过真实 planner/event/run_scenario 产生 GEMM、reduction、MMA、collective、link/transfer workload，比较 logical/physical bytes、energy、owner capacity、queue/phase、makespan 和最终 report。覆盖 shape、并发、zero/invalid dtype/size、duplicate owner。Native 带宽/延迟只有有独立硬件观测才可报告。
 
@@ -73,9 +73,9 @@
 
 ## 建议的补证据顺序
 
-1. **H65 → H42/H50/H57/H64**：先把 report/API/serialization 和缺失状态投影闭合，避免后续实验读取错误结果。
-2. **H62/H39/H40/H48/H49/H55/H24/H26/H30**：补 NAND/DRAM/HBM 的真实前端执行、资源账本和 report/API。
-3. **H27/H44/H52/H58，再回看 H37/H45/H53/H59**：把成本、调度、资源守恒和失败回滚从局部矩阵接到 event/report/API。
+1. **H42/H50/H57/H64 的剩余状态边界**：H65 的 primitive serialization 已闭合，继续补缺失/失败/coverage 的 report/API 投影，不重做 H65。
+2. **H62/H39/H40/H48/H49/H55/H24/H26/H30**：H62 已有当前版本前端机制证据，下一步补 known-offset 跨页激活、HTTP/report projection 和父/候选 A/B，随后扩展其它存储轮次。
+3. **H44/H52/H58，再回看 H37/H45/H53/H59**：H27 已有 report_dict 前端计费证据；继续把剩余成本、调度、资源守恒和失败回滚接到 event/report/API。
 4. **H29/H41/H46/H54/H61/H36**：做重复独立性能 A/B，严格区分仿真器自身 wall/RSS 和被模拟系统延迟。
 5. **H28/H34/H43/H51/H60/H64**：如果确实要发布预测质量结论，再运行 Native 成对误差和留出泛化；否则保持“门控/证据边界修复”。
 
@@ -85,4 +85,4 @@
 - `audit_frontend_eval.json` SHA-256 `e0171ea7cd8978a536760c165bb607adb2111294d4ad79df96dc8cfff30cbfaa`
 - `audit_perf_accuracy.json` SHA-256 `6b9641846f82475e0c8e42178f476ca97b1f15ebb6394284defeaf56b2040b34`
 
-审计本身没有执行任何补测，也没有把尚未执行的命令写成通过。 H65 的自动推进已暂停，后续应由用户逐项批准或继续手动选择。
+初始审计本身没有执行补测；补证阶段实际执行的 H65/H29/H62/H27 命令和退出码已写入对应 artifacts 与 [EVIDENCE_SUPPLEMENT_STATUS_20261003.md](EVIDENCE_SUPPLEMENT_STATUS_20261003.md)。H65 的自动推进已暂停，后续应由用户逐项批准或继续手动选择。

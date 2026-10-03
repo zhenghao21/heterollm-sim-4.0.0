@@ -1,0 +1,28 @@
+{
+  "schema": "heterollm.optimization.evidence_supplement/v1",
+  "round_id": "round_062",
+  "supplement_id": "H62_NAND_FRONTEND_MECHANISM_20261003",
+  "status": "complete_limited",
+  "scope": "Current source NAND/HBF frontend mechanism and report conservation",
+  "source_identity": {
+    "measurement_commit": "dfb0dd9bca4eb7b2edc30689eedb9dd8bf2e4320",
+    "h62_functional_fix_commit": "26d040303b719ef029ef3306341353b5c2d31110"
+  },
+  "protocol": "artifacts/optimization/evidence_supplement_20261003/storage/protocol.json",
+  "result": "artifacts/optimization/evidence_supplement_20261003/storage/frontend_nand_supplement.json",
+  "result_sha256": "525ae67816dafb478b30f21bcef177b22bcf57e8e488f820d0292c9650c21947",
+  "coverage": {
+    "profiles": ["page4k_plane1_q4", "page8k_plane4_q16"],
+    "nand_tasks_per_profile": 18,
+    "frontend": "plan_runtime_placement -> run_scenario -> simulate_online -> report_dict",
+    "physical_bytes_pages_waves_service_equal_independent_truth": true,
+    "owner_resource_energy_makespan_report_saved": true
+  },
+  "decision": "accept_frontend_mechanism_only",
+  "limitations": [
+    "Known-offset cross-page controls were independent oracles, not activated by run_scenario.",
+    "HTTP API was not run.",
+    "No parent/candidate A/B was rerun, so this does not prove H62 causal benefit.",
+    "No Native or physical-device accuracy measured."
+  ]
+}

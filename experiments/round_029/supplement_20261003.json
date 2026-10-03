@@ -1,0 +1,42 @@
+{
+  "schema": "heterollm.optimization.evidence_supplement/v1",
+  "round_id": "round_029",
+  "supplement_id": "H29_CLI_PERFORMANCE_20261003",
+  "status": "complete",
+  "scope": "CLI text frontend simulator wall-time and child-process RSS",
+  "source_identity": {
+    "baseline_commit": "5f79543582592fcb67aac31a2b25d8717a832bf8",
+    "candidate_commit": "c501680a9abd510f19c6933a185ff4a1e1fe8348",
+    "measurement_runner": "current main checkout; source variants loaded from isolated git archives"
+  },
+  "protocol": "artifacts/optimization/evidence_supplement_20261003/performance/protocol.json",
+  "protocol_sha256": "1b5a4e680d31644114f9582ee87cae0f78922bcf18a889bedc426ed3a291ce08",
+  "results": "artifacts/optimization/evidence_supplement_20261003/performance/h29_cli_supplement_results.json",
+  "results_sha256": "fb9b58bef8f8c8a3e4a2917ae95e2c456d8a52adb2a44bdbbc9e75ecf7fafccd",
+  "analysis": "artifacts/optimization/evidence_supplement_20261003/performance/h29_cli_supplement_analysis.json",
+  "analysis_sha256": "b9e3b2ca893fbe6d37c67c3205d77604eb9c26635b5d318471bfe8b9842adedd",
+  "measurements": {
+    "processes": 120,
+    "pairs": 60,
+    "batches_per_scale": 20,
+    "scales": [1, 8, 16],
+    "wall_median_relative_change_percent": {
+      "small": -5.8158,
+      "medium": -10.7905,
+      "large": -12.3377
+    },
+    "rss_median_relative_change_percent": {
+      "small": -0.4872,
+      "medium": -12.2699,
+      "large": -18.3359
+    },
+    "stdout_exact_equal": true,
+    "returncode_all_zero": true
+  },
+  "decision": "accept_cli_frontend_engineering_gain",
+  "limitations": [
+    "No Native or target-system latency accuracy measured.",
+    "Small-scale RSS is not accepted as an improvement because P90 paired delta is positive.",
+    "Does not cover web, run_jobs, global cache or OS page-cache-cleared cold starts."
+  ]
+}
