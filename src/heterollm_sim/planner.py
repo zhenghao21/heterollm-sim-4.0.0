@@ -2924,6 +2924,16 @@ def _validate_scenario_uncached(
                     )
                 )
                 if source_component_id is None:
+                    # The authoring/API form may intentionally omit the
+                    # materialized source map. A declared control-plane target
+                    # is the source contract that the planner will realize
+                    # before execution; validate the resulting decision later.
+                    if (
+                        isinstance(authored_targets, Mapping)
+                        and tensor_name in authored_targets
+                        and str(authored_targets[tensor_name]).strip()
+                    ):
+                        continue
                     errors.append(
                         "weight tensor {} has no physical source for target {}".format(
                             logical_tensor, target_component_id
