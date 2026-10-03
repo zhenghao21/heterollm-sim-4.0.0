@@ -25380,18 +25380,30 @@ def _summarize_nand_task_traffic(
             raw = task.metadata.get("hbf_media")
         raw_rows = [raw] if isinstance(raw, Mapping) else []
         if direct:
+            direct_rows = []
             for key in ("read_service", "write_service"):
                 bill = direct.get(key)
                 if isinstance(bill, Mapping):
-                    raw_rows.append(bill)
-            if len(raw_rows) == 0 and isinstance(direct.get("memory_service"), Mapping):
-                raw_rows.append(direct["memory_service"])
+                    direct_rows.append(bill)
+            if direct_rows:
+                raw_rows = direct_rows
+            elif isinstance(direct.get("memory_service"), Mapping):
+                raw_rows = [direct["memory_service"]]
         if not raw_rows:
             continue
         task_count += 1
-        logical = direct.get("read_bytes", 0) + direct.get("write_bytes", 0)
-        if not isinstance(logical, (int, float)) or isinstance(logical, bool):
+        logical = sum(
+            value
+            for value in (
+                direct.get("read_bytes", 0),
+                direct.get("write_bytes", 0),
+            )
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        )
+        if logical <= 0:
             logical = task.metadata.get("logical_bytes", task.metadata.get("bytes", 0))
+        if not isinstance(logical, (int, float)) or isinstance(logical, bool):
+            logical = 0
         totals["logical_bytes"] += float(logical or 0)
         for raw in raw_rows:
             operation = str(raw.get("operation", "unknown"))
