@@ -41,7 +41,7 @@
 
 - `H29` 已补 120 个独立 CLI 子进程、60 对 AB/BA、每规模 20 对，并记录 wall/RSS/stdout 等价：small/medium/large wall 中位改善约 5.82%/10.79%/12.34%；medium/large RSS 中位改善约 12.27%/18.34%，small RSS 不接纳为改善。结论仍限定为 CLI 文本前端，不外推 web/run_jobs 或目标系统 latency。
 - `H36` 已补 20 对独立 run_scenario 冷/暖 provider 进程 AB/BA，并发现 `.venv` launcher RSS 误采样；校正进程树后，三规模 wall 中位数暖路径下降约 57.98%/75.56%/74.85%，report/makespan/task 结果 20/20 等价，但 RSS 分别上升约 1.98%/1.43%/5.25%，撤销内存改善结论。暖路径仍只是显式 provider 控制，没有安全共享生产生命周期、并发、eviction 或场景身份契约，不晋升生产候选。
-- `H41` 仍只是热点剖析；`H46` 已补 leaf-cache 配置级独立 A/B，完整 report/trace 等价但没有新的源码候选，RSS 仅为 before/after delta。
+- `H41` 已补 small/medium、exact/streaming/aggregate 的独立 run_scenario 前端 AB/BA：同策略 report/metadata 重复稳定，跨策略 task_count/makespan 与 retention contract 一致，但不同 retention 的 report/trace 差异是有意契约成本；没有安全源码候选。`H46` 已补 leaf-cache 配置级独立 A/B，完整 report/trace 等价但没有新的源码候选，RSS 仅为 before/after delta。
 - `H54` fresh/reused 有 245.4ms → 32.35ms、3.68MB → 1.58MB，但仍缺随机批次、淘汰、并发和生产入口。
 - `H61` 已补真实 `/api/run-jobs` 独立进程 AB/BA，并校正 launcher-only RSS：cached wall 在 n=8/32/64 约 -0.58%/-0.54%/-0.01%，tree RSS 约 -2.12%/+1.69%/+5.23%，输出完全等价但方向不稳定且大规模内存退化；保留有限负结论，不晋升缓存候选。
 
@@ -76,7 +76,7 @@
 1. **H42/H50/H57/H64 的剩余状态边界**：H65 的 primitive serialization 已闭合，继续补缺失/失败/coverage 的 report/API 投影，不重做 H65。
 2. **H62/H39/H40/H48/H49/H55/H24/H26/H30**：H62 已有当前版本前端机制证据，下一步补 known-offset 跨页激活、HTTP/report projection 和父/候选 A/B，随后扩展其它存储轮次。
 3. **回看 H37/H45/H53/H59**：H27/H38/H44/H52/H58 的当前成本前端边界已记录；后续只在新增 topology、跨请求或失败回滚触发面实际存在时补测，不能重复已通过的单 compute/单链路路径。
-4. **H41**：继续做重复独立性能 A/B；H36/H46/H61 已完成本批独立前端或配置 A/B，均保留 no-safe-production-callsite/无稳定候选边界，严格区分仿真器自身 wall/RSS 和被模拟系统延迟。
+4. **H36/H41/H46/H61**：独立前端性能证据已补齐当前登记边界，均保留 no-safe-production-callsite/无稳定候选边界；后续只有出现新的生产调用方或已登记触发面才重开，严格区分仿真器自身 wall/RSS 和被模拟系统延迟。
 5. **H28/H34/H43/H51/H60/H64**：如果确实要发布预测质量结论，再运行 Native 成对误差和留出泛化；否则保持“门控/证据边界修复”。
 
 三份机器审计产物已保存到忽略的 artifacts 目录：

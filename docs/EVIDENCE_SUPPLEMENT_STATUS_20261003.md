@@ -119,9 +119,16 @@
 - 进程树 RSS 校正后，cached wall 相对 baseline 在 8/32/64 requests 为 `-0.58%/-0.54%/-0.01%`，近似中性；tree RSS 为 `-2.12%/+1.69%/+5.23%`，方向随规模变化且大规模退化。结论为有限负结论，不晋升缓存源码候选或稳定速度/内存改善。
 - 仍未覆盖 `/api/run` 直接路径、多客户端并发扇出、跨请求/global cache 安全、Native/目标系统 latency；旧 launcher-only 产物和失败边界均保留。
 
+### H41 retention/metadata 独立前端 A/B
+
+- 补证记录：[experiments/round_041/supplement_20261003_retention.json](../experiments/round_041/supplement_20261003_retention.json)，SHA-256 `83b18ddada5287f3f41670bcae592362bf54de5df46e5a633ac2e1cbd34364b4`；矩阵 [h41_retention_metadata_ab.json](../artifacts/optimization/round_041/h41_retention_metadata_ab.json)，SHA-256 `b61e2e8362fa8c4013e92f116c8ca472bd2407908b75e5b04aa747fddfbfee4b`。
+- 真实入口 `build_reference_scenario → run_scenario(retention_policy) → compile_streaming_scenario → execute_incremental_schedule → report_dict`；small/medium 两种规模、exact/streaming/aggregate 三种策略，AB/BA 独立 child 共 12 次，全部退出码 0。
+- 同策略 report/metadata hash 在重复进程中完全相等；跨策略 task_count 与 makespan 完全相等，保留任务数严格符合 exact=全部、streaming=min(total,2000)、aggregate=0。wall/RSS 只作仿真器工程观测，未形成稳定源码候选。
+- 结论：H41 的 retention 语义与真实前端可复现性已补足为有限负结论；不同 retention 的 report/trace 差异是输出契约，不能强行归一成全报告等价，也没有 Web/run_jobs/global cache 或 Native 精度结论。
+
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
-- H29 的收益目前只属于 CLI 文本前端；H36 校正后只保留 wall/output 等价证据且无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 与进程树 RSS 校正，仍无稳定收益，H41 仍缺同等级补证。
+- H29 的收益目前只属于 CLI 文本前端；H36 校正后只保留 wall/output 等价证据且无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 与进程树 RSS 校正，仍无稳定收益；H41 已补 retention 前端边界并保留有限负结论。
 - H27、H38、H44 已完成真实 planner/event/resource/report 前端补证；H52 已完成正式 topology/HTTP 激活性扫描但 collective 仍被单计算组件拓扑阻塞；H58 已完成 routed LinkService 前端机制补证但无候选差异。解析矩阵不能替代前端计费证据。
 - H28/H34/H43/H51/H60/H64：若要声称预测精度或泛化改善，必须补同模型/硬件/shape/runtime 的 Native 成对 TTFT/TPOT/E2E 误差、留出和退化统计；当前记录均不构成精度改善。
 
