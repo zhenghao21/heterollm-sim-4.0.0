@@ -19,7 +19,7 @@
 
 最小补测应把 DRAM/HBM 视为一个家族、SSD/NVMe/HBF/NAND 视为一个家族，分别选至少两个 profile，使用同一 `run_scenario`/`run_jobs` 输入覆盖页内、跨页、跨 plane、read、program/write、erase、queue conflict 和非法参数。对 baseline/candidate 或 profile A/B 保存 TaskResult、makespan、resource bytes、energy、owner、queue、metadata、`report_dict` 和 HTTP JSON。没有真实设备/Native 时，结论只能写成“前端机制已验证”；若要写硬件准确性，另做 E3 设备成对误差。
 
-`H62` 已修复 direct HBF/NAND billing，并补到 `plan_runtime_placement → run_scenario → simulate_online → report_dict`；当前结果只能接纳为机制/守恒证据，因 known-offset 跨页未在 `run_scenario` 激活、HTTP 未启动、父/候选 A/B 未重跑，不能写成修复收益或硬件准确率。`H48/H49/H55` 仍有跨请求 queue、report/API projection 或 DRAM/HBM 传播边界，不能因为负向矩阵通过就视为整个存储方向已闭合。
+`H62` 已修复 direct HBF/NAND billing，并补到 `plan_runtime_placement → run_scenario → simulate_online → report_dict`；当前结果只能接纳为机制/守恒证据，因 known-offset 跨页未在 `run_scenario` 激活、HTTP 未启动、父/候选 A/B 未重跑，不能写成修复收益或硬件准确率。新 workload2 进一步证明测试中的 HBF/NAND direct exposure 仍会在 `compile_scenario` 前置拓扑与 `tensor_bytes` 校验失败，尚未到达 `_direct_memory_phase`。`H48/H49/H55` 仍有跨请求 queue、report/API projection 或 DRAM/HBM 传播边界，不能因为负向矩阵通过就视为整个存储方向已闭合。
 
 ### P0：评估、API、可视化和误差口径
 

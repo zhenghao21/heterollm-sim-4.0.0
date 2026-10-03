@@ -135,6 +135,7 @@
 
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
+- H62 新 workload2 尝试已保留：[experiments/round_062/supplement_20261003_workload2.json](../experiments/round_062/supplement_20261003_workload2.json)，SHA-256 `900ffe7795d30c621ded5a4eee52712782bc16f75ef6afabfdd08ae0d7f7581f`。该输入采用 `_nand_case` 的 HBF/NAND direct exposure 与 GPU GEMM，但在 `compile_scenario` 前置校验被合法拓扑和 `tensor_bytes[model_weights]` 声明阻塞，未进入 event/run/report；初始 import、syntax 和最终 validation 失败均保留，未改源码。
 - H29 的收益目前只属于 CLI 文本前端；H36 校正后只保留 wall/output 等价证据且无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 与进程树 RSS 校正，仍无稳定收益；H41 已补 retention 前端边界并保留有限负结论。
 - H27、H38、H44 已完成真实 planner/event/resource/report 前端补证；H52 已完成正式 topology/HTTP 激活性扫描但 collective 仍被单计算组件拓扑阻塞；H58 已完成 routed LinkService 前端机制补证但无候选差异。解析矩阵不能替代前端计费证据。
 - H28/H34/H43/H51/H60/H64：若要声称预测精度或泛化改善，必须补同模型/硬件/shape/runtime 的 Native 成对 TTFT/TPOT/E2E 误差、留出和退化统计；当前记录均不构成精度改善。

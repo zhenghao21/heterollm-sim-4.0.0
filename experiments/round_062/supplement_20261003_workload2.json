@@ -1,0 +1,170 @@
+{
+  "schema": "heterollm.optimization.supplement/v1",
+  "round_id": "round_062",
+  "supplement_id": "H62_DIRECT_MEMORY_WORKLOAD2_VALIDATION_BLOCKED_20261003",
+  "status": "complete_new_workload_blocked",
+  "phase": "prepare->verify->predict->score->review->promote",
+  "direction": "存储硬件建模粒度",
+  "hypothesis": "使用测试中独立的 HBF/NAND direct exposure 与 GPU GEMM workload 尝试进入正式 compile_scenario→run_scenario 前端，验证 _direct_memory_phase 是否能被 NAND/HBF workload 激活。",
+  "source_identity": {
+    "parent_commit": "8bfb8617ab8ab989a71850e7ea31fbb9e491f3d2",
+    "candidate_commit": null,
+    "source_changed": false,
+    "modules": {
+      "src/heterollm_sim/planner.py": {
+        "content_sha256": "0469eb1227fbda68c4241c32010bf7652e6c966a48ce2fa4792a9adcd75451d2",
+        "git_blob_sha": "8b9c24624488ca6a73e80aab53eba0a5e91e7c16"
+      },
+      "src/heterollm_sim/reporting.py": {
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f",
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528"
+      },
+      "src/heterollm_sim/config.py": {
+        "content_sha256": "0b1986397aa347ca56580a1e91673ae572aa242f059f4c87da5032c2138c5b2e",
+        "git_blob_sha": "167d63bf2d577cf8edf0e075af19a491ad6289d9"
+      },
+      "src/heterollm_sim/reference.py": {
+        "content_sha256": "ccd9262069936655059adf99c346c2295f84c001a2b0c6a93d33f00f299c6bdb",
+        "git_blob_sha": "97661edcb71bde5c8dda356e53f6cd8cf7d16ab2"
+      }
+    }
+  },
+  "input": {
+    "builder": "tests/test_llama_direct_memory.py::_nand_case",
+    "direct_metadata": {
+      "llama_backend_memory": {
+        "hbm1": {
+          "device_id": "gpu0",
+          "access": "direct"
+        }
+      }
+    },
+    "hbm1_kind": "hbf",
+    "tensor_to_component": {
+      "model_weights": "hbm1"
+    },
+    "nand_media": {
+      "version": "nand_media_v1",
+      "host_transaction_bytes": 64,
+      "host_max_request_bytes": 4096,
+      "media_page_bytes": 8192,
+      "command_queue_depth": 4,
+      "media_parallelism": 1,
+      "page_read_latency_ns": 1000.0,
+      "page_program_latency_ns": 2000.0,
+      "physical_planes": 1,
+      "physical_dies": 2,
+      "physical_channels": 1,
+      "access_pattern": "contiguous_page_aligned"
+    }
+  },
+  "data_roles": {
+    "development": "new workload validation probe only",
+    "comparison": "none; compile failed before parent/candidate prediction",
+    "holdout": "none",
+    "final_acceptance": "activation boundary only; no accuracy/performance"
+  },
+  "entrypoint": "compile_scenario → run_scenario(retention_policy=aggregate) → report_dict",
+  "commands": [
+    {
+      "command": ".venv\\Scripts\\python.exe tools\\command_provenance.py --output artifacts/optimization/evidence_supplement_20261003_batch5/storage/h62_workload2_final_provenance.json --cwd . -- .venv\\Scripts\\python.exe artifacts/optimization/evidence_supplement_20261003_batch5/storage/h62_workload2_probe.py",
+      "exit_code": 1,
+      "artifact": "artifacts/optimization/evidence_supplement_20261003_batch5/storage/h62_workload2_final_provenance.json",
+      "artifact_sha256": "b3d4d851dcfce2f02af88dd0e7d546ef76fac623e2cbe221a988ba86f7faa44a"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/evidence_supplement_20261003_batch5/storage/h62_workload2_probe.py",
+      "exit_code": 1,
+      "note": "initial inline/import and syntax failures preserved in separate provenance artifacts"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "artifacts/optimization/evidence_supplement_20261003_batch5/storage/h62_new_workload_probe.json",
+      "sha256": "05018536b936f118a9b96a1fd256e1f7257b4b8447e3019bc0ff3d024df6c455"
+    },
+    {
+      "path": "artifacts/optimization/evidence_supplement_20261003_batch5/storage/h62_workload2_final_provenance.json",
+      "sha256": "b3d4d851dcfce2f02af88dd0e7d546ef76fac623e2cbe221a988ba86f7faa44a"
+    },
+    {
+      "path": "artifacts/optimization/evidence_supplement_20261003_batch5/storage/h62_workload2_probe.py",
+      "sha256": "da44035e6c0f2b39ce8478e36636cde9f1cc10e4f5416588bb5553081b8ddfb0"
+    }
+  ],
+  "observations": {
+    "schema": "heterollm.h62.new_workload_probe/v1",
+    "round_id": "round_062",
+    "source_commit": "8bfb8617ab8ab989a71850e7ea31fbb9e491f3d2",
+    "scenario_input": {
+      "builder": "tests/test_llama_direct_memory.py::_nand_case",
+      "direct_metadata": {
+        "llama_backend_memory": {
+          "hbm1": {
+            "device_id": "gpu0",
+            "access": "direct"
+          }
+        }
+      },
+      "hbm1_kind": "hbf",
+      "nand_media": {
+        "version": "nand_media_v1",
+        "host_transaction_bytes": 64,
+        "host_max_request_bytes": 4096,
+        "media_page_bytes": 8192,
+        "command_queue_depth": 4,
+        "media_parallelism": 1,
+        "page_read_latency_ns": 1000.0,
+        "page_program_latency_ns": 2000.0,
+        "physical_planes": 1,
+        "physical_dies": 2,
+        "physical_channels": 1,
+        "access_pattern": "contiguous_page_aligned"
+      },
+      "tensor_to_component": {
+        "model_weights": "hbm1"
+      }
+    },
+    "attempt": {
+      "entrypoint": "compile_scenario -> run_scenario(aggregate) -> report_dict",
+      "compile_reached": false,
+      "run_reached": false
+    },
+    "outcome": "validation_blocked",
+    "error_type": "ScenarioValidationError",
+    "error": "场景校验失败：\n- 拓扑校验失败：\n- gpu-hbm1 [hbm_dedicated_endpoint]: 本地显存链路必须且只能连接一个 GPU 本地显存组件\n- gpu-hbm1 [hbf_non_ucie_protocol]: V4 中的 HBF 必须通过 HBF 逻辑链路或其 UCIe 物理承载连接\n- 场景校验未通过：tensor_bytes[model_weights] must declare at least 43778048 bytes",
+    "module_paths": {
+      "src/heterollm_sim/planner.py": {
+        "content_sha256": "0469eb1227fbda68c4241c32010bf7652e6c966a48ce2fa4792a9adcd75451d2",
+        "git_blob_sha": "8b9c24624488ca6a73e80aab53eba0a5e91e7c16"
+      },
+      "src/heterollm_sim/reporting.py": {
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f",
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528"
+      },
+      "src/heterollm_sim/config.py": {
+        "content_sha256": "0b1986397aa347ca56580a1e91673ae572aa242f059f4c87da5032c2138c5b2e",
+        "git_blob_sha": "167d63bf2d577cf8edf0e075af19a491ad6289d9"
+      },
+      "src/heterollm_sim/reference.py": {
+        "content_sha256": "ccd9262069936655059adf99c346c2295f84c001a2b0c6a93d33f00f299c6bdb",
+        "git_blob_sha": "97661edcb71bde5c8dda356e53f6cd8cf7d16ab2"
+      }
+    }
+  },
+  "decision": {
+    "status": "blocked_before_compile",
+    "finding": "新 workload 在 compile_scenario 前置验证失败，未进入 planner/event/run/report；错误明确指出 gpu-hbm1 dedicated endpoint/HBF link topology 与 model_weights tensor_bytes 声明不满足正式 reference scenario contract。",
+    "source_action": "none",
+    "native_accuracy": "not_applicable",
+    "performance": "not_measured"
+  },
+  "uncovered": [
+    "需要构造合法 HBF/UCIe endpoint topology",
+    "需要满足 model_weights tensor_bytes 最低声明",
+    "未执行 parent/candidate A/B",
+    "未激活 _direct_memory_phase",
+    "无 Native/设备数据"
+  ],
+  "next_action": "保留失败边界；只有完成合法拓扑与 tensor_bytes 输入后才允许下一次 H62 workload。"
+}
