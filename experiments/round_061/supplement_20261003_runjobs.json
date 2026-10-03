@@ -1,0 +1,310 @@
+{
+  "schema": "heterollm.optimization.evidence_supplement/v1",
+  "round_id": "round_061",
+  "supplement_id": "H61_RUNJOBS_HTTP_INDEPENDENT_AB_MATRIX_20261003",
+  "hypothesis_id": "H61_ONLINE_REPORT_METADATA_REUSE",
+  "direction": "运行速度与内存",
+  "primary_goal": "为 H61 已拒绝的 metadata cache 假设补充真实 /api/run-jobs 前端独立进程 A/B；确认 output equivalence、wall/RSS 及退化边界。",
+  "source_identity": {
+    "parent_source_commit": "6e680960fbdb3780e1c14da940753a11ad79284e",
+    "candidate_source_commit": "6e680960fbdb3780e1c14da940753a11ad79284e",
+    "candidate_source_changed": false,
+    "source_commit_observed": "6e680960fbdb3780e1c14da940753a11ad79284e",
+    "git_status": "clean except pytest-of-A permission warning",
+    "module_paths": {
+      "src/heterollm_sim/reporting.py": {
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528",
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f"
+      },
+      "src/heterollm_sim/run_jobs.py": {
+        "git_blob_sha": "77313c18e8e298d4628b590673d3b5f7bb651174",
+        "content_sha256": "3e3577436635f3b77054b5b2aca457a367c53da271f69506250c1af1a37c2ecc"
+      },
+      "src/heterollm_sim/web.py": {
+        "git_blob_sha": "12009c42d38c64fa0f63b2b97e20fe644999ea02",
+        "content_sha256": "1cf571b6500b1b9f369e3e9fc365ee9547f0a38aa8e5253ee0f2dfc5a72bdea0"
+      }
+    }
+  },
+  "hypothesis": {
+    "claim": "每个 report_dict 调用内部按 batch identity 复用 metadata merge，若真实后台 run-jobs 前端使用 report-local cache，则同一报告语义保持不变且可能降低仿真器 wall/RSS。",
+    "falsifier": "任一报告 digest/bytes 不同、HTTP job 非 completed、wall 或 RSS 无稳定改善，或 cache arm 只改变 instrumentation 而非生产安全候选。",
+    "candidate_status": "runtime_monkeypatch_only_no_source_candidate"
+  },
+  "data_roles": {
+    "development": "reference scenario scaled request_count 8/32/64, prompt 128/output 16, aggregate retention",
+    "comparison": "同一 payload、同一源码、独立 child process，baseline 原始 run_jobs.report_dict vs cached report-local monkeypatch，AB/BA 交替",
+    "holdout": "每个 scale 三对独立 child process；仅用于 H61 bounded runtime review，未用于候选选择",
+    "final_acceptance": "report canonical SHA/bytes exact equality；wall/RSS only simulator engineering metrics，不能外推 Native/target latency"
+  },
+  "entrypoint": {
+    "real_http": "POST /api/run-jobs -> GET /api/run-jobs/{job_id}",
+    "internal_chain": "RunJobManager._run_job -> run_scenario -> report_dict",
+    "controls": [
+      "status=202 submit",
+      "terminal status=completed",
+      "retention_policy=aggregate",
+      "report canonical SHA and bytes",
+      "all child returncodes zero",
+      "AB/BA alternation"
+    ]
+  },
+  "commands": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m py_compile artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.py",
+      "exit_code": 0
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.py",
+      "exit_code": 0,
+      "artifact": "artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.json"
+    },
+    {
+      "command": "tools/command_provenance.py --output artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_provenance.json --cwd . -- .venv\\Scripts\\python.exe artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.py",
+      "exit_code": 0,
+      "duration_seconds": 63.20640430005733,
+      "provenance_sha256": "dd9b26ee0b7e3d3e8801d7a08bf5ea0e7265dae395aba0116228994977850ede"
+    }
+  ],
+  "matrix": {
+    "artifact": "artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.json",
+    "artifact_sha256": "250a63a72c49d17f70614af49f44624337b4fc5f623bbf5ed1dd9b9e70ac8902",
+    "provenance_artifact": "artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_provenance.json",
+    "provenance_artifact_sha256": "dd9b26ee0b7e3d3e8801d7a08bf5ea0e7265dae395aba0116228994977850ede",
+    "scales": {
+      "scales_request_count": [
+        8,
+        32,
+        64
+      ],
+      "repeats_per_child": 3,
+      "pairs_per_scale": 3,
+      "AB_BA_alternation": true,
+      "retention_policy": "aggregate",
+      "output_equivalence": "canonical report SHA and byte length",
+      "rss_sampling": "parent psutil peak process RSS"
+    },
+    "summary": [
+      {
+        "request_count": 8,
+        "pairs": 3,
+        "baseline_wall_median_s": 2.237701900070533,
+        "cached_wall_median_s": 2.2038256999803707,
+        "wall_delta_pct_cached_vs_baseline": -1.513883510984848,
+        "baseline_peak_rss_median_bytes": 6094848,
+        "cached_peak_rss_median_bytes": 6115328,
+        "rss_delta_pct_cached_vs_baseline": 0.33602150537634934,
+        "report_output_equivalent": true,
+        "baseline_report_digests": [
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b"
+        ],
+        "cached_report_digests": [
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+          "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b"
+        ],
+        "all_returncodes_zero": true,
+        "worker_helper_stats": [
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 24,
+            "hits": 72,
+            "distinct_batch_ids": 24
+          },
+          {
+            "calls": 24,
+            "hits": 72,
+            "distinct_batch_ids": 24
+          },
+          {
+            "calls": 24,
+            "hits": 72,
+            "distinct_batch_ids": 24
+          }
+        ]
+      },
+      {
+        "request_count": 32,
+        "pairs": 3,
+        "baseline_wall_median_s": 2.9589245999231935,
+        "cached_wall_median_s": 2.9662214000709355,
+        "wall_delta_pct_cached_vs_baseline": 0.2466031120877954,
+        "baseline_peak_rss_median_bytes": 6098944,
+        "cached_peak_rss_median_bytes": 6098944,
+        "rss_delta_pct_cached_vs_baseline": 0.0,
+        "report_output_equivalent": true,
+        "baseline_report_digests": [
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f"
+        ],
+        "cached_report_digests": [
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+          "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f"
+        ],
+        "all_returncodes_zero": true,
+        "worker_helper_stats": [
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 24,
+            "hits": 72,
+            "distinct_batch_ids": 24
+          },
+          {
+            "calls": 24,
+            "hits": 72,
+            "distinct_batch_ids": 24
+          },
+          {
+            "calls": 24,
+            "hits": 72,
+            "distinct_batch_ids": 24
+          }
+        ]
+      },
+      {
+        "request_count": 64,
+        "pairs": 3,
+        "baseline_wall_median_s": 5.205220899893902,
+        "cached_wall_median_s": 5.235704999999143,
+        "wall_delta_pct_cached_vs_baseline": 0.5856446958065087,
+        "baseline_peak_rss_median_bytes": 6103040,
+        "cached_peak_rss_median_bytes": 6094848,
+        "rss_delta_pct_cached_vs_baseline": -0.13422818791946067,
+        "report_output_equivalent": true,
+        "baseline_report_digests": [
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac"
+        ],
+        "cached_report_digests": [
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+          "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac"
+        ],
+        "all_returncodes_zero": true,
+        "worker_helper_stats": [
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 0,
+            "hits": 0,
+            "distinct_batch_ids": 0
+          },
+          {
+            "calls": 48,
+            "hits": 144,
+            "distinct_batch_ids": 48
+          },
+          {
+            "calls": 48,
+            "hits": 144,
+            "distinct_batch_ids": 48
+          },
+          {
+            "calls": 48,
+            "hits": 144,
+            "distinct_batch_ids": 48
+          }
+        ]
+      }
+    ],
+    "independent_child_processes": true,
+    "all_returncodes_zero": true
+  },
+  "decision": {
+    "status": "reject_limited_negative",
+    "acceptance": "report output exact canonical digest/bytes equality at 8/32/64; all 18 child processes and 18 jobs completed with rc0",
+    "performance": "no stable gain: cached wall -1.51% at 8 but +0.25% at 32 and +0.59% at 64 (latest provenance matrix); RSS +0.34% at 8, 0% at 32, -0.13% at 64; reject runtime promotion",
+    "memory": "no stable RSS improvement",
+    "source_action": "none; do not promote monkeypatch into source",
+    "negative_boundary": "真实 HTTP run-jobs path proves output contract and no stable cache benefit; /api/run direct, concurrent fanout, global cache safety, Native and target latency remain unmeasured"
+  },
+  "uncovered": [
+    "/api/run direct path",
+    "multi-client concurrent API fanout",
+    "cross-request/global cache safety",
+    "Native/real-device accuracy or latency",
+    "production duration beyond 3 pairs per scale",
+    "OS-level RSS decomposition"
+  ],
+  "artifact_sha256": {
+    "script": "2e7dccd5ae598c1cc27de8290863c0f9cf9098725173834ed82656ae7bbf219e",
+    "payload_without_artifact_field": "050ce9e10f41e1b65a575b9b046e617733ad69075f41fe52808b76c3b8feaaed"
+  }
+}
