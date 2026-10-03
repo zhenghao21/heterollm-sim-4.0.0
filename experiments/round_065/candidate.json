@@ -1,20 +1,63 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_065",
-  "status": "prepare",
+  "status": "accepted",
   "hypothesis": {
     "id": "H65_ONLINE_REPORT_PRIMITIVE_SERIALIZATION",
     "direction": "评估/API与可视化口径",
     "claim": "online report_dict 直接返回 tuple guardrails，JSON roundtrip 后为 list，导致 Python report consumers 与 API primitive contract 不一致。",
-    "trigger": "H64 matrix online_json_roundtrip=false at /summary/simulated_subtargets/hardware_phase_ledger/guardrails",
+    "trigger": "独立矩阵复现 online_json_roundtrip=false at /summary/simulated_subtargets/hardware_phase_ledger/guardrails",
     "falsifier": "post-fix direct report_dict roundtrip equal and guardrails is list while static/API/score controls remain unchanged"
   },
   "parent_commit": "9a4d39a814a213b4af91307f9881769bb8adf0b8",
-  "candidate_source_commit": null,
-  "source_sha256": null,
-  "changed_files": [],
-  "independent_evidence": [],
-  "activation_checks": [],
-  "deferred_candidates": [],
-  "tests": []
+  "candidate_source_commit": "4efc351c77e189b18a11680eb615c443bd8a92e9",
+  "source_sha256": {
+    "reporting_file": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f",
+    "reporting_blob": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528",
+    "reporting_function": "61731061092b87338c09ae8a01083a72b4459f27fe1ca2e5e9933589fb971277",
+    "final_review": "28490a7b7c0992a23a26cebbd5cf330f5a0f415700f472dd0c8f6a1bbba62baf"
+  },
+  "changed_files": [
+    "src/heterollm_sim/reporting.py",
+    "tests/test_webui_runtime_contract.py"
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_065/source_scan_independent.json",
+    "artifacts/optimization/round_065/serialization_matrix_independent.json",
+    "artifacts/optimization/round_065/source_scan_postfix_independent.json",
+    "artifacts/optimization/round_065/source_scan_postfix_independent.json.sha256",
+    "artifacts/optimization/round_065/serialization_matrix_postfix_independent.json",
+    "artifacts/optimization/round_065/serialization_matrix_postfix_independent.json.sha256",
+    "artifacts/optimization/round_065/final_review.json",
+    "artifacts/optimization/round_065/final_review.json.sha256"
+  ],
+  "activation_checks": [
+    "online aggregate report guardrails is list",
+    "online and static direct report JSON roundtrip equal",
+    "HTTP /api/run and /api/simulate-score JSON roundtrip equal",
+    "missing native remains HTTP 400 missing_native_reference",
+    "post-fix source identity matches current head and origin/main",
+    "focused 56 passed",
+    "full 3116 passed/4 skipped"
+  ],
+  "deferred_candidates": [
+    "storage frontend evidence H62/H39/H40/H48/H49/H55/H24/H26/H30",
+    "independent performance A/B H29/H36/H41/H46/H54/H61",
+    "Native paired accuracy evidence for accuracy claims"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_web.py tests/test_webui_runtime_contract.py tests/test_end_to_end.py -q",
+      "exit_code": 0,
+      "result": "56 passed"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "exit_code": 0,
+      "result": "3116 passed, 4 skipped"
+    }
+  ],
+  "source_commit": "4efc351c77e189b18a11680eb615c443bd8a92e9",
+  "review": "Independent pre/post report/API matrix reproduced and closed the tuple/list serialization root cause. The fix is accepted as an evaluation contract repair only; it provides no accuracy or performance evidence.",
+  "review_artifact_sha256": "28490a7b7c0992a23a26cebbd5cf330f5a0f415700f472dd0c8f6a1bbba62baf"
 }
