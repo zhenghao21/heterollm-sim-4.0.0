@@ -37,6 +37,15 @@
 - 限制：HTTP `/api/run` 未启动；没有 Native 或物理设备数据；解析/前端守恒不能作为时延精度或预测精度证据。
 - 结论：接纳为 H27 真实 planner→event/resource→report_dict 计费链机制证据；没有 Native 精度、部署吞吐或硬件时延准确性结论。
 
+### H38：计算成本模型边界补证（当前源码，无候选）
+
+- 结果：[h38_frontend_cost_coverage.json](../artifacts/optimization/evidence_supplement_20261003/cost_model/h38_frontend_cost_coverage.json)，SHA-256 `eeeb53febb365258c941a76ed61ac764c7e872c9f42859c896c55e33c1cacb2b`；命令 provenance [h38_frontend_cost_coverage.provenance.json](../artifacts/optimization/evidence_supplement_20261003/cost_model/h38_frontend_cost_coverage.provenance.json)，SHA-256 `e601ce1a75a60e458a9423eaf468b0e25f5af8c0a1546527842b8ba93738caa7`，returncode=0。
+- 当前源码为执行命令时的 `3a23a4e2b8cc89cad9422f6a8c205186be74870f`（后续 H44/H58 仅提交记录/docs，成本模块 content/blob SHA 未变）；结果记录写入 `experiments/round_038/supplement_20261003.json`，SHA-256 `dc111e55be5473996e2204750b7d250ccd810cc19a3bc123ae16a2dc03395865`。
+- 真实入口：`build_reference_scenario → compile_scenario → simulate_schedule → run_scenario(aggregate) → report_dict`，并启动本地 `build_server(port=0)` 执行 HTTP `POST /api/run`；HTTP 返回 200。
+- 独立同输入控制：GEMM 四组 shape、reduction 四组 shape、非法 shape/dtype 拒绝、读写方向带宽/时延（serialized/overlapped）、单资源排队与双 lane 有限流水线；全部控制通过，planner/event/report 与 HTTP 摘要一致。
+- 决策：没有发现 H38 新源码缺陷，不修改/不晋升候选；本批只支持成本模型机制、守恒、队列和 API 前端证据，不支持 Native 精度或真实性能结论。
+- 未覆盖：MMA/collective/full-kernel 微架构、跨请求生产缓存、真实硬件校准和 Native 成对误差。
+
 ## 第二批补证（同一批次，未改源码）
 
 ### H62 parent/candidate 前端 A/B

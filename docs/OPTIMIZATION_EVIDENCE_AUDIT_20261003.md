@@ -49,7 +49,7 @@
 
 ### P1：成本模型必须进入 planner/event/resource/report
 
-`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。H27 已补 `compile_scenario → simulate_schedule → run_scenario → report_dict`，确认 memory/GEMM/reduction 的 bytes/energy/service/owner/queue 守恒与非法控制；H58 本批已补 routed LinkService 的同级 compile→event→run→report 机制 A/B，但 parent/candidate 无差异。H27/H58 仍未有 Native，H38/H44/H52 仍待各自前端 workload。
+`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。H27 已补 `compile_scenario → simulate_schedule → run_scenario → report_dict` 并有 HTTP A/B；H38 现已在执行源码补真实 `planner → event → resource → report_dict` 与 HTTP `/api/run`，加上 shape、方向时延、单队列/双 lane 控制，但无候选 A/B、Native 或校准性能结论；H58 本批已补 routed LinkService 的同级 compile→event→run→report 机制 A/B，但 parent/candidate 无差异且无 Native；H44/H52 仍待各自前端 workload。
 
 补测应通过真实 planner/event/run_scenario 产生 GEMM、reduction、MMA、collective、link/transfer workload，比较 logical/physical bytes、energy、owner capacity、queue/phase、makespan 和最终 report。覆盖 shape、并发、zero/invalid dtype/size、duplicate owner。Native 带宽/延迟只有有独立硬件观测才可报告。
 
