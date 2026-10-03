@@ -20,3 +20,11 @@
 - H62 direct activation scan确认正式条件和当前 workload边界，direct_memory_access_count=0、nand_task_count=0，未产生收益晋升。
 - H52 collective scan确认当前 topology 只有一个 compute component，正式多参与者 collective 被精确阻塞；本地 route oracle通过但不构成E2E。
 - H54 context-local reuse完成120进程/60对AB-BA，wall和内存收益稳定但没有生产安全调用方，不晋升新源码候选。
+
+
+## 2026-10-03 补证状态（自动任务）
+
+- 成本模型前端补证已覆盖 H38/H44/H52/H58：H38/H44/H58 进入真实 planner/event/resource/report（H38 另有 HTTP /api/run），H52 保留单 compute topology blocker；均无 Native 或性能结论。
+- 运行速度/内存补证已覆盖 H36/H41/H46/H61：H36 RSS launcher 误采样已校正，wall 复用收益保留但 RSS 上升；H41 retention 前端 contract 完整；H46/H61 无稳定生产候选。
+- Native readiness 已审计 H28/H34/H43/H51/H60/H64：当前无同源码/模型/硬件/shape/runtime 成对 TTFT/TPOT/E2E 与留出数据，全部保持 blocked，不得声称精度改善。
+- H62 workload2 新尝试在 compile 前置拓扑与 tensor_bytes 校验失败；_direct_memory_phase 仍未被正式 workload 激活，失败 artifact 与 provenance 已保留。
