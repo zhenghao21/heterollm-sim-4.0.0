@@ -50,3 +50,10 @@ H66 是部分实现和选定 NAND read 前端/API 证据，DRAM 与 NAND 两个�
 
 - H67：存储硬件建模粒度方向；完成 DRAM/HBM 组织 profile（subchannel、rank、bank-group、stack/pseudo-channel）与 NAND channel/die/plane、page/program/erase、sequential program、跨请求 queue 的共享执行链。新增真实 `compile_scenario→run_scenario→report_dict→/api/run→/api/run-jobs` workload：380 tasks、10 DRAM contracts、3 NAND read/program/erase probes；Python/API/job ledger 一致。DRAM ledger 保留 burst/row/refresh/queue/owner/physical bytes，NAND ledger 保留 page/organization/mapping/program/erase/queue/owner/physical bytes。定向与相关回归 393 passed；Native 方向复用项目已有 counter-proven Qwen2.5 pair 对当前 simulator replay，TTFT/TPOT/E2E APE 为 12.641%/21.693%/15.696%，绝对误差为 3.839/3.357/7.196ms；只支持一个有效 pair 的限定结论，不外推泛化。当前新 Native probe 因 semantic proof/extractor drift 保留为 diagnostic，headline fields 不纳入正式误差。下一步若要发布跨模型泛化结论，增加独立有效 Native cells；不要把当前一对 replay 当泛化证明。
 - H67 补充多模型 replay：复用 5 个现有 `counter_proven` Native cells（qwen25/qwen35/qwen38/smollm2/tinyllama），当前 simulator replay 全部 valid；TTFT/TPOT/E2E median APE 为 9.392%/38.108%/24.806%，最大 APE 为 108.228%/73.702%/41.407%。这是历史揭示矩阵的当前重放，不能替代新的盲测 holdout，但已经提供多模型误差分布，不能再描述为“没有误差对比”。
+
+
+## H68：校准与 DRAM/NAND 组合验证（2026-10-03）
+
+- 预测精度与泛化方向：将已有 Qwen2.5 phase 校准证据补齐 Native EXE/DLL 哈希、模型/硬件指纹和 Native→仿真器 runtime 适配映射，形成 `configs/calibration/qwen25_p4_native_phase_v1.json`；`phase_boundary` 只拥有 engine phase 成本，DRAM/NAND resolver 保持物理服务、字节、页和队列 owner。
+- 同一 Native payload 的 qwen25 p4 long/long 三次 replay 中，A（新 DRAM/NAND 路径、无校准）到 B（同路径、校准开启）的中位 APE：TTFT 51.941%→8.198%、TPOT 38.695%→30.572%、E2E 39.637%→25.271%，改善 43.743/8.123/14.366 个百分点；storage companion 的 DRAM/NAND ledger invariant 均为 true。
+- 这是已揭示历史 replay 的开发改善证据，不是盲测泛化或器件级 DRAM/NAND 延迟校准；r1 是校准来源，r2/r3 是同形状历史重复。下一轮切换评估/API与可视化口径，或在新独立 Native capture 后再做正式泛化验收。

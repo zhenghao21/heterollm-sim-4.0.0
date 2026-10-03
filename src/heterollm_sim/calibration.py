@@ -73,6 +73,13 @@ class NativeCalibrationProfile:
             for phase, value in self.phase_boundary_ns_per_invocation.items():
                 if str(phase) not in {"prefill", "decode"} or _finite_non_negative(value) is None:
                     raise ValueError("calibration phase boundary values must be finite and phase-scoped")
+        if self.phase_boundary_policy is not None and str(self.phase_boundary_policy) not in {
+            "one_task_per_phase_invocation",
+            "residual_once_per_phase_invocation",
+        }:
+            raise ValueError(
+                "calibration phase boundary policy is unsupported"
+            )
         if self.decode_first_invocation_policy is not None and str(
             self.decode_first_invocation_policy
         ) != "first_decode_only":
@@ -840,14 +847,18 @@ def phase_boundary_calibration_ns(
 ) -> float | None:
     """Return one measured launch+sync boundary cost per physical invocation.
 
-    Evidence must explicitly declare ``one_task_per_phase_invocation``.  A
-    phase aggregate without that policy is intentionally blocked: API calls
-    are not one-to-one with planner operators and spreading them would count
-    launch/synchronization more than once.
+    Evidence must explicitly declare either ``one_task_per_phase_invocation``
+    for measured CUDA launch+sync time or ``residual_once_per_phase_invocation``
+    for a separately measured engine-phase residual.  Both are charged once;
+    the planner preserves the policy so an engine residual is not reported as
+    CUDA API evidence.
     """
     if not isinstance(profile, NativeCalibrationProfile):
         profile = profile_from_mapping(profile)
-    if profile is None or profile.phase_boundary_policy != "one_task_per_phase_invocation":
+    if profile is None or profile.phase_boundary_policy not in {
+        "one_task_per_phase_invocation",
+        "residual_once_per_phase_invocation",
+    }:
         return None
     if profile.coverage_status is not None and profile.coverage_status != "covered":
         return None

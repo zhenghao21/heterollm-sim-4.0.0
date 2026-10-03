@@ -1,0 +1,74 @@
+{
+  "schema": "heterollm.experiment/v1",
+  "round_id": "round_068",
+  "hypothesis_id": "H68_CALIBRATION_COMPOSES_WITH_DRAM_NAND",
+  "created_utc": "2026-10-03T13:39:59.875988+00:00",
+  "direction": "prediction_accuracy_and_generalization",
+  "previous_round": "round_067",
+  "previous_direction": "storage_hardware_modeling_granularity",
+  "direction_switch_reason": "H67 已完成 DRAM/NAND 机制链，本轮转向验证校准与硬件模型的组合及误差改善。",
+  "primary_goal": "把现有 Native 校准证据补成可通过身份门控的开发配置，并用同一 Native payload 对照 A/B，确认 engine phase calibration 与 DRAM/NAND ledger 同时生效且不互相拥有成本。",
+  "scope": {
+    "model": [
+      "qwen25"
+    ],
+    "shape": "prompt long/output long/p4",
+    "native_replay_cells": [
+      "qwen25__long__long__p4__r1",
+      "qwen25__long__long__p4__r2",
+      "qwen25__long__long__p4__r3"
+    ],
+    "hardware": "payload RTX 5080 identity 96a17c...",
+    "storage_control": "round_067 authored DRAM/NAND frontend workload"
+  },
+  "inputs": {
+    "calibration_profile": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\configs\\calibration\\qwen25_p4_native_phase_v1.json",
+      "sha256": "16665a6151745c40933094e2c515063a495c15433c1aeab46eca9c4c5fd7ff75"
+    },
+    "joint_ab": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\work\\round_068_qwen25_ab.json",
+      "sha256": "8a393a002558d8a2d0586c020b427cc5bed0edc0c8f81374fa95a046042ea104"
+    },
+    "ledger_companion": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\work\\round_067_joint_ab\\ledger_companion.json",
+      "sha256": "181e4740cfe25e80f4210adea7fd8af7c27592bbb3e7a0fa63cfd8ab4835540f"
+    },
+    "historical_error_matrix": {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\work\\round_067_replay_summary.json",
+      "sha256": "63e4a43602e9fa1c04e2490c37280f750b9b94b2962af5f056f7ddbdfeade648"
+    },
+    "parent_head": "1ec10021ca4fde6e5ebf813d17ddc0fafd3f9d3d"
+  },
+  "data_roles": {
+    "r1": "development/calibration-source replay; revealed historical Native",
+    "r2_r3": "same-shape repeat Native replay, not blind acceptance",
+    "storage_control": "mechanism/invariance evidence; separate from timing score",
+    "five_model_matrix": "historical analytical baseline retained for complete error table"
+  },
+  "scoring": {
+    "boundary": "engine TTFT/TPOT/E2E",
+    "error_metrics": [
+      "signed_error_ms",
+      "absolute_error_ms",
+      "signed_error_pct",
+      "APE_pct"
+    ],
+    "aggregation": "median across 3 qwen25 same-shape cells",
+    "improvement": "positive APE percentage-point delta means B is closer"
+  },
+  "budget": {
+    "native_new_runs": 0,
+    "replay_runs": 6,
+    "storage_companion_runs": 2,
+    "focused_tests": 1
+  },
+  "protection_rules": [
+    "no new coefficients fitted from holdout rows",
+    "no calibration ownership of DRAM/NAND physical service",
+    "no FTL/GC/cycle-accuracy claim",
+    "historical replay not blind release acceptance"
+  ],
+  "source_head": "83ae5efbfb683fe6e18bea79fdba4f782e73a2f7",
+  "phase": "prepare_verify_predict_score_review_promote"
+}

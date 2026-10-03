@@ -1,0 +1,25 @@
+{
+  "schema": "heterollm.candidate/v1",
+  "round_id": "round_068",
+  "parent_head": "1ec10021ca4fde6e5ebf813d17ddc0fafd3f9d3d",
+  "candidate_head": "83ae5efbfb683fe6e18bea79fdba4f782e73a2f7",
+  "changes": [
+    "identity-complete qwen25 phase calibration adapter under configs/calibration",
+    "NativeCalibrationProfile accepts residual phase policy with explicit engine owner/evidence scope",
+    "planner preserves one phase-boundary task and distinguishes CUDA API boundary vs engine residual",
+    "tests cover policy validation, identity gate, storage non-interference"
+  ],
+  "activation": {
+    "profile_gate": "pass for qwen25 r1/r2/r3; binary plus runtime-artifact hash set matched",
+    "qwen25_phase_boundary_hit": true,
+    "dram_nand_storage_control": "10 DRAM tasks and 58 NAND tasks retained unchanged"
+  },
+  "tests": {
+    "tests/test_native_evidence.py": "57 passed",
+    "git_diff_check": "passed",
+    "full_pytest": "3146 passed, 4 skipped in 438.80s",
+    "focused": "128 passed",
+    "py_compile": "passed"
+  },
+  "known_limit": "profile is development identity-bound adapter; source coefficient is existing measured training profile"
+}

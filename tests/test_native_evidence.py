@@ -562,6 +562,24 @@ def test_phase_boundary_requires_explicit_policy_and_is_one_value_per_invocation
     )
     assert phase_boundary_calibration_ns(profile, "prefill") == 2075657.0
     assert phase_boundary_calibration_ns(profile, "decode") == 1442557.714
+    residual = NativeCalibrationProfile(
+        phase_boundary_ns_per_invocation={"prefill": 17.0, "decode": 23.0},
+        phase_boundary_policy="residual_once_per_phase_invocation",
+        coverage_status="covered",
+    )
+    assert phase_boundary_calibration_ns(residual, "decode") == 23.0
+    assert phase_boundary_calibration_ns(
+        NativeCalibrationProfile(
+            phase_boundary_ns_per_invocation={"decode": 23.0},
+            phase_boundary_policy="residual_once_per_phase_invocation",
+            coverage_status="covered",
+            model_sha256="model-a",
+        ),
+        "decode",
+        model_sha256="model-b",
+    ) is None
+    with pytest.raises(ValueError, match="phase boundary policy"):
+        NativeCalibrationProfile(phase_boundary_policy="end_to_end_residual")
     blocked = NativeCalibrationProfile(
         phase_boundary_ns_per_invocation={"prefill": 2075657.0},
         coverage_status="covered",
@@ -631,8 +649,37 @@ def test_phase_boundary_lowering_adds_one_task_after_frontend_not_per_operator()
     assert len(boundaries) == 1
     assert boundaries[0].metadata["runtime_phase"] == "prefill"
     assert boundaries[0].demands[0].service_ns == 1234.0
+    assert boundaries[0].metadata["cost_owner"] == "native_cuda_api_phase_boundary"
+    assert boundaries[0].metadata["evidence_scope"] == "aggregate_launch_plus_sync_once_per_phase_invocation"
     assert not any(task.metadata.get("event_kind") == "native_phase_boundary"
                    for task in schedule.tasks if task.name.endswith("kernel_launch"))
+
+
+def test_phase_residual_boundary_keeps_engine_owner_and_does_not_create_storage_demands():
+    from dataclasses import replace
+    from heterollm_sim.planner import compile_scenario
+
+    base = build_reference_scenario()
+    placement = replace(base.placement, metadata={
+        **base.placement.metadata,
+        "native_calibration": NativeCalibrationProfile(
+            phase_boundary_ns_per_invocation={"prefill": 4321.0},
+            phase_boundary_policy="residual_once_per_phase_invocation",
+            coverage_status="covered",
+        ).to_dict(),
+        "native_calibration_apply_phase_boundary": True,
+    })
+    schedule = compile_scenario(replace(base, placement=placement,
+                                         workload=replace(base.workload, mtp=None)))
+    boundaries = [task for task in schedule.tasks
+                  if task.metadata.get("event_kind") == "native_phase_boundary"]
+    assert len(boundaries) == 1
+    assert boundaries[0].metadata["phase_boundary_policy"] == "residual_once_per_phase_invocation"
+    assert boundaries[0].metadata["cost_owner"] == "native_engine_phase_residual"
+    assert boundaries[0].metadata["evidence_scope"] == "engine_phase_residual_once_per_phase_invocation"
+    assert boundaries[0].demands[0].service_ns == 4321.0
+    assert not any(task.metadata.get("event_kind") in {"dram_access", "nand_access"}
+                   for task in schedule.tasks)
 
 
 def _request_marker_profile(**kwargs):

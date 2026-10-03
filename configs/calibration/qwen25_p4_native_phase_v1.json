@@ -1,0 +1,1014 @@
+{
+  "schema": "native-calibration/v1",
+  "prompt_ns_per_token": 1024375.0,
+  "decode_ns_per_token": 4751714.285714285,
+  "launch_ns_per_call": 3250.856137797186,
+  "prefill_launch_ns_per_call": null,
+  "decode_launch_ns_per_call": null,
+  "synchronize_ns_per_call": 81343.24375,
+  "decode_first_invocation_extra_ns": null,
+  "decode_first_invocation_policy": null,
+  "decode_first_invocation_evidence": null,
+  "phase_boundary_ns_per_invocation": {
+    "prefill": 2617168.0,
+    "decode": 1750336.7142857143
+  },
+  "phase_boundary_policy": "one_task_per_phase_invocation",
+  "request_marker_ns": null,
+  "request_marker_policy": null,
+  "request_marker_evidence": null,
+  "request_shape": null,
+  "d2h_ns_per_byte": null,
+  "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.json",
+  "source_sha256": "b87b76a4b9bf0cf3a3e6fa160cc7dd45b9ff8f8207f89e349f8ac190317ae79f",
+  "kernel_stage_mapping": {
+    "schema": "native-kernel-mapping/v1",
+    "records": [
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)6, (int)1, (bool)1, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 3038149.0,
+        "instances": 750,
+        "avg_ns": 4050.9,
+        "median_ns": 1888.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)8, (int)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 1283116.0,
+        "instances": 8,
+        "avg_ns": 160389.5,
+        "median_ns": 159237.5,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "quantize_q8_1(const float *, void *, long long, long long, long long, long long, long long, unsigned int, uint3)",
+        "stage": "quantize",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 1105543.0,
+        "instances": 1160,
+        "avg_ns": 953.1,
+        "median_ns": 960.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rms_norm_f32<(int)256, (bool)1, (bool)0>(const float *, float *, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3)",
+        "stage": "normalization",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 1043231.0,
+        "instances": 392,
+        "avg_ns": 2661.3,
+        "median_ns": 2656.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_f<__half, float, (int)1, (int)32, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 687292.0,
+        "instances": 168,
+        "avg_ns": 4091.0,
+        "median_ns": 4096.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 577008.0,
+        "instances": 84,
+        "avg_ns": 6869.1,
+        "median_ns": 6688.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)12, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 540879.0,
+        "instances": 85,
+        "avg_ns": 6363.3,
+        "median_ns": 6240.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)6, (int)8, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 492881.0,
+        "instances": 130,
+        "avg_ns": 3791.4,
+        "median_ns": 2464.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_f<__half, __half, (int)1, (int)128, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, int, uint3, int, int, int, uint3, int, int, int, uint3, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 313034.0,
+        "instances": 168,
+        "avg_ns": 1863.3,
+        "median_ns": 1856.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void soft_max_f32<(bool)1, (int)256, (int)256, float>(const float *, const T4 *, const float *, float *, soft_max_params)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 252838.0,
+        "instances": 192,
+        "avg_ns": 1316.9,
+        "median_ns": 1312.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rope_neox<(bool)1, (bool)0, float, __half>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+        "stage": "attention_qkv",
+        "confidence": 0.91,
+        "reason": "kernel name marker",
+        "total_ns": 239115.0,
+        "instances": 192,
+        "avg_ns": 1245.4,
+        "median_ns": 1248.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void rope_neox<(bool)1, (bool)0, float, float>(const T3 *, T4 *, int, int, int, int, int, int, int, int, int, int, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+        "stage": "attention_qkv",
+        "confidence": 0.91,
+        "reason": "kernel name marker",
+        "total_ns": 217640.0,
+        "instances": 192,
+        "avg_ns": 1133.5,
+        "median_ns": 1152.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_set_rows<float, long long, __half>(const T1 *, const T2 *, T3 *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, uint3, uint3, uint3, uint3, uint3)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 184746.0,
+        "instances": 192,
+        "avg_ns": 962.2,
+        "median_ns": 928.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_bin_bcast<&op_add, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 150408.0,
+        "instances": 126,
+        "avg_ns": 1193.7,
+        "median_ns": 1280.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)8, (int)1, (bool)1, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 140421.0,
+        "instances": 84,
+        "avg_ns": 1671.7,
+        "median_ns": 1664.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_q<(ggml_type)14, (int)8, (bool)0>(const char *, const int *, const int *, const int *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 84706.0,
+        "instances": 12,
+        "avg_ns": 7058.8,
+        "median_ns": 6912.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_f<__half2, (int)32, (int)8, (int)2, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 67425.0,
+        "instances": 24,
+        "avg_ns": 2809.4,
+        "median_ns": 2800.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_q<(ggml_type)12, (int)8, (bool)0>(const char *, const int *, const int *, const int *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 58208.0,
+        "instances": 11,
+        "avg_ns": 5291.6,
+        "median_ns": 5088.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_f<__half2, (int)32, (int)8, (int)1, (bool)0>(const T1 *, const float *, const int *, float *, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 45410.0,
+        "instances": 24,
+        "avg_ns": 1892.1,
+        "median_ns": 1840.5,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_q_stream_k_fixup<(ggml_type)14, (int)8, (bool)0>(const int *, const int *, float *, float *, uint3, int, int, int, uint3, int, uint3, int, uint3)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 41827.0,
+        "instances": 12,
+        "avg_ns": 3485.6,
+        "median_ns": 3488.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_q_stream_k_fixup<(ggml_type)12, (int)8, (bool)0>(const int *, const int *, float *, float *, uint3, int, int, int, uint3, int, uint3, int, uint3)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 38083.0,
+        "instances": 11,
+        "avg_ns": 3462.1,
+        "median_ns": 3456.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void cpy_scalar<&cpy_1_scalar<float, float>>(const char *, char *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 29248.0,
+        "instances": 24,
+        "avg_ns": 1218.7,
+        "median_ns": 1216.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)8, (int)8, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 23200.0,
+        "instances": 12,
+        "avg_ns": 1933.3,
+        "median_ns": 1856.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void unary_gated_op_kernel<&op_silu, float>(const T2 *, const T2 *, T2 *, long long, long long, long long, long long)",
+        "stage": "ffn",
+        "confidence": 0.92,
+        "reason": "kernel name marker",
+        "total_ns": 21218.0,
+        "instances": 23,
+        "avg_ns": 922.5,
+        "median_ns": 928.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long long, long long, uint3, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)",
+        "stage": "lm_head",
+        "confidence": 0.92,
+        "reason": "kernel name marker",
+        "total_ns": 17920.0,
+        "instances": 16,
+        "avg_ns": 1120.0,
+        "median_ns": 1104.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)6, (int)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+        "stage": "unknown",
+        "confidence": 0.0,
+        "reason": "no stage-specific kernel marker",
+        "total_ns": 14016.0,
+        "instances": 7,
+        "avg_ns": 2002.3,
+        "median_ns": 2048.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void quantize_mmq_q8_1<(mmq_q8_1_ds_layout)0, (bool)0>(const float *, const int *, void *, long long, long long, long long, long long, long long, int, int, int)",
+        "stage": "quantize",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 11808.0,
+        "instances": 12,
+        "avg_ns": 984.0,
+        "median_ns": 992.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      },
+      {
+        "name": "void quantize_mmq_q8_1<(mmq_q8_1_ds_layout)1, (bool)0>(const float *, const int *, void *, long long, long long, long long, long long, long long, int, int, int)",
+        "stage": "quantize",
+        "confidence": 0.98,
+        "reason": "kernel name marker",
+        "total_ns": 10848.0,
+        "instances": 11,
+        "avg_ns": 986.2,
+        "median_ns": 992.0,
+        "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\multimodel_next\\qwen25_medium_prompt8_train_profile_v2.kernel.csv"
+      }
+    ],
+    "aggregate": {
+      "attention_qkv": {
+        "stage": "attention_qkv",
+        "kernel_count": 2,
+        "instances": 384,
+        "total_ns": 456755.0,
+        "weighted_avg_ns": 1189.45,
+        "confidence_min": 0.91,
+        "confidence_mean": 0.91,
+        "share": 0.04256716871921894
+      },
+      "attention_output": {
+        "stage": "attention_output",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "ffn": {
+        "stage": "ffn",
+        "kernel_count": 1,
+        "instances": 23,
+        "total_ns": 21218.0,
+        "weighted_avg_ns": 922.5,
+        "confidence_min": 0.92,
+        "confidence_mean": 0.92,
+        "share": 0.0019774062372264942
+      },
+      "kv": {
+        "stage": "kv",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "lm_head": {
+        "stage": "lm_head",
+        "kernel_count": 1,
+        "instances": 16,
+        "total_ns": 17920.0,
+        "weighted_avg_ns": 1120.0,
+        "confidence_min": 0.92,
+        "confidence_mean": 0.92,
+        "share": 0.0016700499467951163
+      },
+      "output": {
+        "stage": "output",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "normalization": {
+        "stage": "normalization",
+        "kernel_count": 1,
+        "instances": 392,
+        "total_ns": 1043231.0,
+        "weighted_avg_ns": 2661.3,
+        "confidence_min": 0.98,
+        "confidence_mean": 0.98,
+        "share": 0.09722365379715492
+      },
+      "quantize": {
+        "stage": "quantize",
+        "kernel_count": 3,
+        "instances": 1183,
+        "total_ns": 1128199.0,
+        "weighted_avg_ns": 953.7212172442942,
+        "confidence_min": 0.98,
+        "confidence_mean": 0.98,
+        "share": 0.10514222544220443
+      },
+      "linear_attention_aux": {
+        "stage": "linear_attention_aux",
+        "kernel_count": 0,
+        "instances": 0,
+        "total_ns": 0.0,
+        "weighted_avg_ns": 0.0,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.0
+      },
+      "unknown": {
+        "stage": "unknown",
+        "kernel_count": 20,
+        "instances": 2124,
+        "total_ns": 8062895.0,
+        "weighted_avg_ns": 3796.10193032015,
+        "confidence_min": 0.0,
+        "confidence_mean": 0.0,
+        "share": 0.7514194958574001
+      }
+    }
+  },
+  "model_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+  "hardware_fingerprint": "96a17c53c8f29950b13d6d48f9f851ab895876297d3f89a4cb139acae89ba22e",
+  "runtime_fingerprint": "0802565eb9c7b64d6a2e0fe0bd672e512b675edfa11dd718badc209c3ea07784",
+  "backend_version": null,
+  "coverage_status": null,
+  "identity_mismatch": false,
+  "calibration_basis": "existing_train_trace_coefficient_reused_with_identity_bound_replay_adapter",
+  "source_payload_sha256": "d79f9940efd7fcd740d2df3fc43ad7a704609e0b7ac9bbaeb6c525efd19ca525",
+  "source_payload": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\work\\round_067_replay_sources\\qwen25__long__long__p4__r1.json",
+  "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
+  "runtime_artifacts": [
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server.exe",
+      "sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
+      "bytes": 10752,
+      "status": "captured",
+      "file_mtime_ns": 1789386763953812100,
+      "role": "executable"
+    },
+    {
+      "path": "C:\\Windows\\System32\\advapi32.dll",
+      "sha256": "e036c9baecd170d7ef4759a5a7eb76036158cacc4cd9e3f697dbf410a3457224",
+      "bytes": 778344,
+      "status": "captured",
+      "file_mtime_ns": 1788930816483754900,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\bcrypt.dll",
+      "sha256": "b5691584e857caf0c6c590dda13779966b383d66be3c87d5b3cbbc2f5005495b",
+      "bytes": 183376,
+      "status": "captured",
+      "file_mtime_ns": 1788930817073682400,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\bcryptprimitives.dll",
+      "sha256": "46c06a0f0323d25a32c2b16da1a4a09e9234d282be7714469b7985bb98031ab6",
+      "bytes": 716408,
+      "status": "captured",
+      "file_mtime_ns": 1788930817083742600,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\cfgmgr32.dll",
+      "sha256": "3842054f8a402a8fc6906c31cff6cc6f4eb2bf4b3443a12b363f0469c72cd9bc",
+      "bytes": 344488,
+      "status": "captured",
+      "file_mtime_ns": 1788930816246204700,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\combase.dll",
+      "sha256": "39a2e2ba1ca6012953c94c10011fff5a18783120a2a34f5b66deb2d374a362c9",
+      "bytes": 3716184,
+      "status": "captured",
+      "file_mtime_ns": 1788930817535399100,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\crypt32.dll",
+      "sha256": "c720af58976a3624dbc5b74ec4e470d8fec8a4645dc06947906c49e929862dc3",
+      "bytes": 1559296,
+      "status": "captured",
+      "file_mtime_ns": 1788930817866636300,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\cryptbase.dll",
+      "sha256": "d77b19df871b5a2f02e826ebeb5de86735f5cd0806294fe9143ba138c964ee16",
+      "bytes": 59392,
+      "status": "captured",
+      "file_mtime_ns": 1788930817842217700,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\cryptnet.dll",
+      "sha256": "facd65fb7d6cf40050260835a84190a65475b994467d8b7c650720773887a6df",
+      "bytes": 253608,
+      "status": "captured",
+      "file_mtime_ns": 1788930817850842900,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\cryptsp.dll",
+      "sha256": "4c5d4a26fc916392d3d478174fb4ed32e0d1141f12dff3eee5a2a3fc71c0483c",
+      "bytes": 121408,
+      "status": "captured",
+      "file_mtime_ns": 1788930817857304800,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\devobj.dll",
+      "sha256": "51508ba598fbb42174fa3328ce363aded0edb1d372542c3c18c0d27dfc5d78eb",
+      "bytes": 204024,
+      "status": "captured",
+      "file_mtime_ns": 1788930816253235300,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\Display.NvContainer\\NvMessageBus.dll",
+      "sha256": "f2579fe46525bb3cab2e3636ed1ee9f6936757d188a6036df4b02142707a879b",
+      "bytes": 3543272,
+      "status": "captured",
+      "file_mtime_ns": 1787748734000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvapi64_impl.dll",
+      "sha256": "1cb84e130ce5400e0730f852e04813af28ca4f57f79f5618865fb36142cf62f1",
+      "bytes": 5686720,
+      "status": "captured",
+      "file_mtime_ns": 1787748362000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvcuda64.dll",
+      "sha256": "3348ef5cb38aed1a9a1e403d7b1ab0b18089e86d2e29a027568e494177edd954",
+      "bytes": 11643112,
+      "status": "captured",
+      "file_mtime_ns": 1787748360000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvdiagclt64.dll",
+      "sha256": "0aa7529babeb4dde95876efecda2b0349e0701a3e1ea554c20d19e995faa5fb9",
+      "bytes": 872168,
+      "status": "captured",
+      "file_mtime_ns": 1787748400000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvdxgdmal64.dll",
+      "sha256": "4322c0dbd13aee6264876d0dd1bf782d5fd9c1c3af3e0927b6cd5d90983a4931",
+      "bytes": 714472,
+      "status": "captured",
+      "file_mtime_ns": 1787748420000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64_ba34f758deb2a7d2\\nvobjectloader64.dll",
+      "sha256": "bdea98def1e9435ae12166477d06be1c02fd64652b642b5ff000bbc6636d4ac2",
+      "bytes": 15015656,
+      "status": "captured",
+      "file_mtime_ns": 1787748488000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\drvstore.dll",
+      "sha256": "a658a90cb3f45314361b27e4718cbd12a36bf311a6c0df1a5346bd70fbe254e1",
+      "bytes": 1563416,
+      "status": "captured",
+      "file_mtime_ns": 1788930819326193800,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\DXCore.dll",
+      "sha256": "7dbabbd215d1e93ba8904540033d3bb71dc795c0c58371c8905583e105311b3c",
+      "bytes": 278400,
+      "status": "captured",
+      "file_mtime_ns": 1788930816165808700,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\gdi32.dll",
+      "sha256": "772c73e294a4c5f5e0d4146288af95287a85c074d3aee3fa9f320dc010d7dbfe",
+      "bytes": 187456,
+      "status": "captured",
+      "file_mtime_ns": 1778642341697819600,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\gdi32full.dll",
+      "sha256": "bde2077a56c90f68c5fa1ce5ebd4a40755c97a5080b91a87d2beff47349dd01e",
+      "bytes": 1220496,
+      "status": "captured",
+      "file_mtime_ns": 1788930819920653000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\gpapi.dll",
+      "sha256": "f43d3670495501badf891e3f4d026461c67d907cf6176e4f2c703586dba4701e",
+      "bytes": 158536,
+      "status": "captured",
+      "file_mtime_ns": 1788930819977177500,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\imagehlp.dll",
+      "sha256": "58117bbc51c4a56b6c4789e190f33a540b7734e394ada9652e2832e3d2e16588",
+      "bytes": 137832,
+      "status": "captured",
+      "file_mtime_ns": 1749611837477225800,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\imm32.dll",
+      "sha256": "7e45f12c1c555e2407c5ca082bd925b34655278fde4dbfac53a0468cc1e77411",
+      "bytes": 212288,
+      "status": "captured",
+      "file_mtime_ns": 1788930820504054600,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\kernel.appcore.dll",
+      "sha256": "ed6d62f2555d260547cc94a5cdfe2a6fcb684f18b8e182f78f9e4de224321fc9",
+      "bytes": 121360,
+      "status": "captured",
+      "file_mtime_ns": 1788930821089517400,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\kernel32.dll",
+      "sha256": "8f8629741558b5df71def4e1dd8ef9645d4f806b949762c47757c50fea1a9e6d",
+      "bytes": 844496,
+      "status": "captured",
+      "file_mtime_ns": 1788930821103414400,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\KernelBase.dll",
+      "sha256": "becad014fb8efa8cb5e314931cca92778ad42c649b12a6909632cacd68af4f40",
+      "bytes": 4212112,
+      "status": "captured",
+      "file_mtime_ns": 1788930821217258900,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\msasn1.dll",
+      "sha256": "f71f74438165a374feeaffbad9e4d4cff9473be726c0781f248405a7d46c2f81",
+      "bytes": 88312,
+      "status": "captured",
+      "file_mtime_ns": 1788930821977728700,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\msvcp140.dll",
+      "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+      "bytes": 643512,
+      "status": "captured",
+      "file_mtime_ns": 1779829176000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\msvcp_win.dll",
+      "sha256": "c50165e6aaf74395c059564d65fa78b0911844828cbcf791d78f80d964a60f4e",
+      "bytes": 642016,
+      "status": "captured",
+      "file_mtime_ns": 1788930826172107300,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\msvcrt.dll",
+      "sha256": "a1bd0acd64e1a60368b8878d3987f603d966ed45be2252d2d4d0f92feb10fa8e",
+      "bytes": 699848,
+      "status": "captured",
+      "file_mtime_ns": 1788930822042009300,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\mswsock.dll",
+      "sha256": "1229de88fce9fd1a3dad4d61ed6c047eaa3e10edeed2bf00a0819b7950425d5e",
+      "bytes": 451920,
+      "status": "captured",
+      "file_mtime_ns": 1788930827207621200,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\ntdll.dll",
+      "sha256": "a74f7482085eab125ccc09152ab7e0b5994bcb13e1a7b29880bdbb24179ecb8b",
+      "bytes": 2522080,
+      "status": "captured",
+      "file_mtime_ns": 1788930822421748000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\nvapi64.dll",
+      "sha256": "97b9ac9c0784a90e5b0b82be693baf72037fc2d1a5b17ea9d7866f6e93d58d82",
+      "bytes": 574040,
+      "status": "captured",
+      "file_mtime_ns": 1787748358000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\nvcuda.dll",
+      "sha256": "ba82badab512a9a0723e0bd380f391392405db38b7fab8ae6c75eeb358f1e3ad",
+      "bytes": 4790504,
+      "status": "captured",
+      "file_mtime_ns": 1787748372000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\ole32.dll",
+      "sha256": "4b81e4a4cb982915ceb3ebef0148227689306c274d5b2f6068ea143ae4db3e40",
+      "bytes": 1695680,
+      "status": "captured",
+      "file_mtime_ns": 1788930817464807300,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\oleaut32.dll",
+      "sha256": "e276bb09983606469c50f0f03c9604bbeffd7d669d996526c8c1af89042fbae0",
+      "bytes": 898200,
+      "status": "captured",
+      "file_mtime_ns": 1788930822411753200,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\profapi.dll",
+      "sha256": "ce53b082348fae6b4bef396c542a7415f39e1b28928233a9cc1b516311fb32c6",
+      "bytes": 179192,
+      "status": "captured",
+      "file_mtime_ns": 1788930823175110300,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\rpcrt4.dll",
+      "sha256": "89af87b6387bde4243306036fce2be89c67a328f93c25c53542e4c665b114747",
+      "bytes": 1162656,
+      "status": "captured",
+      "file_mtime_ns": 1788930823792544100,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\rsaenh.dll",
+      "sha256": "731771049467b6d01c7028a1269df17da37af8d323621e01a32856e306795400",
+      "bytes": 245264,
+      "status": "captured",
+      "file_mtime_ns": 1770782035897946700,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\sechost.dll",
+      "sha256": "c760d6c0dfa2705446aa7a2260206c9076182d92231854c04aa526403217eb9a",
+      "bytes": 704008,
+      "status": "captured",
+      "file_mtime_ns": 1788930824128642000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\setupapi.dll",
+      "sha256": "6c6007cf731272cbd02b928236dca2671032ffaa7e7ab7c151ce70b7dee90f42",
+      "bytes": 4790528,
+      "status": "captured",
+      "file_mtime_ns": 1788930824611709000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\SHCore.dll",
+      "sha256": "e7b47e7b381849dd1b32fd67deedd16ad46b50aaf614cdd28e03a7bac7fd72c8",
+      "bytes": 1022152,
+      "status": "captured",
+      "file_mtime_ns": 1788930824602978100,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\shell32.dll",
+      "sha256": "57231c16611c536a5905395858af37120bce730092786238b1a9dfab0db7afac",
+      "bytes": 8009440,
+      "status": "captured",
+      "file_mtime_ns": 1788930824900838100,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\shlwapi.dll",
+      "sha256": "6b86e4abc06ae40b2b8c1ceebcd300cbcaa5790c3ba377c630f1f0e8b36fb92c",
+      "bytes": 427152,
+      "status": "captured",
+      "file_mtime_ns": 1788930824864157200,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\ucrtbase.dll",
+      "sha256": "5c52e3a303baaac0e0af8bd9b96134993da34bc9d834a31ef37e1d2cdc7fe192",
+      "bytes": 1377512,
+      "status": "captured",
+      "file_mtime_ns": 1788930826200856000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\user32.dll",
+      "sha256": "93a4310e66a47fa359f588c2ebda64fe3651771c6f9ff30d462a77215a2e558e",
+      "bytes": 1914656,
+      "status": "captured",
+      "file_mtime_ns": 1788930826658560100,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\vcomp140.dll",
+      "sha256": "95d4ce4a6802d1e18b5e0e1722cc30ea72ca7e033f83828f05c0b7b993fe7cbf",
+      "bytes": 212920,
+      "status": "captured",
+      "file_mtime_ns": 1779829180000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\vcruntime140.dll",
+      "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+      "bytes": 178616,
+      "status": "captured",
+      "file_mtime_ns": 1779829180000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\vcruntime140_1.dll",
+      "sha256": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
+      "bytes": 50112,
+      "status": "captured",
+      "file_mtime_ns": 1779829180000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\version.dll",
+      "sha256": "cea99f212af557a9613150c5509631403ed0f05f5d9a06ac42039bd59b40e39a",
+      "bytes": 55192,
+      "status": "captured",
+      "file_mtime_ns": 1740111243546073800,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\win32u.dll",
+      "sha256": "9cd636e8a1b300e2f4b16f339d650eda71fa02b92b100e4b2f89ce7c04811767",
+      "bytes": 170952,
+      "status": "captured",
+      "file_mtime_ns": 1788930826989630000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\windows.storage.dll",
+      "sha256": "cf4793b9e7570f1c6621515d634e2fee115b51f6009a19e0d1a5d24cefb55703",
+      "bytes": 9158096,
+      "status": "captured",
+      "file_mtime_ns": 1788930822729959700,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\winmm.dll",
+      "sha256": "b79ba5420f10d76fddc718534c37db671b04fdb07d3bef4152a799b85a4368b7",
+      "bytes": 224688,
+      "status": "captured",
+      "file_mtime_ns": 1788930817025260200,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\wintrust.dll",
+      "sha256": "1fabae0284fa498f92ac83f10e928ab7dcefb42e50198e913291d37b496b7e40",
+      "bytes": 542840,
+      "status": "captured",
+      "file_mtime_ns": 1788930827223636900,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\wldp.dll",
+      "sha256": "ecf34c9c64b2e6be9f622f0ca3a6ca7b95dcfdb88eb0419b045b853934bae0ba",
+      "bytes": 443664,
+      "status": "captured",
+      "file_mtime_ns": 1788930817321162200,
+      "role": "loaded_module"
+    },
+    {
+      "path": "C:\\Windows\\System32\\ws2_32.dll",
+      "sha256": "535d7a8336ddbae77b1f2c68339e5e7dbeb5f06445d6e42b19c794ef0e26f6a3",
+      "bytes": 534592,
+      "status": "captured",
+      "file_mtime_ns": 1788930827213339900,
+      "role": "loaded_module"
+    },
+    {
+      "path": "E:\\cuda\\bin\\cublas64_12.dll",
+      "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99",
+      "bytes": 113716224,
+      "status": "captured",
+      "file_mtime_ns": 1740556276000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "E:\\cuda\\bin\\cublasLt64_12.dll",
+      "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7",
+      "bytes": 674667520,
+      "status": "captured",
+      "file_mtime_ns": 1740556279000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "E:\\cuda\\bin\\cudart64_12.dll",
+      "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344",
+      "bytes": 573952,
+      "status": "captured",
+      "file_mtime_ns": 1739446215000000000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-base.dll",
+      "sha256": "ebb357e640e217aef6a33e646b5d9a8e715635f72e478d85f2aa112b5362e1ca",
+      "bytes": 673792,
+      "status": "captured",
+      "file_mtime_ns": 1789227563382201100,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cpu.dll",
+      "sha256": "e8a36d9c1a66a7ac726282e18c143aa593a4cc96945e075e5904e3a9cf835c44",
+      "bytes": 956928,
+      "status": "captured",
+      "file_mtime_ns": 1789243069226069900,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml-cuda.dll",
+      "sha256": "eef90dd2e43863d2f5692ee6818c65ca036e359065332b0caf3db715b11b1f99",
+      "bytes": 26091520,
+      "status": "captured",
+      "file_mtime_ns": 1789312408209551500,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\ggml.dll",
+      "sha256": "ee18c7ee09d675bf2dedbff201ea9c0b841025f57d4860d49d792389181865fc",
+      "bytes": 61440,
+      "status": "captured",
+      "file_mtime_ns": 1789228350998958500,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-common.dll",
+      "sha256": "f40c793d6b6fd708bbbdc55ceb277b64748f77317ed4940bdfa34f95668cc417",
+      "bytes": 8220160,
+      "status": "captured",
+      "file_mtime_ns": 1789254093478585000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama-server-impl.dll",
+      "sha256": "b22daf20ac45ee9764f9c6e41c93297f0d5e05e6e2b93f3ab600f01bba1bdec2",
+      "bytes": 6345728,
+      "status": "captured",
+      "file_mtime_ns": 1789386763845377000,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\llama.dll",
+      "sha256": "cce35c185cf5d2442a1fbea26e1771efc9ad77f3504cf75cf7cd3ffd4b1bde0f",
+      "bytes": 2633728,
+      "status": "captured",
+      "file_mtime_ns": 1789309365564343300,
+      "role": "loaded_module"
+    },
+    {
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\source\\llama.cpp-semantic\\build-semantic-direct\\bin\\mtmd.dll",
+      "sha256": "1b3906980fc9e47b95234078094d549d4af89c601dc8a14616bce9f246cd74a6",
+      "bytes": 2222080,
+      "status": "captured",
+      "file_mtime_ns": 1789254092610131600,
+      "role": "loaded_module"
+    }
+  ],
+  "native_capture_runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+  "source_capture_shape": {
+    "prompt_tokens": 8,
+    "output_tokens": 8,
+    "parallel": 1,
+    "batch": 64,
+    "ubatch": 64,
+    "note": "source qwen25_medium_prompt8_train_profile_v2"
+  },
+  "target_replay_shape": {
+    "prompt_tokens": 186,
+    "output_tokens": 49,
+    "parallel": 4,
+    "batch": 64,
+    "ubatch": 64,
+    "note": "qwen25 p4 long/long r1-r3"
+  },
+  "shape_policy": "development_reuse_without_exact_shape_or_generalization_claim",
+  "shape_identity_match": false
+}

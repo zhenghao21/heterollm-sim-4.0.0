@@ -7892,6 +7892,13 @@ def _add_physical_invocation_frontend(
         if boundary_ns is not None and startup_extra_ns is not None:
             boundary_ns += startup_extra_ns
         if boundary_ns is not None:
+            boundary_policy = str(calibration.phase_boundary_policy)
+            if boundary_policy == "residual_once_per_phase_invocation":
+                boundary_cost_owner = "native_engine_phase_residual"
+                boundary_evidence_scope = "engine_phase_residual_once_per_phase_invocation"
+            else:
+                boundary_cost_owner = "native_cuda_api_phase_boundary"
+                boundary_evidence_scope = "aggregate_launch_plus_sync_once_per_phase_invocation"
             return builder.add(
                 name + ".phase_boundary",
                 TaskCategory.SYNCHRONIZATION,
@@ -7906,7 +7913,7 @@ def _add_physical_invocation_frontend(
                 metadata={
                     "event_kind": "native_phase_boundary",
                     "runtime_phase": execution_phase,
-                    "phase_boundary_policy": "one_task_per_phase_invocation",
+                    "phase_boundary_policy": boundary_policy,
                     "phase_boundary_ns": boundary_ns,
                     "decode_first_invocation": bool(first_decode_invocation),
                     "decode_first_invocation_extra_ns": startup_extra_ns,
@@ -7914,10 +7921,10 @@ def _add_physical_invocation_frontend(
                     "physical_invocation_group_ids": normalized_group_ids,
                     "physical_invocation_group_count": invocation_count,
                     "orchestration_stage": orchestration_stage,
-                    "cost_owner": "native_cuda_api_phase_boundary",
+                    "cost_owner": boundary_cost_owner,
                     "source_component": cpu_id,
                     "target_component": gpu_id,
-                    "evidence_scope": "aggregate_launch_plus_sync_once_per_phase_invocation",
+                    "evidence_scope": boundary_evidence_scope,
                 },
             )
     return command_processor

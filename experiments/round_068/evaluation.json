@@ -1,0 +1,80 @@
+{
+  "schema": "heterollm.evaluation/v1",
+  "round_id": "round_068",
+  "implementation_status": "passed_for_declared_phase_calibration_and_storage_composition_scope",
+  "mechanism_status": "passed",
+  "profile_gate_status": "passed",
+  "native_accuracy": {
+    "status": "three_valid_historical_qwen25_replays",
+    "reference_policy": "Native payloads reused; native_execution_count=0",
+    "metrics": {
+      "ttft_ms": {
+        "n": 3,
+        "A_median_ape_pct": 51.94097733308406,
+        "B_median_ape_pct": 8.197500532783009,
+        "median_improvement_ape_pp": 43.743476800301046,
+        "A_mean_ape_pct": 52.14167964263144,
+        "B_mean_ape_pct": 7.745650140512501,
+        "all_cells_improved": true
+      },
+      "tpot_ms": {
+        "n": 3,
+        "A_median_ape_pct": 38.69517543488944,
+        "B_median_ape_pct": 30.572142774379866,
+        "median_improvement_ape_pp": 8.123032660509576,
+        "A_mean_ape_pct": 38.87216193791243,
+        "B_mean_ape_pct": 30.772580403064236,
+        "all_cells_improved": true
+      },
+      "e2e_ms": {
+        "n": 3,
+        "A_median_ape_pct": 39.63717095111136,
+        "B_median_ape_pct": 25.271441164465642,
+        "median_improvement_ape_pp": 14.365729786645716,
+        "A_mean_ape_pct": 39.866222374019216,
+        "B_mean_ape_pct": 25.555004460004188,
+        "all_cells_improved": true
+      }
+    },
+    "details_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\outputs\\round_068_joint_calibration_dram_nand.json"
+  },
+  "storage_composition": {
+    "status": "passed",
+    "makespan_A_ns": 38344468.19999996,
+    "makespan_B_ns": 38344468.19999996,
+    "delta_ns": 0.0,
+    "ledger_invariants": {
+      "dram_traffic": true,
+      "storage_traffic": true
+    }
+  },
+  "historical_baseline": {
+    "ttft_ms": {
+      "count": 5,
+      "median_ape_pct": 9.391819673784903,
+      "max_ape_pct": 108.22776450617471,
+      "median_signed_error_pct": 8.719208596021017
+    },
+    "tpot_ms": {
+      "count": 5,
+      "median_ape_pct": 38.108246806017476,
+      "max_ape_pct": 73.70155454360466,
+      "median_signed_error_pct": -38.108246806017476
+    },
+    "e2e_ms": {
+      "count": 5,
+      "median_ape_pct": 24.805548293316114,
+      "max_ape_pct": 41.407272462428296,
+      "median_signed_error_pct": -19.258046013740092
+    }
+  },
+  "regression_status": "128 passed focused; full 3146 passed, 4 skipped in 438.80s",
+  "limitations": [
+    "qwen25 profile is a development identity-bound adapter: coefficients come from the existing measured training profile; r1/r2/r3 are revealed historical replay data, not a new blind acceptance set.",
+    "The profile calibrates engine phase boundary cost. It does not calibrate DRAM row timing, NAND page latency, FTL/GC, or device cycle accuracy.",
+    "The storage companion is a separate authored DRAM/NAND workload; it proves ledger ownership/invariance under composition, while the qwen25 replay proves timing improvement on the matching LLM path.",
+    "The five-model matrix remains the prior analytical baseline and is retained for complete error comparison; it is not re-scored with this qwen25-only profile.",
+    "原始 A/B payload 和 storage companion 保留在本地 work/，未提交到仓库；记录通过路径和 SHA 绑定，独立 checkout 不能仅靠 commit 重放。"
+  ],
+  "source_head": "83ae5efbfb683fe6e18bea79fdba4f782e73a2f7"
+}
