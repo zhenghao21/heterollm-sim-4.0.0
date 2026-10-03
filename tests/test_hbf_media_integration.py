@@ -69,3 +69,28 @@ def test_no_hbf_contract_keeps_legacy_endpoint_semantics():
     phase = TopologyRouter._endpoint_phase(component, 1, read=True, name="read")
     assert phase.metadata["transferred_bytes"] == 4096
     assert "hbf_media" not in phase.metadata
+
+
+def test_transfer_phases_propagates_source_offset_to_nand_endpoint():
+    gpu = ComponentSpec(
+        "gpu0",
+        "gpu",
+        (PortSpec("hbf", "HBF", "controller", version="2.0", lanes=64,
+                  bandwidth_gbps=2048.0, payload="xPU-HBF"),),
+    )
+    storage = hbf()
+    hardware = HardwareSpec(
+        "hbf-offset",
+        (gpu, storage),
+        (LinkSpec("gpu-hbf", "hbf0", "host", "gpu0", "hbf", "HBF",
+                  version="2.0", lanes=64, bandwidth_gbps=2048.0,
+                  latency_ns=20.0, payload="xPU-HBF"),),
+    )
+    phases = TopologyRouter(hardware).transfer_phases(
+        "hbf0", "gpu0", 128, name="cross-page", source_page_offset_bytes=4032
+    )
+    endpoint = phases[0]
+    media = endpoint.metadata["hbf_media"]
+    assert media["page_offset_bytes"] == 4032
+    assert media["pages_touched"] == 2
+    assert media["physical_read_bytes"] == 8192

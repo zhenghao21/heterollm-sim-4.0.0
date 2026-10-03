@@ -824,6 +824,9 @@ def _transfer_phases(
     *,
     policy: str,
     name: str,
+    page_offset_bytes: Optional[int] = None,
+    source_page_offset_bytes: Optional[int] = None,
+    target_page_offset_bytes: Optional[int] = None,
 ) -> Tuple[object, ...]:
     context = _active_compilation_context(scenario)
     if context is None or router is not context.router():
@@ -833,6 +836,9 @@ def _transfer_phases(
             byte_count,
             policy=policy,
             name=name,
+            page_offset_bytes=page_offset_bytes,
+            source_page_offset_bytes=source_page_offset_bytes,
+            target_page_offset_bytes=target_page_offset_bytes,
         )
     template = context.leaf(
         (
@@ -841,6 +847,9 @@ def _transfer_phases(
             target_component,
             byte_count,
             policy,
+            page_offset_bytes,
+            source_page_offset_bytes,
+            target_page_offset_bytes,
         ),
         lambda: router.transfer_phases(
             source_component,
@@ -848,6 +857,9 @@ def _transfer_phases(
             byte_count,
             policy=policy,
             name=_TRANSFER_TEMPLATE_NAME,
+            page_offset_bytes=page_offset_bytes,
+            source_page_offset_bytes=source_page_offset_bytes,
+            target_page_offset_bytes=target_page_offset_bytes,
         ),
     )
     phases = tuple(template)
@@ -861,6 +873,9 @@ def _transfer_phases(
             byte_count,
             policy=policy,
             name=name,
+            page_offset_bytes=page_offset_bytes,
+            source_page_offset_bytes=source_page_offset_bytes,
+            target_page_offset_bytes=target_page_offset_bytes,
         )
     return tuple(
         replace(
@@ -6841,6 +6856,21 @@ def _add_transfer_tasks(
                     ),
                     "evidence": raw_spec.get("evidence"),
                 }
+    shared_page_offset = transfer_metadata.get("page_offset_bytes")
+    if shared_page_offset is None:
+        shared_page_offset = transfer_metadata.get("offset_bytes")
+    if shared_page_offset is None:
+        shared_page_offset = transfer_metadata.get("weight_read_offset_bytes")
+    source_page_offset = transfer_metadata.get("source_page_offset_bytes")
+    if source_page_offset is None:
+        source_page_offset = transfer_metadata.get("source_offset_bytes")
+    if source_page_offset is None:
+        source_page_offset = shared_page_offset
+    target_page_offset = transfer_metadata.get("target_page_offset_bytes")
+    if target_page_offset is None:
+        target_page_offset = transfer_metadata.get("target_offset_bytes")
+    if target_page_offset is None:
+        target_page_offset = shared_page_offset
     phases = (
         _transfer_phases(
             context.scenario,
@@ -6850,6 +6880,8 @@ def _add_transfer_tasks(
             byte_count,
             policy=routing_policy,
             name=name,
+            source_page_offset_bytes=source_page_offset,
+            target_page_offset_bytes=target_page_offset,
         )
         if context is not None and router is context.router()
         else router.transfer_phases(
@@ -6858,6 +6890,8 @@ def _add_transfer_tasks(
             byte_count,
             policy=routing_policy,
             name=name,
+            source_page_offset_bytes=source_page_offset,
+            target_page_offset_bytes=target_page_offset,
         )
     )
     previous = tuple(dependencies)

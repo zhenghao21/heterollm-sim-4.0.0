@@ -550,8 +550,22 @@ class TopologyRouter:
         policy: str = "lowest_latency",
         name: str = "transfer",
         coherent_dma_mode: Optional[str] = None,
+        page_offset_bytes: Optional[int] = None,
+        source_page_offset_bytes: Optional[int] = None,
+        target_page_offset_bytes: Optional[int] = None,
     ) -> Tuple[TransferPhase, ...]:
         _non_negative_integer(byte_count, "byte_count")
+        for label, value in (
+            ("page_offset_bytes", page_offset_bytes),
+            ("source_page_offset_bytes", source_page_offset_bytes),
+            ("target_page_offset_bytes", target_page_offset_bytes),
+        ):
+            if value is not None:
+                _non_negative_integer(value, label)
+        if source_page_offset_bytes is None:
+            source_page_offset_bytes = page_offset_bytes
+        if target_page_offset_bytes is None:
+            target_page_offset_bytes = page_offset_bytes
         if source_component not in self.components:
             raise ValueError(
                 "unknown route source component {}".format(source_component)
@@ -573,7 +587,13 @@ class TopologyRouter:
         # A reference edge only describes connectivity. The endpoint service
         # owns its timing, payload and controller; never delete the endpoint
         # because a topology view happens to share its resource name.
-        read = self._endpoint_phase(source, byte_count, read=True, name=name)
+        read = self._endpoint_phase(
+            source,
+            byte_count,
+            read=True,
+            name=name,
+            page_offset_bytes=source_page_offset_bytes,
+        )
         if read is not None:
             phases.append(read)
         source_dma = self._dma_phase(source, byte_count, name=name, direction="out")
@@ -602,7 +622,13 @@ class TopologyRouter:
         target_dma = self._dma_phase(target, byte_count, name=name, direction="in")
         if target_dma is not None:
             phases.append(target_dma)
-        write = self._endpoint_phase(target, byte_count, read=False, name=name)
+        write = self._endpoint_phase(
+            target,
+            byte_count,
+            read=False,
+            name=name,
+            page_offset_bytes=target_page_offset_bytes,
+        )
         if write is not None:
             phases.append(write)
         mode = self.coherent_dma_mode if coherent_dma_mode is None else str(
@@ -643,10 +669,18 @@ class TopologyRouter:
         buffer_id: str = "transfer_buffer",
         resource_owners: Optional[Mapping[str, str]] = None,
         resource_capacities: Optional[Mapping[str, int]] = None,
+        source_page_offset_bytes: Optional[int] = None,
+        target_page_offset_bytes: Optional[int] = None,
     ) -> TransferPipelinePlan:
         """Price blocks separately, then lower their bounded streaming DAG."""
 
         _non_negative_integer(byte_count, "byte_count")
+        for label, value in (
+            ("source_page_offset_bytes", source_page_offset_bytes),
+            ("target_page_offset_bytes", target_page_offset_bytes),
+        ):
+            if value is not None:
+                _non_negative_integer(value, label)
         _positive_integer(chunk_size_bytes, "chunk_size_bytes")
         if (byte_count + chunk_size_bytes - 1) // chunk_size_bytes > 4096:
             raise ValueError("explicit transfer pipeline exceeds 4096 chunks")
@@ -658,8 +692,16 @@ class TopologyRouter:
             self.transfer_phases(
                 source_component, target_component, size, name=name,
                 coherent_dma_mode="strict_serialized",
+                source_page_offset_bytes=(
+                    source_page_offset_bytes + offset
+                    if source_page_offset_bytes is not None else None
+                ),
+                target_page_offset_bytes=(
+                    target_page_offset_bytes + offset
+                    if target_page_offset_bytes is not None else None
+                ),
             )
-            for size in sizes
+            for offset, size in zip(range(0, byte_count, chunk_size_bytes), sizes)
         )
         return plan_transfer_pipeline(
             chunks, chunk_byte_counts=sizes,
@@ -694,7 +736,12 @@ class TopologyRouter:
             return None
         # Preserve address-aware DRAM endpoint state by keeping explicit
         # READ/link/WRITE phases instead of folding them into one task.
-        if any("dram_access" in phase.metadata for phase in phases):
+        if any(
+            "dram_access" in phase.metadata
+            or "nand_media" in phase.metadata
+            or "hbf_media" in phase.metadata
+            for phase in phases
+        ):
             return None
         if not source.is_active_memory or not target.is_active_memory:
             return None
