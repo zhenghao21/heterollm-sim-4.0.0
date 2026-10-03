@@ -99,11 +99,11 @@
 
 ### H36 run_scenario provider reuse 独立前端 A/B
 
-- 补证记录：[experiments/round_036/supplement_20261003_frontend.json](../experiments/round_036/supplement_20261003_frontend.json)，记录 SHA-256 `7e0e9317a6ab63f61461c1b046b7930c1458661534bea59f7bf820f980353459`；原始矩阵 [h36_frontend_ab_results.json](../artifacts/optimization/round_036/h36_frontend_ab_results.json)，SHA-256 `cb10d43fa49bc130f69edab4aaf6fef699f0ddc25100906e2a86c7bab3ad112f`。
-- 当前源码 `111e58f2bd110ca3db4b02f6ff9ef20dc018d3cb` 未修改；冷路径是实际 `run_scenario` 默认 provider，暖路径是在独立子进程内显式 `TopologyAwareBatchCostProvider` 预热后第二次 `run_scenario`。3 个规模、20 对 AB/BA，共 40 个独立子进程，全部退出码 0。
-- 每对 `report_dict` JSON hash、makespan、batch_count、request_count 完全相等（20/20）；仿真器 measured wall 中位数暖/冷：1×64×4 `0.0368/0.0875 s`（`-57.90%`），8×128×16 `0.0430/0.1678 s`（`-74.37%`），16×128×16 `0.0461/0.1785 s`（`-74.19%`）。
-- 独立子进程峰值 RSS 中位数：小规模 `+0.07%`，中规模 `0.00%`，大规模 `-1.85%`；不接纳为稳定内存改善。
-- 结论：接纳为同一显式 provider 生命周期内的局部工程 wall-time 证据；没有共享 provider 的生产生命周期、场景身份和淘汰契约，拒绝新增生产缓存候选、Web/run_jobs/global cache 或 Native 精度结论。
+- 初始记录 [supplement_20261003_frontend.json](../experiments/round_036/supplement_20261003_frontend.json) 的 RSS 采样只读到了 `.venv` launcher，已保留但其内存结论作废；校正记录 [supplement_20261003_frontend_pidfix.json](../experiments/round_036/supplement_20261003_frontend_pidfix.json)，SHA-256 `f72c1eb7835cf86fb65469d813e67a036f39ca7333a83fede047fec7f54bf21b`，校正矩阵 SHA-256 `6a89836140fb1bdcbc6c5227119eaf8b9b365155066032b243d55ccfa7079a61`。
+- 校正执行源码 `8e6aa2b3307da25a6eabc1b0611de5183ef0429b` 未修改；冷路径是实际 `run_scenario` 默认 provider，暖路径是在独立子进程内显式 `TopologyAwareBatchCostProvider` 预热后第二次 `run_scenario`。3 个规模、20 对 AB/BA，共 40 个独立子进程，全部退出码 0。
+- 每对 `report_dict` JSON hash、makespan、batch_count、request_count 完全相等（20/20）；校正后的仿真器 wall 中位数暖/冷：1×64×4 `0.0377/0.0897 s`（`-57.98%`），8×128×16 `0.0420/0.1720 s`（`-75.56%`），16×128×16 `0.0465/0.1847 s`（`-74.85%`）。
+- 进程树峰值 RSS 中位数暖相对冷分别 `+1.98%`、`+1.43%`、`+5.25%`，只有 2/20 对暖路径更低；因此撤销所有 RSS 改善结论。
+- 结论：接纳为同一显式 provider 生命周期内的局部工程 wall-time/输出等价证据；没有共享 provider 的生产生命周期、场景身份和淘汰契约，拒绝新增生产缓存候选、Web/run_jobs/global cache 或 Native 精度结论。
 
 ### H46 leaf-cache 配置独立前端 A/B
 
@@ -114,7 +114,7 @@
 
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
-- H29 的收益目前只属于 CLI 文本前端；H36 已完成独立 run_scenario 前端 A/B 但无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 但无稳定收益，H41 仍缺同等级补证。
+- H29 的收益目前只属于 CLI 文本前端；H36 校正后只保留 wall/output 等价证据且无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 但无稳定收益，H41 仍缺同等级补证。
 - H27、H38、H44 已完成真实 planner/event/resource/report 前端补证；H52 已完成正式 topology/HTTP 激活性扫描但 collective 仍被单计算组件拓扑阻塞；H58 已完成 routed LinkService 前端机制补证但无候选差异。解析矩阵不能替代前端计费证据。
 - H28/H34/H43/H51/H60/H64：若要声称预测精度或泛化改善，必须补同模型/硬件/shape/runtime 的 Native 成对 TTFT/TPOT/E2E 误差、留出和退化统计；当前记录均不构成精度改善。
 

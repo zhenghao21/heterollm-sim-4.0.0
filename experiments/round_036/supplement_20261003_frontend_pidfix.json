@@ -1,0 +1,154 @@
+{
+  "schema": "heterollm.optimization.supplement/v1",
+  "round_id": "round_036",
+  "supplement_id": "supplement_20261003_frontend_pidfix",
+  "phase": "prepare->verify->predict->score->review->promote",
+  "direction": "运行速度与内存",
+  "primary_goal": "复核 H36 独立前端 A/B 的 Windows .venv launcher RSS 采集范围，保留旧产物并用进程树采集实际解释器 RSS；不改源码、不重跑 H54。",
+  "hypothesis": "Windows .venv\\Scripts\\python.exe launcher 会生成实际 uv Python 子进程；原 H36 RSS 仅采集 launcher，必须标记无效并重新执行 20 对 AB/BA；wall 和输出哈希仍可复用。",
+  "source_identity": {
+    "current_source_commit": "8e6aa2b3307da25a6eabc1b0611de5183ef0429b",
+    "source_changed": false,
+    "module_paths": {
+      "src/heterollm_sim/reporting.py": {
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f",
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528"
+      },
+      "src/heterollm_sim/serving.py": {
+        "content_sha256": "2bac8dce10c996233dfbb1fafc6d31a205f17f29ef9aabf6d540d5e387d680b6",
+        "git_blob_sha": "124c0229c7ae3a6e989d7aec32b806ea269a457a"
+      },
+      "src/heterollm_sim/planner.py": {
+        "content_sha256": "0469eb1227fbda68c4241c32010bf7652e6c966a48ce2fa4792a9adcd75451d2",
+        "git_blob_sha": "8b9c24624488ca6a73e80aab53eba0a5e91e7c16"
+      },
+      "src/heterollm_sim/reference.py": {
+        "content_sha256": "ccd9262069936655059adf99c346c2295f84c001a2b0c6a93d33f00f299c6bdb",
+        "git_blob_sha": "97661edcb71bde5c8dda356e53f6cd8cf7d16ab2"
+      }
+    },
+    "launcher_probe": {
+      "path": "artifacts/optimization/round_036/h36_launcher_pid_probe.json",
+      "sha256": "685ae7ec56677e868e1c35f2b7df408d4e9c7a3bc28980e9d6f83623373d3a06",
+      "result": "launcher PID 27380 RSS 6098944; child PID 43364 actual uv Python RSS 12886016; sys._base_executable points to C:\\Users\\A\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\python.exe"
+    }
+  },
+  "data_roles": {
+    "development": "H36 prior 20 process pairs and launcher PID probe",
+    "comparison": "new 20 independent cold/warm process pairs, alternating AB/BA, three request scales",
+    "holdout": "7 pairs 1x64x4, 7 pairs 8x128x16, 6 pairs 16x128x16",
+    "final_acceptance": "wall/output equivalence evidence only; corrected RSS engineering metric; no Native or production cache acceptance"
+  },
+  "entrypoint": {
+    "cold": "build_reference_scenario -> run_scenario(default provider) -> report_dict",
+    "warm": "build_reference_scenario -> explicit TopologyAwareBatchCostProvider warmup -> measured run_scenario(batch_lowerer=provider) -> report_dict",
+    "independent_process": true,
+    "native_loaded": false
+  },
+  "correction": {
+    "prior_artifact": {
+      "path": "artifacts/optimization/round_036/h36_frontend_ab_results.json",
+      "sha256": "cb10d43fa49bc130f69edab4aaf6fef699f0ddc25100906e2a86c7bab3ad112f",
+      "status": "preserved_but_rss_invalid_scope"
+    },
+    "reason": "run_one polled only psutil.Process(proc.pid), which is the .venv launcher; launcher PID RSS was about 6 MB while actual uv Python child was about 12.9 MB in probe.",
+    "corrected_scope": "sum RSS of launcher and recursive interpreter descendants per poll; peak process-tree RSS; observed child PIDs preserved in each pair record.",
+    "new_artifact": {
+      "path": "artifacts/optimization/round_036/h36_frontend_ab_pidfixed_results.json",
+      "sha256": "6a89836140fb1bdcbc6c5227119eaf8b9b365155066032b243d55ccfa7079a61"
+    },
+    "new_script": {
+      "path": "artifacts/optimization/round_036/h36_frontend_ab_pidfixed.py",
+      "sha256": "f4c45f5069b3388b4851937f968b3e9a8306c6dfacc1ed10a8a18ce7f82ad049"
+    }
+  },
+  "commands": [
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_036/h36_launcher_pid_probe.py",
+      "exit_code": 0,
+      "role": "verified launcher and actual interpreter process tree"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m py_compile artifacts/optimization/round_036/h36_frontend_ab_pidfixed.py",
+      "exit_code": 0,
+      "role": "syntax verification"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_036/h36_frontend_ab_pidfixed.py",
+      "exit_code": 0,
+      "role": "20 independent AB/BA process pairs with corrected process-tree RSS"
+    },
+    {
+      "command": "git rev-parse HEAD",
+      "exit_code": 0,
+      "role": "source identity"
+    }
+  ],
+  "observations": {
+    "aggregate": {
+      "pair_count": 20,
+      "return_codes_zero": true,
+      "output_equivalent": true,
+      "warm_wall_lower_median_pairs": 20,
+      "warm_rss_lower_median_pairs": 2
+    },
+    "by_load": {
+      "1x64x4": {
+        "pair_count": 7,
+        "cold_wall_median_s": 0.08973440004047006,
+        "warm_wall_median_s": 0.037710700067691505,
+        "wall_delta_median_pct": -57.97520231852662,
+        "cold_wall_p90_s": 0.09112540001515299,
+        "warm_wall_p90_s": 0.039048019982874396,
+        "cold_peak_rss_median_bytes": 50290688,
+        "warm_peak_rss_median_bytes": 51286016,
+        "rss_delta_median_pct": 1.9791496986479862,
+        "all_output_equivalent": true,
+        "all_return_codes_zero": true
+      },
+      "8x128x16": {
+        "pair_count": 7,
+        "cold_wall_median_s": 0.17199719999916852,
+        "warm_wall_median_s": 0.04202860000077635,
+        "wall_delta_median_pct": -75.56436965195972,
+        "cold_wall_p90_s": 0.17850910003762693,
+        "warm_wall_p90_s": 0.04435303995851427,
+        "cold_peak_rss_median_bytes": 60624896,
+        "warm_peak_rss_median_bytes": 61489152,
+        "rss_delta_median_pct": 1.425579352746431,
+        "all_output_equivalent": true,
+        "all_return_codes_zero": true
+      },
+      "16x128x16": {
+        "pair_count": 6,
+        "cold_wall_median_s": 0.1846889000153169,
+        "warm_wall_median_s": 0.04645685001742095,
+        "wall_delta_median_pct": -74.84588948574164,
+        "cold_wall_p90_s": 0.19106769998325035,
+        "warm_wall_p90_s": 0.047219600004609674,
+        "cold_peak_rss_median_bytes": 64653312.0,
+        "warm_peak_rss_median_bytes": 68046848.0,
+        "rss_delta_median_pct": 5.24882004498084,
+        "all_output_equivalent": true,
+        "all_return_codes_zero": true
+      }
+    },
+    "output_equivalence": "20/20 pairs have equal report JSON hashes, makespan_ns, batch_count and request_count; all 40 child commands return 0.",
+    "wall": "warm median wall reductions remain ~57.98%, 75.56%, 74.85% for 1x64x4, 8x128x16, 16x128x16.",
+    "corrected_rss": "warm median RSS deltas are +1.98%, +1.43%, +5.25% respectively; only 2/20 pairs warm RSS lower. Therefore no RSS improvement and likely warm reuse retains more memory."
+  },
+  "decision": {
+    "status": "evidence_only_wall_gain_rss_no_gain",
+    "finding": "原 RSS 结论作废；校正进程树后暖 provider 仍有等价 wall-time 工程收益，但三规模 RSS 均不降。",
+    "acceptance": "接纳 wall/output 等价的 context-local explicit provider evidence；不接纳内存改善、生产共享缓存候选或 Native 精度。",
+    "source_modified": false,
+    "native_accuracy": "not measured"
+  },
+  "uncovered": [
+    "没有安全共享 provider 生命周期、场景身份、eviction 或并发契约；暖路径不是新增生产机制。",
+    "RSS 仅进程树工作集峰值，未测 tracemalloc、OS page cache 或系统级工作集。",
+    "没有 Native/真实设备 TTFT/TPOT/E2E、预测精度或生产吞吐证据。",
+    "旧 RSS artifact 未覆盖并保留，不得复用其内存结论。"
+  ],
+  "status": "complete_pid_scope_correction_no_rss_gain"
+}

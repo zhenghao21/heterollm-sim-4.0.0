@@ -40,7 +40,7 @@
 `H29、H36、H41、H46、H54、H61` 不能把单次局部 profile 当作仿真器性能改善。
 
 - `H29` 已补 120 个独立 CLI 子进程、60 对 AB/BA、每规模 20 对，并记录 wall/RSS/stdout 等价：small/medium/large wall 中位改善约 5.82%/10.79%/12.34%；medium/large RSS 中位改善约 12.27%/18.34%，small RSS 不接纳为改善。结论仍限定为 CLI 文本前端，不外推 web/run_jobs 或目标系统 latency。
-- `H36` 已补 20 对独立 run_scenario 冷/暖 provider 进程 AB/BA，三规模 wall 中位数暖路径下降约 57.90%/74.37%/74.19%，report/makespan/task 结果 20/20 等价；RSS 小/中无稳定改善，大规模约 -1.85%。暖路径仍只是显式 provider 控制，没有安全共享生产生命周期、并发、eviction 或场景身份契约，不晋升生产候选。
+- `H36` 已补 20 对独立 run_scenario 冷/暖 provider 进程 AB/BA，并发现 `.venv` launcher RSS 误采样；校正进程树后，三规模 wall 中位数暖路径下降约 57.98%/75.56%/74.85%，report/makespan/task 结果 20/20 等价，但 RSS 分别上升约 1.98%/1.43%/5.25%，撤销内存改善结论。暖路径仍只是显式 provider 控制，没有安全共享生产生命周期、并发、eviction 或场景身份契约，不晋升生产候选。
 - `H41/H46` 只是热点剖析，没有可安全优化的候选、完整 TaskResult/report 等价和 RSS。
 - `H54` fresh/reused 有 245.4ms → 32.35ms、3.68MB → 1.58MB，但仍缺随机批次、淘汰、并发和生产入口。
 - `H61` n=8/32/64 仅一次量级，缓存候选有的更慢且峰值更高；不能外推为稳定负结论，也不能宣称改善。
