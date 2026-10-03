@@ -2,7 +2,7 @@
   "schema": "heterollm.candidate/v1",
   "round_id": "round_067",
   "parent_head": "39cc25a988038ec60f7293bcc506f271249cb243",
-  "candidate_head": "b721ee0d2ff2fdb548212d16076a652e877753f0",
+  "candidate_head": "424629931236782d978c59ec800073694aca64e6",
   "changes": [
     "DramProfile organization coordinates and lane state",
     "NAND channel/die/plane mapping, program ordering, cross-request queue state",
@@ -23,6 +23,7 @@
     "focused": 393,
     "frontend_runner": "passed",
     "diff_check": "passed",
-    "py_compile": "passed"
+    "py_compile": "passed",
+    "full_pytest": "3145 passed/4 skipped"
   }
 }

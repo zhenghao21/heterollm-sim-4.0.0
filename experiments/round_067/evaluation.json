@@ -5,7 +5,7 @@
   "mechanism_status": "passed",
   "frontend_status": "passed",
   "report_api_status": "passed",
-  "regression_status": "393 focused tests passed; frontend Python/API/job ledgers equal",
+  "regression_status": "3145 passed, 4 skipped; frontend runner passed",
   "native_accuracy": {
     "status": "one_valid_historical_pair_replayed_on_current_simulator",
     "reference": {
@@ -67,5 +67,6 @@
     "DRAM/NAND physical values are not device-calibrated",
     "one valid Native pair does not establish cross-model/hardware generalization",
     "current Native probe runtime/extractor drift prevents headline use"
-  ]
+  ],
+  "source_head": "424629931236782d978c59ec800073694aca64e6"
 }

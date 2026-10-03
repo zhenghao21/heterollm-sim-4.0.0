@@ -47,5 +47,7 @@
     "obtain current extractor semantic proof if current fresh measurements are to become headline",
     "FTL/GC and cycle accuracy remain outside first-stage workplan"
   ],
-  "next_step": "Keep round_067 implementation as baseline; any broader accuracy claim requires additional valid independent Native cells, not synthetic self-reference."
+  "next_step": "Keep round_067 implementation as baseline; any broader accuracy claim requires additional valid independent Native cells, not synthetic self-reference.",
+  "source_head": "424629931236782d978c59ec800073694aca64e6",
+  "full_regression": "3145 passed, 4 skipped"
 }
