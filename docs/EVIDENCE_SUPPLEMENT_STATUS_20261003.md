@@ -37,9 +37,33 @@
 - 限制：HTTP `/api/run` 未启动；没有 Native 或物理设备数据；解析/前端守恒不能作为时延精度或预测精度证据。
 - 结论：接纳为 H27 真实 planner→event/resource→report_dict 计费链机制证据；没有 Native 精度、部署吞吐或硬件时延准确性结论。
 
+## 第二批补证（同一批次，未改源码）
+
+### H62 parent/candidate 前端 A/B
+
+- [storage/summary.json](../artifacts/optimization/evidence_supplement_20261003_batch2/storage/summary.json) SHA-256 `c043c22e1a6f8e890ab01590db82afd396f474c271c7af8689de1ccb45b9c170`。
+- 用 H62 parent `6cea26e4d554543306fdd98dbc5857b2045e80ad` 与修复提交 `26d040303b719ef029ef3306341353b5c2d31110` 的隔离 Git archive，2 个 profile、generic no-NAND 控制和双请求 owner/queue，共 6 个同输入场景。
+- Python `run_scenario` 和 HTTP `/api/run` 全部成功；输入、report、HTTP payload、makespan 和 NAND task count 在 parent/candidate 之间完全相同。
+- 结论：正式前端路径健康，但没有激活 H62 的 `_direct_memory_phase` NAND-bearing direct GPU GEMM；不能接纳 H62 修复收益。known-offset 跨页仍是独立 oracle，未伪造为前端证据。
+
+### H27 parent/candidate 成本计费 A/B
+
+- [cost_model/summary.json](../artifacts/optimization/evidence_supplement_20261003_batch2/cost_model/summary.json) SHA-256 `9778ad14893442dda20f96ee174fbdf38ab6f47d2c431b395736efde6add99e0`。
+- parent `9c2b21a6811fca1517df1922eee45a3eaaf417f4` 与 candidate `f6457f07f8f44b1d8c70d4a12ee637a65d1cbdfd` 在 analytical/serialized/overlapped 三种模式下各跑一次静态链和一次独立 HTTP `/api/run`，六次 HTTP 均为 200。
+- serialized/overlapped 中，candidate 的 `ResourceDemand` 与物理 backing bytes 匹配行数相对 parent：GEMM `52→54`、memory `3→6`、reduction `0→15`；candidate `resource_accounted_bytes` 增加 `11034`，energy 增加 `56040`，makespan 保持 `442041.55833333335 ns`。
+- 结论：H27 计费守恒和修复因果差异已由真实前端 A/B 支持；没有速度、Native 精度或设备时延结论。前两次 runner 失败及最终成功 provenance 均保留。
+
+### H64 评估指标完整性 HTTP A/B
+
+- [evaluation/summary.json](../artifacts/optimization/evidence_supplement_20261003_batch2/evaluation/summary.json) SHA-256 `03a0b06bc1727eb824f9f932984e4f45572ecc49353b4ed19b15b1ce213467ab`。
+- parent `23b56f67e4f44f1663a4044c9be14055372f32d5` 与 candidate `fb71035e81be1273741c795d3d7805065fa0bb77` 各执行真实 HTTP `/api/simulate-score` 8 个场景。
+- parent 对缺失 TTFT/TPOT/E2E 都错误返回 `compared/passed=true`；candidate 返回 `incomplete_metric_reference/passed=false` 并给出 `missing_metrics`。complete、partial、empty、N=1 TPOT-NA、missing-native 400 控制均正确。
+- H42/H43/H60 的 OOD/coverage/support 状态没有正式输入触发面，保留为 `local/not-frontend`；self-reference 只证明 HTTP 契约，不构成 Native 误差。
+
 ## 仍未补足的关键边界
 
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
+- H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
 - H29 的收益目前只属于 CLI 文本前端；H36/H41/H46/H54/H61 仍缺同等级独立进程、重复批次、输出等价和 RSS 证据。
-- H27/H38/H44/H52/H58：仍需真实 planner/event/resource/report 计费证据；解析矩阵不能替代前端计费链路。
+- H27 已完成真实 planner/event/resource/report/API A/B；H38/H44/H52/H58 仍需各自进入真实计费链路，解析矩阵不能替代前端计费证据。
 - H28/H34/H43/H51/H60/H64：若要声称预测精度或泛化改善，必须补同模型/硬件/shape/runtime 的 Native 成对 TTFT/TPOT/E2E 误差、留出和退化统计；当前记录均不构成精度改善。

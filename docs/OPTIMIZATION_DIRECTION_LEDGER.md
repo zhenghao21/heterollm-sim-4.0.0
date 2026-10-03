@@ -6,3 +6,10 @@
 - H29 已完成 120 个独立 CLI 子进程补证：wall small/medium/large 中位改善约 5.82%/10.79%/12.34%，medium/large RSS 约 12.27%/18.34%；结论仅限 CLI 文本前端。
 - H62 已完成当前版本存储真实前端机制补证：两 profile、每 profile 18 个 nand_media 任务，介质真值与 report 守恒通过；跨页 run_scenario/HTTP/父候选 A/B 仍待补。
 - 下一补证方向：完成 H27 前端成本计费链，再补 H62 跨页/HTTP/A-B 和其余存储轮次；不把 H65 序列化结果当作速度或精度收益。
+
+
+## 2026-10-03 第二批补证更新
+
+- H62 parent/candidate真实run_scenario+HTTP A/B已完成但修复点未激活，父候选输出完全相同，保留为路径健康/不足以接纳收益。
+- H27 parent/candidate成本计费A/B已完成，serialized/overlapped中ResourceDemand物理匹配提升（GEMM 52→54、memory 3→6、reduction 0→15），makespan不变，接纳机制因果差异。
+- H64缺失指标门控真实HTTP A/B已完成，parent错误通过、candidate fail-closed；H42/H43/H60仍无正式前端触发面。

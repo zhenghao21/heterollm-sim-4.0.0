@@ -86,3 +86,10 @@
 - `audit_perf_accuracy.json` SHA-256 `6b9641846f82475e0c8e42178f476ca97b1f15ebb6394284defeaf56b2040b34`
 
 初始审计本身没有执行补测；补证阶段实际执行的 H65/H29/H62/H27 命令和退出码已写入对应 artifacts 与 [EVIDENCE_SUPPLEMENT_STATUS_20261003.md](EVIDENCE_SUPPLEMENT_STATUS_20261003.md)。H65 的自动推进已暂停，后续应由用户逐项批准或继续手动选择。
+
+## 第二批补证结果
+
+- H62 已通过 parent/candidate 隔离的真实 `run_scenario` 和 HTTP `/api/run` 路径补测，但六个同输入场景的 report/API/makespan/NAND task hashes 完全相同；H62 修复点没有在该正式 workload 激活，因此保留为路径健康证据，拒绝“修复有用”结论。
+- H27 已通过 parent/candidate 隔离的真实计费前端和 HTTP `/api/run` 补测。serialized/overlapped 中 candidate 的 physical backing 与独立 ceil oracle 一致，`ResourceDemand` 匹配行数提升（GEMM `52→54`、memory `3→6`、reduction `0→15`），但 makespan 不变；接纳为计费机制因果证据，不接纳为速度或精度改善。
+- H64 评估/API 门控已用两套隔离源码各执行 8 个真实 HTTP `/api/simulate-score` 场景。parent 对缺失 TTFT/TPOT/E2E 仍错误通过，candidate 全部 fail-closed；这证明 H64 修复进入真实 API，仍不构成 Native 精度证据。H42/H43/H60 状态因正式输入没有触发面，继续标记 `local/not-frontend`。
+- 第二批机器摘要：H62 `c043c22e1a6f8e890ab01590db82afd396f474c271c7af8689de1ccb45b9c170`；H27 `9778ad14893442dda20f96ee174fbdf38ab6f47d2c431b395736efde6add99e0`；H64 `03a0b06bc1727eb824f9f932984e4f45572ecc49353b4ed19b15b1ce213467ab`。所有结果均没有加载真实 Native。

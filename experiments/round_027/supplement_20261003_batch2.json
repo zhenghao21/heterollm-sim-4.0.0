@@ -1,0 +1,43 @@
+{
+  "schema": "heterollm.optimization.evidence_supplement/v2",
+  "round_id": "round_027",
+  "supplement_id": "H27_FRONTEND_COST_BILLING_AB_20261003_BATCH2",
+  "status": "complete_mechanism_causal_delta",
+  "parent_commit": "9c2b21a6811fca1517df1922eee45a3eaaf417f4",
+  "candidate_commit": "f6457f07f8f44b1d8c70d4a12ee637a65d1cbdfd",
+  "summary": "artifacts/optimization/evidence_supplement_20261003_batch2/cost_model/summary.json",
+  "summary_sha256": "9778ad14893442dda20f96ee174fbdf38ab6f47d2c431b395736efde6add99e0",
+  "raw_results_sha256": "c46f3cc876c35616f804e99e3638fdb657cc01edc0250cfbe76d8f1c3e0843d7",
+  "module_identity": {
+    "parent": {
+      "cost_models.py": {"git_blob_sha1": "9c9c9097ff0379f924684adeb66bef769e622ce0", "raw_sha256": "9bdcd51a58ef4d607a652726398073d49af06571910941969b1fd04c1c3fca30"},
+      "planner.py": {"git_blob_sha1": "1d011be3d864397a95347383c3d2683be1769883", "raw_sha256": "233dfa3ff6cb5ac1893282c411b54bfa4f264c4aa8f317e8ec1ed70f6e8c8a5b"},
+      "web.py": {"git_blob_sha1": "e8d0d867a934884705bf287c22bd6f727c10b832", "raw_sha256": "6a8470ce3fe3e4bc92c15b23ad65cf63a89631de127772c155df9c6a44460637"},
+      "reporting.py": {"git_blob_sha1": "79c6eaac8e836a0077b30b30312e2b205ce5ead8", "raw_sha256": "3c9fb15e04a4f2e08661aeb1ef39a1c7f7f0a26fd06ad87a70542764158dccbc"}
+    },
+    "candidate": {
+      "cost_models.py": {"git_blob_sha1": "d6cb3daebd0bcb1c9844632bfbd3a5c5e133e4af", "raw_sha256": "819d14af39e37162c1bba321e6a0e71fc8fedaf96662ba48bdcb21f93c586cef"},
+      "planner.py": {"git_blob_sha1": "1d011be3d864397a95347383c3d2683be1769883", "raw_sha256": "233dfa3ff6cb5ac1893282c411b54bfa4f264c4aa8f317e8ec1ed70f6e8c8a5b"},
+      "web.py": {"git_blob_sha1": "e8d0d867a934884705bf287c22bd6f727c10b832", "raw_sha256": "6a8470ce3fe3e4bc92c15b23ad65cf63a89631de127772c155df9c6a44460637"},
+      "reporting.py": {"git_blob_sha1": "79c6eaac8e836a0077b30b30312e2b205ce5ead8", "raw_sha256": "3c9fb15e04a4f2e08661aeb1ef39a1c7f7f0a26fd06ad87a70542764158dccbc"}
+    }
+  },
+  "coverage": {
+    "independent_runs": 6,
+    "modes": ["analytical", "serialized", "overlapped"],
+    "http_status_all_200": true,
+    "same_input_parent_candidate": true,
+    "physical_metadata_matches_ceil_oracle": true,
+    "demand_match_rows_parent_to_candidate": {
+      "gemm": "52 -> 54",
+      "memory": "3 -> 6",
+      "reduction": "0 -> 15"
+    }
+  },
+  "decision": "accept_billing_mechanism_causal_delta",
+  "limitations": [
+    "No Native/device timing or accuracy evidence.",
+    "Makespan was unchanged; this is not a performance improvement claim.",
+    "Static trace and HTTP report are separate calls and were not merged."
+  ]
+}
