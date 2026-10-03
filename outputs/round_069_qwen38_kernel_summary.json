@@ -1,0 +1,88 @@
+{
+  "schema": "qwen38-cpu-kernel-only-compact/v1",
+  "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\configs\\calibration\\qwen38_current_identity_kernel_v2.json",
+  "profile_sha256": "d540040dc0e8755429931e4d519d65b10cf2e06836ade4cda47b7f30ebfd7aef",
+  "capture_audit": {
+    "schema": "qwen38-cpu-direct-capture-audit/v1",
+    "status": "blocked_exact_key_coverage",
+    "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\configs\\calibration\\qwen38_current_identity_kernel_v2.json",
+    "profile_sha256": "d540040dc0e8755429931e4d519d65b10cf2e06836ade4cda47b7f30ebfd7aef",
+    "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
+    "runtime_artifact_count": 68,
+    "train": {
+      "actual_prompt_tokens": 4,
+      "actual_output_tokens": 4,
+      "events": 6684,
+      "missing_dimensions": {
+        "stage": 6684,
+        "phase": 0,
+        "shape": 0,
+        "type": 0,
+        "layout": 6684,
+        "kernel_family": 6684
+      }
+    },
+    "holdout": {
+      "actual_prompt_tokens": 4,
+      "actual_output_tokens": 3,
+      "events": 6668,
+      "missing_dimensions": {
+        "stage": 6668,
+        "phase": 0,
+        "shape": 0,
+        "type": 0,
+        "layout": 6668,
+        "kernel_family": 6668
+      }
+    },
+    "no_inference": true
+  },
+  "policy": {
+    "apply_stage": true,
+    "apply_memory": false,
+    "apply_phase_boundary": false,
+    "operator_key_policy": "exact"
+  },
+  "profile_gate": "pass",
+  "exact_hits": 0,
+  "changed_demands": 0,
+  "delta_B_minus_A_ms": {
+    "engine_ttft_ms": 0.0,
+    "engine_tpot_ms": 0.0,
+    "engine_e2e_ms": 0.0
+  },
+  "dram_nand_ledger_invariant": {
+    "status": "passed",
+    "reason": "kernel-only profile memory=false; existing authored ledger invariant retained"
+  },
+  "error_rows": [
+    {
+      "metric": "ttft_ms",
+      "native_ms": 11904.232999999998,
+      "A_simulator_ms": 13022.257096907193,
+      "B_simulator_ms": 13022.257096907193,
+      "A_ape_pct": 9.391819673784903,
+      "B_ape_pct": 9.391819673784903,
+      "improvement_pp": 0.0
+    },
+    {
+      "metric": "tpot_ms",
+      "native_ms": 1258.8174285714285,
+      "A_simulator_ms": 331.04941484845557,
+      "B_simulator_ms": 331.04941484845557,
+      "A_ape_pct": 73.70155454360466,
+      "B_ape_pct": 73.70155454360466,
+      "improvement_pp": 0.0
+    },
+    {
+      "metric": "e2e_ms",
+      "native_ms": 21300.966,
+      "A_simulator_ms": 17198.816166348868,
+      "B_simulator_ms": 17198.816166348868,
+      "A_ape_pct": 19.258046013740092,
+      "B_ape_pct": 19.258046013740092,
+      "improvement_pp": 0.0
+    }
+  ],
+  "source_compact": "work/round_069_qwen38_cpu_capture/compact_result.json"
+}

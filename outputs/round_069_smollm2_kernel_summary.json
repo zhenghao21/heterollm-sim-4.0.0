@@ -1,0 +1,55 @@
+{
+  "schema": "round-069-smollm2-kernel-summary/v1",
+  "status": "covered",
+  "model": "SmolLM2-1.7B-Q4_K_M",
+  "profile": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\configs\\calibration\\smollm2_current_kernel_v1.json",
+    "sha256": "ab771ff5cd22b87403ef84bb450b9bf11ad4ad4b112c95b219a9dace3a86239f",
+    "native_capture_runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+    "simulator_runtime_fingerprint": "0802565eb9c7b64d6a2e0fe0bd672e512b675edfa11dd718badc209c3ea07784",
+    "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
+    "runtime_artifact_count": 68
+  },
+  "train": {
+    "prompt_tokens": 30,
+    "output_tokens": 32,
+    "kernel_events": 15905,
+    "trace": "work/smollm2_kernel_capture/train_p128_o32_c1.annotated.trace.json"
+  },
+  "holdout": {
+    "prompt_tokens": 34,
+    "output_tokens": 16,
+    "kernel_events": 8129,
+    "trace": "work/smollm2_kernel_capture/holdout_p256_o16_c1.annotated.trace.json"
+  },
+  "exact_key_coverage": {
+    "all_profile_entries": 58,
+    "common_train_holdout": 28,
+    "exact_hits": 28,
+    "changed_compute_demands": 28
+  },
+  "kernel_holdout_error_pct": {
+    "median": 0.1791884646507212,
+    "p90": 1.8487638657289929,
+    "max": 12.05899229254222
+  },
+  "ledger": {
+    "scope": "kernel_only_scenario",
+    "A": {
+      "dram_task_count": 0,
+      "dram_physical_bytes": 0,
+      "nand_task_count": 0,
+      "nand_physical_bytes": 0
+    },
+    "B": {
+      "dram_task_count": 0,
+      "dram_physical_bytes": 0,
+      "nand_task_count": 0,
+      "nand_physical_bytes": 0
+    },
+    "invariant": true,
+    "interpretation": "kernel-only A/B has no authored DRAM/NAND accesses; separate round_067 storage companion ledger remains invariant under calibration composition"
+  },
+  "e2e_statement": "not_claimed_kernel_only",
+  "raw_trace_policy": "raw Nsight SQLite/trace retained only under work; summary contains no raw events"
+}

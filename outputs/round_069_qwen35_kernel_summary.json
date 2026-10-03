@@ -1,0 +1,80 @@
+{
+  "schema": "round-069-qwen35-kernel-summary/v2",
+  "profile": "configs/calibration/qwen35_current_kernel_v1.json",
+  "profile_sha256": "dae57c20ade2fb78d2e3476dbea31465780ec682ca9eba50d72ccd23e84d62fb",
+  "actual_counts": {
+    "train_prompt_tokens": 113,
+    "train_output_tokens": 16,
+    "holdout_prompt_tokens": 209,
+    "holdout_output_tokens": 16
+  },
+  "identity": {
+    "model_sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+    "hardware_fingerprint": "96a17c53c8f29950b13d6d48f9f851ab895876297d3f89a4cb139acae89ba22e",
+    "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
+    "native_capture_runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+    "simulator_runtime_fingerprint": "0802565eb9c7b64d6a2e0fe0bd672e512b675edfa11dd718badc209c3ea07784",
+    "runtime_binding_policy": "native capture evidence retained; application bound to current simulator runtime"
+  },
+  "coverage": {
+    "train_matched_kernel_events": 9534,
+    "holdout_matched_kernel_events": 11000,
+    "raw_union_keys": 169,
+    "valid_exact_keys": 94,
+    "blocked_missing_dimension": 9564,
+    "holdout_kernel_error_pct": {
+      "median_abs": 0.32270801703802054,
+      "p90_abs": 1.255110196507152
+    }
+  },
+  "target_ab": {
+    "stats": {
+      "calls": 42714,
+      "exact": 48,
+      "fallback": 42666,
+      "changed": 220,
+      "reasons": {
+        "missing": 41790,
+        "exact_operator_key_uncovered": 876
+      }
+    },
+    "error_rows": [
+      {
+        "scene": "target_long_p4_r1_engine_ttft_ms",
+        "native_ms": 131.3065,
+        "A_ms": 273.41659,
+        "B_ms": 285.7199682486389,
+        "A_signed_ms": 142.11008999999999,
+        "B_signed_ms": 154.4134682486389,
+        "A_APE_pct": 108.2277648098152,
+        "B_APE_pct": 117.59773373644025,
+        "improvement_pp": -9.369968926625049
+      },
+      {
+        "scene": "target_long_p4_r1_engine_tpot_ms",
+        "native_ms": 8.034291666666666,
+        "A_ms": 6.262536,
+        "B_ms": 6.32398304278664,
+        "A_signed_ms": -1.7717556666666665,
+        "B_signed_ms": -1.7103086238800262,
+        "A_APE_pct": 22.052419057892468,
+        "B_APE_pct": 21.287609348013792,
+        "improvement_pp": 0.7648097098786764
+      },
+      {
+        "scene": "target_long_p4_r1_engine_e2e_ms",
+        "native_ms": 519.6165,
+        "A_ms": 648.510222,
+        "B_ms": 654.3783906568151,
+        "A_signed_ms": 128.89372200000003,
+        "B_signed_ms": 134.76189065681513,
+        "A_APE_pct": 24.8055483226572,
+        "B_APE_pct": 25.934875173674264,
+        "improvement_pp": -1.1293268510170655
+      }
+    ]
+  },
+  "kernel_only": true,
+  "native_e2e_ape_claim": false,
+  "dram_nand_ledger": "not_applicable_gpu_replay"
+}

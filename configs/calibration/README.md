@@ -10,3 +10,19 @@ Round 068 的 A/B 与逐指标误差表见：
 
 - `outputs/round_068_joint_calibration_dram_nand.md`
 - `outputs/round_068_error_comparison.csv`
+
+Round 069 增加了当前 binary 绑定的 operator/kernel profile：
+
+- `qwen25_current_kernel_v1.json`
+- `qwen35_current_kernel_v1.json`
+- `smollm2_current_kernel_v1.json`
+- `tinyllama_current_identity_kernel_v2.json`
+- `qwen38_current_identity_kernel_v2.json`
+
+这些 profile 使用六维 exact key：`stage`、`phase`、`shape`、`dtype`、`layout`、`kernel_family`。kernel-only A/B 只允许修改 GPU/CPU operator compute demand，`apply_memory=false`、`apply_phase_boundary=false`，所以不会接管 DRAM/NAND 物理服务时间。Qwen3.8 的 current CPU trace 缺少 `layout` 和 `kernel_family`，配置保持 `blocked_exact_key_coverage`；缺失字段不会从 kernel 名或 shape 推断。
+
+Round 069 的身份清单、逐指标误差表和覆盖表见：
+
+- `outputs/round_069_current_identity_manifest.json`
+- `outputs/round_069_kernel_error_comparison.md`
+- `outputs/round_069_kernel_calibration_matrix.json`

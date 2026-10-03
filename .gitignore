@@ -70,3 +70,7 @@ source/llama.cpp-native-thread-control/build*/
 *.obj
 *.pdb
 *.lib
+
+# Local fresh profiler traces and round scratch evidence (compact summaries live under outputs/)
+work/
+

@@ -1,0 +1,33 @@
+{
+  "schema": "heterollm.decision/v1",
+  "round_id": "round_069",
+  "decision": "accept_fresh_kernel_profiles_with_explicit_domain_boundaries",
+  "overall_task_status": "complete_with_explicit_coverage_boundaries_and_regression_pass",
+  "promote": {
+    "qwen25": "development_exact_kernel_profile",
+    "qwen35": "development_exact_kernel_profile_partial_target_coverage",
+    "smollm2": "development_exact_kernel_profile",
+    "tinyllama": "development_exact_kernel_profile_target_shape_miss",
+    "qwen38": "identity_bound_cpu_diagnostic_blocked_exact"
+  },
+  "basis": [
+    "all five current captures bind binary SHA 705eaefd and fixed 68-module manifest",
+    "fresh train/holdout evidence is separate from old phase profile",
+    "exact six-dimensional resolver is fail-closed",
+    "Qwen2.5/SmolLM2 exact common keys changed compute demands with low kernel holdout error",
+    "Qwen3.5 fresh exact profile has 94 valid keys and target strict A/B evidence",
+    "TinyLlama fresh exact profile has 38 common keys",
+    "Qwen3.8 direct CPU capture explicitly records missing layout/kernel_family and remains blocked",
+    "DRAM/NAND ledger invariants pass under kernel-only policy"
+  ],
+  "remaining_limits": [
+    "Qwen3.5 target long/p4 shape/operator coverage is partial and its TTFT/E2E worsened",
+    "TinyLlama target long/p4 shape domain has zero exact hits",
+    "Qwen3.8 needs a new capture with explicit layout and kernel_family or a GPU path before kernel coefficients can be enabled",
+    "kernel holdout APE is not model E2E APE"
+  ],
+  "next_step": "only if formal promotion is required: execute remediation_plan.json for Qwen3.8 and capture target-shape independent Native batches",
+  "full_regression": "3146 passed, 4 skipped in 448.52s",
+  "focused_regression": "224 passed in 143.46s",
+  "remediation_reference": "work/round_069_qwen38_cpu_capture/remediation_plan.json"
+}

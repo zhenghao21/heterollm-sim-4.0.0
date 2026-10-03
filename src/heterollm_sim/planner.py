@@ -10610,6 +10610,21 @@ def _add_rank_gemm(
         **quantization_metadata,
         **operation_metadata,
     }
+    # Native semantic kernel calibration uses the same six-dimensional key as
+    # the trace normalizer (stage, phase, shape, dtype, layout, kernel_family).
+    # GEMM lowering already knows the invocation geometry and quantized path;
+    # expose conservative labels here so an exact-key profile can match only
+    # the measured matrix/vector family.  These are descriptive dispatch
+    # facts, not fitted latency values.
+    operation_metadata.setdefault("semantic_dtype", "f32")
+    # Layout is only exact when the lowering carries an explicit source
+    # annotation.  Fresh Native semantic traces label these GEMM views as
+    # ``contiguous``; infering ``vector_q`` from M=1 would manufacture a
+    # six-dimensional key that the trace never proved.
+    operation_metadata.setdefault("semantic_layout", "contiguous")
+    operation_metadata.setdefault(
+        "kernel_family", "gpu_mmq_vec" if workload.m == 1 else "gpu_mmq"
+    )
     # Immutable workload facts for compact query coverage; never native proof.
     operation_metadata["kernel_query_geometry"] = {
         "m": workload.m, "n": workload.n, "k_logical": workload.k,
