@@ -28,3 +28,9 @@
 - 运行速度/内存补证已覆盖 H36/H41/H46/H61：H36 RSS launcher 误采样已校正，wall 复用收益保留但 RSS 上升；H41 retention 前端 contract 完整；H46/H61 无稳定生产候选。
 - Native readiness 已审计 H28/H34/H43/H51/H60/H64：当前无同源码/模型/硬件/shape/runtime 成对 TTFT/TPOT/E2E 与留出数据，全部保持 blocked，不得声称精度改善。
 - H62 workload2 新尝试在 compile 前置拓扑与 tensor_bytes 校验失败；_direct_memory_phase 仍未被正式 workload 激活，失败 artifact 与 provenance 已保留。
+
+## H66：存储硬件建模方向收口（2026-10-03）
+
+- 源码候选 `974da78c5d9692e988bb2ae3fd614ac331981cce` 将 NAND 地址偏移传入 shared transfer endpoint，并把 NAND provenance、跨页 RMW、跨 block erase 与 bounded storage ledger 接入 planner/event/retention/report/API。
+- 正式 workload：合法 HBF/UCIe + control-plane target policy；compile 377 tasks、direct NAND 51；online report/API storage ledger 71 NAND tasks、physical bytes 126828544、pages/waves 15482；`/api/run`、`/api/run-jobs` 与 Python report/storage 一致；缺 Native score fail-closed 400。
+- 决策：接受并晋升开发基线为机制/工程闭合；无 Native/device paired accuracy、性能或硬件校准结论。下一步切换 DRAM profile 粒度或运行速度/内存方向，不重复 H66 NAND 修复。

@@ -154,3 +154,12 @@
 - 独立子进程入口 `build_reference_scenario → compile_scenario → simulate_schedule → run_scenario(aggregate) → report_dict`，命令退出码为 0；12/12 fused-attention 与 96/96 MMA GEMM 任务进入 event/resource/report，schedule/trace 均为 326 tasks，makespan `223915.48190045252 ns`。
 - 28 个 collective task 在当前单 compute reference topology 下全部 local zero-demand（active=0）；因此只接纳 MMA/full-kernel 机制激活证据，保留 collective topology blocker，不作 Native 带宽、时延、性能或精度结论。
 
+
+## H66：NAND 正式前端、地址偏移和报告/API 投影收口（2026-10-03）
+
+- 当前候选提交：`974da78c5d9692e988bb2ae3fd614ac331981cce`；四份记录：[experiment.json](../experiments/round_066/experiment.json)、[candidate.json](../experiments/round_066/candidate.json)、[evaluation.json](../experiments/round_066/evaluation.json)、[decision.json](../experiments/round_066/decision.json)。
+- 真实前端结果：[frontend_full_attempt/result.json](../artifacts/optimization/round_066/frontend_full_attempt/result.json)，SHA-256 `2501a3a2118f3883f64268270ee52e6bbdae22c28c210a954434b874108a849b`；合法 HBF/UCIe + control-plane workload compile 377 tasks、51 个 direct NAND accesses，`run_scenario→report_dict` storage ledger 71 tasks、physical bytes `126828544`、pages/waves `15482`，HTTP `/api/run` 与 `/api/run-jobs` 均与 Python summary/storage ledger 相等，缺 Native score 为 HTTP 400 `missing_native_reference`。
+- 源码收口：`TopologyRouter.transfer_phases`、planner transfer/endpoint/direct/KV paths 透传 source/target page offset；NAND contract 增加 parameterized/source provenance、unknown plane/die/channel、跨页 RMW 和跨 block erase；static/streaming/aggregate 在 retention 前累计 bounded `storage_traffic`，在线 report/API 保留 logical/physical bytes、pages/waves、operation/RMW/erase、resource/owner projection。
+- 全量回归：[full_regression_provenance.json](../artifacts/optimization/round_066/full_regression_provenance.json)，3136 passed、4 skipped；focused storage/report/API 173 passed。Native/设备成对误差仍为 `blocked_no_current_same_source_native_pair`，不构成精度改善结论。
+- 三次失败前端尝试已保留在 `artifacts/optimization/round_066/failures/`：第一次 HTTP authoring placement gate，第二次 control-plane source validation，第三次 Python tuple/list 与 JSON 比较；修复后才接受最终通过。
+- 未覆盖边界：正式 workload 仍是 page-aligned/unknown-offset（known-offset 跨页是独立通信/data-motion 控制）；formal workload 只激活 NAND read，program/erase 由共享 service/oracle 控制；DRAM subchannel/rank/bank-group/HBM pseudo-channel、跨请求 NAND queue/die/channel scheduler、FTL/GC timing、direct erase production API 延期。
