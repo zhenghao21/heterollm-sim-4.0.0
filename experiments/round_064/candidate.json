@@ -1,20 +1,55 @@
 {
   "schema": "heterollm.optimization.candidate/v1",
   "round_id": "round_064",
-  "status": "prepare",
+  "status": "accepted",
   "hypothesis": {
-    "id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
+    "id": "H64_SCORE_METRIC_COMPLETENESS_FAIL_CLOSED",
     "direction": "评估/API与可视化口径",
-    "claim": "未覆盖评估链路可能把失败/缺失/部分结果序列化或投影为可比较/成功，或在 API/UI 之间丢失边界。",
-    "trigger": "H42/H50/H57 已分别收口 coverage/status/bytes，其他 score/report/API projection 尚未独立核对。",
-    "falsifier": "独立 source/matrix 显示状态、失败、缺失和序列化在 score/report/API/UI 全链路一致，未发现新缺陷。"
+    "claim": "完整 request ID 覆盖不能替代 TTFT/TPOT/E2E 指标完整性；缺失或非正 native metric 不得返回 compared/passed=true。",
+    "trigger": "独立 probe 缺 native tpot/e2e 仍 compared/passed=true",
+    "falsifier": "缺失每项在有效/定义范围内均返回 explicit incomplete_metric_reference passed=false，N=1 TPOT NA 保持合法"
   },
   "parent_commit": "23b56f67e4f44f1663a4044c9be14055372f32d5",
-  "candidate_source_commit": null,
-  "source_sha256": null,
-  "changed_files": [],
-  "independent_evidence": [],
-  "activation_checks": [],
-  "deferred_candidates": [],
-  "tests": []
+  "candidate_source_commit": "fb71035e81be1273741c795d3d7805065fa0bb77",
+  "source_sha256": {
+    "functional_fix": "fb71035e81be1273741c795d3d7805065fa0bb77",
+    "current_head": "fb71035e81be1273741c795d3d7805065fa0bb77"
+  },
+  "changed_files": [
+    "src/heterollm_sim/web.py",
+    "tests/test_web.py"
+  ],
+  "independent_evidence": [
+    "artifacts/optimization/round_064/source_scan_independent.json",
+    "artifacts/optimization/round_064/eval_matrix_pre_fix.json",
+    "artifacts/optimization/round_064/eval_matrix_metric_fix_pre_tuple.json",
+    "artifacts/optimization/round_064/eval_matrix_independent.json",
+    "artifacts/optimization/round_064/final_review.json"
+  ],
+  "activation_checks": [
+    "missing TTFT/TPOT/E2E controls fail closed",
+    "N=1 TPOT not applicable preserved",
+    "request partial_reference behavior preserved",
+    "online tuple/list boundary explicitly deferred",
+    "web 43 passed",
+    "full 3115 passed/4 skipped"
+  ],
+  "deferred_candidates": [
+    "H64_ONLINE_REPORT_PRIMITIVE_SERIALIZATION"
+  ],
+  "tests": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/test_web.py -q",
+      "exit_code": 0,
+      "result": "43 passed"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest -q",
+      "exit_code": 0,
+      "result": "3115 passed, 4 skipped"
+    }
+  ],
+  "source_commit": "fb71035e81be1273741c795d3d7805065fa0bb77",
+  "review": "Independent score scan reproduced metric omission; minimal web comparator gate fixed it, with reporting tuple/list kept as separate deferred root.",
+  "review_artifact_sha256": "a22c3eb6a39492e8bc97c29ecb0577194639e9e01ff63a0a1634ba50ec7067ae"
 }

@@ -1,21 +1,31 @@
 {
   "schema": "heterollm.optimization.evaluation/v1",
   "round_id": "round_064",
-  "candidate_id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
-  "status": "prepare",
+  "candidate_id": "H64_SCORE_METRIC_COMPLETENESS_FAIL_CLOSED",
+  "status": "complete",
   "accuracy_status": "not_applicable",
-  "generalization_status": "not_applicable",
-  "mechanism_status": "pending_scan",
+  "generalization_status": "evaluation contract only; no Native accuracy",
+  "mechanism_status": "fixed_and_verified",
   "prediction": {
     "native_loaded": false,
-    "status": "pending"
+    "source_commit": "fb71035e81be1273741c795d3d7805065fa0bb77",
+    "status": "source_fix_verified"
   },
   "score": {
-    "status": "pending"
+    "status": "accepted_source_fix",
+    "acceptance": "missing defined native TTFT/TPOT/E2E cannot be compared/passed; available rows retained; N=1 TPOT NA preserved",
+    "evidence": [
+      "artifacts/optimization/round_064/source_scan_independent.json",
+      "artifacts/optimization/round_064/eval_matrix_independent.json",
+      "artifacts/optimization/round_064/final_review.json"
+    ]
   },
-  "regression_status": "pending",
-  "result": "pending",
+  "regression_status": "web 43 passed; full 3115 passed/4 skipped",
+  "result": "candidate_accepted_development_baseline_promoted_with_deferred_serialization",
   "limitations": [
-    "尚未完成独立评估/API source/matrix"
-  ]
+    "no Native accuracy",
+    "online report_dict guardrails tuple/list roundtrip remains a separate deferred candidate",
+    "no browser accessibility evidence"
+  ],
+  "review_artifact_sha256": "a22c3eb6a39492e8bc97c29ecb0577194639e9e01ff63a0a1634ba50ec7067ae"
 }

@@ -1,7 +1,7 @@
 {
   "schema": "heterollm.optimization.experiment/v1",
   "round_id": "round_064",
-  "hypothesis_id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
+  "hypothesis_id": "H64_SCORE_METRIC_COMPLETENESS_FAIL_CLOSED",
   "direction": "评估/API与可视化口径",
   "previous_direction": "开发工具链与可复现性",
   "recent_directions": [
@@ -68,10 +68,14 @@
     ]
   },
   "problem_domain_closure": {
-    "rule": "同一评估边界根因若影响 score、report、API、序列化、可视化或回归触发面，本轮一起收口。",
-    "status": "prepare"
+    "candidate": "accepted/promoted",
+    "deferred": "H64_ONLINE_REPORT_PRIMITIVE_SERIALIZATION tuple/list container boundary in reporting.py",
+    "fix": "web.py comparator requires defined TTFT/E2E and TPOT when applicable, returns incomplete_metric_reference passed=false with missing_metrics",
+    "regression": "web 43 passed; full 3115 passed/4 skipped",
+    "status": "closed_with_source_fix_and_explicit_deferred_boundary",
+    "trigger": "native missing TTFT/TPOT/E2E was silently omitted while status compared/passed=true"
   },
-  "selected_candidate": null,
-  "next_step": "等待独立 source scan 与评估矩阵；无缺陷保留有限负结论并切换方向。",
-  "status": "prepare"
+  "selected_candidate": "H64_SCORE_METRIC_COMPLETENESS_FAIL_CLOSED",
+  "next_step": "下一轮单独处理 H64_ONLINE_REPORT_PRIMITIVE_SERIALIZATION 或切换其他最长未查方向；不把 reporting.py tuple/list 根因混入本轮 score metric 修复。",
+  "status": "promote"
 }

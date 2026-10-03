@@ -1,12 +1,25 @@
 {
   "schema": "heterollm.optimization.decision/v1",
   "round_id": "round_064",
-  "candidate_id": "H64_EVAL_UNCOVERED_EXECUTION_CHAIN",
-  "status": "pending",
-  "decision": "pending",
-  "reason": "Prepare 已登记评估/API与可视化方向，等待独立 source scan 与矩阵。",
-  "evidence": [],
-  "source_commit": "23b56f67e4f44f1663a4044c9be14055372f32d5",
-  "deferred_scope": [],
-  "next_hypothesis": null
+  "candidate_id": "H64_SCORE_METRIC_COMPLETENESS_FAIL_CLOSED",
+  "status": "complete",
+  "decision": "accept_promote_development_baseline",
+  "reason": "Independent score probe reproduced missing native TTFT/TPOT/E2E fields being silently dropped while compared/passed=true. The web comparator now records missing_metrics and returns incomplete_metric_reference/passed=false for defined metrics, while preserving N=1 TPOT not-applicable and existing partial-reference behavior. Web 43 passed and full 3115 passed/4 skipped. Online report tuple/list JSON roundtrip remains explicitly deferred as a separate reporting.py root cause.",
+  "evidence": [
+    "artifacts/optimization/round_064/source_scan_independent.json",
+    "artifacts/optimization/round_064/eval_matrix_pre_fix.json",
+    "artifacts/optimization/round_064/eval_matrix_metric_fix_pre_tuple.json",
+    "artifacts/optimization/round_064/eval_matrix_independent.json",
+    "artifacts/optimization/round_064/final_review.json"
+  ],
+  "source_commit": "fb71035e81be1273741c795d3d7805065fa0bb77",
+  "deferred_scope": [
+    "H64_ONLINE_REPORT_PRIMITIVE_SERIALIZATION"
+  ],
+  "next_hypothesis": {
+    "claim": "单独修复 online report_dict hardware_phase_ledger.guardrails tuple/list primitive serialization，或转向其他最长未查方向。",
+    "direction": "评估/API与可视化口径",
+    "rationale": "这是 reporting.py 独立根因，不能与 web score metric gate 混为同一候选。"
+  },
+  "review_artifact_sha256": "a22c3eb6a39492e8bc97c29ecb0577194639e9e01ff63a0a1634ba50ec7067ae"
 }
