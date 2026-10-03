@@ -49,7 +49,7 @@
 
 ### P1：成本模型必须进入 planner/event/resource/report
 
-`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。H27 已补 `compile_scenario → simulate_schedule → run_scenario → report_dict` 并有 HTTP A/B；H38 现已在执行源码补真实 `planner → event → resource → report_dict` 与 HTTP `/api/run`，加上 shape、方向时延、单队列/双 lane 控制，但无候选 A/B、Native 或校准性能结论；H58 本批已补 routed LinkService 的同级 compile→event→run→report 机制 A/B，但 parent/candidate 无差异且无 Native；H44/H52 仍待各自前端 workload。
+`H27、H38、H44、H52、H58` 的公式、单位、owner、queue 和解析守恒证据不能替代真实计费链路。H27 已补 `compile_scenario → simulate_schedule → run_scenario → report_dict` 并有 HTTP A/B；H38 已补真实 `planner → event → resource → report_dict` 与 HTTP `/api/run`，加上 shape、方向时延、单队列/双 lane 控制，但无候选 A/B、Native 或校准性能结论；H44 已补 MMA/full-kernel 的真实 planner/event/report 激活证据，但 collective 仍被单 compute topology 阻塞；H52 已补正式 topology/HTTP 激活性扫描并保留同一 blocker；H58 已补 routed LinkService 的同级 compile→event→run→report 机制 A/B，但 parent/candidate 无差异且无 Native。
 
 补测应通过真实 planner/event/run_scenario 产生 GEMM、reduction、MMA、collective、link/transfer workload，比较 logical/physical bytes、energy、owner capacity、queue/phase、makespan 和最终 report。覆盖 shape、并发、zero/invalid dtype/size、duplicate owner。Native 带宽/延迟只有有独立硬件观测才可报告。
 
@@ -75,7 +75,7 @@
 
 1. **H42/H50/H57/H64 的剩余状态边界**：H65 的 primitive serialization 已闭合，继续补缺失/失败/coverage 的 report/API 投影，不重做 H65。
 2. **H62/H39/H40/H48/H49/H55/H24/H26/H30**：H62 已有当前版本前端机制证据，下一步补 known-offset 跨页激活、HTTP/report projection 和父/候选 A/B，随后扩展其它存储轮次。
-3. **H44/H52/H58，再回看 H37/H45/H53/H59**：H27 已有 report_dict 前端计费证据；继续把剩余成本、调度、资源守恒和失败回滚接到 event/report/API。
+3. **回看 H37/H45/H53/H59**：H27/H38/H44/H52/H58 的当前成本前端边界已记录；后续只在新增 topology、跨请求或失败回滚触发面实际存在时补测，不能重复已通过的单 compute/单链路路径。
 4. **H29/H41/H46/H54/H61/H36**：做重复独立性能 A/B，严格区分仿真器自身 wall/RSS 和被模拟系统延迟。
 5. **H28/H34/H43/H51/H60/H64**：如果确实要发布预测质量结论，再运行 Native 成对误差和留出泛化；否则保持“门控/证据边界修复”。
 
