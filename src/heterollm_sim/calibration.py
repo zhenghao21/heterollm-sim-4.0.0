@@ -616,6 +616,18 @@ def _invocation_fields(metadata: Mapping[str, Any]) -> tuple[str | None, str | N
         # calibration gate below.
         if not projection:
             projection = "lm_head"
+    # GEMM lowering carries an explicit projection id even when the broader
+    # planner coverage component is absent.  These ids are semantic graph
+    # ownership markers, not latency guesses, so bridge them directly to the
+    # same stages used by the CUDA trace.  Keep the mapping deliberately
+    # finite; an unknown projection remains fail-closed.
+    if stage is None:
+        if projection in {"attention.qkv", "linear_attention.qkv"}:
+            stage = "attention_qkv"
+        elif projection in {"mlp.gate", "mlp.up", "mlp.up_gate", "mlp.down"}:
+            stage = "ffn"
+        elif projection == "lm_head":
+            stage = "lm_head"
     # Planner coverage labels describe the layer family; semantic profiles
     # describe the measured operator family.  Bridge only unambiguous ids.
     if stage in {"full_attention", "attention", "attention_projection"}:

@@ -8,7 +8,8 @@
     "qwen35": "development_exact_kernel_profile_partial_target_coverage",
     "smollm2": "development_exact_kernel_profile",
     "tinyllama": "development_exact_kernel_profile_target_shape_miss",
-    "qwen38": "identity_bound_cpu_diagnostic_blocked_exact"
+    "qwen38": "identity_bound_cpu_diagnostic_blocked_exact",
+    "qwen38_gpu": "development_exact_gpu_kernel_profile_fresh_train_holdout"
   },
   "basis": [
     "all five current captures bind binary SHA 705eaefd and fixed 68-module manifest",
@@ -18,16 +19,17 @@
     "Qwen3.5 fresh exact profile has 94 valid keys and target strict A/B evidence",
     "TinyLlama fresh exact profile has 38 common keys",
     "Qwen3.8 direct CPU capture explicitly records missing layout/kernel_family and remains blocked",
-    "DRAM/NAND ledger invariants pass under kernel-only policy"
+    "DRAM/NAND ledger invariants pass under kernel-only policy",
+    "Qwen3.8 GPU current binary full-offload profile has 78 common exact keys and 0.302384% median holdout APE; engine A/B changed kernel demands but critical path unchanged"
   ],
   "remaining_limits": [
     "Qwen3.5 target long/p4 shape/operator coverage is partial and its TTFT/E2E worsened",
     "TinyLlama target long/p4 shape domain has zero exact hits",
-    "Qwen3.8 needs a new capture with explicit layout and kernel_family or a GPU path before kernel coefficients can be enabled",
-    "kernel holdout APE is not model E2E APE"
+    "kernel holdout APE is not model E2E APE",
+    "Qwen3.8 GPU fresh capture is diagnostic native timing for p14/o8 and p18/o4; historical p512/o128 GPU row has binary/runtime mismatch and analytical fallback"
   ],
-  "next_step": "only if formal promotion is required: execute remediation_plan.json for Qwen3.8 and capture target-shape independent Native batches",
+  "next_step": "for formal promotion only: capture current-binary GPU target-shape Native batches p512/o128/c1; do not reuse historical GPU binary",
   "full_regression": "3146 passed, 4 skipped in 448.52s",
   "focused_regression": "224 passed in 143.46s",
-  "remediation_reference": "work/round_069_qwen38_cpu_capture/remediation_plan.json"
+  "remediation_reference": "outputs/round_069_full_error_comparison.md"
 }

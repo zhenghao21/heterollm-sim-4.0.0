@@ -2,8 +2,8 @@
   "schema": "heterollm.evaluation/v1",
   "round_id": "round_069",
   "status": "measured_and_regression_verified",
-  "matrix": "outputs/round_069_kernel_calibration_matrix.json",
-  "error_table": "outputs/round_069_kernel_error_comparison.csv",
+  "matrix": "outputs/round_069_full_error_comparison.json",
+  "error_table": "outputs/round_069_full_error_comparison.csv",
   "kernel_coverage": {
     "qwen25": {
       "train_events": 16048,
@@ -96,7 +96,7 @@
     },
     "qwen38": {
       "schema": "qwen38-cpu-direct-capture-audit/v1",
-      "status": "blocked_exact_key_coverage",
+      "status": "blocked_cpu_route_only",
       "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\configs\\calibration\\qwen38_current_identity_kernel_v2.json",
       "profile_sha256": "d540040dc0e8755429931e4d519d65b10cf2e06836ade4cda47b7f30ebfd7aef",
       "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
@@ -128,13 +128,59 @@
         }
       },
       "no_inference": true
+    },
+    "qwen38_gpu": {
+      "schema": "qwen38-gpu-kernel-summary/v1",
+      "profile": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\configs\\calibration\\qwen38_gpu_current_kernel_v1.json",
+      "profile_sha256": "dbaea7b28cc5dbe410eca635084876d1407f221087f6fa6e3291f5f7f93f9343",
+      "train_trace": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\work\\round_069_qwen38_gpu_capture\\train.annotated.trace.json",
+      "holdout_trace": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\work\\round_069_qwen38_gpu_capture\\holdout.annotated.trace.json",
+      "identity": {
+        "model_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+        "hardware_fingerprint": "96a17c53c8f29950b13d6d48f9f851ab895876297d3f89a4cb139acae89ba22e",
+        "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
+        "native_capture_runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+        "simulator_runtime_fingerprint": "456ef639f9858e62f6a49441f35949efac521a39847d56ab36b3de0c1e7e49fa",
+        "gpu_layers": 66
+      },
+      "raw_kernel_events": {
+        "train": 18673,
+        "holdout": 10913
+      },
+      "eligible_exact_events": {
+        "train": 13809,
+        "holdout": 8097
+      },
+      "blocked_missing_dimensions": {
+        "train": {
+          "stage": 4864
+        },
+        "holdout": {
+          "stage": 2816
+        },
+        "total": 7680
+      },
+      "keys": {
+        "train": 109,
+        "holdout": 109,
+        "raw_union": 140,
+        "common_exact": 78
+      },
+      "holdout_key_ape_pct": {
+        "median": 0.30238402990417435,
+        "p90": 1.970443349753704,
+        "max": 28.673481012068226,
+        "count": 78
+      },
+      "ledger_invariant": "kernel-only profile has no DRAM/NAND service demand; storage ledger remains separate",
+      "generalization_claim": "exact common train/holdout keys only; p512/o128 target shape not claimed"
     }
   },
   "engine_error_row_count": 9,
   "identity_gate": {
     "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
     "runtime_artifacts": 68,
-    "models": 5
+    "models": 6
   },
   "ledger_invariants": {
     "qwen25": {
@@ -168,7 +214,7 @@
     }
   },
   "regression": {
-    "focused": "224 passed in 143.46s",
+    "focused": "88 passed",
     "full": "3146 passed, 4 skipped in 448.52s"
   }
 }

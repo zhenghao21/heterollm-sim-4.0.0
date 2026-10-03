@@ -1,12 +1,21 @@
 import json
 
 from tools.build_semantic_calibration import build, classify_operator, _operator_id, _phase_scopes, _event_phase
-from heterollm_sim.calibration import load_native_calibration
+from heterollm_sim.calibration import load_native_calibration, _invocation_fields
 from heterollm_sim.kernel_mapping import classify_kernel
 
 
 def _trace(path, events):
     path.write_text(json.dumps({"schema": "native-nsys-trace/v1", "events": events}), encoding="utf-8")
+
+
+def test_explicit_projection_bridges_missing_stage_without_guessing_unknown_ids():
+    metadata = {"stage": 0, "execution_phase": "decode", "token_shape": "5120x1x1x1"}
+    assert _invocation_fields({**metadata, "projection_id": "linear_attention.qkv"}) == (
+        "attention_qkv", "decode", "5120x1x1x1")
+    assert _invocation_fields({**metadata, "projection_id": "mlp.down"}) == (
+        "ffn", "decode", "5120x1x1x1")
+    assert _invocation_fields({**metadata, "projection_id": "unknown"})[0] is None
 
 
 def test_explicit_operator_rates_and_categories(tmp_path):

@@ -10646,6 +10646,12 @@ def _add_rank_gemm(
     operation_metadata.setdefault("gemm_k", workload.k)
     operation_metadata.setdefault("gemm_n", workload.n)
     operation_metadata.setdefault("token_batch", workload.m)
+    # A regular projection has an explicit logical output shape.  Preserve it
+    # on the operation envelope so the exact six-dimensional resolver can
+    # bind the same N x M x 1 x 1 shape that the CUDA trace records.  Dynamic
+    # attention replay has its own shape path and remains fail-closed.
+    if dynamic_attention_replay is None:
+        operation_metadata.setdefault("token_shape", f"{workload.n}x{workload.m}x1x1")
     operation_metadata.setdefault("prompt_tokens", builder.request.prompt_tokens)
     operation_metadata.setdefault("output_tokens", builder.request.output_tokens)
     weight_source, source_tensor, logical_tensor = _weight_source_for_tensor(

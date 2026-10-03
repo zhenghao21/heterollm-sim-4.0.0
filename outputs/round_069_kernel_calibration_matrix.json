@@ -1,5 +1,5 @@
 {
-  "schema": "heterollm.round069.kernel-calibration-matrix/v2",
+  "schema": "round-069-kernel-calibration-matrix/v2",
   "round_id": "round_069",
   "created_utc": "2026-10-04T00:00:00+08:00",
   "route_steps": [
@@ -732,6 +732,147 @@
       "ledger": {
         "invariant": true
       }
+    },
+    "qwen38_gpu": {
+      "status": "fresh_current_binary_gpu_exact_covered",
+      "profile": {
+        "path": "configs/calibration/qwen38_gpu_current_kernel_v1.json",
+        "sha256": "dbaea7b28cc5dbe410eca635084876d1407f221087f6fa6e3291f5f7f93f9343"
+      },
+      "identity": {
+        "model_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+        "hardware_fingerprint": "96a17c53c8f29950b13d6d48f9f851ab895876297d3f89a4cb139acae89ba22e",
+        "binary_sha256": "705eaefd70162f3e4363cfad9bcb7aa93c0aed90ec793849e1542957fc964bbf",
+        "native_capture_runtime_fingerprint": "230f281a1fb4eb14986b86cbd422c4a3fbf9b66497ce2e73027ad12c519f8259",
+        "simulator_runtime_fingerprint": "456ef639f9858e62f6a49441f35949efac521a39847d56ab36b3de0c1e7e49fa",
+        "gpu_layers": 66
+      },
+      "coverage": {
+        "raw_kernel_events": {
+          "train": 18673,
+          "holdout": 10913
+        },
+        "eligible_exact_events": {
+          "train": 13809,
+          "holdout": 8097
+        },
+        "blocked_missing_dimensions": {
+          "train": {
+            "stage": 4864
+          },
+          "holdout": {
+            "stage": 2816
+          },
+          "total": 7680
+        },
+        "raw_union_keys": 140,
+        "common_exact_keys": 78,
+        "holdout_key_ape_pct": {
+          "median": 0.30238402990417435,
+          "p90": 1.970443349753704,
+          "max": 28.673481012068226,
+          "count": 78
+        }
+      },
+      "engine_ab": [
+        {
+          "label": "train",
+          "mode": "baseline",
+          "values": {
+            "engine_ttft_ms": 51.12497250243993,
+            "engine_tpot_ms": 53.257067017900766,
+            "engine_e2e_ms": 423.9244416277453,
+            "visible_output_tokens": 8,
+            "timepoints": 8
+          },
+          "tracker": {
+            "calls": 0,
+            "exact_hits": 0,
+            "changed_demand_count": 0,
+            "changed_phase_count": 0,
+            "changed_ns_total": 0.0,
+            "modes": {},
+            "reasons": {}
+          },
+          "runtime_fingerprint": "456ef639f9858e62f6a49441f35949efac521a39847d56ab36b3de0c1e7e49fa"
+        },
+        {
+          "label": "train",
+          "mode": "candidate",
+          "values": {
+            "engine_ttft_ms": 51.12497250243993,
+            "engine_tpot_ms": 53.257067017900766,
+            "engine_e2e_ms": 423.9244416277453,
+            "visible_output_tokens": 8,
+            "timepoints": 8
+          },
+          "tracker": {
+            "calls": 6848,
+            "exact_hits": 72,
+            "changed_demand_count": 72,
+            "changed_phase_count": 72,
+            "changed_ns_total": 3555108.5271120043,
+            "modes": {
+              "analytical_fallback": 4384,
+              "exact": 72
+            },
+            "reasons": {
+              "exact_operator_key_uncovered": 832,
+              "missing_operator_key_dimension": 3552
+            }
+          },
+          "runtime_fingerprint": "456ef639f9858e62f6a49441f35949efac521a39847d56ab36b3de0c1e7e49fa"
+        },
+        {
+          "label": "holdout",
+          "mode": "baseline",
+          "values": {
+            "engine_ttft_ms": 57.36516817557077,
+            "engine_tpot_ms": 53.23168301789951,
+            "engine_e2e_ms": 217.0602172292693,
+            "visible_output_tokens": 4,
+            "timepoints": 4
+          },
+          "tracker": {
+            "calls": 0,
+            "exact_hits": 0,
+            "changed_demand_count": 0,
+            "changed_phase_count": 0,
+            "changed_ns_total": 0.0,
+            "modes": {},
+            "reasons": {}
+          },
+          "runtime_fingerprint": "456ef639f9858e62f6a49441f35949efac521a39847d56ab36b3de0c1e7e49fa"
+        },
+        {
+          "label": "holdout",
+          "mode": "candidate",
+          "values": {
+            "engine_ttft_ms": 57.36516817557077,
+            "engine_tpot_ms": 53.23168301789951,
+            "engine_e2e_ms": 217.0602172292693,
+            "visible_output_tokens": 4,
+            "timepoints": 4
+          },
+          "tracker": {
+            "calls": 4896,
+            "exact_hits": 68,
+            "changed_demand_count": 68,
+            "changed_phase_count": 68,
+            "changed_ns_total": 758996.5825496194,
+            "modes": {
+              "analytical_fallback": 3088,
+              "exact": 68
+            },
+            "reasons": {
+              "exact_operator_key_uncovered": 704,
+              "missing_operator_key_dimension": 2384
+            }
+          },
+          "runtime_fingerprint": "456ef639f9858e62f6a49441f35949efac521a39847d56ab36b3de0c1e7e49fa"
+        }
+      ],
+      "historical_screening": "artifacts/development/ui_native_matched_level2_release_20260930/comparison.json"
     }
   },
   "error_rows": [
@@ -1020,6 +1161,8 @@
     "positive_improvement_ape_pp": "A_ape_pct - B_ape_pct; positive means B is closer to Native",
     "kernel_holdout_error": "device-kernel or CPU-operator interval holdout error, not model total latency",
     "no_model_calibration": "all coefficients are operator/kernel; no model-total latency fit",
-    "current_status": "Qwen2.5/SmolLM2 have covered current-binary exact keys; Qwen3.5 has fresh partial coverage; TinyLlama has fresh exact coverage but target replay shape miss; Qwen3.8 current CPU trace is blocked because layout/kernel_family are absent."
-  }
+    "current_status": "Qwen2.5/Qwen3.5/SmolLM2/TinyLlama current exact routes plus Qwen3.8 GPU current full-offload profile; Qwen3.8 CPU remains diagnostic blocked; historical GPU screening is identity-mismatched."
+  },
+  "full_error_comparison": "outputs/round_069_full_error_comparison.json",
+  "full_error_comparison_sha256": "c33b0c335a5a65b26b1f6c0c62468a37faf93fbd2db7a72c22135a58737b7382"
 }

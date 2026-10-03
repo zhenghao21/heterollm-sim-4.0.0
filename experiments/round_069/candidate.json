@@ -27,14 +27,19 @@
       "path": "configs/calibration/tinyllama_current_identity_kernel_v2.json",
       "sha256": "8851e1f35b07bdcf3c321eddbb6f36f55dccc30014e4391a5794bc8cd7c8f53e",
       "bytes": 54409
+    },
+    "qwen38_gpu": {
+      "path": "configs\\calibration\\qwen38_gpu_current_kernel_v1.json",
+      "sha256": "dbaea7b28cc5dbe410eca635084876d1407f221087f6fa6e3291f5f7f93f9343",
+      "bytes": 129090
     }
   },
-  "planner_change": "Expose descriptive semantic dtype/layout/kernel_family dispatch metadata; layout defaults to contiguous and is never inferred as vector_q from M=1.",
+  "planner_change": "Expose explicit projection-to-stage bridge and N x M x 1 x 1 token_shape for regular GEMM; semantic dtype/layout/kernel_family remain descriptive exact-key metadata.",
   "coverage_policy": "all six dimensions required; missing layout/kernel_family remains blocked.",
   "phase_policy": "phase-boundary profile remains separate and disabled in kernel-only route.",
   "storage_policy": "apply_memory=false; DRAM/NAND ledger must remain invariant.",
   "tests": {
-    "focused": "224 passed",
-    "full": "3146 passed, 4 skipped"
+    "focused": "88 passed",
+    "full": "running/previous baseline 3146 passed, 4 skipped"
   }
 }
