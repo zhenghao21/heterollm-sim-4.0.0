@@ -163,3 +163,16 @@
 - 全量回归：[full_regression_provenance.json](../artifacts/optimization/round_066/full_regression_provenance.json)，3136 passed、4 skipped；focused storage/report/API 173 passed。Native/设备成对误差仍为 `blocked_no_current_same_source_native_pair`，不构成精度改善结论。
 - 三次失败前端尝试已保留在 `artifacts/optimization/round_066/failures/`：第一次 HTTP authoring placement gate，第二次 control-plane source validation，第三次 Python tuple/list 与 JSON 比较；修复后才接受最终通过。
 - 未覆盖边界：正式 workload 仍是 page-aligned/unknown-offset（known-offset 跨页是独立通信/data-motion 控制）；formal workload 只激活 NAND read，program/erase 由共享 service/oracle 控制；DRAM subchannel/rank/bank-group/HBM pseudo-channel、跨请求 NAND queue/die/channel scheduler、FTL/GC timing、direct erase production API 延期。
+
+
+## 2026-10-03 H66 完成范围更正
+
+H66 是部分实现和选定 NAND read 前端/API 证据，DRAM 与 NAND 两个家族的整体建模任务仍未完成。此前“收口/完成”不得解释为 STORAGE_MODELING_WORKPLAN 两项验收或用户整体任务完成。
+
+- DRAM 的 sub-channel、rank/等价分区、bank-group、HBM stack/pseudo-channel 及对应实际执行覆盖仍未完成。
+- NAND 的 die/channel 地址映射与并行/跨请求队列、正式 workload 跨页/program/erase/混合访问覆盖仍未完成；rank-local HBF/NAND bypass 和 ledger owner 还需审查。
+- H66 把这些必需项和 Native accuracy 自行放入 exclude，native_collection_runs=0；四份记录在执行后补写，不能称预登记预算/验收标准。
+- 当前缺同源码/模型/硬件/shape/runtime/timer 的合格成对观测；H66 未进行 Native 采集，也未证明采集环境不可用。旧 readiness 只检查文件和 --help，不能代替测量尝试或误差分析。
+- 没有完成 TTFT/TPOT/E2E signed error、absolute ms、APE；synthetic/oracle/API 相等性和测试通过只支持相应机制/工程域。
+
+四份 JSON 已增加 completion_review_20261003 并更正 overall_task_status=incomplete；原始记录副本保留在 artifacts/optimization/round_066/completion_correction_20261003。后续继续原授权下的剩余建模/真实前端验证和观测配对工作，不由方向轮换关闭尚未完成的用户任务。
