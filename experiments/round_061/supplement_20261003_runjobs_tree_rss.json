@@ -1,0 +1,287 @@
+{
+  "schema": "heterollm.optimization.evidence_supplement/v1",
+  "round_id": "round_061",
+  "supplement_id": "H61_RUNJOBS_HTTP_TREE_RSS_CORRECTION_20261003",
+  "hypothesis_id": "H61_ONLINE_REPORT_METADATA_REUSE",
+  "direction": "运行速度与内存",
+  "purpose": "校正首版 run-jobs 矩阵仅采样 launcher RSS 的测量缺陷；保留旧 artifact，追加 launcher+递归解释器进程树 WorkingSet/RSS 与 peak PID。",
+  "source_identity": {
+    "parent_source_commit": "77f6d393a9121d5c77d16dcb1cf706d57f93a5bf",
+    "candidate_source_commit": "77f6d393a9121d5c77d16dcb1cf706d57f93a5bf",
+    "candidate_source_changed": false,
+    "source_commit_observed": "77f6d393a9121d5c77d16dcb1cf706d57f93a5bf",
+    "git_status": "clean except pytest-of-A permission warning and unrelated untracked round_046 record",
+    "module_paths": {
+      "src/heterollm_sim/reporting.py": {
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528",
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f"
+      },
+      "src/heterollm_sim/run_jobs.py": {
+        "git_blob_sha": "77313c18e8e298d4628b590673d3b5f7bb651174",
+        "content_sha256": "3e3577436635f3b77054b5b2aca457a367c53da271f69506250c1af1a37c2ecc"
+      },
+      "src/heterollm_sim/web.py": {
+        "git_blob_sha": "12009c42d38c64fa0f63b2b97e20fe644999ea02",
+        "content_sha256": "1cf571b6500b1b9f369e3e9fc365ee9547f0a38aa8e5253ee0f2dfc5a72bdea0"
+      }
+    },
+    "measurement_script_sha256": "8f5163da05f55f5e704cb94152517ff4bb6cf36d808a12cfae3b3353ed3240f8"
+  },
+  "method": {
+    "real_entrypoint": "HTTP POST /api/run-jobs -> GET /api/run-jobs/{job_id}; RunJobManager._run_job -> run_scenario -> report_dict",
+    "processes": "each AB/BA arm is independent subprocess; worker starts real build_server on ephemeral port",
+    "rss": "parent psutil samples launcher plus recursive descendant process tree every 10ms; sums WorkingSet/RSS; peak_tree_pids retained in each raw row; returncode and command retained",
+    "scales": [
+      8,
+      32,
+      64
+    ],
+    "pairs_per_scale": 3,
+    "repeats_per_child": 3,
+    "output_equivalence": "canonical report SHA/bytes exact",
+    "candidate": "cached arm remains monkeypatch instrumentation; no source edit"
+  },
+  "data_roles": {
+    "comparison": "same JSON scenario payload per scale, baseline vs cached, AB/BA alternation",
+    "holdout": "three independent process pairs/scale, not used to select candidate",
+    "acceptance": "all child rc0, jobs completed, output exact; runtime/RSS only simulator engineering evidence"
+  },
+  "artifacts": {
+    "matrix": "artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.json",
+    "matrix_sha256": "65df1060b61ff96deb31cf0dd926fd0ea1570bad71bc0755d01eb4c50e36e2e9",
+    "provenance": "artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_provenance.json",
+    "provenance_sha256": "4408bdbcd8afa15b02fe3f7441b39825e6949f4c1385ade886f61d597375a8eb",
+    "superseded_record": "experiments/round_061/supplement_20261003_runjobs.json",
+    "superseded_record_sha256": "599a35d6fc6f95ce20e6ecb33ec9a9941125ad8a0b2b114cb54f219f6fd08a1f"
+  },
+  "summary": [
+    {
+      "request_count": 8,
+      "pairs": 3,
+      "baseline_wall_median_s": 2.2353245000122115,
+      "cached_wall_median_s": 2.2224119000602514,
+      "wall_delta_pct_cached_vs_baseline": -0.577661093585724,
+      "baseline_peak_rss_median_bytes": 138690560,
+      "cached_peak_rss_median_bytes": 135757824,
+      "rss_delta_pct_cached_vs_baseline": -2.1145894861193115,
+      "report_output_equivalent": true,
+      "baseline_report_digests": [
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b"
+      ],
+      "cached_report_digests": [
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b",
+        "c77bfdb2e5d70dcbb598229a173e505fc5e9dc48d6693bdb7f22c88cd597d78b"
+      ],
+      "all_returncodes_zero": true,
+      "worker_helper_stats": [
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 24,
+          "hits": 72,
+          "distinct_batch_ids": 24
+        },
+        {
+          "calls": 24,
+          "hits": 72,
+          "distinct_batch_ids": 24
+        },
+        {
+          "calls": 24,
+          "hits": 72,
+          "distinct_batch_ids": 24
+        }
+      ]
+    },
+    {
+      "request_count": 32,
+      "pairs": 3,
+      "baseline_wall_median_s": 3.0398937999270856,
+      "cached_wall_median_s": 3.0235668999375775,
+      "wall_delta_pct_cached_vs_baseline": -0.5370878413548441,
+      "baseline_peak_rss_median_bytes": 223326208,
+      "cached_peak_rss_median_bytes": 227106816,
+      "rss_delta_pct_cached_vs_baseline": 1.6928635621664245,
+      "report_output_equivalent": true,
+      "baseline_report_digests": [
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f"
+      ],
+      "cached_report_digests": [
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f",
+        "638798d3f0c565216a2b638d28977e66365cb09ede998f1bb27784c80780fe2f"
+      ],
+      "all_returncodes_zero": true,
+      "worker_helper_stats": [
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 24,
+          "hits": 72,
+          "distinct_batch_ids": 24
+        },
+        {
+          "calls": 24,
+          "hits": 72,
+          "distinct_batch_ids": 24
+        },
+        {
+          "calls": 24,
+          "hits": 72,
+          "distinct_batch_ids": 24
+        }
+      ]
+    },
+    {
+      "request_count": 64,
+      "pairs": 3,
+      "baseline_wall_median_s": 5.303303700056858,
+      "cached_wall_median_s": 5.30261909996625,
+      "wall_delta_pct_cached_vs_baseline": -0.012908936190103582,
+      "baseline_peak_rss_median_bytes": 392896512,
+      "cached_peak_rss_median_bytes": 413425664,
+      "rss_delta_pct_cached_vs_baseline": 5.225078709785036,
+      "report_output_equivalent": true,
+      "baseline_report_digests": [
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac"
+      ],
+      "cached_report_digests": [
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac",
+        "e91e119e2e6a944b95307d223b911ca35f9e96bd775cf32c60e37cfb916c49ac"
+      ],
+      "all_returncodes_zero": true,
+      "worker_helper_stats": [
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 0,
+          "hits": 0,
+          "distinct_batch_ids": 0
+        },
+        {
+          "calls": 48,
+          "hits": 144,
+          "distinct_batch_ids": 48
+        },
+        {
+          "calls": 48,
+          "hits": 144,
+          "distinct_batch_ids": 48
+        },
+        {
+          "calls": 48,
+          "hits": 144,
+          "distinct_batch_ids": 48
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "all_returncodes_zero": true,
+    "all_rows_have_launcher_pid": true,
+    "all_rows_have_peak_tree_pids": true,
+    "all_output_equivalent": true
+  },
+  "decision": {
+    "status": "reject_limited_negative",
+    "wall": "cached wall Δ -0.58%/+ -0.54%/-0.01% at 8/32/64 (tree-RSS corrected run latest matrix; effectively neutral)",
+    "rss_tree": "cached tree RSS Δ -2.12%/+1.69%/+5.23% at 8/32/64; direction changes and large scale regresses, no stable memory gain",
+    "output": "all canonical report digests/bytes exact",
+    "source_action": "none; no promotion",
+    "scope_boundary": "This correction validates measurement method and preserves negative conclusion; no Native/target latency; no /api/run direct or concurrency fanout; no claim of project-wide performance."
+  },
+  "commands": [
+    {
+      "command": ".venv\\Scripts\\python.exe -m py_compile artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.py",
+      "exit_code": 0
+    },
+    {
+      "command": "tools/command_provenance.py --output artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_provenance.json --cwd . -- .venv\\Scripts\\python.exe artifacts/optimization/evidence_supplement_20261003_batch4/performance/h61_runjobs_matrix.py",
+      "exit_code": 0,
+      "duration_seconds": 63.70830399997067,
+      "provenance_stdout_sha256": "ab1725e2a6389b7e96a03b277c3551bfc9a2024c9f09d4edee5e0f0e37fb475e"
+    }
+  ],
+  "artifact_sha256": {
+    "script": "8f5163da05f55f5e704cb94152517ff4bb6cf36d808a12cfae3b3353ed3240f8",
+    "payload_without_artifact_field": "feacafb3ba72edd34014914301f25b3007da05b9ffa1b6dc9797b7226d64aa51"
+  }
+}

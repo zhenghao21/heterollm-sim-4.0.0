@@ -112,9 +112,16 @@
 - cached_plan 相对 bounded cache 的 subprocess wall 中位数 `11.151→13.476 s`（约 `-17.17%`），tracemalloc 峰值 `35.53→36.16 MB`；RSS 采集为 before/after delta（`82.25→87.52 MB`），不是独立系统 peak working set。
 - 结论：只保留 leaf-cache 配置的工程机制证据；当前生产默认已是大 cache，本批没有新增源码候选，也不把配置差异外推为稳定生产优化、Native 延迟或预测精度。分析脚本的 trailing-literal 失败（exit 1）已保留，原始矩阵未受影响。
 
+### H61 run-jobs HTTP 独立前端 A/B 与 RSS 校正
+
+- 首版记录 [supplement_20261003_runjobs.json](../experiments/round_061/supplement_20261003_runjobs.json) 保留；其 launcher-only RSS 结果不作为内存结论。校正记录 [supplement_20261003_runjobs_tree_rss.json](../experiments/round_061/supplement_20261003_runjobs_tree_rss.json)，SHA-256 `c5dfbd05e67f7d25faec64fb2406aa97fc38894e1de3b5309fe09f704fd04986`。
+- 真实入口为 `POST /api/run-jobs → GET /api/run-jobs/{job_id} → RunJobManager → run_scenario → report_dict`；8/32/64 requests 各 3 对 AB/BA，每 child 3 次 job，共 18 个独立 child，全部 rc0，canonical report SHA/bytes 全部相等。
+- 进程树 RSS 校正后，cached wall 相对 baseline 在 8/32/64 requests 为 `-0.58%/-0.54%/-0.01%`，近似中性；tree RSS 为 `-2.12%/+1.69%/+5.23%`，方向随规模变化且大规模退化。结论为有限负结论，不晋升缓存源码候选或稳定速度/内存改善。
+- 仍未覆盖 `/api/run` 直接路径、多客户端并发扇出、跨请求/global cache 安全、Native/目标系统 latency；旧 launcher-only 产物和失败边界均保留。
+
 - H62 以及 H24/H26/H30/H39/H40/H48/H49/H55：需要跨页/跨请求 queue 和 HTTP/report projection；若声称修复带来收益，还需要父版本与候选版本同一正式前端 A/B。
 - H62 当前已完成 parent/candidate 前端 A/B，但修复点未激活；仍需设计能实际进入 `_direct_memory_phase` 的正式 workload，不能把现有六场景写成收益。
-- H29 的收益目前只属于 CLI 文本前端；H36 校正后只保留 wall/output 等价证据且无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 但无稳定收益，H41 仍缺同等级补证。
+- H29 的收益目前只属于 CLI 文本前端；H36 校正后只保留 wall/output 等价证据且无安全生产共享 provider 候选；H46 已完成 leaf-cache 配置级独立 A/B 但无源码候选；H61 已完成真实 `/api/run-jobs` A/B 与进程树 RSS 校正，仍无稳定收益，H41 仍缺同等级补证。
 - H27、H38、H44 已完成真实 planner/event/resource/report 前端补证；H52 已完成正式 topology/HTTP 激活性扫描但 collective 仍被单计算组件拓扑阻塞；H58 已完成 routed LinkService 前端机制补证但无候选差异。解析矩阵不能替代前端计费证据。
 - H28/H34/H43/H51/H60/H64：若要声称预测精度或泛化改善，必须补同模型/硬件/shape/runtime 的 Native 成对 TTFT/TPOT/E2E 误差、留出和退化统计；当前记录均不构成精度改善。
 
