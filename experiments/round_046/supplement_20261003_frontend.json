@@ -1,0 +1,106 @@
+{
+  "schema": "heterollm.optimization.supplement/v1",
+  "round_id": "round_046",
+  "supplement_id": "H46_FRONTEND_LEAF_CACHE_CONFIGURATION_20261003",
+  "status": "complete_limited_configuration_evidence",
+  "phase": "prepare->verify->predict->score->review->promote",
+  "hypothesis": "同一真实run_scenario输入下，既有leaf cache=4096与人为受限leaf cache=1可能有工程开销差异；本批只能量化配置控制，不证明新源码候选收益。",
+  "parent_source_sha": "111e58f2bd110ca3db4b02f6ff9ef20dc018d3cb",
+  "candidate_source_sha": "111e58f2bd110ca3db4b02f6ff9ef20dc018d3cb",
+  "source_changed": false,
+  "direction": "运行速度与内存",
+  "source_identity": {
+    "modules": {
+      "src/heterollm_sim/planner.py": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\planner.py",
+        "content_sha256": "0469eb1227fbda68c4241c32010bf7652e6c966a48ce2fa4792a9adcd75451d2",
+        "git_blob_sha": "8b9c24624488ca6a73e80aab53eba0a5e91e7c16"
+      },
+      "src/heterollm_sim/reporting.py": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\reporting.py",
+        "content_sha256": "8b0aacb7e613bfe5941e49931bbb3386d95a178b12a2d14d66ac0e3d4e55e12f",
+        "git_blob_sha": "73b6b2c809cbd6aef9bfe4de0aab738551ecf528"
+      },
+      "src/heterollm_sim/serving.py": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\serving.py",
+        "content_sha256": "2bac8dce10c996233dfbb1fafc6d31a205f17f29ef9aabf6d540d5e387d680b6",
+        "git_blob_sha": "124c0229c7ae3a6e989d7aec32b806ea269a457a"
+      },
+      "src/heterollm_sim/reference.py": {
+        "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\reference.py",
+        "content_sha256": "ccd9262069936655059adf99c346c2295f84c001a2b0c6a93d33f00f299c6bdb",
+        "git_blob_sha": "97661edcb71bde5c8dda356e53f6cd8cf7d16ab2"
+      }
+    }
+  },
+  "data_roles": {
+    "development": "8 requests,64 input tokens,16 output tokens; fixed reference topology",
+    "comparison": "6 alternating independent process pairs leaf_cache_entries=4096 versus 1",
+    "holdout": "none; single scale configuration mechanism",
+    "final_acceptance": "engineering configuration evidence only"
+  },
+  "entrypoint": "build_reference_scenario -> TopologyAwareBatchCostProvider -> run_scenario -> report_dict/serving.events/batches/schedule_trace",
+  "commands": [
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_046/h46_frontend_cache_ab.py --repeats 6",
+      "exit_code": "child rows 12/12 returncode=0; wrapper exit code not independently persisted",
+      "note": "single scale, fixed A then B order; no randomized AB/BA"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe artifacts/optimization/round_046/analyze_h46.py",
+      "exit_code": 1,
+      "note": "analysis printed computed values then failed on trailing literal PY; raw matrix unaffected"
+    }
+  ],
+  "artifact": {
+    "path": "artifacts/optimization/round_046/h46_frontend_cache_ab.json",
+    "sha256": "bfa9cd2b999f75a43f81a2bb7f32220752b35b21f1ad6dfcebcd5a91fffc89a0",
+    "sidecar": "artifacts/optimization/round_046/h46_frontend_cache_ab.json.sha256",
+    "runner_path": "artifacts/optimization/round_046/h46_frontend_cache_ab.py",
+    "runner_sha256": "d77484bcf4fa4667923bc708c318c858be838c160c5bc8dd1d024d1cf0d4ced4"
+  },
+  "observations": {
+    "independent_processes": 12,
+    "pairs": 6,
+    "all_child_returncodes_zero": true,
+    "equivalence": {
+      "report_sha256": true,
+      "trace_events_sha256": true,
+      "trace_batches_sha256": true,
+      "trace_schedule_sha256": true,
+      "task_count": true,
+      "makespan_ns": true,
+      "resource_accounted_bytes": true,
+      "total_energy_pj": true,
+      "trace_event_count": true,
+      "trace_batch_count": true,
+      "schedule_trace_count": true
+    },
+    "cached_plan": {
+      "subprocess_wall_seconds": 11.15105779998703,
+      "internal_wall_seconds": 10.353635349951219,
+      "rss_delta_bytes": 82251776.0,
+      "tracemalloc_peak_bytes": 35533709.0
+    },
+    "bounded_leaf_cache": {
+      "subprocess_wall_seconds": 13.476118850056082,
+      "internal_wall_seconds": 12.67002004996175,
+      "rss_delta_bytes": 87519232.0,
+      "tracemalloc_peak_bytes": 36162865.5
+    }
+  },
+  "decision": {
+    "status": "retain_configuration_evidence_no_source_candidate",
+    "finding": "4096 cache configuration has lower wall and before/after RSS delta than artificially bounded cache=1; all report/trace hashes and task/makespan/bytes/energy equal. This does not establish improvement versus production default (already 4096), does not add a source optimization.",
+    "accuracy": "not_evaluated_no_native",
+    "production_gain": "not_claimed"
+  },
+  "limits": [
+    "RSS is before/after process working set delta, not independent peak RSS.",
+    "tracemalloc instrumentation materially affects wall; same instrumentation in both modes.",
+    "Six pairs at one scale; fixed A/B order; no full multi-scale acceptance.",
+    "Neither metadata plan candidate nor new source optimization is promoted.",
+    "No Native/device paired accuracy, no concurrency/eviction contract."
+  ],
+  "next_step": "H46 performance candidate remains unpromoted; next work checks H61 or Native evidence without repeating this configuration control."
+}
