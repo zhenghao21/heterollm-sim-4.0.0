@@ -1998,6 +1998,39 @@ def _validate_scenario_uncached(
             }
         )
     )
+    # Authoring/API requests may carry a control-plane target policy while
+    # deliberately leaving runtime placement maps empty. Treat those declared
+    # detailed targets as prospective backing coverage for this pre-plan gate;
+    # the control plane still owns and verifies the final mapping.
+    authored_control = scenario.placement.metadata.get("control_plane", {})
+    authored_policy = (
+        authored_control.get("policy", {})
+        if isinstance(authored_control, Mapping)
+        else {}
+    )
+    authored_options = (
+        authored_policy.get("options", {})
+        if isinstance(authored_policy, Mapping)
+        else {}
+    )
+    authored_targets = (
+        authored_options.get("weight_tensor_targets", {})
+        if isinstance(authored_options, Mapping)
+        else {}
+    )
+    if isinstance(authored_targets, Mapping):
+        detailed_weight_tensors = tuple(
+            sorted(
+                set(detailed_weight_tensors)
+                | {
+                    str(name)
+                    for name in authored_targets
+                    if isinstance(name, str)
+                    and name.strip()
+                    and "weight" in name.lower()
+                }
+            )
+        )
     logical_weight_bytes: Dict[str, int] = {}
     for tensor_name in detailed_weight_tensors:
         canonical = _canonical_weight_tensor_id(scenario, tensor_name)
