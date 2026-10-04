@@ -222,4 +222,3 @@ def test_ordinary_endpoint_does_not_mark_physical_transaction():
     assert service is not None
     assert "memory_access" not in service.metadata
     assert not service.metadata.get("physical_memory_config")
-
