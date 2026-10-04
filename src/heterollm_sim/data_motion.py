@@ -38,6 +38,7 @@ class PhysicalRuntimeContext:
     physical_owner: Optional[str] = None
     runtimes: dict[str, _PhysicalRuntime] = field(default_factory=dict)
     timeline: Any = None
+    _committed_owners: set[str] = field(default_factory=set, repr=False)
 
     def __post_init__(self) -> None:
         if self.timeline is None:
@@ -71,6 +72,7 @@ class PhysicalRuntimeContext:
             metadata.setdefault("array_resource_prefix", f"{key}:nand:array")
             metadata.setdefault("parallel_resource_prefix", f"{key}:nand:parallel")
             metadata.setdefault("channel_resource_prefix", f"{key}:nand:channel")
+            metadata.setdefault("host_resource_id", f"{key}:nand:host")
             config = replace(config, metadata=metadata)
         core = DramCore(config, self.timeline) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config, self.timeline)
         current = _PhysicalRuntime(core=core, signature=signature)
@@ -83,6 +85,20 @@ class PhysicalRuntimeContext:
         from .nand_core import NandCore
         core = DramCore(config) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config)
         return _PhysicalRuntime(core=core, signature=kind + ":" + repr(config))
+
+    def snapshot(self) -> dict[str, Any]:
+        import copy as _copy
+        return _copy.deepcopy((self.runtimes, self.timeline.__dict__, self._committed_owners))
+
+    def restore(self, snapshot: dict[str, Any]) -> None:
+        runtimes, timeline_state, owners = snapshot
+        self.runtimes.clear(); self.runtimes.update(runtimes)
+        lane_ref = getattr(self.timeline, "lane_available", None)
+        self.timeline.__dict__.clear(); self.timeline.__dict__.update(timeline_state)
+        if lane_ref is not None and "lane_available" in timeline_state:
+            lane_ref.clear(); lane_ref.update(timeline_state["lane_available"])
+            self.timeline.lane_available = lane_ref
+        self._committed_owners.clear(); self._committed_owners.update(owners)
 
 
 _CURRENT_PHYSICAL_CONTEXT: contextvars.ContextVar[PhysicalRuntimeContext | None] = contextvars.ContextVar(
@@ -144,19 +160,30 @@ def resolve_physical_task(
         raise ValueError("physical task arrival_ns must be non-negative")
     if isinstance(accesses, Mapping):
         accesses = (accesses,)
-    results = []
-    next_arrival = float(arrival_ns)
-    for index, access in enumerate(accesses):
+    # Validate every descriptor before creating a core or reserving a resource.
+    validated = []
+    for access in accesses:
         if not isinstance(access, Mapping):
             raise ValueError("physical memory_access entries must be mappings")
-        owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
         operation = Operation(str(access.get("operation", "")).lower())
-        address = access.get("address")
-        byte_count = access.get("byte_count")
+        address, byte_count = access.get("address"), access.get("byte_count")
         if isinstance(address, bool) or not isinstance(address, int) or address < 0:
             raise ValueError("physical task address must be a non-negative integer")
         if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
             raise ValueError("physical task byte_count must be a positive integer")
+        validated.append((access, operation, address, byte_count))
+    snapshot = runtime.snapshot() if len(validated) > 1 else None
+    placeholder_ids = set()
+    for access, _op, _address, _bytes in validated:
+        for key in ("resource_id", "physical_resource_id", "physical_owner"):
+            value = access.get(key)
+            if value:
+                placeholder_ids.add(str(value))
+    results = []
+    next_arrival = float(arrival_ns)
+    try:
+      for index, (access, operation, address, byte_count) in enumerate(validated):
+        owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
         active = runtime.runtime(config, owner)
         request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation, address, byte_count, next_arrival)
         submit = getattr(active.core, "submit", active.core.execute)
@@ -164,11 +191,16 @@ def resolve_physical_task(
         active.clock_ns = max(active.clock_ns, result.completion_ns)
         results.append(result)
         next_arrival = result.completion_ns
+    except Exception:
+        if snapshot is not None:
+            runtime.restore(snapshot)
+        raise
     result = results[-1]
     counters = dict(result.counters)
     resource_busy = {}
     resource_bytes = {}
     resource_intervals = {}
+    resource_interval_payloads = {}
     resource_last = {}
     for item in results:
         for resource_id, value in item.counters.get("resource_busy_ns", {}).items():
@@ -177,10 +209,26 @@ def resolve_physical_task(
             resource_bytes[resource_id] = resource_bytes.get(resource_id, 0) + value
         for resource_id, value in item.counters.get("resource_intervals", {}).items():
             resource_intervals.setdefault(resource_id, []).extend(value)
+        for resource_id, value in item.counters.get("resource_interval_payloads", {}).items():
+            resource_interval_payloads.setdefault(resource_id, []).extend(value)
         resource_last.update(item.counters.get("resource_last_intervals", {}))
     counters.update({"resource_busy_ns": resource_busy, "resource_bytes": resource_bytes,
                      "resource_intervals": resource_intervals, "resource_last_intervals": resource_last,
+                     "resource_interval_payloads": resource_interval_payloads,
                      "operation_count": len(results)})
+    for key in (
+        "logical_bytes", "physical_bytes", "physical_read_bytes", "physical_write_bytes",
+        "host_transfer_bytes", "internal_transfer_bytes", "pages_read", "pages_programmed",
+        "erase_operations", "burst_count", "row_hits", "row_misses", "row_conflicts",
+    ):
+        if key == "physical_bytes":
+            counters[key] = sum(item.transfer_bytes for item in results)
+        elif key == "logical_bytes":
+            counters[key] = sum(item.logical_bytes for item in results)
+        else:
+            values = [item.counters.get(key) for item in results]
+            if any(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
+                counters[key] = sum(float(value or 0) for value in values)
     demands = tuple(ResourceDemand(str(resource_id), float(duration), bytes_moved=int(resource_bytes.get(resource_id, 0)))
                     for resource_id, duration in sorted(resource_busy.items()) if float(duration) > 0)
     if not demands:
@@ -203,10 +251,11 @@ def resolve_physical_task(
         ),
         "physical_resource_last_intervals": resource_last,
         "physical_demands_resource_ids": tuple(sorted(resource_busy)),
+        "physical_placeholder_resource_ids": tuple(sorted(placeholder_ids)),
     })
     # Keep unrelated compute/link demands. Only preview demands for resources
     # identified by this transaction are replaced by core-owned reservations.
-    memory_ids = set(metadata["physical_demands_resource_ids"])
+    memory_ids = set(metadata["physical_demands_resource_ids"]) | placeholder_ids
     preserved = tuple(d for d in task.demands if d.resource_id not in memory_ids)
     metadata["physical_nonmemory_demand_ids"] = tuple(d.resource_id for d in preserved)
     return replace(task, demands=preserved + demands, metadata=metadata)
@@ -235,6 +284,7 @@ def physical_task_demands(task: TaskSpec) -> Tuple[ResourceDemand, ...]:
     """Return preview demands that remain externally scheduled for a physical task."""
     metadata = task.metadata
     physical_ids = set(str(item) for item in metadata.get("physical_demands_resource_ids", ()))
+    physical_ids.update(str(item) for item in metadata.get("physical_placeholder_resource_ids", ()))
     accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
     if isinstance(accesses, Mapping):
         accesses = (accesses,)

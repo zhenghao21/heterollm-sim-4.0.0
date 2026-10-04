@@ -86,3 +86,13 @@ canonical 字段。`AccessRequest` 的地址和连续长度决定映射、拆分
 同一组请求从单请求价格接口、批量接口和事件内核提交时，应具有相同的访问次数、物理字节、
 完成时间和 owner。若显式地址缺失，物理配置请求必须失败并指出地址错误；普通（没有
 `physical_memory_config`）端点不得携带 `memory_access` 标记，以免事件内核误分派到物理分支。
+
+### 事件内核和报告的边界
+
+endpoint 生成的静态 `ResourceDemand` 是规划占位。任务带有 `memory_access` 后，`UnifiedEventKernel` 在实际到达时刻调用同一个 `PhysicalRuntimeContext`；解析器必须只替换该访问对应的占位需求，并保留同一任务中的 `gpu.compute`、普通链路等需求。因此，改变规划阶段的预估时长不能改变行命中后的物理完成时间或其它并行工作的结果。
+
+主机传输若声明了例如 `shared:pcie`，普通 `ResourceDemand` 和 NAND 的 `HOST_TRANSFER` reservation 必须写入同一条资源日历。提交顺序不改变“同一时刻区间不可重叠”的约束；没有显式共享 ID 的设备则使用各自 owner 命名空间，可以并行。
+
+一次访问组的结果归约按以下规则执行：读写字节、页/突发次数和操作数逐项累加；整体到达与完成时间取组边界；资源区间直接使用核心 reservation 的真实起止时间，并保留搬运字节和能耗。单请求、批量接口和混合读写从同一配置提交时，应得到相同的分类计数与物理字节。
+
+复合访问先完成所有子项的操作、地址、范围和 owner 校验，再登记 runtime、Row/Page Buffer 或资源时间线。任一子项被拒绝时，context 的 timeline 与 runtime 注册必须保持调用前状态；事件内核可将任务重新放回 ready 队列，修正输入后重试不会重复执行已提交前缀。

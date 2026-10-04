@@ -813,6 +813,10 @@ class UnifiedEventKernel:
         self._resource_lane_last_interval: Dict[
             Tuple[str, int], Dict[str, object]
         ] = {}
+        # Physical cores reserve through this same lane calendar.  The
+        # mapping is intentionally assigned once and mutated in place so
+        # compiled/serving paths retain the authority identity.
+        self.physical_runtime.timeline.lane_available = self._resource_lane_available
 
         self._ready_by_group: Dict[ResourceGroup, List[StaticReadyKey]] = {}
         self._group_versions: Dict[ResourceGroup, int] = {}
@@ -1045,6 +1049,15 @@ class UnifiedEventKernel:
             effective_ready_ns = earliest_start_ns
         from .data_motion import is_physical_task, physical_task_demands
         demands = physical_task_demands(task) if is_physical_task(task) else task.demands
+        if is_physical_task(task):
+            # Host/link resources are owned by the physical core but are not
+            # known until submission. Include the explicit configured host ID
+            # in readiness so an ordinary reservation cannot overlap it.
+            config = task.metadata.get("physical_memory_config", {})
+            if isinstance(config, Mapping):
+                host_id = config.get("metadata", {}).get("host_resource_id")
+                if host_id:
+                    demands = tuple(demands) + (ResourceDemand(str(host_id), 0.0),)
         if demands:
             demand_iterator = iter(demands)
             resources_ready_ns = self._resource_ready_ns(
@@ -2131,6 +2144,13 @@ class UnifiedEventKernel:
                 heapq.heappush(self._ready_heap, queued)
                 raise
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
+            # Core reservations happened on the shared timeline; publish
+            # their earliest free lane to kernel readiness before the next
+            # task is admitted.
+            timeline = self.physical_runtime.timeline
+            for resource_id, lanes in timeline.lane_available.items():
+                if lanes:
+                    self.resource_available[resource_id] = min(lanes)
         elif "stateful_l2" in task.metadata:
             try:
                 task = resolve_l2_task(task, self._l2_states)

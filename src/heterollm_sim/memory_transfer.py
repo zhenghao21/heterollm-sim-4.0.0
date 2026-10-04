@@ -67,6 +67,11 @@ class ResourceTimeline:
     _interval_count: int = field(default=0, repr=False)
     _intervals_truncated: bool = field(default=False, repr=False)
     _touched: set[str] = field(default_factory=set, repr=False)
+    _interval_payloads: Dict[str, list[tuple[float, float, int, float]]] = field(default_factory=dict, repr=False)
+    # Optional lane calendar supplied by the event kernel.  Keeping this as a
+    # shared mapping makes ordinary kernel demands and physical reservations
+    # consult one authority while preserving the scalar ``ready_ns`` API.
+    lane_available: Dict[str, list[float]] = field(default_factory=dict, repr=False)
 
     def available_ns(self, resource_id: str) -> float:
         return float(self.ready_ns.get(resource_id, 0.0))
@@ -77,13 +82,19 @@ class ResourceTimeline:
         earliest_ns = _number("earliest_ns", earliest_ns)
         duration_ns = _number("duration_ns", duration_ns)
         switch_ns = _number("switch_ns", switch_ns)
-        previous_end = self.available_ns(resource_id)
+        lanes = self.lane_available.get(resource_id)
+        if lanes is None:
+            lanes = [self.available_ns(resource_id)]
+            self.lane_available[resource_id] = lanes
+        lane_index = min(range(len(lanes)), key=lambda index: (lanes[index], index))
+        previous_end = float(lanes[lane_index])
         previous = self.directions.get(resource_id)
         if direction and previous and previous != direction:
             previous_end += switch_ns
         start = max(earliest_ns, previous_end)
         end = start + duration_ns
-        self.ready_ns[resource_id] = end
+        lanes[lane_index] = end
+        self.ready_ns[resource_id] = min(lanes)
         self.busy_ns[resource_id] = self.busy_ns.get(resource_id, 0.0) + duration_ns
         self.last_intervals[resource_id] = (start, end)
         self._touched.add(resource_id)
@@ -103,6 +114,11 @@ class ResourceTimeline:
         duration = bytes / bandwidth_gb_s
         reservation = self.reserve(resource_id, earliest_ns, duration, direction=direction, switch_ns=switch_ns)
         self.bytes_moved[resource_id] = self.bytes_moved.get(resource_id, 0) + bytes
+        if (resource_id in self._intervals and self._intervals[resource_id]
+                and self._intervals[resource_id][-1] == (reservation.start_ns, reservation.end_ns)):
+            self._interval_payloads.setdefault(resource_id, []).append(
+                (reservation.start_ns, reservation.end_ns, bytes, 0.0)
+            )
         return Transfer(resource_id, bytes, bandwidth_gb_s, reservation.start_ns, reservation.end_ns)
 
     def metrics_snapshot(self, *, max_intervals: int = 0) -> dict:
@@ -116,10 +132,12 @@ class ResourceTimeline:
         self._interval_count = 0
         self._intervals_truncated = False
         self._touched = set()
+        self._interval_payloads = {}
         return {
             "busy_ns": dict(self.busy_ns),
             "bytes_moved": dict(self.bytes_moved),
             "last_intervals": dict(self.last_intervals),
+            "resource_interval_payloads": {},
         }
 
     def metrics_delta(self, before: dict) -> dict:
@@ -130,9 +148,11 @@ class ResourceTimeline:
                  for rid, value in self.bytes_moved.items()
                  if value != before["bytes_moved"].get(rid, 0)}
         intervals = {rid: self.last_intervals[rid] for rid in self._touched}
+        payloads = {rid: tuple(items) for rid, items in self._interval_payloads.items()}
         return {"resource_busy_ns": busy, "resource_bytes": moved,
                 "resource_last_intervals": intervals,
                 "resource_intervals": {rid: tuple(items) for rid, items in self._intervals.items()},
+                "resource_interval_payloads": payloads,
                 "intervals_truncated": self._intervals_truncated}
 
     def snapshot(self) -> dict[str, float]:

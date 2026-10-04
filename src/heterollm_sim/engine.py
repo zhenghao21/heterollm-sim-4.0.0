@@ -24,6 +24,89 @@ if TYPE_CHECKING:
 _CONTROL_CHECK_INTERVAL = 256
 
 
+def _task_resource_intervals(
+    task: TaskSpec,
+    demands: Tuple[object, ...],
+    start_ns: float,
+) -> List[ResourceInterval]:
+    """Project physical reservations and retained ordinary demands together."""
+    metadata = task.metadata
+    physical = metadata.get("physical_execution")
+    if not isinstance(physical, Mapping):
+        return [
+            ResourceInterval(
+                resource_id=demand.resource_id,
+                start_ns=start_ns,
+                end_ns=start_ns + demand.service_ns,
+                bytes_moved=demand.bytes_moved,
+                energy_pj=demand.energy_pj,
+            )
+            for demand in demands
+        ]
+
+    intervals: List[ResourceInterval] = []
+    payloads = physical.get("resource_interval_payloads", {})
+    if isinstance(payloads, Mapping):
+        for resource_id, values in payloads.items():
+            for item in values or ():
+                if isinstance(item, (tuple, list)) and len(item) >= 4:
+                    begin, end, moved, energy = item[:4]
+                    intervals.append(ResourceInterval(
+                        resource_id=str(resource_id), start_ns=begin, end_ns=end,
+                        bytes_moved=int(moved), energy_pj=float(energy),
+                    ))
+    if not intervals and not physical.get("details_truncated", False):
+        raw = physical.get("resource_intervals", {})
+        resource_bytes = physical.get("resource_bytes", {})
+        resource_energy = physical.get("resource_energy_pj", {})
+        if isinstance(raw, Mapping):
+            for resource_id, values in raw.items():
+                for item in values or ():
+                    if not isinstance(item, (tuple, list)) or len(item) < 2:
+                        continue
+                    begin, end = item[:2]
+                    intervals.append(ResourceInterval(
+                        resource_id=str(resource_id), start_ns=begin, end_ns=end,
+                        bytes_moved=int(resource_bytes.get(resource_id, 0)),
+                        energy_pj=float(resource_energy.get(resource_id, 0.0)),
+                    ))
+    if not intervals and not physical.get("details_truncated", False):
+        reservations = metadata.get("physical_resource_intervals", ())
+        for item in reservations:
+            if isinstance(item, (tuple, list)) and len(item) >= 3:
+                resource_id, begin, end = item[:3]
+                moved = int(item[3]) if len(item) > 3 else 0
+                energy = float(item[4]) if len(item) > 4 else 0.0
+            else:
+                resource_id = getattr(item, "resource_id", None)
+                begin = getattr(item, "start_ns", None)
+                end = getattr(item, "end_ns", None)
+                moved = int(getattr(item, "bytes", 0))
+                energy = 0.0
+            if resource_id is not None and begin is not None and end is not None:
+                intervals.append(ResourceInterval(
+                    resource_id=str(resource_id), start_ns=begin, end_ns=end,
+                    bytes_moved=moved, energy_pj=energy,
+                ))
+
+    # Physical tasks retain ordinary compute/link demands alongside replaced
+    # memory previews.  Do not invent intervals when physical detail is absent.
+    retained_ids = set(str(item) for item in metadata.get("physical_nonmemory_demand_ids", ()))
+    if not retained_ids:
+        physical_ids = set(str(item) for item in metadata.get("physical_demands_resource_ids", ()))
+        retained_ids = {d.resource_id for d in demands if d.resource_id not in physical_ids}
+    for demand in demands:
+        if demand.resource_id in retained_ids:
+            intervals.append(ResourceInterval(
+                resource_id=demand.resource_id,
+                start_ns=start_ns,
+                end_ns=start_ns + demand.service_ns,
+                bytes_moved=demand.bytes_moved,
+                energy_pj=demand.energy_pj,
+            ))
+    return intervals
+
+
 @dataclass(frozen=True)
 class ScheduleIR:
     """A deterministic, dependency-constrained task schedule."""
@@ -77,33 +160,7 @@ def simulate_schedule(
             kernel.assert_drained()
             break
         task = event.task
-        intervals: List[ResourceInterval] = []
-        physical = isinstance(task.metadata.get("physical_execution"), Mapping)
-        reservations = task.metadata.get("physical_resource_intervals", ())
-        if physical:
-            raw = task.metadata.get("physical_execution", {}).get("resource_intervals", {})
-            reservations = tuple(
-                (resource_id, start_ns, end_ns)
-                for resource_id, values in raw.items()
-                for start_ns, end_ns in values
-            ) or reservations
-        if physical and reservations:
-            for item in reservations:
-                if isinstance(item, tuple) and len(item) == 3:
-                    resource_id, start_ns, end_ns = item
-                else:
-                    resource_id, start_ns, end_ns = item.resource_id, item.start_ns, item.end_ns
-                intervals.append(ResourceInterval(resource_id=resource_id, start_ns=start_ns, end_ns=end_ns))
-        elif not physical or not task.metadata.get("physical_execution", {}).get("intervals_truncated", False):
-            for demand in event.demands:
-                end_ns = event.start_ns + demand.service_ns
-                intervals.append(ResourceInterval(
-                    resource_id=demand.resource_id,
-                    start_ns=event.start_ns,
-                    end_ns=end_ns,
-                    bytes_moved=demand.bytes_moved,
-                    energy_pj=demand.energy_pj,
-                ))
+        intervals = _task_resource_intervals(task, event.demands, event.start_ns)
         metadata = _merge_engine_metadata(
             task.metadata,
             effective_ready_ns=event.effective_ready_ns,
