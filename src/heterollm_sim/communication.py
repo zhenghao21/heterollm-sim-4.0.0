@@ -734,14 +734,9 @@ class TopologyRouter:
 
         if not route or not phases:
             return None
-        # Preserve address-aware DRAM endpoint state by keeping explicit
-        # READ/link/WRITE phases instead of folding them into one task.
-        if any(
-            "dram_access" in phase.metadata
-            or "nand_media" in phase.metadata
-            or "hbf_media" in phase.metadata
-            for phase in phases
-        ):
+        # Preserve physical memory endpoint stages instead of folding them
+        # into one coherent-DMA task.
+        if any("physical_memory_config" in phase.metadata for phase in phases):
             return None
         if not source.is_active_memory or not target.is_active_memory:
             return None

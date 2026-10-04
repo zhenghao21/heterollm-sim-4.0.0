@@ -1905,13 +1905,20 @@ class ComponentSpec:
             or access_offset < 0
         ):
             raise ValueError("memory_access_offset_bytes must be a non-negative integer")
-        if (self.normalized_kind in OFFLOAD_STORAGE_COMPONENT_KINDS
-                and (self.metadata.get("hbf_media") is not None
-                     or self.metadata.get("nand_media") is not None)):
-            # Keep the page contract opt-in and fail closed at IR load, not
-            # after a long scenario has already been compiled.
-            from .hbf_media import validate_nand_media
-            validate_nand_media(self)
+        physical_config = self.metadata.get("physical_memory_config")
+        if physical_config is not None:
+            from .memory_types import DramConfig, NandConfig
+            from dataclasses import asdict, is_dataclass
+            raw = asdict(physical_config) if is_dataclass(physical_config) else physical_config
+            if not isinstance(raw, Mapping):
+                raise ValueError("physical_memory_config must be a DRAM/NAND config mapping")
+            kind = str(getattr(raw.get("kind", ""), "value", raw.get("kind", ""))).upper()
+            if kind in {"DDR", "LPDDR", "HBM"}:
+                DramConfig.from_mapping(raw)
+            elif kind in {"SSD", "HBF"}:
+                NandConfig.from_mapping(raw)
+            else:
+                raise ValueError("physical_memory_config.kind must be DDR, LPDDR, HBM, SSD or HBF")
         if self.package_id:
             _require_name(self.package_id, "package_id")
         if self.die_id:

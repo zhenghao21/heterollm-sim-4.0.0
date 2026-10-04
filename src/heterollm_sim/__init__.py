@@ -5,6 +5,23 @@ __version__ = "4.0.0"
 
 def __getattr__(name):
     if name in {
+        "AccessRequest", "BatchResult", "DramConfig", "MemoryKind", "NandConfig",
+        "Operation", "TransactionResult", "make_ddr_config", "make_lpddr_config",
+        "make_hbm_config", "make_ssd_config", "make_hbf_config",
+    }:
+        from .memory_types import (
+            AccessRequest, BatchResult, DramConfig, MemoryKind, NandConfig,
+            Operation, TransactionResult, make_ddr_config, make_lpddr_config,
+            make_hbm_config, make_ssd_config, make_hbf_config,
+        )
+        return locals()[name]
+    if name in {"DramCore", "dram_service"}:
+        from .dram_core import DramCore, dram_service
+        return {"DramCore": DramCore, "dram_service": dram_service}[name]
+    if name in {"NandCore", "nand_service"}:
+        from .nand_core import NandCore, nand_service
+        return {"NandCore": NandCore, "nand_service": nand_service}[name]
+    if name in {
         "AUTHORING_SCHEMA_VERSION",
         "ControllerProfile",
     }:
@@ -100,6 +117,22 @@ __all__ = [
     "build_model_from_gguf",
     "RuntimeExecutionPlan",
     "VLLMAdapter",
+    "AccessRequest",
+    "BatchResult",
+    "DramConfig",
+    "MemoryKind",
+    "NandConfig",
+    "Operation",
+    "TransactionResult",
+    "make_ddr_config",
+    "make_lpddr_config",
+    "make_hbm_config",
+    "make_ssd_config",
+    "make_hbf_config",
+    "DramCore",
+    "NandCore",
+    "dram_service",
+    "nand_service",
     "__version__",
     "bootstrap_control_plane",
     "plan_runtime_placement",

@@ -8775,10 +8775,7 @@ function storageTransportParameters(component, scenario = state.scenario) {
   const profileBacked = ["hbm", "host_memory"].includes(profileKey);
   const profile = profileBacked ? costProfileDraft(profileKey, component, scenario) : {};
   const service = asObject(metadata.memory_service);
-  const media = kind === "hbf" ? {
-    ...DEFAULT_HBF_MEDIA_CONTRACT,
-    ...asObject(metadata.hbf_media),
-  } : {};
+  const media = {};
   const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
   const positive = (value) => {
     const number = finite(value);
@@ -8791,7 +8788,7 @@ function storageTransportParameters(component, scenario = state.scenario) {
     ? first(finite(profile.read_latency_ns), finite(metadata.read_latency_ns))
     : first(
       positive(metadata.read_latency_ns),
-      kind === "hbf" ? positive(media.page_read_latency_ns) : null,
+      kind === "hbf" ? 4000 : null,
       kind === "ssd" ? 80000 : null,
       kind === "high_io_ssd" ? 25000 : null,
     );
@@ -8801,7 +8798,7 @@ function storageTransportParameters(component, scenario = state.scenario) {
     ? first(finite(profile.write_latency_ns), finite(metadata.write_latency_ns))
     : first(
       positive(metadata.write_latency_ns),
-      kind === "hbf" ? positive(media.page_program_latency_ns) : null,
+      kind === "hbf" ? 75000 : null,
       kind === "ssd" ? 100000 : null,
       kind === "high_io_ssd" ? 40000 : null,
     );
@@ -8811,7 +8808,7 @@ function storageTransportParameters(component, scenario = state.scenario) {
     ? first(positive(profile.transaction_bytes), positive(metadata.transfer_granularity_bytes), 256)
     : first(
       positive(metadata.transfer_granularity_bytes),
-      kind === "hbf" ? positive(media.media_page_bytes) : null,
+      kind === "hbf" ? 4096 : null,
       kind === "ssd" || kind === "high_io_ssd" ? 4096 : null,
       0,
     );
@@ -8878,45 +8875,7 @@ function componentCapacityNote(component) {
   return "";
 }
 
-const DEFAULT_HBF_MEDIA_CONTRACT = Object.freeze({
-  version: "cold_page_v1",
-  host_transaction_bytes: 64,
-  host_max_request_bytes: 4096,
-  media_page_bytes: 4096,
-  command_queue_depth: 256,
-  media_parallelism: 4,
-  page_read_latency_ns: 2500,
-  page_program_latency_ns: 5000,
-  access_pattern: "contiguous_page_aligned",
-});
-
-function hbfMediaMarkup(component) {
-  if (normalizedComponentKind(component?.kind) !== "hbf") return "";
-  const metadata = asObject(component.metadata);
-  const contract = asObject(metadata.hbf_media);
-  const enabled = Object.keys(contract).length > 0;
-  const value = (field) => contract[field] ?? DEFAULT_HBF_MEDIA_CONTRACT[field] ?? "";
-  const disabled = enabled ? "" : " disabled";
-  return `<details class="inspector-section hbf-media-section" ${enabled ? "open" : ""}>
-    <summary><span>HBF 媒体页模型（Cold-page media contract）</span><span class="section-summary-state ${enabled ? "is-active" : ""}">${enabled ? "已启用" : "未启用"}</span></summary>
-    <div class="inspector-section-body">
-      <label class="checkbox-field"><span><strong>启用 cold_page_v1 媒体模型</strong><small>启用后按媒体页、命令队列与 RMW 规则计费；关闭时保留 legacy endpoint 语义。</small></span><input type="checkbox" data-hbf-media-enabled ${enabled ? "checked" : ""}></label>
-      <div class="field-grid-2 hbf-media-fields">
-        <label class="field"><span>版本（固定）</span><input type="text" value="cold_page_v1" readonly aria-readonly="true"></label>
-        <label class="field"><span>Host 事务粒度（B，固定）</span><input type="number" value="64" readonly disabled aria-readonly="true"></label>
-        <label class="field"><span>媒体页大小（B，固定）</span><input type="number" value="4096" readonly disabled aria-readonly="true"></label>
-        <label class="field"><span>Host 最大请求（B）</span><input type="number" min="64" max="4096" step="64" data-hbf-media-field="host_max_request_bytes" value="${escapeHtml(value("host_max_request_bytes"))}"${disabled}></label>
-        <label class="field"><span>命令队列深度（depth，2 的幂）</span><input type="number" min="256" max="16384" step="1" data-hbf-media-field="command_queue_depth" value="${escapeHtml(value("command_queue_depth"))}"${disabled}></label>
-        <label class="field"><span>媒体并行度（commands）</span><input type="number" min="1" step="1" data-hbf-media-field="media_parallelism" value="${escapeHtml(value("media_parallelism"))}"${disabled}></label>
-        <label class="field"><span>页读取延迟（ns）</span><input type="number" min="0" step="any" data-hbf-media-field="page_read_latency_ns" value="${escapeHtml(value("page_read_latency_ns"))}"${disabled}></label>
-        <label class="field"><span>页编程延迟（ns）</span><input type="number" min="0" step="any" data-hbf-media-field="page_program_latency_ns" value="${escapeHtml(value("page_program_latency_ns"))}"${disabled}></label>
-        <label class="field"><span>访问模式（Access pattern）</span><select data-hbf-media-field="access_pattern"${disabled}>${fixedOptions([["contiguous_page_aligned", "连续且页对齐"], ["unknown_alignment_conservative", "未知对齐（保守）"]], value("access_pattern"))}</select></label>
-        <label class="field"><span>物理 Plane 数（count，可选）</span><input type="number" min="1" step="1" data-hbf-media-field="physical_planes" placeholder="留空 = 不额外限制" value="${escapeHtml(contract.physical_planes ?? "")}"${disabled}></label>
-      </div>
-      <p class="muted">后端当前只接受 cold_page_v1、64 B Host transaction、4096 B media page；命令队列深度必须为 256–16384 的 2 的幂。写请求完成语义为 media program complete。</p>
-    </div>
-  </details>`;
-}
+function hbfMediaMarkup() { return ""; }
 
 function thermalOperatingPointMarkup(element) {
   const point = asObject(state.scenario?.hardware?.metadata?.thermal_operating_point);
@@ -9091,58 +9050,7 @@ function bindInspectorPortFields(component) {
   }));
 }
 
-function bindHbfMediaFields(component) {
-  if (normalizedComponentKind(component?.kind) !== "hbf") return;
-  const enabled = $("[data-hbf-media-enabled]", dom.inspectorContent);
-  enabled?.addEventListener("change", () => {
-    component.metadata = asObject(component.metadata);
-    const historyBefore = topologyHistorySnapshot();
-    if (enabled.checked) component.metadata.hbf_media = { ...DEFAULT_HBF_MEDIA_CONTRACT };
-    else delete component.metadata.hbf_media;
-    commitTopologyHistory(historyBefore, "切换 HBF 媒体页模型", { mappingImpact: true });
-    markScenarioChanged("", { mappingImpact: true, mappingReason: "HBF 媒体页模型已修改，映射需要重新生成。" });
-  });
-  $$('[data-hbf-media-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
-    component.metadata = asObject(component.metadata);
-    const contract = { ...DEFAULT_HBF_MEDIA_CONTRACT, ...asObject(component.metadata.hbf_media) };
-    const field = control.dataset.hbfMediaField;
-    const raw = control.value.trim();
-    let value = control.tagName === "SELECT" ? raw : Number(raw);
-    const integerFields = ["host_max_request_bytes", "command_queue_depth", "media_parallelism", "physical_planes"];
-    const validNumber = Number.isFinite(value) && value > 0 && (!integerFields.includes(field) || Number.isSafeInteger(value));
-    let valid = control.tagName === "SELECT" ? ["contiguous_page_aligned", "unknown_alignment_conservative"].includes(value) : validNumber;
-    if (field === "page_read_latency_ns" || field === "page_program_latency_ns") valid = Number.isFinite(value) && value > 0;
-    if (field === "physical_planes" && raw === "") {
-      delete contract.physical_planes;
-      valid = true;
-    }
-    if (field === "host_max_request_bytes") {
-      valid = valid && value >= 64 && value <= 4096 && value % 64 === 0;
-    }
-    if (field === "command_queue_depth") {
-      valid = valid && value >= 256 && value <= 16384 && (value & (value - 1)) === 0;
-    }
-    if (!valid) {
-      toast("HBF 媒体参数无效", field === "command_queue_depth" ? "命令队列深度必须是 256–16384 的 2 的幂。" : field === "host_max_request_bytes" ? "Host 最大请求必须是 64 的倍数，且不超过 4096 B。" : "请输入符合后端契约的正数或正整数。", "error", 6200);
-      renderComponentInspector(component.component_id);
-      return;
-    }
-    if (field !== "physical_planes" || raw) contract[field] = value;
-    const historyBefore = topologyHistorySnapshot();
-    component.metadata.hbf_media = contract;
-    commitTopologyHistory(historyBefore, "编辑 HBF 媒体页模型", { mappingImpact: true });
-    markScenarioChanged("", { mappingImpact: true, mappingReason: "HBF media metadata 已修改，映射需要重新生成。" });
-  }));
-  // Some browser automation and IME paths commit number inputs on blur rather
-  // than dispatching a reliable change event. Reuse the same validator once
-  // when the visible value differs from the stored contract.
-  $$('[data-hbf-media-field]', dom.inspectorContent).forEach((control) => control.addEventListener("blur", () => {
-    const field = control.dataset.hbfMediaField;
-    const stored = asObject(component.metadata?.hbf_media)[field];
-    const raw = control.value.trim();
-    if (String(stored ?? "") !== raw) control.dispatchEvent(new Event("change", { bubbles: true }));
-  }));
-}
+function bindHbfMediaFields() {}
 
 function bindInspectorQuantityFields(component) {
   $$('[data-inspector-quantity-field]', dom.inspectorContent).forEach((control) => {

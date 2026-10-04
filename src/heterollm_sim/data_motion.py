@@ -291,26 +291,64 @@ class PhysicalService:
             if page_offset_bytes is not None:
                 _non_negative_int(page_offset_bytes, "memory_access_offset_bytes")
         bandwidth = self.read_bandwidth_gb_s if read else self.write_bandwidth_gb_s
-        if byte_count and kind is not AccessKind.ERASE and bandwidth <= 0:
+        if (byte_count and kind is not AccessKind.ERASE and bandwidth <= 0
+                and not (self.component is not None and self.component.metadata.get("physical_memory_config") is not None)):
             raise ValueError(f"storage service {self.service_id} requires a positive {kind.value.lower()} bandwidth")
-        if (self.component is not None
-                and (self.component.metadata.get("nand_media") is not None
-                     or self.component.metadata.get("hbf_media") is not None)):
-            from .hbf_media import nand_media_service
-            return nand_media_service(
-                self.component,
-                byte_count,
-                read,
-                page_offset_bytes=page_offset_bytes,
-                operation=(
-                    "read" if kind is AccessKind.READ
-                    else "erase" if kind is AccessKind.ERASE
-                    else "program"
-                ),
-                background_work=self.component.metadata.get("background_work"),
+        # The component configuration is the single physical transaction contract.
+        # and therefore gets explicit array and data-path stages.
+        if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
+            from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
+            from .dram_core import DramCore
+            from .nand_core import NandCore
+            raw_config = self.component.metadata["physical_memory_config"]
+            if is_dataclass(raw_config):
+                raw_config = asdict(raw_config)
+            if not isinstance(raw_config, Mapping):
+                raise ValueError("physical_memory_config must be a DRAM/NAND config or mapping")
+            if byte_count == 0:
+                return {
+                    "logical_bytes": 0, "physical_bytes": 0,
+                    "physical_read_bytes": 0, "physical_write_bytes": 0,
+                    "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
+                    "service_ns": 0.0, "actual_bandwidth_gb_s": 0.0,
+                    "bandwidth_ceiling_gb_s": 0.0,
+                    "operation": kind.value.lower(),
+                    "timing_model": "physical_transaction_v1",
+                    "energy_pj": 0.0,
+                    "pages_touched": 0,
+                }
+            kind_value = raw_config.get("kind", "")
+            kind_name = str(getattr(kind_value, "value", kind_value)).upper()
+            is_dram = kind_name in {"DDR", "LPDDR", "HBM"}
+            config = DramConfig.from_mapping(raw_config) if is_dram else NandConfig.from_mapping(raw_config)
+            operation = Operation.READ if kind is AccessKind.READ else Operation.WRITE if kind is AccessKind.WRITE else Operation.ERASE
+            request = AccessRequest(
+                f"{self.service_id}:physical",
+                operation,
+                0 if page_offset_bytes is None else page_offset_bytes,
+                max(1, byte_count),
             )
+            result = (DramCore(config).execute(request) if is_dram else NandCore(config).execute(request))
+            counters = dict(result.counters)
+            counters.update({
+                "logical_bytes": result.logical_bytes,
+                "physical_bytes": result.transfer_bytes,
+                "physical_read_bytes": result.physical_read_bytes,
+                "physical_write_bytes": result.physical_write_bytes,
+                "host_transfer_bytes": result.host_transfer_bytes,
+                "internal_transfer_bytes": result.internal_transfer_bytes,
+                "service_ns": result.latency_ns,
+                "actual_bandwidth_gb_s": result.actual_bandwidth_gb_s,
+                "bandwidth_ceiling_gb_s": result.bandwidth_ceiling_gb_s,
+                "operation": operation.value,
+                "timing_model": "physical_transaction_v1",
+                "energy_pj": 0.0,
+                "pages_touched": len(result.mapping) if not is_dram else 0,
+                "write_completion": "media_program_complete" if operation is Operation.WRITE else "n/a",
+            })
+            return counters
         if kind is AccessKind.ERASE:
-            raise ValueError("ERASE requires a NAND media contract")
+            raise ValueError("ERASE requires physical_memory_config")
         model = self.service_model if service_model is None else service_model
         if model not in {"analytical", "serialized", "overlapped"}:
             raise ValueError("memory_service_model must be analytical, serialized or overlapped")
@@ -344,15 +382,47 @@ class PhysicalService:
 
     def price_batch(self, requests, *, start_ns=0.0, state=None):
         """Price an explicit NAND request batch and return its next queue state."""
-        if self.component is None or not (
-            self.component.metadata.get("nand_media") is not None
-            or self.component.metadata.get("hbf_media") is not None
-        ):
-            raise ValueError("price_batch requires a NAND media contract")
-        from .hbf_media import nand_media_service_batch
-        return nand_media_service_batch(
-            self.component, requests, start_ns=start_ns, state=state
-        )
+        if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
+            from .memory_types import AccessRequest, NandConfig, Operation
+            from .nand_core import NandCore
+            from dataclasses import asdict, is_dataclass
+            raw = self.component.metadata["physical_memory_config"]
+            if is_dataclass(raw):
+                raw = asdict(raw)
+            config = raw if isinstance(raw, NandConfig) else NandConfig.from_mapping(raw)
+            core = NandCore(config)
+            parsed = []
+            for index, item in enumerate(requests):
+                op = str(item.get("operation", "")).lower()
+                address = item.get("address", item.get("page_offset_bytes", 0))
+                parsed.append(AccessRequest(
+                    str(item.get("request_id", f"request-{index}")),
+                    Operation(op), int(address), int(item["byte_count"]),
+                    float(item.get("arrival_ns", start_ns)),
+                ))
+            batch = core.run(parsed)
+            return {
+                "model": "physical_transaction_queue_v1",
+                "requests": tuple(batch.requests),
+                "request_count": len(batch.requests),
+                "logical_bytes": batch.logical_bytes,
+                "physical_bytes": batch.transfer_bytes,
+                "host_transfer_bytes": batch.host_transfer_bytes,
+                "internal_transfer_bytes": batch.internal_transfer_bytes,
+                "physical_read_bytes": batch.physical_read_bytes,
+                "physical_write_bytes": batch.physical_write_bytes,
+                "pages_read": batch.pages_read,
+                "pages_programmed": batch.pages_programmed,
+                "erase_operations": batch.erase_operations,
+                "queue_wait_ns": batch.queue_wait_ns,
+                "service_ns": batch.duration_ns,
+                "end_ns": batch.last_completion_ns,
+                "actual_bandwidth_gb_s": batch.actual_bandwidth_gb_s,
+                "bandwidth_ceiling_gb_s": batch.bandwidth_ceiling_gb_s,
+            }, state
+        if self.component is None or self.component.metadata.get("physical_memory_config") is None:
+            raise ValueError("price_batch requires physical_memory_config")
+        raise RuntimeError("unreachable physical batch branch")
 
 
 @dataclass(frozen=True)
@@ -728,280 +798,58 @@ def endpoint_service(
     dram_address_bytes: Optional[int] = None,
     operation: Optional[str] = None,
 ) -> Optional[EndpointService]:
+    """Lower one memory access using the canonical physical transaction model."""
     _non_negative_int(byte_count, "byte_count")
-    address_source = "explicit_access" if page_offset_bytes is not None else "unknown"
-    if page_offset_bytes is None:
-        page_offset_bytes = component.metadata.get("memory_access_offset_bytes")
-        if page_offset_bytes is not None:
-            address_source = "parameterized_repeated_access_start"
-    if page_offset_bytes is not None:
-        _non_negative_int(page_offset_bytes, "page_offset_bytes")
-    operation = ("read" if read else "program") if operation is None else str(operation).lower()
-    if operation not in {"read", "program", "erase"}:
-        raise ValueError("operation must be read, program or erase")
-    if operation == "read" and not read:
+    address = page_offset_bytes if page_offset_bytes is not None else dram_address_bytes
+    if address is None:
+        address = component.metadata.get("memory_access_offset_bytes", 0)
+    _non_negative_int(address, "memory access address")
+    op_name = ("read" if read else "write") if operation is None else str(operation).lower()
+    if op_name not in {"read", "write", "erase"}:
+        raise ValueError("operation must be read, write or erase")
+    if op_name == "read" and not read:
         raise ValueError("read operation requires read=True")
-    if operation == "program" and read:
-        raise ValueError("program operation requires read=False")
-    bandwidth = float(component.directional_bandwidth_gbps("read" if read else "write"))
-    if bandwidth <= 0 and operation != "erase":
-        # Offload media are active transfer endpoints.  Silently omitting
-        # a missing direction used to make an HBF with unknown write
-        # bandwidth accept state/KV writes at zero cost.  Active HBM/DRAM
-        # interfaces may rely on their declared topology link or global
-        # memory profile, but HBF/SSD media must fail closed when a real
-        # transfer uses an unknown direction.
-        if (
-            byte_count > 0
-            and operation != "erase"
-            and component.normalized_kind
-            in OFFLOAD_STORAGE_COMPONENT_KINDS
-        ):
-            direction = "read" if read else "write"
-            raise ValueError(
-                "storage component {} requires a positive {} bandwidth "
-                "for this transfer".format(component.component_id, direction)
-            )
-        return None
-    direction = "read" if operation == "read" else "erase" if operation == "erase" else "write"
-    # Opt-in OCP-style cold-page accounting.  The link still carries the
-    # host-visible request bytes; this endpoint demand charges the
-    # physical page traffic and media latency separately.  We intentionally
-    # keep one logical endpoint demand: a shared physical owner cannot
-    # accept two demands from the same task, and the diagnostic metadata
-    # retains RMW read bytes for write requests.
-    if (component.normalized_kind in OFFLOAD_STORAGE_COMPONENT_KINDS
-            and (component.metadata.get("nand_media") is not None
-                 or component.metadata.get("hbf_media") is not None)):
-        if byte_count == 0:
+    if op_name == "write" and read:
+        raise ValueError("write operation requires read=False")
+    if byte_count > 0 and component.metadata.get("physical_memory_config") is None:
+        declared_bandwidth = float(component.directional_bandwidth_gbps("read" if read else "write"))
+        if declared_bandwidth <= 0:
             return None
-        from .hbf_media import nand_media_service
-        if operation == "erase":
-            media = nand_media_service(
-                component, byte_count, False,
-                page_offset_bytes=page_offset_bytes, operation="erase",
-                background_work=component.metadata.get("background_work"),
-            )
-            physical_service = resolve_service(component)
-            media_contract = component.metadata.get("nand_media", component.metadata.get("hbf_media", {}))
-            nand_access = None
-            if page_offset_bytes is not None and all(
-                media_contract.get(key) is not None
-                for key in ("physical_channels", "physical_dies", "physical_planes")
-            ):
-                nand_access = {
-                    "component": {
-                        "component_id": component.component_id,
-                        "read_bandwidth_gbps": component.read_bandwidth_gbps,
-                        "write_bandwidth_gbps": component.write_bandwidth_gbps,
-                        "metadata": dict(component.metadata),
-                    },
-                    "requests": ({"operation": "erase", "byte_count": byte_count,
-                                  "page_offset_bytes": page_offset_bytes},),
-                    "resource_id": physical_service.resource_id,
-                    "state_key": physical_service.physical_owner,
-                }
-            return EndpointService(
-                name="{}.{}.{}.erase".format(name, component.component_id, direction),
-                demands=(ResourceDemand(
-                    resource_id=resolve_service(component).resource_id,
-                    service_ns=media["service_ns"],
-                    bytes_moved=media["physical_bytes"],
-                ),),
-                metadata={"event_kind": "memory_erase", "component_id": component.component_id,
-                          "bytes": byte_count, "physical_bytes": media["physical_bytes"],
-                          "nand_media": media, "operation": "erase",
-                          "address_source": address_source,
-                          "background_work": media.get("background_work", {}),
-                          **({"nand_access": nand_access} if nand_access else {})},
-            )
-        media = nand_media_service(
-            component,
-            byte_count,
-            read,
-            page_offset_bytes=page_offset_bytes,
-            operation=operation,
-            background_work=component.metadata.get("background_work"),
-        )
-        physical_bytes = media["physical_read_bytes"] if read else media["physical_bytes"]
-        physical_service = resolve_service(component)
-        media_contract = component.metadata.get("nand_media", component.metadata.get("hbf_media", {}))
-        nand_access = None
-        if page_offset_bytes is not None and all(
-            media_contract.get(key) is not None
-            for key in ("physical_channels", "physical_dies", "physical_planes")
-        ):
-            nand_access = {
-                "component": {
-                    "component_id": component.component_id,
-                    "read_bandwidth_gbps": component.read_bandwidth_gbps,
-                    "write_bandwidth_gbps": component.write_bandwidth_gbps,
-                    "metadata": dict(component.metadata),
-                },
-                "requests": ({"operation": operation, "byte_count": byte_count,
-                              "page_offset_bytes": page_offset_bytes},),
-                "resource_id": physical_service.resource_id,
-                "state_key": physical_service.physical_owner,
-            }
-        return EndpointService(
-            name="{}.{}.{}.cold_page".format(name, component.component_id, direction),
-            demands=(ResourceDemand(
-                resource_id=physical_service.resource_id,
-                service_ns=media["service_ns"],
-                bytes_moved=physical_bytes,
-                energy_pj=media["energy_pj"],
-            ),),
-            metadata={
-                "event_kind": "memory_{}".format(direction),
-                "component_id": component.component_id,
-                "bytes": byte_count,
-                "transferred_bytes": media["host_transfer_bytes"],
-                "physical_bytes": media["physical_bytes"],
-                "nand_media": media,
-                "address_source": address_source,
-                **({"hbf_media": media}
-                   if component.metadata.get("hbf_media") is not None else {}),
-                "transfer_granularity_bytes": media["media_page_bytes"],
-                "transactions": media["command_count"],
-                "max_outstanding_requests": media["command_queue_depth"],
-                "latency_ns": (media["page_read_latency_ns"] if read
-                               else media["page_program_latency_ns"]),
-                "latency_batches": media["media_waves"],
-                "bandwidth_service_ns": media["host_service_ns"],
-                "latency_service_ns": media["media_read_service_ns"] if read else media["service_ns"],
-                "physical_kind": component.normalized_kind,
-                "physical_service_id": physical_service.service_id,
-                "physical_owner": physical_service.physical_owner,
-                "physical_resource_id": physical_service.resource_id,
-                "queue_depth": media["command_queue_depth"],
-                "effective_parallelism": media["effective_parallelism"],
-                "access_mode": component.metadata.get("access_mode", "default"),
-                "memory_service_model": media["version"],
-                "timing_evidence": "ANALYTICAL",
-                **({"nand_access": nand_access} if nand_access else {}),
-            },
-        )
-    if operation == "erase":
-        raise ValueError("ERASE requires a NAND media contract")
-    physical_service = resolve_service(component)
-    latency = physical_service.read_latency_ns if read else physical_service.write_latency_ns
-    granularity = _non_negative_int(component.metadata.get("transfer_granularity_bytes", 0), "transfer_granularity_bytes")
-    transaction_count = math.ceil(byte_count / granularity) if granularity and byte_count else int(byte_count > 0)
-    transferred_bytes = transaction_count * granularity if granularity else byte_count
-    if component.is_active_memory:
-        granularity = physical_service.transaction_granularity
-        transaction_count = math.ceil(byte_count / granularity)
-        transferred_bytes = transaction_count * granularity
-    max_outstanding = physical_service.queue_depth
-    parallel_lanes = physical_service.parallel_lanes
-    request_window = max_outstanding * parallel_lanes
-    latency_batches = math.ceil(transaction_count / request_window) if transaction_count else 0
-    service_model = physical_service.service_model
-    if service_model == "analytical":
-        transferred_bytes = byte_count
-        granularity = physical_service.transaction_granularity
-        transaction_count = math.ceil(byte_count / granularity)
-        latency_batches = math.ceil(transaction_count / request_window) if transaction_count else 0
-    bandwidth_gb_s = physical_service.read_bandwidth_gb_s if read else physical_service.write_bandwidth_gb_s
-    billed = physical_service.price(
-        AccessKind.READ if read else AccessKind.WRITE, byte_count,
-        transaction_bytes=(physical_service.transaction_granularity if service_model == "analytical"
-                           else granularity or max(1, byte_count)),
-        service_model=service_model,
-    )
-    bandwidth_ns = billed["bandwidth_service_ns"]
-    latency_ns = billed["latency_service_ns"]
-    service_ns = billed["service_ns"]
-    energy_key = "{}_energy_pj_per_byte".format(direction)
-    energy = _non_negative(component.metadata.get(energy_key, component.metadata.get("memory_service", {}).get("energy_pj_per_byte", 0.0)), energy_key)
-    dram_contract = None
-    dram_profile = component.metadata.get("dram_profile")
-    if dram_profile is not None:
-        if is_dataclass(dram_profile):
-            dram_profile = asdict(dram_profile)
-        if not isinstance(dram_profile, Mapping):
-            raise ValueError("dram_profile must be a mapping or DramProfile")
-        address = (
-            dram_address_bytes
-            if dram_address_bytes is not None
-            else page_offset_bytes if page_offset_bytes is not None
-            else component.metadata.get("dram_address_bytes")
-        )
-        if address is not None:
-            if isinstance(address, bool) or not isinstance(address, int) or address < 0:
-                raise ValueError("dram_address_bytes must be a non-negative integer")
-            dram_contract = {
-                "profile": dict(dram_profile),
-                "accesses": ({
-                    "operation": "read" if read else "write",
-                    "offset_bytes": address,
-                    "byte_count": byte_count,
-                },),
-                "read_bandwidth_gb_s": physical_service.read_bandwidth_gb_s,
-                "write_bandwidth_gb_s": physical_service.write_bandwidth_gb_s,
-                "max_outstanding_requests": physical_service.queue_depth,
-                "resource_id": physical_service.resource_id,
-                "state_key": physical_service.physical_owner,
-            }
-    if service_model in {"analytical", "overlapped"}:
-        bottleneck = "latency" if latency_ns > bandwidth_ns else "bandwidth"
-        if latency_ns == bandwidth_ns:
-            bottleneck = "bandwidth_and_latency"
-    else:
-        bottleneck = "serialized_bandwidth_and_latency"
-    throughput_metrics = realtime_memory_metrics(
+    service = resolve_service(component)
+    billed = service.price(
+        AccessKind.READ if op_name == "read" else AccessKind.WRITE if op_name == "write" else AccessKind.ERASE,
         byte_count,
-        service_ns,
-        physical_bytes=transferred_bytes,
-        # Component fields are Gbit/s; the shared helper reports GB/s.
-        bandwidth_ceiling_gb_s=bandwidth_gb_s,
-        queue_wait_ns=0.0,
-        request_window_utilization=min(
-            1.0, transaction_count / float(request_window)
-        ) if transaction_count else 0.0,
-        bottleneck=bottleneck,
+        page_offset_bytes=address,
+    )
+    physical = int(billed.get("physical_bytes", 0))
+    if op_name == "erase":
+        physical = 0
+    demand = ResourceDemand(
+        resource_id=service.resource_id,
+        service_ns=float(billed.get("service_ns", 0.0)),
+        bytes_moved=physical,
+        energy_pj=float(billed.get("energy_pj", 0.0)),
     )
     return EndpointService(
-        name="{}.{}.{}".format(name, component.component_id, direction),
-        demands=(
-            ResourceDemand(
-                resource_id=(physical_service.resource_id if component.is_active_memory
-                             else "component.{}.{}".format(component.component_id, direction)),
-                service_ns=service_ns,
-                bytes_moved=transferred_bytes,
-                energy_pj=transferred_bytes * energy,
-            ),
-        ),
+        name=f"{name}.{component.component_id}.{op_name}",
+        demands=(demand,),
         metadata={
-            "event_kind": "memory_{}".format(direction),
+            "event_kind": f"memory_{op_name}",
             "component_id": component.component_id,
             "bytes": byte_count,
-            "transferred_bytes": transferred_bytes,
-            "transfer_granularity_bytes": granularity,
-            "transactions": transaction_count,
-            "max_outstanding_requests": max_outstanding,
-            "parallel_lanes": parallel_lanes,
-            "request_window": request_window,
-            "effective_outstanding": billed["effective_outstanding"],
-            "latency_batches": latency_batches,
-            "latency_ns": latency,
+            "address": address,
+            "physical_memory_config": component.metadata.get("physical_memory_config"),
+            "physical_execution": dict(billed),
+            "physical_bytes": physical,
+            "transferred_bytes": int(billed.get("host_transfer_bytes", billed.get("logical_bytes", byte_count))),
             "physical_kind": component.normalized_kind,
-            "access_mode": component.metadata.get("access_mode", "default"),
-            "memory_service_model": service_model,
-            "physical_service_id": physical_service.service_id,
-            "physical_owner": physical_service.physical_owner,
-            "physical_resource_id": physical_service.resource_id,
-            "access_kind": "READ" if read else "WRITE",
-            "bandwidth_service_ns": bandwidth_ns,
-            "latency_service_ns": latency_ns,
-            **throughput_metrics,
-            "estimated_internal_wait_ns": billed["estimated_internal_wait_ns"],
+            "physical_service_id": service.service_id,
+            "physical_owner": service.physical_owner,
+            "physical_resource_id": service.resource_id,
+            "access_kind": op_name.upper(),
             "timing_evidence": "ANALYTICAL",
-            **({"dram_access": dram_contract} if dram_contract is not None else {}),
-            **({"dram_address_scope": "aggregate_unknown"} if dram_profile is not None and dram_contract is None else {}),
         },
     )
-
 
 
 # Public spelling used by communication and cost model callers.

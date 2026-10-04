@@ -895,12 +895,12 @@ class _ResultAccumulator:
         resource_predecessors: Mapping[str, Mapping[str, object]],
         resource_lanes: Optional[Mapping[str, int]] = None,
     ) -> None:
-        if isinstance(task.metadata.get("nand_execution"), Mapping):
+        if isinstance(task.metadata.get("physical_execution"), Mapping):
             _merge_storage_traffic(
                 self.storage_traffic,
                 _summarize_nand_task_traffic((task,), resource_owners=self.resource_owners),
             )
-        if isinstance(task.metadata.get("dram_execution"), Mapping):
+        if isinstance(task.metadata.get("physical_execution"), Mapping):
             _merge_dram_traffic(
                 self.dram_traffic,
                 _summarize_dram_task_traffic((task,), resource_owners=self.resource_owners),
