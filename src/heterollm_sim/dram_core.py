@@ -54,7 +54,7 @@ class DramCore:
         if len(inflight) >= self.config.max_outstanding_requests:
             effective_arrival = max(effective_arrival, min(inflight))
             inflight = [end for end in inflight if end > effective_arrival]
-        before_metrics = self.timeline.metrics_snapshot()
+        before_metrics = self.timeline.metrics_snapshot(max_intervals=self.config.max_expanded_segments)
         result = self._execute_accepted(
             request if effective_arrival == request.arrival_ns
             else replace(request, arrival_ns=effective_arrival)
@@ -113,6 +113,7 @@ class DramCore:
                 self._command_id(m), dependency,
                 self.config.burst_interval_ns,
             )
+            record(StageTiming("COMMAND_RESERVATION", command.start_ns, command.end_ns, self._command_id(m)))
             latency = self.config.read_latency_ns if request.operation is Operation.READ else self.config.write_latency_ns
             data_ready = command.start_ns + latency
             record(StageTiming(

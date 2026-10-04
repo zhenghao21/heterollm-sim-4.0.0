@@ -6241,23 +6241,23 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
     physical_metadata = {}
     physical_config = _component(scenario, storage).metadata.get("physical_memory_config")
     if physical_config is not None and isinstance(page_offset, int) and not isinstance(page_offset, bool):
-        if moved_reads and not moved_writes:
+        descriptors = []
+        if moved_reads:
+            descriptors.append({
+                "operation": "read", "address": page_offset,
+                "byte_count": moved_reads, "physical_owner": service.physical_owner,
+                "resource_id": service.resource_id,
+            })
+        if moved_writes:
+            descriptors.append({
+                "operation": "write", "address": page_offset,
+                "byte_count": moved_writes, "physical_owner": service.physical_owner,
+                "resource_id": service.resource_id,
+            })
+        if descriptors:
             physical_metadata = {
                 "physical_memory_config": physical_config,
-                "memory_access": {
-                    "operation": "read", "address": page_offset,
-                    "byte_count": moved_reads, "physical_owner": service.physical_owner,
-                    "resource_id": service.resource_id,
-                },
-            }
-        elif moved_writes and not moved_reads:
-            physical_metadata = {
-                "physical_memory_config": physical_config,
-                "memory_access": {
-                    "operation": "write", "address": page_offset,
-                    "byte_count": moved_writes, "physical_owner": service.physical_owner,
-                    "resource_id": service.resource_id,
-                },
+                "memory_access": descriptors[0] if len(descriptors) == 1 else tuple(descriptors),
             }
     return replace(phase, demands=tuple(merged.values()), metadata={**phase.metadata,
         **physical_metadata,

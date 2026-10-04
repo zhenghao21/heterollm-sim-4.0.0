@@ -1043,7 +1043,8 @@ class UnifiedEventKernel:
         effective_ready_ns = dependency_ready_ns
         if earliest_start_ns > effective_ready_ns:
             effective_ready_ns = earliest_start_ns
-        demands = () if "memory_access" in task.metadata else task.demands
+        from .data_motion import is_physical_task, physical_task_demands
+        demands = physical_task_demands(task) if is_physical_task(task) else task.demands
         if demands:
             demand_iterator = iter(demands)
             resources_ready_ns = self._resource_ready_ns(
@@ -1621,9 +1622,10 @@ class UnifiedEventKernel:
         if self.has_active_tasks:
             raise ValueError("prevalidated compiled drain requires an idle kernel")
         chunk = tuple(tasks)
+        from .data_motion import is_physical_task
         if (
             self.resource_owners
-            or any("stateful_l2" in task.metadata or "memory_access" in task.metadata for task in chunk)
+            or any("stateful_l2" in task.metadata or is_physical_task(task) for task in chunk)
         ):
             if not layout.matches_structure(chunk):
                 raise ValueError("task graph does not match compiled structure")
@@ -2116,7 +2118,8 @@ class UnifiedEventKernel:
             _version,
         ) = queued
         task = self._tasks[task_id]
-        is_physical = "memory_access" in task.metadata
+        from .data_motion import is_physical_task
+        is_physical = is_physical_task(task)
         if is_physical:
             try:
                 # Local import avoids making the planner/data-motion module
@@ -2163,6 +2166,7 @@ class UnifiedEventKernel:
         self._phase_sequence.pop(task_id)
         resource_predecessors: Dict[str, Dict[str, object]] = {}
         resource_lanes: Dict[str, int] = {}
+        physical_ids = set(str(item) for item in task.metadata.get("physical_demands_resource_ids", ())) if is_physical else set()
         end_ns = float(task.metadata["physical_completion_ns"]) if is_physical else start_ns
         resource_last_interval = self.resource_last_interval
         resource_available = self.resource_available
@@ -2172,7 +2176,7 @@ class UnifiedEventKernel:
         resource_busy_ns_get = resource_busy_ns.get
         queue_wait_ns = start_ns - effective_ready_ns
         for demand in demands:
-            if is_physical:
+            if is_physical and str(demand.resource_id) in physical_ids:
                 # The core already reserved the real stages. Charging these
                 # durations as another exclusive device demand would both
                 # serialize independent channels and count contention twice.

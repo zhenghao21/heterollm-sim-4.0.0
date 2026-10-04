@@ -78,17 +78,32 @@ def simulate_schedule(
             break
         task = event.task
         intervals: List[ResourceInterval] = []
-        for demand in event.demands:
-            end_ns = event.start_ns + demand.service_ns
-            intervals.append(
-                ResourceInterval(
+        physical = isinstance(task.metadata.get("physical_execution"), Mapping)
+        reservations = task.metadata.get("physical_resource_intervals", ())
+        if physical:
+            raw = task.metadata.get("physical_execution", {}).get("resource_intervals", {})
+            reservations = tuple(
+                (resource_id, start_ns, end_ns)
+                for resource_id, values in raw.items()
+                for start_ns, end_ns in values
+            ) or reservations
+        if physical and reservations:
+            for item in reservations:
+                if isinstance(item, tuple) and len(item) == 3:
+                    resource_id, start_ns, end_ns = item
+                else:
+                    resource_id, start_ns, end_ns = item.resource_id, item.start_ns, item.end_ns
+                intervals.append(ResourceInterval(resource_id=resource_id, start_ns=start_ns, end_ns=end_ns))
+        elif not physical or not task.metadata.get("physical_execution", {}).get("intervals_truncated", False):
+            for demand in event.demands:
+                end_ns = event.start_ns + demand.service_ns
+                intervals.append(ResourceInterval(
                     resource_id=demand.resource_id,
                     start_ns=event.start_ns,
                     end_ns=end_ns,
                     bytes_moved=demand.bytes_moved,
                     energy_pj=demand.energy_pj,
-                )
-            )
+                ))
         metadata = _merge_engine_metadata(
             task.metadata,
             effective_ready_ns=event.effective_ready_ns,

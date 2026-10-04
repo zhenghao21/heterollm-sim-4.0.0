@@ -37,8 +37,12 @@ class PhysicalRuntimeContext:
     config: Any = None
     physical_owner: Optional[str] = None
     runtimes: dict[str, _PhysicalRuntime] = field(default_factory=dict)
+    timeline: Any = None
 
     def __post_init__(self) -> None:
+        if self.timeline is None:
+            from .memory_transfer import ResourceTimeline
+            self.timeline = ResourceTimeline()
         if self.config is not None or self.physical_owner is not None:
             if self.config is None or not self.physical_owner:
                 raise ValueError("config and physical_owner must be provided together")
@@ -57,7 +61,18 @@ class PhysicalRuntimeContext:
             return current
         from .dram_core import DramCore
         from .nand_core import NandCore
-        core = DramCore(config) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config)
+        metadata = dict(config.metadata)
+        if kind in {"DDR", "LPDDR", "HBM"}:
+            metadata.setdefault("bank_resource_prefix", f"{key}:dram:bank")
+            metadata.setdefault("command_resource_prefix", f"{key}:dram:command")
+            metadata.setdefault("data_resource_prefix", f"{key}:dram:data")
+            config = replace(config, metadata=metadata)
+        else:
+            metadata.setdefault("array_resource_prefix", f"{key}:nand:array")
+            metadata.setdefault("parallel_resource_prefix", f"{key}:nand:parallel")
+            metadata.setdefault("channel_resource_prefix", f"{key}:nand:channel")
+            config = replace(config, metadata=metadata)
+        core = DramCore(config, self.timeline) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config, self.timeline)
         current = _PhysicalRuntime(core=core, signature=signature)
         self.runtimes[key] = current
         return current
@@ -113,7 +128,8 @@ def resolve_physical_task(
     metadata = dict(task.metadata)
     raw_config = metadata.get("physical_memory_config")
     access = metadata.get("memory_access")
-    if raw_config is None or not isinstance(access, Mapping):
+    accesses = metadata.get("memory_accesses", access)
+    if raw_config is None or not isinstance(accesses, (Mapping, tuple, list)) or not accesses:
         raise ValueError("physical task requires physical_memory_config and memory_access")
     if is_dataclass(raw_config):
         raw_config = asdict(raw_config)
@@ -124,51 +140,111 @@ def resolve_physical_task(
     kind_name = str(getattr(kind_value, "value", kind_value)).upper()
     is_dram = kind_name in {"DDR", "LPDDR", "HBM"}
     config = DramConfig.from_mapping(raw_config) if is_dram else NandConfig.from_mapping(raw_config)
-    owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
-    operation = Operation(str(access.get("operation", "")).lower())
-    address = access.get("address")
-    byte_count = access.get("byte_count")
-    if isinstance(address, bool) or not isinstance(address, int) or address < 0:
-        raise ValueError("physical task address must be a non-negative integer")
-    if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
-        raise ValueError("physical task byte_count must be a positive integer")
     if isinstance(arrival_ns, bool) or not isinstance(arrival_ns, (int, float)) or arrival_ns < 0:
         raise ValueError("physical task arrival_ns must be non-negative")
-    active = runtime.runtime(config, owner)
-    request = AccessRequest(task.request_id or task.task_id, operation, address, byte_count, float(arrival_ns))
-    submit = getattr(active.core, "submit", active.core.execute)
-    result = submit(request)
-    active.clock_ns = max(active.clock_ns, result.completion_ns)
+    if isinstance(accesses, Mapping):
+        accesses = (accesses,)
+    results = []
+    next_arrival = float(arrival_ns)
+    for index, access in enumerate(accesses):
+        if not isinstance(access, Mapping):
+            raise ValueError("physical memory_access entries must be mappings")
+        owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
+        operation = Operation(str(access.get("operation", "")).lower())
+        address = access.get("address")
+        byte_count = access.get("byte_count")
+        if isinstance(address, bool) or not isinstance(address, int) or address < 0:
+            raise ValueError("physical task address must be a non-negative integer")
+        if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
+            raise ValueError("physical task byte_count must be a positive integer")
+        active = runtime.runtime(config, owner)
+        request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation, address, byte_count, next_arrival)
+        submit = getattr(active.core, "submit", active.core.execute)
+        result = submit(request)
+        active.clock_ns = max(active.clock_ns, result.completion_ns)
+        results.append(result)
+        next_arrival = result.completion_ns
+    result = results[-1]
     counters = dict(result.counters)
-    resource_busy = counters.get("resource_busy_ns", {})
-    resource_bytes = counters.get("resource_bytes", {})
-    demands = tuple(
-        ResourceDemand(
-            str(resource_id),
-            float(duration),
-            bytes_moved=int(resource_bytes.get(resource_id, 0)),
-        )
-        for resource_id, duration in sorted(resource_busy.items())
-        if float(duration) > 0
-    )
+    resource_busy = {}
+    resource_bytes = {}
+    resource_intervals = {}
+    resource_last = {}
+    for item in results:
+        for resource_id, value in item.counters.get("resource_busy_ns", {}).items():
+            resource_busy[resource_id] = resource_busy.get(resource_id, 0.0) + value
+        for resource_id, value in item.counters.get("resource_bytes", {}).items():
+            resource_bytes[resource_id] = resource_bytes.get(resource_id, 0) + value
+        for resource_id, value in item.counters.get("resource_intervals", {}).items():
+            resource_intervals.setdefault(resource_id, []).extend(value)
+        resource_last.update(item.counters.get("resource_last_intervals", {}))
+    counters.update({"resource_busy_ns": resource_busy, "resource_bytes": resource_bytes,
+                     "resource_intervals": resource_intervals, "resource_last_intervals": resource_last,
+                     "operation_count": len(results)})
+    demands = tuple(ResourceDemand(str(resource_id), float(duration), bytes_moved=int(resource_bytes.get(resource_id, 0)))
+                    for resource_id, duration in sorted(resource_busy.items()) if float(duration) > 0)
     if not demands:
         demands = (ResourceDemand(owner, result.latency_ns, bytes_moved=result.transfer_bytes),)
     metadata.update({
         "physical_execution": {
             **counters,
-            "logical_bytes": result.logical_bytes,
-            "physical_bytes": result.transfer_bytes,
-            "service_ns": result.latency_ns,
-            "arrival_ns": result.arrival_ns,
-            "completion_ns": result.completion_ns,
-            "operation": result.operation.value,
+            "logical_bytes": sum(item.logical_bytes for item in results),
+            "physical_bytes": sum(item.transfer_bytes for item in results),
+            "service_ns": next_arrival - float(arrival_ns),
+            "arrival_ns": float(arrival_ns),
+            "completion_ns": next_arrival,
+            "operation": results[-1].operation.value if len(results) == 1 else "read_write",
         },
-        "physical_arrival_ns": result.arrival_ns,
-        "physical_completion_ns": result.completion_ns,
-        "physical_resource_intervals": tuple(result.stages),
-        "physical_resource_last_intervals": counters.get("resource_last_intervals", {}),
+        "physical_arrival_ns": float(arrival_ns),
+        "physical_completion_ns": next_arrival,
+        "physical_resource_intervals": tuple(
+            item for result in results for item in result.stages
+            if item.name not in {"READ_PIPELINE", "WRITE_PIPELINE"}
+        ),
+        "physical_resource_last_intervals": resource_last,
+        "physical_demands_resource_ids": tuple(sorted(resource_busy)),
     })
-    return replace(task, demands=demands, metadata=metadata)
+    # Keep unrelated compute/link demands. Only preview demands for resources
+    # identified by this transaction are replaced by core-owned reservations.
+    memory_ids = set(metadata["physical_demands_resource_ids"])
+    preserved = tuple(d for d in task.demands if d.resource_id not in memory_ids)
+    metadata["physical_nonmemory_demand_ids"] = tuple(d.resource_id for d in preserved)
+    return replace(task, demands=preserved + demands, metadata=metadata)
+
+
+def is_physical_task(task: TaskSpec) -> bool:
+    metadata = task.metadata
+    config = metadata.get("physical_memory_config")
+    accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
+    # Endpoint metadata always carries these optional keys.  It becomes a
+    # formal physical transaction only when both values are present and the
+    # descriptor is non-empty; an explicitly supplied malformed descriptor is
+    # rejected instead of silently falling back to analytical pricing.
+    if config is None:
+        if accesses not in (None, (), []):
+            raise ValueError("physical task requires physical_memory_config and memory_access")
+        return False
+    if not isinstance(accesses, Mapping) and not isinstance(accesses, (tuple, list)):
+        raise ValueError("physical task requires physical_memory_config and memory_access")
+    if not accesses:
+        raise ValueError("physical task requires a non-empty memory access descriptor")
+    return True
+
+
+def physical_task_demands(task: TaskSpec) -> Tuple[ResourceDemand, ...]:
+    """Return preview demands that remain externally scheduled for a physical task."""
+    metadata = task.metadata
+    physical_ids = set(str(item) for item in metadata.get("physical_demands_resource_ids", ()))
+    accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
+    if isinstance(accesses, Mapping):
+        accesses = (accesses,)
+    for access in accesses or ():
+        if isinstance(access, Mapping):
+            for key in ("resource_id", "physical_resource_id"):
+                value = access.get(key)
+                if value:
+                    physical_ids.add(str(value))
+    return tuple(demand for demand in task.demands if str(demand.resource_id) not in physical_ids)
 
 
 class AccessKind(str, Enum):
@@ -558,12 +634,17 @@ class PhysicalService:
     ):
         """Price an explicit NAND request batch and return its next queue state."""
         if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
-            from .memory_types import AccessRequest, NandConfig, Operation
+            from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
             from dataclasses import asdict, is_dataclass
             raw = self.component.metadata["physical_memory_config"]
             if is_dataclass(raw):
                 raw = asdict(raw)
-            config = raw if isinstance(raw, NandConfig) else NandConfig.from_mapping(raw)
+            if isinstance(raw, (DramConfig, NandConfig)):
+                config = raw
+            else:
+                kind_value = raw.get("kind", "") if isinstance(raw, Mapping) else ""
+                kind_name = str(getattr(kind_value, "value", kind_value)).upper()
+                config = DramConfig.from_mapping(raw) if kind_name in {"DDR", "LPDDR", "HBM"} else NandConfig.from_mapping(raw)
             explicit_context = runtime or (state if isinstance(state, PhysicalRuntimeContext) else None)
             context = explicit_context or current_physical_runtime_context()
             active_runtime = _physical_runtime(
@@ -611,7 +692,7 @@ class PhysicalService:
                 "end_ns": batch.last_completion_ns,
                 "actual_bandwidth_gb_s": batch.actual_bandwidth_gb_s,
                 "bandwidth_ceiling_gb_s": batch.bandwidth_ceiling_gb_s,
-            }, explicit_context
+            }
         if self.component is None or self.component.metadata.get("physical_memory_config") is None:
             raise ValueError("price_batch requires physical_memory_config")
         raise RuntimeError("unreachable physical batch branch")
@@ -714,6 +795,7 @@ class MotionPhase:
     extra_demands: Tuple[ResourceDemand, ...] = ()
     physical_bytes: Optional[int] = None
     energy_pj: float = 0.0
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def demand(self) -> ResourceDemand:
@@ -740,6 +822,7 @@ class ExpandedMotion:
         tasks = tuple(TaskSpec(
             phase.operation_id, request_id, phase.operation_id, TaskCategory.COMMUNICATION,
             dependencies=phase.dependencies, demands=phase.demands,
+            metadata=dict(phase.metadata),
         ) for phase in self.phases)
         if not tasks or tasks[-1].task_id != self.operation_id:
             tasks += (TaskSpec(
@@ -893,10 +976,23 @@ def expand_access(
             access.byte_count,
             page_offset_bytes=position.offset_bytes,
         )
+        metadata: dict[str, Any] = {}
+        raw_config = service.component.metadata.get("physical_memory_config") if service.component is not None else None
+        if raw_config is not None:
+            metadata.update({
+                "physical_memory_config": raw_config,
+                "memory_access": {
+                    "operation": kind.value.lower(),
+                    "address": position.offset_bytes,
+                    "byte_count": access.byte_count,
+                    "physical_owner": service.physical_owner,
+                    "resource_id": service.resource_id,
+                },
+            })
         return MotionPhase(access.operation_id, kind, service.service_id, service.physical_owner,
                            service.resource_id, access.byte_count, float(bill["service_ns"]), deps,
                            physical_bytes=int(bill.get("physical_bytes", access.byte_count)),
-                           energy_pj=float(bill.get("energy_pj", 0.0)))
+                           energy_pj=float(bill.get("energy_pj", 0.0)), metadata=metadata)
 
     if access.kind is AccessKind.READ:
         phases = (phase(AccessKind.READ, access.source, access.dependencies),)
@@ -907,7 +1003,7 @@ def expand_access(
     else:
         read = phase(AccessKind.READ, access.source, access.dependencies)
         deps = access.dependencies + (read.operation_id + ".read",)
-        read = MotionPhase(read.operation_id + ".read", read.kind, read.service_id, read.physical_owner, read.resource_id, read.byte_count, read.service_ns, read.dependencies, physical_bytes=read.physical_bytes, energy_pj=read.energy_pj)
+        read = MotionPhase(read.operation_id + ".read", read.kind, read.service_id, read.physical_owner, read.resource_id, read.byte_count, read.service_ns, read.dependencies, physical_bytes=read.physical_bytes, energy_pj=read.energy_pj, metadata=read.metadata)
         phases_list = [read]
         link = links.get((access.source.service_id, access.target.service_id)) if hasattr(links, "get") else None
         if link is not None:
@@ -919,7 +1015,7 @@ def expand_access(
             ))
             deps = (access.operation_id + ".link",)
         write = phase(AccessKind.WRITE, access.target, deps)
-        phases_list.append(MotionPhase(access.operation_id + ".write", write.kind, write.service_id, write.physical_owner, write.resource_id, write.byte_count, write.service_ns, deps, physical_bytes=write.physical_bytes, energy_pj=write.energy_pj))
+        phases_list.append(MotionPhase(access.operation_id + ".write", write.kind, write.service_id, write.physical_owner, write.resource_id, write.byte_count, write.service_ns, deps, physical_bytes=write.physical_bytes, energy_pj=write.energy_pj, metadata=write.metadata))
         phases = tuple(phases_list)
     owners = {}
     for item in phases:
@@ -1032,22 +1128,12 @@ def endpoint_service(
         bytes_moved=physical,
         energy_pj=float(billed.get("energy_pj", 0.0)),
     )
-    return EndpointService(
-        name=f"{name}.{component.component_id}.{op_name}",
-        demands=(demand,),
-        metadata={
+    endpoint_metadata = {
             "event_kind": f"memory_{op_name}",
             "component_id": component.component_id,
             "bytes": byte_count,
             "address": address,
             "physical_memory_config": component.metadata.get("physical_memory_config"),
-            "memory_access": {
-                "operation": op_name,
-                "address": address,
-                "byte_count": byte_count,
-                "physical_owner": service.physical_owner,
-                "resource_id": service.resource_id,
-            },
             "physical_execution": dict(billed),
             "physical_bytes": physical,
             "transferred_bytes": int(billed.get("host_transfer_bytes", billed.get("logical_bytes", byte_count))),
@@ -1057,7 +1143,19 @@ def endpoint_service(
             "physical_resource_id": service.resource_id,
             "access_kind": op_name.upper(),
             "timing_evidence": "ANALYTICAL",
-        },
+        }
+    if component.metadata.get("physical_memory_config") is not None:
+        endpoint_metadata["memory_access"] = {
+            "operation": op_name,
+            "address": address,
+            "byte_count": byte_count,
+            "physical_owner": service.physical_owner,
+            "resource_id": service.resource_id,
+        }
+    return EndpointService(
+        name=f"{name}.{component.component_id}.{op_name}",
+        demands=(demand,),
+        metadata=endpoint_metadata,
     )
 
 

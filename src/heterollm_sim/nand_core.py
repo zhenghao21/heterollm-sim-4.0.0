@@ -56,7 +56,7 @@ class NandCore:
         if len(inflight) >= self.config.max_outstanding_requests:
             effective_arrival = max(effective_arrival, min(inflight))
             inflight = [end for end in inflight if end > effective_arrival]
-        before_metrics = self.timeline.metrics_snapshot()
+        before_metrics = self.timeline.metrics_snapshot(max_intervals=self.config.max_expanded_segments)
         result = self._execute_accepted(
             request if effective_arrival == request.arrival_ns
             else replace(request, arrival_ns=effective_arrival)

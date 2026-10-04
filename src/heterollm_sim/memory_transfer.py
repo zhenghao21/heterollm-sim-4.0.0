@@ -62,6 +62,11 @@ class ResourceTimeline:
     busy_ns: Dict[str, float] = field(default_factory=dict)
     bytes_moved: Dict[str, int] = field(default_factory=dict)
     last_intervals: Dict[str, tuple[float, float]] = field(default_factory=dict)
+    _intervals: Dict[str, list[tuple[float, float]]] = field(default_factory=dict, repr=False)
+    _interval_limit: int = field(default=0, repr=False)
+    _interval_count: int = field(default=0, repr=False)
+    _intervals_truncated: bool = field(default=False, repr=False)
+    _touched: set[str] = field(default_factory=set, repr=False)
 
     def available_ns(self, resource_id: str) -> float:
         return float(self.ready_ns.get(resource_id, 0.0))
@@ -72,14 +77,21 @@ class ResourceTimeline:
         earliest_ns = _number("earliest_ns", earliest_ns)
         duration_ns = _number("duration_ns", duration_ns)
         switch_ns = _number("switch_ns", switch_ns)
-        start = max(earliest_ns, self.available_ns(resource_id))
+        previous_end = self.available_ns(resource_id)
         previous = self.directions.get(resource_id)
         if direction and previous and previous != direction:
-            start += switch_ns
+            previous_end += switch_ns
+        start = max(earliest_ns, previous_end)
         end = start + duration_ns
         self.ready_ns[resource_id] = end
         self.busy_ns[resource_id] = self.busy_ns.get(resource_id, 0.0) + duration_ns
         self.last_intervals[resource_id] = (start, end)
+        self._touched.add(resource_id)
+        if self._interval_count < self._interval_limit:
+            self._intervals.setdefault(resource_id, []).append((start, end))
+            self._interval_count += 1
+        else:
+            self._intervals_truncated = True
         if direction:
             self.directions[resource_id] = direction
         return Transfer(resource_id, 0, 0.0, start, end)
@@ -93,8 +105,17 @@ class ResourceTimeline:
         self.bytes_moved[resource_id] = self.bytes_moved.get(resource_id, 0) + bytes
         return Transfer(resource_id, bytes, bandwidth_gb_s, reservation.start_ns, reservation.end_ns)
 
-    def metrics_snapshot(self) -> dict:
-        """Copy cumulative reservation metrics for per-request accounting."""
+    def metrics_snapshot(self, *, max_intervals: int = 0) -> dict:
+        """Begin per-request accounting with bounded real reservation details.
+
+        Pipeline stages are latency annotations and never enter this recorder.
+        The detail bound does not change resource calendars or summary counters.
+        """
+        self._intervals = {}
+        self._interval_limit = max_intervals
+        self._interval_count = 0
+        self._intervals_truncated = False
+        self._touched = set()
         return {
             "busy_ns": dict(self.busy_ns),
             "bytes_moved": dict(self.bytes_moved),
@@ -108,10 +129,11 @@ class ResourceTimeline:
         moved = {rid: value - before["bytes_moved"].get(rid, 0)
                  for rid, value in self.bytes_moved.items()
                  if value != before["bytes_moved"].get(rid, 0)}
-        touched = set(busy) | set(moved)
-        intervals = {rid: self.last_intervals[rid] for rid in touched if rid in self.last_intervals}
+        intervals = {rid: self.last_intervals[rid] for rid in self._touched}
         return {"resource_busy_ns": busy, "resource_bytes": moved,
-                "resource_last_intervals": intervals}
+                "resource_last_intervals": intervals,
+                "resource_intervals": {rid: tuple(items) for rid, items in self._intervals.items()},
+                "intervals_truncated": self._intervals_truncated}
 
     def snapshot(self) -> dict[str, float]:
         return dict(self.ready_ns)

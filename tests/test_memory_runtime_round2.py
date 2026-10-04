@@ -193,9 +193,10 @@ def test_nand_single_batch_and_split_batch_share_one_context_timeline():
         {"request_id": "a", "operation": "read", "address": 0, "byte_count": 256, "arrival_ns": 0},
         {"request_id": "b", "operation": "read", "address": 256, "byte_count": 256, "arrival_ns": 100},
     )
-    batch, _ = service.price_batch(rows, state=_context(config, "nand0"))
-    first, context = service.price_batch(rows[:1], state=_context(config, "nand0"))
-    second, _ = service.price_batch(rows[1:], state=context)
+    batch = service.price_batch(rows, state=_context(config, "nand0"))
+    context = _context(config, "nand0")
+    first = service.price_batch(rows[:1], runtime=context)
+    second = service.price_batch(rows[1:], runtime=context)
     assert batch["end_ns"] == second["end_ns"]
     assert [item.completion_ns for item in batch["requests"]] == [
         first["requests"][0].completion_ns,

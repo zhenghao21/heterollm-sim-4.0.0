@@ -582,16 +582,29 @@ def _materialize_history_task(record: _TaskHistoryRecord) -> TaskResult:
         resource_predecessors,
         resource_lanes,
     ) = record
-    intervals = tuple(
-        ResourceInterval(
+    reservations = task.metadata.get("physical_resource_intervals", ())
+    physical = task.metadata.get("physical_execution")
+    if isinstance(physical, Mapping):
+        raw = physical.get("resource_intervals", {})
+        reservations = tuple((resource_id, start_ns, end_ns)
+                             for resource_id, values in raw.items()
+                             for start_ns, end_ns in values) or reservations
+    if reservations:
+        intervals = tuple(ResourceInterval(
+            resource_id=item[0], start_ns=item[1], end_ns=item[2]
+        ) if isinstance(item, tuple) and len(item) == 3 else ResourceInterval(
+            resource_id=item.resource_id, start_ns=item.start_ns, end_ns=item.end_ns
+        ) for item in reservations)
+    elif isinstance(physical, Mapping) and physical.get("intervals_truncated", False):
+        intervals = ()
+    else:
+        intervals = tuple(ResourceInterval(
             resource_id=demand.resource_id,
             start_ns=start_ns,
             end_ns=start_ns + demand.service_ns,
             bytes_moved=demand.bytes_moved,
             energy_pj=demand.energy_pj,
-        )
-        for demand in demands
-    )
+        ) for demand in demands)
     return TaskResult(
         task_id=task.task_id,
         request_id=task.request_id,
