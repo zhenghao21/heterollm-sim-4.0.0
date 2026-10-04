@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Dict, Iterable, Mapping, Optional
+from typing import Dict, Iterable, Optional
 
 from .memory_mapping import split_dram_request
 from .memory_transfer import ResourceTimeline
@@ -19,10 +19,8 @@ class DramCore:
     """Generate DRAM array and burst stages on a caller-owned time line."""
 
     def __init__(self, config: DramConfig, timeline: Optional[ResourceTimeline] = None) -> None:
-        if isinstance(config, Mapping):
-            config = DramConfig.from_mapping(config)
         if not isinstance(config, DramConfig):
-            raise TypeError("config must be DramConfig or a mapping")
+            raise TypeError("config must be DramConfig")
         self.config = config
         self.timeline = timeline or ResourceTimeline()
         self._banks: Dict[str, _BankState] = {}
@@ -53,13 +51,22 @@ class DramCore:
         segments = split_dram_request(request, self.config)
         stages = []
         mappings = []
+        segment_count = 0
+        details_truncated = False
+        def record(stage):
+            if not details_truncated:
+                stages.append(stage)
         completion = request.arrival_ns
         logical = 0
         physical = 0
         row_hits = row_misses = row_conflicts = 0
         for segment in segments:
+            segment_count += 1
+            if segment_count > self.config.max_expanded_segments and not details_truncated:
+                stages.clear(); mappings.clear(); details_truncated = True
             m = segment.mapping
-            mappings.append(m)
+            if not details_truncated:
+                mappings.append(m)
             logical += segment.logical_bytes
             physical += segment.transfer_bytes
             bank_id = self._bank_id(m)
@@ -72,12 +79,12 @@ class DramCore:
                 if bank.open_row is not None:
                     row_conflicts += 1
                     pre = self.timeline.reserve(bank_id, max(dependency, bank.ready_ns), self.config.close_ns)
-                    stages.append(StageTiming("PRECHARGE", pre.start_ns, pre.end_ns, bank_id))
+                    record(StageTiming("PRECHARGE", pre.start_ns, pre.end_ns, bank_id))
                     dependency = pre.end_ns
                 else:
                     row_misses += 1
                 act = self.timeline.reserve(bank_id, max(dependency, bank.ready_ns), self.config.open_ns)
-                stages.append(StageTiming("ACTIVATE", act.start_ns, act.end_ns, bank_id))
+                record(StageTiming("ACTIVATE", act.start_ns, act.end_ns, bank_id))
                 dependency = act.end_ns
                 bank.open_row = m.row
                 bank.ready_ns = act.end_ns
@@ -88,7 +95,7 @@ class DramCore:
             )
             latency = self.config.read_latency_ns if request.operation is Operation.READ else self.config.write_latency_ns
             data_ready = command.start_ns + latency
-            stages.append(StageTiming(
+            record(StageTiming(
                 "READ_PIPELINE" if request.operation is Operation.READ else "WRITE_PIPELINE",
                 command.start_ns, data_ready, self._command_id(m),
             ))
@@ -102,7 +109,7 @@ class DramCore:
                 self.config.directional_lane_bandwidth_gb_s(request.operation),
                 direction=request.operation.value, switch_ns=switch,
             )
-            stages.append(StageTiming("BURST_TRANSFER", transfer.start_ns, transfer.end_ns, data_id, segment.transfer_bytes))
+            record(StageTiming("BURST_TRANSFER", transfer.start_ns, transfer.end_ns, data_id, segment.transfer_bytes))
             recovery = self.config.read_recovery_ns if request.operation is Operation.READ else self.config.write_recovery_ns
             # A row remains open while later column commands are issued.  The
             # recovery gate constrains a future PRECHARGE/ACTIVATE, not the
@@ -119,11 +126,12 @@ class DramCore:
             counters={
                 "row_hits": row_hits, "row_misses": row_misses,
                 "row_conflicts": row_conflicts,
-                "burst_count": len(segments),
+                "burst_count": segment_count,
+                "details_truncated": details_truncated,
                 "physical_read_bytes": physical if request.operation is Operation.READ else 0,
                 "physical_write_bytes": physical if request.operation is Operation.WRITE else 0,
                 "queue_wait_ns": 0.0,
-                "bandwidth_ceiling_gb_s": self.config.bandwidth_gb_s,
+                "bandwidth_ceiling_gb_s": self.config.directional_bandwidth_gb_s(request.operation),
                 "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
                 "pages_read": 0, "pages_programmed": 0, "erase_operations": 0,
             },
@@ -150,7 +158,7 @@ class DramCore:
                     arrival_ns=request.arrival_ns,
                     counters={**result.counters, "queue_wait_ns": queue_wait},
                 )
-            self._acceptance_ns = effective_arrival
+            self._acceptance_ns = max(self._acceptance_ns, effective_arrival)
             self._inflight.append(result.completion_ns)
             results.append(result)
         return tuple(results)

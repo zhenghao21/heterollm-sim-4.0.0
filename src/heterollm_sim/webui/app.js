@@ -4940,6 +4940,53 @@ function isFlashStorage(kind) {
   return ["hbf", "ssd", "high_io_ssd"].includes(normalizedComponentKind(kind));
 }
 
+// A physical core is opt-in.  The authoring UI must never manufacture a
+// geometry from the older component capacity/bandwidth fields: those fields
+// describe a topology endpoint, while this object is the canonical DRAM/NAND
+// contract consumed by the physical cores.
+const PHYSICAL_MEMORY_COMPONENT_KINDS = new Set([
+  "hbm", "hbm_stack", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory",
+  "hbf", "ssd", "high_io_ssd",
+]);
+const PHYSICAL_MEMORY_KINDS = new Set(["DDR", "LPDDR", "HBM", "SSD", "HBF"]);
+
+function physicalMemoryConfigForComponent(component) {
+  const kind = normalizedComponentKind(component?.kind);
+  if (!PHYSICAL_MEMORY_COMPONENT_KINDS.has(kind)) return null;
+  const value = asObject(asObject(component?.metadata).physical_memory_config);
+  return Object.keys(value).length ? value : null;
+}
+
+function validatePhysicalMemoryConfig(value, component) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("physical_memory_config 必须是 JSON 对象。");
+  }
+  const kind = String(value.kind || "").trim().toUpperCase();
+  if (!PHYSICAL_MEMORY_KINDS.has(kind)) {
+    throw new Error("physical_memory_config.kind 必须是 DDR、LPDDR、HBM、SSD 或 HBF。");
+  }
+  const componentKind = normalizedComponentKind(component?.kind);
+  const allowed = componentKind === "hbf"
+    ? new Set(["HBF"])
+    : ["ssd", "high_io_ssd"].includes(componentKind)
+      ? new Set(["SSD"])
+      : componentKind === "hbm" || componentKind === "hbm_stack"
+        ? new Set(["HBM"])
+        : new Set(["DDR", "LPDDR", "HBM"]);
+  if (!allowed.has(kind)) {
+    throw new Error(`组件 ${component?.component_id || ""} 的物理配置类型 ${kind} 与组件类型不匹配。`);
+  }
+  const integerFields = kind === "SSD" || kind === "HBF"
+    ? ["channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes"]
+    : ["channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "data_width_bits"];
+  integerFields.forEach((field) => {
+    if (!Number.isSafeInteger(Number(value[field])) || Number(value[field]) <= 0) {
+      throw new Error(`physical_memory_config.${field} 必须是正整数。`);
+    }
+  });
+  return { ...value, kind };
+}
+
 function componentCanHostOperator(component) {
   return ["compute", "cim"].includes(componentKindClass(component?.kind));
 }
@@ -8945,6 +8992,18 @@ function renderComponentInspector(componentId) {
     ? `<p class="muted"><strong>只读优先：</strong>HBF 是 High Bandwidth Flash 后备层，不是 HBM。厂家未公开通用写带宽和端到端写延迟，界面显示“未公开”；后端的 0 只是 unknown sentinel，不表示零成本写入或零延迟。没有显式可写证据与路径时，不应把它作为 KV Cache 或线性 state 的 offload 目标。</p>`
     : "";
   const hbfMediaMarkupHtml = hbfMediaMarkup(component);
+  const physicalMemoryConfig = physicalMemoryConfigForComponent(component);
+  const physicalMemorySection = PHYSICAL_MEMORY_COMPONENT_KINDS.has(normalizedComponentKind(component.kind))
+    ? `<section class="inspector-section physical-memory-config-section">
+      <h3>物理内存核心配置（Canonical physical_memory_config）</h3>
+      <p class="muted">只有显式配置且通过后端几何校验，才会启用 DDR / LPDDR / HBM / SSD / HBF 物理核心。组件容量、带宽和旧 profile 不会自动转换为物理配置。</p>
+      <textarea data-inspector-physical-config rows="12" spellcheck="false" aria-label="physical_memory_config JSON">${escapeHtml(physicalMemoryConfig ? JSON.stringify(physicalMemoryConfig, null, 2) : "")}</textarea>
+      ${physicalMemoryConfig
+        ? `<div class="readout"><span>物理核心状态</span><strong>已显式配置 · ${escapeHtml(String(physicalMemoryConfig.kind || "").toUpperCase())}</strong></div>`
+        : `<div class="readout"><span>物理核心状态</span><strong>未启用：缺少 physical_memory_config</strong></div>`}
+      <p class="muted">留空表示该组件仍是拓扑/成本端点，不会被当作新物理核心；不接受旧字段自动兼容。</p>
+    </section>`
+    : "";
   const kindOptionLabels = Object.fromEntries(COMPONENT_INSPECTOR_KINDS.map((kind) => [kind, kindLabel(kind)]));
   const capabilityFields = [
     profile.capacity ? quantityField(componentCapacityFieldLabel(component), "capacity_bytes", component.capacity_bytes ?? 0, "bytes") : "",
@@ -8963,6 +9022,7 @@ function renderComponentInspector(componentId) {
         ${inputField("裸片 ID（Die ID）", "die_id", component.die_id || "")}
       </div>
     </section>
+    ${physicalMemorySection}
     ${capabilityFields ? `<section class="inspector-section"><h3>物理容量与传输能力（Physical Capacity & Transport Capability）</h3>${capabilityFields}${capacityNote ? `<p class="muted">${capacityNote}</p>` : ""}${hbfReadOnlyNote}</section>` : ""}
     ${costProfileMarkup}
     ${hbfMediaMarkupHtml}
@@ -8994,6 +9054,33 @@ function renderComponentInspector(componentId) {
   bindCostProfileFields(component);
   bindGpuDenseThroughputControl(component);
   bindHbfMediaFields(component);
+  const physicalConfigControl = $("[data-inspector-physical-config]", dom.inspectorContent);
+  physicalConfigControl?.addEventListener("change", () => {
+    const raw = physicalConfigControl.value.trim();
+    const historyBefore = topologyHistorySnapshot();
+    component.metadata = asObject(component.metadata);
+    if (!raw) {
+      if (!Object.hasOwn(component.metadata, "physical_memory_config")) return;
+      delete component.metadata.physical_memory_config;
+      commitTopologyHistory(historyBefore, "停用物理内存核心", { mappingImpact: true });
+      markScenarioChanged("", { mappingImpact: true, mappingReason: "已移除 physical_memory_config，物理核心不再启用。" });
+      renderComponentInspector(component.component_id);
+      return;
+    }
+    let parsed;
+    try {
+      parsed = validatePhysicalMemoryConfig(JSON.parse(raw), component);
+    } catch (error) {
+      toast("物理配置无效", chineseMessage(error), "error", 7000);
+      renderComponentInspector(component.component_id);
+      return;
+    }
+    if (stableMappingEqual(component.metadata.physical_memory_config, parsed)) return;
+    component.metadata.physical_memory_config = parsed;
+    commitTopologyHistory(historyBefore, "配置物理内存核心", { mappingImpact: true });
+    markScenarioChanged("", { mappingImpact: true, mappingReason: "physical_memory_config 已更新，映射需要重新生成。" });
+    renderComponentInspector(component.component_id);
+  });
   hydrateConceptHelp(dom.inspectorContent);
   $$('[data-inspector-metadata-field]', dom.inspectorContent).forEach((control) => control.addEventListener("change", () => {
     component.metadata = asObject(component.metadata);
@@ -19255,6 +19342,11 @@ async function importScenarioFile(file) {
       const componentProfiles = {};
       importedHardware.components = importedComponents.map((rawComponent) => {
         const component = deepClone(rawComponent);
+        const physicalConfig = asObject(asObject(component.metadata).physical_memory_config);
+        if (Object.keys(physicalConfig).length) {
+          component.metadata = asObject(component.metadata);
+          component.metadata.physical_memory_config = validatePhysicalMemoryConfig(physicalConfig, component);
+        }
         const profile = component.execution_profile;
         const profileKey = costProfileKeyForComponentKind(component);
         if (!profileKey) {
@@ -19296,6 +19388,11 @@ async function importScenarioFile(file) {
       resetPlacementForArchitecturePreset(normalized.placement, normalized.hardware.name);
       setScenario(normalized, { dirty: true, message: "统一硬件参数文件已导入；硬件已绑定到组件预设" });
     } else {
+      asArray(asObject(value.hardware).components).forEach((rawComponent) => {
+        const component = deepClone(rawComponent);
+        const physicalConfig = asObject(asObject(component.metadata).physical_memory_config);
+        if (Object.keys(physicalConfig).length) validatePhysicalMemoryConfig(physicalConfig, component);
+      });
       const normalized = await normalizeScenarioThroughBackend(value);
       ensureScenarioShape(normalized);
       setScenario(normalized, { dirty: true, message: "JSON 已导入；硬件已绑定到组件预设" });

@@ -113,6 +113,14 @@ def summarize_batch(results, *, bandwidth_ceiling_gb_s: float = 0.0) -> BatchRes
     last = max(item.completion_ns for item in items)
     counters = {
         "bandwidth_ceiling_gb_s": float(bandwidth_ceiling_gb_s),
+        "read_bandwidth_ceiling_gb_s": max(
+            (item.bandwidth_ceiling_gb_s for item in items if item.operation.value == "read"),
+            default=0.0,
+        ),
+        "write_bandwidth_ceiling_gb_s": max(
+            (item.bandwidth_ceiling_gb_s for item in items if item.operation.value == "write"),
+            default=0.0,
+        ),
         "physical_read_bytes": sum(item.physical_read_bytes for item in items),
         "physical_write_bytes": sum(item.physical_write_bytes for item in items),
         "host_transfer_bytes": sum(item.host_transfer_bytes for item in items),

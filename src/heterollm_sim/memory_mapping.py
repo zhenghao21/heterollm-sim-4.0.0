@@ -1,7 +1,7 @@
 """Deterministic address mapping and request splitting."""
 from __future__ import annotations
 
-from typing import Iterable, List
+from typing import Iterable
 
 from .memory_types import AccessRequest, AddressMapping, DramConfig, NandConfig, Operation, Segment
 
@@ -34,7 +34,11 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     lane = interleave_block % config.lane_count
     bank_linear = interleave_block // config.lane_count
     bank = bank_linear % config.bank_count
-    row_column = bank_linear * interleave_bursts + inner_burst
+    # ``bank_linear`` contains both the bank coordinate and the index inside
+    # that bank.  Remove the bank dimension before decoding row/column; using
+    # it directly aliases addresses once there is more than one bank.
+    bank_local = bank_linear // config.bank_count
+    row_column = bank_local * interleave_bursts + inner_burst
     bursts_per_row = config.row_bytes // config.burst_bytes
     column = row_column % bursts_per_row
     row = (row_column // bursts_per_row) % config.rows_per_bank
@@ -97,7 +101,7 @@ def map_nand_address(config: NandConfig, address: int) -> AddressMapping:
     )
 
 
-def split_dram_request(request: AccessRequest, config: DramConfig) -> List[Segment]:
+def split_dram_request(request: AccessRequest, config: DramConfig) -> Iterable[Segment]:
     if request.operation is Operation.ERASE:
         raise ValueError("DRAM does not support erase")
     start, end = request.address, request.address + request.byte_count
@@ -106,24 +110,20 @@ def split_dram_request(request: AccessRequest, config: DramConfig) -> List[Segme
         raise ValueError("request extends beyond modeled DRAM capacity")
     first = start // config.burst_bytes
     last = (end - 1) // config.burst_bytes
-    if last - first + 1 > config.max_expanded_segments:
-        raise ValueError("DRAM request exceeds max_expanded_segments; split it upstream")
-    segments: List[Segment] = []
     for burst in range(first, last + 1):
         burst_start = burst * config.burst_bytes
         logical_start = max(start, burst_start)
         logical_end = min(end, burst_start + config.burst_bytes)
         logical = logical_end - logical_start
         mapping = map_dram_address(config, burst_start)
-        segments.append(Segment(
+        yield Segment(
             request_id=request.request_id, operation=request.operation,
             address=burst_start, logical_bytes=logical,
             transfer_bytes=config.burst_bytes, mapping=mapping,
-        ))
-    return segments
+        )
 
 
-def split_nand_request(request: AccessRequest, config: NandConfig) -> List[Segment]:
+def split_nand_request(request: AccessRequest, config: NandConfig) -> Iterable[Segment]:
     start, end = request.address, request.address + request.byte_count
     _check_address(start, config.effective_capacity_bytes)
     if end > config.effective_capacity_bytes:
@@ -136,8 +136,6 @@ def split_nand_request(request: AccessRequest, config: NandConfig) -> List[Segme
         page = config.page_bytes
         first_page = start // page
         last_page = (end - 1) // page
-        if last_page - first_page + 1 > config.max_expanded_segments:
-            raise ValueError("NAND erase exceeds max_expanded_segments; split it upstream")
         blocks = {}
         for page_index in range(first_page, last_page + 1):
             address = page_index * page
@@ -145,8 +143,8 @@ def split_nand_request(request: AccessRequest, config: NandConfig) -> List[Segme
             key = (mapping.channel, mapping.target, mapping.die,
                    mapping.lun, mapping.plane, mapping.block)
             blocks.setdefault(key, (address, mapping))
-        return [
-            Segment(
+        for address, mapping in blocks.values():
+            yield Segment(
                 request_id=request.request_id,
                 operation=request.operation,
                 address=address,
@@ -154,13 +152,9 @@ def split_nand_request(request: AccessRequest, config: NandConfig) -> List[Segme
                 transfer_bytes=0,
                 mapping=mapping,
             )
-            for address, mapping in blocks.values()
-        ]
+        return
     first = start // config.page_bytes
     last = (end - 1) // config.page_bytes
-    if last - first + 1 > config.max_expanded_segments:
-        raise ValueError("NAND request exceeds max_expanded_segments; split it upstream")
-    segments = []
     for page_index in range(first, last + 1):
         page_start = page_index * config.page_bytes
         logical_start = max(start, page_start)
@@ -168,16 +162,17 @@ def split_nand_request(request: AccessRequest, config: NandConfig) -> List[Segme
         logical = logical_end - logical_start
         if request.operation is Operation.WRITE and logical != config.page_bytes and config.partial_page_policy == "reject":
             raise ValueError("partial NAND page write rejected by configuration")
-        host_bytes = _round_up(logical, config.host_granularity_bytes)
-        segments.append(Segment(
+        aligned_start = (logical_start // config.host_granularity_bytes) * config.host_granularity_bytes
+        aligned_end = _round_up(logical_end, config.host_granularity_bytes)
+        host_bytes = aligned_end - aligned_start
+        yield Segment(
             request_id=request.request_id, operation=request.operation,
             address=page_start, logical_bytes=logical,
             transfer_bytes=config.transfer_page_bytes,
             mapping=map_nand_address(config, page_start),
             host_transfer_bytes=host_bytes,
             internal_transfer_bytes=config.transfer_page_bytes,
-        ))
-    return segments
+        )
 
 
 def map_address(config: DramConfig | NandConfig, address: int) -> AddressMapping:

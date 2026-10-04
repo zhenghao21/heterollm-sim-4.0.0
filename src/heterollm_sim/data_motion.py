@@ -8,6 +8,8 @@ existing :class:`ResourceDemand`/``TaskSpec`` contracts.
 from __future__ import annotations
 
 import math
+import copy
+import contextvars
 from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
@@ -21,29 +23,76 @@ from .memory_service import realtime_memory_metrics
 class _PhysicalRuntime:
     core: Any
     clock_ns: float = 0.0
+    signature: str = ""
 
 
-_PHYSICAL_RUNTIMES: dict[tuple[str, str], _PhysicalRuntime] = {}
+@dataclass
+class PhysicalRuntimeContext:
+    """State for one simulation run's physical devices.
+
+    Runtime ownership is explicit and context-local.  A context never silently
+    merges two configurations under one physical owner.
+    """
+
+    config: Any = None
+    physical_owner: Optional[str] = None
+    runtimes: dict[str, _PhysicalRuntime] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.config is not None or self.physical_owner is not None:
+            if self.config is None or not self.physical_owner:
+                raise ValueError("config and physical_owner must be provided together")
+            self.runtime(self.config, self.physical_owner)
+
+    def runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
+        kind = str(getattr(config.kind, "value", config.kind))
+        signature = kind + ":" + repr(config)
+        key = str(owner)
+        current = self.runtimes.get(key)
+        if current is not None:
+            if current.signature != signature:
+                raise ValueError(
+                    f"physical owner {owner} was configured with multiple physical geometries"
+                )
+            return current
+        from .dram_core import DramCore
+        from .nand_core import NandCore
+        core = DramCore(config) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config)
+        current = _PhysicalRuntime(core=core, signature=signature)
+        self.runtimes[key] = current
+        return current
+
+    def preview_runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
+        return copy.deepcopy(self.runtime(config, owner))
+
+
+_CURRENT_PHYSICAL_CONTEXT: contextvars.ContextVar[PhysicalRuntimeContext | None] = contextvars.ContextVar(
+    "heterollm_sim_physical_context", default=None
+)
+
+
+def current_physical_runtime_context() -> PhysicalRuntimeContext:
+    context = _CURRENT_PHYSICAL_CONTEXT.get()
+    if context is None:
+        context = PhysicalRuntimeContext()
+        _CURRENT_PHYSICAL_CONTEXT.set(context)
+    return context
 
 
 def reset_physical_runtimes() -> None:
-    """Reset per-owner DRAM/NAND timelines at the start of a simulation."""
-    _PHYSICAL_RUNTIMES.clear()
+    """Start a fresh context-local physical simulation timeline."""
+    _CURRENT_PHYSICAL_CONTEXT.set(PhysicalRuntimeContext())
 
 
-def _physical_runtime(config: Any, owner: str) -> _PhysicalRuntime:
-    from .dram_core import DramCore
-    from .nand_core import NandCore
-
-    kind = str(getattr(config.kind, "value", config.kind))
-    key = (str(owner), kind + ":" + repr(config))
-    runtime = _PHYSICAL_RUNTIMES.get(key)
-    if runtime is None:
-        runtime = _PhysicalRuntime(
-            DramCore(config) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config)
-        )
-        _PHYSICAL_RUNTIMES[key] = runtime
-    return runtime
+def _physical_runtime(
+    config: Any,
+    owner: str,
+    context: Optional[PhysicalRuntimeContext] = None,
+    *,
+    preview: bool = False,
+) -> _PhysicalRuntime:
+    context = context or current_physical_runtime_context()
+    return context.preview_runtime(config, owner) if preview else context.runtime(config, owner)
 
 
 class AccessKind(str, Enum):
@@ -307,6 +356,9 @@ class PhysicalService:
         transaction_bytes: Optional[int] = None,
         service_model: Optional[str] = None,
         page_offset_bytes: Optional[int] = None,
+        runtime: Optional[PhysicalRuntimeContext] = None,
+        arrival_ns: Optional[float] = None,
+        preview: bool = False,
     ) -> Mapping[str, object]:
         kind = AccessKind(kind)
         _non_negative_int(byte_count, "byte_count")
@@ -351,17 +403,21 @@ class PhysicalService:
             is_dram = kind_name in {"DDR", "LPDDR", "HBM"}
             config = DramConfig.from_mapping(raw_config) if is_dram else NandConfig.from_mapping(raw_config)
             operation = Operation.READ if kind is AccessKind.READ else Operation.WRITE if kind is AccessKind.WRITE else Operation.ERASE
-            runtime = _physical_runtime(config, self.physical_owner)
-            arrival_ns = runtime.clock_ns
+            if arrival_ns is not None:
+                _non_negative(arrival_ns, "arrival_ns")
+            context = runtime if runtime is not None else current_physical_runtime_context()
+            active_runtime = _physical_runtime(config, self.physical_owner, context, preview=preview or runtime is None)
+            request_arrival_ns = active_runtime.clock_ns if arrival_ns is None else float(arrival_ns)
             request = AccessRequest(
                 f"{self.service_id}:physical",
                 operation,
                 0 if page_offset_bytes is None else page_offset_bytes,
                 max(1, byte_count),
-                arrival_ns=arrival_ns,
+                arrival_ns=request_arrival_ns,
             )
-            result = runtime.core.execute(request)
-            runtime.clock_ns = max(runtime.clock_ns, result.completion_ns)
+            result = active_runtime.core.execute(request)
+            if not preview and runtime is not None:
+                active_runtime.clock_ns = max(active_runtime.clock_ns, result.completion_ns)
             counters = dict(result.counters)
             counters.update({
                 "logical_bytes": result.logical_bytes,
@@ -415,7 +471,14 @@ class PhysicalService:
     def bill(self, kind: AccessKind, byte_count: int) -> float:
         return float(self.price(kind, byte_count)["service_ns"])
 
-    def price_batch(self, requests, *, start_ns=0.0, state=None):
+    def price_batch(
+        self,
+        requests,
+        *,
+        start_ns=0.0,
+        state=None,
+        runtime: Optional[PhysicalRuntimeContext] = None,
+    ):
         """Price an explicit NAND request batch and return its next queue state."""
         if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
             from .memory_types import AccessRequest, NandConfig, Operation
@@ -424,7 +487,14 @@ class PhysicalService:
             if is_dataclass(raw):
                 raw = asdict(raw)
             config = raw if isinstance(raw, NandConfig) else NandConfig.from_mapping(raw)
-            runtime = _physical_runtime(config, self.physical_owner)
+            explicit_context = runtime or (state if isinstance(state, PhysicalRuntimeContext) else None)
+            context = explicit_context or current_physical_runtime_context()
+            active_runtime = _physical_runtime(
+                config,
+                self.physical_owner,
+                context,
+                preview=explicit_context is None,
+            )
             parsed = []
             for index, item in enumerate(requests):
                 op = str(item.get("operation", "")).lower()
@@ -432,10 +502,11 @@ class PhysicalService:
                 parsed.append(AccessRequest(
                     str(item.get("request_id", f"request-{index}")),
                     Operation(op), int(address), int(item["byte_count"]),
-                    float(item.get("arrival_ns", max(start_ns, runtime.clock_ns))),
+                    float(item.get("arrival_ns", max(start_ns, active_runtime.clock_ns))),
                 ))
-            batch = runtime.core.run(parsed)
-            runtime.clock_ns = max(runtime.clock_ns, batch.last_completion_ns)
+            batch = active_runtime.core.run(parsed)
+            if explicit_context is not None:
+                active_runtime.clock_ns = max(active_runtime.clock_ns, batch.last_completion_ns)
             return {
                 "model": "physical_transaction_queue_v1",
                 "requests": tuple(batch.requests),
@@ -454,7 +525,7 @@ class PhysicalService:
                 "end_ns": batch.last_completion_ns,
                 "actual_bandwidth_gb_s": batch.actual_bandwidth_gb_s,
                 "bandwidth_ceiling_gb_s": batch.bandwidth_ceiling_gb_s,
-            }, state
+            }, explicit_context
         if self.component is None or self.component.metadata.get("physical_memory_config") is None:
             raise ValueError("price_batch requires physical_memory_config")
         raise RuntimeError("unreachable physical batch branch")
@@ -832,6 +903,9 @@ def endpoint_service(
     page_offset_bytes: Optional[int] = None,
     dram_address_bytes: Optional[int] = None,
     operation: Optional[str] = None,
+    runtime: Optional[PhysicalRuntimeContext] = None,
+    arrival_ns: Optional[float] = None,
+    preview: bool = False,
 ) -> Optional[EndpointService]:
     """Lower one memory access using the canonical physical transaction model."""
     _non_negative_int(byte_count, "byte_count")
@@ -859,6 +933,9 @@ def endpoint_service(
         AccessKind.READ if op_name == "read" else AccessKind.WRITE if op_name == "write" else AccessKind.ERASE,
         byte_count,
         page_offset_bytes=address,
+        runtime=runtime,
+        arrival_ns=arrival_ns,
+        preview=preview,
     )
     physical = int(billed.get("physical_bytes", 0))
     if op_name == "erase":

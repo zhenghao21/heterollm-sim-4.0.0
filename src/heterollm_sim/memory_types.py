@@ -143,11 +143,16 @@ class DramConfig:
                     raise ValueError(f"{name} must be positive")
         if self.lane_bandwidth_gb_s is not None and self.interface_bandwidth_gb_s is not None:
             raise ValueError("choose lane_bandwidth_gb_s or interface_bandwidth_gb_s, not both")
-        if self.interface_bandwidth_gb_s is not None and any(
-            value is not None and value > self.interface_bandwidth_gb_s
-            for value in (self.read_bandwidth_gb_s, self.write_bandwidth_gb_s)
-        ):
-            raise ValueError("directional bandwidth cannot exceed interface_bandwidth_gb_s")
+        physical_bandwidth = (
+            float(self.interface_bandwidth_gb_s)
+            if self.interface_bandwidth_gb_s is not None
+            else float(self.lane_bandwidth_gb_s) * self.lane_count
+            if self.lane_bandwidth_gb_s is not None
+            else self.data_width_bits * self.data_rate_mt_s / 8.0 / 1000.0 * self.lane_count
+        )
+        if any(value is not None and value > physical_bandwidth
+               for value in (self.read_bandwidth_gb_s, self.write_bandwidth_gb_s)):
+            raise ValueError("directional bandwidth cannot exceed the physical interface bandwidth")
         if not isinstance(self.metadata, Mapping):
             raise ValueError("metadata must be a mapping")
         if self.capacity_bytes is not None and self.capacity_bytes > self.computed_capacity_bytes:
@@ -177,13 +182,16 @@ class DramConfig:
 
     @property
     def bandwidth_gb_s(self) -> float:
-        declared = [value for value in (self.read_bandwidth_gb_s, self.write_bandwidth_gb_s) if value is not None]
-        return max(declared) if declared else self.effective_lane_bandwidth_gb_s * self.lane_count
+        return max(self.directional_bandwidth_gb_s(Operation.READ), self.directional_bandwidth_gb_s(Operation.WRITE))
+
+    def directional_bandwidth_gb_s(self, operation: Operation | str) -> float:
+        op = operation if isinstance(operation, Operation) else Operation(str(operation).lower())
+        declared = self.read_bandwidth_gb_s if op is Operation.READ else self.write_bandwidth_gb_s
+        return float(declared) if declared is not None else self.effective_lane_bandwidth_gb_s * self.lane_count
 
     def directional_lane_bandwidth_gb_s(self, operation: Operation | str) -> float:
         op = operation if isinstance(operation, Operation) else Operation(str(operation).lower())
-        total = self.read_bandwidth_gb_s if op is Operation.READ else self.write_bandwidth_gb_s
-        return float(total) / self.lane_count if total is not None else self.effective_lane_bandwidth_gb_s
+        return self.directional_bandwidth_gb_s(op) / self.lane_count
 
     @property
     def computed_capacity_bytes(self) -> int:
@@ -254,6 +262,8 @@ class NandConfig:
             raise ValueError("partial_page_policy must be read_modify_write or reject")
         if not isinstance(self.metadata, Mapping):
             raise ValueError("metadata must be a mapping")
+        if self.capacity_bytes is not None and self.capacity_bytes > self.computed_capacity_bytes:
+            raise ValueError("capacity_bytes cannot exceed the declared physical geometry")
         if self.capacity_bytes is None:
             object.__setattr__(self, "capacity_bytes", self.computed_capacity_bytes)
 
@@ -406,6 +416,14 @@ class BatchResult:
     @property
     def bandwidth_ceiling_gb_s(self) -> float:
         return float(self.counters.get("bandwidth_ceiling_gb_s", 0.0))
+
+    @property
+    def read_bandwidth_ceiling_gb_s(self) -> float:
+        return float(self.counters.get("read_bandwidth_ceiling_gb_s", 0.0))
+
+    @property
+    def write_bandwidth_ceiling_gb_s(self) -> float:
+        return float(self.counters.get("write_bandwidth_ceiling_gb_s", 0.0))
 
     @property
     def physical_read_bytes(self) -> int:
