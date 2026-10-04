@@ -59,6 +59,9 @@ class ResourceTimeline:
 
     ready_ns: Dict[str, float] = field(default_factory=dict)
     directions: Dict[str, str] = field(default_factory=dict)
+    busy_ns: Dict[str, float] = field(default_factory=dict)
+    bytes_moved: Dict[str, int] = field(default_factory=dict)
+    last_intervals: Dict[str, tuple[float, float]] = field(default_factory=dict)
 
     def available_ns(self, resource_id: str) -> float:
         return float(self.ready_ns.get(resource_id, 0.0))
@@ -75,6 +78,8 @@ class ResourceTimeline:
             start += switch_ns
         end = start + duration_ns
         self.ready_ns[resource_id] = end
+        self.busy_ns[resource_id] = self.busy_ns.get(resource_id, 0.0) + duration_ns
+        self.last_intervals[resource_id] = (start, end)
         if direction:
             self.directions[resource_id] = direction
         return Transfer(resource_id, 0, 0.0, start, end)
@@ -85,7 +90,28 @@ class ResourceTimeline:
         bandwidth_gb_s = _number("bandwidth_gb_s", bandwidth_gb_s, positive=True)
         duration = bytes / bandwidth_gb_s
         reservation = self.reserve(resource_id, earliest_ns, duration, direction=direction, switch_ns=switch_ns)
+        self.bytes_moved[resource_id] = self.bytes_moved.get(resource_id, 0) + bytes
         return Transfer(resource_id, bytes, bandwidth_gb_s, reservation.start_ns, reservation.end_ns)
+
+    def metrics_snapshot(self) -> dict:
+        """Copy cumulative reservation metrics for per-request accounting."""
+        return {
+            "busy_ns": dict(self.busy_ns),
+            "bytes_moved": dict(self.bytes_moved),
+            "last_intervals": dict(self.last_intervals),
+        }
+
+    def metrics_delta(self, before: dict) -> dict:
+        busy = {rid: value - before["busy_ns"].get(rid, 0.0)
+                for rid, value in self.busy_ns.items()
+                if value != before["busy_ns"].get(rid, 0.0)}
+        moved = {rid: value - before["bytes_moved"].get(rid, 0)
+                 for rid, value in self.bytes_moved.items()
+                 if value != before["bytes_moved"].get(rid, 0)}
+        touched = set(busy) | set(moved)
+        intervals = {rid: self.last_intervals[rid] for rid in touched if rid in self.last_intervals}
+        return {"resource_busy_ns": busy, "resource_bytes": moved,
+                "resource_last_intervals": intervals}
 
     def snapshot(self) -> dict[str, float]:
         return dict(self.ready_ns)

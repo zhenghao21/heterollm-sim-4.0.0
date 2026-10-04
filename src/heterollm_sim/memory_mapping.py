@@ -41,7 +41,7 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     row_column = bank_local * interleave_bursts + inner_burst
     bursts_per_row = config.row_bytes // config.burst_bytes
     column = row_column % bursts_per_row
-    row = (row_column // bursts_per_row) % config.rows_per_bank
+    row = row_column // bursts_per_row
     # Decode the flat lane while allowing data_lanes to describe an arbitrary
     # package connection.  Coordinates are descriptive; lane remains the
     # authoritative data resource id.
@@ -101,13 +101,21 @@ def map_nand_address(config: NandConfig, address: int) -> AddressMapping:
     )
 
 
-def split_dram_request(request: AccessRequest, config: DramConfig) -> Iterable[Segment]:
+def validate_dram_request(request: AccessRequest, config: DramConfig) -> None:
+    """Check the complete request before admission or resource reservations."""
+    if not isinstance(request, AccessRequest):
+        raise TypeError("request must be AccessRequest")
     if request.operation is Operation.ERASE:
         raise ValueError("DRAM does not support erase")
     start, end = request.address, request.address + request.byte_count
     _check_address(start, config.effective_capacity_bytes)
     if end > config.effective_capacity_bytes:
         raise ValueError("request extends beyond modeled DRAM capacity")
+
+
+def split_dram_request(request: AccessRequest, config: DramConfig) -> Iterable[Segment]:
+    validate_dram_request(request, config)
+    start, end = request.address, request.address + request.byte_count
     first = start // config.burst_bytes
     last = (end - 1) // config.burst_bytes
     for burst in range(first, last + 1):
@@ -123,11 +131,22 @@ def split_dram_request(request: AccessRequest, config: DramConfig) -> Iterable[S
         )
 
 
-def split_nand_request(request: AccessRequest, config: NandConfig) -> Iterable[Segment]:
+def validate_nand_request(request: AccessRequest, config: NandConfig) -> None:
+    """Validate streamed page access in constant space before any mutation."""
+    if not isinstance(request, AccessRequest):
+        raise TypeError("request must be AccessRequest")
     start, end = request.address, request.address + request.byte_count
     _check_address(start, config.effective_capacity_bytes)
     if end > config.effective_capacity_bytes:
         raise ValueError("request extends beyond modeled NAND capacity")
+    if (request.operation is Operation.WRITE and config.partial_page_policy == "reject"
+            and (start % config.page_bytes or request.byte_count % config.page_bytes)):
+        raise ValueError("partial NAND page write rejected by configuration")
+
+
+def split_nand_request(request: AccessRequest, config: NandConfig) -> Iterable[Segment]:
+    validate_nand_request(request, config)
+    start, end = request.address, request.address + request.byte_count
     if request.operation is Operation.ERASE:
         # Erase follows the same striped physical mapping as page access.
         # A byte range can touch one block in each interleaved LUN/plane, so
@@ -160,8 +179,6 @@ def split_nand_request(request: AccessRequest, config: NandConfig) -> Iterable[S
         logical_start = max(start, page_start)
         logical_end = min(end, page_start + config.page_bytes)
         logical = logical_end - logical_start
-        if request.operation is Operation.WRITE and logical != config.page_bytes and config.partial_page_policy == "reject":
-            raise ValueError("partial NAND page write rejected by configuration")
         aligned_start = (logical_start // config.host_granularity_bytes) * config.host_granularity_bytes
         aligned_end = _round_up(logical_end, config.host_granularity_bytes)
         host_bytes = aligned_end - aligned_start
@@ -180,7 +197,7 @@ def map_address(config: DramConfig | NandConfig, address: int) -> AddressMapping
     return map_dram_address(config, address) if isinstance(config, DramConfig) else map_nand_address(config, address)
 
 
-def split_request(request: AccessRequest, config: DramConfig | NandConfig) -> List[Segment]:
+def split_request(request: AccessRequest, config: DramConfig | NandConfig) -> Iterable[Segment]:
     """Split at DRAM burst or NAND page/block boundaries."""
     if isinstance(config, DramConfig):
         return split_dram_request(request, config)
@@ -192,4 +209,5 @@ def split_request(request: AccessRequest, config: DramConfig | NandConfig) -> Li
 __all__ = [
     "map_address", "map_dram_address", "map_nand_address", "split_request",
     "split_dram_request", "split_nand_request",
+    "validate_dram_request", "validate_nand_request",
 ]

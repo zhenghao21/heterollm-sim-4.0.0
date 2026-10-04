@@ -12508,7 +12508,12 @@ class _OnlineRuntime:
         # shared owners use the unified kernel until this optimization has an
         # owner-aware structural key and parity proof.
         if (kernel.has_active_tasks or kernel.resource_owners
-                or any("stateful_l2" in task.metadata for stage in stages for task in stage.execution_tasks)):
+                or any(
+                    "stateful_l2" in task.metadata
+                    or "memory_access" in task.metadata
+                    for stage in stages
+                    for task in stage.execution_tasks
+                )):
             return None
         layout = replay_layout.compiled
         task_count = layout.task_count

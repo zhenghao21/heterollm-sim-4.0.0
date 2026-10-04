@@ -133,6 +133,9 @@ class DramConfig:
             _positive_int("interleave_bytes", self.interleave_bytes)
             if self.interleave_bytes % self.burst_bytes:
                 raise ValueError("interleave_bytes must be a multiple of burst_bytes")
+            bank_bytes = self.rows_per_bank * self.row_bytes
+            if self.interleave_bytes > bank_bytes or bank_bytes % self.interleave_bytes:
+                raise ValueError("interleave_bytes must divide the capacity of one bank")
         for name in ("data_rate_mt_s", "open_ns", "close_ns", "read_latency_ns", "write_latency_ns", "burst_interval_ns", "read_recovery_ns", "write_recovery_ns", "read_to_write_ns", "write_to_read_ns"):
             _nonnegative(name, getattr(self, name))
         for name in ("lane_bandwidth_gb_s", "interface_bandwidth_gb_s", "read_bandwidth_gb_s", "write_bandwidth_gb_s", "capacity_bytes"):
@@ -150,6 +153,8 @@ class DramConfig:
             if self.lane_bandwidth_gb_s is not None
             else self.data_width_bits * self.data_rate_mt_s / 8.0 / 1000.0 * self.lane_count
         )
+        if physical_bandwidth <= 0 or not math.isfinite(physical_bandwidth):
+            raise ValueError("physical interface bandwidth must be finite and positive")
         if any(value is not None and value > physical_bandwidth
                for value in (self.read_bandwidth_gb_s, self.write_bandwidth_gb_s)):
             raise ValueError("directional bandwidth cannot exceed the physical interface bandwidth")
@@ -288,7 +293,9 @@ class NandConfig:
 
     @property
     def transfer_page_bytes(self) -> int:
-        return self.internal_transfer_bytes or self.page_bytes
+        """Bytes carried for one complete page, rounded to the transfer quantum."""
+        quantum = self.internal_transfer_bytes or self.page_bytes
+        return ((self.page_bytes + quantum - 1) // quantum) * quantum
 
 
 @dataclass(frozen=True)

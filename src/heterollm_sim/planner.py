@@ -6238,7 +6238,29 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
             previous, service_ns=previous.service_ns + demand.service_ns,
             bytes_moved=previous.bytes_moved + demand.bytes_moved,
             energy_pj=previous.energy_pj + demand.energy_pj)
+    physical_metadata = {}
+    physical_config = _component(scenario, storage).metadata.get("physical_memory_config")
+    if physical_config is not None and isinstance(page_offset, int) and not isinstance(page_offset, bool):
+        if moved_reads and not moved_writes:
+            physical_metadata = {
+                "physical_memory_config": physical_config,
+                "memory_access": {
+                    "operation": "read", "address": page_offset,
+                    "byte_count": moved_reads, "physical_owner": service.physical_owner,
+                    "resource_id": service.resource_id,
+                },
+            }
+        elif moved_writes and not moved_reads:
+            physical_metadata = {
+                "physical_memory_config": physical_config,
+                "memory_access": {
+                    "operation": "write", "address": page_offset,
+                    "byte_count": moved_writes, "physical_owner": service.physical_owner,
+                    "resource_id": service.resource_id,
+                },
+            }
     return replace(phase, demands=tuple(merged.values()), metadata={**phase.metadata,
+        **physical_metadata,
         "direct_memory_access": {"component_id": storage, "physical_owner": service.physical_owner,
             "resource_id": service.resource_id, "read_bytes": moved_reads, "write_bytes": moved_writes,
             "access_kind": "READ_WRITE" if moved_reads and moved_writes else "READ" if moved_reads else "WRITE",
@@ -13068,7 +13090,7 @@ def _add_kv_access(
             for hop in router.route(rank.component_id, owner, byte_count, policy=plan.routing_policy):
                 demands.extend(hop.demands(byte_count))
         local = builder.add(name + ".direct", TaskCategory.MEMORY, tuple(demands),
-            dependencies=dependencies, advance=False, metadata={**payload,
+            dependencies=dependencies, advance=False, metadata={**(service.metadata if service else {}), **payload,
                 "access_kind": "READ" if is_read else "WRITE",
                 "direct_memory_component": owner,
                 "resource_accounting": "included_in_attention_kernel" if is_read else "direct_memory_store",

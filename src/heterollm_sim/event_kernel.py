@@ -27,6 +27,7 @@ from typing import (
 )
 
 from .contracts import ResourceDemand, TaskSpec
+from .data_motion import PhysicalRuntimeContext
 from .kernel_memory import resolve_l2_task
 from .runtime_ir import (
     KernelCompletion,
@@ -772,6 +773,9 @@ class UnifiedEventKernel:
         for logical_id, owner_id in owners.items():
             capacities.setdefault(logical_id, owner_capacities.get(owner_id, 1))
         self._l2_states = {}
+        # Physical stages retain their own channel/bank clocks in this one
+        # run context. Preview endpoint costs never reserve a whole device.
+        self.physical_runtime = PhysicalRuntimeContext()
         self._tasks: Dict[str, TaskSpec] = {}
         self._indegree: Dict[str, int] = {}
         self._dependents: Dict[str, List[str]] = {}
@@ -1039,7 +1043,7 @@ class UnifiedEventKernel:
         effective_ready_ns = dependency_ready_ns
         if earliest_start_ns > effective_ready_ns:
             effective_ready_ns = earliest_start_ns
-        demands = task.demands
+        demands = () if "memory_access" in task.metadata else task.demands
         if demands:
             demand_iterator = iter(demands)
             resources_ready_ns = self._resource_ready_ns(
@@ -1619,7 +1623,7 @@ class UnifiedEventKernel:
         chunk = tuple(tasks)
         if (
             self.resource_owners
-            or any("stateful_l2" in task.metadata for task in chunk)
+            or any("stateful_l2" in task.metadata or "memory_access" in task.metadata for task in chunk)
         ):
             if not layout.matches_structure(chunk):
                 raise ValueError("task graph does not match compiled structure")
@@ -2112,7 +2116,19 @@ class UnifiedEventKernel:
             _version,
         ) = queued
         task = self._tasks[task_id]
-        if "stateful_l2" in task.metadata:
+        is_physical = "memory_access" in task.metadata
+        if is_physical:
+            try:
+                # Local import avoids making the planner/data-motion module
+                # part of the kernel import cycle; it also keeps the physical
+                # adapter optional for analytical-only users.
+                from .data_motion import resolve_physical_task
+                task = resolve_physical_task(task, self.physical_runtime, start_ns)
+            except (ValueError, TypeError, KeyError):
+                heapq.heappush(self._ready_heap, queued)
+                raise
+            demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
+        elif "stateful_l2" in task.metadata:
             try:
                 task = resolve_l2_task(task, self._l2_states)
             except (ValueError, TypeError, KeyError):
@@ -2147,7 +2163,7 @@ class UnifiedEventKernel:
         self._phase_sequence.pop(task_id)
         resource_predecessors: Dict[str, Dict[str, object]] = {}
         resource_lanes: Dict[str, int] = {}
-        end_ns = start_ns
+        end_ns = float(task.metadata["physical_completion_ns"]) if is_physical else start_ns
         resource_last_interval = self.resource_last_interval
         resource_available = self.resource_available
         resource_busy_ns = self.resource_busy_ns
@@ -2156,6 +2172,21 @@ class UnifiedEventKernel:
         resource_busy_ns_get = resource_busy_ns.get
         queue_wait_ns = start_ns - effective_ready_ns
         for demand in demands:
+            if is_physical:
+                # The core already reserved the real stages. Charging these
+                # durations as another exclusive device demand would both
+                # serialize independent channels and count contention twice.
+                resource_busy_ns[demand.resource_id] = (
+                    resource_busy_ns_get(demand.resource_id, 0.0) + demand.service_ns
+                )
+                resource_queue_wait_ns[demand.resource_id] = (
+                    resource_queue_wait_ns.get(demand.resource_id, 0.0)
+                    + float(task.metadata["physical_execution"].get("queue_wait_ns", 0.0))
+                )
+                resource_task_count[demand.resource_id] = resource_task_count.get(demand.resource_id, 0) + 1
+                self.resource_capacities.setdefault(demand.resource_id, 1)
+                resource_lanes[demand.resource_id] = 0
+                continue
             demand_end_ns = start_ns + demand.service_ns
             lanes, lane_index, available_ns = self._select_lane(
                 demand.resource_id
@@ -2199,6 +2230,23 @@ class UnifiedEventKernel:
             resource_task_count[demand.resource_id] = (
                 resource_task_count.get(demand.resource_id, 0) + 1
             )
+
+        if is_physical:
+            for stage in task.metadata.get("physical_resource_intervals", ()):
+                if stage.resource_id is None:
+                    continue
+                resource_id = stage.resource_id
+                interval = {
+                    "task_id": task_id, "resource_id": resource_id,
+                    "start_ns": stage.start_ns, "end_ns": stage.end_ns,
+                }
+                previous = resource_last_interval.get(resource_id)
+                if previous is not None and previous["end_ns"] == stage.start_ns:
+                    resource_predecessors.setdefault(resource_id, dict(previous))
+                if stage.end_ns >= resource_available.get(resource_id, 0.0):
+                    resource_available[resource_id] = stage.end_ns
+                    resource_last_interval[resource_id] = interval
+                    self._resource_lane_last_interval[(resource_id, 0)] = interval
 
         self._completed_end[task_id] = end_ns
         self._completion_leases[task_id] = 1

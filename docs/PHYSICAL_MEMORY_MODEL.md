@@ -53,7 +53,6 @@ canonical 字段。`AccessRequest` 的地址和连续长度决定映射、拆分
 `make_ddr_config`、`make_lpddr_config`、`make_hbm_config`、`make_ssd_config`、
 `make_hbf_config`。
 
-规划器生成的静态 `ResourceDemand` 仍是事件内核的调度输入；需要让物理核心在
-实际事件开始时刷新行/Page Buffer 状态的调用方，应在该事件时刻使用同一个
-`PhysicalRuntimeContext` 提交请求，再将核心结果作为执行记录。这样可以把预估与
-状态提交分开，也避免查询或重复预估改变正式运行。
+规划器生成的 `TaskSpec` 可以携带 `metadata["memory_access"]` 描述（`operation`、`address`、`byte_count`、`physical_owner`）及对应的 `physical_memory_config`。`UnifiedEventKernel` 在任务真正出队的事件时刻调用 `resolve_physical_task`，并把本次运行唯一的 `PhysicalRuntimeContext` 传给核心；核心返回的 `physical_execution`、`physical_arrival_ns` 与 `physical_completion_ns` 是该访问的权威物理结果。静态 `ResourceDemand` 在这一类任务中只用于任务索引和报告占位，不会再次把设备阶段排队或重复计费。
+
+因此，规划阶段生成的 endpoint demand 只是预估；正式运行必须经过事件内核的 `memory_access` 描述，才能更新 Row / Page Buffer、通道时间线与请求接纳状态。事件内核会用核心返回的实际完成时间推进依赖，并将核心的每资源占用写入报告；没有该描述的普通通信阶段仍按原有静态 demand 调度。

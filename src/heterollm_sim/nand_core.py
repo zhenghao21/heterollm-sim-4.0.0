@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Dict, Iterable, Optional
 
-from .memory_mapping import split_nand_request
+from .memory_mapping import split_nand_request, validate_nand_request
 from .memory_transfer import ResourceTimeline
 from .memory_types import AccessRequest, NandConfig, Operation, StageTiming, TransactionResult
 
@@ -46,8 +46,30 @@ class NandCore:
         return StageTiming(name, reservation.start_ns, reservation.end_ns, resource, bytes)
 
     def execute(self, request: AccessRequest) -> TransactionResult:
-        if not isinstance(request, AccessRequest):
-            raise TypeError("request must be AccessRequest")
+        """Submit one request through the same admission gate as batches."""
+        return self.submit(request)
+
+    def submit(self, request: AccessRequest) -> TransactionResult:
+        validate_nand_request(request, self.config)
+        effective_arrival = max(request.arrival_ns, self._acceptance_ns)
+        inflight = [end for end in self._inflight if end > effective_arrival]
+        if len(inflight) >= self.config.max_outstanding_requests:
+            effective_arrival = max(effective_arrival, min(inflight))
+            inflight = [end for end in inflight if end > effective_arrival]
+        before_metrics = self.timeline.metrics_snapshot()
+        result = self._execute_accepted(
+            request if effective_arrival == request.arrival_ns
+            else replace(request, arrival_ns=effective_arrival)
+        )
+        result = replace(result, arrival_ns=request.arrival_ns, counters={
+            **result.counters, "queue_wait_ns": effective_arrival - request.arrival_ns,
+            **self.timeline.metrics_delta(before_metrics),
+        })
+        self._acceptance_ns = effective_arrival
+        self._inflight = [*inflight, result.completion_ns]
+        return result
+
+    def _execute_accepted(self, request: AccessRequest) -> TransactionResult:
         segments = split_nand_request(request, self.config)
         stages = []
         mappings = []
@@ -154,8 +176,8 @@ class NandCore:
             counters={
                 "host_transfer_bytes": host_bytes,
                 "internal_transfer_bytes": internal_bytes,
-                "physical_read_bytes": pages_read * self.config.transfer_page_bytes,
-                "physical_write_bytes": pages_programmed * self.config.transfer_page_bytes,
+                "physical_read_bytes": pages_read * self.config.page_bytes,
+                "physical_write_bytes": pages_programmed * self.config.page_bytes,
                 "pages_read": pages_read,
                 "pages_programmed": pages_programmed,
                 "erase_operations": erases,
@@ -168,30 +190,7 @@ class NandCore:
         )
 
     def execute_batch(self, requests: Iterable[AccessRequest]) -> tuple[TransactionResult, ...]:
-        results = []
-        for request in requests:
-            if not isinstance(request, AccessRequest):
-                raise TypeError("requests must contain AccessRequest values")
-            effective_arrival = max(request.arrival_ns, self._acceptance_ns)
-            self._inflight = [end for end in self._inflight if end > effective_arrival]
-            if len(self._inflight) >= self.config.max_outstanding_requests:
-                effective_arrival = max(effective_arrival, min(self._inflight))
-                self._inflight = [end for end in self._inflight if end > effective_arrival]
-            result = self.execute(
-                request if effective_arrival == request.arrival_ns
-                else replace(request, arrival_ns=effective_arrival)
-            )
-            queue_wait = max(0.0, effective_arrival - request.arrival_ns)
-            if queue_wait:
-                result = replace(
-                    result,
-                    arrival_ns=request.arrival_ns,
-                    counters={**result.counters, "queue_wait_ns": queue_wait},
-                )
-            self._acceptance_ns = max(self._acceptance_ns, effective_arrival)
-            self._inflight.append(result.completion_ns)
-            results.append(result)
-        return tuple(results)
+        return tuple(self.submit(request) for request in requests)
 
     def run(self, requests: Iterable[AccessRequest]):
         """Execute a batch and return one aggregate with achieved bandwidth."""

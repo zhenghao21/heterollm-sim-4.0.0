@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import copy
 import contextvars
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from enum import Enum
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
@@ -63,7 +63,11 @@ class PhysicalRuntimeContext:
         return current
 
     def preview_runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
-        return copy.deepcopy(self.runtime(config, owner))
+        kind = str(getattr(config.kind, "value", config.kind))
+        from .dram_core import DramCore
+        from .nand_core import NandCore
+        core = DramCore(config) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config)
+        return _PhysicalRuntime(core=core, signature=kind + ":" + repr(config))
 
 
 _CURRENT_PHYSICAL_CONTEXT: contextvars.ContextVar[PhysicalRuntimeContext | None] = contextvars.ContextVar(
@@ -93,6 +97,78 @@ def _physical_runtime(
 ) -> _PhysicalRuntime:
     context = context or current_physical_runtime_context()
     return context.preview_runtime(config, owner) if preview else context.runtime(config, owner)
+
+
+def resolve_physical_task(
+    task: TaskSpec,
+    runtime: PhysicalRuntimeContext,
+    arrival_ns: float,
+) -> TaskSpec:
+    """Commit one physical task at its event-kernel arrival time.
+
+    Planner pricing remains a preview.  This function is the single formal
+    submission point used by the event kernel; the core's own resource
+    timeline supplies the task completion time and per-resource busy demand.
+    """
+    metadata = dict(task.metadata)
+    raw_config = metadata.get("physical_memory_config")
+    access = metadata.get("memory_access")
+    if raw_config is None or not isinstance(access, Mapping):
+        raise ValueError("physical task requires physical_memory_config and memory_access")
+    if is_dataclass(raw_config):
+        raw_config = asdict(raw_config)
+    if not isinstance(raw_config, Mapping):
+        raise ValueError("physical_memory_config must be a DRAM/NAND config or mapping")
+    from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
+    kind_value = raw_config.get("kind", "")
+    kind_name = str(getattr(kind_value, "value", kind_value)).upper()
+    is_dram = kind_name in {"DDR", "LPDDR", "HBM"}
+    config = DramConfig.from_mapping(raw_config) if is_dram else NandConfig.from_mapping(raw_config)
+    owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
+    operation = Operation(str(access.get("operation", "")).lower())
+    address = access.get("address")
+    byte_count = access.get("byte_count")
+    if isinstance(address, bool) or not isinstance(address, int) or address < 0:
+        raise ValueError("physical task address must be a non-negative integer")
+    if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
+        raise ValueError("physical task byte_count must be a positive integer")
+    if isinstance(arrival_ns, bool) or not isinstance(arrival_ns, (int, float)) or arrival_ns < 0:
+        raise ValueError("physical task arrival_ns must be non-negative")
+    active = runtime.runtime(config, owner)
+    request = AccessRequest(task.request_id or task.task_id, operation, address, byte_count, float(arrival_ns))
+    submit = getattr(active.core, "submit", active.core.execute)
+    result = submit(request)
+    active.clock_ns = max(active.clock_ns, result.completion_ns)
+    counters = dict(result.counters)
+    resource_busy = counters.get("resource_busy_ns", {})
+    resource_bytes = counters.get("resource_bytes", {})
+    demands = tuple(
+        ResourceDemand(
+            str(resource_id),
+            float(duration),
+            bytes_moved=int(resource_bytes.get(resource_id, 0)),
+        )
+        for resource_id, duration in sorted(resource_busy.items())
+        if float(duration) > 0
+    )
+    if not demands:
+        demands = (ResourceDemand(owner, result.latency_ns, bytes_moved=result.transfer_bytes),)
+    metadata.update({
+        "physical_execution": {
+            **counters,
+            "logical_bytes": result.logical_bytes,
+            "physical_bytes": result.transfer_bytes,
+            "service_ns": result.latency_ns,
+            "arrival_ns": result.arrival_ns,
+            "completion_ns": result.completion_ns,
+            "operation": result.operation.value,
+        },
+        "physical_arrival_ns": result.arrival_ns,
+        "physical_completion_ns": result.completion_ns,
+        "physical_resource_intervals": tuple(result.stages),
+        "physical_resource_last_intervals": counters.get("resource_last_intervals", {}),
+    })
+    return replace(task, demands=demands, metadata=metadata)
 
 
 class AccessKind(str, Enum):
@@ -415,7 +491,8 @@ class PhysicalService:
                 max(1, byte_count),
                 arrival_ns=request_arrival_ns,
             )
-            result = active_runtime.core.execute(request)
+            submit = getattr(active_runtime.core, "submit", active_runtime.core.execute)
+            result = submit(request)
             if not preview and runtime is not None:
                 active_runtime.clock_ns = max(active_runtime.clock_ns, result.completion_ns)
             counters = dict(result.counters)
@@ -434,7 +511,7 @@ class PhysicalService:
                 "operation": operation.value,
                 "timing_model": "physical_transaction_v1",
                 "energy_pj": 0.0,
-                "pages_touched": len(result.mapping) if not is_dram else 0,
+                "pages_touched": result.counters.get("page_count", 0) if not is_dram else 0,
                 "write_completion": "media_program_complete" if operation is Operation.WRITE else "n/a",
             })
             return counters
@@ -498,7 +575,16 @@ class PhysicalService:
             parsed = []
             for index, item in enumerate(requests):
                 op = str(item.get("operation", "")).lower()
-                address = item.get("address", item.get("page_offset_bytes", 0))
+                if "address" in item:
+                    address = item["address"]
+                elif "page_offset_bytes" in item:
+                    address = item["page_offset_bytes"]
+                else:
+                    raise ValueError("physical batch request requires an explicit address")
+                if isinstance(address, bool) or not isinstance(address, int) or address < 0:
+                    raise ValueError("physical batch request address must be a non-negative integer")
+                if isinstance(item.get("byte_count"), bool) or not isinstance(item.get("byte_count"), int):
+                    raise ValueError("physical batch request byte_count must be an integer")
                 parsed.append(AccessRequest(
                     str(item.get("request_id", f"request-{index}")),
                     Operation(op), int(address), int(item["byte_count"]),
@@ -955,6 +1041,13 @@ def endpoint_service(
             "bytes": byte_count,
             "address": address,
             "physical_memory_config": component.metadata.get("physical_memory_config"),
+            "memory_access": {
+                "operation": op_name,
+                "address": address,
+                "byte_count": byte_count,
+                "physical_owner": service.physical_owner,
+                "resource_id": service.resource_id,
+            },
             "physical_execution": dict(billed),
             "physical_bytes": physical,
             "transferred_bytes": int(billed.get("host_transfer_bytes", billed.get("logical_bytes", byte_count))),
