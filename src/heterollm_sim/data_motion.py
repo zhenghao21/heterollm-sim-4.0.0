@@ -17,6 +17,35 @@ from .ir import ComponentSpec, LinkSpec, OFFLOAD_STORAGE_COMPONENT_KINDS, defaul
 from .memory_service import realtime_memory_metrics
 
 
+@dataclass
+class _PhysicalRuntime:
+    core: Any
+    clock_ns: float = 0.0
+
+
+_PHYSICAL_RUNTIMES: dict[tuple[str, str], _PhysicalRuntime] = {}
+
+
+def reset_physical_runtimes() -> None:
+    """Reset per-owner DRAM/NAND timelines at the start of a simulation."""
+    _PHYSICAL_RUNTIMES.clear()
+
+
+def _physical_runtime(config: Any, owner: str) -> _PhysicalRuntime:
+    from .dram_core import DramCore
+    from .nand_core import NandCore
+
+    kind = str(getattr(config.kind, "value", config.kind))
+    key = (str(owner), kind + ":" + repr(config))
+    runtime = _PHYSICAL_RUNTIMES.get(key)
+    if runtime is None:
+        runtime = _PhysicalRuntime(
+            DramCore(config) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config)
+        )
+        _PHYSICAL_RUNTIMES[key] = runtime
+    return runtime
+
+
 class AccessKind(str, Enum):
     READ = "READ"
     WRITE = "WRITE"
@@ -298,13 +327,13 @@ class PhysicalService:
         # and therefore gets explicit array and data-path stages.
         if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
             from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
-            from .dram_core import DramCore
-            from .nand_core import NandCore
             raw_config = self.component.metadata["physical_memory_config"]
             if is_dataclass(raw_config):
                 raw_config = asdict(raw_config)
             if not isinstance(raw_config, Mapping):
                 raise ValueError("physical_memory_config must be a DRAM/NAND config or mapping")
+            if page_offset_bytes is None and self.component.metadata.get("memory_access_offset_bytes") is None:
+                raise ValueError("physical_memory_config requires an explicit memory address")
             if byte_count == 0:
                 return {
                     "logical_bytes": 0, "physical_bytes": 0,
@@ -322,13 +351,17 @@ class PhysicalService:
             is_dram = kind_name in {"DDR", "LPDDR", "HBM"}
             config = DramConfig.from_mapping(raw_config) if is_dram else NandConfig.from_mapping(raw_config)
             operation = Operation.READ if kind is AccessKind.READ else Operation.WRITE if kind is AccessKind.WRITE else Operation.ERASE
+            runtime = _physical_runtime(config, self.physical_owner)
+            arrival_ns = runtime.clock_ns
             request = AccessRequest(
                 f"{self.service_id}:physical",
                 operation,
                 0 if page_offset_bytes is None else page_offset_bytes,
                 max(1, byte_count),
+                arrival_ns=arrival_ns,
             )
-            result = (DramCore(config).execute(request) if is_dram else NandCore(config).execute(request))
+            result = runtime.core.execute(request)
+            runtime.clock_ns = max(runtime.clock_ns, result.completion_ns)
             counters = dict(result.counters)
             counters.update({
                 "logical_bytes": result.logical_bytes,
@@ -338,6 +371,8 @@ class PhysicalService:
                 "host_transfer_bytes": result.host_transfer_bytes,
                 "internal_transfer_bytes": result.internal_transfer_bytes,
                 "service_ns": result.latency_ns,
+                "arrival_ns": result.arrival_ns,
+                "completion_ns": result.completion_ns,
                 "actual_bandwidth_gb_s": result.actual_bandwidth_gb_s,
                 "bandwidth_ceiling_gb_s": result.bandwidth_ceiling_gb_s,
                 "operation": operation.value,
@@ -384,13 +419,12 @@ class PhysicalService:
         """Price an explicit NAND request batch and return its next queue state."""
         if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
             from .memory_types import AccessRequest, NandConfig, Operation
-            from .nand_core import NandCore
             from dataclasses import asdict, is_dataclass
             raw = self.component.metadata["physical_memory_config"]
             if is_dataclass(raw):
                 raw = asdict(raw)
             config = raw if isinstance(raw, NandConfig) else NandConfig.from_mapping(raw)
-            core = NandCore(config)
+            runtime = _physical_runtime(config, self.physical_owner)
             parsed = []
             for index, item in enumerate(requests):
                 op = str(item.get("operation", "")).lower()
@@ -398,9 +432,10 @@ class PhysicalService:
                 parsed.append(AccessRequest(
                     str(item.get("request_id", f"request-{index}")),
                     Operation(op), int(address), int(item["byte_count"]),
-                    float(item.get("arrival_ns", start_ns)),
+                    float(item.get("arrival_ns", max(start_ns, runtime.clock_ns))),
                 ))
-            batch = core.run(parsed)
+            batch = runtime.core.run(parsed)
+            runtime.clock_ns = max(runtime.clock_ns, batch.last_completion_ns)
             return {
                 "model": "physical_transaction_queue_v1",
                 "requests": tuple(batch.requests),
@@ -802,7 +837,11 @@ def endpoint_service(
     _non_negative_int(byte_count, "byte_count")
     address = page_offset_bytes if page_offset_bytes is not None else dram_address_bytes
     if address is None:
-        address = component.metadata.get("memory_access_offset_bytes", 0)
+        address = component.metadata.get("memory_access_offset_bytes")
+    if address is None and component.metadata.get("physical_memory_config") is not None:
+        raise ValueError("physical_memory_config requires an explicit memory address")
+    if address is None:
+        address = 0
     _non_negative_int(address, "memory access address")
     op_name = ("read" if read else "write") if operation is None else str(operation).lower()
     if op_name not in {"read", "write", "erase"}:

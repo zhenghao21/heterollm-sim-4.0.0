@@ -106,6 +106,7 @@ class DramConfig:
     write_to_read_ns: float = 0.0
     capacity_bytes: Optional[int] = None
     max_outstanding_requests: int = 64
+    max_expanded_segments: int = 1_000_000
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -123,6 +124,7 @@ class DramConfig:
         for name in ("channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "data_width_bits"):
             _positive_int(name, getattr(self, name))
         _positive_int("max_outstanding_requests", self.max_outstanding_requests)
+        _positive_int("max_expanded_segments", self.max_expanded_segments)
         if self.data_lanes is not None:
             _positive_int("data_lanes", self.data_lanes)
         if self.row_bytes % self.burst_bytes:
@@ -141,8 +143,15 @@ class DramConfig:
                     raise ValueError(f"{name} must be positive")
         if self.lane_bandwidth_gb_s is not None and self.interface_bandwidth_gb_s is not None:
             raise ValueError("choose lane_bandwidth_gb_s or interface_bandwidth_gb_s, not both")
+        if self.interface_bandwidth_gb_s is not None and any(
+            value is not None and value > self.interface_bandwidth_gb_s
+            for value in (self.read_bandwidth_gb_s, self.write_bandwidth_gb_s)
+        ):
+            raise ValueError("directional bandwidth cannot exceed interface_bandwidth_gb_s")
         if not isinstance(self.metadata, Mapping):
             raise ValueError("metadata must be a mapping")
+        if self.capacity_bytes is not None and self.capacity_bytes > self.computed_capacity_bytes:
+            raise ValueError("capacity_bytes cannot exceed the declared physical geometry")
         if self.capacity_bytes is None:
             object.__setattr__(self, "capacity_bytes", self.computed_capacity_bytes)
 
@@ -212,6 +221,7 @@ class NandConfig:
     partial_page_policy: str = "read_modify_write"
     capacity_bytes: Optional[int] = None
     max_outstanding_requests: int = 32
+    max_expanded_segments: int = 1_000_000
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -235,6 +245,7 @@ class NandConfig:
         if self.capacity_bytes is not None:
             _positive_int("capacity_bytes", self.capacity_bytes)
         _positive_int("max_outstanding_requests", self.max_outstanding_requests)
+        _positive_int("max_expanded_segments", self.max_expanded_segments)
         for name in ("host_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns", "block_erase_ns", "front_ns"):
             value = _nonnegative(name, getattr(self, name))
             if name.endswith("bandwidth_gb_s") and value <= 0:

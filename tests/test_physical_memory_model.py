@@ -40,5 +40,5 @@ def test_physical_memory_smoke() -> None:
     assert write.pages_programmed == 1
     assert write.pages_read == 0
     erase = ncore.execute(AccessRequest("erase", "erase", 0, nand.block_bytes))
-    assert erase.erase_operations == 1
+    assert erase.erase_operations == 2
     assert erase.transfer_bytes == 0

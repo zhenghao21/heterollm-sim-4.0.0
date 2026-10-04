@@ -21,6 +21,8 @@ class NandCore:
         self.timeline = timeline or ResourceTimeline()
         self._array_ready: Dict[str, float] = {}
         self._buffer_ready: Dict[str, float] = {}
+        self._inflight: list[float] = []
+        self._acceptance_ns = 0.0
 
     def _array_id(self, mapping) -> str:
         prefix = str(self.config.metadata.get("array_resource_prefix", "nand:array"))
@@ -80,6 +82,7 @@ class NandCore:
                     direction="read",
                 )
                 stages.append(StageTiming("RMW_INTERNAL_TRANSFER", read_xfer.start_ns, read_xfer.end_ns, read_xfer.resource_id, read_xfer.bytes))
+                internal_bytes += read_xfer.bytes
                 dependency = read_xfer.end_ns
                 self._buffer_ready[array_id] = read_xfer.end_ns
                 pages_read += 1
@@ -114,7 +117,8 @@ class NandCore:
                 stages.append(StageTiming("HOST_TRANSFER", host.start_ns, host.end_ns, host.resource_id, host.bytes))
                 internal = self.timeline.transfer(
                     self._channel_id(m), segment.internal_transfer_bytes,
-                    host.end_ns, self.config.internal_bandwidth_gb_s,
+                    max(host.end_ns, self._buffer_ready.get(array_id, 0.0)),
+                    self.config.internal_bandwidth_gb_s,
                     direction="write",
                 )
                 stages.append(StageTiming("INTERNAL_TRANSFER", internal.start_ns, internal.end_ns, internal.resource_id, internal.bytes))
@@ -148,15 +152,14 @@ class NandCore:
 
     def execute_batch(self, requests: Iterable[AccessRequest]) -> tuple[TransactionResult, ...]:
         results = []
-        active = []
         for request in requests:
             if not isinstance(request, AccessRequest):
                 raise TypeError("requests must contain AccessRequest values")
-            active = [end for end in active if end > request.arrival_ns]
-            effective_arrival = request.arrival_ns
-            if len(active) >= self.config.max_outstanding_requests:
-                effective_arrival = min(active)
-                active = [end for end in active if end > effective_arrival]
+            effective_arrival = max(request.arrival_ns, self._acceptance_ns)
+            self._inflight = [end for end in self._inflight if end > effective_arrival]
+            if len(self._inflight) >= self.config.max_outstanding_requests:
+                effective_arrival = max(effective_arrival, min(self._inflight))
+                self._inflight = [end for end in self._inflight if end > effective_arrival]
             result = self.execute(
                 request if effective_arrival == request.arrival_ns
                 else replace(request, arrival_ns=effective_arrival)
@@ -168,7 +171,8 @@ class NandCore:
                     arrival_ns=request.arrival_ns,
                     counters={**result.counters, "queue_wait_ns": queue_wait},
                 )
-            active.append(result.completion_ns)
+            self._acceptance_ns = effective_arrival
+            self._inflight.append(result.completion_ns)
             results.append(result)
         return tuple(results)
 

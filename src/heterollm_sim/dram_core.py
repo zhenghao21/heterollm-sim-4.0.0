@@ -26,6 +26,8 @@ class DramCore:
         self.config = config
         self.timeline = timeline or ResourceTimeline()
         self._banks: Dict[str, _BankState] = {}
+        self._inflight: list[float] = []
+        self._acceptance_ns = 0.0
 
     def _bank_id(self, mapping) -> str:
         prefix = str(self.config.metadata.get("bank_resource_prefix", "dram:bank"))
@@ -129,15 +131,14 @@ class DramCore:
 
     def execute_batch(self, requests: Iterable[AccessRequest]) -> tuple[TransactionResult, ...]:
         results = []
-        active = []
         for request in requests:
             if not isinstance(request, AccessRequest):
                 raise TypeError("requests must contain AccessRequest values")
-            active = [end for end in active if end > request.arrival_ns]
-            effective_arrival = request.arrival_ns
-            if len(active) >= self.config.max_outstanding_requests:
-                effective_arrival = min(active)
-                active = [end for end in active if end > effective_arrival]
+            effective_arrival = max(request.arrival_ns, self._acceptance_ns)
+            self._inflight = [end for end in self._inflight if end > effective_arrival]
+            if len(self._inflight) >= self.config.max_outstanding_requests:
+                effective_arrival = max(effective_arrival, min(self._inflight))
+                self._inflight = [end for end in self._inflight if end > effective_arrival]
             result = self.execute(
                 request if effective_arrival == request.arrival_ns
                 else replace(request, arrival_ns=effective_arrival)
@@ -149,7 +150,8 @@ class DramCore:
                     arrival_ns=request.arrival_ns,
                     counters={**result.counters, "queue_wait_ns": queue_wait},
                 )
-            active.append(result.completion_ns)
+            self._acceptance_ns = effective_arrival
+            self._inflight.append(result.completion_ns)
             results.append(result)
         return tuple(results)
 

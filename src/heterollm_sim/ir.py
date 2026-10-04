@@ -33,6 +33,8 @@ ACTIVE_MEMORY_COMPONENT_KINDS = frozenset(
         "dram",
         "ddr",
         "ddr_memory",
+        "lpddr",
+        "lpddr_memory",
         "cxl_memory",
         "host_memory",
         "memory",
@@ -59,6 +61,8 @@ def normalize_component_kind(value: str) -> str:
         "ddr3": "ddr",
         "ddr4": "ddr",
         "ddr5": "ddr",
+        "lpddr5": "lpddr",
+        "lpddr5x": "lpddr",
     }
     return aliases.get(normalized, normalized)
 

@@ -27,10 +27,14 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     per_stack = per_die * config.dies_per_stack
     stack, stack_local = divmod(address, per_stack)
     die, local = divmod(stack_local, per_die)
-    lane = (local // interleave) % config.lane_count
-    bank_linear = (local // interleave) // config.lane_count
+    interleave_bursts = interleave // config.burst_bytes
+    interleave_block, inner_burst = divmod(
+        local // config.burst_bytes, interleave_bursts
+    )
+    lane = interleave_block % config.lane_count
+    bank_linear = interleave_block // config.lane_count
     bank = bank_linear % config.bank_count
-    row_column = bank_linear // config.bank_count
+    row_column = bank_linear * interleave_bursts + inner_burst
     bursts_per_row = config.row_bytes // config.burst_bytes
     column = row_column % bursts_per_row
     row = (row_column // bursts_per_row) % config.rows_per_bank
@@ -65,25 +69,27 @@ def map_nand_address(config: NandConfig, address: int) -> AddressMapping:
     _check_address(address, config.effective_capacity_bytes)
     page_index, page_offset = divmod(address, config.page_bytes)
     base_units = config.channels * config.targets_per_channel * config.dies_per_target * config.luns_per_die
-    unit = page_index % config.array_units
-    physical_page = page_index // config.array_units
-    plane = physical_page % config.planes_per_lun
-    logical = physical_page // config.planes_per_lun
-    page = logical % config.pages_per_block
-    block = logical // config.pages_per_block
+    base_unit = page_index % base_units
+    if config.planes_independent:
+        plane = (page_index // base_units) % config.planes_per_lun
+        unit = base_unit + plane * base_units
+        physical_page = page_index // (base_units * config.planes_per_lun)
+    else:
+        unit = base_unit
+        physical_page = page_index // base_units
+        plane = physical_page % config.planes_per_lun
+        physical_page //= config.planes_per_lun
+    page = physical_page % config.pages_per_block
+    block = physical_page // config.pages_per_block
     # A flat index is decoded for reporting.  If planes are shared, ``unit``
     # intentionally omits the plane and therefore those planes contend.
-    base = unit if config.planes_independent else unit
+    base = base_unit
     lun = base % config.luns_per_die
     base //= config.luns_per_die
     die = base % config.dies_per_target
     base //= config.dies_per_target
     target = base % config.targets_per_channel
     channel = base // config.targets_per_channel
-    if not config.planes_independent:
-        # Plane still identifies the physical page, but does not make a new
-        # array resource unless the configuration declared independence.
-        plane = (page_index // config.array_units) % config.planes_per_lun
     return AddressMapping(
         address=address, channel=channel, target=target, die=die, lun=lun,
         plane=plane, block=block, page=page, page_offset=page_offset,
@@ -100,6 +106,8 @@ def split_dram_request(request: AccessRequest, config: DramConfig) -> List[Segme
         raise ValueError("request extends beyond modeled DRAM capacity")
     first = start // config.burst_bytes
     last = (end - 1) // config.burst_bytes
+    if last - first + 1 > config.max_expanded_segments:
+        raise ValueError("DRAM request exceeds max_expanded_segments; split it upstream")
     segments: List[Segment] = []
     for burst in range(first, last + 1):
         burst_start = burst * config.burst_bytes
@@ -121,20 +129,37 @@ def split_nand_request(request: AccessRequest, config: NandConfig) -> List[Segme
     if end > config.effective_capacity_bytes:
         raise ValueError("request extends beyond modeled NAND capacity")
     if request.operation is Operation.ERASE:
-        block = config.block_bytes
-        first = start // block
-        last = (end - 1) // block
-        segments = []
-        for index in range(first, last + 1):
-            address = index * block
-            segments.append(Segment(
-                request_id=request.request_id, operation=request.operation,
-                address=address, logical_bytes=0, transfer_bytes=0,
-                mapping=map_nand_address(config, address),
-            ))
-        return segments
+        # Erase follows the same striped physical mapping as page access.
+        # A byte range can touch one block in each interleaved LUN/plane, so
+        # deduplicate by the full physical block coordinate rather than by a
+        # linear logical block number.
+        page = config.page_bytes
+        first_page = start // page
+        last_page = (end - 1) // page
+        if last_page - first_page + 1 > config.max_expanded_segments:
+            raise ValueError("NAND erase exceeds max_expanded_segments; split it upstream")
+        blocks = {}
+        for page_index in range(first_page, last_page + 1):
+            address = page_index * page
+            mapping = map_nand_address(config, address)
+            key = (mapping.channel, mapping.target, mapping.die,
+                   mapping.lun, mapping.plane, mapping.block)
+            blocks.setdefault(key, (address, mapping))
+        return [
+            Segment(
+                request_id=request.request_id,
+                operation=request.operation,
+                address=address,
+                logical_bytes=0,
+                transfer_bytes=0,
+                mapping=mapping,
+            )
+            for address, mapping in blocks.values()
+        ]
     first = start // config.page_bytes
     last = (end - 1) // config.page_bytes
+    if last - first + 1 > config.max_expanded_segments:
+        raise ValueError("NAND request exceeds max_expanded_segments; split it upstream")
     segments = []
     for page_index in range(first, last + 1):
         page_start = page_index * config.page_bytes

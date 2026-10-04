@@ -152,9 +152,11 @@ def run_scenario(
     """Plan, validate, and execute through the V4 unified event kernel."""
 
     from .llama_scenario import prepare_llama_scenario
+    from .data_motion import reset_physical_runtimes
 
     authored = scenario
     scenario = prepare_llama_scenario(scenario)
+    reset_physical_runtimes()
     if batch_lowerer is not None and scenario is not authored:
         raise ValueError("prepare llama runtime before constructing a custom batch lowerer")
 
