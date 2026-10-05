@@ -98,6 +98,8 @@ class PhysicalRuntimeContext:
         if lane_ref is not None and "lane_available" in timeline_state:
             lane_ref.clear(); lane_ref.update(timeline_state["lane_available"])
             self.timeline.lane_available = lane_ref
+        for active in self.runtimes.values():
+            active.core.timeline = self.timeline
         self._committed_owners.clear(); self._committed_owners.update(owners)
 
 
