@@ -55,7 +55,29 @@ def _task_resource_intervals(
                         resource_id=str(resource_id), start_ns=begin, end_ns=end,
                         bytes_moved=int(moved), energy_pj=float(energy),
                     ))
+    reservations = metadata.get("physical_resource_intervals", ())
+    if not physical.get("details_truncated", False):
+        seen = {(item.resource_id, item.start_ns, item.end_ns) for item in intervals}
+        for item in reservations:
+            if isinstance(item, (tuple, list)) and len(item) >= 3:
+                resource_id, begin, end = item[:3]
+                moved = int(item[3]) if len(item) > 3 else 0
+                energy = float(item[4]) if len(item) > 4 else 0.0
+            else:
+                resource_id = getattr(item, "resource_id", None)
+                begin = getattr(item, "start_ns", None)
+                end = getattr(item, "end_ns", None)
+                moved = int(getattr(item, "bytes", 0))
+                energy = 0.0
+            key = (resource_id, begin, end)
+            if resource_id is not None and begin is not None and end is not None and key not in seen:
+                intervals.append(ResourceInterval(
+                    resource_id=str(resource_id), start_ns=begin, end_ns=end,
+                    bytes_moved=moved, energy_pj=energy,
+                ))
+                seen.add(key)
     if not intervals and not physical.get("details_truncated", False):
+        reservations = metadata.get("physical_resource_intervals", ())
         raw = physical.get("resource_intervals", {})
         resource_bytes = physical.get("resource_bytes", {})
         resource_energy = physical.get("resource_energy_pj", {})
@@ -70,24 +92,6 @@ def _task_resource_intervals(
                         bytes_moved=int(resource_bytes.get(resource_id, 0)),
                         energy_pj=float(resource_energy.get(resource_id, 0.0)),
                     ))
-    if not intervals and not physical.get("details_truncated", False):
-        reservations = metadata.get("physical_resource_intervals", ())
-        for item in reservations:
-            if isinstance(item, (tuple, list)) and len(item) >= 3:
-                resource_id, begin, end = item[:3]
-                moved = int(item[3]) if len(item) > 3 else 0
-                energy = float(item[4]) if len(item) > 4 else 0.0
-            else:
-                resource_id = getattr(item, "resource_id", None)
-                begin = getattr(item, "start_ns", None)
-                end = getattr(item, "end_ns", None)
-                moved = int(getattr(item, "bytes", 0))
-                energy = 0.0
-            if resource_id is not None and begin is not None and end is not None:
-                intervals.append(ResourceInterval(
-                    resource_id=str(resource_id), start_ns=begin, end_ns=end,
-                    bytes_moved=moved, energy_pj=energy,
-                ))
 
     # Physical tasks retain ordinary compute/link demands alongside replaced
     # memory previews.  Do not invent intervals when physical detail is absent.

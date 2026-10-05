@@ -1,5 +1,5 @@
 from contextlib import nullcontext
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 
 from heterollm_sim.contracts import ResourceDemand, RunManifest, TaskCategory, TaskSpec, RetentionPolicy
@@ -56,6 +56,11 @@ def test_simulate_schedule_keeps_compute_and_physical_payload():
     assert compute.bytes_moved == 0
     assert compute.energy_pj == 0
     assert (data.start_ns, data.end_ns, data.bytes_moved, data.energy_pj) == (15, 16, 64, 0)
+    bank = next(item for item in intervals if item.resource_id == "A:dram:bank:0:0:0:0:0:0")
+    command = next(item for item in intervals if item.resource_id == "A:dram:command:0")
+    assert (bank.start_ns, bank.end_ns) == (0, 10)
+    assert (command.start_ns, command.end_ns) == (10, 11)
+    assert len(intervals) == 4
 
 
 def test_streaming_full_history_uses_same_projection(monkeypatch):
@@ -74,6 +79,26 @@ def test_streaming_full_history_uses_same_projection(monkeypatch):
     intervals = result.trace.tasks[0].resource_intervals
     assert any(item.resource_id == "gpu.compute" for item in intervals)
     assert any(item.resource_id == "A:dram:data:0" and item.bytes_moved == 64 for item in intervals)
+    assert any(item.resource_id == "A:dram:bank:0:0:0:0:0:0" and (item.start_ns, item.end_ns) == (0, 10)
+               for item in intervals)
+    assert any(item.resource_id == "A:dram:command:0" and (item.start_ns, item.end_ns) == (10, 11)
+               for item in intervals)
+    assert len(intervals) == 4
+
+
+def test_multi_burst_report_merges_reservations_without_duplicate_bytes():
+    task = _task()
+    task = replace(task, metadata={
+        **task.metadata,
+        "memory_access": {**task.metadata["memory_access"], "byte_count": 128},
+    })
+    result = simulate_schedule(ScheduleIR(_manifest(), (task,)))
+    intervals = result.tasks[0].resource_intervals
+    data = [item for item in intervals if item.resource_id == "A:dram:data:0"]
+    commands = [item for item in intervals if item.resource_id == "A:dram:command:0"]
+    assert len(data) == len(commands) == 2
+    assert sum(item.bytes_moved for item in data) == 128
+    assert len({(item.resource_id, item.start_ns, item.end_ns) for item in intervals}) == len(intervals)
 
 
 def test_low_detail_does_not_fabricate_physical_intervals_but_keeps_compute():
