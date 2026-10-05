@@ -59,7 +59,17 @@ GDDR 配置约定：`data_lanes`/`data_width_bits` 表示数据组织，`interfa
 GDDR7 使用 PAM3 仅作为来源说明，不能再对有效数据率乘一次编码系数。组件拓扑使用
 `kind="gddr"`，物理配置使用 `kind="GDDR"` 并保留 `generation`。
 
+组件预设的 `burst_interval_ns` 是每条 32-bit 数据通路的分析调度预算，按
+`burst_bytes / (pin_data_rate_gbps × data_width_bits / 8)` 推导。它用于避免
+命令资源人为地把接口峰值压到一个更低的共同上限，不代表 JEDEC 的 tCCD 或器件实测
+时序；真实控制器时序仍应通过显式配置覆盖。启用 `stateful_l2` 时，规划器先保留
+物理地址锚点并附加 L2 contract，事件出队后先更新 L2 状态，再把 `hbm_read_bytes` /
+`hbm_write_bytes` 的未命中和写回流量重建为 GDDR 物理描述。纯命中任务不会提交空的
+DRAM 事务，但仍保留 L2 的状态更新和缓存耗时。
+
 规划器生成的 `TaskSpec` 可以携带 `metadata["memory_access"]` 描述（`operation`、`address`、`byte_count`、`physical_owner`）及对应的 `physical_memory_config`。`UnifiedEventKernel` 在任务真正出队的事件时刻调用 `resolve_physical_task`，并把本次运行唯一的 `PhysicalRuntimeContext` 传给核心；核心返回的 `physical_execution`、`physical_arrival_ns` 与 `physical_completion_ns` 是该访问的权威物理结果。静态 `ResourceDemand` 在这一类任务中只用于任务索引和报告占位，不会再次把设备阶段排队或重复计费。
+
+当算子级方向字节经过 Rank 分片或缓存裁剪后与本地 demand 不一致时，规划器会按原始读写比例重建本地读写字节，并在 `gddr_directional_reconstruction` 中保留原值、重建值和来源；显式 `buffer_accesses` 则要求字节数严格守恒。两条路径都不会把不确定流量静默改成全读。
 
 因此，规划阶段生成的 endpoint demand 只是预估；正式运行必须经过事件内核的 `memory_access` 描述，才能更新 Row / Page Buffer、通道时间线与请求接纳状态。事件内核会用核心返回的实际完成时间推进依赖，并将核心的每资源占用写入报告；没有该描述的普通通信阶段仍按原有静态 demand 调度。
 

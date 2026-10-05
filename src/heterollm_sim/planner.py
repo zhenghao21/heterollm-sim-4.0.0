@@ -3595,11 +3595,10 @@ def _route_resident_memory_demands(demands, metadata):
 
 
 def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
-    # Physical GDDR tasks are lowered directly into DramCore.  The mutable L2
-    # recost path is an analytical cache model and must not run after the
-    # formal physical transaction has been attached.
-    if task.metadata.get("physical_memory_config") is not None:
-        return task
+    # Physical GDDR tasks still receive the dynamic L2 contract.  At dispatch
+    # the event kernel resolves cache state first and forwards only backing
+    # misses/write-backs to the physical core; skipping this contract would
+    # make a physical descriptor bypass stateful cache semantics.
     audit = task.metadata.get("phase_metadata", {}).get("kernel_model", task.metadata.get("cost_model", {}).get("kernel_model"))
     if audit and task.metadata.get("phase") != "kernel_launch":
         task = replace(task, metadata={**task.metadata, "kernel_prediction": audit})
@@ -3663,13 +3662,220 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
                               cache_resource=cache_resource, owner=target_id + ".l2", accesses=accesses)
 
 
+def _gddr_non_negative_int(value: object, name: str) -> int:
+    """Parse one physical-memory byte fact without silently coercing it."""
+
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("GDDR {} must be a non-negative integer".format(name))
+    return int(value)
+
+
+def _gddr_stable_address(
+    identity: str,
+    offset: int,
+    byte_count: int,
+    capacity: int,
+    burst: int,
+    allocation_size: Optional[int] = None,
+) -> int:
+    """Map a stable allocation identity to a checked DRAM address.
+
+    The hash is only an address-space allocator for a stable buffer/tensor
+    identity. It deliberately never includes task_id: two invocations
+    reading the same allocation therefore hit the same rows. offset and
+    allocation_size come from the caller allocation contract.
+    """
+
+    if not identity.strip():
+        raise ValueError("GDDR physical access requires a stable buffer/tensor identity")
+    offset = _gddr_non_negative_int(offset, "buffer offset")
+    byte_count = _gddr_non_negative_int(byte_count, "byte_count")
+    capacity = _gddr_non_negative_int(capacity, "capacity")
+    burst = _gddr_non_negative_int(burst, "burst_bytes")
+    if byte_count <= 0:
+        raise ValueError("GDDR byte_count must be positive")
+    if capacity <= 0 or burst <= 0:
+        raise ValueError("GDDR capacity and burst_bytes must be positive")
+    if allocation_size is None:
+        allocation_size = offset + byte_count
+    allocation_size = _gddr_non_negative_int(allocation_size, "allocation size")
+    if allocation_size < offset + byte_count:
+        raise ValueError(
+            "GDDR access exceeds allocation {}: offset {} + length {}".format(
+                allocation_size, offset, byte_count
+            )
+        )
+    if allocation_size > capacity:
+        raise ValueError(
+            "GDDR allocation {} exceeds physical capacity {}".format(
+                allocation_size, capacity
+            )
+        )
+    max_base = capacity - allocation_size
+    digest = hashlib.blake2b(identity.encode("utf-8"), digest_size=16).digest()
+    slot_count = max_base // burst + 1
+    base = (int.from_bytes(digest, "big") % slot_count) * burst
+    address = base + offset
+    if address < 0 or address + byte_count > capacity:
+        raise ValueError(
+            "GDDR physical access range exceeds capacity: address {} + length {} > {}".format(
+                address, byte_count, capacity
+            )
+        )
+    return address
+
+
+def _gddr_directional_bytes(
+    task: TaskSpec, cost: Mapping[str, object], total_bytes: int
+) -> Tuple[int, int]:
+    """Resolve logical GDDR reads/writes while preserving conservation."""
+
+    has_explicit_direction = "read_bytes" in cost or "write_bytes" in cost
+    has_gemm_direction = any(
+        key in cost for key in ("activation_bytes", "weight_bytes", "output_bytes")
+    )
+    if has_explicit_direction:
+        read_bytes = _gddr_non_negative_int(cost.get("read_bytes", 0), "read_bytes")
+        write_bytes = _gddr_non_negative_int(cost.get("write_bytes", 0), "write_bytes")
+        source = "explicit_read_write_bytes"
+    elif has_gemm_direction:
+        activation = _gddr_non_negative_int(cost.get("activation_bytes", 0), "activation_bytes")
+        weight = _gddr_non_negative_int(cost.get("weight_bytes", 0), "weight_bytes")
+        output = _gddr_non_negative_int(cost.get("output_bytes", 0), "output_bytes")
+        read_bytes = activation + weight
+        write_bytes = output
+        source = "activation_plus_weight_and_output"
+    else:
+        raise ValueError(
+            "GDDR task {} has no explicit directional byte contract; "
+            "provide read_bytes/write_bytes or activation_bytes/weight_bytes/output_bytes".format(
+                task.task_id
+            )
+        )
+    declared_total = read_bytes + write_bytes
+    if declared_total != total_bytes:
+        if declared_total <= 0:
+            raise ValueError(
+                "GDDR task {} byte conservation failed: no positive directional bytes for physical demand {} (source={})".format(
+                    task.task_id, total_bytes, source
+                )
+            )
+        # Operator metadata can be expressed before rank sharding or cache
+        # trimming. Preserve its direction ratio and record the reconstruction
+        # on the task; never silently convert the demand into all reads.
+        read_bytes = min(total_bytes, int(round(total_bytes * read_bytes / declared_total)))
+        write_bytes = total_bytes - read_bytes
+    return read_bytes, write_bytes
+
+
+def _gddr_stable_identity(
+    task: TaskSpec,
+    metadata: Mapping[str, object],
+    side: str,
+    ordinal: int = 0,
+) -> str:
+    """Return an allocation identity independent of task naming/counters."""
+
+    keys = {
+        "read": (
+            "input_buffer_id",
+            "input_tensor_id",
+            "activation_tensor_id",
+            "input_allocation_id",
+            "allocation_id",
+        ),
+        "weight": (
+            "weight_buffer_id",
+            "weight_tensor_id",
+            "tensor_id",
+            "rhs_tensor_id",
+            "weight_allocation_id",
+            "allocation_id",
+        ),
+        "write": (
+            "output_buffer_id",
+            "output_tensor_id",
+            "output_tensor",
+            "output_allocation_id",
+            "allocation_id",
+        ),
+    }[side]
+    declared = next(
+        (metadata.get(key) for key in keys if metadata.get(key) is not None),
+        None,
+    )
+    if declared is not None and str(declared).strip():
+        identity = str(declared).strip()
+        suffix = []
+        for key in ("rank", "tp_rank", "pp_rank", "projection_id"):
+            value = metadata.get(key)
+            if value is not None and str(value).strip():
+                suffix.append("{}={}".format(key, value))
+        # Keep the declared tensor/allocation identity independent of access
+        # direction so an explicit in-place input/output tensor aliases one
+        # physical allocation.  The direction remains in each descriptor.
+        return "tensor:{}{}".format(
+            identity,
+            (":" + ":".join(suffix)) if suffix else "",
+        )
+    operator = next(
+        (
+            metadata.get(key)
+            for key in ("operator_id", "op_name", "model_operator_id", "event_kind")
+            if metadata.get(key) is not None and str(metadata.get(key)).strip()
+        ),
+        None,
+    )
+    if operator is None:
+        raise ValueError(
+            "GDDR task {} has no stable {} buffer/tensor identity".format(
+                task.task_id, side
+            )
+        )
+    return "{}:operator={}:ordinal={}".format(side, operator, ordinal)
+
+
+def _gddr_allocation_size(
+    scenario: ScenarioConfig,
+    metadata: Mapping[str, object],
+    side: str,
+    identity: str,
+    offset: int,
+    byte_count: int,
+    declared: Optional[object] = None,
+) -> int:
+    """Find an optional stable allocation extent for one logical buffer."""
+
+    keys = {
+        "read": ("input_buffer_size_bytes", "input_allocation_bytes"),
+        "weight": ("weight_buffer_size_bytes", "weight_allocation_bytes"),
+        "write": ("output_buffer_size_bytes", "output_allocation_bytes"),
+    }[side]
+    for key in keys:
+        if metadata.get(key) is not None:
+            return _gddr_non_negative_int(metadata[key], key)
+    if declared is not None:
+        return _gddr_non_negative_int(declared, "buffer_size_bytes")
+    if identity.startswith("tensor:"):
+        tensor_id = identity.split(":", 2)[1]
+    elif identity.startswith(side + ":"):
+        tensor_id = identity.split(":", 2)[1]
+    else:
+        tensor_id = ""
+    placement_bytes = getattr(getattr(scenario, "placement", None), "tensor_bytes", {})
+    if tensor_id and isinstance(placement_bytes, Mapping):
+        value = placement_bytes.get(tensor_id)
+        if value is not None:
+            return _gddr_non_negative_int(value, "placement tensor bytes")
+    return offset + byte_count
+
+
 def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
     """Attach one explicit GDDR access descriptor to a lowered memory phase.
 
     The planner still owns dependencies and compute demands; only the local
     GDDR resource demand is replaced by the physical core at event dispatch.
-    Addresses are deterministic task-local ranges so repeated runs do not
-    collapse every request onto address zero.
+    Addresses come from stable buffer/tensor identities and declared offsets.
     """
 
     if task.metadata.get("physical_memory_config") is not None:
@@ -3700,36 +3906,395 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     if total_bytes <= 0:
         return task
     cost = task.metadata.get("cost_model", {})
-    read_bytes = int(cost.get("read_bytes", 0) or cost.get("activation_bytes", 0) or cost.get("weight_bytes", 0) or 0)
-    write_bytes = int(cost.get("write_bytes", 0) or cost.get("output_bytes", 0) or 0)
-    if read_bytes + write_bytes != total_bytes:
-        direction = str(task.metadata.get("memory_direction", "read")).lower()
-        read_bytes, write_bytes = (0, total_bytes) if direction == "write" else (total_bytes, 0)
+    if not isinstance(cost, Mapping):
+        raise ValueError(
+            "GDDR task {} cost_model must contain directional byte facts".format(
+                task.task_id
+            )
+        )
     try:
         capacity = int(raw_config.get("capacity_bytes") or 0)
         burst = int(raw_config.get("burst_bytes") or 64)
     except (TypeError, ValueError):
-        return task
+        raise ValueError(
+            "GDDR task {} has invalid capacity_bytes or burst_bytes".format(
+                task.task_id
+            )
+        )
     if capacity <= 0 or burst <= 0:
-        return task
-    digest = hashlib.blake2b(task.task_id.encode("utf-8"), digest_size=8).digest()
-    base = int.from_bytes(digest, "big") % max(burst, capacity - burst + 1)
-    base -= base % burst
+        raise ValueError(
+            "GDDR task {} requires positive capacity_bytes and burst_bytes".format(
+                task.task_id
+            )
+        )
+    metadata = task.metadata
+    directional_reconstruction = None
+    raw_explicit = metadata.get(
+        "memory_accesses",
+        metadata.get("memory_access", metadata.get("buffer_accesses")),
+    )
+    explicit_items = ()
+    if isinstance(raw_explicit, Mapping):
+        explicit_items = (raw_explicit,)
+    elif isinstance(raw_explicit, (tuple, list)):
+        explicit_items = tuple(raw_explicit)
+    if explicit_items:
+        if not all(isinstance(item, Mapping) for item in explicit_items):
+            raise ValueError("GDDR explicit memory accesses must be mappings")
+        for item in explicit_items:
+            explicit_address = item.get("address")
+            if explicit_address is not None:
+                explicit_address = _gddr_non_negative_int(explicit_address, "address")
+                explicit_size = _gddr_non_negative_int(
+                    item.get("byte_count", item.get("size_bytes")), "byte_count"
+                )
+                if explicit_address + explicit_size > capacity:
+                    raise ValueError(
+                        "GDDR task {} explicit access exceeds capacity: address {} + length {} > {}".format(
+                            task.task_id, explicit_address, explicit_size, capacity
+                        )
+                    )
+        read_bytes = sum(
+            _gddr_non_negative_int(item.get("byte_count", item.get("size_bytes")), "byte_count")
+            for item in explicit_items
+            if str(item.get("operation", "")).lower() == "read"
+        )
+        write_bytes = sum(
+            _gddr_non_negative_int(item.get("byte_count", item.get("size_bytes")), "byte_count")
+            for item in explicit_items
+            if str(item.get("operation", "")).lower() == "write"
+        )
+        if read_bytes + write_bytes != total_bytes:
+            raise ValueError(
+                "GDDR task {} explicit access bytes do not match physical demand".format(task.task_id)
+            )
+    else:
+        if "read_bytes" in cost or "write_bytes" in cost:
+            declared_read = _gddr_non_negative_int(cost.get("read_bytes", 0), "read_bytes")
+            declared_write = _gddr_non_negative_int(cost.get("write_bytes", 0), "write_bytes")
+            direction_source = "explicit_read_write_bytes"
+        elif any(key in cost for key in ("activation_bytes", "weight_bytes", "output_bytes")):
+            declared_read = _gddr_non_negative_int(cost.get("activation_bytes", 0), "activation_bytes") + _gddr_non_negative_int(cost.get("weight_bytes", 0), "weight_bytes")
+            declared_write = _gddr_non_negative_int(cost.get("output_bytes", 0), "output_bytes")
+            direction_source = "activation_plus_weight_and_output"
+        else:
+            declared_read = declared_write = 0
+            direction_source = "unknown"
+        read_bytes, write_bytes = _gddr_directional_bytes(task, cost, total_bytes)
+        directional_reconstruction = (
+            {
+                "source": direction_source,
+                "declared_read_bytes": declared_read,
+                "declared_write_bytes": declared_write,
+                "physical_demand_bytes": total_bytes,
+                "reconstructed_read_bytes": read_bytes,
+                "reconstructed_write_bytes": write_bytes,
+            }
+            if declared_read + declared_write != total_bytes
+            else None
+        )
     descriptors = []
-    if read_bytes:
-        descriptors.append({"operation": "read", "address": base, "byte_count": read_bytes, "physical_owner": owner, "resource_id": owner})
-    if write_bytes:
-        write_address = min(capacity - burst, base + max(burst, read_bytes))
-        write_address -= write_address % burst
-        descriptors.append({"operation": "write", "address": write_address, "byte_count": write_bytes, "physical_owner": owner, "resource_id": owner})
+    address_bindings = []
+
+    def append_descriptor(
+        operation: str,
+        byte_count: int,
+        *,
+        identity: Optional[str] = None,
+        offset: int = 0,
+        allocation_size: Optional[int] = None,
+        explicit_address: Optional[object] = None,
+        source: str = "stable_buffer_tensor_offset",
+    ) -> None:
+        byte_count = _gddr_non_negative_int(byte_count, "byte_count")
+        if byte_count <= 0:
+            return
+        if explicit_address is not None:
+            address = _gddr_non_negative_int(explicit_address, "address")
+            address_source = "explicit_physical_address"
+        else:
+            if identity is None:
+                raise ValueError(
+                    "GDDR task {} {} access has no stable buffer/tensor identity".format(
+                        task.task_id, operation
+                    )
+                )
+            address = _gddr_stable_address(
+                identity,
+                offset,
+                byte_count,
+                capacity,
+                burst,
+                allocation_size,
+            )
+            address_source = source
+        if address + byte_count > capacity:
+            raise ValueError(
+                "GDDR task {} {} range exceeds capacity: address {} + length {} > {}".format(
+                    task.task_id, operation, address, byte_count, capacity
+                )
+            )
+        descriptor = {
+            "operation": operation,
+            "address": address,
+            "byte_count": byte_count,
+            "physical_owner": owner,
+            "physical_memory_component_id": component.component_id,
+            "resource_id": owner,
+            "address_source": address_source,
+        }
+        if identity is not None:
+            descriptor["buffer_id"] = identity
+        if allocation_size is not None:
+            descriptor["allocation_size_bytes"] = allocation_size
+        descriptors.append(descriptor)
+        address_bindings.append(
+            {
+                "operation": operation,
+                "buffer_id": identity,
+                "offset_bytes": offset,
+                "byte_count": byte_count,
+                "address": address,
+                "address_source": address_source,
+                "allocation_size_bytes": allocation_size,
+                "physical_memory_component_id": component.component_id,
+            }
+        )
+
+    def explicit_accesses() -> Optional[Sequence[Mapping[str, object]]]:
+        raw = metadata.get("memory_accesses", metadata.get("memory_access"))
+        if raw is None:
+            raw = metadata.get("buffer_accesses")
+        if raw is None:
+            return None
+        if isinstance(raw, Mapping):
+            return (raw,)
+        if isinstance(raw, (tuple, list)):
+            if not raw:
+                raise ValueError(
+                    "GDDR task {} supplied an empty memory access list".format(
+                        task.task_id
+                    )
+                )
+            if not all(isinstance(item, Mapping) for item in raw):
+                raise ValueError(
+                    "GDDR task {} memory access entries must be mappings".format(
+                        task.task_id
+                    )
+                )
+            return tuple(raw)
+        raise ValueError(
+            "GDDR task {} memory accesses must be a mapping or sequence".format(
+                task.task_id
+            )
+        )
+
+    explicit = explicit_accesses()
+    if explicit is not None:
+        for item in explicit:
+            operation = str(item.get("operation", "")).strip().lower()
+            if operation not in {"read", "write"}:
+                raise ValueError(
+                    "GDDR task {} has unsupported memory operation {}".format(
+                        task.task_id, operation
+                    )
+                )
+            byte_count = item.get("byte_count", item.get("size_bytes"))
+            if byte_count is None:
+                raise ValueError(
+                    "GDDR task {} memory access requires byte_count".format(
+                        task.task_id
+                    )
+                )
+            byte_count = _gddr_non_negative_int(byte_count, "byte_count")
+            raw_offset = item.get("offset_bytes", item.get("offset", 0))
+            offset = _gddr_non_negative_int(raw_offset, "buffer offset")
+            identity_value = item.get(
+                "buffer_id",
+                item.get("tensor_id", item.get("allocation_id")),
+            )
+            identity = (
+                str(identity_value).strip()
+                if identity_value is not None and str(identity_value).strip()
+                else None
+            )
+            allocation_size = item.get(
+                "buffer_size_bytes", item.get("allocation_bytes")
+            )
+            explicit_address = item.get("address")
+            if explicit_address is None and identity is None:
+                raise ValueError(
+                    "GDDR task {} access requires address or stable buffer/tensor identity".format(
+                        task.task_id
+                    )
+                )
+            if explicit_address is not None:
+                append_descriptor(
+                    operation,
+                    byte_count,
+                    identity=identity,
+                    offset=offset,
+                    explicit_address=explicit_address,
+                    source="explicit_buffer_tensor_address",
+                )
+            else:
+                allocation = _gddr_allocation_size(
+                    scenario,
+                    metadata,
+                    "read" if operation == "read" else "write",
+                    identity or "",
+                    offset,
+                    byte_count,
+                    allocation_size,
+                )
+                append_descriptor(
+                    operation,
+                    byte_count,
+                    identity=identity,
+                    offset=offset,
+                    allocation_size=allocation,
+                )
+    else:
+        activation = (
+            _gddr_non_negative_int(cost.get("activation_bytes", 0), "activation_bytes")
+            if "activation_bytes" in cost
+            else 0
+        )
+        weight = (
+            _gddr_non_negative_int(cost.get("weight_bytes", 0), "weight_bytes")
+            if "weight_bytes" in cost
+            else 0
+        )
+        if activation + weight > read_bytes:
+            if directional_reconstruction is None:
+                raise ValueError(
+                    "GDDR task {} activation/weight reads exceed directional read bytes".format(
+                        task.task_id
+                    )
+                )
+            operand_total = activation + weight
+            activation = min(read_bytes, int(round(read_bytes * activation / operand_total)))
+            weight = read_bytes - activation
+            directional_reconstruction["reconstructed_activation_bytes"] = activation
+            directional_reconstruction["reconstructed_weight_bytes"] = weight
+        # When GEMM operands are present, keep activation and weight as two
+        # independent stable allocations.  Generic kernels with only an
+        # explicit read_bytes field use one stable input allocation.
+        if activation or weight:
+            if activation:
+                identity = _gddr_stable_identity(task, metadata, "read")
+                offset = _gddr_non_negative_int(
+                    metadata.get("input_offset_bytes", 0), "input_offset_bytes"
+                )
+                append_descriptor(
+                    "read",
+                    activation,
+                    identity=identity,
+                    offset=offset,
+                    allocation_size=_gddr_allocation_size(
+                        scenario,
+                        metadata,
+                        "read",
+                        identity,
+                        offset,
+                        activation,
+                    ),
+                )
+            if weight:
+                identity = _gddr_stable_identity(task, metadata, "weight")
+                offset = _gddr_non_negative_int(
+                    metadata.get("weight_offset_bytes", 0), "weight_offset_bytes"
+                )
+                append_descriptor(
+                    "read",
+                    weight,
+                    identity=identity,
+                    offset=offset,
+                    allocation_size=_gddr_allocation_size(
+                        scenario,
+                        metadata,
+                        "weight",
+                        identity,
+                        offset,
+                        weight,
+                    ),
+                )
+            remaining_read = read_bytes - activation - weight
+            if remaining_read:
+                identity = _gddr_stable_identity(task, metadata, "read", 1)
+                append_descriptor(
+                    "read",
+                    remaining_read,
+                    identity=identity,
+                    offset=0,
+                    allocation_size=_gddr_allocation_size(
+                        scenario, metadata, "read", identity, 0, remaining_read
+                    ),
+                )
+        elif read_bytes:
+            identity = _gddr_stable_identity(task, metadata, "read")
+            offset = _gddr_non_negative_int(
+                metadata.get("input_offset_bytes", 0), "input_offset_bytes"
+            )
+            append_descriptor(
+                "read",
+                read_bytes,
+                identity=identity,
+                offset=offset,
+                allocation_size=_gddr_allocation_size(
+                    scenario, metadata, "read", identity, offset, read_bytes
+                ),
+            )
+        if write_bytes:
+            identity = _gddr_stable_identity(task, metadata, "write")
+            offset = _gddr_non_negative_int(
+                metadata.get("output_offset_bytes", 0), "output_offset_bytes"
+            )
+            append_descriptor(
+                "write",
+                write_bytes,
+                identity=identity,
+                offset=offset,
+                allocation_size=_gddr_allocation_size(
+                    scenario, metadata, "write", identity, offset, write_bytes
+                ),
+            )
+
+    descriptor_reads = sum(
+        int(item["byte_count"]) for item in descriptors if item["operation"] == "read"
+    )
+    descriptor_writes = sum(
+        int(item["byte_count"]) for item in descriptors if item["operation"] == "write"
+    )
+    if (descriptor_reads, descriptor_writes) != (read_bytes, write_bytes):
+        raise ValueError(
+            "GDDR task {} descriptor byte conservation failed: descriptors read/write "
+            "({}, {}) != logical ({}, {})".format(
+                task.task_id,
+                descriptor_reads,
+                descriptor_writes,
+                read_bytes,
+                write_bytes,
+            )
+        )
+    if sum(int(item["byte_count"]) for item in descriptors) != total_bytes:
+        raise ValueError(
+            "GDDR task {} descriptor total does not match physical demand".format(
+                task.task_id
+            )
+        )
     metadata = dict(task.metadata)
     metadata.update({
         "physical_memory_config": raw_config,
         "memory_access": descriptors[0] if len(descriptors) == 1 else tuple(descriptors),
+        "memory_accesses": tuple(descriptors),
         "physical_memory_component_id": component.component_id,
         "physical_owner": owner,
-        "physical_address_scope": "deterministic_task_local_range",
+        "physical_address_scope": "stable_buffer_tensor_allocation_offset",
+        "physical_address_bindings": tuple(address_bindings),
     })
+    if not explicit and directional_reconstruction is not None:
+        metadata["gddr_directional_reconstruction"] = directional_reconstruction
     return replace(task, metadata=metadata)
 
 
@@ -8953,8 +9518,7 @@ def _compute_local_runtime_memory_component_id(
 
     target = _component(scenario, target_component_id)
     target_kind = _kind(target)
-    memory_kind = "host_memory" if target_kind == "cpu" else None
-    if memory_kind is None:
+    if target_kind not in {"cpu", "gpu"}:
         raise ValueError(
             "runtime memory target {} must be a CPU or GPU, not {}".format(
                 target_component_id, target.kind
@@ -8971,7 +9535,12 @@ def _compute_local_runtime_memory_component_id(
         if len(declared) > 1:
             raise ValueError("runtime memory target needs an explicit rank for multiple memory backends")
     memory_component_id = None
-    for candidate_kind in (("gddr", "hbm", "dram", "ddr", "lpddr") if target_kind == "gpu" else (memory_kind,)):
+    candidate_kinds = (
+        ("gddr", "hbm", "dram", "ddr", "lpddr")
+        if target_kind == "gpu"
+        else ("host_memory",)
+    )
+    for candidate_kind in candidate_kinds:
         memory_component_id = _nearest_profile_component_id(
             scenario,
             target_component_id,

@@ -795,6 +795,16 @@ def _gddr_preset(
     """
     component_id = preset_id.replace("-", "_")
     bandwidth_gbps = data_rate_gbps * interface_bits
+    # DramCore reserves one command interval per data lane.  Keep that
+    # reservation from becoming an accidental second bandwidth ceiling: a
+    # lane carrying ``data_width_bits`` pins at ``data_rate_gbps`` Gb/s needs
+    # this long to move one burst.  The value is a scheduling budget derived
+    # from the declared interface rate, not a JEDEC tCCD measurement.
+    burst_bytes = 64
+    data_lanes = max(1, interface_bits // 32)
+    data_width_bits = max(1, interface_bits // data_lanes)
+    lane_bandwidth_gb_s = data_rate_gbps * data_width_bits / 8.0
+    burst_interval_ns = burst_bytes / lane_bandwidth_gb_s
     cost_profile_template, cost_profile_parameter_basis = _hbm_cost_profile_template(
         component_id,
         bandwidth_gbps,
@@ -862,8 +872,8 @@ def _gddr_preset(
                     "kind": "GDDR",
                     "generation": generation,
                     "channels": 1,
-                    "data_lanes": max(1, interface_bits // 32),
-                    "data_width_bits": 32,
+                    "data_lanes": data_lanes,
+                    "data_width_bits": data_width_bits,
                     "data_rate_mt_s": data_rate_gbps * 1000.0,
                     "interface_bandwidth_gb_s": bandwidth_gbps / 8.0,
                     "stacks": 1,
@@ -873,13 +883,13 @@ def _gddr_preset(
                     "banks_per_group": 4,
                     "rows_per_bank": 131072,
                     "row_bytes": 8192,
-                    "burst_bytes": 64,
-                    "interleave_bytes": 64,
+                    "burst_bytes": burst_bytes,
+                    "interleave_bytes": burst_bytes,
                     "open_ns": 14.0,
                     "close_ns": 14.0,
                     "read_latency_ns": 35.0,
                     "write_latency_ns": 35.0,
-                    "burst_interval_ns": 2.5,
+                    "burst_interval_ns": burst_interval_ns,
                     "max_outstanding_requests": 64,
                     "capacity_bytes": _gb(capacity_gb),
                     "metadata": {
@@ -888,6 +898,10 @@ def _gddr_preset(
                         "bandwidth_input_mode": "explicit_aggregate_interface",
                         "pin_data_rate_gbps": data_rate_gbps,
                         "signal_encoding": signal_encoding,
+                        "command_interval_model": "per_lane_burst_payload_budget",
+                        "command_interval_basis": "burst_bytes / (pin_data_rate_gbps * data_width_bits / 8); analytical scheduling budget, not JEDEC timing",
+                        "lane_bandwidth_gb_s": lane_bandwidth_gb_s,
+                        "burst_interval_ns": burst_interval_ns,
                     },
                 },
             },

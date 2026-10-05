@@ -36,6 +36,7 @@ def test_webui_exposes_gddr_palette_protocol_and_validation():
     assert '<option value="GDDR">GDDR</option>' in index
     assert '"GDDR6", "GDDR6X", "GDDR7"' in app
     assert 'physical_memory_config.kind 必须是 DDR、LPDDR、HBM、GDDR、SSD 或 HBF。' in app
+    assert 'burst_interval_ns: 0.8' in app
 
 
 def test_native_rtx_architecture_uses_formal_gddr_endpoint_and_link():

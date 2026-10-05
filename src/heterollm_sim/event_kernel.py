@@ -9,10 +9,11 @@ they are retention policies rather than independent simulators.
 from __future__ import annotations
 
 import bisect
+import copy
 import heapq
 import math
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import (
     Dict,
@@ -52,6 +53,114 @@ _RUNTIME_AGGREGATE_METADATA_KEYS = (
     RUNTIME_INSTRUCTION_BATCH_METADATA_KEY,
     RUNTIME_CONTROLLER_BATCH_METADATA_KEY,
 )
+
+
+def _materialize_l2_physical_access(task: TaskSpec) -> Tuple[TaskSpec, bool]:
+    """Retarget a physical descriptor to the L2 miss/write-back traffic.
+
+    Planner descriptors describe the logical kernel access before the cache is
+    consulted.  Once :func:`resolve_l2_task` has updated the mutable cache
+    state, only its ``hbm_*_bytes`` are eligible for the external GDDR/DRAM
+    core.  Reuse the planner-provided addresses as stable allocation anchors,
+    changing only direction and length.  A cache hit has no physical
+    descriptor; its task remains an ordinary stateful-L2 event.
+    """
+
+    execution = task.metadata.get("l2_execution")
+    if not isinstance(execution, Mapping):
+        return task, True
+    read_bytes = int(execution.get("hbm_read_bytes", 0) or 0)
+    write_bytes = int(execution.get("hbm_write_bytes", 0) or 0)
+    if read_bytes < 0 or write_bytes < 0:
+        raise ValueError("stateful L2 backing traffic must be non-negative")
+
+    raw = task.metadata.get("memory_accesses", task.metadata.get("memory_access"))
+    if isinstance(raw, Mapping):
+        templates = (dict(raw),)
+    elif isinstance(raw, (tuple, list)):
+        templates = tuple(dict(item) for item in raw if isinstance(item, Mapping))
+    else:
+        templates = ()
+
+    def templates_for(operation: str) -> Tuple[Dict[str, object], ...]:
+        matches = tuple(
+            dict(item) for item in templates
+            if str(item.get("operation", "")).lower() == operation
+        )
+        if matches:
+            return matches
+        # A write-back can be created by a read-only logical access.  Keep the
+        # same allocation anchor in that case; cache state, rather than task
+        # naming, still determines whether the write exists.
+        if templates:
+            item = dict(templates[0])
+            item["operation"] = operation
+            return (item,)
+        raise ValueError("stateful L2 backing traffic has no physical address anchor")
+
+    descriptors = []
+    raw_config = task.metadata.get("physical_memory_config")
+    try:
+        capacity = int(raw_config.get("capacity_bytes", 0)) if isinstance(raw_config, Mapping) else 0
+        burst = int(raw_config.get("burst_bytes", 64)) if isinstance(raw_config, Mapping) else 64
+    except (TypeError, ValueError):
+        capacity = burst = 0
+    for operation, count in (("read", read_bytes), ("write", write_bytes)):
+        if count <= 0:
+            continue
+        remaining = count
+        candidates = templates_for(operation)
+        for index, candidate in enumerate(candidates):
+            logical_size = int(candidate.get("byte_count", remaining) or remaining)
+            amount = min(remaining, max(logical_size, 1))
+            item = dict(candidate)
+            item["operation"] = operation
+            item["byte_count"] = amount
+            descriptors.append(item)
+            remaining -= amount
+            if remaining <= 0:
+                break
+        if remaining > 0:
+            # Dirty write-back can aggregate more bytes than the logical write
+            # that created the cache line. Reuse the final allocation anchor;
+            # the detailed L2 report remains the authority for its identity.
+            item = dict(candidates[-1])
+            item["operation"] = operation
+            item["byte_count"] = remaining
+            descriptors.append(item)
+
+    # Dirty write-back can aggregate more bytes than the logical descriptor
+    # that created the cache line. Keep every rebuilt range valid before the
+    # physical core is called; this is an address-boundary guard, not a new
+    # allocation policy.
+    if capacity > 0 and burst > 0:
+        if any(int(item["byte_count"]) > capacity for item in descriptors):
+            raise ValueError("stateful L2 backing traffic exceeds physical capacity")
+        for item in descriptors:
+            count = int(item["byte_count"])
+            address = int(item.get("address", 0))
+            if address < 0 or address + count > capacity:
+                address = max(0, capacity - count)
+                address -= address % burst
+                if address + count > capacity:
+                    address = capacity - count
+                item["address"] = address
+
+    metadata = dict(task.metadata)
+    if descriptors:
+        metadata["memory_access"] = descriptors[0] if len(descriptors) == 1 else tuple(descriptors)
+        metadata["memory_accesses"] = tuple(descriptors)
+        return replace(task, metadata=metadata), True
+
+    # Keep the L2 execution report and cache demand, but remove the physical
+    # marker so the scheduler does not try to submit an empty DRAM request.
+    for key in (
+        "physical_memory_config", "memory_access", "memory_accesses",
+        "physical_memory_component_id", "physical_owner",
+        "physical_address_scope",
+    ):
+        metadata.pop(key, None)
+    return replace(task, metadata=metadata), False
 
 
 def _validated_phase_sequence(task: TaskSpec) -> Tuple[int, int]:
@@ -2133,24 +2242,38 @@ class UnifiedEventKernel:
         task = self._tasks[task_id]
         from .data_motion import is_physical_task
         is_physical = is_physical_task(task)
+        l2_snapshot = None
         if is_physical:
             try:
                 # Local import avoids making the planner/data-motion module
                 # part of the kernel import cycle; it also keeps the physical
                 # adapter optional for analytical-only users.
                 from .data_motion import resolve_physical_task
-                task = resolve_physical_task(task, self.physical_runtime, start_ns)
+                # A physical GDDR descriptor is only a preview until the
+                # mutable L2 contract has run.  Resolve that contract first,
+                # then submit the remaining miss/write-back traffic to the
+                # DRAM core.  This preserves cache reuse while retaining the
+                # physical event path for cold traffic.
+                if "stateful_l2" in task.metadata:
+                    l2_snapshot = copy.deepcopy(self._l2_states)
+                    task = resolve_l2_task(task, self._l2_states)
+                    task, is_physical = _materialize_l2_physical_access(task)
+                if is_physical:
+                    task = resolve_physical_task(task, self.physical_runtime, start_ns)
             except (ValueError, TypeError, KeyError):
+                if l2_snapshot is not None:
+                    self._l2_states = l2_snapshot
                 heapq.heappush(self._ready_heap, queued)
                 raise
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
             # Core reservations happened on the shared timeline; publish
             # their earliest free lane to kernel readiness before the next
             # task is admitted.
-            timeline = self.physical_runtime.timeline
-            for resource_id, lanes in timeline.lane_available.items():
-                if lanes:
-                    self.resource_available[resource_id] = min(lanes)
+            if is_physical:
+                timeline = self.physical_runtime.timeline
+                for resource_id, lanes in timeline.lane_available.items():
+                    if lanes:
+                        self.resource_available[resource_id] = min(lanes)
         elif "stateful_l2" in task.metadata:
             try:
                 task = resolve_l2_task(task, self._l2_states)
