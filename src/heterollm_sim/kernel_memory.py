@@ -33,9 +33,24 @@ def resolve_l2_task(task, states):
     hbm_payload.pop('generation', None)
     hbm = HBMProfile(**hbm_payload)
     results = cache.access_many(accesses)
+    backing_accesses = tuple(access for result in results for access in result.backing_accesses)
+    reads = sum(a.size_bytes for a in backing_accesses if a.operation == 'read')
+    writes = sum(a.size_bytes for a in backing_accesses if a.operation == 'write')
+    if (reads, writes) != (sum(r.backing_read_bytes for r in results),
+                          sum(r.backing_write_bytes for r in results)):
+        raise ValueError('L2 backing access ranges do not conserve directional bytes')
+    physical_allocations = {}
+    for access in (*accesses, *backing_accesses):
+        key = (access.buffer_id, access.allocation_generation)
+        extent = access.buffer_size_bytes or (access.offset_bytes + access.size_bytes)
+        previous = physical_allocations.get(key)
+        if previous is None or extent > previous['size_bytes']:
+            physical_allocations[key] = {
+                'buffer_id': access.buffer_id,
+                'size_bytes': extent,
+                'generation': access.allocation_generation,
+            }
     states[owner] = (signature, cache)
-    reads = sum(r.backing_read_bytes for r in results)
-    writes = sum(r.backing_write_bytes for r in results)
     requested = sum(a.size_bytes for a in accesses)
     memory_ns = hbm.memory_service(reads, writes, bandwidth_gb_s=contract['bandwidth_gb_s'])['service_ns']
     cache_ns = max(requested / contract['cache_bandwidth_gb_s'],
@@ -58,6 +73,8 @@ def resolve_l2_task(task, states):
               'miss_lines': sum(r.miss_lines for r in results), 'hbm_read_bytes': reads, 'hbm_write_bytes': writes,
               'dirty_eviction_bytes': sum(r.dirty_eviction_bytes for r in results),
               'accesses': tuple(asdict(a) for a in accesses),
+              'backing_accesses': tuple(asdict(a) for a in backing_accesses),
+              'physical_allocations': list(physical_allocations.values()),
               'cache_state_after': asdict(cache.snapshot()),
               'concurrency_policy': 'memory_phase_order_compute_tail_overlap',
               'memory_completion_offset_ns': memory_completion_ns,
@@ -66,8 +83,23 @@ def resolve_l2_task(task, states):
     if prediction:
         prediction = {**prediction, 'prediction': {**prediction.get('prediction', {}),
                       'prediction_ns': duration, 'model': 'analytical', 'reason': 'stateful_l2_runtime_recost'}}
-    return replace(task, demands=demands, metadata={**task.metadata, **({'kernel_prediction': prediction} if prediction else {}), 'l2_execution': report,
-                   'analytical_service_ns': duration, 'analytical_bytes': sum(d.bytes_moved for d in demands)})
+    metadata_updates = {
+        **({'kernel_prediction': prediction} if prediction else {}),
+        'l2_execution': report,
+        'analytical_service_ns': duration,
+        'analytical_bytes': sum(d.bytes_moved for d in demands),
+    }
+    # Physical event dispatch needs allocator declarations before it can
+    # resolve the backing ranges. Keep these declarations off ordinary HBM
+    # cache tasks so the analytical dynamic-cache path remains unchanged.
+    if task.metadata.get('physical_memory_config') is not None:
+        owner = str(task.metadata.get('physical_owner') or contract['memory_resource'])
+        metadata_updates['physical_owner'] = owner
+        metadata_updates['physical_allocations'] = [
+            {**item, 'physical_owner': owner}
+            for item in physical_allocations.values()
+        ]
+    return replace(task, demands=demands, metadata={**task.metadata, **metadata_updates})
 
 
 def attach_l2_contract(task, *, gpu, hbm, memory_resource, cache_resource, owner, accesses):
@@ -133,9 +165,14 @@ def paged_buffer_accesses(*, buffer_id, page_ids, tokens_per_page, bytes_per_tok
     while first_token < end:
         logical_page, offset = divmod(first_token, tokens_per_page)
         count = min(end-first_token, tokens_per_page-offset)
-        result.append(CacheAccess(f'{buffer_id}:generation:{allocation_generation}:page:{page_ids[logical_page]}',
-                                  offset*bytes_per_token, count*bytes_per_token, operation,
-                                  tokens_per_page*bytes_per_token))
+        result.append(CacheAccess(
+            f'{buffer_id}:page:{page_ids[logical_page]}',
+            offset * bytes_per_token,
+            count * bytes_per_token,
+            operation,
+            tokens_per_page * bytes_per_token,
+            allocation_generation,
+        ))
         first_token += count
     return tuple(result)
 

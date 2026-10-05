@@ -95,6 +95,19 @@ def test_stateful_l2_runs_before_gddr_and_keeps_cold_miss_physical():
     ).step()
     assert event is not None
     assert event.task.metadata["l2_execution"]["hbm_read_bytes"] == 64
+    assert event.task.metadata["l2_execution"]["backing_accesses"][0]["operation"] == "read"
+    assert event.task.metadata["l2_execution"]["backing_accesses"][0]["size_bytes"] == 64
+    assert event.task.metadata["l2_execution"]["physical_allocations"] == [
+        {"buffer_id": "weight-W", "size_bytes": 64, "generation": 0},
+    ]
+    assert event.task.metadata["physical_allocations"] == [
+        {
+            "buffer_id": "weight-W",
+            "size_bytes": 64,
+            "generation": 0,
+            "physical_owner": "gddr0.gddr_fabric",
+        }
+    ]
     assert event.task.metadata["physical_execution"]["physical_read_bytes"] == 64
     assert event.task.metadata["physical_execution"]["physical_write_bytes"] == 0
 
@@ -122,6 +135,7 @@ def test_stateful_l2_hit_does_not_submit_an_empty_gddr_transaction():
     assert first.task.metadata["physical_execution"]["physical_read_bytes"] == 64
     assert second.task.metadata["l2_execution"]["hbm_read_bytes"] == 0
     assert "physical_execution" not in second.task.metadata
+    assert second.start_ns >= first.task.metadata["physical_completion_ns"]
 
 
 def test_gddr_presets_derive_command_interval_from_lane_payload_budget():

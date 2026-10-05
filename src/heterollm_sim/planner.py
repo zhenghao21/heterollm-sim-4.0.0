@@ -3807,7 +3807,14 @@ def _gddr_stable_identity(
     if declared is not None and str(declared).strip():
         identity = str(declared).strip()
         suffix = []
-        for key in ("rank", "tp_rank", "pp_rank", "projection_id"):
+        # Projection labels describe an operator view of a shared activation
+        # buffer.  They must not split the physical allocation identity for
+        # reads/writes; only weight shards use projection as part of their
+        # declared allocation identity.
+        suffix_keys = ("rank", "tp_rank", "pp_rank")
+        if side == "weight":
+            suffix_keys += ("projection_id",)
+        for key in suffix_keys:
             value = metadata.get(key)
             if value is not None and str(value).strip():
                 suffix.append("{}={}".format(key, value))

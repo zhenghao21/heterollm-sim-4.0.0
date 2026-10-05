@@ -55,113 +55,42 @@ _RUNTIME_AGGREGATE_METADATA_KEYS = (
 )
 
 
-def _materialize_l2_physical_access(task: TaskSpec) -> Tuple[TaskSpec, bool]:
-    """Retarget a physical descriptor to the L2 miss/write-back traffic.
-
-    Planner descriptors describe the logical kernel access before the cache is
-    consulted.  Once :func:`resolve_l2_task` has updated the mutable cache
-    state, only its ``hbm_*_bytes`` are eligible for the external GDDR/DRAM
-    core.  Reuse the planner-provided addresses as stable allocation anchors,
-    changing only direction and length.  A cache hit has no physical
-    descriptor; its task remains an ordinary stateful-L2 event.
-    """
-
+def _materialize_l2_physical_access(task: TaskSpec, runtime) -> Tuple[TaskSpec, bool]:
+    """Resolve only explicit L2 backing ranges through the owner allocator."""
     execution = task.metadata.get("l2_execution")
-    if not isinstance(execution, Mapping):
-        return task, True
-    read_bytes = int(execution.get("hbm_read_bytes", 0) or 0)
-    write_bytes = int(execution.get("hbm_write_bytes", 0) or 0)
-    if read_bytes < 0 or write_bytes < 0:
-        raise ValueError("stateful L2 backing traffic must be non-negative")
-
-    raw = task.metadata.get("memory_accesses", task.metadata.get("memory_access"))
-    if isinstance(raw, Mapping):
-        templates = (dict(raw),)
-    elif isinstance(raw, (tuple, list)):
-        templates = tuple(dict(item) for item in raw if isinstance(item, Mapping))
-    else:
-        templates = ()
-
-    def templates_for(operation: str) -> Tuple[Dict[str, object], ...]:
-        matches = tuple(
-            dict(item) for item in templates
-            if str(item.get("operation", "")).lower() == operation
-        )
-        if matches:
-            return matches
-        # A write-back can be created by a read-only logical access.  Keep the
-        # same allocation anchor in that case; cache state, rather than task
-        # naming, still determines whether the write exists.
-        if templates:
-            item = dict(templates[0])
-            item["operation"] = operation
-            return (item,)
-        raise ValueError("stateful L2 backing traffic has no physical address anchor")
-
-    descriptors = []
-    raw_config = task.metadata.get("physical_memory_config")
-    try:
-        capacity = int(raw_config.get("capacity_bytes", 0)) if isinstance(raw_config, Mapping) else 0
-        burst = int(raw_config.get("burst_bytes", 64)) if isinstance(raw_config, Mapping) else 64
-    except (TypeError, ValueError):
-        capacity = burst = 0
-    for operation, count in (("read", read_bytes), ("write", write_bytes)):
-        if count <= 0:
-            continue
-        remaining = count
-        candidates = templates_for(operation)
-        for index, candidate in enumerate(candidates):
-            logical_size = int(candidate.get("byte_count", remaining) or remaining)
-            amount = min(remaining, max(logical_size, 1))
-            item = dict(candidate)
-            item["operation"] = operation
-            item["byte_count"] = amount
-            descriptors.append(item)
-            remaining -= amount
-            if remaining <= 0:
-                break
-        if remaining > 0:
-            # Dirty write-back can aggregate more bytes than the logical write
-            # that created the cache line. Reuse the final allocation anchor;
-            # the detailed L2 report remains the authority for its identity.
-            item = dict(candidates[-1])
-            item["operation"] = operation
-            item["byte_count"] = remaining
-            descriptors.append(item)
-
-    # Dirty write-back can aggregate more bytes than the logical descriptor
-    # that created the cache line. Keep every rebuilt range valid before the
-    # physical core is called; this is an address-boundary guard, not a new
-    # allocation policy.
-    if capacity > 0 and burst > 0:
-        if any(int(item["byte_count"]) > capacity for item in descriptors):
-            raise ValueError("stateful L2 backing traffic exceeds physical capacity")
-        for item in descriptors:
-            count = int(item["byte_count"])
-            address = int(item.get("address", 0))
-            if address < 0 or address + count > capacity:
-                address = max(0, capacity - count)
-                address -= address % burst
-                if address + count > capacity:
-                    address = capacity - count
-                item["address"] = address
-
+    backing = execution.get("backing_accesses") if isinstance(execution, Mapping) else None
     metadata = dict(task.metadata)
-    if descriptors:
-        metadata["memory_access"] = descriptors[0] if len(descriptors) == 1 else tuple(descriptors)
-        metadata["memory_accesses"] = tuple(descriptors)
-        return replace(task, metadata=metadata), True
-
-    # Keep the L2 execution report and cache demand, but remove the physical
-    # marker so the scheduler does not try to submit an empty DRAM request.
-    for key in (
-        "physical_memory_config", "memory_access", "memory_accesses",
-        "physical_memory_component_id", "physical_owner",
-        "physical_address_scope",
-    ):
-        metadata.pop(key, None)
-    return replace(task, metadata=metadata), False
-
+    if not backing:
+        for key in ("physical_memory_config", "memory_access", "memory_accesses", "physical_memory_component_id", "physical_owner", "physical_address_scope"):
+            metadata.pop(key, None)
+        return replace(task, metadata=metadata), False
+    from .data_motion import register_physical_allocations
+    register_physical_allocations(task, runtime)
+    owner_default = str(metadata.get("physical_owner") or
+                        (metadata.get("stateful_l2") or {}).get("memory_resource") or "")
+    resolved = []
+    for item in backing:
+        if not isinstance(item, Mapping):
+            raise ValueError("L2 backing_accesses entries must be mappings")
+        operation = str(item.get("operation", "")).lower()
+        buffer_id = item.get("buffer_id")
+        size = item.get("size_bytes")
+        offset = item.get("offset_bytes", 0)
+        generation = int(item.get("allocation_generation", item.get("generation", 0)) or 0)
+        owner = str(item.get("physical_owner") or owner_default)
+        if operation not in {"read", "write"} or not buffer_id or not isinstance(size, int) or size <= 0:
+            raise ValueError("invalid L2 backing access descriptor")
+        allocator = runtime.allocators.get(owner)
+        if allocator is None:
+            raise ValueError("L2 backing owner has no allocator: {}".format(owner))
+        if not any(a.buffer_id == str(buffer_id) and a.generation == generation
+                   for a in allocator.allocations()):
+            raise ValueError("L2 backing buffer has no declared allocation: {}".format(buffer_id))
+        address = allocator.address(str(buffer_id), int(offset), size, generation)
+        resolved.append({"operation": operation, "address": address, "byte_count": size, "physical_owner": owner, "resource_id": owner, "buffer_id": str(buffer_id), "offset_bytes": int(offset), "generation": generation})
+    metadata["memory_access"] = resolved[0] if len(resolved) == 1 else tuple(resolved)
+    metadata["memory_accesses"] = tuple(resolved)
+    return replace(task, metadata=metadata), True
 
 def _validated_phase_sequence(task: TaskSpec) -> Tuple[int, int]:
     """Validate reserved runtime metadata without taxing ordinary DAG tasks."""
@@ -2243,8 +2172,10 @@ class UnifiedEventKernel:
         from .data_motion import is_physical_task
         is_physical = is_physical_task(task)
         l2_snapshot = None
+        physical_snapshot = None
         if is_physical:
             try:
+                physical_snapshot = self.physical_runtime.snapshot()
                 # Local import avoids making the planner/data-motion module
                 # part of the kernel import cycle; it also keeps the physical
                 # adapter optional for analytical-only users.
@@ -2257,12 +2188,24 @@ class UnifiedEventKernel:
                 if "stateful_l2" in task.metadata:
                     l2_snapshot = copy.deepcopy(self._l2_states)
                     task = resolve_l2_task(task, self._l2_states)
-                    task, is_physical = _materialize_l2_physical_access(task)
+                    task, is_physical = _materialize_l2_physical_access(task, self.physical_runtime)
                 if is_physical:
                     task = resolve_physical_task(task, self.physical_runtime, start_ns)
+                    contract = task.metadata.get("stateful_l2")
+                    if contract is not None:
+                        completion_span = float(task.metadata["physical_completion_ns"]) - float(start_ns)
+                        order_resource = contract.get("order_resource")
+                        if order_resource and completion_span > 0:
+                            task = replace(task, demands=tuple(
+                                replace(d, service_ns=max(d.service_ns, completion_span))
+                                if d.resource_id == order_resource else d
+                                for d in task.demands
+                            ))
             except (ValueError, TypeError, KeyError):
                 if l2_snapshot is not None:
                     self._l2_states = l2_snapshot
+                if physical_snapshot is not None:
+                    self.physical_runtime.restore(physical_snapshot)
                 heapq.heappush(self._ready_heap, queued)
                 raise
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))

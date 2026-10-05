@@ -20,7 +20,7 @@ from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
 
 Operation = Literal["read", "write"]
-LineKey = Tuple[str, int]
+LineKey = Tuple[str, int, int]
 
 
 class CacheStateError(ValueError):
@@ -35,6 +35,9 @@ class CacheAccess:
     a buffer, it bounds the final physical cache line; later accesses must use
     the same size when they supply one.  Without it, a touched line occupies a
     full ``line_bytes`` in the cache and on dirty eviction.
+
+    ``allocation_generation`` separates reused allocator identities.  A line
+    from generation ``n`` can never hit a line from generation ``n + 1``.
     """
 
     buffer_id: str
@@ -42,6 +45,7 @@ class CacheAccess:
     size_bytes: int
     operation: Operation
     buffer_size_bytes: Optional[int] = None
+    allocation_generation: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.buffer_id, str) or not self.buffer_id.strip():
@@ -63,6 +67,14 @@ class CacheAccess:
         if operation not in {"read", "write"}:
             raise CacheStateError("operation must be read or write")
         object.__setattr__(self, "operation", operation)
+        if (
+            isinstance(self.allocation_generation, bool)
+            or not isinstance(self.allocation_generation, int)
+            or self.allocation_generation < 0
+        ):
+            raise CacheStateError(
+                "allocation_generation must be a non-negative integer"
+            )
         if self.buffer_size_bytes is not None:
             if (
                 isinstance(self.buffer_size_bytes, bool)
@@ -85,6 +97,7 @@ class CacheAccess:
         size_bytes: int,
         *,
         buffer_size_bytes: Optional[int] = None,
+        allocation_generation: int = 0,
     ) -> "CacheAccess":
         return cls(
             buffer_id,
@@ -92,6 +105,7 @@ class CacheAccess:
             size_bytes,
             "read",
             buffer_size_bytes,
+            allocation_generation,
         )
 
     @classmethod
@@ -102,6 +116,7 @@ class CacheAccess:
         size_bytes: int,
         *,
         buffer_size_bytes: Optional[int] = None,
+        allocation_generation: int = 0,
     ) -> "CacheAccess":
         return cls(
             buffer_id,
@@ -109,6 +124,7 @@ class CacheAccess:
             size_bytes,
             "write",
             buffer_size_bytes,
+            allocation_generation,
         )
 
 
@@ -120,10 +136,11 @@ class CacheLine:
     line_index: int
     size_bytes: int
     dirty: bool
+    allocation_generation: int = 0
 
     @property
     def key(self) -> LineKey:
-        return (self.buffer_id, self.line_index)
+        return (self.buffer_id, self.allocation_generation, self.line_index)
 
 
 @dataclass(frozen=True)
@@ -143,6 +160,7 @@ class CacheAccessResult:
     clean_eviction_bytes: int
     dirty_eviction_lines: int
     clean_eviction_lines: int
+    backing_accesses: Tuple[CacheAccess, ...]
 
     @property
     def backing_read_bytes(self) -> int:
@@ -242,7 +260,7 @@ class ExplicitCacheState:
         self.write_back = write_back
         self.write_allocate = write_allocate
         self._lines: "OrderedDict[LineKey, CacheLine]" = OrderedDict()
-        self._buffer_sizes: Dict[str, Optional[int]] = {}
+        self._buffer_sizes: Dict[Tuple[str, int], Optional[int]] = {}
         self._access_count = 0
         self._hit_lines = 0
         self._miss_lines = 0
@@ -259,12 +277,14 @@ class ExplicitCacheState:
             raise CacheStateError("{} must be a positive integer".format(name))
 
     def _buffer_size(self, access: CacheAccess) -> Optional[int]:
-        buffer_id = access.buffer_id
-        if buffer_id in self._buffer_sizes:
-            known = self._buffer_sizes[buffer_id]
+        buffer_key = (access.buffer_id, access.allocation_generation)
+        if buffer_key in self._buffer_sizes:
+            known = self._buffer_sizes[buffer_key]
             if access.buffer_size_bytes is not None and known != access.buffer_size_bytes:
                 raise CacheStateError(
-                    "buffer_size_bytes must be fixed at first access for buffer {}".format(buffer_id)
+                    "buffer_size_bytes must be fixed at first access for buffer {} generation {}".format(
+                        access.buffer_id, access.allocation_generation
+                    )
                 )
         else:
             known = access.buffer_size_bytes
@@ -299,7 +319,7 @@ class ExplicitCacheState:
                 covered_start == line_start and covered_end == line_end
             )
             specs.append(
-                ((access.buffer_id.strip(), line_index), physical_size,
+                ((access.buffer_id.strip(), access.allocation_generation, line_index), physical_size,
                  covered_end - covered_start, full_line)
             )
         return tuple(specs)
@@ -314,7 +334,9 @@ class ExplicitCacheState:
         self._dirty_eviction_bytes += dirty_bytes
         return victim, dirty_bytes, clean_bytes
 
-    def _ensure_slot(self) -> Tuple[int, int, int, int]:
+    def _ensure_slot(
+        self, backing_accesses: List[CacheAccess]
+    ) -> Tuple[int, int, int, int]:
         dirty_bytes = clean_bytes = dirty_lines = clean_lines = 0
         if len(self._lines) >= self.capacity_lines:
             victim, dirty, clean = self._evict_one()
@@ -322,6 +344,15 @@ class ExplicitCacheState:
             clean_bytes += clean
             if victim.dirty:
                 dirty_lines += 1
+                backing_accesses.append(CacheAccess.write(
+                    victim.buffer_id,
+                    victim.line_index * self.line_bytes,
+                    victim.size_bytes,
+                    buffer_size_bytes=self._buffer_sizes[
+                        (victim.buffer_id, victim.allocation_generation)
+                    ],
+                    allocation_generation=victim.allocation_generation,
+                ))
             else:
                 clean_lines += 1
         return dirty_bytes, clean_bytes, dirty_lines, clean_lines
@@ -331,14 +362,23 @@ class ExplicitCacheState:
             raise CacheStateError("access must be a CacheAccess")
         specs = self._line_specs(access)
         # Validate the complete range before remembering size or mutating LRU.
-        self._buffer_sizes.setdefault(access.buffer_id, access.buffer_size_bytes)
+        self._buffer_sizes.setdefault(
+            (access.buffer_id, access.allocation_generation),
+            access.buffer_size_bytes,
+        )
         hit_lines = miss_lines = allocated_lines = 0
         read_fill_bytes = read_for_ownership_bytes = 0
         write_through_bytes = bypass_write_bytes = 0
         dirty_eviction_bytes = clean_eviction_bytes = 0
         dirty_eviction_lines = clean_eviction_lines = 0
+        backing_accesses: List[CacheAccess] = []
 
         for key, physical_size, covered_bytes, full_line in specs:
+            line_offset = key[2] * self.line_bytes
+            covered_offset = max(access.offset_bytes, line_offset)
+            buffer_size = self._buffer_sizes[
+                (access.buffer_id, access.allocation_generation)
+            ]
             line = self._lines.pop(key, None)
             if line is not None:
                 hit_lines += 1
@@ -350,10 +390,16 @@ class ExplicitCacheState:
                             line.line_index,
                             line.size_bytes,
                             True,
+                            line.allocation_generation,
                         )
                     else:
                         write_through_bytes += covered_bytes
                         self._write_through_bytes += covered_bytes
+                        backing_accesses.append(CacheAccess.write(
+                            access.buffer_id, covered_offset, covered_bytes,
+                            buffer_size_bytes=buffer_size,
+                            allocation_generation=access.allocation_generation,
+                        ))
                 self._lines[key] = line
                 continue
 
@@ -362,9 +408,14 @@ class ExplicitCacheState:
             if access.operation == "write" and not self.write_allocate:
                 bypass_write_bytes += covered_bytes
                 self._bypass_write_bytes += covered_bytes
+                backing_accesses.append(CacheAccess.write(
+                    access.buffer_id, covered_offset, covered_bytes,
+                    buffer_size_bytes=buffer_size,
+                    allocation_generation=access.allocation_generation,
+                ))
                 continue
 
-            dirty, clean, dirty_lines, clean_lines = self._ensure_slot()
+            dirty, clean, dirty_lines, clean_lines = self._ensure_slot(backing_accesses)
             dirty_eviction_bytes += dirty
             clean_eviction_bytes += clean
             dirty_eviction_lines += dirty_lines
@@ -375,17 +426,27 @@ class ExplicitCacheState:
             if access.operation == "read" or not full_line:
                 read_fill_bytes += physical_size
                 self._read_fill_bytes += physical_size
+                backing_accesses.append(CacheAccess.read(
+                    access.buffer_id, line_offset, physical_size,
+                    buffer_size_bytes=buffer_size,
+                    allocation_generation=access.allocation_generation,
+                ))
                 if access.operation == "write":
                     read_for_ownership_bytes += physical_size
 
             dirty_line = access.operation == "write" and self.write_back
             self._lines[key] = CacheLine(
-                key[0], key[1], physical_size, dirty_line
+                key[0], key[2], physical_size, dirty_line, key[1]
             )
             allocated_lines += 1
             if access.operation == "write" and not self.write_back:
                 write_through_bytes += covered_bytes
                 self._write_through_bytes += covered_bytes
+                backing_accesses.append(CacheAccess.write(
+                    access.buffer_id, covered_offset, covered_bytes,
+                    buffer_size_bytes=buffer_size,
+                    allocation_generation=access.allocation_generation,
+                ))
 
         self._access_count += 1
         return CacheAccessResult(
@@ -402,6 +463,7 @@ class ExplicitCacheState:
             clean_eviction_bytes=clean_eviction_bytes,
             dirty_eviction_lines=dirty_eviction_lines,
             clean_eviction_lines=clean_eviction_lines,
+            backing_accesses=tuple(backing_accesses),
         )
 
     def access_many(
@@ -415,15 +477,19 @@ class ExplicitCacheState:
         for access in accesses:
             if not isinstance(access, CacheAccess):
                 raise CacheStateError("access must be a CacheAccess")
-            buffer_id = access.buffer_id
-            if buffer_id not in sizes:
-                if buffer_id in self._buffer_sizes:
-                    sizes[buffer_id] = self._buffer_sizes[buffer_id]
+            buffer_key = (access.buffer_id, access.allocation_generation)
+            if buffer_key not in sizes:
+                if buffer_key in self._buffer_sizes:
+                    sizes[buffer_key] = self._buffer_sizes[buffer_key]
                 else:
-                    sizes[buffer_id] = access.buffer_size_bytes
-            size = sizes[buffer_id]
+                    sizes[buffer_key] = access.buffer_size_bytes
+            size = sizes[buffer_key]
             if access.buffer_size_bytes is not None and size != access.buffer_size_bytes:
-                raise CacheStateError("buffer_size_bytes must be fixed at first access for buffer " + buffer_id)
+                raise CacheStateError(
+                    "buffer_size_bytes must be fixed at first access for buffer {} generation {}".format(
+                        access.buffer_id, access.allocation_generation
+                    )
+                )
             if size is not None and access.offset_bytes + access.size_bytes > size:
                 raise CacheStateError("access range exceeds remembered buffer_size_bytes")
         return tuple(self.access(access) for access in accesses)
@@ -435,6 +501,7 @@ class ExplicitCacheState:
         size_bytes: int,
         *,
         buffer_size_bytes: Optional[int] = None,
+        allocation_generation: int = 0,
     ) -> CacheAccessResult:
         return self.access(
             CacheAccess.read(
@@ -442,6 +509,7 @@ class ExplicitCacheState:
                 offset_bytes,
                 size_bytes,
                 buffer_size_bytes=buffer_size_bytes,
+                allocation_generation=allocation_generation,
             )
         )
 
@@ -452,6 +520,7 @@ class ExplicitCacheState:
         size_bytes: int,
         *,
         buffer_size_bytes: Optional[int] = None,
+        allocation_generation: int = 0,
     ) -> CacheAccessResult:
         return self.access(
             CacheAccess.write(
@@ -459,6 +528,7 @@ class ExplicitCacheState:
                 offset_bytes,
                 size_bytes,
                 buffer_size_bytes=buffer_size_bytes,
+                allocation_generation=allocation_generation,
             )
         )
 
@@ -482,6 +552,7 @@ class ExplicitCacheState:
                 line.line_index,
                 line.size_bytes,
                 False,
+                line.allocation_generation,
             )
         self._flush_writeback_bytes += writeback_bytes
         return CacheFlushResult(normalized, flushed_lines, writeback_bytes)

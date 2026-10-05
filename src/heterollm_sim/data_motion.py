@@ -37,6 +37,7 @@ class PhysicalRuntimeContext:
     config: Any = None
     physical_owner: Optional[str] = None
     runtimes: dict[str, _PhysicalRuntime] = field(default_factory=dict)
+    allocators: dict[str, Any] = field(default_factory=dict)
     timeline: Any = None
     _committed_owners: set[str] = field(default_factory=set, repr=False)
 
@@ -65,6 +66,7 @@ class PhysicalRuntimeContext:
             return current
         from .dram_core import DramCore
         from .nand_core import NandCore
+        from .memory_allocator import PhysicalAddressAllocator
         metadata = dict(config.metadata)
         if isinstance(config, DramConfig):
             metadata.setdefault("bank_resource_prefix", f"{key}:dram:bank")
@@ -80,6 +82,10 @@ class PhysicalRuntimeContext:
         core = DramCore(config, self.timeline) if isinstance(config, DramConfig) else NandCore(config, self.timeline)
         current = _PhysicalRuntime(core=core, signature=signature)
         self.runtimes[key] = current
+        capacity = int(getattr(config, "effective_capacity_bytes", getattr(config, "capacity_bytes", 0)) or 0)
+        if capacity > 0:
+            alignment = int(getattr(config, "burst_bytes", 64) or 64)
+            self.allocators.setdefault(key, PhysicalAddressAllocator(capacity, alignment))
         return current
 
     def preview_runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
@@ -94,11 +100,12 @@ class PhysicalRuntimeContext:
 
     def snapshot(self) -> dict[str, Any]:
         import copy as _copy
-        return _copy.deepcopy((self.runtimes, self.timeline.__dict__, self._committed_owners))
+        return _copy.deepcopy((self.runtimes, self.allocators, self.timeline.__dict__, self._committed_owners))
 
     def restore(self, snapshot: dict[str, Any]) -> None:
-        runtimes, timeline_state, owners = snapshot
+        runtimes, allocators, timeline_state, owners = snapshot
         self.runtimes.clear(); self.runtimes.update(runtimes)
+        self.allocators.clear(); self.allocators.update(allocators)
         lane_ref = getattr(self.timeline, "lane_available", None)
         self.timeline.__dict__.clear(); self.timeline.__dict__.update(timeline_state)
         if lane_ref is not None and "lane_available" in timeline_state:
@@ -138,6 +145,75 @@ def _physical_runtime(
     return context.preview_runtime(config, owner) if preview else context.runtime(config, owner)
 
 
+def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContext, *, config=None) -> None:
+    """Materialize declared buffers into the owner-scoped run allocator."""
+    metadata = task.metadata
+    raw_config = config if config is not None else metadata.get("physical_memory_config")
+    from .memory_types import DramConfig, NandConfig, parse_physical_memory_config
+    if not isinstance(raw_config, (DramConfig, NandConfig)):
+        raw_config = parse_physical_memory_config(raw_config)
+    declarations = metadata.get("physical_allocations", ())
+    if isinstance(declarations, Mapping):
+        declarations = (declarations,)
+    if declarations is None:
+        declarations = ()
+    if not isinstance(declarations, (tuple, list)):
+        raise ValueError("physical_allocations must be a mapping or sequence")
+    # Planner-created descriptors carry a stable buffer identity and an
+    # allocation extent, but older task metadata did not promote a separate
+    # declaration table. Derive declarations from those descriptors once;
+    # this is registration, never an address guess.
+    if not declarations:
+        raw_accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
+        if isinstance(raw_accesses, Mapping):
+            raw_accesses = (raw_accesses,)
+        if isinstance(raw_accesses, (tuple, list)):
+            derived = {}
+            for access in raw_accesses:
+                if not isinstance(access, Mapping):
+                    continue
+                buffer_id = access.get("buffer_id") or access.get("tensor_id")
+                if not buffer_id:
+                    continue
+                offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
+                size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
+                extent = int(access.get("allocation_size_bytes", access.get("buffer_size_bytes", offset + size)) or (offset + size))
+                generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
+                key = (str(buffer_id), generation)
+                previous = derived.get(key)
+                if previous is None or extent > previous["size_bytes"]:
+                    declaration = {"buffer_id": str(buffer_id), "size_bytes": extent,
+                                   "generation": generation, "physical_owner": access.get("physical_owner") or metadata.get("physical_owner")}
+                    if str(access.get("address_source", "")).startswith("explicit"):
+                        explicit_address = access.get("address")
+                        if not isinstance(explicit_address, int) or explicit_address < offset:
+                            raise ValueError("explicit physical address is before buffer offset")
+                        declaration["address"] = explicit_address - offset
+                    derived[key] = declaration
+            declarations = tuple(derived.values())
+    for declaration in declarations:
+        if not isinstance(declaration, Mapping):
+            raise ValueError("physical allocation entries must be mappings")
+        buffer_id = declaration.get("buffer_id")
+        if not buffer_id:
+            raise ValueError("physical allocation requires buffer_id")
+        owner = str(declaration.get("physical_owner") or metadata.get("physical_owner") or "")
+        if not owner:
+            raise ValueError("physical allocation requires physical_owner")
+        size_bytes = declaration.get("size_bytes", declaration.get("buffer_size_bytes"))
+        if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes <= 0:
+            raise ValueError("physical allocation requires positive size_bytes")
+        runtime.runtime(raw_config, owner)
+        allocator = runtime.allocators.get(owner)
+        if allocator is None:
+            raise ValueError("physical owner has no address allocator: {}".format(owner))
+        allocator.allocate(
+            str(buffer_id), size_bytes, int(declaration.get("generation", 0) or 0),
+            alias_of=declaration.get("alias_of"), address=declaration.get("address"),
+            alias_offset_bytes=int(declaration.get("alias_offset_bytes", 0) or 0),
+        )
+
+
 def resolve_physical_task(
     task: TaskSpec,
     runtime: PhysicalRuntimeContext,
@@ -166,19 +242,53 @@ def resolve_physical_task(
         raise ValueError("physical task arrival_ns must be non-negative")
     if isinstance(accesses, Mapping):
         accesses = (accesses,)
+    register_physical_allocations(task, runtime, config=config)
+
     # Validate every descriptor before creating a core or reserving a resource.
+    # A physical address may be omitted only when the buffer has an explicit
+    # allocation; this keeps L2 victims and partial line fills tied to it.
+    declarations = metadata.get("physical_allocations", ())
+    if isinstance(declarations, Mapping):
+        declarations = (declarations,)
+    if declarations is None:
+        declarations = ()
+    if not isinstance(declarations, (tuple, list)):
+        raise ValueError("physical_allocations must be a mapping or sequence")
     validated = []
     for access in accesses:
         if not isinstance(access, Mapping):
             raise ValueError("physical memory_access entries must be mappings")
         operation = Operation(str(access.get("operation", "")).lower())
         address, byte_count = access.get("address"), access.get("byte_count")
-        if isinstance(address, bool) or not isinstance(address, int) or address < 0:
-            raise ValueError("physical task address must be a non-negative integer")
         if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
             raise ValueError("physical task byte_count must be a positive integer")
+        owner = str(access.get("physical_owner") or metadata.get("physical_owner") or "")
+        if not owner:
+            raise ValueError("physical access requires physical_owner")
+        buffer_id = access.get("buffer_id") or access.get("tensor_id")
+        address_source = str(access.get("address_source", ""))
+        if buffer_id and address_source and not address_source.startswith("explicit"):
+            allocator = runtime.allocators.get(owner)
+            if allocator is None:
+                raise ValueError("physical owner has no address allocator: {}".format(owner))
+            generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
+            offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
+            address = allocator.address(str(buffer_id), offset, byte_count, generation)
+        elif address is None:
+            if not buffer_id:
+                raise ValueError("physical access without address requires buffer_id")
+            generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
+            allocator = runtime.allocators.get(owner)
+            if allocator is None:
+                raise ValueError("physical owner has no address allocator: {}".format(owner))
+            if not any(a.buffer_id == str(buffer_id) and a.generation == generation
+                       for a in allocator.allocations()):
+                raise ValueError("physical access has no declared allocation: {}".format(buffer_id))
+            address = allocator.address(str(buffer_id), int(access.get("offset_bytes", access.get("offset", 0)) or 0), byte_count, generation)
+        if isinstance(address, bool) or not isinstance(address, int) or address < 0:
+            raise ValueError("physical task address must be a non-negative integer")
         validated.append((access, operation, address, byte_count))
-    snapshot = runtime.snapshot() if len(validated) > 1 else None
+    snapshot = runtime.snapshot()
     placeholder_ids = set()
     for access, _op, _address, _bytes in validated:
         for key in ("resource_id", "physical_resource_id", "physical_owner"):
@@ -187,6 +297,7 @@ def resolve_physical_task(
                 placeholder_ids.add(str(value))
     results = []
     next_arrival = float(arrival_ns)
+    resolved_accesses = []
     try:
       for index, (access, operation, address, byte_count) in enumerate(validated):
         owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
@@ -196,6 +307,7 @@ def resolve_physical_task(
         result = submit(request)
         active.clock_ns = max(active.clock_ns, result.completion_ns)
         results.append(result)
+        resolved_accesses.append({**dict(access), "address": address})
         next_arrival = result.completion_ns
     except Exception:
         if snapshot is not None:
@@ -240,6 +352,8 @@ def resolve_physical_task(
     if not demands:
         demands = (ResourceDemand(owner, result.latency_ns, bytes_moved=result.transfer_bytes),)
     metadata.update({
+        "memory_access": resolved_accesses[0] if len(resolved_accesses) == 1 else tuple(resolved_accesses),
+        "memory_accesses": tuple(resolved_accesses),
         "physical_execution": {
             **counters,
             "logical_bytes": sum(item.logical_bytes for item in results),
