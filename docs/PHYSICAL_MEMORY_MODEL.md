@@ -4,7 +4,7 @@
 
 五个模块各自只有一个职责：
 
-- `memory_types.py` 定义 `AccessRequest`、DDR/LPDDR/HBM 的 `DramConfig`、SSD/HBF 的 `NandConfig`，以及统一的事务和批次结果。
+- `memory_types.py` 定义 `AccessRequest`、DDR/LPDDR/HBM/GDDR 的 `DramConfig`、SSD/HBF 的 `NandConfig`，以及统一的事务和批次结果。GDDR6、GDDR6X、GDDR7 共享 `DramCore`，代际只通过配置与元数据区分。
 - `memory_mapping.py` 将显式字节地址映射到通道、Rank、Bank、Die、Plane、Block、Page，并在 Burst 或页/块边界拆分请求。
 - `dram_core.py` 生成开行、换行、读写流水和 Burst 数据阶段。Bank 保存打开的 Row，命令发起、首数据延迟和数据总线分别计时，因此同一 Row 的连续 Burst 不会重复支付首数据延迟。
 - `nand_core.py` 生成页读、页编程和块擦除阶段。阵列执行单元、Page Buffer、内部通道和主机接口分别竞争；部分页写按配置执行简化读改写，擦除不产生数据搬运。
@@ -50,8 +50,14 @@ canonical 字段。`AccessRequest` 的地址和连续长度决定映射、拆分
 结果中的 `logical_bytes` 用于实际带宽，`host_transfer_bytes`、`internal_transfer_bytes`、
 `physical_read_bytes`、`physical_write_bytes`、`pages_read`、`pages_programmed` 和
 `erase_operations` 用于核对物理代价。调用方使用上述统一入口以及
-`make_ddr_config`、`make_lpddr_config`、`make_hbm_config`、`make_ssd_config`、
+`make_ddr_config`、`make_lpddr_config`、`make_hbm_config`、`make_gddr_config`、`make_ssd_config`、
 `make_hbf_config`。
+
+GDDR 配置约定：`data_lanes`/`data_width_bits` 表示数据组织，`interface_bandwidth_gb_s`
+表示整套接口的十进制 GB/s；若使用 `effective_pin_data_rate_gbps` 与总位宽，带宽按
+`effective_pin_data_rate_gbps × data_width_bits × data_lanes ÷ 8` 计算一次。GDDR6 使用 NRZ、GDDR6X 使用 PAM4、
+GDDR7 使用 PAM3 仅作为来源说明，不能再对有效数据率乘一次编码系数。组件拓扑使用
+`kind="gddr"`，物理配置使用 `kind="GDDR"` 并保留 `generation`。
 
 规划器生成的 `TaskSpec` 可以携带 `metadata["memory_access"]` 描述（`operation`、`address`、`byte_count`、`physical_owner`）及对应的 `physical_memory_config`。`UnifiedEventKernel` 在任务真正出队的事件时刻调用 `resolve_physical_task`，并把本次运行唯一的 `PhysicalRuntimeContext` 传给核心；核心返回的 `physical_execution`、`physical_arrival_ns` 与 `physical_completion_ns` 是该访问的权威物理结果。静态 `ResourceDemand` 在这一类任务中只用于任务索引和报告占位，不会再次把设备阶段排队或重复计费。
 

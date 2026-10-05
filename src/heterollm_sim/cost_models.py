@@ -1628,6 +1628,30 @@ class HBMProfile:
 
 
 @dataclass(frozen=True)
+class GDDRProfile(HBMProfile):
+    """GDDR local-memory service profile.
+
+    GDDR uses the same lightweight directional service model as HBM, but is a
+    separate registry type so component identity, generation metadata and
+    resource ownership remain explicit.  Subclassing preserves callers that
+    accept the common HBM-compatible DRAM service contract.
+    """
+
+    generation: str = ""
+    resource_id: str = "gddr.channel"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.generation:
+            generation = str(self.generation).strip().upper().replace("-", "")
+            if generation not in {"GDDR6", "GDDR6X", "GDDR7"}:
+                raise ValueError(
+                    "GDDR profile generation must be GDDR6, GDDR6X or GDDR7"
+                )
+            object.__setattr__(self, "generation", generation)
+
+
+@dataclass(frozen=True)
 class HostMemoryProfile:
     """Effective CPU-visible memory service and energy characteristics."""
 
@@ -6486,6 +6510,7 @@ __all__ = [
     "FusedAttentionWorkload",
     "GPUProfile",
     "GemmWorkload",
+    "GDDRProfile",
     "HBMProfile",
     "HostGemmOffloadCapability",
     "HostRecurrentOffloadCapability",

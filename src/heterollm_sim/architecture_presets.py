@@ -61,6 +61,7 @@ LINK_CAPABILITY_UNITS: Mapping[str, str] = {
 _DEFAULT_COST_PROFILE_IDS: Mapping[str, str] = {
     "gpu": "legacy-gpu",
     "hbm": "legacy-hbm",
+    "gddr": "legacy-gddr",
     "cpu": "legacy-cpu",
     "host_memory": "legacy-host-memory",
     "dram": "legacy-host-memory",
@@ -2109,9 +2110,9 @@ def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinitio
         ports=(
             _port(
                 "gddr7",
-                "GDDR7",
+                "GDDR",
                 "controller",
-                version="GDDR7-30.0Gbps",
+                version="GDDR7",
                 lanes=256,
                 bandwidth_gbps=gddr7_gbps,
                 metadata={"bandwidth_source": "component_preset"},
@@ -2192,16 +2193,16 @@ def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinitio
     )
     gpu_memory = _catalog_component(
         "gddr7-16gb-30_0-256bit",
-        "hbm0",
+        "gddr0",
         package_id="gpu_package0",
         die_id="gddr7_memory0",
         component_catalog=component_catalog,
         ports=(
             _port(
                 "memory",
-                "GDDR7",
+                "GDDR",
                 "device",
-                version="GDDR7-30.0Gbps",
+                version="GDDR7",
                 lanes=256,
                 bandwidth_gbps=gddr7_gbps,
                 metadata={"bandwidth_source": "component_preset"},
@@ -2209,14 +2210,15 @@ def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinitio
         ),
         metadata_updates={
             "architecture_role": "native_gpu_local_memory",
-            "native_source_component_id": "hbm0",
+            "native_source_component_id": "gddr0",
             "attached_memory_preset_id": "gddr7-16gb-30_0-256bit",
             "component_preset_status": "logical_gpu_attached_memory",
             "memory_type": "GDDR7",
-            "memory_service_owner": "hbm0.hbm_fabric",
+            "memory_service_owner": "gddr0.gddr_fabric",
             "resident_access_path": "topology",
             "physical_hardware_component": False,
-            "simulator_memory_kind": "hbm",
+            "simulator_memory_kind": "gddr",
+            "generation": "GDDR7",
         },
     )
 
@@ -2261,17 +2263,17 @@ def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinitio
             "gpu-gddr7",
             "gpu0",
             "gddr7",
-            "hbm0",
+            "gddr0",
             "memory",
-            "GDDR7",
-            version="GDDR7-30.0Gbps",
+            "GDDR",
+            version="GDDR7",
             lanes=256,
             bandwidth_gbps=gddr7_gbps,
             latency_ns=40.0,
             metadata={
                 "bandwidth_source": "memory_component",
-                "bandwidth_resource_id": "hbm0.hbm_fabric",
-                "native_source_link_id": "gpu-hbm0",
+                "bandwidth_resource_id": "gddr0.gddr_fabric",
+                "native_source_link_id": "gpu-gddr7",
                 "logical_memory_interface": True,
             },
         ),
@@ -2294,12 +2296,12 @@ def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinitio
         components,
         links,
         (
-            _group("gpu_local", "RTX 5080 + GDDR7", ("gpu0", "hbm0"), "gpu0"),
+            _group("gpu_local", "RTX 5080 + GDDR7", ("gpu0", "gddr0"), "gpu0"),
             _group("host", "Ryzen 9 9950X3D + DDR5", ("cpu0", "hostmem0"), "cpu0"),
         ),
         {
             "gpu0": {"x": 360.0, "y": 200.0},
-            "hbm0": {"x": 650.0, "y": 200.0},
+            "gddr0": {"x": 650.0, "y": 200.0},
             "cpu0": {"x": 40.0, "y": 200.0},
             "hostmem0": {"x": 40.0, "y": 430.0},
         },

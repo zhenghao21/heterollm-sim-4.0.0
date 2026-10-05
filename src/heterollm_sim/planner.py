@@ -9,6 +9,7 @@ optimistic scaling factor.
 from __future__ import annotations
 
 import heapq
+import hashlib
 import math
 import re
 from collections import OrderedDict, deque
@@ -3594,6 +3595,11 @@ def _route_resident_memory_demands(demands, metadata):
 
 
 def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
+    # Physical GDDR tasks are lowered directly into DramCore.  The mutable L2
+    # recost path is an analytical cache model and must not run after the
+    # formal physical transaction has been attached.
+    if task.metadata.get("physical_memory_config") is not None:
+        return task
     audit = task.metadata.get("phase_metadata", {}).get("kernel_model", task.metadata.get("cost_model", {}).get("kernel_model"))
     if audit and task.metadata.get("phase") != "kernel_launch":
         task = replace(task, metadata={**task.metadata, "kernel_prediction": audit})
@@ -3655,6 +3661,76 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
     cache_resource = _rank_gpu_resource(scenario, rank, gpu.cache_hierarchy.levels[-1].resource_id)
     return attach_l2_contract(task, gpu=gpu, hbm=hbm, memory_resource=memory_resource,
                               cache_resource=cache_resource, owner=target_id + ".l2", accesses=accesses)
+
+
+def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
+    """Attach one explicit GDDR access descriptor to a lowered memory phase.
+
+    The planner still owns dependencies and compute demands; only the local
+    GDDR resource demand is replaced by the physical core at event dispatch.
+    Addresses are deterministic task-local ranges so repeated runs do not
+    collapse every request onto address zero.
+    """
+
+    if task.metadata.get("physical_memory_config") is not None:
+        return task
+    target_id = task.metadata.get("target_component")
+    if not isinstance(target_id, str):
+        return task
+    target = scenario.hardware.component_map().get(target_id)
+    if target is None or _kind(target) != "gpu":
+        return task
+    candidates = []
+    for component in scenario.hardware.components:
+        if _kind(component) != "gddr":
+            continue
+        raw_config = component.metadata.get("physical_memory_config")
+        if not isinstance(raw_config, Mapping):
+            continue
+        service = component.metadata.get("memory_service", {})
+        owner = str(service.get("physical_owner") or component.metadata.get("memory_service_owner") or component.component_id + ".gddr_fabric")
+        resource_ids = {owner, component.component_id + ".gddr_fabric", component.component_id + ".access"}
+        if any(str(d.resource_id) in resource_ids and d.bytes_moved > 0 for d in task.demands):
+            candidates.append((component, raw_config, owner, resource_ids))
+    if len(candidates) != 1:
+        return task
+    component, raw_config, owner, resource_ids = candidates[0]
+    memory_demands = [d for d in task.demands if str(d.resource_id) in resource_ids and d.bytes_moved > 0]
+    total_bytes = sum(int(d.bytes_moved) for d in memory_demands)
+    if total_bytes <= 0:
+        return task
+    cost = task.metadata.get("cost_model", {})
+    read_bytes = int(cost.get("read_bytes", 0) or cost.get("activation_bytes", 0) or cost.get("weight_bytes", 0) or 0)
+    write_bytes = int(cost.get("write_bytes", 0) or cost.get("output_bytes", 0) or 0)
+    if read_bytes + write_bytes != total_bytes:
+        direction = str(task.metadata.get("memory_direction", "read")).lower()
+        read_bytes, write_bytes = (0, total_bytes) if direction == "write" else (total_bytes, 0)
+    try:
+        capacity = int(raw_config.get("capacity_bytes") or 0)
+        burst = int(raw_config.get("burst_bytes") or 64)
+    except (TypeError, ValueError):
+        return task
+    if capacity <= 0 or burst <= 0:
+        return task
+    digest = hashlib.blake2b(task.task_id.encode("utf-8"), digest_size=8).digest()
+    base = int.from_bytes(digest, "big") % max(burst, capacity - burst + 1)
+    base -= base % burst
+    descriptors = []
+    if read_bytes:
+        descriptors.append({"operation": "read", "address": base, "byte_count": read_bytes, "physical_owner": owner, "resource_id": owner})
+    if write_bytes:
+        write_address = min(capacity - burst, base + max(burst, read_bytes))
+        write_address -= write_address % burst
+        descriptors.append({"operation": "write", "address": write_address, "byte_count": write_bytes, "physical_owner": owner, "resource_id": owner})
+    metadata = dict(task.metadata)
+    metadata.update({
+        "physical_memory_config": raw_config,
+        "memory_access": descriptors[0] if len(descriptors) == 1 else tuple(descriptors),
+        "physical_memory_component_id": component.component_id,
+        "physical_owner": owner,
+        "physical_address_scope": "deterministic_task_local_range",
+    })
+    return replace(task, metadata=metadata)
 
 
 def _apply_planned_graph_launches(tasks):
@@ -3776,6 +3852,9 @@ class _TaskBuilder:
                 metadata=bound_metadata,
             )
         )
+        context = _COMPILATION_CONTEXT.get()
+        if context is not None:
+            self.tasks[-1] = _attach_gddr_physical_task(self.tasks[-1], context.scenario)
         self.tasks[-1] = _attach_planned_l2(self.tasks[-1])
         inherited: Dict[int, str] = {}
         ambiguous = set()
@@ -8755,13 +8834,19 @@ def _gpu_profiles(
                 # backing profile; GPU kernel traffic still uses attached HBM.
                 selected_memory = None
         if selected_memory is None:
-            selected_memory = _nearest_profile_component_id(
-                scenario, gpu_component_id, "hbm"
-            )
+            # Resolve the GPU's attached local DRAM by its canonical family.
+            # GDDR is a first-class memory component; do not require callers
+            # to encode it as HBM just to reach the shared DRAM service path.
+            for memory_kind in ("gddr", "hbm", "dram", "ddr", "lpddr"):
+                selected_memory = _nearest_profile_component_id(
+                    scenario, gpu_component_id, memory_kind
+                )
+                if selected_memory is not None:
+                    break
         if selected_memory is None:
             raise ValueError(
-                "GPU component {} has no reachable HBM profile target; "
-                "select an explicit active DRAM/HBF rank memory".format(gpu_component_id)
+                "GPU component {} has no reachable local DRAM profile target; "
+                "select an explicit GDDR/HBM/DRAM rank memory".format(gpu_component_id)
             )
         profile = _resolve_component_profile(scenario, selected_memory)
         if isinstance(profile, HBMProfile):
@@ -8868,10 +8953,7 @@ def _compute_local_runtime_memory_component_id(
 
     target = _component(scenario, target_component_id)
     target_kind = _kind(target)
-    memory_kind = {
-        "cpu": "host_memory",
-        "gpu": "hbm",
-    }.get(target_kind)
+    memory_kind = "host_memory" if target_kind == "cpu" else None
     if memory_kind is None:
         raise ValueError(
             "runtime memory target {} must be a CPU or GPU, not {}".format(
@@ -8888,17 +8970,21 @@ def _compute_local_runtime_memory_component_id(
                 return selected
         if len(declared) > 1:
             raise ValueError("runtime memory target needs an explicit rank for multiple memory backends")
-    memory_component_id = _nearest_profile_component_id(
-        scenario,
-        target_component_id,
-        memory_kind,
-    )
+    memory_component_id = None
+    for candidate_kind in (("gddr", "hbm", "dram", "ddr", "lpddr") if target_kind == "gpu" else (memory_kind,)):
+        memory_component_id = _nearest_profile_component_id(
+            scenario,
+            target_component_id,
+            candidate_kind,
+        )
+        if memory_component_id is not None:
+            break
     if memory_component_id is None:
         raise ValueError(
             "{} component {} has no reachable {} runtime-memory target".format(
                 target_kind.upper(),
                 target_component_id,
-                memory_kind.replace("_", "-"),
+                ("local-dram" if target_kind == "gpu" else memory_kind.replace("_", "-")),
             )
         )
     return memory_component_id
@@ -25524,7 +25610,7 @@ def _summarize_dram_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
         config = task.metadata.get("physical_memory_config")
         kind_value = config.get("kind", "") if isinstance(config, Mapping) else getattr(config, "kind", "")
         kind = str(getattr(kind_value, "value", kind_value)).upper()
-        if kind not in {"DDR", "LPDDR", "HBM", "MEMORYKIND.DDR", "MEMORYKIND.LPDDR", "MEMORYKIND.HBM"}:
+        if kind not in {"DDR", "LPDDR", "HBM", "GDDR", "MEMORYKIND.DDR", "MEMORYKIND.LPDDR", "MEMORYKIND.HBM", "MEMORYKIND.GDDR"}:
             continue
         count += 1
         for key in fields:

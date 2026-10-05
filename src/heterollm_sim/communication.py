@@ -24,6 +24,32 @@ from .ir import (
 )
 
 
+_GDDR_PROTOCOLS = frozenset({"gddr", "gddr6", "gddr6x", "gddr7"})
+
+
+def _normalized_protocol(value: object) -> str:
+    return str(value or "").strip().lower().replace("-", "").replace("_", "")
+
+
+def _is_local_memory_protocol(value: object) -> bool:
+    normalized = _normalized_protocol(value)
+    return normalized in {"hbm", "hbmstack", "hbf", "ddr", "dram", "tsv", "lpddr5x"} or normalized in _GDDR_PROTOCOLS
+
+
+def _is_storage_endpoint(component: ComponentSpec) -> bool:
+    """Recognize formal storage endpoints during config normalization.
+
+    ``ComponentSpec.is_storage`` is the authoritative property after IR
+    normalization.  The explicit kind fallback keeps topology routing useful
+    while a newly-authored GDDR component is being normalized by the config
+    layer and avoids silently charging its local link as a second bus.
+    """
+
+    return component.is_storage or component.normalized_kind in {
+        "gddr", "gddr_memory", "gddr6", "gddr6x", "gddr7",
+    }
+
+
 def _non_negative_integer(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError("{} must be a non-negative integer".format(name))
@@ -406,7 +432,7 @@ class TopologyRouter:
         memory_component = None
         if service_ref or source_flag in {"component", "memory_component", "shared_component"}:
             candidates = [self.components[ident] for ident in (source_component, target_component)
-                          if self.components[ident].is_storage]
+                          if _is_storage_endpoint(self.components[ident])]
             if service_ref:
                 candidates = [item for item in candidates if str(service_ref) in {
                     item.component_id, item.component_id + ".access",
@@ -425,13 +451,13 @@ class TopologyRouter:
             direction = "read" if memory_component.component_id == source_component else "write"
             physical_service = resolve_service(memory_component)
             bandwidth = getattr(physical_service, direction + "_bandwidth_gb_s") * 8.0
-        elif str(link.protocol).strip().lower() in {"hbm", "hbm_stack", "hbf", "ddr", "dram", "tsv", "lpddr5x"}:
+        elif _is_local_memory_protocol(link.protocol):
             # An unbound local interface remains an independent topology
             # service, but its negotiated rate cannot exceed the endpoint's
             # declared direction. This is a physical link ceiling, not an
             # inferred service alias.
             candidates = [self.components[ident] for ident in (source_component, target_component)
-                          if self.components[ident].is_storage]
+                          if _is_storage_endpoint(self.components[ident])]
             if candidates:
                 direction = "read" if candidates[0].component_id == source_component else "write"
                 endpoint_limit = candidates[0].directional_bandwidth_gbps(direction)

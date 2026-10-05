@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter, deque
 from dataclasses import dataclass
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 from .ir import (
     ComponentSpec,
@@ -23,10 +23,21 @@ _PROTOCOL_ALIASES = {
     "ucie": "ucie",
     "nvlink": "nvlink",
     "hbm": "hbm",
+    # Canonical authoring uses protocol=GDDR and version=<generation>.
+    # Generation-shaped names remain accepted during input normalization.
+    "gddr": "gddr",
+    "gddr6": "gddr6",
+    "gddr_6": "gddr6",
+    "gddr6x": "gddr6x",
+    "gddr_6x": "gddr6x",
+    "gddr7": "gddr7",
+    "gddr_7": "gddr7",
     "ddr3": "ddr",
     "ddr4": "ddr",
     "ddr5": "ddr",
 }
+
+_GDDR_PROTOCOLS = frozenset({"gddr", "gddr6", "gddr6x", "gddr7"})
 _DIRECTION_ALIASES = {
     "in": "input",
     "input": "input",
@@ -71,7 +82,78 @@ def _role(value: str) -> str:
 
 def _component_kind(component: ComponentSpec) -> str:
     normalized = normalize_component_kind(component.kind)
-    return "hbm" if normalized in {"hbm", "hbm_stack"} else normalized
+    if normalized in {"hbm", "hbm_stack"}:
+        return "hbm"
+    # Component normalization is intentionally kept in one place in ir.py,
+    # but accept generation-shaped authoring values here as well so topology
+    # validation remains fail-closed while a config is being normalized.
+    if normalized in {"gddr", "gddr_memory", "gddr6", "gddr6x", "gddr7"}:
+        return "gddr"
+    return normalized
+
+
+def _gddr_generation(value: object) -> Optional[str]:
+    """Extract a canonical GDDR generation from a protocol/version value."""
+
+    text = re.sub(r"^GDDR[-_ ]+", "GDDR", str(value or "").strip().upper())
+    matched = re.match(r"^(GDDR6X|GDDR6|GDDR7)(?:$|[-_ ].*)", text)
+    return matched.group(1) if matched is not None else None
+
+
+def _metadata_generations(metadata: object) -> Set[str]:
+    if not isinstance(metadata, Mapping):
+        return set()
+    values = []
+    for key in (
+        "generation",
+        "memory_generation",
+        "supported_generations",
+        "gddr_generations",
+        "supported_gddr_generations",
+        "memory_generations",
+    ):
+        raw = metadata.get(key)
+        if isinstance(raw, str):
+            values.extend(re.split(r"[,;\s]+", raw))
+        elif isinstance(raw, (tuple, list, set, frozenset)):
+            values.extend(raw)
+    return {
+        generation
+        for value in values
+        if (generation := _gddr_generation(value)) is not None
+    }
+
+
+def _component_gddr_generation(component: ComponentSpec) -> Optional[str]:
+    metadata = component.metadata
+    physical_config = metadata.get("physical_memory_config")
+    physical_generation = (
+        physical_config.get("generation")
+        if isinstance(physical_config, Mapping)
+        else getattr(physical_config, "generation", None)
+    )
+    candidates = [
+        metadata.get("generation"),
+        metadata.get("memory_generation"),
+        metadata.get("technology", {}).get("generation")
+        if isinstance(metadata.get("technology"), Mapping)
+        else None,
+        physical_generation,
+        component.kind,
+    ]
+    for value in candidates:
+        generation = _gddr_generation(value)
+        if generation is not None:
+            return generation
+    return None
+
+
+def _protocols_compatible(port_protocol: str, link_protocol: str) -> bool:
+    """Allow a generic GDDR port to negotiate a generation explicitly."""
+
+    if port_protocol == link_protocol:
+        return True
+    return port_protocol in _GDDR_PROTOCOLS and link_protocol in _GDDR_PROTOCOLS
 
 
 def _version_key(version: str) -> Optional[Tuple[int, ...]]:
@@ -177,14 +259,14 @@ def _validate_protocol_rules(
             )
         )
 
-    if protocol in {"hbm", "gddr7"}:
+    if protocol == "hbm":
         source_is_hbm = _component_kind(source_component) == "hbm"
         target_is_hbm = _component_kind(target_component) == "hbm"
         if source_is_hbm == target_is_hbm:
             add(
                 "hbm_dedicated_endpoint",
-                "本地显存链路必须且只能连接一个 GPU 本地显存组件",
-                "GPU-local memory links must connect exactly one local-memory component",
+                "HBM 本地显存链路必须且只能连接一个 HBM 显存组件",
+                "HBM links must connect exactly one HBM local-memory component",
             )
             return
         memory_port = source_port if source_is_hbm else target_port
@@ -192,14 +274,89 @@ def _validate_protocol_rules(
         if _role(memory_port.role) not in {"device", "endpoint"}:
             add(
                 "hbm_device_role",
-                "显存侧端口必须使用 device 角色",
-                "the memory-side port must have device role",
+                "HBM 显存侧端口必须使用 device 角色",
+                "the HBM memory-side port must have device role",
             )
         if _role(controller_port.role) not in {"controller", "host", "root"}:
             add(
                 "hbm_controller_role",
-                "GPU 侧端口必须使用 controller 角色",
-                "the GPU-side port must have controller role",
+                "HBM 控制器侧端口必须使用 controller 角色",
+                "the HBM controller-side port must have controller role",
+            )
+
+    elif protocol in _GDDR_PROTOCOLS:
+        source_is_gddr = _component_kind(source_component) == "gddr"
+        target_is_gddr = _component_kind(target_component) == "gddr"
+        if source_is_gddr == target_is_gddr:
+            add(
+                "gddr_dedicated_endpoint",
+                "GDDR 本地显存链路必须且只能连接一个 GDDR 显存组件",
+                "GDDR links must connect exactly one GDDR local-memory component",
+            )
+            return
+        memory_component = source_component if source_is_gddr else target_component
+        memory_port = source_port if source_is_gddr else target_port
+        controller_component = target_component if source_is_gddr else source_component
+        controller_port = target_port if source_is_gddr else source_port
+        if _role(memory_port.role) not in {"device", "endpoint"}:
+            add(
+                "gddr_device_role",
+                "GDDR 显存侧端口必须使用 device 角色",
+                "the GDDR memory-side port must have device role",
+            )
+        if _role(controller_port.role) not in {"controller", "host", "root"}:
+            add(
+                "gddr_controller_role",
+                "GDDR 控制器侧端口必须使用 controller 角色",
+                "the GDDR controller-side port must have controller role",
+            )
+
+        memory_generation = _component_gddr_generation(memory_component)
+        link_generation = _gddr_generation(link.protocol) or _gddr_generation(link.version)
+        port_generation = _gddr_generation(memory_port.protocol) or _gddr_generation(memory_port.version)
+        controller_generation = _gddr_generation(controller_port.protocol) or _gddr_generation(controller_port.version)
+        controller_supported = (
+            _metadata_generations(controller_port.metadata)
+            | _metadata_generations(controller_component.metadata)
+        )
+        required = memory_generation or link_generation or port_generation
+        if memory_generation and link_generation and memory_generation != link_generation:
+            add(
+                "gddr_generation_mismatch",
+                "GDDR 显存代际 {} 与链路代际 {} 不一致".format(memory_generation, link_generation),
+                "GDDR memory generation {} does not match link generation {}".format(memory_generation, link_generation),
+            )
+        if link_generation and port_generation and link_generation != port_generation:
+            add(
+                "gddr_memory_port_generation_mismatch",
+                "GDDR 链路代际 {} 与显存端口代际 {} 不一致".format(link_generation, port_generation),
+                "GDDR link generation {} does not match memory port generation {}".format(link_generation, port_generation),
+            )
+        if required is None:
+            add(
+                "gddr_generation_required",
+                "GDDR 链路必须明确声明 GDDR6、GDDR6X 或 GDDR7 代际",
+                "GDDR links must explicitly declare GDDR6, GDDR6X or GDDR7",
+            )
+        elif controller_supported:
+            if required not in controller_supported:
+                add(
+                    "gddr_controller_unsupported_generation",
+                    "控制器未声明支持 GDDR 代际 {}".format(required),
+                    "controller does not declare support for GDDR generation {}".format(required),
+                )
+        elif controller_generation is not None:
+            if required != controller_generation:
+                add(
+                    "gddr_controller_generation_mismatch",
+                    "控制器端口仅声明 {}，不支持 {}".format(controller_generation, required),
+                    "controller port declares {} and does not support {}".format(controller_generation, required),
+                )
+        else:
+            add(
+                "gddr_controller_capability_missing",
+                "GDDR 控制器必须声明端口代际或 supported_generations",
+                "GDDR controller must declare a port generation or supported_generations",
             )
 
     elif protocol in {"ucie", "hbf"}:
@@ -468,7 +625,8 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
 
         protocol = _protocol(link.protocol)
         for port, endpoint_name in ((source_port, "source"), (target_port, "target")):
-            if _protocol(port.protocol) != protocol:
+            port_protocol = _protocol(port.protocol)
+            if not _protocols_compatible(port_protocol, protocol):
                 add(
                     "protocol_mismatch",
                     "{}端口 protocol {} 与链路 protocol {} 不匹配".format(
@@ -481,7 +639,16 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
                     ),
                     link_id=link.link_id,
                 )
-            if not _version_supported(link.version, port.version):
+            # GDDR generations are negotiated by the explicit generation
+            # checks below.  A generic GDDR controller commonly uses a
+            # controller-specific numeric version (for example ``1.0``),
+            # which must not be compared as if it were a JEDEC generation.
+            version_supported = (
+                True
+                if protocol in _GDDR_PROTOCOLS and port_protocol in _GDDR_PROTOCOLS
+                else _version_supported(link.version, port.version)
+            )
+            if not version_supported:
                 add(
                     "version_unsupported",
                     "{}端口 version {} 不支持协商后的 version {}".format(
@@ -549,11 +716,21 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
                 endpoint[1],
             )
         component = components[endpoint[0]]
-        if (_component_kind(component) == "hbm" or _protocol(port.protocol) in {"hbm", "gddr7"}) and count > 1:
+        component_kind = _component_kind(component)
+        port_protocol = _protocol(port.protocol)
+        if (component_kind == "hbm" or port_protocol == "hbm") and count > 1:
             add(
                 "hbm_port_not_dedicated",
-                "本地显存端口只能由一条链路独占使用",
-                "GPU-local memory ports may be used by only one link",
+                "HBM 本地显存端口只能由一条链路独占使用",
+                "HBM local-memory ports may be used by only one link",
+                endpoint[0],
+                endpoint[1],
+            )
+        elif (component_kind == "gddr" or port_protocol in _GDDR_PROTOCOLS) and count > 1:
+            add(
+                "gddr_port_not_dedicated",
+                "GDDR 本地显存端口只能由一条链路独占使用",
+                "GDDR local-memory ports may be used by only one link",
                 endpoint[0],
                 endpoint[1],
             )
@@ -568,11 +745,19 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
         ]
         for link in incident:
             protocol = _protocol(link.protocol)
-            if component_kind == "hbm" and protocol not in {"hbm", "gddr7"}:
+            if component_kind == "hbm" and protocol != "hbm":
                 add(
                     "hbm_non_dedicated_protocol",
-                    "GPU 本地显存组件只能使用 HBM 或 GDDR7 专用链路",
-                    "GPU-local memory components may only use dedicated HBM or GDDR7 links",
+                    "HBM 本地显存组件只能使用 HBM 专用链路",
+                    "HBM local-memory components may only use dedicated HBM links",
+                    component.component_id,
+                    link_id=link.link_id,
+                )
+            elif component_kind == "gddr" and protocol not in _GDDR_PROTOCOLS:
+                add(
+                    "gddr_non_dedicated_protocol",
+                    "GDDR 本地显存组件只能使用 GDDR 专用链路",
+                    "GDDR local-memory components may only use dedicated GDDR links",
                     component.component_id,
                     link_id=link.link_id,
                 )

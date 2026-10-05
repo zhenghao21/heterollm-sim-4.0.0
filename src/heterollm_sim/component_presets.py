@@ -60,6 +60,7 @@ LINK_CAPABILITY_UNITS: Mapping[str, str] = {
 _DEFAULT_COST_PROFILE_IDS: Mapping[str, str] = {
     "gpu": "legacy-gpu",
     "hbm": "legacy-hbm",
+    "gddr": "legacy-gddr",
     "cpu": "legacy-cpu",
     "host_memory": "legacy-host-memory",
     "cim": "legacy-cim",
@@ -164,6 +165,7 @@ COMPONENT_KINDS = frozenset(
         "cpu",
         "gpu",
         "hbm",
+        "gddr",
         "host_memory",
         "hbf",
         "ssd",
@@ -770,6 +772,140 @@ def _hbm_preset(
     )
 
 
+def _gddr_preset(
+    preset_id: str,
+    name: str,
+    *,
+    generation: str,
+    data_rate_gbps: float,
+    interface_bits: int,
+    capacity_gb: float,
+    evidence_level: str,
+    limitations: Sequence[str],
+    notes: str,
+    sources: Sequence[ComponentSource],
+    family: str = "GDDR Graphics Memory",
+    signal_encoding: str = "NRZ",
+) -> ComponentPresetDefinition:
+    """Build a first-class GDDR component template.
+
+    ``data_rate_gbps`` is the effective per-pin data rate.  The resulting
+    component bandwidth is stored in the IR's one-way Gb/s field exactly once;
+    no additional DDR/PAM multiplier is applied.
+    """
+    component_id = preset_id.replace("-", "_")
+    bandwidth_gbps = data_rate_gbps * interface_bits
+    cost_profile_template, cost_profile_parameter_basis = _hbm_cost_profile_template(
+        component_id,
+        bandwidth_gbps,
+        read_latency_ns=35.0,
+        write_latency_ns=35.0,
+        transaction_bytes=256,
+        max_outstanding_requests=64,
+        parallel_lanes=max(1, interface_bits // 32),
+    )
+    cost_profile_template["resource_id"] = "{}.gddr_fabric".format(component_id)
+    technology = {
+        "generation": generation,
+        "memory_type": generation,
+        "data_rate_gbps": data_rate_gbps,
+        "interface_bits": interface_bits,
+        "interface_bandwidth_gb_s": bandwidth_gbps / 8.0,
+        "signal_encoding": signal_encoding,
+        "kind_policy": "GDDR 代际保留在 technology；ComponentSpec.kind 固定为 gddr。",
+        "interface_protocol": generation,
+    }
+    component = ComponentSpec(
+        component_id=component_id,
+        kind="gddr",
+        cost_profile_id=_default_cost_profile_id("gddr"),
+        ports=(
+            PortSpec(
+                port_id="host",
+                protocol="GDDR",
+                role="device",
+                version=generation,
+                lanes=interface_bits,
+                bandwidth_gbps=bandwidth_gbps,
+                metadata=_port_metadata({
+                    "interface_width_bits": interface_bits,
+                    "data_rate_gbps": data_rate_gbps,
+                    "bandwidth_scope": "shared_component_total_one_way",
+                }),
+            ),
+        ),
+        capacity_bytes=_gb(capacity_gb),
+        read_bandwidth_gbps=bandwidth_gbps,
+        write_bandwidth_gbps=bandwidth_gbps,
+        metadata=_component_metadata(
+            preset_id,
+            technology=technology,
+            sources=sources,
+            evidence_level=evidence_level,
+            limitations=limitations,
+            notes=notes,
+            measurement_basis="有效引脚数据率 × 总接口位宽 ÷ 8，结果按十进制 GB/s 写入 IR。",
+            extras={
+                "revision": "{}-{}".format(generation, CATALOG_VERSION),
+                "value_scope": "单套 GDDR 显存子系统的峰值读写带宽模板",
+                "conditions": ["十进制容量与带宽单位", "读写共享同一数据通路，不将方向带宽相加"],
+                "derived_formula": "data_rate_gbps × interface_bits = IR one-way Gb/s",
+                "expires_at": "2027-10-05",
+                "read_latency_ns": cost_profile_template["read_latency_ns"],
+                "write_latency_ns": cost_profile_template["write_latency_ns"],
+                "transfer_granularity_bytes": cost_profile_template["transaction_bytes"],
+                "max_outstanding_requests": cost_profile_template["max_outstanding_requests"],
+                "cost_profile_template": cost_profile_template,
+                "cost_profile_parameter_basis": cost_profile_parameter_basis,
+                "cost_profile_key": "gddr",
+                "physical_memory_config": {
+                    "kind": "GDDR",
+                    "generation": generation,
+                    "channels": 1,
+                    "data_lanes": max(1, interface_bits // 32),
+                    "data_width_bits": 32,
+                    "data_rate_mt_s": data_rate_gbps * 1000.0,
+                    "interface_bandwidth_gb_s": bandwidth_gbps / 8.0,
+                    "stacks": 1,
+                    "dies_per_stack": 1,
+                    "ranks_per_channel": 1,
+                    "bank_groups_per_rank": 4,
+                    "banks_per_group": 4,
+                    "rows_per_bank": 131072,
+                    "row_bytes": 8192,
+                    "burst_bytes": 64,
+                    "interleave_bytes": 64,
+                    "open_ns": 14.0,
+                    "close_ns": 14.0,
+                    "read_latency_ns": 35.0,
+                    "write_latency_ns": 35.0,
+                    "burst_interval_ns": 2.5,
+                    "max_outstanding_requests": 64,
+                    "capacity_bytes": _gb(capacity_gb),
+                    "metadata": {
+                        "parameter_basis": "A_ANALYTICAL" if evidence_level == A_ANALYTICAL else evidence_level,
+                        "geometry_scope": "synthetic_equivalent_gddr_subsystem",
+                        "bandwidth_input_mode": "explicit_aggregate_interface",
+                        "pin_data_rate_gbps": data_rate_gbps,
+                        "signal_encoding": signal_encoding,
+                    },
+                },
+            },
+        ),
+    )
+    return ComponentPresetDefinition(
+        preset_id=preset_id,
+        name=name,
+        family=family,
+        component=component,
+        sources=tuple(sources),
+        evidence_level=evidence_level,
+        limitations=tuple(limitations),
+        notes=notes,
+        tags=("memory", "gddr", generation.lower()),
+    )
+
+
 def _hbm_product_slice_preset(
     preset_id: str,
     name: str,
@@ -1271,6 +1407,20 @@ NVIDIA_RTX_5080_SOURCE = _source(
     S2_VENDOR_DECLARED,
     publisher="NVIDIA",
     accessed_at="2026-09-27",
+)
+MICRON_GDDR_SOURCE = _source(
+    "Micron GDDR graphics memory family overview",
+    "https://www.micron.com/products/memory/graphics-memory",
+    S2_VENDOR_DECLARED,
+    publisher="Micron",
+    accessed_at="2026-10-05",
+)
+MICRON_GDDR7_SOURCE = _source(
+    "Micron GDDR7 product and technology overview",
+    "https://www.micron.com/products/memory/graphics-memory/gddr7",
+    S2_VENDOR_DECLARED,
+    publisher="Micron",
+    accessed_at="2026-10-05",
 )
 NVIDIA_BLACKWELL_ARCHITECTURE_PDF_SOURCE = _source(
     "NVIDIA RTX Blackwell GPU Architecture technical brief (GeForce RTX 5080 table)",
@@ -1789,9 +1939,9 @@ def _consumer_gpu_preset(
         ports=(
             PortSpec(
                 port_id="gddr7",
-                protocol="GDDR7",
+                protocol="GDDR",
                 role="controller",
-                version="GDDR7-{}Gbps".format(memory_data_rate_gbps),
+                version="GDDR7",
                 lanes=memory_bus_bits,
                 bandwidth_gbps=port_bandwidth_gbps,
                 metadata=_port_metadata(
@@ -2525,28 +2675,56 @@ _GENERIC_HBM3E = _curated_clone(
     },
 )
 
-# The RTX 5080 native comparison uses GDDR7, not HBM.  The runtime keeps the
-# active-memory kind ``hbm`` for the historical GPU-local memory service node,
-# while this preset preserves the real GDDR7 protocol and technology identity.
-_RTX5080_GDDR7 = _hbm_preset(
+# GDDR generations share the same lightweight DRAM service model while
+# retaining first-class component identity and generation-specific metadata.
+_GDDR6_REFERENCE = _gddr_preset(
+    "gddr6-16gb-20_0-256bit",
+    "GDDR6 16GB 20Gb/s 256-bit Graphics Memory",
+    generation="GDDR6",
+    data_rate_gbps=20.0,
+    interface_bits=256,
+    capacity_gb=16.0,
+    evidence_level=A_ANALYTICAL,
+    limitations=(
+        "GDDR6 20Gb/s 与 16GB/256-bit 是可编辑分析组合，不对应单一厂商 SKU。",
+        "时序、效率、能耗和持续带宽保留为分析参数，不能解读为器件级实测。",
+    ),
+    notes="GDDR6 分析参考：20Gb/s/pin × 256-bit ÷ 8 = 640GB/s。",
+    sources=(MICRON_GDDR_SOURCE,),
+)
+_GDDR6X_REFERENCE = _gddr_preset(
+    "gddr6x-16gb-21_0-256bit",
+    "GDDR6X 16GB 21Gb/s 256-bit Graphics Memory",
+    generation="GDDR6X",
+    data_rate_gbps=21.0,
+    interface_bits=256,
+    capacity_gb=16.0,
+    evidence_level=A_ANALYTICAL,
+    limitations=(
+        "GDDR6X 21Gb/s 与 16GB/256-bit 是可编辑分析组合，不对应单一厂商 SKU。",
+        "GDDR6X 的 PAM4 仅记录为信号方式说明；有效数据率不再额外乘编码系数。",
+    ),
+    notes="GDDR6X 分析参考：21Gb/s/pin × 256-bit ÷ 8 = 672GB/s。",
+    sources=(MICRON_GDDR_SOURCE,),
+    signal_encoding="PAM4",
+)
+_RTX5080_GDDR7 = _gddr_preset(
     "gddr7-16gb-30_0-256bit",
     "GDDR7 16GB 30Gb/s 256-bit GPU Memory",
     generation="GDDR7",
-    pin_speed_gbps=30.0,
-    io_bits=256,
-    channels=256,
+    data_rate_gbps=30.0,
+    interface_bits=256,
     capacity_gb=16.0,
-    bandwidth_gbps=30.0 * 256,
     evidence_level=S2_VENDOR_DECLARED,
     limitations=(
         "该预设采用 RTX 5080 公布的 GDDR7 16GB、30Gb/s、256-bit 接口参数；实际可用容量和持续吞吐受驱动、控制器和工作负载影响。",
         "读写带宽是同一 GDDR7 接口的方向性上限，不应相加理解为同时双倍预算。",
-        "ComponentSpec.kind 保持 hbm 是模拟器 GPU 本地显存服务的兼容表示；真实介质由 protocol=GDDR7 和 metadata/interface_protocol 标明。",
+        "ComponentSpec.kind 正式为 gddr；该节点表示 GPU 本地 GDDR7 显存子系统。",
     ),
     notes="NVIDIA GeForce RTX 5080 的 GDDR7 本地显存预设；30Gb/s × 256-bit ÷ 8 = 960GB/s，写入 IR 为 7680Gb/s。",
     sources=(NVIDIA_RTX_5080_SOURCE,),
-    protocol="GDDR7",
     family="GDDR7 GPU Memory",
+    signal_encoding="PAM3",
 )
 _RTX5080_GDDR7 = _curated_clone(
     _RTX5080_GDDR7,
@@ -2559,8 +2737,8 @@ _RTX5080_GDDR7 = _curated_clone(
         "data_rate_gbps": 30.0,
         "interface_bits": 256,
         "bandwidth_gb_s": 960.0,
-        "simulator_component_kind": "hbm",
-        "simulator_node_role": "logical_gpu_attached_memory",
+        "simulator_component_kind": "gddr",
+        "simulator_node_role": "gpu_local_memory_subsystem",
     },
     provenance={
         "capacity_bytes": {"value": 16, "unit": "GB_decimal", "source_field": "RTX 5080 standard memory configuration"},
@@ -2997,6 +3175,8 @@ _RTX_5080 = _consumer_gpu_preset(
 
 _PRESETS: Tuple[ComponentPresetDefinition, ...] = (
     _SAMSUNG_HBM3E,
+    _GDDR6_REFERENCE,
+    _GDDR6X_REFERENCE,
     _RTX5080_GDDR7,
     _SK_HYNIX_HBF,
     _TIPRO9100,

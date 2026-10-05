@@ -123,6 +123,18 @@ JEDEC_HBM2E = _source(
     "https://www.jedec.org/standards-documents/docs/jesd235d",
     "JEDEC",
 )
+MICRON_GDDR = _source(
+    "Micron GDDR graphics memory family overview",
+    "https://www.micron.com/products/memory/graphics-memory",
+    "Micron",
+    S2_VENDOR_DECLARED,
+)
+MICRON_GDDR7 = _source(
+    "Micron GDDR7 product and technology overview",
+    "https://www.micron.com/products/memory/graphics-memory/gddr7",
+    "Micron",
+    S2_VENDOR_DECLARED,
+)
 NVIDIA_GH200 = _source(
     "NVIDIA Grace Hopper Superchip specifications",
     "https://www.nvidia.com/en-us/data-center/grace-hopper-superchip/",
@@ -245,6 +257,87 @@ _PRESETS: Tuple[ProtocolPresetDefinition, ...] = (
         derivation="8.0 GT/s × 2048 DQ = 2.048 TB/s。",
         limitations=("未扣除刷新、ECC、控制器、封装和热限制。",),
         sources=(JEDEC_HBM4,),
+    ),
+    ProtocolPresetDefinition(
+        preset_id="gddr6-20_0-256",
+        name="GDDR6 · 20 Gb/s per pin · 256-bit",
+        protocol="GDDR",
+        version="GDDR6",
+        organization="Micron / analytical reference",
+        transfer_unit="data_pin",
+        transfer_unit_count=256,
+        transfer_unit_semantics="PortSpec.lanes 表示总数据位宽；不把位宽再次当作独立通道数相乘。",
+        io_speed_value=20.0,
+        io_speed_unit="Gb/s per data pin",
+        raw_gbps=5120.0,
+        effective_one_way_gbps=5120.0,
+        aggregate_bidirectional_gbps=None,
+        displayed_bandwidth_scope="GDDR6 单套 256-bit 接口的一向峰值；读写共享同一数据资源。",
+        simulation_bandwidth_gbps=5120.0,
+        simulation_latency_ns=35.0,
+        port_roles=("controller", "device"),
+        payload=None,
+        derivation="20 Gb/s per pin × 256 bit = 5120 Gb/s = 640 GB/s; no extra DDR multiplier.",
+        limitations=(
+            "该预设是可编辑分析参考，不对应单一厂商 SKU。",
+            "不仿真 NRZ 电气细节、刷新、ECC 或控制器调度。",
+        ),
+        sources=(MICRON_GDDR,),
+        evidence_level=A_ANALYTICAL,
+    ),
+    ProtocolPresetDefinition(
+        preset_id="gddr6x-21_0-256",
+        name="GDDR6X · 21 Gb/s per pin · 256-bit",
+        protocol="GDDR",
+        version="GDDR6X",
+        organization="Micron / analytical reference",
+        transfer_unit="data_pin",
+        transfer_unit_count=256,
+        transfer_unit_semantics="PortSpec.lanes 表示总数据位宽；PAM4 只作为代际说明。",
+        io_speed_value=21.0,
+        io_speed_unit="Gb/s per data pin",
+        raw_gbps=5376.0,
+        effective_one_way_gbps=5376.0,
+        aggregate_bidirectional_gbps=None,
+        displayed_bandwidth_scope="GDDR6X 单套 256-bit 接口的一向峰值；读写共享同一数据资源。",
+        simulation_bandwidth_gbps=5376.0,
+        simulation_latency_ns=35.0,
+        port_roles=("controller", "device"),
+        payload=None,
+        derivation="21 Gb/s per pin × 256 bit = 5376 Gb/s = 672 GB/s; PAM4 is not multiplied again.",
+        limitations=(
+            "该预设是可编辑分析参考，不对应单一厂商 SKU。",
+            "PAM4 信号编码不构成额外带宽乘数。",
+        ),
+        sources=(MICRON_GDDR,),
+        evidence_level=A_ANALYTICAL,
+    ),
+    ProtocolPresetDefinition(
+        preset_id="gddr7-30_0-256",
+        name="GDDR7 · 30 Gb/s per pin · 256-bit",
+        protocol="GDDR",
+        version="GDDR7",
+        organization="Micron / NVIDIA",
+        transfer_unit="data_pin",
+        transfer_unit_count=256,
+        transfer_unit_semantics="PortSpec.lanes 表示总数据位宽；PAM3 只作为代际说明。",
+        io_speed_value=30.0,
+        io_speed_unit="Gb/s per data pin",
+        raw_gbps=7680.0,
+        effective_one_way_gbps=7680.0,
+        aggregate_bidirectional_gbps=None,
+        displayed_bandwidth_scope="GDDR7 单套 256-bit 接口的一向峰值；读写共享同一数据资源。",
+        simulation_bandwidth_gbps=7680.0,
+        simulation_latency_ns=35.0,
+        port_roles=("controller", "device"),
+        payload=None,
+        derivation="30 Gb/s per pin × 256 bit = 7680 Gb/s = 960 GB/s; PAM3 is not multiplied again.",
+        limitations=(
+            "RTX 5080 参数来自厂商产品页；通用 GDDR7 时序仍是分析默认。",
+            "不声称 GDDR7 向后兼容其他代际控制器。",
+        ),
+        sources=(MICRON_GDDR7,),
+        evidence_level=S2_VENDOR_DECLARED,
     ),
     ProtocolPresetDefinition(
         preset_id="pcie-5_0-x16",
@@ -471,7 +564,7 @@ def _display_gbs(value_gbps: Optional[float]) -> Optional[float]:
 
 
 def _metadata(item: ProtocolPresetDefinition) -> Dict[str, Any]:
-    return {
+    payload = {
         "id": item.preset_id,
         "name": item.name,
         "protocol": item.protocol,
@@ -495,6 +588,9 @@ def _metadata(item: ProtocolPresetDefinition) -> Dict[str, Any]:
         "limitations": list(item.limitations),
         "catalog_version": CATALOG_VERSION,
     }
+    if item.protocol.upper() in {"GDDR", "GDDR6", "GDDR6X", "GDDR7"}:
+        payload["generation"] = item.version.upper() if item.version.upper() in {"GDDR6", "GDDR6X", "GDDR7"} else item.protocol.upper()
+    return payload
 
 
 def _simulation_defaults(item: ProtocolPresetDefinition) -> Dict[str, Any]:
@@ -513,6 +609,9 @@ def _simulation_defaults(item: ProtocolPresetDefinition) -> Dict[str, Any]:
         "bandwidth_semantics": "one_way_capacity",
         "manual_override_allowed": True,
     }
+    if item.protocol.upper() in {"GDDR", "GDDR6", "GDDR6X", "GDDR7"}:
+        metadata["generation"] = item.version.upper() if item.version.upper() in {"GDDR6", "GDDR6X", "GDDR7"} else item.protocol.upper()
+        metadata["protocol_family"] = "GDDR"
     return {
         "source_port": {
             **common,

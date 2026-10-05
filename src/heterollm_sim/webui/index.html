@@ -146,6 +146,9 @@ PLACEHOLDERS / BOUNDARIES
                 <button type="button" class="palette-item io" data-add-kind="hbm">
                   <span class="component-glyph">HBM</span><span><strong data-concept-help="hbm">高带宽内存（HBM）</strong><small>专用 HBM 链路</small></span>
                 </button>
+                <button type="button" class="palette-item io" data-add-kind="gddr">
+                  <span class="component-glyph">GDDR</span><span><strong data-concept-help="gddr">图形双倍数据率内存（GDDR）</strong><small>GDDR6 / GDDR6X / GDDR7 专用链路</small></span>
+                </button>
                 <button type="button" class="palette-item io" data-add-kind="host_memory">
                   <span class="component-glyph">RAM</span><span><strong data-concept-help="host_memory">主机内存（Host Memory）</strong><small>CPU 可见内存成本（CPU-Visible Memory Cost）</small></span>
                 </button>
@@ -201,6 +204,7 @@ PLACEHOLDERS / BOUNDARIES
                     <label class="inline-control" for="protocolSelect" role="group" aria-label="连接协议（Connection Protocol）"><span data-concept-help="protocol">协议（Protocol）</span>
                       <select id="protocolSelect">
                         <option value="HBM">HBM</option>
+                        <option value="GDDR">GDDR</option>
                         <option value="PCIe">PCIe</option>
                         <option value="CXL">CXL</option>
                         <option value="HBF">HBF</option>
@@ -239,12 +243,12 @@ PLACEHOLDERS / BOUNDARIES
                 <div class="link-tooltip" id="topologyLinkTooltip" role="tooltip" hidden><strong data-link-tooltip-protocol>—</strong><span data-link-tooltip-bandwidth>—</span></div>
                 <div class="marquee" id="topologyMarquee" hidden></div>
                 <div class="canvas-empty" id="canvasEmpty" hidden>
-                  <strong>拓扑为空</strong><span>从左侧添加 GPU、HBM、HBF、SSD 或数字 SRAM-CIM。</span>
+                  <strong>拓扑为空</strong><span>从左侧添加 GPU、HBM、GDDR、HBF、SSD 或数字 SRAM-CIM。</span>
                 </div>
               </div>
               <div class="canvas-legend" aria-label="Component and protocol legend" data-i18n-aria-label-zh="组件与协议图例" data-i18n-aria-label-en="Component and protocol legend">
                 <span><i class="legend-swatch compute"></i>计算 / CIM</span>
-                <span><i class="legend-swatch io"></i>HBM</span>
+                <span><i class="legend-swatch io"></i>HBM / GDDR</span>
                 <span><i class="legend-swatch storage"></i>分层存储 / IO</span>
                 <div class="protocol-legend" id="topologyProtocolLegend" role="list" aria-label="Link protocol line styles" data-i18n-aria-label-zh="链路协议线型" data-i18n-aria-label-en="Link protocol line styles">
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-pcie"></i>PCIe</span>
@@ -254,6 +258,7 @@ PLACEHOLDERS / BOUNDARIES
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-roce"></i>RoCE</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-infinityfabric"></i>Infinity Fabric</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-hbm"></i>HBM / internal</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-gddr"></i>GDDR / internal</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-ddr"></i>DDR</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-lpddr5x"></i>LPDDR5X</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-unknown"></i><span data-i18n-zh="未知" data-i18n-en="Unknown">Unknown</span></span>
@@ -474,6 +479,7 @@ PLACEHOLDERS / BOUNDARIES
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-roce"></i>RoCE</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-infinityfabric"></i>Infinity Fabric</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-hbm"></i>HBM / internal</span>
+                  <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-gddr"></i>GDDR / internal</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-ddr"></i>DDR</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-lpddr5x"></i>LPDDR5X</span>
                   <span class="protocol-legend-item" role="listitem"><i class="protocol-legend-line protocol-unknown"></i><span data-i18n-zh="未知" data-i18n-en="Unknown">Unknown</span></span>
@@ -842,7 +848,7 @@ PLACEHOLDERS / BOUNDARIES
         <div>
           <span class="eyebrow kicker" data-i18n-zh="KV 驻留决策 · KV RESIDENCY EXPLORER" data-i18n-en="KV Residency Explorer">KV Residency Explorer</span>
           <h2 id="kvAnalysisDialogTitle" data-i18n-zh="KV Cache 分层扫描" data-i18n-en="KV Cache Residency Scan">KV Cache Residency Scan</h2>
-          <p id="kvAnalysisDescription" data-i18n-zh="复制当前模型和负载，分别运行 HBM、HBF 及混合候选，比较 TTFT、TPOT、E2E、KV 峰值驻留、读写流量和迁移成本。扫描不会修改当前场景。" data-i18n-en="Clone the current model and workload, run HBM, HBF, and hybrid candidates, and compare TTFT, TPOT, E2E, KV peak residency, traffic, and migration cost. The scan does not modify the current scenario.">Clone the current model and workload, run HBM, HBF, and hybrid candidates, and compare TTFT, TPOT, E2E, KV peak residency, traffic, and migration cost. The scan does not modify the current scenario.</p>
+          <p id="kvAnalysisDescription" data-i18n-zh="复制当前模型和负载，分别运行 HBM/GDDR、HBF 及混合候选，比较 TTFT、TPOT、E2E、KV 峰值驻留、读写流量和迁移成本。扫描不会修改当前场景。" data-i18n-en="Clone the current model and workload, run HBM/GDDR, HBF, and hybrid candidates, and compare TTFT, TPOT, E2E, KV peak residency, traffic, and migration cost. The scan does not modify the current scenario.">Clone the current model and workload, run HBM/GDDR, HBF, and hybrid candidates, and compare TTFT, TPOT, E2E, KV peak residency, traffic, and migration cost. The scan does not modify the current scenario.</p>
         </div>
         <button type="button" class="icon-button" id="closeKvAnalysisButton" aria-label="Close KV Cache residency scan" data-i18n-aria-label-zh="关闭 KV Cache 分层扫描" data-i18n-aria-label-en="Close KV Cache residency scan">×</button>
       </header>

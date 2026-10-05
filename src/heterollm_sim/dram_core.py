@@ -1,4 +1,4 @@
-"""Shared lightweight DRAM read/write core for DDR, LPDDR and HBM."""
+"""Shared lightweight DRAM read/write core for DDR, LPDDR, HBM and GDDR."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -48,6 +48,8 @@ class DramCore:
         return self.submit(request)
 
     def submit(self, request: AccessRequest) -> TransactionResult:
+        if request.operation is Operation.ERASE:
+            raise ValueError("DRAM does not support ERASE operations")
         validate_dram_request(request, self.config)
         effective_arrival = max(request.arrival_ns, self._acceptance_ns)
         inflight = [end for end in self._inflight if end > effective_arrival]

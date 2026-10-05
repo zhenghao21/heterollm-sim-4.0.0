@@ -30,6 +30,8 @@ ACTIVE_MEMORY_COMPONENT_KINDS = frozenset(
     {
         "hbm",
         "hbm_stack",
+        "gddr",
+        "gddr_memory",
         "dram",
         "ddr",
         "ddr_memory",
@@ -63,6 +65,11 @@ def normalize_component_kind(value: str) -> str:
         "ddr5": "ddr",
         "lpddr5": "lpddr",
         "lpddr5x": "lpddr",
+        # Generation is carried by component metadata; the component family
+        # remains canonical ``gddr`` for profile binding and topology.
+        "gddr6": "gddr",
+        "gddr6x": "gddr",
+        "gddr7": "gddr",
     }
     return aliases.get(normalized, normalized)
 
@@ -1854,6 +1861,9 @@ class ComponentSpec:
     # media models, but local interface links and typed memory profiles bind to
     # this value when it is present.
     bandwidth_gbps: float = field(default=0.0, kw_only=True)
+    # Physical memory generation is explicit for GDDR; other component kinds
+    # leave it empty.  Metadata remains accepted for older authoring payloads.
+    generation: str = field(default="", kw_only=True)
 
     def __post_init__(self) -> None:
         _require_name(self.component_id, "component_id")
@@ -1887,6 +1897,86 @@ class ComponentSpec:
                     metadata.setdefault("bandwidth_mode", "directional")
                     object.__setattr__(self, "metadata", metadata)
         _require_mapping(self.metadata, "metadata")
+        if self.normalized_kind in {"gddr", "gddr_memory"}:
+            # Preserve generation before replacing a generation-shaped kind
+            # with its canonical family.  Physical config is authoritative;
+            # explicit contradictions fail instead of silently choosing one.
+            from dataclasses import asdict, is_dataclass
+            from .memory_types import DramConfig, MemoryKind, parse_physical_memory_config
+
+            metadata = dict(self.metadata)
+            alias = self.kind.strip().upper().replace("-", "")
+            component_generation = str(
+                self.generation
+                or metadata.get(
+                    "generation", metadata.get("memory_generation", "")
+                ) or ""
+            ).strip().upper().replace("-", "")
+            if alias in {"GDDR6", "GDDR6X", "GDDR7"}:
+                if component_generation and component_generation != alias:
+                    raise ValueError(
+                        "component {} kind={} conflicts with metadata.generation={}".format(
+                            self.component_id, self.kind, component_generation
+                        )
+                    )
+                component_generation = alias
+            if component_generation and component_generation not in {"GDDR6", "GDDR6X", "GDDR7"}:
+                raise ValueError(
+                    "component {} metadata.generation must be GDDR6, GDDR6X or GDDR7".format(self.component_id)
+                )
+            physical_raw = metadata.get("physical_memory_config")
+            if physical_raw is not None:
+                parsed = parse_physical_memory_config(physical_raw)
+                if not isinstance(parsed, DramConfig) or parsed.kind is not MemoryKind.GDDR:
+                    raise ValueError(
+                        "component {} kind=gddr conflicts with physical_memory_config.kind={}".format(
+                            self.component_id, parsed.kind.value
+                        )
+                    )
+                if component_generation and parsed.generation and component_generation != parsed.generation:
+                    raise ValueError(
+                        "component {} metadata.generation={} conflicts with physical_memory_config.generation={}".format(
+                            self.component_id, component_generation, parsed.generation
+                        )
+                    )
+                component_generation = component_generation or parsed.generation
+                physical = asdict(physical_raw) if is_dataclass(physical_raw) else dict(physical_raw)
+                physical["kind"] = "GDDR"
+                if component_generation:
+                    physical["generation"] = component_generation
+                if parsed.interface_bandwidth_gb_s is not None:
+                    physical["interface_bandwidth_gb_s"] = parsed.interface_bandwidth_gb_s
+                metadata["physical_memory_config"] = physical
+                physical_bandwidth = parsed.physical_interface_bandwidth_gb_s * 8.0
+                if self.bandwidth_gbps > physical_bandwidth * (1.0 + 1e-12):
+                    raise ValueError(
+                        "component {} bandwidth_gbps={} Gb/s conflicts with physical_memory_config interface={} GB/s ({} Gb/s)".format(
+                            self.component_id, self.bandwidth_gbps,
+                            parsed.physical_interface_bandwidth_gb_s, physical_bandwidth,
+                        )
+                    )
+                if self.capacity_bytes > parsed.effective_capacity_bytes:
+                    raise ValueError(
+                        "component {} capacity_bytes={} B conflicts with physical_memory_config.capacity_bytes={} B".format(
+                            self.component_id, self.capacity_bytes, parsed.effective_capacity_bytes
+                        )
+                    )
+                if not self.bandwidth_gbps:
+                    object.__setattr__(self, "bandwidth_gbps", physical_bandwidth)
+                if not self.capacity_bytes:
+                    object.__setattr__(self, "capacity_bytes", parsed.effective_capacity_bytes)
+                elif self.capacity_bytes < parsed.effective_capacity_bytes:
+                    # The component's visible capacity can intentionally be a
+                    # bounded view of a larger declared geometry.
+                    physical["capacity_bytes"] = self.capacity_bytes
+                    metadata["physical_memory_config"] = physical
+            if component_generation:
+                metadata["generation"] = component_generation
+                object.__setattr__(self, "generation", component_generation)
+            if not str(metadata.get("memory_service_owner", "")).strip():
+                metadata["memory_service_owner"] = "{}.memory".format(self.component_id)
+            object.__setattr__(self, "kind", "gddr")
+            object.__setattr__(self, "metadata", metadata)
         _require_schema_version(self.schema_version)
         if self.normalized_kind == "hbf":
             access_mode = self.metadata.get("access_mode", "remote_flash")
@@ -1911,18 +2001,43 @@ class ComponentSpec:
             raise ValueError("memory_access_offset_bytes must be a non-negative integer")
         physical_config = self.metadata.get("physical_memory_config")
         if physical_config is not None:
-            from .memory_types import DramConfig, NandConfig
+            from .memory_types import parse_physical_memory_config
             from dataclasses import asdict, is_dataclass
             raw = asdict(physical_config) if is_dataclass(physical_config) else physical_config
             if not isinstance(raw, Mapping):
                 raise ValueError("physical_memory_config must be a DRAM/NAND config mapping")
-            kind = str(getattr(raw.get("kind", ""), "value", raw.get("kind", ""))).upper()
-            if kind in {"DDR", "LPDDR", "HBM"}:
-                DramConfig.from_mapping(raw)
-            elif kind in {"SSD", "HBF"}:
-                NandConfig.from_mapping(raw)
-            else:
-                raise ValueError("physical_memory_config.kind must be DDR, LPDDR, HBM, SSD or HBF")
+            parsed_config = parse_physical_memory_config(raw)
+            parsed_kind = str(getattr(parsed_config.kind, "value", parsed_config.kind)).upper()
+            component_kind = self.normalized_kind
+            if component_kind == "gddr" and parsed_kind != "GDDR":
+                raise ValueError(
+                    "component {} kind gddr requires physical_memory_config.kind=GDDR".format(
+                        self.component_id
+                    )
+                )
+            if parsed_kind == "GDDR" and component_kind != "gddr":
+                raise ValueError(
+                    "component {} physical GDDR config requires component kind=gddr".format(
+                        self.component_id
+                    )
+                )
+            if parsed_kind == "GDDR":
+                technology = self.metadata.get("technology", {})
+                declared_generations = {
+                    str(value).strip().upper().replace("-", "")
+                    for value in (
+                        getattr(parsed_config, "generation", ""),
+                        self.metadata.get("generation", ""),
+                        technology.get("generation", "") if isinstance(technology, Mapping) else "",
+                    )
+                    if str(value).strip()
+                }
+                if len(declared_generations) > 1:
+                    raise ValueError(
+                        "component {} GDDR generation conflicts: {}".format(
+                            self.component_id, ", ".join(sorted(declared_generations))
+                        )
+                    )
         if self.package_id:
             _require_name(self.package_id, "package_id")
         if self.die_id:
@@ -1996,7 +2111,11 @@ def default_memory_resource_id(component: ComponentSpec) -> str:
     declared = component.metadata.get("memory_service_owner")
     if isinstance(declared, str) and declared.strip():
         return declared.strip()
-    suffix = "hbm_fabric" if component.normalized_kind in {"hbm", "hbm_stack"} else "memory"
+    suffix = (
+        "hbm_fabric" if component.normalized_kind in {"hbm", "hbm_stack"}
+        else "gddr_fabric" if component.normalized_kind == "gddr"
+        else "memory"
+    )
     return "{}.{}".format(component.component_id, suffix)
 
 
@@ -2011,7 +2130,7 @@ def is_local_memory_interface_link(link: "LinkSpec", hardware: "HardwareSpec") -
     if source_flag in {"component", "memory_component", "shared_component"}:
         return True
     protocol = normalize_component_kind(str(link.protocol))
-    if protocol in {"hbm", "hbf", "ddr", "dram", "tsv", "lpddr5x"}:
+    if protocol in {"hbm", "gddr", "gddr6", "gddr6x", "gddr7", "hbf", "ddr", "dram", "tsv", "lpddr5x"}:
         return source.is_active_memory or target.is_active_memory
     return False
 

@@ -37,8 +37,72 @@ class MemoryKind(str, Enum):
     DDR = "DDR"
     LPDDR = "LPDDR"
     HBM = "HBM"
+    # GDDR is a first-class DRAM family.  The concrete generation is kept in
+    # ``DramConfig.generation`` so all generations share the same DramCore.
+    GDDR = "GDDR"
     SSD = "SSD"
     HBF = "HBF"
+
+
+_GDDR_GENERATIONS = frozenset({"GDDR6", "GDDR6X", "GDDR7"})
+
+
+def _coerce_dram_kind(value: Any, generation: Any = "") -> tuple[MemoryKind, str]:
+    """Canonicalize DRAM family and GDDR generation without guessing NAND."""
+
+    raw = str(getattr(value, "value", value)).strip().upper().replace("-", "")
+    generation_text = str(generation or "").strip().upper().replace("-", "")
+    # Accept generation-shaped kind values as an authoring convenience while
+    # retaining the generation in the canonical config.
+    if raw in _GDDR_GENERATIONS:
+        if generation_text and generation_text != raw:
+            raise ValueError(
+                "kind {} conflicts with generation {}".format(raw, generation_text)
+            )
+        generation_text = generation_text or raw
+        raw = "GDDR"
+    if raw == "GDDR" and generation_text:
+        if generation_text not in _GDDR_GENERATIONS:
+            raise ValueError(
+                "GDDR generation must be GDDR6, GDDR6X or GDDR7; got {}".format(
+                    generation
+                )
+            )
+    try:
+        kind = MemoryKind(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "kind must be DDR, LPDDR, HBM, GDDR, SSD or HBF"
+        ) from exc
+    return kind, generation_text
+
+
+def parse_physical_memory_config(values: Any) -> "DramConfig | NandConfig":
+    """Parse one physical memory config through a single explicit dispatcher.
+
+    Unknown kinds fail before entering the NAND branch.  Generation aliases
+    such as ``GDDR7`` are canonicalized to ``kind=GDDR, generation=GDDR7``.
+    """
+
+    from dataclasses import asdict, is_dataclass
+
+    raw = asdict(values) if is_dataclass(values) else values
+    if not isinstance(raw, Mapping):
+        raise ValueError("physical_memory_config must be a DRAM/NAND config mapping")
+    payload = dict(raw)
+    kind_value = payload.get("kind")
+    kind_name = str(getattr(kind_value, "value", kind_value or "")).strip().upper().replace("-", "")
+    if kind_name in _GDDR_GENERATIONS:
+        return DramConfig.from_mapping(payload)
+    if kind_name in {"DDR", "LPDDR", "HBM", "GDDR"}:
+        return DramConfig.from_mapping(payload)
+    if kind_name in {"SSD", "HBF"}:
+        return NandConfig.from_mapping(payload)
+    raise ValueError(
+        "physical_memory_config.kind must be DDR, LPDDR, HBM, GDDR, SSD or HBF; got {}".format(
+            kind_value
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -89,6 +153,10 @@ class DramConfig:
     burst_bytes: int = 64
     data_width_bits: int = 64
     data_rate_mt_s: float = 3200.0
+    # Effective per-pin Gbit/s already includes DDR/PAM encoding effects.
+    # Explicit GDDR rate mode uses it once, without changing legacy MT/s.
+    effective_pin_data_rate_gbps: Optional[float] = None
+    bandwidth_input_mode: str = "bandwidth"
     lane_bandwidth_gb_s: Optional[float] = None
     interface_bandwidth_gb_s: Optional[float] = None
     read_bandwidth_gb_s: Optional[float] = None
@@ -111,16 +179,23 @@ class DramConfig:
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, Any]) -> "DramConfig":
-        return cls(**dict(values))
+        payload = dict(values)
+        kind, generation = _coerce_dram_kind(payload.get("kind", MemoryKind.DDR), payload.get("generation", ""))
+        payload["kind"] = kind
+        if generation:
+            payload["generation"] = generation
+        return cls(**payload)
 
     def __post_init__(self) -> None:
         try:
-            kind = self.kind if isinstance(self.kind, MemoryKind) else MemoryKind(str(self.kind).upper())
+            kind, generation = _coerce_dram_kind(self.kind, self.generation)
         except ValueError as exc:
-            raise ValueError("kind must be DDR, LPDDR or HBM") from exc
-        if kind not in {MemoryKind.DDR, MemoryKind.LPDDR, MemoryKind.HBM}:
-            raise ValueError("DramConfig.kind must be DDR, LPDDR or HBM")
+            raise ValueError("kind must be DDR, LPDDR, HBM or GDDR") from exc
+        if kind not in {MemoryKind.DDR, MemoryKind.LPDDR, MemoryKind.HBM, MemoryKind.GDDR}:
+            raise ValueError("DramConfig.kind must be DDR, LPDDR, HBM or GDDR")
         object.__setattr__(self, "kind", kind)
+        if generation:
+            object.__setattr__(self, "generation", generation)
         for name in ("channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "data_width_bits"):
             _positive_int(name, getattr(self, name))
         _positive_int("max_outstanding_requests", self.max_outstanding_requests)
@@ -144,6 +219,38 @@ class DramConfig:
                 _positive_int(name, value) if name == "capacity_bytes" else _nonnegative(name, value)
                 if name in {"lane_bandwidth_gb_s", "interface_bandwidth_gb_s", "read_bandwidth_gb_s", "write_bandwidth_gb_s"} and value <= 0:
                     raise ValueError(f"{name} must be positive")
+        mode = str(self.bandwidth_input_mode).strip().lower().replace("-", "_")
+        if mode not in {"bandwidth", "data_rate"}:
+            raise ValueError("bandwidth_input_mode must be bandwidth or data_rate")
+        object.__setattr__(self, "bandwidth_input_mode", mode)
+        if self.effective_pin_data_rate_gbps is not None:
+            rate = _nonnegative("effective_pin_data_rate_gbps", self.effective_pin_data_rate_gbps)
+            if rate <= 0:
+                raise ValueError("effective_pin_data_rate_gbps must be positive")
+            total_from_rate = rate * self.data_width_bits * self.lane_count / 8.0
+            if self.interface_bandwidth_gb_s is not None and not math.isclose(
+                float(self.interface_bandwidth_gb_s), total_from_rate, rel_tol=1e-12
+            ):
+                raise ValueError(
+                    "interface_bandwidth_gb_s={} GB/s conflicts with effective_pin_data_rate_gbps={} Gb/s and total width {} bit ({} GB/s)".format(
+                        self.interface_bandwidth_gb_s, rate,
+                        self.data_width_bits * self.lane_count, total_from_rate,
+                    )
+                )
+            if self.lane_bandwidth_gb_s is not None and not math.isclose(
+                float(self.lane_bandwidth_gb_s) * self.lane_count,
+                total_from_rate,
+                rel_tol=1e-12,
+            ):
+                raise ValueError(
+                    "lane_bandwidth_gb_s={} GB/s conflicts with effective_pin_data_rate_gbps={} Gb/s".format(
+                        self.lane_bandwidth_gb_s, rate
+                    )
+                )
+            if self.interface_bandwidth_gb_s is None and self.lane_bandwidth_gb_s is None:
+                object.__setattr__(self, "interface_bandwidth_gb_s", total_from_rate)
+        elif mode == "data_rate":
+            raise ValueError("data_rate mode requires effective_pin_data_rate_gbps in Gb/s")
         if self.lane_bandwidth_gb_s is not None and self.interface_bandwidth_gb_s is not None:
             raise ValueError("choose lane_bandwidth_gb_s or interface_bandwidth_gb_s, not both")
         physical_bandwidth = (
@@ -188,6 +295,12 @@ class DramConfig:
     @property
     def bandwidth_gb_s(self) -> float:
         return max(self.directional_bandwidth_gb_s(Operation.READ), self.directional_bandwidth_gb_s(Operation.WRITE))
+
+    @property
+    def physical_interface_bandwidth_gb_s(self) -> float:
+        """The shared physical data-interface peak, before direction caps."""
+
+        return self.effective_lane_bandwidth_gb_s * self.lane_count
 
     def directional_bandwidth_gb_s(self, operation: Operation | str) -> float:
         op = operation if isinstance(operation, Operation) else Operation(str(operation).lower())
@@ -493,6 +606,13 @@ def make_hbm_config(**kwargs: Any) -> DramConfig:
     return DramConfig(**kwargs)
 
 
+def make_gddr_config(**kwargs: Any) -> DramConfig:
+    """Create a GDDR config while retaining the optional generation label."""
+
+    kwargs["kind"] = MemoryKind.GDDR
+    return DramConfig(**kwargs)
+
+
 def make_ssd_config(**kwargs: Any) -> NandConfig:
     kwargs["kind"] = MemoryKind.SSD
     kwargs.setdefault("host_bandwidth_gb_s", 112.0)
@@ -513,6 +633,7 @@ def make_hbf_config(**kwargs: Any) -> NandConfig:
 __all__ = [
     "AccessRequest", "AddressMapping", "BatchResult", "DramConfig", "MemoryKind", "NandConfig",
     "Operation", "Segment", "StageTiming", "TransactionResult",
-    "make_ddr_config", "make_lpddr_config", "make_hbm_config",
+    "make_ddr_config", "make_lpddr_config", "make_hbm_config", "make_gddr_config",
+    "parse_physical_memory_config",
     "make_ssd_config", "make_hbf_config",
 ]

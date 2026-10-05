@@ -27,7 +27,11 @@ def resolve_l2_task(task, states):
     accesses = tuple(CacheAccess(**{**item, 'buffer_id':
                         task.task_id + item['buffer_id'][10:] if item['buffer_id'].startswith('@tasklocal') else item['buffer_id']})
                      for item in contract['accesses'])
-    hbm = HBMProfile(**contract['hbm'])
+    # GDDRProfile shares the DRAM service contract but adds generation
+    # metadata; the cache recost path only needs the common HBM fields.
+    hbm_payload = dict(contract['hbm'])
+    hbm_payload.pop('generation', None)
+    hbm = HBMProfile(**hbm_payload)
     results = cache.access_many(accesses)
     states[owner] = (signature, cache)
     reads = sum(r.backing_read_bytes for r in results)

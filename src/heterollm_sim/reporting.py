@@ -2527,8 +2527,8 @@ def _component_capacities(
         if write_bandwidth <= 0.0:
             write_bandwidth = attached_bandwidth
 
-    if profile_kind in {"hbm", "host_memory"}:
-        if profile_kind == "hbm":
+    if profile_kind in {"hbm", "gddr", "host_memory"}:
+        if profile_kind in {"hbm", "gddr"}:
             memory_profile = scenario.resolve_component_profile(
                 component, HBMProfile
             )
@@ -2745,7 +2745,7 @@ def _component_memory_resource_id(
     scenario: ScenarioConfig, component: Any
 ) -> Optional[str]:
     profile_kind = normalize_cost_profile_kind(component.normalized_kind)
-    if profile_kind == "hbm":
+    if profile_kind in {"hbm", "gddr"}:
         profile = scenario.resolve_component_profile(component, HBMProfile)
     elif profile_kind == "host_memory":
         profile = scenario.resolve_component_profile(

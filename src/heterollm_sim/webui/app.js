@@ -21,7 +21,7 @@ const UI_THEMES = Object.freeze(["graphite", "bluegray", "black", "ivory", "mist
 const LIGHT_THEMES = new Set(["ivory", "mist", "softgray"]);
 const COMPONENT_KINDS = Object.freeze([
   "gpu", "generic_accelerator", "digital_sram_cim", "pim_accelerator",
-  "hbm", "hbm_stack", "dram", "host_memory", "cxl_memory", "hbf", "ssd", "high_io_ssd",
+  "hbm", "hbm_stack", "gddr", "dram", "host_memory", "cxl_memory", "hbf", "ssd", "high_io_ssd",
   "cpu", "fabric_switch", "io_die",
 ]);
 // hbm_stack remains a valid backend kind for imported architecture presets,
@@ -279,6 +279,7 @@ const CONCEPT_HELP_ZH = Object.freeze({
   ir: "IR（Intermediate Representation，中间表示）是前端编辑、校验、映射和仿真共同读取的规范结构；界面视图不是另一份执行真相。",
   dag: "DAG（有向无环图）用于表达算子和张量依赖。新增连接必须保持无环，否则模型不能形成合法执行顺序。",
   hbm: "HBM（High-Bandwidth Memory，高带宽内存）是靠近加速器的高带宽易失性主存；本项目将它与 HBF 后备闪存严格区分。",
+  gddr: "GDDR 是 GPU 本地显存家族；GDDR6、GDDR6X、GDDR7 使用明确代际与专用控制器连接。一个节点默认表示整套等效显存子系统，容量用字节、物理带宽用十进制 GB/s。",
   hbf: "HBF（High-Bandwidth Flash，高带宽闪存）在本项目中表示只读优先的 NAND 高带宽后备存储，不是 HBM。未知或未声明的写带宽不能被当作零成本写入，也不能据此用于 KV Cache 或线性 state offload。",
   cim: "CIM（Compute-In-Memory，存算一体）表示在存储阵列附近或内部执行受支持计算的组件；当前数字 SRAM-CIM 仍受显式算子、容量和互连约束。",
   chiplet: "Chiplet（芯粒）是封装内可独立设计并通过 die-to-die 互连组合的裸片。分组框只表达封装视图，不会自动改变执行或带宽语义。",
@@ -531,6 +532,7 @@ const CONCEPT_HELP_EN = Object.freeze({
   ir: "IR (Intermediate Representation) is the canonical structure shared by editing, validation, placement, and simulation; a UI projection is not a second execution truth.",
   dag: "A DAG is the directed acyclic operator-and-tensor dependency graph. New connections must preserve acyclicity to keep a valid execution order.",
   hbm: "HBM is high-bandwidth volatile memory close to an accelerator. This project keeps it strictly distinct from HBF backing flash.",
+  gddr: "GDDR is GPU-local memory. GDDR6, GDDR6X, and GDDR7 retain their generation and connect to a dedicated matching controller. A node represents an equivalent memory subsystem, with bytes for capacity and decimal GB/s for physical bandwidth.",
   hbf: "HBF means read-mostly NAND High-Bandwidth Flash in this project, not HBM. Unknown or undeclared write bandwidth is not zero-cost writing and does not authorize KV-cache or linear-state offload.",
   cim: "Compute-In-Memory executes supported work near or inside a memory array. Digital SRAM-CIM remains subject to explicit operators, capacity, and links.",
   chiplet: "A Chiplet is a separately designed die combined with others through package die-to-die links. A visual group alone does not change execution semantics.",
@@ -804,7 +806,7 @@ const CONCEPT_HELP_DISPLAY_KEYS = new Set([
 ]);
 const CONCEPT_HELP_PROFILE_KEYS = Object.freeze({
   hardware: new Set([
-    "hbm", "hbf", "cim", "chiplet", "pcie", "cxl", "ucie", "nvlink", "roce", "sram", "dma",
+    "hbm", "gddr", "hbf", "cim", "chiplet", "pcie", "cxl", "ucie", "nvlink", "roce", "sram", "dma",
     "read_latency", "write_latency", "transfer_granularity", "dma_latency", "dma_bandwidth", "dma_energy",
     "dma_resource", "outstanding_requests", "capacity", "peak_ops", "gemm_throughput",
     "elementwise_throughput", "reduction_throughput", "bandwidth", "protocol", "bandwidth_semantics",
@@ -1301,17 +1303,17 @@ const CONCEPT_HELP_DETAIL_OVERRIDES = Object.freeze({
   kv_residency_policy: Object.freeze({
     "zh-CN": Object.freeze([
       "映射和运行时用该策略确定 KV Cache 首选驻留位置、容量页以及内存不足时的卸载目标。",
-      "缓存组件应选择适用 HBM；卸载组件可留空表示不卸载，或选择显式可达组件；每页 Token 数为大于等于 1 的整数。",
+      "缓存组件应选择适用 HBM/GDDR；卸载组件可留空表示不卸载，或选择显式可达组件；每页 Token 数为大于等于 1 的整数。",
       "组件选项来自当前硬件拓扑；空缓存表示未指定，空卸载表示不卸载；每页 Token 默认由当前场景 schema 提供。",
       "选择会改变容量门禁、KV 读写流量、迁移次数、传输时间以及可能的重计算。",
-      "界面不会自动创建缺失硬件或链路。例如选择 HBM0 + SSD0 只有在两者存在可达协议路径时才形成有效卸载方案。",
+      "界面不会自动创建缺失硬件或链路。例如选择 HBM/GDDR0 + SSD0 只有在两者存在可达协议路径时才形成有效卸载方案。",
     ]),
     en: Object.freeze([
       "Placement and runtime use this policy to choose primary KV Cache residency, capacity pages, and the offload target under memory pressure.",
-      "Choose an applicable HBM cache component; leave offload empty for no offload or select an explicitly reachable component; Tokens per Page must be an integer of at least 1.",
+      "Choose an applicable HBM/GDDR cache component; leave offload empty for no offload or select an explicitly reachable component; Tokens per Page must be an integer of at least 1.",
       "Component choices come from the current topology. Empty cache means unspecified; empty offload means disabled; the current scenario schema supplies the page-size default.",
       "The selection changes capacity gates, KV traffic, migration counts, transfer time, and possible recomputation.",
-      "The UI does not create missing hardware or links. HBM0 + SSD0 is valid only when an explicit reachable protocol path exists between them.",
+      "The UI does not create missing hardware or links. An HBM/GDDR memory component plus SSD0 is valid only when an explicit reachable protocol path exists between them.",
     ]),
   }),
   model_weights_backing: Object.freeze({
@@ -1527,7 +1529,7 @@ const CONCEPT_TERM_PATTERNS = Object.freeze([
   ["physical_link", /物理链路|Physical Link/iu], ["link_latency", /链路时延|Link Latency/iu],
   ["bidirectional_link", /双向链路|Bidirectional Link/iu], ["lanes", /通道数|\bLanes?\b/iu], ["payload", /载荷语义|\bPayload\b/iu],
   ["capacity_gate", /容量门禁|Capacity Gate/iu],
-  ["hbf", /高带宽闪存|\bHBF\b/iu], ["hbm", /高带宽内存|\bHBM\b/iu], ["cim", /存算一体|SRAM[- ]?CIM|\bCIM\b/iu],
+  ["hbf", /高带宽闪存|\bHBF\b/iu], ["hbm", /高带宽内存|\bHBM\b/iu], ["gddr", /图形(?:双倍数据率)?内存|\bGDDR(?:6X?|7)?\b/iu], ["cim", /存算一体|SRAM[- ]?CIM|\bCIM\b/iu],
   ["chiplet", /芯粒|\bChiplet(?:s)?\b|异构封装/iu], ["pcie", /\bPCIe\b/iu], ["cxl", /\bCXL\b/iu], ["ucie", /\bUCIe\b/iu],
   ["nvlink", /\bNVLink(?:-C2C)?\b/iu], ["roce", /\bRoCE\b/iu], ["sram", /\bSRAM\b/iu],
   ["read_latency", /读取延迟|Read Latency/iu], ["write_latency", /写入延迟|Write Latency/iu],
@@ -3969,7 +3971,7 @@ function focusValidationIssue(issue, { announce = true } = {}) {
   } else {
     control = validationFindControl(target);
   }
-  if (!control && /hardware|topology|component|profile|gpu|hbm|拓扑|硬件|组件/.test(context)) {
+  if (!control && /hardware|topology|component|profile|gpu|hbm|gddr|拓扑|硬件|组件/.test(context)) {
     switchView("architecture");
     const paletteKind = context.match(/\b(gpu|cpu|hbm|ram|hbf|ssd|cim)\b/i)?.[1]?.toLowerCase();
     control = paletteKind ? document.querySelector?.(`[data-add-kind="${paletteKind === "ram" ? "host_memory" : paletteKind}"]`) : null;
@@ -4893,11 +4895,19 @@ function componentKindClass(kind) {
 }
 
 function normalizedComponentKind(kind) {
-  return String(kind || "").toLowerCase().replaceAll("-", "_");
+  const normalized = String(kind || "").toLowerCase().replaceAll("-", "_");
+  return ["gddr6", "gddr6x", "gddr7"].includes(normalized) ? "gddr" : normalized;
 }
 
 function isDedicatedHbm(kind) {
   return ["hbm", "hbm_stack"].includes(normalizedComponentKind(kind));
+}
+
+function gddrGeneration(component) {
+  const metadata = asObject(component?.metadata);
+  const physical = asObject(metadata.physical_memory_config);
+  const technology = asObject(metadata.technology);
+  return String(physical.generation || metadata.generation || technology.generation || metadata.memory_type || "").toUpperCase();
 }
 
 function sharedMemoryLinkComponent(link, scenario = state.scenario) {
@@ -4925,7 +4935,7 @@ function linkDisplayedBandwidthGbps(link, scenario = state.scenario) {
 function isActiveMemoryComponent(componentOrKind) {
   const component = componentOrKind && typeof componentOrKind === "object" ? componentOrKind : null;
   const kind = normalizedComponentKind(component ? component.kind : componentOrKind);
-  if (["hbm", "hbm_stack", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory", "memory", "sram", "shared_memory"].includes(kind)) return true;
+  if (["hbm", "hbm_stack", "gddr", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory", "memory", "sram", "shared_memory"].includes(kind)) return true;
   return kind === "hbf" && asObject(component?.metadata).access_mode === "memory";
 }
 
@@ -4945,10 +4955,10 @@ function isFlashStorage(kind) {
 // describe a topology endpoint, while this object is the canonical DRAM/NAND
 // contract consumed by the physical cores.
 const PHYSICAL_MEMORY_COMPONENT_KINDS = new Set([
-  "hbm", "hbm_stack", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory",
+  "hbm", "hbm_stack", "gddr", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory",
   "hbf", "ssd", "high_io_ssd",
 ]);
-const PHYSICAL_MEMORY_KINDS = new Set(["DDR", "LPDDR", "HBM", "SSD", "HBF"]);
+const PHYSICAL_MEMORY_KINDS = new Set(["DDR", "LPDDR", "HBM", "GDDR", "SSD", "HBF"]);
 
 function physicalMemoryConfigForComponent(component) {
   const kind = normalizedComponentKind(component?.kind);
@@ -4963,18 +4973,23 @@ function validatePhysicalMemoryConfig(value, component) {
   }
   const kind = String(value.kind || "").trim().toUpperCase();
   if (!PHYSICAL_MEMORY_KINDS.has(kind)) {
-    throw new Error("physical_memory_config.kind 必须是 DDR、LPDDR、HBM、SSD 或 HBF。");
+    throw new Error("physical_memory_config.kind 必须是 DDR、LPDDR、HBM、GDDR、SSD 或 HBF。");
   }
   const componentKind = normalizedComponentKind(component?.kind);
   const allowed = componentKind === "hbf"
     ? new Set(["HBF"])
     : ["ssd", "high_io_ssd"].includes(componentKind)
       ? new Set(["SSD"])
-      : componentKind === "hbm" || componentKind === "hbm_stack"
+      : componentKind === "gddr"
+        ? new Set(["GDDR"])
+        : componentKind === "hbm" || componentKind === "hbm_stack"
         ? new Set(["HBM"])
         : new Set(["DDR", "LPDDR", "HBM"]);
   if (!allowed.has(kind)) {
     throw new Error(`组件 ${component?.component_id || ""} 的物理配置类型 ${kind} 与组件类型不匹配。`);
+  }
+  if (kind === "GDDR" && !["GDDR6", "GDDR6X", "GDDR7"].includes(String(value.generation || "").toUpperCase())) {
+    throw new Error("physical_memory_config.generation 必须是 GDDR6、GDDR6X 或 GDDR7。");
   }
   const integerFields = kind === "SSD" || kind === "HBF"
     ? ["channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes"]
@@ -4996,6 +5011,7 @@ function kindLabel(kind) {
     gpu: ["通用计算（GPU）", "GPU Compute"],
     hbm: ["高带宽内存（HBM）", "High-Bandwidth Memory (HBM)"],
     hbm_stack: ["高带宽内存堆栈（HBM）", "HBM Stack"],
+    gddr: ["图形显存（GDDR）", "Graphics Memory (GDDR)"],
     hbf: ["高带宽闪存（HBF）", "High-Bandwidth Flash (HBF)"],
     dram: ["堆叠 DRAM", "Stacked DRAM"],
     ssd: ["固态硬盘（SSD）", "Solid-State Drive (SSD)"],
@@ -5232,7 +5248,7 @@ function openArchitectureScanDialog() {
 
 function kvAnalysisComponentCandidates(scenario) {
   const components = asArray(scenario?.hardware?.components);
-  const hbm = components.filter((component) => ["hbm", "hbm_stack"].includes(normalizedComponentKind(component?.kind)));
+  const hbm = components.filter((component) => ["hbm", "hbm_stack", "gddr"].includes(normalizedComponentKind(component?.kind)));
   const hbf = components.filter((component) => normalizedComponentKind(component?.kind) === "hbf");
   const currentPolicy = asObject(scenario?.placement?.kv_policy);
   const candidates = [];
@@ -5244,13 +5260,14 @@ function kvAnalysisComponentCandidates(scenario) {
     add("current", "当前策略", currentPolicy, "保留当前 KV 驻留设置，作为同一模型和负载的基线。");
   }
   if (hbm.length) {
-    add("hbm", `HBM（${hbm[0].component_id}）`, {
+    const activeLabel = kindLabel(hbm[0].kind);
+    add("hbm", `${activeLabel}（${hbm[0].component_id}）`, {
       ...currentPolicy,
       layout_mode: "fixed",
       cache_component: hbm[0].component_id,
       offload_component: null,
       pool_components: [],
-    }, "全部 KV 保持在 HBM 活动层，不配置外移。");
+    }, "全部 KV 保持在本地显存活动层，不配置外移。");
   }
   if (hbf.length) {
     const target = hbf[0];
@@ -5267,7 +5284,7 @@ function kvAnalysisComponentCandidates(scenario) {
   }
   if (hbm.length && hbf.length) {
     const target = hbf[0];
-    add("hybrid", `混合（HBM + HBF）`, {
+    add("hybrid", `混合（${kindLabel(hbm[0].kind)} + HBF）`, {
       ...currentPolicy,
       layout_mode: "fixed",
       cache_component: hbm[0].component_id,
@@ -5278,7 +5295,7 @@ function kvAnalysisComponentCandidates(scenario) {
       offload_ratio: 1.0,
       pool_components: [],
     }, isWritableActiveRankMemory(target)
-      ? "HBM 作为活动层，容量压力下将 KV 页卸载到 HBF。"
+      ? `${kindLabel(hbm[0].kind)} 作为活动层，容量压力下将 KV 页卸载到 HBF。`
       : "HBF 未声明可写活动内存；混合候选会显示为不可行，结果用于说明当前硬件能力边界。");
   }
   return candidates;
@@ -5386,7 +5403,7 @@ async function runKvAnalysis() {
   const scenarioReference = state.scenario;
   const candidates = kvAnalysisComponentCandidates(scenarioReference);
   if (!candidates.length) {
-    toast("KV 分层扫描不可用", "当前硬件没有 HBM 或 HBF 组件，请先载入支持分层的架构预设。", "warning", 5200);
+    toast("KV 分层扫描不可用", "当前硬件没有本地显存（HBM/GDDR）或 HBF 组件，请先载入支持分层的架构预设。", "warning", 5200);
     return;
   }
   state.kvAnalysisRunning = true;
@@ -5418,7 +5435,7 @@ async function runKvAnalysis() {
   }
   state.kvAnalysisRunning = false;
   renderKvAnalysis();
-  if (!aborted) toast("KV 分层扫描完成", "当前模型和负载的 HBM、HBF、混合候选已经逐一评估。", "success", 5200);
+  if (!aborted) toast("KV 分层扫描完成", "当前模型和负载的 HBM/GDDR、HBF、混合候选已经逐一评估。", "success", 5200);
 }
 
 function openKvAnalysisDialog() {
@@ -5947,6 +5964,7 @@ function topologyProtocolClass(protocol) {
   if (compact.includes("roce")) return "roce";
   if (compact.includes("cxl")) return "cxl";
   if (compact.includes("hbm")) return "hbm";
+  if (compact.includes("gddr")) return "gddr";
   if (compact === "ddr" || /^ddr[345]/.test(compact)) return "ddr";
   if (compact.includes("internal")) return "internal";
   return "unknown";
@@ -6811,6 +6829,7 @@ function handleConnectNode(componentId) {
 
 const PROTOCOL_DEFAULTS = {
   HBM: { preset_id: "hbm3-6_4-1024", version: "HBM3", lanes: 16, bandwidth_gbps: 6553.6, latency_ns: 40 },
+  GDDR: { preset_id: "gddr6-20_0-256", version: "GDDR6", lanes: 256, bandwidth_gbps: 5120, latency_ns: 35 },
   PCIe: { preset_id: "pcie-5_0-x16", version: "5.0", lanes: 16, bandwidth_gbps: 504.12307692307695, latency_ns: 150 },
   CXL: { preset_id: "cxl-3_0-x16", version: "3.0", lanes: 16, bandwidth_gbps: 1024, latency_ns: 180 },
   HBF: { preset_id: null, version: "2.0", lanes: 64, bandwidth_gbps: 3904, latency_ns: 4000, payload: "streaming" },
@@ -6882,14 +6901,21 @@ function createProtocolLink(sourceId, targetId, protocol) {
   const targetIsHbm = isDedicatedHbm(target.kind);
   const sourceKind = normalizedComponentKind(source.kind);
   const targetKind = normalizedComponentKind(target.kind);
+  const sourceIsGddr = sourceKind === "gddr";
+  const targetIsGddr = targetKind === "gddr";
   const hasHbf = sourceKind === "hbf" || targetKind === "hbf";
   const hasSsd = [sourceKind, targetKind].some((kind) => ["ssd", "high_io_ssd"].includes(kind));
 
   if (protocol === "HBM") {
     if (sourceIsHbm === targetIsHbm) throw new Error("HBM 链路必须且只能连接一个 HBM 组件");
     if (sourceIsHbm) [source, target] = [target, source];
+  } else if (protocol === "GDDR") {
+    if (sourceIsGddr === targetIsGddr) throw new Error("GDDR 链路必须且只能连接一个 GDDR 组件");
+    if (sourceIsGddr) [source, target] = [target, source];
+    if (normalizedComponentKind(source.kind) !== "gpu") throw new Error("GDDR 首版只支持 GPU 本地控制器连接");
   } else {
     if (sourceIsHbm || targetIsHbm) throw new Error("HBM 组件只能使用专用 HBM 链路");
+    if (sourceIsGddr || targetIsGddr) throw new Error("GDDR 组件只能使用专用 GDDR 链路");
     if (hasHbf && !["HBF", "UCIe"].includes(protocol)) throw new Error("高带宽闪存（HBF）连接应使用 HBF 或 UCIe");
     if (hasSsd && !["PCIe", "CXL"].includes(protocol)) throw new Error("SSD 与高 I/O SSD 连接应使用 PCIe 或 CXL");
     if (["PCIe", "CXL"].includes(protocol) && targetIsGpu && !sourceIsGpu) [source, target] = [target, source];
@@ -6904,8 +6930,22 @@ function createProtocolLink(sourceId, targetId, protocol) {
   }
 
   const defaults = currentProtocolConnectionDefaults();
+  if (protocol === "GDDR") {
+    const memoryGeneration = gddrGeneration(target);
+    const selectedGeneration = String(defaults.version).toUpperCase();
+    if (!["GDDR6", "GDDR6X", "GDDR7"].includes(selectedGeneration)) throw new Error("GDDR 版本必须是 GDDR6、GDDR6X 或 GDDR7");
+    if (memoryGeneration && memoryGeneration !== selectedGeneration) throw new Error(`显存 ${target.component_id} 的代际 ${memoryGeneration} 与链路 ${selectedGeneration} 不一致`);
+    const supported = asArray(source.metadata?.supported_gddr_generations);
+    const controllerGenerations = supported.length ? supported.map((value) => String(value).toUpperCase())
+      : asArray(source.ports).filter((port) => /^GDDR/i.test(String(port.protocol))).map((port) => String(port.version || port.protocol).match(/GDDR(?:6X|6|7)/i)?.[0]?.toUpperCase()).filter(Boolean);
+    if (!controllerGenerations.includes(selectedGeneration)) throw new Error(`GPU ${source.component_id} 未声明支持 ${selectedGeneration} 控制器，请在 GPU 元数据或端口中声明 supported_gddr_generations`);
+  }
   const historyBefore = topologyHistorySnapshot();
-  const localMemoryComponent = protocol === "HBM"
+  if (protocol === "GDDR") {
+    target.metadata ??= {};
+    target.metadata.generation = String(defaults.version).toUpperCase();
+  }
+  const localMemoryComponent = ["HBM", "GDDR"].includes(protocol)
     ? [source, target].find((item) => isActiveMemoryComponent(item)) || null
     : null;
   const localMemoryBandwidth = localMemoryComponent
@@ -6923,7 +6963,7 @@ function createProtocolLink(sourceId, targetId, protocol) {
   const targetPortId = uniquePortId(target, protocol);
   let sourceRole = "endpoint";
   let targetRole = "endpoint";
-  if (protocol === "HBM") [sourceRole, targetRole] = ["controller", "device"];
+  if (["HBM", "GDDR"].includes(protocol)) [sourceRole, targetRole] = ["controller", "device"];
   if (protocol === "PCIe") [sourceRole, targetRole] = ["root", "endpoint"];
   if (protocol === "CXL") [sourceRole, targetRole] = ["host", "device"];
   const makePort = (portId, role) => ({
@@ -6941,7 +6981,7 @@ function createProtocolLink(sourceId, targetId, protocol) {
       ...(defaults.protocol_preset_id ? { protocol_preset_id: defaults.protocol_preset_id } : {}),
       bandwidth_semantics: localMemoryComponent ? "shared_component_total" : "one_way_capacity",
       bandwidth_source: localMemoryComponent ? "memory_component" : "link",
-      ...(localMemoryComponent ? { bandwidth_resource_id: localMemoryResourceId } : {}),
+      ...(localMemoryComponent ? { bandwidth_resource_id: localMemoryResourceId, service_ref: `${localMemoryComponent.component_id}.access` } : {}),
       manual_override_allowed: !localMemoryComponent,
     },
   });
@@ -6967,7 +7007,7 @@ function createProtocolLink(sourceId, targetId, protocol) {
       ...(defaults.protocol_preset_id ? { protocol_preset_id: defaults.protocol_preset_id } : {}),
       bandwidth_semantics: localMemoryComponent ? "shared_component_total" : "one_way_capacity",
       bandwidth_source: localMemoryComponent ? "memory_component" : "link",
-      ...(localMemoryComponent ? { bandwidth_resource_id: localMemoryResourceId } : {}),
+      ...(localMemoryComponent ? { bandwidth_resource_id: localMemoryResourceId, service_ref: `${localMemoryComponent.component_id}.access` } : {}),
       manual_override_allowed: !localMemoryComponent,
     },
   };
@@ -6987,9 +7027,10 @@ function addComponent(kind) {
   while (ids.has(`${base}${index}`)) index += 1;
   const id = `${base}${index}`;
   const defaults = {
-    gpu: { capacity_bytes: 64 * 1024 * 1024, peak_ops_per_s: 120e12, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", read_latency_ns: 0, write_latency_ns: 0, transfer_granularity_bytes: 0, dma_latency_ns: 0 } },
+    gpu: { capacity_bytes: 64 * 1024 * 1024, peak_ops_per_s: 120e12, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", supported_gddr_generations: ["GDDR6", "GDDR6X", "GDDR7"], read_latency_ns: 0, write_latency_ns: 0, transfer_granularity_bytes: 0, dma_latency_ns: 0 } },
     cpu: { capacity_bytes: 0, peak_ops_per_s: 100e9, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "editable-reference-default" } },
     hbm: { capacity_bytes: 16 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 4096, write_bandwidth_gbps: 4096, metadata: { evidence_status: "analytical", read_latency_ns: 40, write_latency_ns: 40, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
+    gddr: { capacity_bytes: 16 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 5120, write_bandwidth_gbps: 5120, metadata: { evidence_status: "analytical", generation: "GDDR6", node_scope: "equivalent_gpu_memory_subsystem", read_latency_ns: 35, write_latency_ns: 35, transfer_granularity_bytes: 256, max_outstanding_requests: 64, dma_latency_ns: 0, physical_memory_config: { kind: "GDDR", generation: "GDDR6", channels: 1, data_lanes: 8, data_width_bits: 32, effective_pin_data_rate_gbps: 20, bandwidth_input_mode: "data_rate", stacks: 1, dies_per_stack: 1, ranks_per_channel: 1, bank_groups_per_rank: 4, banks_per_group: 4, rows_per_bank: 131072, row_bytes: 8192, burst_bytes: 64, interleave_bytes: 64, open_ns: 14, close_ns: 14, read_latency_ns: 35, write_latency_ns: 35, burst_interval_ns: 2.5, max_outstanding_requests: 64, capacity_bytes: 16 * 1000 ** 3 } } },
     dram: { capacity_bytes: 32 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 2048, write_bandwidth_gbps: 2048, metadata: { evidence_status: "analytical", read_latency_ns: 60, write_latency_ns: 60, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
     host_memory: { capacity_bytes: 128 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 1600, write_bandwidth_gbps: 1600, metadata: { evidence_status: "analytical", source: "editable-reference-default", read_latency_ns: 100, write_latency_ns: 100, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
     hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 3904, write_bandwidth_gbps: 217.6, metadata: { evidence_status: "analytical_user_configured", source: "user-configured-hbf-coordinates", dma_parameter_basis: "editable analytical assumption bounded by the HBF logical path", reference_capacity: "512 GB", reference_read_bandwidth: "488 GB/s", reference_write_bandwidth: "27.2 GB/s", read_only: false, writable: true, access_mode: "memory", write_buffer_bytes: 0, read_latency_ns: 4000, write_latency_ns: 75000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 3904, dma_latency_ns: 800, dma_energy_pj_per_byte: 0 } },
@@ -7610,6 +7651,12 @@ const COST_PROFILE_FIELD_RULES = Object.freeze({
     read_latency_ns: "nonnegative", write_latency_ns: "nonnegative",
     transaction_bytes: "positive_integer", max_outstanding_requests: "positive_integer",
   }),
+  gddr: Object.freeze({
+    bandwidth_gb_s: "positive", efficiency: "efficiency", measured_effective_bandwidth_gb_s: "optional_positive", energy_pj_per_byte: "nonnegative", resource_id: "text",
+    read_bandwidth_gb_s: "optional_positive", write_bandwidth_gb_s: "optional_positive",
+    read_latency_ns: "nonnegative", write_latency_ns: "nonnegative",
+    transaction_bytes: "positive_integer", max_outstanding_requests: "positive_integer", parallel_lanes: "positive_integer",
+  }),
   cpu: Object.freeze({
     "pipeline.core_count": "positive_integer", "pipeline.frequency_ghz": "positive",
     "pipeline.simd_width_bits": "positive_integer", "pipeline.decode_width": "positive_integer",
@@ -7662,6 +7709,7 @@ function costProfileKeyForComponentKind(kindValue) {
   if (kind === "gpu") return "gpu";
   if (kind === "cpu") return "cpu";
   if (isDedicatedHbm(kind)) return "hbm";
+  if (kind === "gddr") return "gddr";
   if (["host_memory", "dram", "ddr", "ddr_memory", "cxl_memory"].includes(kind)) return "host_memory";
   if (kind === "cim" || kind.includes("cim") || kind.includes("compute_in_memory")) return "cim";
   return "";
@@ -7944,11 +7992,11 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
       name: String(current.name || `${componentId}-gpu-profile`),
     };
   }
-  if (profileKey === "hbm") {
+  if (["hbm", "gddr"].includes(profileKey)) {
     const metadata = asObject(component.metadata);
     const physicalGbS = componentSharedBandwidthGbps(component) / 8
       || asArray(scenario?.hardware?.components)
-        .filter((item) => isDedicatedHbm(item.kind))
+        .filter((item) => costProfileKeyForComponentKind(item) === profileKey)
         .reduce((sum, item) => sum + componentSharedBandwidthGbps(item) / 8, 0);
     return {
       ...current,
@@ -7963,7 +8011,7 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
       transaction_bytes: positiveProfileNumber(current.transaction_bytes, positiveProfileNumber(metadata.transfer_granularity_bytes, 256)),
       max_outstanding_requests: positiveProfileNumber(current.max_outstanding_requests, positiveProfileNumber(metadata.max_outstanding_requests, 32)),
       energy_pj_per_byte: nonnegativeProfileNumber(current.energy_pj_per_byte),
-      resource_id: String(current.resource_id || `${componentId}.hbm_fabric`),
+      resource_id: String(current.resource_id || `${componentId}.${profileKey}_fabric`),
     };
   }
   if (profileKey === "cpu") {
@@ -8354,8 +8402,9 @@ function gpuDenseThroughputMarkup(profile) {
 
 function memoryCostProfileMarkup(profileKey, component) {
   const profile = costProfileDraft(profileKey, component);
-  const title = profileKey === "hbm" ? "GPU 内存成本 Profile（HBM）" : "CPU 主机内存成本 Profile";
-  const sourceLabel = profileKey === "hbm" ? "HBM 硬件总带宽" : "主机内存硬件总带宽";
+  const local = ["hbm", "gddr"].includes(profileKey);
+  const title = local ? `GPU 内存成本 Profile（${profileKey.toUpperCase()}）` : "CPU 主机内存成本 Profile";
+  const sourceLabel = local ? `${profileKey.toUpperCase()} 硬件总带宽` : "主机内存硬件总带宽";
   const sourceComponent = String(component?.component_id || "—");
   const physicalBandwidth = componentSharedBandwidthGbps(component) / 8;
   const physicalCap = physicalBandwidth > 0 ? physicalBandwidth : Number.POSITIVE_INFINITY;
@@ -8597,7 +8646,7 @@ function componentCostProfileMarkup(component) {
   if (normalized === "gpu") markup = gpuCostProfileMarkup(component);
   else if (normalized === "cpu") markup = cpuCostProfileMarkup(component);
   else if (profileKey === "host_memory") markup = memoryCostProfileMarkup("host_memory", component);
-  else if (profileKey === "hbm") markup = memoryCostProfileMarkup("hbm", component);
+  else if (["hbm", "gddr"].includes(profileKey)) markup = memoryCostProfileMarkup(profileKey, component);
   else if (profileKey === "cim") markup = cimCostProfileMarkup(component);
   if (!markup) return "";
   return `${componentProfileBindingMarkup(profileKey, component)}${markup}`;
@@ -8662,7 +8711,7 @@ function bindCostProfileFields(component) {
     if (Object.is(previousValue, value) || String(previousValue) === String(value)) return;
     const historyBefore = topologyHistorySnapshot();
     const next = costProfileDraft(profileKey, component);
-    if (["hbm", "host_memory"].includes(profileKey)
+    if (["hbm", "gddr", "host_memory"].includes(profileKey)
         && field === "efficiency"
         && next.measured_effective_bandwidth_gb_s != null
         && value !== 1) {
@@ -8670,7 +8719,7 @@ function bindCostProfileFields(component) {
       renderComponentInspector(component.component_id);
       return;
     }
-    if (["hbm", "host_memory"].includes(profileKey)
+    if (["hbm", "gddr", "host_memory"].includes(profileKey)
         && ["read_bandwidth_gb_s", "write_bandwidth_gb_s"].includes(field)
         && next.measured_effective_bandwidth_gb_s != null) {
       toast("Profile 口径互斥", "已填写实测有效带宽覆盖；请先清空覆盖，才能编辑方向性读写带宽。", "error", 6000);
@@ -8679,7 +8728,7 @@ function bindCostProfileFields(component) {
     }
     if (value === null) deleteProfileValueAtPath(next, field);
     else setProfileValueAtPath(next, field, value);
-    if (["hbm", "host_memory"].includes(profileKey)
+    if (["hbm", "gddr", "host_memory"].includes(profileKey)
         && field === "measured_effective_bandwidth_gb_s"
         && value != null) {
       next.efficiency = 1;
@@ -8697,7 +8746,7 @@ function bindCostProfileFields(component) {
       next.arithmetic_mode = "fp16_fp32_analytical";
     }
     registry[profileId] = next;
-    if (["hbm", "host_memory"].includes(profileKey)) {
+    if (["hbm", "gddr", "host_memory"].includes(profileKey)) {
       const physicalField = {
         read_latency_ns: "read_latency_ns", write_latency_ns: "write_latency_ns",
         transaction_bytes: "transfer_granularity_bytes", max_outstanding_requests: "max_outstanding_requests",
@@ -8819,7 +8868,7 @@ function storageTransportParameters(component, scenario = state.scenario) {
   const metadata = asObject(component?.metadata);
   const kind = normalizedComponentKind(component?.kind);
   const profileKey = costProfileKeyForComponentKind(component);
-  const profileBacked = ["hbm", "host_memory"].includes(profileKey);
+  const profileBacked = ["hbm", "gddr", "host_memory"].includes(profileKey);
   const profile = profileBacked ? costProfileDraft(profileKey, component, scenario) : {};
   const service = asObject(metadata.memory_service);
   const media = {};
@@ -8907,7 +8956,7 @@ function inspectorPortMarkup(port, index, { expanded = false } = {}) {
 function componentCapacityFieldLabel(component) {
   const normalized = normalizedComponentKind(component?.kind);
   if (normalized === "gpu") return "片上/组件容量（On-chip Component Capacity, B/KB…PB）";
-  if (isDedicatedHbm(normalized)) return "独立设备内存容量（Separate Device Memory Capacity, B/KB…PB）";
+  if (isDedicatedHbm(normalized) || normalized === "gddr") return `${normalized.toUpperCase()} 容量（Capacity, B/KB…PB）`;
   return "物理容量（Physical Capacity, B/KB…PB）";
 }
 
@@ -8916,7 +8965,7 @@ function componentCapacityNote(component) {
   if (normalized === "gpu") {
     return "GPU 组件容量描述片上或组件本地容量；独立显存容量与带宽由拓扑中的 HBM/设备内存组件提供。";
   }
-  if (isDedicatedHbm(normalized)) {
+  if (isDedicatedHbm(normalized) || normalized === "gddr") {
     return "这是独立设备内存组件的容量；GPU 计算组件的片上容量不会自动等同于这里的显存容量。";
   }
   return "";
@@ -9016,7 +9065,7 @@ function renderComponentInspector(componentId) {
       ${inputField("组件 ID（Component ID）", "component_id", component.component_id)}
       ${inputField("组件类型（Kind）", "kind", component.kind, { options: COMPONENT_INSPECTOR_KINDS, optionLabels: kindOptionLabels })}
       <div class="readout"><span>硬件预设来源（Hardware Preset）</span><strong>${escapeHtml(hardwarePresetId || "未绑定组件预设")}</strong></div>
-      ${logicalAttachedMemory ? `<div class="readout"><span>实际显存介质（Physical Memory）</span><strong>${escapeHtml(metadata.memory_type || "未知")}（逻辑附加节点，不是物理 HBM）</strong></div>` : ""}
+      ${logicalAttachedMemory ? `<div class="readout"><span>实际显存介质（Physical Memory）</span><strong>${escapeHtml(metadata.memory_type || gddrGeneration(component) || "未知")}（逻辑附加节点）</strong></div>` : ""}
       <div class="field-grid-2">
         ${inputField("封装 ID（Package ID）", "package_id", component.package_id || "")}
         ${inputField("裸片 ID（Die ID）", "die_id", component.die_id || "")}
@@ -9899,7 +9948,8 @@ function populateComponentPresetEditor(detail = null) {
   const status = editing
     ? uiText("修改内置预设会写入本地覆盖；可用删除操作隐藏该预设。", "Editing a built-in preset writes a local override; use Delete to hide it.")
     : uiText("新增预设会写入本地目录，重启服务后仍可使用。", "New presets are saved to the local catalog and survive service restarts.");
-  const gpuNote = gpuExternalMemory ? uiText("GPU 容量和读写带宽由外部 HBM 组件建模。", "GPU capacity and read/write bandwidth are modeled by external HBM components.") : "";
+  const gpuMemoryLabel = String(asObject(spec.metadata).memory_type || asObject(asObject(spec.metadata).technology).memory_type || "HBM");
+  const gpuNote = gpuExternalMemory ? uiText(`GPU 容量和读写带宽由外部 ${gpuMemoryLabel} 组件建模。`, `GPU capacity and read/write bandwidth are modeled by external ${gpuMemoryLabel} components.`) : "";
   const unknownNote = [
     writeStatus === "not_published" ? uiText("当前写带宽为厂家未公开值；0 仅是未知哨兵，可按实测值覆盖。", "The vendor has not published write bandwidth; 0 is an unknown sentinel and can be replaced by a measured value.") : "",
     writeLatencyStatus === "not_published" ? uiText("当前写延迟为厂家未公开值；0 ns 仅是未知哨兵，不参与免费计费。", "The vendor has not published write latency; 0 ns is an unknown sentinel and is never treated as free service.") : "",
@@ -10573,7 +10623,7 @@ function architecturePresetHardwareMarkup(preset) {
   asArray(rawView.groups).forEach((group) => {
     const hbmMembers = asArray(asObject(group).members)
       .map((id) => componentById.get(String(id)))
-      .filter((member) => member && normalizedComponentKind(member.kind) === "hbm");
+      .filter((member) => member && ["hbm", "hbm_stack", "gddr"].includes(normalizedComponentKind(member.kind)));
     if (!hbmMembers.length) return;
     const countsBySubsystem = new Map();
     hbmMembers.forEach((member) => {
@@ -14928,8 +14978,8 @@ function renderPlacementControls() {
     "HBF uses the HBF logical link with UCIe recorded as the physical carrier; SSD and high-I/O SSD use PCIe/CXL.",
   );
   const rankMappingExplanation = uiText(
-    "更改 TP/PP/EP 会清空旧 Rank 映射；更改 PP 还会清空层到阶段映射。开启同址开关后，界面只使用当前 eligible GPU 及其直接相连的活动内存（包括 DRAM/HBM）与 CIM 生成完整笛卡尔积映射。",
-    "Changing TP/PP/EP clears the old Rank mapping; changing PP also clears the layer-to-stage mapping. With colocation enabled, the interface builds the complete Cartesian mapping only from eligible GPUs and their directly connected active memory (including DRAM/HBM) and CIM components.",
+    "更改 TP/PP/EP 会清空旧 Rank 映射；更改 PP 还会清空层到阶段映射。开启同址开关后，界面只使用当前 eligible GPU 及其直接相连的活动内存（包括 DRAM/HBM/GDDR）与 CIM 生成完整笛卡尔积映射。",
+    "Changing TP/PP/EP clears the old Rank mapping; changing PP also clears the layer-to-stage mapping. With colocation enabled, the interface builds the complete Cartesian mapping only from eligible GPUs and their directly connected active memory (including DRAM/HBM/GDDR) and CIM components.",
   );
   dom.placementControls.innerHTML = `
     ${llamaRuntimeControlsMarkup()}
@@ -18576,8 +18626,8 @@ function normalizeComponentTimeseries(reportValue) {
 function timeseriesMetricGroup(metric) {
   const key = String(metric || "");
   if (["busy_fraction", "modeled_compute_utilization"].includes(key)) return uiText("GPU 忙碌与模型计算（GPU Busy & Compute）", "GPU busy and modeled compute");
-  if (key.includes("residency") || key === "memory_occupancy_bytes") return uiText("HBM 容量驻留（HBM Capacity Residency）", "HBM capacity residency");
-  if (key.includes("memory_read_bandwidth") || key.includes("memory_write_bandwidth")) return uiText("HBM 读写带宽（HBM Bandwidth）", "HBM read/write bandwidth");
+  if (key.includes("residency") || key === "memory_occupancy_bytes") return uiText("显存容量驻留（Memory Capacity Residency）", "Memory capacity residency");
+  if (key.includes("memory_read_bandwidth") || key.includes("memory_write_bandwidth")) return uiText("显存读写带宽（Memory Bandwidth）", "Memory read/write bandwidth");
   if (key.startsWith("storage_") || key === "dma_engine_utilization") return uiText("存储与 DMA（Storage / DMA）", "Storage and DMA");
   if (key.includes("fabric") || key.includes("link_bandwidth")) return uiText("互连与链路（Fabric / Link）", "Fabric and link");
   return uiText("其他组件指标（Other Metrics）", "Other component metrics");

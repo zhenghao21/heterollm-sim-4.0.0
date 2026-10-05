@@ -50,6 +50,9 @@ class PhysicalRuntimeContext:
             self.runtime(self.config, self.physical_owner)
 
     def runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
+        from .memory_types import DramConfig, NandConfig, parse_physical_memory_config
+        if not isinstance(config, (DramConfig, NandConfig)):
+            config = parse_physical_memory_config(config)
         kind = str(getattr(config.kind, "value", config.kind))
         signature = kind + ":" + repr(config)
         key = str(owner)
@@ -63,7 +66,7 @@ class PhysicalRuntimeContext:
         from .dram_core import DramCore
         from .nand_core import NandCore
         metadata = dict(config.metadata)
-        if kind in {"DDR", "LPDDR", "HBM"}:
+        if isinstance(config, DramConfig):
             metadata.setdefault("bank_resource_prefix", f"{key}:dram:bank")
             metadata.setdefault("command_resource_prefix", f"{key}:dram:command")
             metadata.setdefault("data_resource_prefix", f"{key}:dram:data")
@@ -74,16 +77,19 @@ class PhysicalRuntimeContext:
             metadata.setdefault("channel_resource_prefix", f"{key}:nand:channel")
             metadata.setdefault("host_resource_id", f"{key}:nand:host")
             config = replace(config, metadata=metadata)
-        core = DramCore(config, self.timeline) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config, self.timeline)
+        core = DramCore(config, self.timeline) if isinstance(config, DramConfig) else NandCore(config, self.timeline)
         current = _PhysicalRuntime(core=core, signature=signature)
         self.runtimes[key] = current
         return current
 
     def preview_runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
+        from .memory_types import DramConfig, NandConfig, parse_physical_memory_config
+        if not isinstance(config, (DramConfig, NandConfig)):
+            config = parse_physical_memory_config(config)
         kind = str(getattr(config.kind, "value", config.kind))
         from .dram_core import DramCore
         from .nand_core import NandCore
-        core = DramCore(config) if kind in {"DDR", "LPDDR", "HBM"} else NandCore(config)
+        core = DramCore(config) if isinstance(config, DramConfig) else NandCore(config)
         return _PhysicalRuntime(core=core, signature=kind + ":" + repr(config))
 
     def snapshot(self) -> dict[str, Any]:
@@ -153,11 +159,9 @@ def resolve_physical_task(
         raw_config = asdict(raw_config)
     if not isinstance(raw_config, Mapping):
         raise ValueError("physical_memory_config must be a DRAM/NAND config or mapping")
-    from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
-    kind_value = raw_config.get("kind", "")
-    kind_name = str(getattr(kind_value, "value", kind_value)).upper()
-    is_dram = kind_name in {"DDR", "LPDDR", "HBM"}
-    config = DramConfig.from_mapping(raw_config) if is_dram else NandConfig.from_mapping(raw_config)
+    from .memory_types import AccessRequest, DramConfig, Operation, parse_physical_memory_config
+    config = parse_physical_memory_config(raw_config)
+    is_dram = isinstance(config, DramConfig)
     if isinstance(arrival_ns, bool) or not isinstance(arrival_ns, (int, float)) or arrival_ns < 0:
         raise ValueError("physical task arrival_ns must be non-negative")
     if isinstance(accesses, Mapping):
@@ -582,12 +586,16 @@ class PhysicalService:
         # The component configuration is the single physical transaction contract.
         # and therefore gets explicit array and data-path stages.
         if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
-            from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
+            from .memory_types import AccessRequest, DramConfig, Operation, parse_physical_memory_config
             raw_config = self.component.metadata["physical_memory_config"]
             if is_dataclass(raw_config):
                 raw_config = asdict(raw_config)
             if not isinstance(raw_config, Mapping):
                 raise ValueError("physical_memory_config must be a DRAM/NAND config or mapping")
+            if kind is AccessKind.ERASE:
+                raw_kind = str(getattr(raw_config.get("kind", ""), "value", raw_config.get("kind", ""))).strip().upper().replace("-", "")
+                if raw_kind in {"DDR", "LPDDR", "HBM", "GDDR", "GDDR6", "GDDR6X", "GDDR7"}:
+                    raise ValueError("DRAM does not support ERASE operations")
             if page_offset_bytes is None and self.component.metadata.get("memory_access_offset_bytes") is None:
                 raise ValueError("physical_memory_config requires an explicit memory address")
             if byte_count == 0:
@@ -602,10 +610,8 @@ class PhysicalService:
                     "energy_pj": 0.0,
                     "pages_touched": 0,
                 }
-            kind_value = raw_config.get("kind", "")
-            kind_name = str(getattr(kind_value, "value", kind_value)).upper()
-            is_dram = kind_name in {"DDR", "LPDDR", "HBM"}
-            config = DramConfig.from_mapping(raw_config) if is_dram else NandConfig.from_mapping(raw_config)
+            config = parse_physical_memory_config(raw_config)
+            is_dram = isinstance(config, DramConfig)
             operation = Operation.READ if kind is AccessKind.READ else Operation.WRITE if kind is AccessKind.WRITE else Operation.ERASE
             if arrival_ns is not None:
                 _non_negative(arrival_ns, "arrival_ns")
@@ -686,17 +692,12 @@ class PhysicalService:
     ):
         """Price an explicit NAND request batch and return its next queue state."""
         if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
-            from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
+            from .memory_types import AccessRequest, Operation, parse_physical_memory_config
             from dataclasses import asdict, is_dataclass
             raw = self.component.metadata["physical_memory_config"]
             if is_dataclass(raw):
                 raw = asdict(raw)
-            if isinstance(raw, (DramConfig, NandConfig)):
-                config = raw
-            else:
-                kind_value = raw.get("kind", "") if isinstance(raw, Mapping) else ""
-                kind_name = str(getattr(kind_value, "value", kind_value)).upper()
-                config = DramConfig.from_mapping(raw) if kind_name in {"DDR", "LPDDR", "HBM"} else NandConfig.from_mapping(raw)
+            config = parse_physical_memory_config(raw)
             explicit_context = runtime or (state if isinstance(state, PhysicalRuntimeContext) else None)
             context = explicit_context or current_physical_runtime_context()
             active_runtime = _physical_runtime(

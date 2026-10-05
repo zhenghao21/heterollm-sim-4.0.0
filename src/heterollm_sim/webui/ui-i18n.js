@@ -29,7 +29,7 @@
     "PACKAGE TOPOLOGY / SCHEMA 4.0.0": "封装拓扑 / SCHEMA 4.0.0",
   });
   const CANONICAL_PARENTHETICALS = new Set([
-    "BF16", "FP16", "FP8", "INT8", "GPU", "HBM", "HBF", "SSD", "CIM", "CXL", "PCIe", "UCIe",
+    "BF16", "FP16", "FP8", "INT8", "GPU", "HBM", "GDDR", "HBF", "SSD", "CIM", "CXL", "PCIe", "UCIe",
     "KV", "MoE", "MTP", "TP", "PP", "EP", "GQA", "MQA", "RMS", "MLP", "Q/K/V", "I/O",
     "dtype", "shape", "layout", "repeat", "layer_template", "overrides", "experts", "top-k", "auto",
   ]);
@@ -66,6 +66,7 @@
     "关闭后台仿真窗口": "Close background simulation dialog", "通知": "Notifications",
     "通用计算（GPU）": "GPU Compute",
     "高带宽内存（HBM）": "High-Bandwidth Memory (HBM)",
+    "图形双倍数据率内存（GDDR）": "Graphics Double Data Rate Memory (GDDR)",
     "高带宽闪存（HBF）": "High-Bandwidth Flash (HBF)",
     "固态硬盘（SSD）": "Solid-State Drive (SSD)",
     "首 Token 延迟（TTFT）": "Time to First Token (TTFT)",
@@ -171,7 +172,7 @@
     "尚无诊断信息。运行校验可检查拓扑、映射和当前 lowering 支持范围。": "No diagnostics yet. Run validation to check topology, mapping, and current lowering support.",
     "异构封装拓扑": "Heterogeneous package topology",
     "加速器计算": "Accelerator compute",
-    "专用 HBM 链路": "Dedicated HBM links",
+    "专用 HBM 链路": "Dedicated HBM links", "GDDR6 / GDDR6X / GDDR7 专用链路": "Dedicated GDDR6 / GDDR6X / GDDR7 links",
     "512 GiB · 约 3 TB/s · 分析估算": "512 GiB · about 3 TB/s · analytical estimate",
     "PCIe / CXL 存储": "PCIe / CXL storage",
     "高并发 PCIe / CXL": "High-concurrency PCIe / CXL",
@@ -187,7 +188,8 @@
     "选择节点或链路查看属性": "Select a node or link to inspect its properties",
     "未选择": "Nothing selected",
     "拓扑为空": "The topology is empty",
-    "从左侧添加 GPU、HBM、HBF、SSD 或数字 SRAM-CIM。": "Add a GPU, HBM, HBF, SSD, or digital SRAM-CIM from the left.",
+    "从左侧添加 GPU、HBM、GDDR、HBF、SSD 或数字 SRAM-CIM。": "Add a GPU, HBM, GDDR, HBF, SSD, or digital SRAM-CIM from the left.",
+    "复制当前模型和负载，分别运行 HBM/GDDR、HBF 及混合候选，比较 TTFT、TPOT、E2E、KV 峰值驻留、读写流量和迁移成本。扫描不会修改当前场景。": "Clone the current model and workload, run HBM/GDDR, HBF, and hybrid candidates, and compare TTFT, TPOT, E2E, KV peak residency, traffic, and migration cost. The scan does not modify the current scenario.",
     "分层存储 / IO": "Tiered storage / I/O",
     "协议链路": "Protocol link",
     "空白框选 · Ctrl/Cmd 多选 · Space/中键平移 · Ctrl/Cmd C/V · Delete 删除": "Drag empty space to select · Ctrl/Cmd multi-select · Space/middle button to pan · Ctrl/Cmd C/V · Delete",

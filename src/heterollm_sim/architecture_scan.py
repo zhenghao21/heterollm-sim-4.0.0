@@ -406,7 +406,7 @@ def _gpu_memory_efficiency(
         if bandwidth <= 0.0:
             continue
         profile_kind = normalize_cost_profile_kind(memory.normalized_kind)
-        if profile_kind == "hbm":
+        if profile_kind in {"hbm", "gddr"}:
             profile = scenario.resolve_component_profile(memory, HBMProfile)
         elif profile_kind == "host_memory":
             profile = scenario.resolve_component_profile(memory, HostMemoryProfile)
