@@ -170,12 +170,21 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
         raw_accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
         if isinstance(raw_accesses, Mapping):
             raw_accesses = (raw_accesses,)
-        if (not raw_accesses or not any(
-            isinstance(access, Mapping)
-            and (access.get("buffer_id") or access.get("tensor_id"))
-            for access in raw_accesses
-        )) and isinstance(contract, Mapping):
-            raw_accesses = contract.get("accesses", ())
+        if isinstance(contract, Mapping):
+            # The physical preview may already be cache-trimmed. Allocate the
+            # logical working set before the cache uses it, using the same
+            # buffer identities and preserving explicit address/alias facts.
+            previews = {(str(row.get("buffer_id")), row.get("allocation_generation", row.get("generation", 0))): row
+                        for row in raw_accesses or () if isinstance(row, Mapping) and row.get("buffer_id")}
+            cache_accesses = []
+            for row in contract.get("accesses", ()):
+                buffer_id = row["buffer_id"]
+                if buffer_id.startswith("@tasklocal"):
+                    buffer_id = task.task_id + buffer_id[10:]
+                preview = previews.get((buffer_id, row.get("allocation_generation", 0)), {})
+                cache_accesses.append({**preview, **row, "buffer_id": buffer_id,
+                                       "byte_count": row["size_bytes"]})
+            raw_accesses = tuple(cache_accesses)
         if isinstance(raw_accesses, (tuple, list)):
             derived = {}
             for access in raw_accesses:
@@ -186,8 +195,13 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
                     continue
                 offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
                 size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
-                declared_extent = access.get("allocation_size_bytes", access.get("buffer_size_bytes"))
+                declared_extent = access.get("allocation_size_bytes")
+                if declared_extent is None:
+                    declared_extent = access.get("buffer_size_bytes")
                 extent = int(declared_extent if declared_extent is not None else (offset + size))
+                if declared_extent is None and isinstance(contract, Mapping):
+                    line_bytes = int(contract["line_bytes"])
+                    extent = ((extent + line_bytes - 1) // line_bytes) * line_bytes
                 generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
                 key = (str(buffer_id), generation)
                 previous = derived.get(key)

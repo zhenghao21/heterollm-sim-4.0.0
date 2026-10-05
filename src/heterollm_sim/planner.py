@@ -3645,18 +3645,32 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
         projection = task.metadata.get("projection_id")
         if tensor_id and weight_bytes and weight_bytes <= read:
             # Fused logical weight groups need a physical projection identity.
-            if projection:
-                accesses.append(CacheAccess(f"{target_id}:weights:{tensor_id}:{projection}:{rank.tp_rank}", 0, weight_bytes, "read"))
+            if task.metadata.get("physical_memory_config") is not None:
+                weight_identity = _gddr_stable_identity(task, task.metadata, "weight")
+            else:
+                weight_identity = f"{target_id}:weights:{tensor_id}:{projection}:{rank.tp_rank}"
+            if projection or task.metadata.get("physical_memory_config") is not None:
+                accesses.append(CacheAccess(weight_identity, 0, weight_bytes, "read"))
                 read -= weight_bytes
         input_id = task.metadata.get("input_buffer_id")
         if input_id and read:
-            accesses.append(CacheAccess(str(input_id), int(task.metadata.get("input_offset_bytes", 0)), read, "read"))
+            input_identity = (
+                _gddr_stable_identity(task, task.metadata, "read")
+                if task.metadata.get("physical_memory_config") is not None
+                else str(input_id)
+            )
+            accesses.append(CacheAccess(input_identity, int(task.metadata.get("input_offset_bytes", 0)), read, "read"))
             read = 0
         if read:
             accesses.append(CacheAccess("@tasklocal:unknown_read", 0, read, "read"))
         if write:
             output_id = task.metadata.get("output_buffer_id", "@tasklocal:unknown_write")
-            accesses.append(CacheAccess(str(output_id), int(task.metadata.get("output_offset_bytes", 0)), write, "write"))
+            output_identity = (
+                _gddr_stable_identity(task, task.metadata, "write")
+                if task.metadata.get("physical_memory_config") is not None
+                else str(output_id)
+            )
+            accesses.append(CacheAccess(output_identity, int(task.metadata.get("output_offset_bytes", 0)), write, "write"))
     cache_resource = _rank_gpu_resource(scenario, rank, gpu.cache_hierarchy.levels[-1].resource_id)
     return attach_l2_contract(task, gpu=gpu, hbm=hbm, memory_resource=memory_resource,
                               cache_resource=cache_resource, owner=target_id + ".l2", accesses=accesses)
@@ -3877,8 +3891,14 @@ def _gddr_allocation_size(
     offset: int,
     byte_count: int,
     declared: Optional[object] = None,
-) -> int:
-    """Find an optional stable allocation extent for one logical buffer."""
+) -> Optional[int]:
+    """Find a declared stable extent; leave access-derived extents unknown.
+
+    ``offset + byte_count`` is sufficient for stable address preview, but it
+    is not a fixed allocation contract.  Returning ``None`` for that fallback
+    lets runtime registration mark the declaration inferred so later accesses
+    to a smaller range do not look like a fixed allocation resize.
+    """
 
     keys = {
         "read": ("input_buffer_size_bytes", "input_allocation_bytes"),
@@ -3901,7 +3921,7 @@ def _gddr_allocation_size(
         value = placement_bytes.get(tensor_id)
         if value is not None:
             return _gddr_non_negative_int(value, "placement tensor bytes")
-    return offset + byte_count
+    return None
 
 
 def _gddr_access_generation(metadata: Mapping[str, object], side: str) -> int:
@@ -4082,6 +4102,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             "address_source": address_source,
             "offset_bytes": offset,
             "allocation_generation": generation,
+            "generation": generation,
         }
         if identity is not None:
             descriptor["buffer_id"] = identity
@@ -4104,6 +4125,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 "address_source": address_source,
                 "allocation_size_bytes": allocation_size,
                 "allocation_generation": generation,
+                "generation": generation,
                 "alias_of": alias_of,
                 "alias_generation": alias_generation,
                 "alias_offset_bytes": alias_offset_bytes,
@@ -6198,6 +6220,98 @@ def _scenario_resource_owners(scenario: ScenarioConfig) -> Mapping[str, str]:
     return declared_resource_owners(scenario.hardware)
 
 
+def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[TaskSpec, ...]:
+    """Promote access-derived extents after the complete graph is lowered.
+
+    A per-task slice is not a complete allocation contract.  Once all tasks
+    are known, the largest declared or touched range becomes the run-local
+    extent for that buffer/generation.  Explicit extents remain authoritative
+    and conflicting declarations fail before dispatch.
+    """
+
+    extents: Dict[Tuple[str, int], int] = {}
+    fixed: Dict[Tuple[str, int], int] = {}
+    for task in tasks:
+        if task.metadata.get("physical_memory_config") is None:
+            continue
+        accesses = task.metadata.get("memory_accesses", task.metadata.get("memory_access"))
+        if isinstance(accesses, Mapping):
+            accesses = (accesses,)
+        for access in accesses or ():
+            if not isinstance(access, Mapping) or not access.get("buffer_id"):
+                continue
+            buffer_id = str(access["buffer_id"])
+            generation = int(access.get("allocation_generation", access.get("generation", 0)) or 0)
+            offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
+            size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
+            extent = int(access.get("allocation_size_bytes") or 0)
+            required = max(extent, offset + size)
+            key = (buffer_id, generation)
+            previous = extents.get(key, 0)
+            extents[key] = max(previous, required)
+            if extent:
+                declared = fixed.get(key)
+                if declared is not None and declared != extent:
+                    raise ValueError("conflicting physical allocation extent for {} generation {}".format(*key))
+                fixed[key] = extent
+            if key in fixed and required > fixed[key]:
+                raise ValueError("physical access exceeds declared allocation {} generation {}".format(*key))
+    if not extents:
+        return tuple(tasks)
+
+    promoted = []
+    for task in tasks:
+        metadata = dict(task.metadata)
+        accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
+        if isinstance(accesses, Mapping):
+            access_rows = (dict(accesses),)
+            was_mapping = True
+        elif isinstance(accesses, (tuple, list)):
+            access_rows = tuple(dict(item) for item in accesses)
+            was_mapping = False
+        else:
+            promoted.append(task)
+            continue
+        changed = False
+        for row in access_rows:
+            buffer_id = row.get("buffer_id")
+            if not buffer_id:
+                continue
+            generation = int(row.get("allocation_generation", row.get("generation", 0)) or 0)
+            key = (str(buffer_id), generation)
+            extent = extents.get(key)
+            if extent is None or row.get("allocation_size_bytes") is not None:
+                continue
+            row["allocation_size_bytes"] = extent
+            changed = True
+        if changed:
+            metadata["memory_accesses"] = tuple(access_rows)
+            metadata["memory_access"] = access_rows[0] if was_mapping else tuple(access_rows)
+            bindings = metadata.get("physical_address_bindings")
+            if isinstance(bindings, (tuple, list)):
+                updated_bindings = []
+                for binding in bindings:
+                    item = dict(binding)
+                    key = (str(item.get("buffer_id")), int(item.get("allocation_generation", item.get("generation", 0)) or 0))
+                    if item.get("allocation_size_bytes") is None and key in extents:
+                        item["allocation_size_bytes"] = extents[key]
+                    updated_bindings.append(item)
+                metadata["physical_address_bindings"] = tuple(updated_bindings)
+            contract = metadata.get("stateful_l2")
+            if isinstance(contract, Mapping):
+                rows = []
+                for item in contract.get("accesses", ()):
+                    row = dict(item)
+                    key = (str(row.get("buffer_id")), int(row.get("allocation_generation", row.get("generation", 0)) or 0))
+                    if row.get("buffer_size_bytes") is None and key in extents:
+                        row["buffer_size_bytes"] = extents[key]
+                    rows.append(row)
+                metadata["stateful_l2"] = {**contract, "accesses": tuple(rows)}
+            task = replace(task, metadata=metadata)
+        promoted.append(task)
+    return tuple(promoted)
+
+
 def compile_scenario(scenario: ScenarioConfig) -> ScheduleIR:
     """Compile one scenario inside a single exact, request-local context."""
 
@@ -6287,6 +6401,7 @@ def _compile_scenario_in_context(scenario: ScenarioConfig) -> ScheduleIR:
     tasks: List[TaskSpec] = []
     for request in materialize_requests(scenario):
         tasks.extend(_compile_parallel_request(scenario, request))
+    tasks = list(_promote_physical_allocation_extents(tasks))
     iq_panel_contract = scenario.workload.metadata.get("llama_cpp_cpu_iq_panel_reuse")
     if isinstance(iq_panel_contract, Mapping) and iq_panel_contract.get("enabled") is True:
         manifest = replace(manifest, metadata={

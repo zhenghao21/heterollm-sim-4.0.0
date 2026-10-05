@@ -97,17 +97,15 @@ def test_stateful_l2_runs_before_gddr_and_keeps_cold_miss_physical():
     assert event.task.metadata["l2_execution"]["hbm_read_bytes"] == 64
     assert event.task.metadata["l2_execution"]["backing_accesses"][0]["operation"] == "read"
     assert event.task.metadata["l2_execution"]["backing_accesses"][0]["size_bytes"] == 64
-    assert event.task.metadata["l2_execution"]["physical_allocations"] == [
-        {"buffer_id": "weight-W", "size_bytes": 64, "generation": 0},
-    ]
-    assert event.task.metadata["physical_allocations"] == [
-        {
-            "buffer_id": "weight-W",
-            "size_bytes": 64,
-            "generation": 0,
-            "physical_owner": "gddr0.gddr_fabric",
-        }
-    ]
+    allocation = event.task.metadata["l2_execution"]["physical_allocations"][0]
+    assert allocation["buffer_id"] == "weight-W"
+    assert allocation["size_bytes"] == 64
+    assert allocation["generation"] == 0
+    physical_allocation = event.task.metadata["physical_allocations"][0]
+    assert physical_allocation["buffer_id"] == "weight-W"
+    assert physical_allocation["size_bytes"] == 64
+    assert physical_allocation["generation"] == 0
+    assert physical_allocation["physical_owner"] == "gddr0.gddr_fabric"
     assert event.task.metadata["physical_execution"]["physical_read_bytes"] == 64
     assert event.task.metadata["physical_execution"]["physical_write_bytes"] == 0
 

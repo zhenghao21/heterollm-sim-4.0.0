@@ -74,8 +74,12 @@ def _canonical_access(item, allocator):
     root_id, root_generation, root_offset = canonical
     root = _allocation_for(allocator, root_id, root_generation)
     root_size = getattr(root, 'size_bytes', None)
+    if getattr(root, 'inferred', False):
+        # An access-derived bound is not the complete buffer size. Keep cache
+        # lines full-sized and stable when a later access is a shorter slice.
+        root_size = None
     if isinstance(root, dict):
-        root_size = root.get('size_bytes', root.get('buffer_size_bytes'))
+        root_size = None if root.get('inferred') else root.get('size_bytes', root.get('buffer_size_bytes'))
     if root_size is None:
         root_size = item.get('buffer_size_bytes')
     return {**item, 'buffer_id': root_id, 'allocation_generation': root_generation,
@@ -83,7 +87,7 @@ def _canonical_access(item, allocator):
             **({'buffer_size_bytes': root_size} if root_size is not None else {})}
 
 
-def _allocation_table(task, accesses, backing_accesses):
+def _allocation_table(task, accesses, backing_accesses, allocator=None):
     """Preserve declared allocations and add only references not yet declared."""
     raw = task.metadata.get('physical_allocations', ())
     if isinstance(raw, dict):
@@ -112,7 +116,12 @@ def _allocation_table(task, accesses, backing_accesses):
         extent = access.buffer_size_bytes or (access.offset_bytes + access.size_bytes)
         previous = table.get(key)
         if previous is None:
-            table[key] = {'buffer_id': key[0], 'size_bytes': extent, 'generation': key[1]}
+            allocation = _allocation_for(allocator, *key)
+            if allocation is not None:
+                table[key] = dict(allocation) if isinstance(allocation, dict) else asdict(allocation)
+            else:
+                table[key] = {'buffer_id': key[0], 'size_bytes': extent, 'generation': key[1],
+                              'inferred': access.buffer_size_bytes is None}
         else:
             declared_size = previous.get('size_bytes', previous.get('buffer_size_bytes'))
             if declared_size is not None and extent > declared_size:
@@ -149,7 +158,7 @@ def resolve_l2_task(task, states, physical_allocator=None):
     if (reads, writes) != (sum(r.backing_read_bytes for r in results),
                           sum(r.backing_write_bytes for r in results)):
         raise ValueError('L2 backing access ranges do not conserve directional bytes')
-    physical_allocations = _allocation_table(task, accesses, backing_accesses)
+    physical_allocations = _allocation_table(task, accesses, backing_accesses, allocator)
     states[owner] = (signature, cache)
     requested = sum(a.size_bytes for a in accesses)
     memory_ns = hbm.memory_service(reads, writes, bandwidth_gb_s=contract['bandwidth_gb_s'])['service_ns']

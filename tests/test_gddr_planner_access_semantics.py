@@ -152,3 +152,63 @@ def test_gddr_planner_uses_explicit_buffer_range_and_checks_it():
             ),
             scenario,
         )
+
+
+def test_gddr_planner_leaves_access_derived_extent_inferred():
+    scenario = _scenario()
+    first = _attach_gddr_physical_task(
+        _task(
+            "range-128",
+            128,
+            {"read_bytes": 128, "write_bytes": 0},
+            memory_accesses=(
+                {
+                    "operation": "read",
+                    "buffer_id": "activation-A",
+                    "offset_bytes": 0,
+                    "byte_count": 128,
+                },
+            ),
+        ),
+        scenario,
+    )
+    second = _attach_gddr_physical_task(
+        _task(
+            "range-64",
+            64,
+            {"read_bytes": 64, "write_bytes": 0},
+            memory_accesses=(
+                {
+                    "operation": "read",
+                    "buffer_id": "activation-A",
+                    "offset_bytes": 0,
+                    "byte_count": 64,
+                },
+            ),
+        ),
+        scenario,
+    )
+    assert "allocation_size_bytes" not in first.metadata["memory_accesses"][0]
+    assert "allocation_size_bytes" not in second.metadata["memory_accesses"][0]
+
+
+def test_gddr_planner_preserves_declared_fixed_extent():
+    scenario = _scenario()
+    task = _attach_gddr_physical_task(
+        _task(
+            "fixed-range",
+            128,
+            {"read_bytes": 128, "write_bytes": 0},
+            memory_accesses=(
+                {
+                    "operation": "read",
+                    "buffer_id": "activation-A",
+                    "offset_bytes": 0,
+                    "byte_count": 128,
+                    "buffer_size_bytes": 256,
+                },
+            ),
+        ),
+        scenario,
+    )
+    assert task.metadata["memory_accesses"][0]["allocation_size_bytes"] == 256
