@@ -24,6 +24,9 @@ class PhysicalAllocation:
     size_bytes: int
     generation: int = 0
     alias_of: Optional[str] = None
+    alias_generation: Optional[int] = None
+    alias_offset_bytes: int = 0
+    inferred: bool = False
 
     def address(self, offset_bytes: int, size_bytes: int = 1) -> int:
         if type(offset_bytes) is not int or offset_bytes < 0:
@@ -117,27 +120,49 @@ class PhysicalAddressAllocator:
         generation: int = 0,
         *,
         alias_of: Optional[str] = None,
+        alias_generation: Optional[int] = None,
         address: Optional[int] = None,
         alias_offset_bytes: int = 0,
+        inferred: bool = False,
     ) -> PhysicalAllocation:
         key = self._key(buffer_id, generation)
         if type(size_bytes) is not int or size_bytes <= 0:
             raise AllocationError("size_bytes must be a positive integer")
         existing = self._allocations.get(key)
+        if type(inferred) is not bool:
+            raise AllocationError("inferred must be a boolean")
+        if alias_generation is not None and (type(alias_generation) is not int or alias_generation < 0):
+            raise AllocationError("alias_generation must be a non-negative integer")
+        if alias_of is not None:
+            alias_of = str(alias_of).strip()
+            if not alias_of:
+                raise AllocationError("alias_of must be non-empty text")
+            if alias_generation is None:
+                alias_generation = key[1]
+        if type(alias_offset_bytes) is not int or alias_offset_bytes < 0:
+            raise AllocationError("alias_offset_bytes must be non-negative")
         if existing is not None:
-            if size_bytes > existing.size_bytes:
-                if existing.alias_of is not None:
-                    raise AllocationError("aliased allocation {} cannot grow".format(buffer_id))
+            if existing.alias_of != alias_of or existing.alias_generation != alias_generation:
+                raise AllocationError("allocation alias changed for {}".format(buffer_id))
+            if existing.alias_offset_bytes != alias_offset_bytes:
+                raise AllocationError("allocation alias offset changed for {}".format(buffer_id))
+            if size_bytes != existing.size_bytes and size_bytes > existing.size_bytes:
+                if existing.alias_of is not None or not existing.inferred or not inferred:
+                    raise AllocationError("allocation {} cannot grow".format(buffer_id))
                 self._check_extent(existing.base_address, size_bytes)
                 if tuple(self._overlaps(existing.base_address, size_bytes, ignore=key)):
                     raise AllocationError(
                         "allocation {} generation {} cannot grow without moving".format(*key)
                     )
                 existing = PhysicalAllocation(
-                    existing.buffer_id, existing.base_address, size_bytes,
-                    existing.generation, existing.alias_of,
+                    buffer_id=existing.buffer_id, base_address=existing.base_address,
+                    size_bytes=size_bytes, generation=existing.generation,
+                    alias_of=existing.alias_of, alias_generation=existing.alias_generation,
+                    alias_offset_bytes=existing.alias_offset_bytes, inferred=existing.inferred,
                 )
                 self._allocations[key] = existing
+            elif size_bytes != existing.size_bytes and (not existing.inferred or not inferred):
+                raise AllocationError("allocation size changed for {}".format(buffer_id))
             if address is not None and address != existing.base_address:
                 raise AllocationError("allocation address changed for {}".format(buffer_id))
             return existing
@@ -145,20 +170,17 @@ class PhysicalAddressAllocator:
         alias_key = None
         base: int
         if alias_of is not None:
-            alias_name = str(alias_of).strip()
-            if not alias_name:
-                raise AllocationError("alias_of must be non-empty text")
-            candidates = [item for (name, _gen), item in self._allocations.items() if name == alias_name]
-            if not candidates:
-                raise AllocationError("alias target {} is not allocated".format(alias_name))
-            target = max(candidates, key=lambda item: item.generation)
-            if type(alias_offset_bytes) is not int or alias_offset_bytes < 0:
-                raise AllocationError("alias_offset_bytes must be non-negative")
+            target_key = (alias_of, alias_generation)
+            target = self._allocations.get(target_key)
+            if target is None:
+                raise AllocationError("alias target {} generation {} is not allocated".format(*target_key))
             if alias_offset_bytes + size_bytes > target.size_bytes:
-                raise AllocationError("alias range exceeds target allocation {}".format(alias_name))
+                raise AllocationError("alias range exceeds target allocation {} generation {}".format(*target_key))
             base = target.base_address + alias_offset_bytes
-            alias_key = alias_name
+            alias_key = alias_of
             self._check_extent(base, size_bytes)
+            if address is not None and address != base:
+                raise AllocationError("allocation address changed for {}".format(buffer_id))
         elif address is not None:
             if type(address) is not int or address < 0:
                 raise AllocationError("address must be a non-negative integer")
@@ -175,7 +197,10 @@ class PhysicalAddressAllocator:
             base = self._find_first_fit(size_bytes)
 
         allocation = PhysicalAllocation(buffer_id=key[0], base_address=base, size_bytes=size_bytes,
-                                        generation=key[1], alias_of=alias_key)
+                                        generation=key[1], alias_of=alias_key,
+                                        alias_generation=alias_generation,
+                                        alias_offset_bytes=alias_offset_bytes,
+                                        inferred=inferred)
         self._allocations[key] = allocation
         return allocation
 
@@ -188,11 +213,40 @@ class PhysicalAddressAllocator:
         if size is None:
             raise AllocationError("physical allocation requires size_bytes")
         return self.allocate(
-            str(buffer_id), int(size), int(declaration.get("generation", declaration.get("allocation_generation", 0))),
+            buffer_id, int(size), int(declaration.get("generation", declaration.get("allocation_generation", 0))),
             alias_of=declaration.get("alias_of"),
+            alias_generation=declaration.get("alias_generation"),
             address=declaration.get("base_address"),
             alias_offset_bytes=int(declaration.get("alias_offset_bytes", 0)),
         )
+
+    def lookup(self, buffer_id: str, generation: int = 0) -> PhysicalAllocation:
+        allocation = self._allocations.get(self._key(buffer_id, generation))
+        if allocation is None:
+            raise AllocationError("allocation {} generation {} is not registered".format(buffer_id, generation))
+        return allocation
+
+    def get_allocation(self, buffer_id: str, generation: int = 0) -> Optional[PhysicalAllocation]:
+        """Return a registered allocation for adapters that use optional lookup."""
+        return self._allocations.get(self._key(buffer_id, generation))
+
+    def canonical_range(
+        self, buffer_id: str, offset_bytes: int, size_bytes: int, generation: int = 0
+    ) -> Tuple[str, int, int]:
+        """Return the root allocation identity and offset for a (possibly aliased) range."""
+        allocation = self.lookup(buffer_id, generation)
+        allocation.address(offset_bytes, size_bytes)
+        offset = offset_bytes
+        visited = set()
+        while allocation.alias_of is not None:
+            key = (allocation.buffer_id, allocation.generation)
+            if key in visited:
+                raise AllocationError("cyclic allocation alias")
+            visited.add(key)
+            target = self.lookup(allocation.alias_of, allocation.alias_generation)
+            offset += allocation.base_address - target.base_address
+            allocation = target
+        return allocation.buffer_id, allocation.generation, offset
 
     def address(self, buffer_id: str, offset_bytes: int, size_bytes: int, generation: int = 0) -> int:
         key = self._key(buffer_id, generation)
@@ -206,7 +260,27 @@ class PhysicalAddressAllocator:
         return allocation.address(offset_bytes, size_bytes)
 
     def release(self, buffer_id: str, generation: int = 0) -> None:
-        self._allocations.pop(self._key(buffer_id, generation), None)
+        key = self._key(buffer_id, generation)
+        if key not in self._allocations:
+            return
+        for item in self._allocations.values():
+            if item.alias_of is None:
+                continue
+            current = item
+            visited = set()
+            while current.alias_of is not None:
+                current_key = (current.buffer_id, current.generation)
+                if current_key in visited:
+                    break
+                visited.add(current_key)
+                target_key = (current.alias_of, current.alias_generation)
+                if target_key == key:
+                    raise AllocationError("cannot release allocation {} generation {} with live aliases".format(*key))
+                target = self._allocations.get(target_key)
+                if target is None:
+                    break
+                current = target
+        self._allocations.pop(key)
 
     def snapshot(self) -> dict:
         return {
@@ -220,9 +294,28 @@ class PhysicalAddressAllocator:
         allocator = cls(snapshot["capacity_bytes"], snapshot["alignment_bytes"])
         for item in snapshot.get("allocations", ()):
             if isinstance(item, PhysicalAllocation):
+                if item.alias_of is not None and item.alias_generation is None:
+                    item = PhysicalAllocation(
+                        buffer_id=item.buffer_id, base_address=item.base_address,
+                        size_bytes=item.size_bytes, generation=item.generation,
+                        alias_of=item.alias_of, alias_generation=item.generation,
+                        alias_offset_bytes=item.alias_offset_bytes, inferred=item.inferred,
+                    )
                 allocator._allocations[(item.buffer_id, item.generation)] = item
             else:
-                allocator.register(dict(item))
+                item = dict(item)
+                size = item.get("size_bytes", item.get("allocation_size_bytes"))
+                if size is None:
+                    raise AllocationError("physical allocation requires size_bytes")
+                alias_generation = item.get("alias_generation")
+                if item.get("alias_of") is not None and alias_generation is None:
+                    alias_generation = item.get("generation", 0)
+                allocator.allocate(
+                    item["buffer_id"], size, item.get("generation", 0),
+                    alias_of=item.get("alias_of"), alias_generation=alias_generation,
+                    address=item.get("base_address"), alias_offset_bytes=item.get("alias_offset_bytes", 0),
+                    inferred=item.get("inferred", False),
+                )
         return allocator
 
 

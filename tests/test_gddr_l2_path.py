@@ -1,4 +1,4 @@
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from heterollm_sim.component_presets import get_component_preset
 from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
@@ -136,6 +136,29 @@ def test_stateful_l2_hit_does_not_submit_an_empty_gddr_transaction():
     assert second.task.metadata["l2_execution"]["hbm_read_bytes"] == 0
     assert "physical_execution" not in second.task.metadata
     assert second.start_ns >= first.task.metadata["physical_completion_ns"]
+
+
+def test_stateful_l2_preserves_declared_fixed_base():
+    config = _config()
+    access = {
+        "operation": "read", "address": 0, "byte_count": 64,
+        "physical_owner": "gddr0.gddr_fabric", "resource_id": "gddr0.gddr_fabric",
+    }
+    task = _task("fixed-base", config=config, access=access)
+    task = replace(task, metadata={
+        **task.metadata,
+        "physical_allocations": [{
+            "buffer_id": "weight-W", "size_bytes": 64, "generation": 0,
+            "address": 1024, "physical_owner": "gddr0.gddr_fabric",
+        }],
+    })
+    event = UnifiedEventKernel.from_closed_graph(
+        (task,),
+        resource_capacities={"gddr0.gddr_fabric": 1, "gpu0.l2": 1, "gpu0.l2.access_order": 1},
+    ).step()
+    assert event is not None
+    assert event.task.metadata["physical_execution"]["physical_read_bytes"] == 64
+    assert event.task.metadata["memory_accesses"][0]["address"] == 1024
 
 
 def test_gddr_presets_derive_command_interval_from_lane_payload_budget():

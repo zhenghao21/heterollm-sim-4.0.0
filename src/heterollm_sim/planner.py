@@ -3725,10 +3725,41 @@ def _gddr_stable_address(
     return address
 
 
+def _gddr_formal_directional_bytes(cost: Mapping[str, object]) -> Optional[Tuple[int, int]]:
+    """Return a direction pair emitted by a cache/backing stage, if present."""
+
+    candidates = [cost]
+    for key in ("cache", "backing_memory_service"):
+        value = cost.get(key)
+        if isinstance(value, Mapping):
+            candidates.append(value)
+    for source in candidates:
+        if "physical_read_bytes" not in source or "physical_write_bytes" not in source:
+            continue
+        read = _gddr_non_negative_int(source.get("physical_read_bytes"), "physical_read_bytes")
+        write = _gddr_non_negative_int(source.get("physical_write_bytes"), "physical_write_bytes")
+        return read, write
+    return None
+
+
 def _gddr_directional_bytes(
     task: TaskSpec, cost: Mapping[str, object], total_bytes: int
 ) -> Tuple[int, int]:
-    """Resolve logical GDDR reads/writes while preserving conservation."""
+    """Resolve physical GDDR direction from an exact stage contract.
+
+    A logical operator read/write split cannot describe cache trimming or
+    rank-local sharding.  Such a task must carry physical directional bytes
+    from the cache/backing stage instead of being proportionally guessed.
+    """
+
+    formal = _gddr_formal_directional_bytes(cost)
+    if formal is not None:
+        if sum(formal) != total_bytes:
+            raise ValueError(
+                "GDDR task {} physical directional bytes ({}, {}) do not match "
+                "the submitted demand {}".format(task.task_id, formal[0], formal[1], total_bytes)
+            )
+        return formal
 
     has_explicit_direction = "read_bytes" in cost or "write_bytes" in cost
     has_gemm_direction = any(
@@ -3754,17 +3785,13 @@ def _gddr_directional_bytes(
         )
     declared_total = read_bytes + write_bytes
     if declared_total != total_bytes:
-        if declared_total <= 0:
-            raise ValueError(
-                "GDDR task {} byte conservation failed: no positive directional bytes for physical demand {} (source={})".format(
-                    task.task_id, total_bytes, source
-                )
+        raise ValueError(
+            "GDDR task {} lacks an exact physical directional contract: logical "
+            "({}, {}) != submitted demand {} (source={}); provide physical_read_bytes "
+            "and physical_write_bytes from the cache/backing stage".format(
+                task.task_id, read_bytes, write_bytes, total_bytes, source
             )
-        # Operator metadata can be expressed before rank sharding or cache
-        # trimming. Preserve its direction ratio and record the reconstruction
-        # on the task; never silently convert the demand into all reads.
-        read_bytes = min(total_bytes, int(round(total_bytes * read_bytes / declared_total)))
-        write_bytes = total_bytes - read_bytes
+        )
     return read_bytes, write_bytes
 
 
@@ -3877,6 +3904,30 @@ def _gddr_allocation_size(
     return offset + byte_count
 
 
+def _gddr_access_generation(metadata: Mapping[str, object], side: str) -> int:
+    keys = {
+        "read": ("input_allocation_generation", "input_generation", "allocation_generation", "generation"),
+        "weight": ("weight_allocation_generation", "weight_generation", "allocation_generation", "generation"),
+        "write": ("output_allocation_generation", "output_generation", "allocation_generation", "generation"),
+    }[side]
+    for key in keys:
+        if metadata.get(key) is not None:
+            return _gddr_non_negative_int(metadata[key], key)
+    return 0
+
+
+def _gddr_access_alias(metadata: Mapping[str, object], side: str) -> Tuple[Optional[str], Optional[int], int]:
+    alias = metadata.get("{}_alias_of".format(side), metadata.get("alias_of"))
+    if alias is None or not str(alias).strip():
+        return None, None, 0
+    generation = metadata.get(
+        "{}_alias_generation".format(side), metadata.get("alias_generation")
+    )
+    alias_generation = None if generation is None else _gddr_non_negative_int(generation, "alias_generation")
+    offset = metadata.get("{}_alias_offset_bytes".format(side), metadata.get("alias_offset_bytes", 0))
+    return str(alias).strip(), alias_generation, _gddr_non_negative_int(offset, "alias_offset_bytes")
+
+
 def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
     """Attach one explicit GDDR access descriptor to a lowered memory phase.
 
@@ -3935,7 +3986,6 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             )
         )
     metadata = task.metadata
-    directional_reconstruction = None
     raw_explicit = metadata.get(
         "memory_accesses",
         metadata.get("memory_access", metadata.get("buffer_accesses")),
@@ -3976,30 +4026,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 "GDDR task {} explicit access bytes do not match physical demand".format(task.task_id)
             )
     else:
-        if "read_bytes" in cost or "write_bytes" in cost:
-            declared_read = _gddr_non_negative_int(cost.get("read_bytes", 0), "read_bytes")
-            declared_write = _gddr_non_negative_int(cost.get("write_bytes", 0), "write_bytes")
-            direction_source = "explicit_read_write_bytes"
-        elif any(key in cost for key in ("activation_bytes", "weight_bytes", "output_bytes")):
-            declared_read = _gddr_non_negative_int(cost.get("activation_bytes", 0), "activation_bytes") + _gddr_non_negative_int(cost.get("weight_bytes", 0), "weight_bytes")
-            declared_write = _gddr_non_negative_int(cost.get("output_bytes", 0), "output_bytes")
-            direction_source = "activation_plus_weight_and_output"
-        else:
-            declared_read = declared_write = 0
-            direction_source = "unknown"
         read_bytes, write_bytes = _gddr_directional_bytes(task, cost, total_bytes)
-        directional_reconstruction = (
-            {
-                "source": direction_source,
-                "declared_read_bytes": declared_read,
-                "declared_write_bytes": declared_write,
-                "physical_demand_bytes": total_bytes,
-                "reconstructed_read_bytes": read_bytes,
-                "reconstructed_write_bytes": write_bytes,
-            }
-            if declared_read + declared_write != total_bytes
-            else None
-        )
     descriptors = []
     address_bindings = []
 
@@ -4012,6 +4039,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         allocation_size: Optional[int] = None,
         explicit_address: Optional[object] = None,
         source: str = "stable_buffer_tensor_offset",
+        generation: int = 0,
+        alias_of: Optional[str] = None,
+        alias_generation: Optional[int] = None,
+        alias_offset_bytes: int = 0,
     ) -> None:
         byte_count = _gddr_non_negative_int(byte_count, "byte_count")
         if byte_count <= 0:
@@ -4049,11 +4080,19 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             "physical_memory_component_id": component.component_id,
             "resource_id": owner,
             "address_source": address_source,
+            "offset_bytes": offset,
+            "allocation_generation": generation,
         }
         if identity is not None:
             descriptor["buffer_id"] = identity
         if allocation_size is not None:
             descriptor["allocation_size_bytes"] = allocation_size
+        if alias_of is not None:
+            descriptor.update({
+                "alias_of": alias_of,
+                "alias_generation": alias_generation if alias_generation is not None else generation,
+                "alias_offset_bytes": alias_offset_bytes,
+            })
         descriptors.append(descriptor)
         address_bindings.append(
             {
@@ -4064,6 +4103,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 "address": address,
                 "address_source": address_source,
                 "allocation_size_bytes": allocation_size,
+                "allocation_generation": generation,
+                "alias_of": alias_of,
+                "alias_generation": alias_generation,
+                "alias_offset_bytes": alias_offset_bytes,
                 "physical_memory_component_id": component.component_id,
             }
         )
@@ -4128,12 +4171,29 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             allocation_size = item.get(
                 "buffer_size_bytes", item.get("allocation_bytes")
             )
+            side = "write" if operation == "write" else "read"
+            generation = _gddr_non_negative_int(
+                item.get("allocation_generation", item.get("generation", _gddr_access_generation(metadata, side))),
+                "allocation_generation",
+            )
+            alias_of = item.get("alias_of")
+            alias_generation = item.get("alias_generation")
+            if alias_of is not None:
+                alias_of = str(alias_of).strip()
+                alias_generation = generation if alias_generation is None else _gddr_non_negative_int(alias_generation, "alias_generation")
+            alias_offset = _gddr_non_negative_int(item.get("alias_offset_bytes", 0), "alias_offset_bytes")
             explicit_address = item.get("address")
             if explicit_address is None and identity is None:
                 raise ValueError(
                     "GDDR task {} access requires address or stable buffer/tensor identity".format(
                         task.task_id
                     )
+                )
+            if allocation_size is not None:
+                allocation_size = _gddr_non_negative_int(allocation_size, "buffer_size_bytes")
+            else:
+                allocation_size = _gddr_allocation_size(
+                    scenario, metadata, side, identity or "", offset, byte_count
                 )
             if explicit_address is not None:
                 append_descriptor(
@@ -4143,23 +4203,23 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                     offset=offset,
                     explicit_address=explicit_address,
                     source="explicit_buffer_tensor_address",
+                    allocation_size=allocation_size,
+                    generation=generation,
+                    alias_of=alias_of,
+                    alias_generation=alias_generation,
+                    alias_offset_bytes=alias_offset,
                 )
             else:
-                allocation = _gddr_allocation_size(
-                    scenario,
-                    metadata,
-                    "read" if operation == "read" else "write",
-                    identity or "",
-                    offset,
-                    byte_count,
-                    allocation_size,
-                )
                 append_descriptor(
                     operation,
                     byte_count,
                     identity=identity,
                     offset=offset,
-                    allocation_size=allocation,
+                    allocation_size=allocation_size,
+                    generation=generation,
+                    alias_of=alias_of,
+                    alias_generation=alias_generation,
+                    alias_offset_bytes=alias_offset,
                 )
     else:
         activation = (
@@ -4173,17 +4233,17 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             else 0
         )
         if activation + weight > read_bytes:
-            if directional_reconstruction is None:
+            # A cache/backing stage supplied the exact physical direction,
+            # but not an operand split. Keep one generic read allocation;
+            # assigning the residual bytes to activation/weight would be
+            # another unrecorded ratio estimate.
+            if _gddr_formal_directional_bytes(cost) is None:
                 raise ValueError(
                     "GDDR task {} activation/weight reads exceed directional read bytes".format(
                         task.task_id
                     )
                 )
-            operand_total = activation + weight
-            activation = min(read_bytes, int(round(read_bytes * activation / operand_total)))
-            weight = read_bytes - activation
-            directional_reconstruction["reconstructed_activation_bytes"] = activation
-            directional_reconstruction["reconstructed_weight_bytes"] = weight
+            activation = weight = 0
         # When GEMM operands are present, keep activation and weight as two
         # independent stable allocations.  Generic kernels with only an
         # explicit read_bytes field use one stable input allocation.
@@ -4206,6 +4266,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                         offset,
                         activation,
                     ),
+                    generation=_gddr_access_generation(metadata, "read"),
+                    alias_of=_gddr_access_alias(metadata, "read")[0],
+                    alias_generation=_gddr_access_alias(metadata, "read")[1],
+                    alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
                 )
             if weight:
                 identity = _gddr_stable_identity(task, metadata, "weight")
@@ -4225,6 +4289,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                         offset,
                         weight,
                     ),
+                    generation=_gddr_access_generation(metadata, "weight"),
+                    alias_of=_gddr_access_alias(metadata, "weight")[0],
+                    alias_generation=_gddr_access_alias(metadata, "weight")[1],
+                    alias_offset_bytes=_gddr_access_alias(metadata, "weight")[2],
                 )
             remaining_read = read_bytes - activation - weight
             if remaining_read:
@@ -4237,6 +4305,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                     allocation_size=_gddr_allocation_size(
                         scenario, metadata, "read", identity, 0, remaining_read
                     ),
+                    generation=_gddr_access_generation(metadata, "read"),
+                    alias_of=_gddr_access_alias(metadata, "read")[0],
+                    alias_generation=_gddr_access_alias(metadata, "read")[1],
+                    alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
                 )
         elif read_bytes:
             identity = _gddr_stable_identity(task, metadata, "read")
@@ -4251,6 +4323,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 allocation_size=_gddr_allocation_size(
                     scenario, metadata, "read", identity, offset, read_bytes
                 ),
+                generation=_gddr_access_generation(metadata, "read"),
+                alias_of=_gddr_access_alias(metadata, "read")[0],
+                alias_generation=_gddr_access_alias(metadata, "read")[1],
+                alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
             )
         if write_bytes:
             identity = _gddr_stable_identity(task, metadata, "write")
@@ -4265,6 +4341,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 allocation_size=_gddr_allocation_size(
                     scenario, metadata, "write", identity, offset, write_bytes
                 ),
+                generation=_gddr_access_generation(metadata, "write"),
+                alias_of=_gddr_access_alias(metadata, "write")[0],
+                alias_generation=_gddr_access_alias(metadata, "write")[1],
+                alias_offset_bytes=_gddr_access_alias(metadata, "write")[2],
             )
 
     descriptor_reads = sum(
@@ -4300,8 +4380,6 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         "physical_address_scope": "stable_buffer_tensor_allocation_offset",
         "physical_address_bindings": tuple(address_bindings),
     })
-    if not explicit and directional_reconstruction is not None:
-        metadata["gddr_directional_reconstruction"] = directional_reconstruction
     return replace(task, metadata=metadata)
 
 

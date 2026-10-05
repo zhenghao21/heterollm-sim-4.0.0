@@ -11,7 +11,116 @@ from .contracts import ResourceDemand
 from .cost_models import HBMProfile
 
 
-def resolve_l2_task(task, states):
+def _allocation_for(allocator, buffer_id, generation):
+    """Return an allocator record when the optional physical adapter has one."""
+    if allocator is None:
+        return None
+    getter = getattr(allocator, 'get_allocation', None)
+    if getter is not None:
+        for args in ((buffer_id, generation), (buffer_id,)):
+            try:
+                return getter(*args)
+            except (KeyError, LookupError, TypeError):
+                pass
+    records = getattr(allocator, 'allocations', None)
+    if callable(records):
+        records = records()
+    for item in records or ():
+        item_id = getattr(item, 'buffer_id', None)
+        item_generation = getattr(item, 'generation', None)
+        if isinstance(item, dict):
+            item_id = item.get('buffer_id')
+            item_generation = item.get('generation', item.get('allocation_generation', 0))
+        if item_id == buffer_id and item_generation == generation:
+            return item
+    return None
+
+
+def _physical_allocator(allocator, task, contract):
+    """Accept either an allocator or a PhysicalRuntimeContext."""
+    if allocator is None or hasattr(allocator, 'canonical_range'):
+        return allocator
+    owner = str(task.metadata.get('physical_owner') or contract.get('memory_resource') or '')
+    allocators = getattr(allocator, 'allocators', None)
+    if not isinstance(allocators, dict):
+        return None
+    if owner in allocators:
+        return allocators[owner]
+    # A runtime normally has one memory owner for a task. This fallback keeps
+    # the optional adapter usable before physical_owner is promoted into task
+    # metadata by the event dispatcher.
+    return next(iter(allocators.values())) if len(allocators) == 1 else None
+
+
+def _canonical_access(item, allocator):
+    """Map aliases to their root before constructing a cache key."""
+    if allocator is None or not hasattr(allocator, 'canonical_range'):
+        return item
+    buffer_id = item['buffer_id']
+    generation = item.get('allocation_generation', 0)
+    allocation = _allocation_for(allocator, buffer_id, generation)
+    # Analytical callers may provide no physical declaration. Keep their
+    # original identity; declared physical aliases must be canonicalized.
+    if allocation is None:
+        return item
+    try:
+        canonical = allocator.canonical_range(
+            buffer_id, item['offset_bytes'], item['size_bytes'], generation
+        )
+    except (KeyError, LookupError, TypeError, ValueError) as exc:
+        raise ValueError('invalid physical alias range for {}'.format(buffer_id)) from exc
+    if not isinstance(canonical, (tuple, list)) or len(canonical) != 3:
+        raise ValueError('physical allocator canonical_range must return (root_id, generation, offset)')
+    root_id, root_generation, root_offset = canonical
+    root = _allocation_for(allocator, root_id, root_generation)
+    root_size = getattr(root, 'size_bytes', None)
+    if isinstance(root, dict):
+        root_size = root.get('size_bytes', root.get('buffer_size_bytes'))
+    if root_size is None:
+        root_size = item.get('buffer_size_bytes')
+    return {**item, 'buffer_id': root_id, 'allocation_generation': root_generation,
+            'offset_bytes': root_offset,
+            **({'buffer_size_bytes': root_size} if root_size is not None else {})}
+
+
+def _allocation_table(task, accesses, backing_accesses):
+    """Preserve declared allocations and add only references not yet declared."""
+    raw = task.metadata.get('physical_allocations', ())
+    if isinstance(raw, dict):
+        raw = (raw,)
+    if raw is None:
+        raw = ()
+    if not isinstance(raw, (tuple, list)):
+        raise ValueError('physical_allocations must be a mapping or sequence')
+    table = {}
+    for declaration in raw:
+        if not isinstance(declaration, dict):
+            raise ValueError('physical allocation entries must be mappings')
+        if not declaration.get('buffer_id'):
+            raise ValueError('physical allocation requires buffer_id')
+        generation = declaration.get('generation', declaration.get('allocation_generation', 0))
+        key = (str(declaration['buffer_id']), generation)
+        normalized = dict(declaration)
+        normalized['buffer_id'] = key[0]
+        normalized['generation'] = generation
+        previous = table.get(key)
+        if previous is not None and previous != normalized:
+            raise ValueError('conflicting physical allocation declaration for {} generation {}'.format(*key))
+        table[key] = normalized
+    for access in (*accesses, *backing_accesses):
+        key = (access.buffer_id, access.allocation_generation)
+        extent = access.buffer_size_bytes or (access.offset_bytes + access.size_bytes)
+        previous = table.get(key)
+        if previous is None:
+            table[key] = {'buffer_id': key[0], 'size_bytes': extent, 'generation': key[1]}
+        else:
+            declared_size = previous.get('size_bytes', previous.get('buffer_size_bytes'))
+            if declared_size is not None and extent > declared_size:
+                raise ValueError('access exceeds declared physical allocation {} generation {}'.format(*key))
+    return table
+
+
+def resolve_l2_task(task, states, physical_allocator=None):
     contract = task.metadata.get('stateful_l2')
     if contract is None:
         return task
@@ -24,8 +133,9 @@ def resolve_l2_task(task, states):
         cache = ExplicitCacheState(signature[0], signature[1], write_back=signature[2], write_allocate=signature[3])
     else:
         cache = existing[1]
-    accesses = tuple(CacheAccess(**{**item, 'buffer_id':
-                        task.task_id + item['buffer_id'][10:] if item['buffer_id'].startswith('@tasklocal') else item['buffer_id']})
+    allocator = _physical_allocator(physical_allocator, task, contract)
+    accesses = tuple(CacheAccess(**_canonical_access({**item, 'buffer_id':
+                        task.task_id + item['buffer_id'][10:] if item['buffer_id'].startswith('@tasklocal') else item['buffer_id']}, allocator))
                      for item in contract['accesses'])
     # GDDRProfile shares the DRAM service contract but adds generation
     # metadata; the cache recost path only needs the common HBM fields.
@@ -39,17 +149,7 @@ def resolve_l2_task(task, states):
     if (reads, writes) != (sum(r.backing_read_bytes for r in results),
                           sum(r.backing_write_bytes for r in results)):
         raise ValueError('L2 backing access ranges do not conserve directional bytes')
-    physical_allocations = {}
-    for access in (*accesses, *backing_accesses):
-        key = (access.buffer_id, access.allocation_generation)
-        extent = access.buffer_size_bytes or (access.offset_bytes + access.size_bytes)
-        previous = physical_allocations.get(key)
-        if previous is None or extent > previous['size_bytes']:
-            physical_allocations[key] = {
-                'buffer_id': access.buffer_id,
-                'size_bytes': extent,
-                'generation': access.allocation_generation,
-            }
+    physical_allocations = _allocation_table(task, accesses, backing_accesses)
     states[owner] = (signature, cache)
     requested = sum(a.size_bytes for a in accesses)
     memory_ns = hbm.memory_service(reads, writes, bandwidth_gb_s=contract['bandwidth_gb_s'])['service_ns']
@@ -96,7 +196,7 @@ def resolve_l2_task(task, states):
         owner = str(task.metadata.get('physical_owner') or contract['memory_resource'])
         metadata_updates['physical_owner'] = owner
         metadata_updates['physical_allocations'] = [
-            {**item, 'physical_owner': owner}
+            {**item, 'physical_owner': item.get('physical_owner', owner)}
             for item in physical_allocations.values()
         ]
     return replace(task, demands=demands, metadata={**task.metadata, **metadata_updates})

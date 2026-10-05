@@ -92,3 +92,72 @@ def test_unified_event_kernel_commits_gddr_at_dispatch():
     event = kernel.step()
     assert event is not None
     assert event.task.metadata["physical_execution"]["physical_bytes"] == 64
+
+
+@pytest.mark.parametrize("offset", (0, 64, 128))
+def test_runtime_preserves_buffer_offsets(offset):
+    task = TaskSpec(
+        task_id="offset.gddr", request_id="offset-0", name="offset GDDR read",
+        category=TaskCategory.MEMORY,
+        metadata={
+            "physical_memory_config": _config().__dict__,
+            "physical_owner": "gddr0",
+            "memory_accesses": ({
+                "operation": "read", "address": offset, "byte_count": 64,
+                "buffer_id": "activation", "offset_bytes": offset,
+                "allocation_size_bytes": 256,
+                "address_source": "stable_buffer_tensor_offset",
+                "physical_owner": "gddr0", "resource_id": "gddr0",
+            },),
+        },
+        demands=(ResourceDemand("gddr0", 0, bytes_moved=64),),
+    )
+    resolved = resolve_physical_task(task, PhysicalRuntimeContext(), 0.0)
+    access = resolved.metadata["memory_accesses"][0]
+    assert access["offset_bytes"] == offset
+    assert access["address"] == offset
+
+
+def _multi_access_task(accesses):
+    return TaskSpec(
+        task_id="multi.gddr", request_id="multi-0", name="multi GDDR access",
+        category=TaskCategory.MEMORY,
+        metadata={"physical_memory_config": _config().__dict__,
+                  "memory_accesses": tuple({"physical_owner": "gddr0", "resource_id": "gddr0", **item}
+                                            for item in accesses)},
+    )
+
+
+def test_physical_batch_independent_lanes_share_arrival():
+    resolved = resolve_physical_task(_multi_access_task((
+        {"operation": "read", "address": 0, "byte_count": 1},
+        {"operation": "read", "address": 64, "byte_count": 1},
+    )), PhysicalRuntimeContext(), 0.0)
+    contiguous = resolve_physical_task(_multi_access_task((
+        {"operation": "read", "address": 0, "byte_count": 65},
+    )), PhysicalRuntimeContext(), 0.0)
+    execution = resolved.metadata["physical_execution"]
+    assert execution["operation_count"] == 2
+    assert execution["completion_ns"] == resolved.metadata["physical_completion_ns"]
+    assert execution["completion_ns"] == contiguous.metadata["physical_completion_ns"]
+    assert execution["queue_wait_ns"] >= 0
+
+
+def test_physical_batch_same_lane_contends_and_overlap_write_reads_wait():
+    runtime = PhysicalRuntimeContext()
+    same_lane = resolve_physical_task(_multi_access_task((
+        {"operation": "read", "address": 0, "byte_count": 1},
+        {"operation": "read", "address": 128, "byte_count": 1},
+    )), runtime, 0.0)
+    independent = resolve_physical_task(_multi_access_task((
+        {"operation": "read", "address": 0, "byte_count": 1},
+        {"operation": "read", "address": 64, "byte_count": 1},
+    )), PhysicalRuntimeContext(), 0.0)
+    assert same_lane.metadata["physical_completion_ns"] > independent.metadata["physical_completion_ns"]
+
+    overlap = resolve_physical_task(_multi_access_task((
+        {"operation": "write", "address": 0, "byte_count": 1},
+        {"operation": "read", "address": 0, "byte_count": 1},
+    )), PhysicalRuntimeContext(), 0.0)
+    intervals = overlap.metadata["physical_resource_intervals"]
+    assert overlap.metadata["physical_completion_ns"] >= max(item.end_ns for item in intervals)

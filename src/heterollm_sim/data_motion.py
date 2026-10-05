@@ -164,9 +164,18 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
     # declaration table. Derive declarations from those descriptors once;
     # this is registration, never an address guess.
     if not declarations:
+        contract = metadata.get("stateful_l2")
+        default_owner = str(metadata.get("physical_owner") or
+                            (contract.get("memory_resource") if isinstance(contract, Mapping) else "") or "")
         raw_accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
         if isinstance(raw_accesses, Mapping):
             raw_accesses = (raw_accesses,)
+        if (not raw_accesses or not any(
+            isinstance(access, Mapping)
+            and (access.get("buffer_id") or access.get("tensor_id"))
+            for access in raw_accesses
+        )) and isinstance(contract, Mapping):
+            raw_accesses = contract.get("accesses", ())
         if isinstance(raw_accesses, (tuple, list)):
             derived = {}
             for access in raw_accesses:
@@ -177,13 +186,21 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
                     continue
                 offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
                 size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
-                extent = int(access.get("allocation_size_bytes", access.get("buffer_size_bytes", offset + size)) or (offset + size))
+                declared_extent = access.get("allocation_size_bytes", access.get("buffer_size_bytes"))
+                extent = int(declared_extent if declared_extent is not None else (offset + size))
                 generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
                 key = (str(buffer_id), generation)
                 previous = derived.get(key)
                 if previous is None or extent > previous["size_bytes"]:
                     declaration = {"buffer_id": str(buffer_id), "size_bytes": extent,
-                                   "generation": generation, "physical_owner": access.get("physical_owner") or metadata.get("physical_owner")}
+                                   "generation": generation, "physical_owner": access.get("physical_owner") or default_owner,
+                                   "inferred": declared_extent is None}
+                    if access.get("alias_of") is not None:
+                        declaration.update({
+                            "alias_of": str(access["alias_of"]),
+                            "alias_generation": int(access.get("alias_generation", generation) or 0),
+                            "alias_offset_bytes": int(access.get("alias_offset_bytes", 0) or 0),
+                        })
                     if str(access.get("address_source", "")).startswith("explicit"):
                         explicit_address = access.get("address")
                         if not isinstance(explicit_address, int) or explicit_address < offset:
@@ -191,27 +208,64 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
                         declaration["address"] = explicit_address - offset
                     derived[key] = declaration
             declarations = tuple(derived.values())
-    for declaration in declarations:
-        if not isinstance(declaration, Mapping):
-            raise ValueError("physical allocation entries must be mappings")
-        buffer_id = declaration.get("buffer_id")
-        if not buffer_id:
-            raise ValueError("physical allocation requires buffer_id")
-        owner = str(declaration.get("physical_owner") or metadata.get("physical_owner") or "")
-        if not owner:
-            raise ValueError("physical allocation requires physical_owner")
-        size_bytes = declaration.get("size_bytes", declaration.get("buffer_size_bytes"))
-        if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes <= 0:
-            raise ValueError("physical allocation requires positive size_bytes")
-        runtime.runtime(raw_config, owner)
-        allocator = runtime.allocators.get(owner)
-        if allocator is None:
-            raise ValueError("physical owner has no address allocator: {}".format(owner))
-        allocator.allocate(
-            str(buffer_id), size_bytes, int(declaration.get("generation", 0) or 0),
-            alias_of=declaration.get("alias_of"), address=declaration.get("address"),
-            alias_offset_bytes=int(declaration.get("alias_offset_bytes", 0) or 0),
-        )
+    pending = sorted(
+        declarations,
+        key=lambda item: 1 if isinstance(item, Mapping) and item.get("alias_of") else 0,
+    )
+    while pending:
+        deferred = []
+        progress = 0
+        for declaration in pending:
+            if not isinstance(declaration, Mapping):
+                raise ValueError("physical allocation entries must be mappings")
+            alias_of = declaration.get("alias_of")
+            owner = str(declaration.get("physical_owner") or metadata.get("physical_owner") or "")
+            generation = int(declaration.get("generation", declaration.get("allocation_generation", 0)) or 0)
+            alias_generation = declaration.get("alias_generation")
+            if alias_of is not None and alias_generation is None:
+                alias_generation = generation
+            if alias_of is not None and owner:
+                existing_allocator = runtime.allocators.get(owner)
+                if existing_allocator is not None and existing_allocator.get_allocation(str(alias_of), int(alias_generation)) is None:
+                    deferred.append(declaration)
+                    continue
+            try:
+                _register_physical_allocation(declaration, metadata, runtime, raw_config)
+                progress += 1
+            except ValueError:
+                raise
+        if not deferred:
+            break
+        if progress == 0:
+            raise ValueError("physical allocation alias target is not registered")
+        pending = deferred
+
+
+def _register_physical_allocation(declaration, metadata, runtime, raw_config):
+    """Register one declaration after its optional alias target exists."""
+    if not isinstance(declaration, Mapping):
+        raise ValueError("physical allocation entries must be mappings")
+    buffer_id = declaration.get("buffer_id")
+    if not buffer_id:
+        raise ValueError("physical allocation requires buffer_id")
+    owner = str(declaration.get("physical_owner") or metadata.get("physical_owner") or "")
+    if not owner:
+        raise ValueError("physical allocation requires physical_owner")
+    size_bytes = declaration.get("size_bytes", declaration.get("buffer_size_bytes"))
+    if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes <= 0:
+        raise ValueError("physical allocation requires positive size_bytes")
+    runtime.runtime(raw_config, owner)
+    allocator = runtime.allocators.get(owner)
+    if allocator is None:
+        raise ValueError("physical owner has no address allocator: {}".format(owner))
+    allocator.allocate(
+        str(buffer_id), size_bytes, int(declaration.get("generation", 0) or 0),
+        alias_of=declaration.get("alias_of"),
+        address=declaration.get("address", declaration.get("base_address")),
+        alias_generation=declaration.get("alias_generation"),
+        alias_offset_bytes=int(declaration.get("alias_offset_bytes", 0) or 0),
+        inferred=bool(declaration.get("inferred", False)),
+    )
 
 
 def resolve_physical_task(
@@ -296,24 +350,29 @@ def resolve_physical_task(
             if value:
                 placeholder_ids.add(str(value))
     results = []
-    next_arrival = float(arrival_ns)
     resolved_accesses = []
     try:
       for index, (access, operation, address, byte_count) in enumerate(validated):
         owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
         active = runtime.runtime(config, owner)
-        request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation, address, byte_count, next_arrival)
+        access_arrival = float(arrival_ns)
+        for previous, previous_result in zip(validated[:index], results):
+            previous_access, previous_operation, previous_address, previous_bytes = previous
+            overlaps = address < previous_address + previous_bytes and previous_address < address + byte_count
+            if overlaps and (operation is Operation.WRITE or previous_operation is Operation.WRITE):
+                access_arrival = max(access_arrival, previous_result.completion_ns)
+        request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation, address, byte_count, access_arrival)
         submit = getattr(active.core, "submit", active.core.execute)
         result = submit(request)
         active.clock_ns = max(active.clock_ns, result.completion_ns)
         results.append(result)
         resolved_accesses.append({**dict(access), "address": address})
-        next_arrival = result.completion_ns
+      completion_ns = max(item.completion_ns for item in results)
     except Exception:
         if snapshot is not None:
             runtime.restore(snapshot)
         raise
-    result = results[-1]
+    result = max(results, key=lambda item: item.completion_ns)
     counters = dict(result.counters)
     resource_busy = {}
     resource_bytes = {}
@@ -337,7 +396,7 @@ def resolve_physical_task(
     for key in (
         "logical_bytes", "physical_bytes", "physical_read_bytes", "physical_write_bytes",
         "host_transfer_bytes", "internal_transfer_bytes", "pages_read", "pages_programmed",
-        "erase_operations", "burst_count", "row_hits", "row_misses", "row_conflicts",
+        "erase_operations", "burst_count", "row_hits", "row_misses", "row_conflicts", "queue_wait_ns",
     ):
         if key == "physical_bytes":
             counters[key] = sum(item.transfer_bytes for item in results)
@@ -358,13 +417,13 @@ def resolve_physical_task(
             **counters,
             "logical_bytes": sum(item.logical_bytes for item in results),
             "physical_bytes": sum(item.transfer_bytes for item in results),
-            "service_ns": next_arrival - float(arrival_ns),
+            "service_ns": completion_ns - float(arrival_ns),
             "arrival_ns": float(arrival_ns),
-            "completion_ns": next_arrival,
+            "completion_ns": completion_ns,
             "operation": results[-1].operation.value if len(results) == 1 else "read_write",
         },
         "physical_arrival_ns": float(arrival_ns),
-        "physical_completion_ns": next_arrival,
+        "physical_completion_ns": completion_ns,
         "physical_resource_intervals": tuple(
             item for result in results for item in result.stages
             if item.name not in {"READ_PIPELINE", "WRITE_PIPELINE"}

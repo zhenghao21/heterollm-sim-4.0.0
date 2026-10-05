@@ -83,21 +83,40 @@ def test_gddr_planner_adds_gemm_reads_and_output_write():
     )
 
 
-def test_gddr_planner_records_directional_reconstruction_on_sharded_demand():
+def test_gddr_planner_rejects_unresolved_directional_sharding():
+    scenario = _scenario()
+    with pytest.raises(ValueError, match="exact physical directional contract"):
+        _attach_gddr_physical_task(
+            _task(
+                "sharded-gemm",
+                400,
+                {"activation_bytes": 128, "weight_bytes": 256, "output_bytes": 64},
+            ),
+            scenario,
+        )
+
+
+def test_gddr_planner_consumes_exact_cache_direction_after_sharding():
     scenario = _scenario()
     task = _attach_gddr_physical_task(
         _task(
             "sharded-gemm",
             400,
-            {"activation_bytes": 128, "weight_bytes": 256, "output_bytes": 64},
+            {
+                "activation_bytes": 128,
+                "weight_bytes": 256,
+                "output_bytes": 64,
+                "cache": {
+                    "physical_read_bytes": 336,
+                    "physical_write_bytes": 64,
+                },
+            },
         ),
         scenario,
     )
-    reconstruction = task.metadata["gddr_directional_reconstruction"]
-    assert reconstruction["declared_read_bytes"] == 384
-    assert reconstruction["declared_write_bytes"] == 64
-    assert reconstruction["physical_demand_bytes"] == 400
-    assert reconstruction["reconstructed_read_bytes"] + reconstruction["reconstructed_write_bytes"] == 400
+    assert sum(item["byte_count"] for item in task.metadata["memory_accesses"] if item["operation"] == "read") == 336
+    assert sum(item["byte_count"] for item in task.metadata["memory_accesses"] if item["operation"] == "write") == 64
+    assert "gddr_directional_reconstruction" not in task.metadata
 
 
 def test_gddr_planner_rejects_out_of_range_buffer_offset():

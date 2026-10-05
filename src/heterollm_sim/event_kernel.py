@@ -2179,7 +2179,7 @@ class UnifiedEventKernel:
                 # Local import avoids making the planner/data-motion module
                 # part of the kernel import cycle; it also keeps the physical
                 # adapter optional for analytical-only users.
-                from .data_motion import resolve_physical_task
+                from .data_motion import register_physical_allocations, resolve_physical_task
                 # A physical GDDR descriptor is only a preview until the
                 # mutable L2 contract has run.  Resolve that contract first,
                 # then submit the remaining miss/write-back traffic to the
@@ -2187,7 +2187,8 @@ class UnifiedEventKernel:
                 # physical event path for cold traffic.
                 if "stateful_l2" in task.metadata:
                     l2_snapshot = copy.deepcopy(self._l2_states)
-                    task = resolve_l2_task(task, self._l2_states)
+                    register_physical_allocations(task, self.physical_runtime)
+                    task = resolve_l2_task(task, self._l2_states, self.physical_runtime)
                     task, is_physical = _materialize_l2_physical_access(task, self.physical_runtime)
                 if is_physical:
                     task = resolve_physical_task(task, self.physical_runtime, start_ns)

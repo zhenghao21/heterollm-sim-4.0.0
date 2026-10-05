@@ -1,7 +1,11 @@
-# GDDR 审计二轮回归记录
+# GDDR 审计三轮回归记录
 
 本轮回归使用真实 `ScenarioConfig`、`compile_scenario` 和 Web API 传输边界，并覆盖了
 stateful L2 到物理 GDDR 的事件提交路径；物理地址由 run-local allocator 解析。
+
+本轮进一步统一了 planner、L2、allocator 和物理核心之间的事务契约：访问记录保留
+`offset_bytes`、`allocation_generation` 和 alias 字段；L2 recost 保留既有分配声明；
+独立物理请求共享到达时间，真实写读重叠才建立完成依赖；根分配存在存活 alias 时不能释放。
 
 ## 运行时编译
 
@@ -11,9 +15,10 @@ stateful L2 到物理 GDDR 的事件提交路径；物理地址由 run-local all
 
 方向信息的来源层次如下：
 
-1. `cost_model.read_bytes` / `write_bytes` 是显式分方向字节；
-2. GEMM 使用 `activation_bytes + weight_bytes` 与 `output_bytes`；
-3. cache 阶段的 `physical_read_bytes` / `physical_write_bytes` 和 `backing_read_bytes` / `backing_write_bytes` 描述缓存后的外存流量。
+1. `cost_model.read_bytes` / `write_bytes` 在与物理 demand 守恒时可直接使用；
+2. GEMM 使用 `activation_bytes + weight_bytes` 与 `output_bytes`，前提是它们与物理 demand 守恒；
+3. cache/backing 阶段的 `physical_read_bytes` / `physical_write_bytes` 描述缓存后的外存流量，并作为分片或裁剪后的正式方向来源；
+4. 只有总量而没有精确方向时现在明确报错，不再按原始读写比例猜测。
 
 ## 前端传输往返
 
@@ -27,4 +32,4 @@ stateful L2 到物理 GDDR 的事件提交路径；物理地址由 run-local all
 python -m pytest -q
 ```
 
-结果：项目全量回归为 `29 passed`，其中包含 HTTP 往返、动态 L2、运行时分配器和物理核心测试。
+结果：项目全量回归为 `40 passed`，其中包含 HTTP 往返、动态 L2、运行时分配器、固定 offset/alias、独立物理请求和物理核心测试。
