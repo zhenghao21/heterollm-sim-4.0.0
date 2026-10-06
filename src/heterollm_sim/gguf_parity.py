@@ -736,6 +736,133 @@ def assert_gguf_parity(report: Mapping[str, Any]) -> None:
         raise ValueError(f"GGUF/native parity gate failed: {fields or 'unknown mismatch'}")
 
 
+def _gguf_architecture_prefixes(gguf: GGUFMetadata) -> tuple[str, ...]:
+    """Return metadata namespaces in precedence order."""
+    arch = str(gguf.architecture or "").strip().lower()
+    if not arch:
+        return ()
+    return (arch, "qwen35") if arch == "qwen35moe" else (arch,)
+
+
+def _gguf_positive_metadata_int(
+    metadata: Mapping[str, Any], prefixes: tuple[str, ...], suffixes: tuple[str, ...],
+    *, label: str, required: bool = False,
+) -> int | None:
+    """Read one positive integer from formal GGUF metadata namespaces."""
+    values: list[tuple[str, int]] = []
+    for prefix in prefixes:
+        namespace_values: list[tuple[str, int]] = []
+        for suffix in suffixes:
+            key = f"{prefix}.{suffix}"
+            if key not in metadata:
+                continue
+            value = _as_int(metadata.get(key))
+            if value is None or value <= 0:
+                raise GGUFError(f"GGUF {key} must be a positive integer")
+            namespace_values.append((key, value))
+        if namespace_values:
+            values.extend(namespace_values)
+            break  # architecture namespace takes precedence over alias
+    if not values:
+        if required:
+            raise GGUFError(f"GGUF is missing required {label} metadata")
+        return None
+    first = values[0][1]
+    if any(value != first for _, value in values[1:]):
+        keys = ", ".join(f"{key}={value}" for key, value in values)
+        raise GGUFError(f"conflicting GGUF {label} metadata: {keys}")
+    return first
+
+
+def _gguf_attention_metadata_head_dim(gguf: GGUFMetadata) -> int | None:
+    """Resolve formal attention head dimension metadata, if declared."""
+    prefixes = _gguf_architecture_prefixes(gguf)
+    if not prefixes:
+        return None
+    values: list[tuple[str, int]] = []
+    for label, suffixes in (
+        ("key_length", ("attention.key_length", "attention.head_dim", "head_dim")),
+        ("value_length", ("attention.value_length", "attention.head_dim", "head_dim")),
+    ):
+        value = _gguf_positive_metadata_int(gguf.metadata, prefixes, suffixes, label=label)
+        if value is not None:
+            values.append((label, value))
+    if not values:
+        return None
+    first = values[0][1]
+    if any(value != first for _, value in values[1:]):
+        raise GGUFError("GGUF key/value attention head dimensions conflict")
+    return first
+
+
+def _matrix_extent(tensor: GGUFTensor) -> tuple[int, int]:
+    """Return GGUF matrix ``(input K, output N)`` dimensions."""
+    if len(tensor.shape) != 2 or any(int(dimension) <= 0 for dimension in tensor.shape):
+        raise GGUFError(f"tensor {tensor.name} is not a positive-rank-2 matrix")
+    return int(tensor.shape[0]), int(tensor.shape[1])
+
+
+def _resolve_attention_head_dim(
+    gguf: GGUFMetadata,
+    q: GGUFTensor,
+    k: GGUFTensor,
+    v: GGUFTensor,
+    o: GGUFTensor,
+    *,
+    qwen35_full: bool = False,
+    declared_head_dim: int | None = None,
+) -> int:
+    """Resolve and cross-check Q/K/V/O attention geometry."""
+    hidden = int(gguf.n_embd or 0)
+    heads = int(gguf.n_head or 0)
+    kv_heads = int(gguf.n_head_kv or 0)
+    if hidden <= 0 or heads <= 0 or kv_heads <= 0:
+        raise GGUFError("GGUF attention geometry is missing positive head counts")
+    q_in, q_width = _matrix_extent(q)
+    k_in, k_width = _matrix_extent(k)
+    v_in, v_width = _matrix_extent(v)
+    o_width, o_out = _matrix_extent(o)
+    if q_in != hidden or k_in != hidden or v_in != hidden or o_out != hidden:
+        raise GGUFError(f"GGUF Q/K/V/O width conflicts with hidden size {hidden}")
+    metadata_dim = declared_head_dim if declared_head_dim is not None else _gguf_attention_metadata_head_dim(gguf)
+    if metadata_dim is None:
+        divisor = heads * (2 if qwen35_full else 1)
+        if q_width % divisor:
+            raise GGUFError("GGUF Q projection width is not divisible by head count")
+        metadata_dim = q_width // divisor
+    if metadata_dim <= 0:
+        raise GGUFError("GGUF attention head dimension must be positive")
+    multiplier = 2 if qwen35_full else 1
+    expected = (
+        heads * metadata_dim * multiplier,
+        kv_heads * metadata_dim,
+        kv_heads * metadata_dim,
+        heads * metadata_dim,
+    )
+    actual = (q_width, k_width, v_width, o_width)
+    if actual != expected:
+        raise GGUFError(
+            "GGUF Q/K/V/O tensor widths conflict with declared/inferred head_dim "
+            f"(got q={q_width}, k={k_width}, v={v_width}, o_in={o_width}; expected {expected})"
+        )
+    return int(metadata_dim)
+
+
+def _unique_tensor_bytes(tensors: tuple[GGUFTensor, ...] | list[GGUFTensor]) -> int:
+    """Count physical payload bytes once for tensors sharing a GGUF offset."""
+    seen: set[tuple[int, int]] = set()
+    total = 0
+    for tensor in tensors:
+        if tensor.n_bytes is None:
+            continue
+        identity = (int(tensor.offset), int(tensor.n_bytes))
+        if identity in seen:
+            continue
+        seen.add(identity)
+        total += int(tensor.n_bytes)
+    return total
+
+
 def _build_model_from_gguf_registered(gguf: GGUFMetadata):
     """Bind a supported GGUF directory to an executable ``ModelSpec``.
 
@@ -775,6 +902,14 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
     # geometry parity while recording the auxiliary tensors in bindings.
     is_qwen35 = adapter.hybrid
     qwen35_metadata_prefix = gguf.architecture if gguf.architecture in {"qwen35", "qwen35moe"} else "qwen35"
+    qwen35_prefixes = _gguf_architecture_prefixes(gguf)
+    declared_head_dim = _gguf_attention_metadata_head_dim(gguf) if is_qwen35 else None
+    has_qwen35_linear_blocks = bool(
+        is_qwen35 and any(
+            any(tensor.name.lower().endswith(suffix) for suffix in ("attn_qkv.weight", "ssm_out.weight"))
+            for values in by_layer.values() for tensor in values
+        )
+    )
     linear_attention = None
     if is_qwen35:
         from .ir import LinearAttentionSpec
@@ -795,16 +930,40 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
             raise GGUFError(
                 "Qwen35 GGUF contains experts; use the generic artifact preset"
             )
-        linear_attention = LinearAttentionSpec(
-            key_heads=int(md.get(f"{qwen35_metadata_prefix}.ssm.group_count") or 16),
-            value_heads=max(1, int((md.get(f"{qwen35_metadata_prefix}.ssm.inner_size") or 6144) // (md.get(f"{qwen35_metadata_prefix}.ssm.state_size") or 128))),
-            key_head_dim=128,
-            value_head_dim=int(md.get(f"{qwen35_metadata_prefix}.ssm.state_size") or 128),
-            conv_kernel_size=int(md.get(f"{qwen35_metadata_prefix}.ssm.conv_kernel") or 4),
-            state_dtype="fp32",
-            output_gate=True,
-            gate_activation="silu",
-        )
+        def ssm_int(suffix: str) -> int | None:
+            return _gguf_positive_metadata_int(
+                md, qwen35_prefixes, (f"ssm.{suffix}",), label=f"ssm.{suffix}"
+            )
+        ssm_groups = ssm_int("group_count") if has_qwen35_linear_blocks else None
+        ssm_inner = ssm_int("inner_size") if has_qwen35_linear_blocks else None
+        ssm_state = ssm_int("state_size") if has_qwen35_linear_blocks else None
+        ssm_conv = ssm_int("conv_kernel") if has_qwen35_linear_blocks else None
+        # These are architecture geometry fields, not calibration defaults.
+        # Missing values are handled below from a fused QKV tensor where that
+        # width proves the inner size; state/group/conv remain unproven and
+        # therefore fail closed rather than silently selecting 16/128/4.
+        if has_qwen35_linear_blocks and (ssm_groups is None or ssm_state is None or ssm_conv is None):
+            raise GGUFError("Qwen3.5 GGUF is missing formal SSM geometry metadata")
+        if has_qwen35_linear_blocks and ssm_inner is None:
+            for candidate in (tensor for values in by_layer.values() for tensor in values):
+                if candidate.name.lower().endswith("attn_qkv.weight"):
+                    _, width = _matrix_extent(candidate)
+                    if width % 3 == 0:
+                        ssm_inner = width // 3
+                        break
+        if has_qwen35_linear_blocks and (ssm_inner is None or ssm_inner % ssm_state):
+            raise GGUFError("Qwen3.5 GGUF SSM inner_size is not divisible by state_size")
+        if has_qwen35_linear_blocks:
+            linear_attention = LinearAttentionSpec(
+                key_heads=ssm_groups,
+                value_heads=ssm_inner // ssm_state,
+                key_head_dim=ssm_state,
+                value_head_dim=ssm_state,
+                conv_kernel_size=ssm_conv,
+                state_dtype="fp32",
+                output_gate=True,
+                gate_activation="silu",
+            )
     for index in range(gguf.n_layer):
         tensors = by_layer[index]
         names = {t.name.lower(): t for t in tensors}
@@ -832,16 +991,29 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
         if not all((q, k, v, o, down)) or (gate is None and up is None):
             raise GGUFError(f"layer {index} is missing QKV/O/FFN tensors")
         def extent(t):
-            if len(t.shape) != 2: raise GGUFError(f"tensor {t.name} is not a matrix")
-            # GGUF stores matrix dimensions as [input(K), output(N)].
-            return int(t.shape[0]), int(t.shape[1])
+            return _matrix_extent(t)
         hidden = int(gguf.n_embd)
         # GGUF matrices are stored as [input (K), output (N)].  The gated/up
         # projection therefore exposes the FFN width on dimension 1; using
         # dimension 0 silently collapsed every imported model's MLP to the
         # hidden size and made simulator timings dramatically too small.
         intermediate = int((gate or up).shape[1])
-        metadata: dict[str, Any] = {"gguf_tensor_bindings": [binding(t) for t in tensors], "gguf_physical_weight_bytes": sum(t.n_bytes for t in tensors)}
+        is_linear_block = bool(is_qwen35 and q is k is v)
+        resolved_head_dim: int | None = None
+        if not is_linear_block:
+            resolved_head_dim = _resolve_attention_head_dim(
+                gguf, q, k, v, o, qwen35_full=is_qwen35,
+                declared_head_dim=declared_head_dim,
+            )
+        elif declared_head_dim is None:
+            # A Qwen3.5 file containing only linear blocks cannot prove the
+            # full-attention query geometry from the fused SSM projection.
+            # Refuse the executable adapter instead of reviving the old 256
+            # hard-coded calibration geometry.
+            raise GGUFError("Qwen3.5 linear-only GGUF lacks formal attention head_dim metadata")
+        else:
+            resolved_head_dim = declared_head_dim
+        metadata: dict[str, Any] = {"gguf_tensor_bindings": [binding(t) for t in tensors], "gguf_physical_weight_bytes": _unique_tensor_bytes(tensors)}
         projections: dict[str, Any] = {}
         def add_projection(pid, ts, shard_axis="n", segment_ids=None):
             segments = []
@@ -862,14 +1034,23 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
             add_projection("attention.qkv", (q, k, v), segment_ids=("q", "k", "v")); add_projection("attention.output", (o,), "k", segment_ids=("output",))
             if is_qwen35:
                 # llama.cpp's Qwen3.5 full-attention graph uses q/k RMS norms,
-                # a sigmoid query gate, and a 64-d rotary section.
-                q_width = int(gguf.n_head) * 256
+                # a sigmoid query gate, and a rotary section.  The dimension
+                # comes from formal metadata or the Q/K/V/O tensor evidence.
+                q_width = int(gguf.n_head) * int(resolved_head_dim)
+                rotary_dim = _gguf_positive_metadata_int(
+                    gguf.metadata, qwen35_prefixes, ("rope.dimension_count",),
+                    label="rope.dimension_count",
+                )
+                if rotary_dim is None:
+                    rotary_dim = int(resolved_head_dim)
+                if rotary_dim > resolved_head_dim or rotary_dim % 2:
+                    raise GGUFError("Qwen3.5 rotary dimension conflicts with attention head_dim")
                 metadata["attention_execution_descriptor"] = {
                     "schema_version": "heterollm.attention-execution/v1",
                     "query_heads": int(gguf.n_head), "kv_heads": int(gguf.n_head_kv),
-                    "head_dim": 256, "query_width": q_width, "gate_width": q_width,
-                    "q_projection_width": 2 * q_width, "rotary_dim": int(gguf.metadata.get(f"{qwen35_metadata_prefix}.rope.dimension_count") or 64),
-                    "qk_scale": 1.0 / (256.0 ** 0.5), "qk_norm": True,
+                    "head_dim": int(resolved_head_dim), "query_width": q_width, "gate_width": q_width,
+                    "q_projection_width": 2 * q_width, "rotary_dim": int(rotary_dim),
+                    "qk_scale": 1.0 / (float(resolved_head_dim) ** 0.5), "qk_norm": True,
                     "gate_activation": "sigmoid",
                 }
         if is_qwen35 and q is k is v:
@@ -902,7 +1083,7 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
         else:
             mixer, la = "full_attention", None
         layers.append(LayerSpec(layer_id=f"layer-{index:03d}", kind="dense", hidden_size=hidden, intermediate_size=intermediate,
-                                attention_heads=int(gguf.n_head), kv_heads=int(gguf.n_head_kv), attention_head_dim=(256 if is_qwen35 else 0),
+                                attention_heads=int(gguf.n_head), kv_heads=int(gguf.n_head_kv), attention_head_dim=int(resolved_head_dim or 0),
                                 sequence_mixer=mixer, linear_attention=la, dtype="fp16", weight_bytes=sum(t.n_bytes for t in tensors), metadata=metadata))
     embedding = next((t for t in gguf.tensor_directory if "token_embd.weight" in t.name or "embed_tokens.weight" in t.name), None)
     if embedding is None: raise GGUFError("GGUF embedding tensor is missing")
@@ -912,13 +1093,38 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
     # the final projection in that case, so bind the same physical tensor
     # instead of rejecting an otherwise valid model.
     output_norm = next((t for t in gguf.tensor_directory if t.name == "output_norm.weight"), None)
+    # Missing output/lm_head means a tied logical matrix in llama.cpp.  A
+    # present tensor is independent unless it aliases the embedding payload at
+    # the same GGUF offset and byte length.
     output_tied_to_embedding = output is None
     if output_tied_to_embedding:
         output = embedding
+    elif (output.offset, output.n_bytes) == (embedding.offset, embedding.n_bytes):
+        output_tied_to_embedding = True
+    tie_values: list[tuple[str, bool]] = []
+    tie_keys = [
+        *(f"{prefix}.tie_word_embeddings" for prefix in _gguf_architecture_prefixes(gguf)),
+        "general.tie_word_embeddings",
+    ]
+    for key in tie_keys:
+        if key not in gguf.metadata:
+            continue
+        raw = gguf.metadata[key]
+        if not isinstance(raw, bool):
+            raise GGUFError(f"GGUF {key} must be boolean")
+        tie_values.append((key, raw))
+    if tie_values and any(value != tie_values[0][1] for _, value in tie_values[1:]):
+        raise GGUFError("GGUF tie_word_embeddings metadata conflicts across namespaces")
+    tie_metadata = tie_values[0][1] if tie_values else None
+    if tie_metadata is True and not output_tied_to_embedding:
+        raise GGUFError("GGUF tie_word_embeddings metadata conflicts with independent output.weight")
+    if tie_metadata is False and output_tied_to_embedding:
+        raise GGUFError("GGUF tie_word_embeddings=false but output.weight is absent")
     graph_architecture = adapter.graph_family if is_qwen35 else gguf.architecture
     graph = build_model_graph_from_layer_specs("GGUF-" + gguf.architecture, layers, architecture=graph_architecture,
         vocabulary_size=int(gguf.vocab_size), max_sequence_length=int(gguf.context_length), embedding_weight_bytes=embedding.n_bytes,
         output_weight_bytes=output.n_bytes,
+        tie_word_embeddings=bool(output_tied_to_embedding),
         # Keep the file-level label under an audit-only key.  The planner's
         # artifact dispatcher consumes per-segment formats from
         # weight_projection_descriptors; feeding a mixed file label such as
@@ -939,6 +1145,7 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
                   "gguf_imported_executable_layers": gguf.n_layer,
                   "gguf_mtp_layer_count": gguf.n_layer_nextn,
                   "gguf_output_tied_to_embedding": output_tied_to_embedding,
+                  "gguf_physical_weight_bytes": _unique_tensor_bytes(gguf.tensor_directory),
                   # Keep graph-level bindings compact; tensor directory owns
                   # block geometry and the planner must not interpret these
                   # audit fields as one global artifact format.

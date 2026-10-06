@@ -8,7 +8,6 @@ event engine contracts in :mod:`heterollm_sim.contracts`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cached_property
 import math
 from numbers import Real
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -252,6 +251,10 @@ class LayerSpec:
             raise ValueError("kv_heads must be in [0, attention_heads]")
         if self.attention_head_dim < 0:
             raise ValueError("attention_head_dim must be non-negative")
+        if not self.attention_head_dim and self.hidden_size % self.attention_heads:
+            raise ValueError(
+                "attention_head_dim is omitted, but hidden_size must be divisible by attention_heads"
+            )
         if not 1 <= self.experts_per_token <= self.num_experts:
             raise ValueError("experts_per_token must be in [1, num_experts]")
         normalized_kind = self.kind.strip().lower().replace("-", "_")
@@ -294,7 +297,7 @@ class LayerSpec:
 
         if self.attention_head_dim:
             return self.attention_head_dim
-        return int(math.ceil(self.hidden_size / float(self.attention_heads)))
+        return self.hidden_size // self.attention_heads
 
     @property
     def is_moe(self) -> bool:
@@ -420,18 +423,14 @@ class ModelSpec:
             raise ValueError("excluded_subgraphs values must be unique")
         object.__setattr__(self, "supported_modalities", normalized_modalities)
 
-    @cached_property
+    @property
     def _execution_view(self) -> ModelGraphExecutionView:
-        """Validate and project this immutable model graph once per model.
+        """Return the guarded graph-derived view on every access.
 
-        ``ModelSpec`` and ``ModelGraph`` are frozen value objects.  Mapping,
-        planning, and reporting read the same graph-derived view repeatedly;
-        rebuilding the lossless coverage projection for every property access
-        adds substantial pure-Python work without changing execution state.
-        ``cached_property`` keeps the derived value outside dataclass fields,
-        so canonical serialization and equality remain unchanged.
+        The graph dataclass is frozen, but its compatibility mappings remain
+        mutable.  ``model_graph_execution_view`` owns a content guard and
+        refreshes its cache when nested execution data changes.
         """
-
         return model_graph_execution_view(
             self.graph,
             schema_version=self.schema_version,
@@ -543,6 +542,7 @@ def build_model_graph_from_layer_specs(
     max_sequence_length: int = 0,
     embedding_weight_bytes: int = 0,
     output_weight_bytes: int = 0,
+    tie_word_embeddings: bool = False,
     output_head_dtype: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
     mtp: Optional[MTPBranchSpec] = None,
@@ -565,6 +565,8 @@ def build_model_graph_from_layer_specs(
     _require_int(max_sequence_length, "max_sequence_length")
     _require_int(embedding_weight_bytes, "embedding_weight_bytes")
     _require_int(output_weight_bytes, "output_weight_bytes")
+    if not isinstance(tie_word_embeddings, bool):
+        raise ValueError("tie_word_embeddings must be boolean")
     if output_head_dtype is not None:
         _require_name(output_head_dtype, "output_head_dtype")
     _require_int(mtp.prediction_layers, "mtp.prediction_layers")
@@ -596,10 +598,12 @@ def build_model_graph_from_layer_specs(
         producer: Optional[str] = None,
         consumer: Optional[str] = None,
         logical_bytes: Optional[int] = None,
+        attributes: Optional[Mapping[str, Any]] = None,
     ) -> None:
         record = tensor_records.setdefault(tensor_id, {
             "role": role, "dtype": dtype, "shape": shape, "layout": "logical",
             "producer": producer, "consumers": [], "logical_bytes": logical_bytes,
+            "attributes": dict(attributes or {}),
         })
         actual = (record["dtype"], record["shape"], record["layout"])
         expected = (dtype, shape, "logical")
@@ -636,7 +640,10 @@ def build_model_graph_from_layer_specs(
             ports.append(OperatorPort("out{}".format(port_index), "output", tensor_id, dtype, shape))
         weight_ids = []
         for port_index, (tensor_id, dtype, shape, logical_bytes) in enumerate(weights):
-            tensor(tensor_id, "weight", dtype, shape, consumer=operator_id, logical_bytes=logical_bytes)
+            weight_attributes = {}
+            if tensor_id == "lm_head_weights" and tie_word_embeddings:
+                weight_attributes["storage_id"] = "embedding_weights"
+            tensor(tensor_id, "weight", dtype, shape, consumer=operator_id, logical_bytes=logical_bytes, attributes=weight_attributes)
             weight_ids.append(tensor_id)
             ports.append(OperatorPort("weight{}".format(port_index), "weight", tensor_id, dtype, shape))
         operators.append(OperatorNode(
@@ -840,6 +847,7 @@ def build_model_graph_from_layer_specs(
             dtype=record["dtype"],
             shape=record["shape"],
             layout=record["layout"],
+            attributes=record.get("attributes", {}),
         )
         for tensor_id, record in sorted(tensor_records.items())
     )
@@ -854,6 +862,7 @@ def build_model_graph_from_layer_specs(
             "symbols": {"B": "batch", "T": "sequence", "V": vocabulary_size},
             "max_sequence_length": max_sequence_length,
             "metadata": dict(metadata or {}),
+            "tie_word_embeddings": tie_word_embeddings,
             "ui": {"collapsed_groups": [item.operator_id for item in operators if item.op_kind == "layer_group"]},
         },
     )
@@ -873,6 +882,7 @@ _LAYER_OVERRIDE_KEYS = frozenset(
         "experts_per_token",
         "shared_expert_intermediate_size",
         "shared_expert_gate",
+        "gated_mlp",
         "dtype",
         "quantization",
         "weight_bytes",
@@ -1337,7 +1347,47 @@ def _model_graph_authoring_summary(
     if len(lm_head_operator.weight_tensor_ids) != 1:
         raise ValueError("model.graph lm_head must declare exactly one weight tensor")
     output_weight_tensor = tensor_map[lm_head_operator.weight_tensor_ids[0]]
-    output_weight_bytes = output_weight_tensor.logical_bytes or 0
+    output_storage_id = output_weight_tensor.attributes.get("storage_id")
+    if output_storage_id is not None:
+        if output_storage_id not in tensor_map:
+            raise ValueError(
+                "model.graph lm_head storage_id references missing tensor {}".format(
+                    output_storage_id
+                )
+            )
+        if output_storage_id != embedding_operator.weight_tensor_ids[0]:
+            raise ValueError(
+                "model.graph lm_head storage_id must alias the embedding weight tensor"
+            )
+        target_tensor = tensor_map[output_storage_id]
+        if (
+            output_weight_tensor.logical_bytes is not None
+            and target_tensor.logical_bytes is not None
+            and output_weight_tensor.logical_bytes != target_tensor.logical_bytes
+        ):
+            raise ValueError(
+                "model.graph lm_head alias bytes conflict with embedding storage"
+            )
+        output_weight_bytes = 0
+    else:
+        output_weight_bytes = output_weight_tensor.logical_bytes
+        if output_weight_bytes is None:
+            dimensions = []
+            for raw_dimension in output_weight_tensor.shape:
+                dimension = symbols.get(raw_dimension) if isinstance(raw_dimension, str) else raw_dimension
+                if isinstance(dimension, bool) or not isinstance(dimension, int) or dimension < 0:
+                    raise ValueError(
+                        "model.graph lm_head weight bytes are not derivable; declare tensor logical_bytes"
+                    )
+                dimensions.append(dimension)
+            output_weight_bytes = (math.prod(dimensions) * dtype_bits(
+                output_weight_tensor.dtype,
+                unsupported_message=(
+                    "不支持的数据类型 {}，无法推导 lm_head 权重 logical_bytes".format(
+                        output_weight_tensor.dtype
+                    )
+                ),
+            ) + 7) // 8
     _require_int(output_weight_bytes, "model.graph lm_head logical_bytes")
     output_head_tensor = tensor_map[lm_head_operator.output_tensor_ids[0]]
     _require_name(output_head_tensor.dtype, "model.graph lm_head output dtype")
@@ -1436,6 +1486,9 @@ def _model_graph_execution_payload(graph: "ModelGraph") -> Dict[str, Any]:
     attributes = payload.get("attributes")
     if isinstance(attributes, dict):
         attributes.pop("ui", None)
+        # Older serialized graphs predate the explicit tying contract.
+        # Missing means independent output storage for backward compatibility.
+        attributes.setdefault("tie_word_embeddings", False)
     operators = payload.get("operators")
     if isinstance(operators, list):
         payload["operators"] = sorted(
@@ -1468,11 +1521,6 @@ def _model_graph_execution_payload(graph: "ModelGraph") -> Dict[str, Any]:
         for tensor in tensors:
             if isinstance(tensor, Mapping):
                 next_tensor = dict(tensor)
-                if (
-                    next_tensor.get("tensor_id") == "lm_head_weights"
-                    and next_tensor.get("logical_bytes") == 0
-                ):
-                    next_tensor["logical_bytes"] = None
                 derived_logical_bytes = _derived_tensor_logical_bytes(
                     next_tensor, symbols
                 )
@@ -1605,6 +1653,7 @@ def _assert_execution_projection_coverage(
         max_sequence_length=max_sequence_length,
         embedding_weight_bytes=embedding_weight_bytes,
         output_weight_bytes=output_weight_bytes,
+        tie_word_embeddings=bool(attributes.get("tie_word_embeddings", False)),
         output_head_dtype=output_head_dtype,
         metadata=metadata,
         mtp=mtp_projection,

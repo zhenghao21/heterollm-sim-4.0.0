@@ -118,6 +118,9 @@ class PresetDefinition:
     vocabulary_size: int
     max_sequence_length: int
     patterns: Tuple[LayerPattern, ...]
+    # The HF config contract is explicit: false means an independent LM head
+    # tensor, while true means the head aliases the input embedding storage.
+    tie_word_embeddings: bool = False
     architecture: str = "decoder_only_transformer"
     source_sha: Optional[str] = None
     config_hash: Optional[str] = None
@@ -209,6 +212,7 @@ def _definition(
     max_sequence_length: int,
     patterns: Iterable[LayerPattern],
     *,
+    tie_word_embeddings: bool = False,
     support: str = EXACT,
     notes: str = "Public config.json fields; bf16 storage bytes are derived analytically.",
     revision: str = "main",
@@ -249,6 +253,7 @@ def _definition(
         notes=notes,
         vocabulary_size=vocabulary_size,
         max_sequence_length=max_sequence_length,
+        tie_word_embeddings=bool(tie_word_embeddings),
         patterns=tuple(patterns),
         architecture=architecture,
         modalities=tuple(modalities),
@@ -280,6 +285,7 @@ def _dense(
     max_sequence_length: int,
     policy: str = "apache",
     gated_mlp: Optional[bool] = None,
+    attention_head_dim: int = 0,
     **kwargs: Any,
 ) -> PresetDefinition:
     if gated_mlp is None:
@@ -287,7 +293,9 @@ def _dense(
     return _definition(
         preset_id, name, family, scale, repo, policy,
         vocabulary_size, max_sequence_length,
-        (_pattern(layers, "dense", hidden, intermediate, heads, kv_heads, gated_mlp=bool(gated_mlp)),),
+        (_pattern(layers, "dense", hidden, intermediate, heads, kv_heads,
+                  attention_head_dim=attention_head_dim,
+                  gated_mlp=bool(gated_mlp)),),
         **kwargs,
     )
 
@@ -308,12 +316,14 @@ def _moe(
     vocabulary_size: int,
     max_sequence_length: int,
     policy: str = "apache",
+    attention_head_dim: int = 0,
     **kwargs: Any,
 ) -> PresetDefinition:
     return _definition(
         preset_id, name, family, scale, repo, policy,
         vocabulary_size, max_sequence_length,
-        (_pattern(layers, "moe", hidden, intermediate, heads, kv_heads, experts, top_k),),
+        (_pattern(layers, "moe", hidden, intermediate, heads, kv_heads, experts, top_k,
+                  attention_head_dim=attention_head_dim),),
         **kwargs,
     )
 
@@ -334,74 +344,75 @@ _PRESETS: Tuple[PresetDefinition, ...] = (
     _dense(
         "qwen2_5-0_5b", "Qwen2.5-0.5B", "Qwen2.5", "0.5B",
         "Qwen/Qwen2.5-0.5B", 24, 896, 4864, 14, 2, 151936, 32768,
-        policy="apache", architecture="qwen2",
+        policy="apache", architecture="qwen2", attention_head_dim=64,
     ),
     _dense(
         "qwen2_5-1_5b", "Qwen2.5-1.5B", "Qwen2.5", "1.5B",
         "Qwen/Qwen2.5-1.5B", 28, 1536, 8960, 12, 2, 151936, 32768,
-        policy="apache", architecture="qwen2",
+        policy="apache", architecture="qwen2", attention_head_dim=128,
     ),
     _dense(
         "qwen2_5-3b", "Qwen2.5-3B", "Qwen2.5", "3B",
         "Qwen/Qwen2.5-3B", 36, 2048, 11008, 16, 2, 151936, 32768,
-        policy="apache", architecture="qwen2",
+        policy="apache", architecture="qwen2", attention_head_dim=128,
     ),
     _dense(
         "qwen2_5-7b", "Qwen2.5-7B", "Qwen2.5", "7B",
         "Qwen/Qwen2.5-7B", 28, 3584, 18944, 28, 4, 152064, 131072,
-        policy="apache", architecture="qwen2",
+        policy="apache", architecture="qwen2", attention_head_dim=128,
     ),
     _dense(
         "qwen2_5-14b", "Qwen2.5-14B", "Qwen2.5", "14B",
         "Qwen/Qwen2.5-14B", 48, 5120, 13824, 40, 8, 152064, 131072,
-        policy="apache", architecture="qwen2",
+        policy="apache", architecture="qwen2", attention_head_dim=128,
     ),
     _dense(
         "qwen2_5-32b", "Qwen2.5-32B", "Qwen2.5", "32B",
         "Qwen/Qwen2.5-32B", 64, 5120, 27648, 40, 8, 152064, 131072,
-        policy="apache", architecture="qwen2",
+        policy="apache", architecture="qwen2", attention_head_dim=128,
     ),
     _dense(
         "qwen2_5-72b", "Qwen2.5-72B", "Qwen2.5", "72B",
         "Qwen/Qwen2.5-72B", 80, 8192, 29568, 64, 8, 152064, 131072,
-        policy="apache", architecture="qwen2",
+        policy="apache", architecture="qwen2", attention_head_dim=128,
     ),
 
     # Qwen3 official text-only causal models.
     _dense(
         "qwen3-0_6b", "Qwen3-0.6B", "Qwen3", "0.6B",
         "Qwen/Qwen3-0.6B", 28, 1024, 3072, 16, 8, 151936, 40960,
-        policy="apache", architecture="qwen3",
+        policy="apache", architecture="qwen3", attention_head_dim=128,
     ),
     _dense(
         "qwen3-1_7b", "Qwen3-1.7B", "Qwen3", "1.7B",
         "Qwen/Qwen3-1.7B", 28, 2048, 6144, 16, 8, 151936, 40960,
-        policy="apache", architecture="qwen3",
+        policy="apache", architecture="qwen3", attention_head_dim=128,
     ),
     _dense(
         "qwen3-4b", "Qwen3-4B", "Qwen3", "4B",
         "Qwen/Qwen3-4B", 36, 2560, 9728, 32, 8, 151936, 40960,
-        policy="apache", architecture="qwen3",
+        policy="apache", architecture="qwen3", attention_head_dim=128,
     ),
     _dense(
         "qwen3-8b", "Qwen3-8B", "Qwen3", "8B",
         "Qwen/Qwen3-8B", 36, 4096, 12288, 32, 8, 151936, 40960,
-        policy="apache", architecture="qwen3",
+        policy="apache", architecture="qwen3", attention_head_dim=128,
     ),
     _dense(
         "qwen3-14b", "Qwen3-14B", "Qwen3", "14B",
         "Qwen/Qwen3-14B", 40, 5120, 17408, 40, 8, 151936, 40960,
-        policy="apache", architecture="qwen3",
+        policy="apache", architecture="qwen3", attention_head_dim=128,
     ),
     _dense(
         "qwen3-32b", "Qwen3-32B", "Qwen3", "32B",
         "Qwen/Qwen3-32B", 64, 5120, 25600, 64, 8, 151936, 40960,
-        policy="apache", architecture="qwen3",
+        policy="apache", architecture="qwen3", attention_head_dim=128,
     ),
     _moe(
         "qwen3-30b-a3b", "Qwen3-30B-A3B", "Qwen3", "30B/A3B",
         "Qwen/Qwen3-30B-A3B-Base", 48, 2048, 768, 32, 4, 128, 8,
         151936, 32768, policy="apache", support=APPROXIMATION,
+        attention_head_dim=128,
         architecture="qwen3",
         notes="官方 config.json 的 MoE 几何；当前 IR 保留专家数量和 Top-K，专家路由字节数按分析模型估算。",
     ),
@@ -409,6 +420,7 @@ _PRESETS: Tuple[PresetDefinition, ...] = (
         "qwen3-235b-a22b", "Qwen3-235B-A22B", "Qwen3", "235B/A22B",
         "Qwen/Qwen3-235B-A22B", 94, 4096, 1536, 64, 4, 128, 8,
         151936, 40960, policy="apache", support=APPROXIMATION,
+        attention_head_dim=128,
         architecture="qwen3",
         notes="官方 config.json 的 MoE 几何；当前 IR 保留专家数量和 Top-K，专家路由字节数按分析模型估算。",
     ),
@@ -419,42 +431,42 @@ _PRESETS: Tuple[PresetDefinition, ...] = (
     _dense(
         "llama3_2-1b", "Llama 3.2 1B", "Llama3.2", "1B",
         "meta-llama/Llama-3.2-1B", 16, 2048, 8192, 32, 8, 128256, 131072,
-        policy="llama", architecture="llama", access="gated",
+        policy="llama", architecture="llama", access="gated", attention_head_dim=64,
         source_sha="4e20de362430cd3b72f300e6b0f18e50e7166e08",
         notes="官方 Meta Llama 配置；仓库 gated，仿真仅使用公开架构元数据，不加载权重。",
     ),
     _dense(
         "llama3_2-3b", "Llama 3.2 3B", "Llama3.2", "3B",
         "meta-llama/Llama-3.2-3B", 28, 3072, 8192, 24, 8, 128256, 131072,
-        policy="llama", architecture="llama", access="gated",
+        policy="llama", architecture="llama", access="gated", attention_head_dim=128,
         source_sha="13afe5124825b4f3751f836b40dafda64c1ed062",
         notes="官方 Meta Llama 配置；仓库 gated，仿真仅使用公开架构元数据，不加载权重。",
     ),
     _dense(
         "llama3_1-8b", "Llama 3.1 8B", "Llama3.1", "8B",
         "meta-llama/Llama-3.1-8B", 32, 4096, 14336, 32, 8, 128256, 131072,
-        policy="llama", architecture="llama", access="gated",
+        policy="llama", architecture="llama", access="gated", attention_head_dim=128,
         source_sha="d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
         notes="官方 Meta Llama 配置；仓库 gated，仿真仅使用公开架构元数据，不加载权重。",
     ),
     _dense(
         "llama3_1-70b", "Llama 3.1 70B", "Llama3.1", "70B",
         "meta-llama/Llama-3.1-70B", 80, 8192, 28672, 64, 8, 128256, 131072,
-        policy="llama", architecture="llama", access="gated",
+        policy="llama", architecture="llama", access="gated", attention_head_dim=128,
         source_sha="349b2ddb53ce8f2849a6c168a81980ab25258dac",
         notes="官方 Meta Llama 配置；仓库 gated，仿真仅使用公开架构元数据，不加载权重。",
     ),
     _dense(
         "llama3_1-405b", "Llama 3.1 405B", "Llama3.1", "405B",
         "meta-llama/Llama-3.1-405B", 126, 16384, 53248, 128, 8, 128256, 131072,
-        policy="llama", architecture="llama", access="gated",
+        policy="llama", architecture="llama", access="gated", attention_head_dim=128,
         source_sha="b906e4dc842aa489c962f9db26554dcfdde901fe",
         notes="官方 Meta Llama 配置；仓库 gated，仿真仅使用公开架构元数据，不加载权重。",
     ),
     _dense(
         "llama3_3-70b", "Llama 3.3 70B Instruct", "Llama3.3", "70B",
         "meta-llama/Llama-3.3-70B-Instruct", 80, 8192, 28672, 64, 8, 128256, 131072,
-        policy="llama", architecture="llama", access="gated",
+        policy="llama", architecture="llama", access="gated", attention_head_dim=128,
         source_sha="6f6073b423013f6a7d4d9f39144961bfbfbc386b",
         notes="官方 Meta Llama 配置；仓库 gated，仿真仅使用公开架构元数据，不加载权重。",
     ),
@@ -583,6 +595,7 @@ def _metadata(definition: PresetDefinition) -> Dict[str, Any]:
         "layer_count": definition.layer_count,
         "vocabulary_size": definition.vocabulary_size,
         "max_sequence_length": definition.max_sequence_length,
+        "tie_word_embeddings": definition.tie_word_embeddings,
         "source_repo": definition.source_repo,
         "source_revision": definition.source_revision,
         "source_sha": definition.source_sha,
@@ -798,6 +811,11 @@ def materialize_preset_definition(definition: PresetDefinition) -> Dict[str, Any
         * _pattern_weight_storage_bits(definition.patterns[0])
         + 7
     ) // 8
+    # Keep the logical LM-head matrix visible even when it aliases the
+    # embedding storage.  The graph builder records the alias and de-duplicates
+    # resident bytes; dropping this value would make output_weight_bytes mean
+    # "unknown" rather than "shared".
+    output_weight_bytes = embedding_weight_bytes
     payload = {
         "schema_version": SCHEMA_VERSION,
         "name": definition.name,
@@ -834,6 +852,9 @@ def materialize_preset_definition(definition: PresetDefinition) -> Dict[str, Any
             "embedding_weight_storage_bits": (
                 _pattern_weight_storage_bits(definition.patterns[0])
             ),
+            "output_weight_bytes": output_weight_bytes,
+            "output_weight_storage_bits": _pattern_weight_storage_bits(definition.patterns[0]),
+            "tie_word_embeddings": definition.tie_word_embeddings,
         },
     }
     layer_specs = tuple(
@@ -873,6 +894,8 @@ def materialize_preset_definition(definition: PresetDefinition) -> Dict[str, Any
         vocabulary_size=definition.vocabulary_size,
         max_sequence_length=definition.max_sequence_length,
         embedding_weight_bytes=embedding_weight_bytes,
+        output_weight_bytes=output_weight_bytes,
+        tie_word_embeddings=definition.tie_word_embeddings,
         metadata=payload["metadata"],
         mtp=MTPBranchSpec(
             prediction_layers=definition.mtp.prediction_layers,

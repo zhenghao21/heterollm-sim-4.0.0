@@ -1184,6 +1184,13 @@ def hardware_from_dict(data: Mapping[str, Any]) -> HardwareSpec:
 def model_from_dict(
     data: Mapping[str, Any], *, artifact_dir: Optional[Path] = None
 ) -> ModelSpec:
+    if not isinstance(data, Mapping):
+        raise ValueError("model must be a mapping")
+    # Validate the caller's envelope before resolving an artifact.  A reference
+    # must not replace an invalid request schema with the stored model's schema.
+    requested_schema = _schema_version(
+        data.get("schema_version", SCHEMA_VERSION), "model schema_version"
+    )
     _reject_training_fields(data, "model")
     _reject_unknown_fields(
         data,
@@ -1203,6 +1210,13 @@ def model_from_dict(
     if artifact_id is not None:
         if "graph" in data:
             raise ValueError("model.graph 与 model.artifact_id 只能二选一")
+        extra_reference_fields = set(data) - {"artifact_id", "schema_version"}
+        if extra_reference_fields:
+            raise ValueError(
+                "model.artifact_id 不能与其他模型字段同时使用：{}".format(
+                    ", ".join(sorted(extra_reference_fields))
+                )
+            )
         from .model_artifacts import load_model_artifact
 
         artifact = load_model_artifact(str(artifact_id), artifact_dir=artifact_dir)
@@ -1210,12 +1224,14 @@ def model_from_dict(
         if not isinstance(loaded, Mapping):
             raise ValueError("模型文件缺少有效的 model 定义")
         data = dict(loaded)
+        _schema_version(
+            data.get("schema_version", SCHEMA_VERSION),
+            "artifact model schema_version",
+        )
         metadata = dict(data.get("metadata", {}))
         metadata["artifact_id"] = str(artifact_id)
         data["metadata"] = metadata
-    schema_version = _schema_version(
-        data.get("schema_version", SCHEMA_VERSION), "model schema_version"
-    )
+    schema_version = requested_schema
     if "graph" not in data:
         raise ValueError("V4 model.graph is required")
     graph = model_graph_from_dict(_mapping(data["graph"], "model graph"))

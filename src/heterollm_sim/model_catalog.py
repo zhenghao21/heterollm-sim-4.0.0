@@ -520,7 +520,7 @@ class ModelCatalog:
             "repository": _repository_provenance(info),
             "config": config,
         }
-        self._write_record(repo_id, record)
+        self._write_record(repo_id, record, resolved_sha=resolved_sha, revision=revision)
         self._reload()
         selected_id = alias_of or definition.preset_id
         detail = self.detail(selected_id)
@@ -535,11 +535,37 @@ class ModelCatalog:
         }
         return detail
 
-    def _record_path(self, repo_id: str) -> Path:
-        digest = hashlib.sha256(repo_id.lower().encode("utf-8")).hexdigest()[:24]
+    def _record_path(
+        self,
+        repo_id: str,
+        *,
+        resolved_sha: Optional[str] = None,
+        revision: Optional[str] = None,
+    ) -> Path:
+        # A repository can legitimately be imported at multiple revisions.
+        # Prefer the immutable resolved commit; old callers without it retain
+        # the historical repo-only path for backward-compatible reads.
+        # Preserve exact canonical spelling for revision-qualified identities;
+        # legacy repo-only paths remain lower-cased for cache compatibility.
+        identity = repo_id if (resolved_sha or revision) else repo_id.lower()
+        if resolved_sha:
+            identity += "@" + resolved_sha.lower()
+        elif revision:
+            identity += "@" + revision
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        # Keep the legacy repo-only filename stable for callers that inspect
+        # an old cache directly; revision-qualified records use a longer key.
+        digest = digest[:24] if resolved_sha is None and revision is None else digest[:32]
         return self.cache_dir / "{}.json".format(digest)
 
-    def _write_record(self, repo_id: str, record: Mapping[str, Any]) -> None:
+    def _write_record(
+        self,
+        repo_id: str,
+        record: Mapping[str, Any],
+        *,
+        resolved_sha: Optional[str] = None,
+        revision: Optional[str] = None,
+    ) -> None:
         encoded = (json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
         if len(encoded) > MAX_CACHE_RECORD_BYTES:
             raise CatalogError("cache_record_too_large", "imported catalog record is too large")
@@ -557,7 +583,10 @@ class ModelCatalog:
                 handle.write(encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
-            os.replace(temp_name, str(self._record_path(repo_id)))
+            os.replace(
+                temp_name,
+                str(self._record_path(repo_id, resolved_sha=resolved_sha, revision=revision)),
+            )
         finally:
             if temp_name and os.path.exists(temp_name):
                 try:
@@ -613,6 +642,16 @@ def definition_from_huggingface(
     kv_heads = _positive_int(text.get("num_key_value_heads")) or heads
     vocabulary = _positive_int(_first(text, "vocab_size", "padded_vocab_size")) or 0
     max_sequence = _positive_int(_first(text, "max_position_embeddings", "seq_length", "n_positions")) or 0
+    tie_word_embeddings_raw = _first(text, "tie_word_embeddings")
+    if tie_word_embeddings_raw is None and text is not config:
+        tie_word_embeddings_raw = _first(config, "tie_word_embeddings")
+    tie_word_embeddings = (
+        tie_word_embeddings_raw if isinstance(tie_word_embeddings_raw, bool) else False
+    )
+    tie_word_embeddings_invalid = (
+        tie_word_embeddings_raw is not None
+        and not isinstance(tie_word_embeddings_raw, bool)
+    )
     expert_count = _positive_int(_first(text, "num_experts", "num_local_experts")) or 1
     top_k = _positive_int(_first(text, "num_experts_per_tok", "num_experts_per_token")) or 1
     moe_intermediate = _positive_int(text.get("moe_intermediate_size"))
@@ -625,6 +664,10 @@ def definition_from_huggingface(
     patterns: Tuple[LayerPattern, ...] = ()
     support = OUT_OF_DOMAIN
     limitations: List[str] = list(precision_limitations)
+    if tie_word_embeddings_invalid:
+        limitations.append(
+            "tie_word_embeddings must be a boolean; the import remains metadata-only."
+        )
     architecture = "{}_decoder".format(model_type.replace("-", "_"))
     model_kind = "moe" if expert_count > 1 else "dense"
     architecture_supported = False
@@ -656,7 +699,7 @@ def definition_from_huggingface(
         and heads
         and expert_count == 1
         and _only_full_attention(text.get("layer_types"))
-        and not text.get("sliding_window")
+        and _sliding_window_is_disabled(text)
     ):
         hidden_act = str(text.get("hidden_act") or "").lower()
         # Config-only imports must preserve the FFN topology.  GELU/ReLU
@@ -682,12 +725,12 @@ def definition_from_huggingface(
         )
         architecture_supported = True
         support = EXACT if precision_supported else OUT_OF_DOMAIN
-        if attention_head_dim and attention_head_dim != hidden // heads:
-            if precision_supported:
-                support = APPROXIMATION
-            limitations.append(
-                "The public attention head_dim is retained in metadata and weight estimates but is not an independent LayerSpec field."
-            )
+        # ``head_dim`` is an independent public geometry field for models such
+        # as Qwen3.  Preserve it even when hidden_size / num_attention_heads
+        # would imply a different value; tensor shapes are validated by the
+        # concrete GGUF adapter when weights are imported.
+    if tie_word_embeddings_invalid:
+        support = OUT_OF_DOMAIN
     if not architecture_supported:
         limitations.append(
             "The imported architecture is not in the config-only materializer allowlist; metadata is retained fail-closed."
@@ -709,7 +752,11 @@ def definition_from_huggingface(
     name = repo_id.split("/", 1)[1]
     family = _family_from_name(name)
     return PresetDefinition(
-        preset_id=_import_preset_id(repo_id),
+        preset_id=_import_preset_id(
+            repo_id,
+            revision=revision,
+            resolved_sha=resolved_sha,
+        ),
         name=name,
         family=family,
         parameter_scale=_scale_from_name(name),
@@ -726,6 +773,7 @@ def definition_from_huggingface(
         notes="Explicit config-only Hugging Face import; no weights or remote code were loaded.",
         vocabulary_size=vocabulary,
         max_sequence_length=max_sequence,
+        tie_word_embeddings=tie_word_embeddings,
         patterns=patterns,
         architecture=architecture,
         modalities=modalities,
@@ -913,6 +961,39 @@ def _only_full_attention(value: Any) -> bool:
     )
 
 
+def _sliding_window_is_disabled(text: Mapping[str, Any]) -> bool:
+    """Interpret HF window fields as an enabled mixer, not mere metadata.
+
+    Several official configs retain a non-zero ``sliding_window`` capacity
+    while explicitly setting ``use_sliding_window`` to false.  Such models are
+    ordinary full-attention models for the imported execution graph.  If the
+    switch is omitted and a non-zero window is declared, stay conservative.
+    """
+
+    value = text.get("use_sliding_window")
+    disabled = value is False or value == 0 or (
+        isinstance(value, str) and value.strip().lower() in {"false", "0", "no"}
+    )
+    if disabled:
+        return True
+    enabled = value is True or value == 1 or (
+        isinstance(value, str) and value.strip().lower() in {"true", "1", "yes"}
+    )
+    if enabled:
+        return False
+    raw_window = text.get("sliding_window")
+    if raw_window is None:
+        return True
+    window = _positive_int(raw_window)
+    if window > 0:
+        return False
+    # A missing switch plus a malformed/non-canonical window is unknown; only
+    # explicit zero can safely mean no window.
+    return raw_window == 0 or (
+        isinstance(raw_window, str) and raw_window.strip() == "0"
+    )
+
+
 def _first(values: Mapping[str, Any], *names: str) -> Any:
     for name in names:
         if values.get(name) is not None:
@@ -1064,9 +1145,35 @@ def _import_quantization(
     return "w{}".format(bits), None
 
 
-def _import_preset_id(repo_id: str) -> str:
+def _import_preset_id(
+    repo_id: str,
+    revision: Optional[str] = None,
+    resolved_sha: Optional[str] = None,
+) -> str:
+    """Build a readable but collision-resistant imported preset identity.
+
+    The slug remains useful in URLs, while the immutable commit (or requested
+    revision when no commit is available in a synthetic/imported fixture) is
+    part of the primary key.  This prevents ``model.a`` and ``model-a`` from
+    silently replacing one another and permits multiple revisions of one repo.
+    """
+
     value = re.sub(r"[^a-z0-9]+", "-", repo_id.lower()).strip("-")
-    return "hf-{}".format(value[:120])
+    # Always retain a compact digest of the canonical repository spelling so
+    # punctuation variants such as ``model.a`` and ``model-a`` cannot collide.
+    repo_digest = hashlib.sha256(repo_id.strip().encode("utf-8")).hexdigest()[:12]
+    identity = resolved_sha or revision
+    suffix = re.sub(r"[^a-z0-9]+", "-", str(identity).lower()).strip("-") if identity else ""
+    # Bound the human-readable portion, but keep both identity digests after
+    # the truncation so long legal repo IDs cannot erase the revision key.
+    prefix = value[:120].rstrip("-")
+    identity_part = suffix[:40] if suffix else "legacy"
+    if revision is not None and resolved_sha is None:
+        # Git refs are case-sensitive; preserve that distinction in the
+        # identity digest even though the readable slug is lower-cased.
+        revision_digest = hashlib.sha256(str(revision).encode("utf-8")).hexdigest()[:12]
+        identity_part = "{}-{}".format(identity_part, revision_digest)
+    return "hf-{}-{}-{}".format(prefix, identity_part, repo_digest)
 
 
 def _family_from_name(name: str) -> str:

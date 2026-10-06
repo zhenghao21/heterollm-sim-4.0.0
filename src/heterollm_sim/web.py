@@ -675,7 +675,32 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                         message_en="unknown model-file import fields: {}".format(", ".join(unexpected)),
                     )
                 preset_id = payload.get("preset_id")
-                source_path = payload.get("path", payload.get("gguf_path"))
+                if payload.get("path") is not None and payload.get("gguf_path") is not None:
+                    raise HttpError(
+                        400,
+                        "ambiguous_source",
+                        "path 与 gguf_path 只能二选一",
+                        message_en="path and gguf_path are mutually exclusive",
+                    )
+                source_path = (
+                    payload.get("path")
+                    if payload.get("path") is not None
+                    else payload.get("gguf_path")
+                )
+                selected_sources = [
+                    name for name, present in (
+                        ("preset_id", bool(preset_id)),
+                        ("artifact_id", bool(payload.get("artifact_id"))),
+                        ("path", isinstance(source_path, str) and bool(source_path.strip())),
+                    ) if present
+                ]
+                if len(selected_sources) > 1:
+                    raise HttpError(
+                        400,
+                        "ambiguous_source",
+                        "模型文件导入来源只能选择一种：{}".format(", ".join(selected_sources)),
+                        message_en="model-file import sources are mutually exclusive: {}".format(", ".join(selected_sources)),
+                    )
                 if preset_id:
                     detail = self._model_catalog().detail(str(preset_id))
                     model = detail.get("model")

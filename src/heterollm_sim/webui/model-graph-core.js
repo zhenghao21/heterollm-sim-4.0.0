@@ -37,6 +37,19 @@
     return Number.isFinite(number) ? number : fallback;
   }
 
+  // Mirrors the Python MTP default for ordinary dtype/quantization names.
+  // A null result means the caller supplied an explicit byte count or an
+  // opaque dtype whose storage contract must remain unresolved.
+  function matrixStorageBytes(rows, columns, dtype, quantization) {
+    const quantized = String(quantization ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "").match(/^w(\d+)(?:a\d+)?$/);
+    const bitsByDtype = { fp64: 64, float64: 64, fp32: 32, float32: 32, fp16: 16, float16: 16, bf16: 16, bfloat16: 16, fp8: 8, float8: 8, int8: 8, uint8: 8, int4: 4, uint4: 4 };
+    const bits = quantized ? Number(quantized[1]) : bitsByDtype[canonicalDtype(dtype)];
+    if (!Number.isSafeInteger(bits) || bits <= 0) return null;
+    const elements = Number(rows) * Number(columns);
+    if (!Number.isSafeInteger(elements) || elements < 0) return null;
+    return Math.ceil((elements * bits) / 8);
+  }
+
   function safeId(value, fallback = "item") {
     const text = String(value ?? fallback).trim()
       .replace(/[^A-Za-z0-9_.:-]+/g, "-")
@@ -503,6 +516,9 @@
       experts_per_token: Math.max(1, Math.trunc(finite(layer.experts_per_token, 1))),
       shared_expert_intermediate_size: Math.max(0, Math.trunc(finite(layer.shared_expert_intermediate_size))),
       shared_expert_gate: layer.shared_expert_gate === true,
+      // Keep the Python LayerSpec gate contract explicit.  `false` is
+      // meaningful (two-projection MLP) and must survive JS round trips.
+      gated_mlp: layer.gated_mlp !== false,
       dtype: canonicalDtype(layer.dtype || "fp16"),
       quantization: layer.quantization == null || layer.quantization === "" ? null : String(layer.quantization),
       weight_bytes: Math.max(0, Math.trunc(finite(layer.weight_bytes))),
@@ -532,6 +548,7 @@
     const first = layerTemplate(layers[0]);
     if (first.hidden_size < 1) throw new Error("layer specs 的 hidden_size 必须为正整数。");
     const graphId = String(options.graph_id || model.name || "model");
+    const tieWordEmbeddings = model.tie_word_embeddings === true;
     const operators = [];
     const tensors = new Map();
     let sequenceIndex = 0;
@@ -585,6 +602,14 @@
     }
 
     const dtype = first.dtype;
+    const outputDtype = canonicalDtype(model.output_head_dtype || dtype);
+    // Python's graph builder treats zero byte arguments as "derive from
+    // shape". Keep null in the graph so a zero default cannot suppress a
+    // real embedding/LM-head declaration.
+    const embeddingWeightBytes = model.embedding_weight_bytes == null || Number(model.embedding_weight_bytes) === 0
+      ? null : Math.max(0, Math.trunc(finite(model.embedding_weight_bytes)));
+    const outputWeightBytes = model.output_weight_bytes == null || Number(model.output_weight_bytes) === 0
+      ? null : Math.max(0, Math.trunc(finite(model.output_weight_bytes)));
     let hidden = first.hidden_size;
     addOperator("input", "model_input", {
       outputs: [["input.tokens", "int64", ["B", "T"], "input"]],
@@ -592,7 +617,7 @@
     });
     addOperator("embedding", "embedding", {
       inputs: ["input.tokens"], outputs: [["embedding.output", dtype, ["B", "T", hidden]]],
-      weights: [["embedding_weights", dtype, ["V", hidden], model.embedding_weight_bytes == null ? null : Math.max(0, Math.trunc(finite(model.embedding_weight_bytes)))]],
+      weights: [["embedding_weights", dtype, ["V", hidden], embeddingWeightBytes]],
       parameters: { vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))), hidden_size: hidden },
     });
     let previous = "embedding.output";
@@ -634,7 +659,8 @@
         kind: base.kind, intermediate_size: base.intermediate_size,
         num_experts: base.num_experts, experts_per_token: base.experts_per_token,
         shared_expert_intermediate_size: base.shared_expert_intermediate_size,
-        shared_expert_gate: base.shared_expert_gate, quantization: base.quantization,
+        shared_expert_gate: base.shared_expert_gate, gated_mlp: base.gated_mlp,
+        quantization: base.quantization,
       };
       const ffOutput = `${groupId}.ff.output`;
       const isMoe = base.kind.toLowerCase().includes("moe") || base.num_experts > 1;
@@ -674,44 +700,59 @@
       previous = output;
     }
     const mtpBranchSource = previous;
+    // Keep operator order identical to Python materialization: the standard
+    // decoder output path is emitted first, then the MTP branch is appended.
+    addOperator("final_norm", "rms_norm", { inputs: [previous], outputs: [["final_norm.output", dtype, ["B", "T", hidden]]] });
+    addOperator("lm_head", "lm_head", {
+      inputs: ["final_norm.output"], outputs: [["logits", outputDtype, ["B", "T", "V"]]],
+      weights: [["lm_head_weights", dtype, [hidden, "V"],
+        outputWeightBytes]],
+      parameters: { vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))) },
+    });
+    if (tieWordEmbeddings) {
+      const outputWeights = tensors.get("lm_head_weights");
+      if (outputWeights) {
+        outputWeights.attributes = { ...object(outputWeights.attributes), storage_id: "embedding_weights" };
+      }
+    }
+    addOperator("output", "model_output", { inputs: ["logits"], parameters: { kind: "logits" } });
     const mtp = object(model.mtp);
     const mtpPredictionLayers = Math.max(0, Math.trunc(finite(mtp.prediction_layers)));
     const mtpPredictionWeightBytes = Math.max(0, Math.trunc(finite(mtp.prediction_layer_weight_bytes)));
     const mtpAuxHead = mtp.auxiliary_head === true;
     const mtpAuxHeadWeightBytes = Math.max(0, Math.trunc(finite(mtp.auxiliary_head_weight_bytes)));
+    const defaultMtpPredictionBytes = mtpPredictionWeightBytes || matrixStorageBytes(hidden, hidden, dtype, first.quantization) || 0;
+    const defaultMtpAuxHeadBytes = mtpAuxHeadWeightBytes || matrixStorageBytes(hidden, Math.max(0, Math.trunc(finite(model.vocabulary_size))), dtype, first.quantization) || 0;
     let mtpPrevious = mtpBranchSource;
     for (let index = 0; index < mtpPredictionLayers; index += 1) {
       const prefix = `mtp.prediction_layer.${String(index).padStart(3, "0")}`;
       const output = `${prefix}.output`;
       addOperator(prefix, "mtp_prediction_layer", {
         inputs: [mtpPrevious], outputs: [[output, dtype, ["B", "T", hidden]]],
-        weights: [[`${prefix}.weights`, dtype, [hidden, hidden], mtpPredictionWeightBytes]],
-        parameters: { hidden_size: hidden },
+        weights: [[`${prefix}.weights`, dtype, [hidden, hidden], defaultMtpPredictionBytes]],
+        // Python's typed MTP contract requires a stable zero-based index.
+        parameters: { prediction_index: index, hidden_size: hidden,
+          weight_bytes: defaultMtpPredictionBytes },
         attributes: { branch: "mtp", source_tensor_id: mtpBranchSource },
       });
       mtpPrevious = output;
     }
     if (mtpAuxHead) {
       addOperator("mtp.aux_head", "mtp_aux_head", {
-        inputs: [mtpPrevious], outputs: [["mtp.proposal_logits", dtype, ["B", "T", "V"], "output"]],
-        weights: [["mtp.aux_head.weights", dtype, [hidden, "V"], mtpAuxHeadWeightBytes]],
-        parameters: { hidden_size: hidden, vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))) },
+        inputs: [mtpPrevious], outputs: [["mtp.proposal_logits", outputDtype, ["B", "T", "V"], "output"]],
+        weights: [["mtp.aux_head.weights", dtype, [hidden, "V"], defaultMtpAuxHeadBytes]],
+        parameters: { hidden_size: hidden, vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))),
+          weight_bytes: defaultMtpAuxHeadBytes },
         attributes: { branch: "mtp", source_tensor_id: mtpBranchSource },
       });
     }
-    addOperator("final_norm", "rms_norm", { inputs: [previous], outputs: [["final_norm.output", dtype, ["B", "T", hidden]]] });
-    addOperator("lm_head", "lm_head", {
-      inputs: ["final_norm.output"], outputs: [["logits", dtype, ["B", "T", "V"]]],
-      weights: [["lm_head_weights", dtype, [hidden, "V"], null]],
-      parameters: { vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))) },
-    });
-    addOperator("output", "model_output", { inputs: ["logits"], parameters: { kind: "logits" } });
     return normalizeModelGraph({
       graph_id: graphId, operators, tensors: Array.from(tensors.values()), transforms: [], executable: true,
       attributes: {
         authoritative: true, derivation: "layer_specs", architecture: String(model.architecture || "transformer"),
         symbols: { B: "batch", T: "sequence", V: Math.max(0, Math.trunc(finite(model.vocabulary_size))) },
         max_sequence_length: Math.max(0, Math.trunc(finite(model.max_sequence_length))),
+        tie_word_embeddings: tieWordEmbeddings,
         metadata: clone(object(model.metadata)),
         ui: { collapsed_groups: operators.filter((item) => item.op_kind === "layer_group").map((item) => item.operator_id), positions: {} },
       }, provenance: [],
@@ -763,6 +804,7 @@
           experts_per_token: Math.max(1, Math.trunc(finite(ffParams.experts_per_token, 1))),
           shared_expert_intermediate_size: Math.max(0, Math.trunc(finite(ffParams.shared_expert_intermediate_size))),
           shared_expert_gate: ffParams.shared_expert_gate === true,
+          gated_mlp: ffParams.gated_mlp !== false,
           dtype: canonicalDtype(params.dtype || "fp16"),
           quantization: ffParams.quantization == null ? null : ffParams.quantization,
           weight_bytes: Math.max(0, Math.trunc(finite(params.weight_bytes))),
@@ -982,9 +1024,13 @@
     const parameters = object(operator.parameters);
     const context = object(contextValue);
     const attentionHeads = Math.max(1, Math.trunc(finite(parameters.attention_heads, context.attention_heads || 1)));
-    const kvHeads = Math.max(1, Math.min(attentionHeads, Math.trunc(finite(parameters.kv_heads, context.kv_heads || attentionHeads))));
+    // LayerSpec uses 0 as a sentinel: KV heads default to Q heads.  Do not
+    // clamp the sentinel to one, otherwise GQA/MHA is displayed as MQA.
+    const kvRaw = finite(parameters.kv_heads, context.kv_heads || 0);
+    const kvHeads = Math.max(1, Math.min(attentionHeads, Math.trunc(kvRaw > 0 ? kvRaw : attentionHeads)));
     const hiddenSize = Math.max(1, Math.trunc(finite(context.hidden_size)));
-    const headDim = Math.max(1, Math.trunc(finite(parameters.attention_head_dim, context.attention_head_dim || Math.floor(hiddenSize / attentionHeads) || 1)));
+    const headDimRaw = finite(parameters.attention_head_dim, context.attention_head_dim || 0);
+    const headDim = Math.max(1, Math.trunc(headDimRaw > 0 ? headDimRaw : Math.floor(hiddenSize / attentionHeads) || 1));
     const attentionMode = kvHeads === attentionHeads ? "MHA" : kvHeads === 1 ? "MQA" : "GQA";
     const sourceOperatorId = String(operator.operator_id || "attention");
     const nodes = [
@@ -2857,8 +2903,41 @@
   }
 
   function validateModelGraph(graphValue) {
+    // Validate the caller's declared contracts before normalization.  The
+    // normalizer intentionally rebuilds port/index metadata from tensors, so
+    // validating only its output would erase a dtype/shape/layout conflict
+    // that the user needs to see.
+    const rawRoot = object(graphValue);
+    const rawNested = object(object(rawRoot.model).graph);
+    const rawSource = Object.keys(rawNested).length ? rawNested
+      : (Object.keys(object(rawRoot.graph)).length ? object(rawRoot.graph) : rawRoot);
+    const rawTensors = new Map(array(rawSource.tensors).map((item) => {
+      const value = object(item);
+      return [String(value.tensor_id ?? value.id ?? ""), value];
+    }).filter(([id]) => id));
+    const preflightErrors = [];
+    array(rawSource.operators ?? rawSource.nodes).forEach((rawOperator, operatorIndex) => {
+      const operator = object(rawOperator);
+      const operatorId = String(operator.operator_id ?? operator.node_id ?? operator.id ?? `operator-${operatorIndex + 1}`);
+      array(operator.ports).forEach((rawPort, portIndex) => {
+        const port = object(rawPort);
+        const tensorId = String(port.tensor_id ?? port.id ?? "");
+        const tensor = rawTensors.get(tensorId);
+        if (!tensor || !tensorId) return;
+        const contractKeys = ["dtype", "shape", "layout"];
+        const conflictingKey = contractKeys.find((key) => Object.hasOwn(port, key)
+          && Object.hasOwn(tensor, key)
+          && stableStringify(normalizedContract({ [key]: port[key] })[key])
+             !== stableStringify(normalizedContract({ [key]: tensor[key] })[key]));
+        if (conflictingKey) {
+          const declared = normalizedContract(port);
+          const actual = normalizedContract(tensor);
+          preflightErrors.push(`组件 ${operatorId} 端口 ${String(port.port_id ?? `port-${portIndex + 1}`)} 维度/类型不匹配：期望 ${contractText(declared)}，实际 ${contractText(actual)}。`);
+        }
+      });
+    });
     const graph = normalizeModelGraph(graphValue);
-    const errors = [];
+    const errors = preflightErrors;
     const operators = new Set(graph.operators.map((item) => item.operator_id));
     const tensors = new Map(graph.tensors.map((item) => [item.tensor_id, item]));
     graph.operators.forEach((operator) => operator.ports.forEach((port) => {

@@ -11654,6 +11654,12 @@ function normalizeModelGraphPayload(payloadValue, modelValue = {}) {
     candidate = ModelGraph.buildGraphFromGGUFPreset(root);
   }
   if (!Object.keys(candidate).length) throw new Error("V4 model.graph 是必填的唯一执行定义。");
+  // Validate declared port contracts before normalization.  The normalizer
+  // rebuilds ports from tensor contracts for editing convenience; doing this
+  // preflight at the ingress keeps an invalid dtype/shape/layout declaration
+  // visible instead of silently repairing it into a different graph.
+  const preflight = ModelGraph.validateModelGraph(candidate);
+  if (!preflight.valid) throw new Error(preflight.errors.join("\n"));
   return ModelGraph.normalizeModelGraph(candidate, model);
 }
 
