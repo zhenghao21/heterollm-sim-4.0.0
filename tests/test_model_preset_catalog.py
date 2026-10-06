@@ -4,6 +4,7 @@ from heterollm_sim.model_presets import (
     list_model_presets,
 )
 from heterollm_sim.model_catalog import definition_from_huggingface, _import_preset_id
+from heterollm_sim.config import model_from_dict
 
 
 def test_bundled_catalog_contains_only_qwen_and_llama_families():
@@ -48,6 +49,53 @@ def test_qwen3_presets_keep_official_independent_head_dim():
             if operator["op_kind"] in {"attention", "linear_attention"}
         )
         assert mixer["parameters"]["attention_head_dim"] == 128
+
+
+def test_bundled_presets_follow_official_tied_output_head_configs():
+    # These flags are copied from the corresponding official config.json
+    # snapshots.  Keep the independent entries explicit too, so a default
+    # change cannot silently alter their output-head storage contract.
+    expected = {
+        "qwen2_5-0_5b": True,
+        "qwen2_5-1_5b": True,
+        "qwen2_5-3b": True,
+        "qwen2_5-7b": False,
+        "qwen2_5-14b": False,
+        "qwen2_5-32b": False,
+        "qwen2_5-72b": False,
+        "qwen3-0_6b": True,
+        "qwen3-1_7b": True,
+        "qwen3-4b": True,
+        "qwen3-8b": False,
+        "qwen3-14b": False,
+        "qwen3-32b": False,
+        "qwen3-30b-a3b": False,
+        "qwen3-235b-a22b": False,
+        "llama3_2-1b": False,
+        "llama3_2-3b": False,
+        "llama3_1-8b": False,
+        "llama3_1-70b": False,
+        "llama3_1-405b": False,
+        "llama3_3-70b": False,
+    }
+    for preset_id, tied in expected.items():
+        definition = get_model_preset(preset_id)
+        assert definition.tie_word_embeddings is tied
+        model = model_from_dict(materialize_model_payload(preset_id))
+        if tied:
+            assert model.output_weight_bytes == 0
+            lm_head = next(
+                tensor
+                for tensor in model.graph.tensors
+                if tensor.tensor_id == "lm_head_weights"
+            )
+            assert lm_head.attributes["storage_id"] == "embedding_weights"
+        else:
+            assert model.output_weight_bytes == (
+                definition.vocabulary_size
+                * definition.patterns[0].hidden_size
+                * 2
+            )
 
 
 def test_catalog_import_accepts_explicitly_disabled_sliding_window():

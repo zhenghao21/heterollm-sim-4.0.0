@@ -1401,6 +1401,46 @@ def _model_graph_authoring_summary(
     )
 
 
+def _model_graph_output_tensor_bytes(graph: "ModelGraph") -> int:
+    """Return the logical tensor bytes for LM-head graph reconstruction.
+
+    This is deliberately separate from ``output_weight_bytes`` in the
+    execution view: the latter is the *incremental resident* contribution and
+    is zero for a tied head, while coverage must preserve the original tensor
+    contract (including measured bytes for quantized tensors).
+    """
+
+    symbols = graph.attributes.get("symbols", {})
+    tensor_map = {item.tensor_id: item for item in graph.tensors}
+    operators = [item for item in graph.operators if item.op_kind == "lm_head"]
+    if len(operators) != 1 or len(operators[0].weight_tensor_ids) != 1:
+        raise ValueError("model.graph must contain one lm_head weight tensor")
+    tensor = tensor_map[operators[0].weight_tensor_ids[0]]
+    if tensor.logical_bytes is not None:
+        return tensor.logical_bytes
+    storage_id = tensor.attributes.get("storage_id")
+    if storage_id is not None and storage_id in tensor_map:
+        target_bytes = tensor_map[storage_id].logical_bytes
+        if target_bytes is not None:
+            return target_bytes
+    dimensions: List[int] = []
+    for raw_dimension in tensor.shape:
+        dimension = symbols.get(raw_dimension) if isinstance(raw_dimension, str) else raw_dimension
+        if isinstance(dimension, bool) or not isinstance(dimension, int) or dimension < 0:
+            raise ValueError(
+                "model.graph lm_head weight bytes are not derivable; declare tensor logical_bytes"
+            )
+        dimensions.append(dimension)
+    return (math.prod(dimensions) * dtype_bits(
+        tensor.dtype,
+        unsupported_message=(
+            "不支持的数据类型 {}，无法推导 lm_head 权重 logical_bytes".format(
+                tensor.dtype
+            )
+        ),
+    ) + 7) // 8
+
+
 def _without_graph_provenance(value: Any) -> Any:
     """Drop only schema provenance fields, never user execution parameters.
 
@@ -1645,6 +1685,7 @@ def _assert_execution_projection_coverage(
         output_weight_bytes,
         output_head_dtype,
     ) = _model_graph_authoring_summary(graph)
+    output_tensor_bytes = _model_graph_output_tensor_bytes(graph)
     expected = build_model_graph_from_layer_specs(
         graph.graph_id,
         base_layers,
@@ -1652,7 +1693,7 @@ def _assert_execution_projection_coverage(
         vocabulary_size=vocabulary_size,
         max_sequence_length=max_sequence_length,
         embedding_weight_bytes=embedding_weight_bytes,
-        output_weight_bytes=output_weight_bytes,
+        output_weight_bytes=output_tensor_bytes,
         tie_word_embeddings=bool(attributes.get("tie_word_embeddings", False)),
         output_head_dtype=output_head_dtype,
         metadata=metadata,

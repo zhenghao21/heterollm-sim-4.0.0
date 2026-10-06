@@ -907,7 +907,9 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
     has_qwen35_linear_blocks = bool(
         is_qwen35 and any(
             any(tensor.name.lower().endswith(suffix) for suffix in ("attn_qkv.weight", "ssm_out.weight"))
-            for values in by_layer.values() for tensor in values
+            for layer_index, values in by_layer.items()
+            if layer_index < int(gguf.n_layer)
+            for tensor in values
         )
     )
     linear_attention = None
@@ -939,20 +941,82 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
         ssm_state = ssm_int("state_size") if has_qwen35_linear_blocks else None
         ssm_conv = ssm_int("conv_kernel") if has_qwen35_linear_blocks else None
         # These are architecture geometry fields, not calibration defaults.
-        # Missing values are handled below from a fused QKV tensor where that
-        # width proves the inner size; state/group/conv remain unproven and
-        # therefore fail closed rather than silently selecting 16/128/4.
+        # Missing values are handled below from the fused QKV and SSM output
+        # tensors where those shapes prove the inner size.  State/group/conv
+        # remain unproven and therefore fail closed rather than silently
+        # selecting 16/128/4.
         if has_qwen35_linear_blocks and (ssm_groups is None or ssm_state is None or ssm_conv is None):
             raise GGUFError("Qwen3.5 GGUF is missing formal SSM geometry metadata")
-        if has_qwen35_linear_blocks and ssm_inner is None:
-            for candidate in (tensor for values in by_layer.values() for tensor in values):
-                if candidate.name.lower().endswith("attn_qkv.weight"):
-                    _, width = _matrix_extent(candidate)
-                    if width % 3 == 0:
-                        ssm_inner = width // 3
-                        break
+        if has_qwen35_linear_blocks:
+            # A fused QKV projection is laid out as Q, K, and V channels, but
+            # the IR deliberately permits different key/value head counts.
+            # Therefore ``qkv_width // 3`` is not a valid fallback.  The SSM
+            # output projection independently exposes the value/inner width;
+            # require both tensor dimensions to agree with the formal
+            # metadata before constructing an executable recurrent block.
+            key_width = 2 * int(ssm_groups) * int(ssm_state)
+            proven_inner_sizes: list[int] = []
+            for layer_index, values in sorted(by_layer.items()):
+                if layer_index >= int(gguf.n_layer):
+                    # nextn/MTP blocks are retained as audit bindings but do
+                    # not define the executable trunk geometry.
+                    continue
+                qkv_candidates = [
+                    tensor for tensor in values
+                    if tensor.name.lower().endswith("attn_qkv.weight")
+                ]
+                ssm_candidates = [
+                    tensor for tensor in values
+                    if tensor.name.lower().endswith("ssm_out.weight")
+                ]
+                if not qkv_candidates and not ssm_candidates:
+                    # Hybrid Qwen3.5 models also contain full-attention
+                    # layers.  Those layers have separate Q/K/V tensors and
+                    # are validated by _resolve_attention_head_dim below.
+                    continue
+                if not qkv_candidates or not ssm_candidates:
+                    # A partial linear layer must not trigger a guessed size;
+                    # fail here with an explicit geometry error.
+                    raise GGUFError(
+                        f"Qwen3.5 linear layer {layer_index} lacks fused QKV or SSM output tensor"
+                    )
+                if len(qkv_candidates) != 1 or len(ssm_candidates) != 1:
+                    raise GGUFError(
+                        f"Qwen3.5 linear layer {layer_index} has ambiguous fused SSM tensors"
+                    )
+                qkv_in, qkv_width = _matrix_extent(qkv_candidates[0])
+                ssm_inner_width, ssm_out = _matrix_extent(ssm_candidates[0])
+                if qkv_in != int(gguf.n_embd) or ssm_out != int(gguf.n_embd):
+                    raise GGUFError(
+                        f"Qwen3.5 linear layer {layer_index} tensor widths conflict with hidden size"
+                    )
+                inferred_inner = qkv_width - key_width
+                if inferred_inner <= 0 or ssm_inner_width <= 0:
+                    raise GGUFError(
+                        f"Qwen3.5 linear layer {layer_index} has invalid fused QKV/SSM width"
+                    )
+                if inferred_inner != ssm_inner_width:
+                    raise GGUFError(
+                        "Qwen3.5 fused QKV and ssm_out widths conflict "
+                        f"(layer {layer_index}: qkv remainder {inferred_inner}, "
+                        f"ssm_out input {ssm_inner_width})"
+                    )
+                proven_inner_sizes.append(int(ssm_inner_width))
+            if not proven_inner_sizes or any(item != proven_inner_sizes[0] for item in proven_inner_sizes[1:]):
+                raise GGUFError("Qwen3.5 linear layers disagree on SSM inner_size")
+            tensor_inner = proven_inner_sizes[0]
+            if ssm_inner is not None and int(ssm_inner) != tensor_inner:
+                raise GGUFError(
+                    "Qwen3.5 formal ssm.inner_size conflicts with fused QKV/ssm_out tensors "
+                    f"(metadata {ssm_inner}, tensors {tensor_inner})"
+                )
+            ssm_inner = tensor_inner
         if has_qwen35_linear_blocks and (ssm_inner is None or ssm_inner % ssm_state):
             raise GGUFError("Qwen3.5 GGUF SSM inner_size is not divisible by state_size")
+        if has_qwen35_linear_blocks and (ssm_inner // ssm_state) % ssm_groups:
+            raise GGUFError(
+                "Qwen3.5 GGUF SSM value head count is not divisible by key head count"
+            )
         if has_qwen35_linear_blocks:
             linear_attention = LinearAttentionSpec(
                 key_heads=ssm_groups,

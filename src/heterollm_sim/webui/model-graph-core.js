@@ -473,6 +473,31 @@
     const embeddingTensorId = embeddings[0].weight_tensor_ids[0];
     const tensor = graph.tensors.find((item) => item.tensor_id === embeddingTensorId);
     if (!tensor) throw new Error(`model.graph embedding 引用了不存在的权重张量 ${embeddingTensorId}。`);
+    function deriveTensorBytes(value, label) {
+      const source = object(value);
+      if (source.logical_bytes != null) {
+        const declared = Number(source.logical_bytes);
+        if (!Number.isSafeInteger(declared) || declared < 0) {
+          throw new Error(`model.graph ${label} logical_bytes 必须是非负安全整数。`);
+        }
+        return declared;
+      }
+      const dtypeKey = canonicalDtype(source.dtype).replaceAll("-", "").replaceAll("_", "");
+      const dtypeBitWidths = { fp64: 64, float64: 64, fp32: 32, float32: 32, fp16: 16, float16: 16, bf16: 16, bfloat16: 16, fp8: 8, float8: 8, int8: 8, uint8: 8, int4: 4, uint4: 4 };
+      const bits = dtypeBitWidths[dtypeKey];
+      if (!bits) throw new Error(`不支持的数据类型 ${source.dtype}，无法推导 ${label} 字节数。`);
+      let elements = 1;
+      normalizeShape(source.shape).forEach((rawDimension) => {
+        const dimension = typeof rawDimension === "string" ? symbols[rawDimension] : rawDimension;
+        if (!Number.isSafeInteger(dimension) || dimension < 0) {
+          throw new Error(`model.graph ${label} 字节数无法从 shape 推导；请声明 tensor.logical_bytes。`);
+        }
+        elements *= dimension;
+        if (!Number.isSafeInteger(elements)) throw new Error(`model.graph ${label} 元素数超出安全整数范围。`);
+      });
+      return Math.ceil((elements * bits) / 8);
+    }
+
     let embeddingWeightBytes = tensor.logical_bytes;
     if (embeddingWeightBytes == null) {
       const dtypeKey = canonicalDtype(tensor.dtype).replaceAll("-", "").replaceAll("_", "");
@@ -490,14 +515,53 @@
       });
       embeddingWeightBytes = Math.ceil((elements * bits) / 8);
     }
-    if (!Number.isSafeInteger(embeddingWeightBytes) || embeddingWeightBytes < 0) {
-      throw new Error("model.graph embedding logical_bytes 必须是非负安全整数。");
+    if (!Number.isSafeInteger(embeddingWeightBytes) || embeddingWeightBytes < 0) throw new Error("model.graph embedding logical_bytes 必须是非负安全整数。");
+
+    const lmHeads = graph.operators.filter((operator) => operator.op_kind === "lm_head");
+    if (lmHeads.length !== 1 || lmHeads[0].weight_tensor_ids.length !== 1 || lmHeads[0].output_tensor_ids.length !== 1) {
+      throw new Error("model.graph 必须包含一个且仅一个 lm_head，并声明一个权重和一个输出张量。");
     }
+    const lmHead = lmHeads[0];
+    const outputWeightTensor = graph.tensors.find((item) => item.tensor_id === lmHead.weight_tensor_ids[0]);
+    const outputTensor = graph.tensors.find((item) => item.tensor_id === lmHead.output_tensor_ids[0]);
+    if (!outputWeightTensor || !outputTensor) throw new Error("model.graph lm_head 引用了不存在的权重或输出张量。");
+    const outputAttributes = object(outputWeightTensor.attributes);
+    const outputStorageId = outputAttributes.storage_id == null ? null : String(outputAttributes.storage_id);
+    if (outputStorageId && !graph.tensors.some((item) => item.tensor_id === outputStorageId)) {
+      throw new Error(`model.graph lm_head storage_id 引用了不存在的张量 ${outputStorageId}。`);
+    }
+    const tieAttribute = attributes.tie_word_embeddings === true;
+    if (tieAttribute && outputStorageId !== embeddingTensorId) {
+      throw new Error("model.graph tie_word_embeddings=true 时 lm_head 权重必须声明 embedding storage_id。");
+    }
+    const tieWordEmbeddings = tieAttribute || outputStorageId === embeddingTensorId;
+    if (outputStorageId && outputStorageId !== embeddingTensorId) {
+      throw new Error("model.graph lm_head storage_id 必须指向 embedding 权重张量。");
+    }
+    const outputWeightStorageBytes = deriveTensorBytes(outputWeightTensor, "lm_head weight");
+    const outputWeightBytes = tieWordEmbeddings ? 0 : outputWeightStorageBytes;
     return Object.freeze({
       architecture,
       vocabulary_size: vocabularySize,
       max_sequence_length: maxSequenceLength,
       embedding_weight_bytes: embeddingWeightBytes,
+      tie_word_embeddings: tieWordEmbeddings,
+      output_weight_bytes: outputWeightBytes,
+      output_weight_storage_bytes: outputWeightStorageBytes,
+      output_weight_storage_id: outputStorageId,
+      output_weight_dtype: canonicalDtype(outputWeightTensor.dtype),
+      output_weight_shape: clone(outputWeightTensor.shape),
+      output_weight_layout: canonicalLayout(outputWeightTensor.layout),
+      output_head_dtype: canonicalDtype(outputTensor.dtype),
+      output_weight_storage: Object.freeze({
+        tensor_id: outputWeightTensor.tensor_id,
+        storage_id: outputStorageId,
+        logical_bytes: outputWeightStorageBytes,
+        dtype: canonicalDtype(outputWeightTensor.dtype),
+        shape: clone(outputWeightTensor.shape),
+        layout: canonicalLayout(outputWeightTensor.layout),
+        attributes: clone(outputAttributes),
+      }),
     });
   }
 
@@ -608,8 +672,20 @@
     // real embedding/LM-head declaration.
     const embeddingWeightBytes = model.embedding_weight_bytes == null || Number(model.embedding_weight_bytes) === 0
       ? null : Math.max(0, Math.trunc(finite(model.embedding_weight_bytes)));
+    const outputWeightStorage = object(model.output_weight_storage || model.output_weight_contract);
+    const outputWeightStorageId = outputWeightStorage.storage_id ?? model.output_weight_storage_id ?? null;
+    const outputWeightStorageDtype = outputWeightStorage.dtype ?? model.output_weight_dtype ?? dtype;
+    const outputWeightStorageShape = outputWeightStorage.shape ?? model.output_weight_shape ?? [first.hidden_size, "V"];
+    const outputWeightStorageBytes = outputWeightStorage.logical_bytes == null
+      ? (model.output_weight_storage_bytes == null || Number(model.output_weight_storage_bytes) < 0
+        ? null : Math.max(0, Math.trunc(finite(model.output_weight_storage_bytes))))
+      : Math.max(0, Math.trunc(finite(outputWeightStorage.logical_bytes)));
+    // output_weight_bytes is the new resident contribution (zero for a tied
+    // head), while output_weight_storage_bytes preserves the physical/logical
+    // tensor contract needed to rebuild a quantized or aliased weight.
     const outputWeightBytes = model.output_weight_bytes == null || Number(model.output_weight_bytes) === 0
       ? null : Math.max(0, Math.trunc(finite(model.output_weight_bytes)));
+    const outputWeightTensorBytes = outputWeightStorageBytes ?? outputWeightBytes;
     let hidden = first.hidden_size;
     addOperator("input", "model_input", {
       outputs: [["input.tokens", "int64", ["B", "T"], "input"]],
@@ -705,12 +781,16 @@
     addOperator("final_norm", "rms_norm", { inputs: [previous], outputs: [["final_norm.output", dtype, ["B", "T", hidden]]] });
     addOperator("lm_head", "lm_head", {
       inputs: ["final_norm.output"], outputs: [["logits", outputDtype, ["B", "T", "V"]]],
-      weights: [["lm_head_weights", dtype, [hidden, "V"],
-        outputWeightBytes]],
+      weights: [["lm_head_weights", canonicalDtype(outputWeightStorageDtype),
+        clone(outputWeightStorageShape), outputWeightTensorBytes]],
       parameters: { vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))) },
     });
+    const outputWeights = tensors.get("lm_head_weights");
+    if (outputWeights && (outputWeightStorage.attributes || outputWeightStorageId)) {
+      outputWeights.attributes = { ...object(outputWeights.attributes), ...clone(outputWeightStorage.attributes) };
+      if (outputWeightStorageId) outputWeights.attributes.storage_id = String(outputWeightStorageId);
+    }
     if (tieWordEmbeddings) {
-      const outputWeights = tensors.get("lm_head_weights");
       if (outputWeights) {
         outputWeights.attributes = { ...object(outputWeights.attributes), storage_id: "embedding_weights" };
       }
@@ -721,8 +801,9 @@
     const mtpPredictionWeightBytes = Math.max(0, Math.trunc(finite(mtp.prediction_layer_weight_bytes)));
     const mtpAuxHead = mtp.auxiliary_head === true;
     const mtpAuxHeadWeightBytes = Math.max(0, Math.trunc(finite(mtp.auxiliary_head_weight_bytes)));
-    const defaultMtpPredictionBytes = mtpPredictionWeightBytes || matrixStorageBytes(hidden, hidden, dtype, first.quantization) || 0;
-    const defaultMtpAuxHeadBytes = mtpAuxHeadWeightBytes || matrixStorageBytes(hidden, Math.max(0, Math.trunc(finite(model.vocabulary_size))), dtype, first.quantization) || 0;
+    const last = layerTemplate(layers.at(-1));
+    const defaultMtpPredictionBytes = mtpPredictionWeightBytes || matrixStorageBytes(hidden, hidden, dtype, last.quantization) || 0;
+    const defaultMtpAuxHeadBytes = mtpAuxHeadWeightBytes || matrixStorageBytes(hidden, Math.max(0, Math.trunc(finite(model.vocabulary_size))), dtype, last.quantization) || 0;
     let mtpPrevious = mtpBranchSource;
     for (let index = 0; index < mtpPredictionLayers; index += 1) {
       const prefix = `mtp.prediction_layer.${String(index).padStart(3, "0")}`;
@@ -739,7 +820,7 @@
     }
     if (mtpAuxHead) {
       addOperator("mtp.aux_head", "mtp_aux_head", {
-        inputs: [mtpPrevious], outputs: [["mtp.proposal_logits", outputDtype, ["B", "T", "V"], "output"]],
+        inputs: [mtpPrevious], outputs: [["mtp.proposal_logits", outputDtype, ["B", "T", "V"], "activation"]],
         weights: [["mtp.aux_head.weights", dtype, [hidden, "V"], defaultMtpAuxHeadBytes]],
         parameters: { hidden_size: hidden, vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))),
           weight_bytes: defaultMtpAuxHeadBytes },
@@ -2911,19 +2992,86 @@
     const rawNested = object(object(rawRoot.model).graph);
     const rawSource = Object.keys(rawNested).length ? rawNested
       : (Object.keys(object(rawRoot.graph)).length ? object(rawRoot.graph) : rawRoot);
-    const rawTensors = new Map(array(rawSource.tensors).map((item) => {
-      const value = object(item);
-      return [String(value.tensor_id ?? value.id ?? ""), value];
-    }).filter(([id]) => id));
+    const rawOperators = array(rawSource.operators ?? rawSource.nodes);
+    const rawTensorRecords = array(rawSource.tensors);
+    const rawTensors = new Map();
     const preflightErrors = [];
-    array(rawSource.operators ?? rawSource.nodes).forEach((rawOperator, operatorIndex) => {
+    const rawOperatorIds = new Set();
+    rawOperators.forEach((rawOperator, operatorIndex) => {
       const operator = object(rawOperator);
       const operatorId = String(operator.operator_id ?? operator.node_id ?? operator.id ?? `operator-${operatorIndex + 1}`);
+      if (!operatorId.trim()) preflightErrors.push(`组件 ${operatorIndex + 1} 缺少 operator_id。`);
+      else if (rawOperatorIds.has(operatorId)) preflightErrors.push(`组件 ID 重复：${operatorId}。`);
+      rawOperatorIds.add(operatorId);
+    });
+    const rawTensorIds = new Set();
+    rawTensorRecords.forEach((rawTensor, tensorIndex) => {
+      const tensor = object(rawTensor);
+      const tensorId = String(tensor.tensor_id ?? tensor.id ?? "").trim();
+      if (!tensorId) preflightErrors.push(`张量 ${tensorIndex + 1} 缺少 tensor_id。`);
+      else if (rawTensorIds.has(tensorId)) preflightErrors.push(`张量 ID 重复：${tensorId}。`);
+      else rawTensors.set(tensorId, tensor);
+      rawTensorIds.add(tensorId);
+    });
+    const outputProducer = new Map();
+    const rawInputConsumers = new Map();
+    const adjacency = new Map([...rawOperatorIds].map((id) => [id, new Set()]));
+    const rawRefs = (operator, direction) => {
+      const fields = { input: "input_tensor_ids", output: "output_tensor_ids", weight: "weight_tensor_ids" };
+      const aliases = { input: "inputs", output: "outputs", weight: "weights" };
+      const field = fields[direction];
+      if (Object.hasOwn(operator, field)) return rawTensorRefs(operator[field]);
+      if (Object.hasOwn(operator, aliases[direction])) return rawTensorRefs(operator[aliases[direction]]);
+      return null;
+    };
+    const portRefs = (operator, direction) => array(operator.ports).filter((rawPort) => String(object(rawPort).direction || "input") === direction)
+      .map((rawPort) => String(object(rawPort).tensor_id ?? object(rawPort).id ?? "").trim());
+    // Collect ownership and dependencies in a separate pass.  A consumer may
+    // appear before its producer in the serialized operator order; building
+    // edges while scanning one operator at a time would then miss that edge
+    // and could let a raw cycle pass preflight.
+    rawOperators.forEach((rawOperator, operatorIndex) => {
+      const operator = object(rawOperator);
+      const operatorId = String(operator.operator_id ?? operator.node_id ?? operator.id ?? `operator-${operatorIndex + 1}`).trim();
+      const outputRefs = new Set([...(rawRefs(operator, "output") || []), ...portRefs(operator, "output")]);
+      outputRefs.forEach((tensorId) => {
+        if (!tensorId) return;
+        const producer = outputProducer.get(tensorId);
+        if (producer && producer !== operatorId) preflightErrors.push(`张量 ${tensorId} 存在多个生产组件：${producer}、${operatorId}。`);
+        else outputProducer.set(tensorId, operatorId);
+      });
+      const inputRefs = new Set([
+        ...(rawRefs(operator, "input") || []),
+        ...(rawRefs(operator, "weight") || []),
+        ...portRefs(operator, "input"),
+        ...portRefs(operator, "weight"),
+      ]);
+      inputRefs.forEach((tensorId) => {
+        if (!tensorId) return;
+        if (!rawInputConsumers.has(tensorId)) rawInputConsumers.set(tensorId, new Set());
+        rawInputConsumers.get(tensorId).add(operatorId);
+      });
+    });
+    rawOperators.forEach((rawOperator, operatorIndex) => {
+      const operator = object(rawOperator);
+      const operatorId = String(operator.operator_id ?? operator.node_id ?? operator.id ?? `operator-${operatorIndex + 1}`).trim();
+      const usedPortIds = new Set();
       array(operator.ports).forEach((rawPort, portIndex) => {
         const port = object(rawPort);
+        const portId = String(port.port_id ?? port.id ?? `port-${portIndex + 1}`).trim();
+        if (usedPortIds.has(portId)) preflightErrors.push(`组件 ${operatorId} 的端口 ID 重复：${portId}。`);
+        usedPortIds.add(portId);
+        const direction = String(port.direction || "input");
+        if (!["input", "output", "weight"].includes(direction)) {
+          preflightErrors.push(`组件 ${operatorId} 的端口 ${portId} 使用了不支持的方向 ${direction}。`);
+        }
         const tensorId = String(port.tensor_id ?? port.id ?? "");
+        if (!tensorId.trim()) preflightErrors.push(`组件 ${operatorId} 的端口 ${portId} 缺少 tensor_id。`);
         const tensor = rawTensors.get(tensorId);
-        if (!tensor || !tensorId) return;
+        if (!tensor || !tensorId) {
+          if (tensorId) preflightErrors.push(`组件 ${operatorId} 的端口 ${portId} 引用了不存在的张量 ${tensorId}。`);
+          return;
+        }
         const contractKeys = ["dtype", "shape", "layout"];
         const conflictingKey = contractKeys.find((key) => Object.hasOwn(port, key)
           && Object.hasOwn(tensor, key)
@@ -2935,7 +3083,61 @@
           preflightErrors.push(`组件 ${operatorId} 端口 ${String(port.port_id ?? `port-${portIndex + 1}`)} 维度/类型不匹配：期望 ${contractText(declared)}，实际 ${contractText(actual)}。`);
         }
       });
+      for (const direction of ["input", "output", "weight"]) {
+        const declared = rawRefs(operator, direction);
+        if (declared == null) continue;
+        const ports = portRefs(operator, direction);
+        if (stableStringify(declared) !== stableStringify(ports)) {
+          preflightErrors.push(`组件 ${operatorId} 的 ${direction} tensor 列表与端口列表不一致。`);
+        }
+        declared.forEach((tensorId) => {
+          if (!rawTensors.has(tensorId)) preflightErrors.push(`组件 ${operatorId} 的 ${direction} 列表引用了不存在的张量 ${tensorId}。`);
+        });
+      }
     });
+    rawInputConsumers.forEach((consumers, tensorId) => {
+      const producer = outputProducer.get(tensorId);
+      if (!producer) return;
+      consumers.forEach((consumer) => {
+        if (producer !== consumer) adjacency.get(producer)?.add(consumer);
+      });
+    });
+    rawTensorRecords.forEach((rawTensor, tensorIndex) => {
+      const tensor = object(rawTensor);
+      const tensorId = String(tensor.tensor_id ?? tensor.id ?? "").trim();
+      if (!tensorId || !rawTensorIds.has(tensorId)) return;
+      const declaredProducer = tensor.producer_operator_id == null ? null : String(tensor.producer_operator_id).trim();
+      if (declaredProducer && !rawOperatorIds.has(declaredProducer)) {
+        preflightErrors.push(`张量 ${tensorId} 的生产组件不存在：${declaredProducer}。`);
+      } else if (declaredProducer && outputProducer.has(tensorId) && outputProducer.get(tensorId) !== declaredProducer) {
+        preflightErrors.push(`张量 ${tensorId} 的 producer_operator_id 与输出端口不一致。`);
+      }
+      if (Object.hasOwn(tensor, "consumer_operator_ids")) {
+        const declaredConsumers = array(tensor.consumer_operator_ids).map((id) => String(id).trim());
+        const expectedConsumers = rawInputConsumers.get(tensorId) || new Set();
+        declaredConsumers.forEach((consumer) => {
+          if (!rawOperatorIds.has(consumer)) preflightErrors.push(`张量 ${tensorId} 的消费组件不存在：${consumer}。`);
+        });
+        if (new Set(declaredConsumers).size !== declaredConsumers.length
+            || declaredConsumers.some((consumer) => !expectedConsumers.has(consumer))
+            || [...expectedConsumers].some((consumer) => !declaredConsumers.includes(consumer))) {
+          preflightErrors.push(`张量 ${tensorId} 的 consumer_operator_ids 与输入端口不一致。`);
+        }
+      }
+    });
+    // A raw graph must already be a DAG.  Do not normalize it first: the
+    // normalizer deliberately splits conflicting producers and rewrites IDs,
+    // which would hide the user's original structural error.
+    const rawIndegree = new Map([...adjacency].map(([id]) => [id, 0]));
+    adjacency.forEach((targets) => targets.forEach((target) => rawIndegree.set(target, (rawIndegree.get(target) || 0) + 1)));
+    const rawReady = [...rawIndegree].filter(([, degree]) => degree === 0).map(([id]) => id);
+    let rawVisited = 0;
+    while (rawReady.length) {
+      const id = rawReady.shift(); rawVisited += 1;
+      adjacency.get(id)?.forEach((target) => { rawIndegree.set(target, rawIndegree.get(target) - 1); if (rawIndegree.get(target) === 0) rawReady.push(target); });
+    }
+    if (rawVisited !== rawOperatorIds.size) preflightErrors.push("模型组件图必须是 DAG；原始图检测到环。");
+    if (preflightErrors.length) return { valid: false, errors: [...new Set(preflightErrors)] };
     const graph = normalizeModelGraph(graphValue);
     const errors = preflightErrors;
     const operators = new Set(graph.operators.map((item) => item.operator_id));
