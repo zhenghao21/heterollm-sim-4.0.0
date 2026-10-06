@@ -77,7 +77,7 @@ class RetainedKVState:
         _require((config.kv_type_k, config.kv_type_v) == ("f16", "f16"), "only f16 cache supported")
         _require(config.ubatch < 1024, "mask-trimming query groups unsupported")
         _require(layers and not any(layer.is_linear_attention for layer in layers), "hybrid/recurrent state unsupported")
-        _require(scenario.model.architecture in {"llama", "qwen2", "llama_decoder", "qwen2_decoder"}, "ordinary architecture unproven")
+        _require(scenario.model.architecture in {"llama", "qwen2", "qwen3", "llama_decoder", "qwen2_decoder"}, "ordinary architecture unproven")
         _require(not plan.mtp.enabled and scenario.workload.mtp is None and plan.kv_policy.offload_ratio == 0.0, "speculation/offload unsupported")
         binding = {"batch": config.batch, "ubatch": config.ubatch, "parallel": config.parallel,
             "simulator_slot_context_tokens": config.context, "native_context_tokens": config.context * config.parallel,

@@ -18,7 +18,7 @@ from .runtime_adapters import _cpp_source_function
 SCHEMA = 'llama.cpp.gguf.tensor-storage/v1'
 SOURCE_KEY = 'llama_cpp_tensor_storage_contract'
 AUDIT_KEY = 'llama_cpp_tensor_storage'
-_ARCHITECTURES = {'qwen2', 'qwen2_decoder', 'llama', 'llama_decoder', 'qwen3_5_hybrid_transformer'}
+_ARCHITECTURES = {'qwen2', 'qwen2_decoder', 'qwen3', 'llama', 'llama_decoder', 'qwen3_5_hybrid_transformer'}
 
 
 def derive_llama_tensor_storage_contract(source_root: str | Path) -> dict[str, Any]:

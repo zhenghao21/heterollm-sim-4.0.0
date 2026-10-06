@@ -151,7 +151,7 @@ def derive_llama_gpu_invocation_contract(
         raise ValueError("cache-write RoPE fusion boundary not recognized")
     model_rope=_source_function(source["model"],"llama_rope_type llama_model_rope_type(")
     rope_modes={}
-    for ir_arch,native_arch,expected in (("llama","LLAMA","NORM"),("qwen2","QWEN2","NEOX"),("qwen3_5_hybrid_transformer","QWEN35","IMROPE")):
+    for ir_arch,native_arch,expected in (("llama","LLAMA","NORM"),("qwen2","QWEN2","NEOX"),("qwen3","QWEN3","NEOX"),("qwen3_5_hybrid_transformer","QWEN35","IMROPE")):
         match=re.search(r"case LLM_ARCH_"+native_arch+r":.*?return LLAMA_ROPE_TYPE_([A-Z_]+);",model_rope,re.S)
         if match is None or match[1]!=expected:raise ValueError("fixed architecture RoPE rule changed")
         rope_modes[ir_arch]={"NORM":"normal","NEOX":"neox","IMROPE":"imrope"}[expected]

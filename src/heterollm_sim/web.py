@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import mimetypes
+from pathlib import Path
 import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -35,6 +36,15 @@ from .contracts import (
 )
 from .control_plane_state import mapping_fingerprint_status
 from .model_catalog import CatalogError, HuggingFaceClient, ModelCatalog
+from .model_artifacts import (
+    MODEL_ARTIFACT_SCHEMA,
+    ModelArtifactError,
+    default_model_artifact_dir,
+    list_model_artifacts,
+    load_model_artifact,
+    save_model_artifact,
+)
+from .gguf_parity import build_model_from_gguf, read_gguf_metadata
 from .planner import validate_scenario
 from .protocol_presets import protocol_preset_detail, protocol_preset_page
 from .reference import build_llama_default_scenario, build_reference_scenario
@@ -125,6 +135,41 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/reference":
                 self._send_json(200, scenario_to_payload(build_llama_default_scenario()))
+                return
+            if path == "/api/model-files":
+                self._send_json(
+                    200,
+                    {
+                        "schema_version": MODEL_ARTIFACT_SCHEMA,
+                        "items": list_model_artifacts(
+                            artifact_dir=self._model_artifact_dir()
+                        ),
+                    },
+                )
+                return
+            if path.startswith("/api/model-files/"):
+                artifact_id = unquote(path[len("/api/model-files/") :]).strip("/")
+                if artifact_id == "import":
+                    raise HttpError(
+                        405,
+                        "method_not_allowed",
+                        "模型文件导入端点要求使用 POST 方法",
+                        message_en="model-file import requires POST",
+                    )
+                if not artifact_id or "/" in artifact_id:
+                    raise HttpError(
+                        404,
+                        "not_found",
+                        "未找到指定的模型文件",
+                        message_en="unknown model file",
+                    )
+                self._send_json(
+                    200,
+                    load_model_artifact(
+                        artifact_id,
+                        artifact_dir=self._model_artifact_dir(),
+                    ),
+                )
                 return
             if path == "/api/workload-presets":
                 params = parse_qs(split.query, keep_blank_values=True)
@@ -414,6 +459,10 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             self._send_error(exc)
         except ComponentPresetPersistenceError:
             self._send_error(_component_catalog_unavailable_error())
+        except ModelArtifactError as exc:
+            self._send_error(
+                HttpError(422, "invalid_model_artifact", str(exc), message_en=str(exc))
+            )
         except CatalogError as exc:
             self._send_error(
                 HttpError(
@@ -431,18 +480,26 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
         path = split.path
         try:
             self._require_same_origin()
+            model_artifact_dir = self._model_artifact_dir()
             if path == "/api/validate":
                 payload = self._read_json_object()
-                self._send_json(200, validation_payload(payload))
+                self._send_json(
+                    200,
+                    validation_payload(payload, model_artifact_dir=model_artifact_dir),
+                )
                 return
             if path == "/api/normalize":
                 payload = self._read_json_object()
-                scenario = scenario_or_http_error(payload)
+                scenario = scenario_or_http_error(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 self._send_json(200, scenario_to_payload(scenario))
                 return
             if path == "/api/run":
                 payload = self._read_json_object()
-                scenario = scenario_or_http_error(payload)
+                scenario = scenario_or_http_error(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 ensure_valid_or_http_error(scenario)
                 trace_options = _visualization_query_options(split.query)
                 self._send_json(
@@ -452,7 +509,9 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/simulate-score":
                 payload = self._read_json_object()
-                scenario, native_reference, threshold_pct, r0_reference = _ui_score_request(payload)
+                scenario, native_reference, threshold_pct, r0_reference = _ui_score_request(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 # run_scenario rebuilds runtime placement, then validates it.
                 result = run_scenario(scenario)
                 report = report_dict(result)
@@ -473,13 +532,17 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/run-estimate":
                 payload = self._read_json_object()
-                scenario = scenario_or_http_error(payload)
+                scenario = scenario_or_http_error(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 ensure_valid_or_http_error(scenario)
                 self._send_json(200, estimate_scenario(scenario))
                 return
             if path == "/api/run-jobs":
                 payload = self._read_json_object()
-                scenario, retention_policy = _run_job_request(payload)
+                scenario, retention_policy = _run_job_request(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 ensure_valid_or_http_error(scenario)
                 try:
                     job_id = self._run_job_manager().submit(
@@ -498,7 +561,9 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/canonical-ir":
                 payload = self._read_json_object()
-                scenario = scenario_or_http_error(payload)
+                scenario = scenario_or_http_error(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 ensure_valid_or_http_error(scenario)
                 self._send_json(
                     200,
@@ -507,7 +572,9 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/architecture-scan":
                 payload = self._read_json_object()
-                scenario, backend, top_n = _architecture_scan_request(payload)
+                scenario, backend, top_n = _architecture_scan_request(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 ensure_valid_or_http_error(scenario)
                 self._send_json(
                     200,
@@ -543,7 +610,9 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/compare":
                 payload = self._read_json_object()
-                scenario = scenario_or_http_error(payload)
+                scenario = scenario_or_http_error(
+                    payload, model_artifact_dir=model_artifact_dir
+                )
                 ensure_valid_or_http_error(scenario)
                 self._send_json(200, compare_with_gpu_baseline(scenario))
                 return
@@ -564,6 +633,107 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(200, detail)
                 return
+            if path == "/api/model-files":
+                payload = self._read_json_object()
+                model = payload.get("model", payload)
+                if not isinstance(model, Mapping):
+                    raise HttpError(
+                        400,
+                        "missing_model",
+                        "模型文件请求必须包含 model 对象",
+                        message_en="model file request requires a model object",
+                    )
+                if payload.get("model") is not None:
+                    unexpected = sorted(
+                        set(payload) - {"model", "artifact_id", "provenance"}
+                    )
+                    if unexpected:
+                        raise HttpError(
+                            400,
+                            "unknown_fields",
+                            "模型文件请求包含未知字段：{}".format(", ".join(unexpected)),
+                            message_en="unknown model file fields: {}".format(", ".join(unexpected)),
+                        )
+                document = save_model_artifact(
+                    model,
+                    artifact_dir=self._model_artifact_dir(),
+                    artifact_id=payload.get("artifact_id"),
+                    provenance=payload.get("provenance"),
+                )
+                self._send_json(201, document)
+                return
+            if path == "/api/model-files/import":
+                payload = self._read_json_object()
+                unexpected = sorted(
+                    set(payload) - {"preset_id", "path", "gguf_path", "artifact_id"}
+                )
+                if unexpected:
+                    raise HttpError(
+                        400,
+                        "unknown_fields",
+                        "模型文件导入包含未知字段：{}".format(", ".join(unexpected)),
+                        message_en="unknown model-file import fields: {}".format(", ".join(unexpected)),
+                    )
+                preset_id = payload.get("preset_id")
+                source_path = payload.get("path", payload.get("gguf_path"))
+                if preset_id:
+                    detail = self._model_catalog().detail(str(preset_id))
+                    model = detail.get("model")
+                    if not isinstance(model, Mapping):
+                        raise HttpError(
+                            422,
+                            "preset_not_materializable",
+                            "该模型预设只有元数据，当前 IR 无法生成可执行图",
+                            details={"preset": detail.get("preset", {}), "graph": detail.get("graph")},
+                            message_en="model preset does not have an executable graph",
+                        )
+                    document = save_model_artifact(
+                        model,
+                        artifact_dir=self._model_artifact_dir(),
+                        provenance={"source_type": "model_preset", "preset_id": str(preset_id)},
+                    )
+                    document["preset"] = detail.get("preset", {})
+                    self._send_json(201, document)
+                    return
+                if payload.get("artifact_id"):
+                    self._send_json(
+                        200,
+                        load_model_artifact(
+                            str(payload["artifact_id"]),
+                            artifact_dir=self._model_artifact_dir(),
+                        ),
+                    )
+                    return
+                if not isinstance(source_path, str) or not source_path.strip():
+                    raise HttpError(
+                        400,
+                        "missing_source",
+                        "模型文件导入需要 preset_id、artifact_id 或本地 GGUF path",
+                        message_en="model-file import requires preset_id, artifact_id, or a local GGUF path",
+                    )
+                gguf = read_gguf_metadata(source_path.strip(), allow_unknown_types=True)
+                try:
+                    model_spec = build_model_from_gguf(gguf)
+                except (ValueError, TypeError, KeyError) as exc:
+                    raise HttpError(
+                        422,
+                        "gguf_graph_unsupported",
+                        "GGUF 元数据已读取，但当前后端没有该架构的可执行适配：{}".format(exc),
+                        details={"gguf": gguf.as_dict()},
+                        message_en="GGUF metadata was read, but this architecture has no executable adapter",
+                    ) from exc
+                document = save_model_artifact(
+                    model_spec,
+                    artifact_dir=self._model_artifact_dir(),
+                    provenance={
+                        "source_type": "gguf",
+                        "source_path": gguf.path,
+                        "source_sha256": gguf.sha256,
+                        "architecture": gguf.architecture,
+                    },
+                )
+                self._send_json(201, document)
+                return
             if path == "/api/component-presets":
                 detail = self._component_catalog().create(self._read_json_object())
                 self._send_json(201, detail)
@@ -575,6 +745,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                     "/api/reference",
                     "/api/workload-presets",
                     "/api/model-presets",
+                    "/api/model-files",
                     "/api/component-presets",
                     "/api/architecture-presets",
                     "/api/protocol-presets",
@@ -600,6 +771,15 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             self._send_error(_component_catalog_unavailable_error())
         except ComponentPresetMutationError as exc:
             self._send_error(HttpError(exc.status, exc.code, str(exc), message_en=str(exc)))
+        except ModelArtifactError as exc:
+            self._send_error(
+                HttpError(
+                    422,
+                    "invalid_model_artifact",
+                    str(exc),
+                    message_en=str(exc),
+                )
+            )
         except CatalogError as exc:
             self._send_error(
                 HttpError(
@@ -768,6 +948,10 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             raise HttpError(500, "catalog_unavailable", "模型目录当前不可用", message_en="model catalog is unavailable")
         return catalog
 
+    def _model_artifact_dir(self):
+        configured = getattr(self.server, "model_artifact_dir", None)
+        return configured if configured is not None else default_model_artifact_dir()
+
     def _component_catalog(self) -> ComponentPresetCatalog:
         catalog = getattr(self.server, "component_preset_catalog", None)
         if not isinstance(catalog, ComponentPresetCatalog):
@@ -876,10 +1060,14 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def validation_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
+def validation_payload(
+    payload: Mapping[str, Any], *, model_artifact_dir: Optional[Path] = None
+) -> Dict[str, Any]:
     try:
         from .llama_scenario import prepare_llama_scenario
-        scenario = prepare_llama_scenario(scenario_from_dict(payload))
+        scenario = prepare_llama_scenario(
+            scenario_from_dict(payload, model_artifact_dir=model_artifact_dir)
+        )
     except (ValueError, TypeError, KeyError) as exc:
         message_zh, message_en = _scenario_parse_messages(exc)
         return {
@@ -1113,12 +1301,16 @@ def validation_payload_for_scenario(scenario: ScenarioConfig) -> Dict[str, Any]:
     }
 
 
-def scenario_or_http_error(payload: Mapping[str, Any]) -> ScenarioConfig:
+def scenario_or_http_error(
+    payload: Mapping[str, Any], *, model_artifact_dir: Optional[Path] = None
+) -> ScenarioConfig:
     try:
         from .llama_scenario import prepare_llama_scenario
-        return prepare_llama_scenario(scenario_from_dict(payload))
+        return prepare_llama_scenario(
+            scenario_from_dict(payload, model_artifact_dir=model_artifact_dir)
+        )
     except (ValueError, TypeError, KeyError) as exc:
-        details = validation_payload(payload)
+        details = validation_payload(payload, model_artifact_dir=model_artifact_dir)
         message_zh, message_en = _scenario_parse_messages(exc)
         raise HttpError(
             422,
@@ -1131,6 +1323,8 @@ def scenario_or_http_error(payload: Mapping[str, Any]) -> ScenarioConfig:
 
 def _run_job_request(
     payload: Mapping[str, Any],
+    *,
+    model_artifact_dir: Optional[Path] = None,
 ) -> Tuple[ScenarioConfig, Optional[str]]:
     unexpected = sorted(set(payload) - {"scenario", "retention_policy"})
     if unexpected:
@@ -1166,7 +1360,9 @@ def _run_job_request(
                 "retention_policy must be exact, streaming, or aggregate"
             ),
         )
-    scenario = scenario_or_http_error(scenario_payload)
+    scenario = scenario_or_http_error(
+        scenario_payload, model_artifact_dir=model_artifact_dir
+    )
     scheduler = getattr(scenario.workload, "scheduler", None)
     scheduler_mode = (
         str(getattr(scheduler, "mode", "static")) if scheduler else "static"
@@ -1190,6 +1386,8 @@ def _run_job_request(
 
 def _ui_score_request(
     payload: Mapping[str, Any],
+    *,
+    model_artifact_dir: Optional[Path] = None,
 ) -> Tuple[ScenarioConfig, Mapping[str, Any], Optional[float], Optional[Mapping[str, Any]]]:
     """Parse the unconstrained UI scenario plus its explicit native reference."""
     unexpected = sorted(
@@ -1239,11 +1437,20 @@ def _ui_score_request(
             "R0 参考结果必须是 JSON 对象",
             message_en="R0 reference must be a JSON object",
         )
-    return scenario_or_http_error(scenario_payload), native, threshold, r0
+    return (
+        scenario_or_http_error(
+            scenario_payload, model_artifact_dir=model_artifact_dir
+        ),
+        native,
+        threshold,
+        r0,
+    )
 
 
 def _architecture_scan_request(
     payload: Mapping[str, Any],
+    *,
+    model_artifact_dir: Optional[Path] = None,
 ) -> Tuple[ScenarioConfig, str, int]:
     unexpected = sorted(set(payload) - {"scenario", "backend", "top_n"})
     if unexpected:
@@ -1279,7 +1486,13 @@ def _architecture_scan_request(
             "top_n 必须是 1 到 200 之间的整数",
             message_en="top_n must be an integer between 1 and 200",
         )
-    return scenario_or_http_error(scenario_payload), str(backend), top_n
+    return (
+        scenario_or_http_error(
+            scenario_payload, model_artifact_dir=model_artifact_dir
+        ),
+        str(backend),
+        top_n,
+    )
 
 
 def ensure_valid_or_http_error(scenario: ScenarioConfig) -> None:
@@ -1767,6 +1980,7 @@ def build_server(
     component_preset_cache_dir: Optional[Any] = None,
     hf_client: Optional[HuggingFaceClient] = None,
     model_catalog: Optional[ModelCatalog] = None,
+    model_artifact_dir: Optional[Any] = None,
     diagnostic_log_path: Optional[Any] = None,
     run_job_manager: Optional[RunJobManager] = None,
 ) -> ThreadingHTTPServer:
@@ -1774,6 +1988,9 @@ def build_server(
     server.model_catalog = model_catalog or ModelCatalog(  # type: ignore[attr-defined]
         catalog_cache_dir,
         hf_client=hf_client,
+    )
+    server.model_artifact_dir = (  # type: ignore[attr-defined]
+        model_artifact_dir if model_artifact_dir is not None else default_model_artifact_dir()
     )
     server.component_preset_catalog = ComponentPresetCatalog(component_preset_cache_dir)  # type: ignore[attr-defined]
     server.diagnostic_log_path = diagnostic_log_path  # type: ignore[attr-defined]

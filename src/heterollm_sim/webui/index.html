@@ -37,7 +37,7 @@ PLACEHOLDERS / BOUNDARIES
       </div>
       <div class="top-actions" aria-label="场景操作">
         <button type="button" class="button button-quiet" id="loadReferenceButton">载入参考</button>
-        <button type="button" class="button button-quiet" id="importButton">导入 JSON</button>
+        <button type="button" class="button button-quiet" id="importButton">导入 JSON / 模型文件</button>
         <input type="file" id="fileInput" accept="application/json,.json" hidden>
         <button type="button" class="button button-quiet" id="exportButton">导出 JSON</button>
         <button type="button" class="button button-quiet" id="importHardwareButton">导入硬件参数</button>
@@ -281,9 +281,12 @@ PLACEHOLDERS / BOUNDARIES
 
         <section class="view" id="view-model" data-view-panel="model" aria-labelledby="modelTitle" hidden>
           <div class="view-head">
-            <div><h1 id="modelTitle" data-concept-help="model_graph">模型语义组件图（Model Graph）</h1><p data-i18n-zh="重复模式以可折叠组显示；展开可编辑权威模板算子的 Shape、DType 与组件量化参数，虚线 ×N 回线仅是视图提示。" data-i18n-en="Repeat patterns are collapsible. Expand a group to edit authoritative template operators, port Shape and DType, and per-component quantization; the dashed ×N loop is visual only.">Repeat patterns are collapsible. Expand a group to edit authoritative template operators, port Shape and DType, and per-component quantization; the dashed ×N loop is visual only.</p></div>
+            <div><h1 id="modelTitle" data-concept-help="model_graph">模型语义组件图（Model Graph）</h1><p data-i18n-zh="可新建标准 Decoder 模型图，再编辑算子端口的 Shape、DType 与连接；重复模式以可折叠组显示，虚线 ×N 回线仅是视图提示。" data-i18n-en="Create a standard Decoder graph, then edit operator port Shape, DType, and connections. Repeat patterns are collapsible; the dashed ×N loop is visual only.">可新建标准 Decoder 模型图，再编辑算子端口的 Shape、DType 与连接；重复模式以可折叠组显示，虚线 ×N 回线仅是视图提示。</p></div>
             <div class="view-head-actions">
               <button type="button" class="button button-secondary" id="modelPresetsButton" aria-haspopup="dialog" aria-controls="modelPresetsDialog">模型预设（Model Presets）</button>
+              <button type="button" class="button button-quiet" id="modelNewGraphButton">新建模型图</button>
+              <button type="button" class="button button-quiet" id="modelSaveFileButton">保存模型文件</button>
+              <button type="button" class="button button-quiet" id="modelLoadFileButton">加载模型文件</button>
             </div>
           </div>
           <dl class="form-strip model-summary-strip" id="modelMetaForm" aria-label="只读模型摘要"></dl>

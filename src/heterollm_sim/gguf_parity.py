@@ -19,6 +19,7 @@ class GGUFError(ValueError):
 # geometry produced by a different parser.
 GGUF_METADATA_CACHE_SCHEMA = "gguf-metadata-cache/v1"
 GGUF_METADATA_PARSER_SOURCE = "heterollm_sim.gguf_parity:gguf-directory-parser/v1"
+GGUF_MODEL_PRESET_SCHEMA = "heterollm.gguf-model-preset/v1"
 
 
 _FILE_TYPE_NAMES = {
@@ -62,8 +63,11 @@ class GGUFTensor:
     shape: tuple[int, ...]
     type_id: int
     type_name: str
-    block_size: int
-    n_bytes: int
+    # ``None`` means the GGML type is newer than this parser's physical-size
+    # registry.  Keeping the tensor opaque is safer than inventing a byte
+    # count and then claiming an exact model artifact.
+    block_size: int | None
+    n_bytes: int | None
     offset: int
 
 
@@ -184,7 +188,12 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
-def _read_gguf_metadata(path: str | Path, *, hash_payload: bool = True) -> GGUFMetadata:
+def _read_gguf_metadata(
+    path: str | Path,
+    *,
+    hash_payload: bool = True,
+    allow_unknown_types: bool = False,
+) -> GGUFMetadata:
     p = Path(path)
     with p.open("rb") as raw:
         f = _HashedReadStream(raw) if hash_payload else raw
@@ -223,7 +232,12 @@ def _read_gguf_metadata(path: str | Path, *, hash_payload: bool = True) -> GGUFM
             offset = struct.unpack("<Q", offset_raw)[0]
             spec = _TENSOR_TYPES.get(type_id)
             if spec is None:
-                raise GGUFError(f"unsupported GGUF tensor type {type_id}")
+                if not allow_unknown_types:
+                    raise GGUFError(f"unsupported GGUF tensor type {type_id}")
+                directory.append(GGUFTensor(
+                    name, dims, type_id, f"GGML_TYPE_{type_id}", None, None, offset
+                ))
+                continue
             type_name, block_size, block_bytes = spec
             elements = 1
             for dim in dims: elements *= dim
@@ -235,9 +249,21 @@ def _read_gguf_metadata(path: str | Path, *, hash_payload: bool = True) -> GGUFM
             directory.append(GGUFTensor(name, dims, type_id, type_name, block_size, n_bytes, offset))
         data_start = ((f.tell() + alignment - 1) // alignment) * alignment
         file_size = initial_stat.st_size
-        for tensor in directory:
-            if data_start + tensor.offset + tensor.n_bytes > file_size:
+        ordered = sorted(directory, key=lambda tensor: tensor.offset)
+        for index, tensor in enumerate(ordered):
+            start = data_start + tensor.offset
+            if start >= file_size:
                 raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
+            next_start = (
+                data_start + ordered[index + 1].offset
+                if index + 1 < len(ordered) else file_size
+            )
+            if next_start <= start:
+                raise GGUFError(f"overlapping GGUF tensor payload: {tensor.name}")
+            if tensor.n_bytes is not None and start + tensor.n_bytes > file_size:
+                raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
+            if tensor.n_bytes is not None and start + tensor.n_bytes > next_start:
+                raise GGUFError(f"overlapping GGUF tensor payload: {tensor.name}")
         # Full identity mode hashes the exact bytes returned to the parser.
         # Metadata-only mode stops after the directory and never touches the
         # tensor payload; the sidecar loader validates size/mtime/file-id.
@@ -289,14 +315,22 @@ def _read_gguf_metadata(path: str | Path, *, hash_payload: bool = True) -> GGUFM
                         _as_int(file_type), metadata, tuple(directory))
 
 
-def read_gguf_metadata(path: str | Path) -> GGUFMetadata:
+def read_gguf_metadata(
+    path: str | Path, *, allow_unknown_types: bool = False
+) -> GGUFMetadata:
     """Read and hash a GGUF in the historical, strict default mode."""
-    return _read_gguf_metadata(path, hash_payload=True)
+    return _read_gguf_metadata(
+        path, hash_payload=True, allow_unknown_types=allow_unknown_types
+    )
 
 
-def read_gguf_metadata_only(path: str | Path) -> GGUFMetadata:
+def read_gguf_metadata_only(
+    path: str | Path, *, allow_unknown_types: bool = False
+) -> GGUFMetadata:
     """Read header/metadata/tensor directory without reading tensor payload."""
-    return _read_gguf_metadata(path, hash_payload=False)
+    return _read_gguf_metadata(
+        path, hash_payload=False, allow_unknown_types=allow_unknown_types
+    )
 
 
 def _cache_file_id(stat: os.stat_result) -> str:
@@ -390,11 +424,13 @@ def _metadata_from_cache(document: Mapping[str, Any], source: Path) -> GGUFMetad
         for item in data["tensor_directory"]:
             if (not isinstance(item, dict) or not isinstance(item.get("shape"), list)
                     or any(type(x) is not int for x in item["shape"])
-                    or any(type(item.get(field)) is not int for field in ("type_id", "block_size", "n_bytes", "offset"))
+                    or any(type(item.get(field)) is not int for field in ("type_id", "offset"))
+                    or any(item.get(field) is not None and type(item.get(field)) is not int
+                           for field in ("block_size", "n_bytes"))
                     or not isinstance(item.get("name"), str) or not isinstance(item.get("type_name"), str)):
                 raise ValueError("invalid tensor")
         tensors = tuple(GGUFTensor(str(item["name"]), tuple(int(x) for x in item["shape"]), int(item["type_id"]),
-            str(item["type_name"]), int(item["block_size"]), int(item["n_bytes"]), int(item["offset"]))
+            str(item["type_name"]), _as_int(item.get("block_size")), _as_int(item.get("n_bytes")), int(item["offset"]))
             for item in data["tensor_directory"])
         if len(tensors) != data["tensor_count"]:
             raise ValueError("tensor count mismatch")
@@ -461,6 +497,202 @@ def read_gguf_metadata_cache(gguf_path: str | Path, cache_path: str | Path | Non
     return gguf
 
 
+def build_gguf_model_preset(gguf: GGUFMetadata) -> dict[str, Any]:
+    """Build a conservative, architecture-agnostic GGUF model preset.
+
+    This is an artifact preset, not an executable :class:`ModelSpec`.  It
+    preserves facts proved by the file and records unknown physical types as
+    opaque instead of inventing a layer graph or byte count.  Architecture
+    adapters can later consume the same inventory when they can prove an
+    executable mapping.
+    """
+    if not isinstance(gguf, GGUFMetadata):
+        raise TypeError("gguf must be GGUFMetadata")
+    opaque = [tensor for tensor in gguf.tensor_directory if tensor.n_bytes is None]
+    known_bytes = sum(
+        tensor.n_bytes for tensor in gguf.tensor_directory
+        if tensor.n_bytes is not None
+    )
+    geometry_fields = (
+        gguf.architecture, gguf.n_layer, gguf.n_embd, gguf.n_head,
+        gguf.n_head_kv, gguf.vocab_size, gguf.context_length,
+    )
+    file_id = gguf.sha256 or gguf_metadata_digest(gguf)
+    preset_id = "gguf-{}".format(file_id[:16])
+    limitations = [
+        "GGUF metadata and tensor inventory are exact file evidence; execution graph semantics require an architecture adapter.",
+        "Hardware topology, kernel performance, and llama.cpp runtime options are not part of a GGUF file.",
+    ]
+    if opaque:
+        limitations.append(
+            "{} tensor type(s) are not in the local physical-size registry; their payload bytes remain opaque.".format(
+                len(opaque)
+            )
+        )
+    # Keep the artifact graph displayable by the frontend while refusing to
+    # invent operators from tensor names.  This mirrors the existing
+    # display-only preset contract used for out-of-domain architectures.
+    graph_dtype = "unknown"
+    graph_shape = ["B", "T", "H"]
+    input_tensor = {
+        "tensor_id": "input.hidden",
+        "role": "input",
+        "logical_bytes": None,
+        "producer_operator_id": "input",
+        "consumer_operator_ids": ["unsupported-artifact"],
+        "dtype": graph_dtype,
+        "shape": graph_shape,
+        "layout": "logical",
+        "attributes": {},
+        "provenance": [],
+    }
+    output_tensor = {
+        "tensor_id": "output.hidden",
+        "role": "output",
+        "logical_bytes": None,
+        "producer_operator_id": "unsupported-artifact",
+        "consumer_operator_ids": ["output"],
+        "dtype": graph_dtype,
+        "shape": graph_shape,
+        "layout": "logical",
+        "attributes": {},
+        "provenance": [],
+    }
+    graph = {
+        "graph_id": preset_id,
+        "operators": [
+            {
+                "operator_id": "input",
+                "op_kind": "model_input",
+                "sequence_index": 0,
+                "layer_id": None,
+                "input_tensor_ids": [],
+                "output_tensor_ids": ["input.hidden"],
+                "weight_tensor_ids": [],
+                "ports": [{"port_id": "out0", "direction": "output", "tensor_id": "input.hidden", "dtype": graph_dtype, "shape": graph_shape, "layout": "logical", "attributes": {}}],
+                "parameters": {},
+                "attributes": {},
+                "provenance": [],
+            },
+            {
+                "operator_id": "unsupported-artifact",
+                "op_kind": "unsupported_component_group",
+                "sequence_index": 1,
+                "layer_id": None,
+                "input_tensor_ids": ["input.hidden"],
+                "output_tensor_ids": ["output.hidden"],
+                "weight_tensor_ids": [],
+                "ports": [
+                    {"port_id": "in0", "direction": "input", "tensor_id": "input.hidden", "dtype": graph_dtype, "shape": graph_shape, "layout": "logical", "attributes": {}},
+                    {"port_id": "out0", "direction": "output", "tensor_id": "output.hidden", "dtype": graph_dtype, "shape": graph_shape, "layout": "logical", "attributes": {}},
+                ],
+                "parameters": {"architecture": gguf.architecture, "layer_count": gguf.n_layer, "tensor_count": gguf.tensor_count},
+                "attributes": {"unsupported": True, "reason": "GGUF artifact inventory has no proven execution graph"},
+                "provenance": [],
+            },
+            {
+                "operator_id": "output",
+                "op_kind": "model_output",
+                "sequence_index": 2,
+                "layer_id": None,
+                "input_tensor_ids": ["output.hidden"],
+                "output_tensor_ids": [],
+                "weight_tensor_ids": [],
+                "ports": [{"port_id": "in0", "direction": "input", "tensor_id": "output.hidden", "dtype": graph_dtype, "shape": graph_shape, "layout": "logical", "attributes": {}}],
+                "parameters": {},
+                "attributes": {},
+                "provenance": [],
+            },
+        ],
+        "tensors": [input_tensor, output_tensor],
+        "source_operators": [],
+        "sub_operators": [],
+        "transforms": [],
+        "executable": False,
+        "attributes": {
+            "authoritative": False,
+            "derivation": "gguf_artifact_inventory",
+            "architecture": gguf.architecture or "unknown",
+            "support_level": "metadata_only",
+            "execution_graph": "unproven",
+            "symbols": {
+                "B": "batch",
+                "T": "sequence",
+                "H": gguf.n_embd or "hidden",
+                "V": gguf.vocab_size or 0,
+            },
+            "max_sequence_length": gguf.context_length or 0,
+            "evidence": {"file_identity": "exact" if gguf.sha256 else "metadata_digest_only", "geometry": "exact" if all(value is not None for value in geometry_fields) else "partial"},
+            "ui": {"collapsed_groups": ["unsupported-artifact"]},
+            "limitations": limitations,
+        },
+        "provenance": [],
+    }
+    return {
+        "schema_version": GGUF_MODEL_PRESET_SCHEMA,
+        "preset": {
+            "id": preset_id,
+            "name": Path(gguf.path).stem or "GGUF model",
+            "family": gguf.architecture or "unknown",
+            "source": "gguf_import",
+            "source_sha": gguf.sha256 or None,
+            "support_level": "metadata_only",
+            "coverage": "gguf_artifact",
+            "generation_allowed": False,
+            "license": None,
+            "openness": None,
+            "limitations": limitations,
+        },
+        "model": {
+            "architecture": gguf.architecture,
+            "n_layer": gguf.n_layer,
+            "n_layer_all": gguf.n_layer_all,
+            "n_layer_nextn": gguf.n_layer_nextn,
+            "n_embd": gguf.n_embd,
+            "n_head": gguf.n_head,
+            "n_head_kv": gguf.n_head_kv,
+            "vocab_size": gguf.vocab_size,
+            "context_length": gguf.context_length,
+            "quantization": gguf.quantization,
+            "file_type": gguf.file_type,
+        },
+        "evidence": {
+            "file_identity": "exact" if gguf.sha256 else "metadata_digest_only",
+            "geometry": "exact" if all(value is not None for value in geometry_fields) else "partial",
+            "tensor_directory": "exact",
+            "physical_tensor_bytes": "exact" if not opaque else "partial",
+            "execution_graph": "unproven",
+        },
+        "weights": {
+            "tensor_count": gguf.tensor_count,
+            "known_physical_bytes": known_bytes,
+            "opaque_tensor_count": len(opaque),
+            "tensor_inventory": [
+                {
+                    "name": tensor.name,
+                    "shape": list(tensor.shape),
+                    "type_id": tensor.type_id,
+                    "type": tensor.type_name,
+                    "block_size": tensor.block_size,
+                    "n_bytes": tensor.n_bytes,
+                    "offset": tensor.offset,
+                    "bytes_status": "exact" if tensor.n_bytes is not None else "opaque",
+                }
+                for tensor in gguf.tensor_directory
+            ],
+        },
+        "gguf": gguf.as_dict(),
+        "graph": graph,
+    }
+
+
+def import_gguf_model_preset(path: str | Path) -> dict[str, Any]:
+    """Import any parseable GGUF as a conservative generic preset."""
+    return build_gguf_model_preset(
+        read_gguf_metadata(path, allow_unknown_types=True)
+    )
+
+
 def _expected_geometry(model: Any) -> dict[str, int | str | None]:
     from .ir import model_graph_execution_view
     view = model_graph_execution_view(model.graph, schema_version=model.schema_version)
@@ -504,19 +736,27 @@ def assert_gguf_parity(report: Mapping[str, Any]) -> None:
         raise ValueError(f"GGUF/native parity gate failed: {fields or 'unknown mismatch'}")
 
 
-def build_model_from_gguf(gguf: GGUFMetadata):
-    """Bind a dense Qwen2/Llama GGUF directory to an executable ModelSpec.
+def _build_model_from_gguf_registered(gguf: GGUFMetadata):
+    """Bind a supported GGUF directory to an executable ``ModelSpec``.
 
-    The graph keeps training context as the model limit; runtime ``-c`` is a
-    serving setting and is deliberately not copied into ``max_sequence_length``.
+    Architecture selection follows the same boundary as llama.cpp: the
+    ``general.architecture`` metadata value is resolved through a registry,
+    and only then is the selected graph implementation allowed to interpret
+    tensor names. Multiple architecture IDs may share one implementation.
     """
     from .ir import LayerSpec, ModelSpec, build_model_graph_from_layer_specs
+    from .architecture_adapters import resolve_gguf_architecture_adapter
     import re
-    if gguf.architecture not in {"qwen2", "llama", "qwen35"}:
+    adapter = resolve_gguf_architecture_adapter(gguf.architecture)
+    if adapter is None:
         raise GGUFError(f"unsupported GGUF architecture: {gguf.architecture}")
     required = (gguf.n_layer, gguf.n_embd, gguf.n_head, gguf.n_head_kv, gguf.vocab_size, gguf.context_length)
     if any(value is None or value <= 0 for value in required):
         raise GGUFError("GGUF is missing required model geometry")
+    if any(tensor.n_bytes is None for tensor in gguf.tensor_directory):
+        raise GGUFError(
+            "GGUF contains unregistered tensor types; use the generic artifact preset"
+        )
     by_layer: dict[int, list[GGUFTensor]] = {}
     for tensor in gguf.tensor_directory:
         match = re.search(r"(?:blk|layers)\.(\d+)\.", tensor.name)
@@ -533,17 +773,34 @@ def build_model_from_gguf(gguf: GGUFMetadata):
     # metadata also carries the final ``nextn`` block; llama.cpp reports it in
     # block_count, so retain it as an executable full-attention layer for
     # geometry parity while recording the auxiliary tensors in bindings.
-    is_qwen35 = gguf.architecture == "qwen35"
+    is_qwen35 = adapter.hybrid
+    qwen35_metadata_prefix = gguf.architecture if gguf.architecture in {"qwen35", "qwen35moe"} else "qwen35"
     linear_attention = None
     if is_qwen35:
         from .ir import LinearAttentionSpec
         md = gguf.metadata
+        if gguf.architecture == "qwen35moe":
+            expert_count = _as_int(md.get(f"{qwen35_metadata_prefix}.expert_count"))
+            if expert_count is None:
+                # Some converters retain the qwen35 metadata namespace even
+                # when general.architecture is qwen35moe.  Accept that alias
+                # only when it proves a dense model; missing evidence stays
+                # fail-closed.
+                expert_count = _as_int(md.get("qwen35.expert_count"))
+            if expert_count is None or expert_count > 1:
+                raise GGUFError(
+                    "Qwen35 MoE GGUF lacks a proven dense mapping; use the generic artifact preset"
+                )
+        elif _as_int(md.get(f"{qwen35_metadata_prefix}.expert_count")) not in (None, 1):
+            raise GGUFError(
+                "Qwen35 GGUF contains experts; use the generic artifact preset"
+            )
         linear_attention = LinearAttentionSpec(
-            key_heads=int(md.get("qwen35.ssm.group_count") or 16),
-            value_heads=max(1, int((md.get("qwen35.ssm.inner_size") or 6144) // (md.get("qwen35.ssm.state_size") or 128))),
+            key_heads=int(md.get(f"{qwen35_metadata_prefix}.ssm.group_count") or 16),
+            value_heads=max(1, int((md.get(f"{qwen35_metadata_prefix}.ssm.inner_size") or 6144) // (md.get(f"{qwen35_metadata_prefix}.ssm.state_size") or 128))),
             key_head_dim=128,
-            value_head_dim=int(md.get("qwen35.ssm.state_size") or 128),
-            conv_kernel_size=int(md.get("qwen35.ssm.conv_kernel") or 4),
+            value_head_dim=int(md.get(f"{qwen35_metadata_prefix}.ssm.state_size") or 128),
+            conv_kernel_size=int(md.get(f"{qwen35_metadata_prefix}.ssm.conv_kernel") or 4),
             state_dtype="fp32",
             output_gate=True,
             gate_activation="silu",
@@ -611,7 +868,7 @@ def build_model_from_gguf(gguf: GGUFMetadata):
                     "schema_version": "heterollm.attention-execution/v1",
                     "query_heads": int(gguf.n_head), "kv_heads": int(gguf.n_head_kv),
                     "head_dim": 256, "query_width": q_width, "gate_width": q_width,
-                    "q_projection_width": 2 * q_width, "rotary_dim": int(gguf.metadata.get("qwen35.rope.dimension_count") or 64),
+                    "q_projection_width": 2 * q_width, "rotary_dim": int(gguf.metadata.get(f"{qwen35_metadata_prefix}.rope.dimension_count") or 64),
                     "qk_scale": 1.0 / (256.0 ** 0.5), "qk_norm": True,
                     "gate_activation": "sigmoid",
                 }
@@ -641,7 +898,7 @@ def build_model_from_gguf(gguf: GGUFMetadata):
             mixer = "full_attention" if qkv is None else "linear_attention"
             la = linear_attention if mixer == "linear_attention" else None
             metadata["qwen35_block_kind"] = mixer
-            metadata["qwen35_full_attention_interval"] = gguf.metadata.get("qwen35.full_attention_interval")
+            metadata["qwen35_full_attention_interval"] = gguf.metadata.get(f"{qwen35_metadata_prefix}.full_attention_interval")
         else:
             mixer, la = "full_attention", None
         layers.append(LayerSpec(layer_id=f"layer-{index:03d}", kind="dense", hidden_size=hidden, intermediate_size=intermediate,
@@ -658,7 +915,7 @@ def build_model_from_gguf(gguf: GGUFMetadata):
     output_tied_to_embedding = output is None
     if output_tied_to_embedding:
         output = embedding
-    graph_architecture = "qwen3_5_hybrid_transformer" if is_qwen35 else gguf.architecture
+    graph_architecture = adapter.graph_family if is_qwen35 else gguf.architecture
     graph = build_model_graph_from_layer_specs("GGUF-" + gguf.architecture, layers, architecture=graph_architecture,
         vocabulary_size=int(gguf.vocab_size), max_sequence_length=int(gguf.context_length), embedding_weight_bytes=embedding.n_bytes,
         output_weight_bytes=output.n_bytes,
@@ -668,6 +925,11 @@ def build_model_from_gguf(gguf: GGUFMetadata):
         # Q4_K_M into its single-format registry would incorrectly reject the
         # otherwise valid mixed tensor graph.
         metadata={"gguf_sha256": gguf.sha256, "gguf_file_quantization": gguf.quantization, "gguf_tensor_count": len(gguf.tensor_directory),
+                  # This is the simulator equivalent of llama.cpp's
+                  # architecture enum.  Keep both the implementation family
+                  # and the raw GGUF ID in the artifact for auditability.
+                  "gguf_architecture_adapter": adapter.adapter_id,
+                  "gguf_architecture_id": gguf.architecture,
                   # Keep the native loading-unit geometry beside the executable
                   # graph.  llama.cpp counts nextn/MTP blocks in -ngl while the
                   # simulator intentionally keeps them out of the main graph.
@@ -687,11 +949,24 @@ def build_model_from_gguf(gguf: GGUFMetadata):
                   "gguf_output_norm_binding": ({k: v for k, v in binding(output_norm).items() if k != "block_size"}
                                                if output_norm is not None else None),
                   "gguf_norm_epsilon": gguf.metadata.get(
-                      f"{gguf.architecture}.attention.layer_norm_rms_epsilon")})
+                      f"{qwen35_metadata_prefix if is_qwen35 else gguf.architecture}.attention.layer_norm_rms_epsilon")})
     return ModelSpec(name="GGUF-" + gguf.architecture, graph=graph, metadata=graph.attributes)
 
 
+def build_model_from_gguf(gguf: GGUFMetadata):
+    """Select the GGUF graph implementation through the architecture registry.
+
+    ``_build_model_from_gguf_registered`` performs the exact metadata lookup
+    and fail-closed validation.  Keeping this public entry point as a thin
+    call avoids a second, competing architecture registry.
+    """
+
+    return _build_model_from_gguf_registered(gguf)
+
+
 __all__ = ["GGUFError", "GGUFTensor", "GGUFMetadata", "GGUF_METADATA_CACHE_SCHEMA",
-           "GGUF_METADATA_PARSER_SOURCE", "read_gguf_metadata", "read_gguf_metadata_only",
-           "write_gguf_metadata_cache", "read_gguf_metadata_cache", "gguf_metadata_digest", "compare_gguf_to_model",
+           "GGUF_METADATA_PARSER_SOURCE", "GGUF_MODEL_PRESET_SCHEMA",
+           "read_gguf_metadata", "read_gguf_metadata_only",
+           "write_gguf_metadata_cache", "read_gguf_metadata_cache", "gguf_metadata_digest",
+           "build_gguf_model_preset", "import_gguf_model_preset", "compare_gguf_to_model",
            "assert_gguf_parity", "build_model_from_gguf"]

@@ -10,6 +10,7 @@ _BACKEND_COMMIT = "0f3a71be15af836d277c9f918adfafb45732677e"
 _ARCHITECTURES = {
     "qwen2": ("qwen2", "before_last_ffn"),
     "qwen2_decoder": ("qwen2", "before_last_ffn"),
+    "qwen3": ("qwen3", "before_last_ffn"),
     "llama": ("llama", "before_last_ffn"),
     "llama_decoder": ("llama", "before_last_ffn"),
     "qwen3_5_hybrid_transformer": ("qwen35", "after_final_norm"),

@@ -391,6 +391,44 @@
     };
   }
 
+  // Convert the metadata-only preset emitted by the GGUF importer into a
+  // display graph.  GGUF does not prove an executable operator graph, so the
+  // result deliberately contains only a compact, non-executable backbone
+  // node; it never invents embedding/attention/LM-head connections.
+  function buildGraphFromGGUFPreset(value) {
+    const root = object(value);
+    const preset = object(root.preset);
+    const model = object(root.model);
+    const evidence = object(root.evidence);
+    const geometry = object(evidence.geometry);
+    const architecture = String(model.architecture || preset.architecture || geometry.architecture || "gguf").trim() || "gguf";
+    const name = String(preset.name || preset.id || root.name || "GGUF model").trim() || "GGUF model";
+    const layers = Math.max(0, Math.trunc(finite(model.n_layer ?? model.layer_count ?? geometry.n_layer)));
+    const hidden = Math.max(0, Math.trunc(finite(model.n_embd ?? model.hidden_size ?? geometry.n_embd)));
+    const heads = Math.max(0, Math.trunc(finite(model.n_head ?? model.attention_heads ?? geometry.n_head)));
+    const kvHeads = Math.max(0, Math.trunc(finite(model.n_head_kv ?? model.kv_heads ?? geometry.n_head_kv)));
+    const vocabulary = Math.max(0, Math.trunc(finite(model.vocab ?? model.vocabulary_size ?? geometry.vocab_size)));
+    const context = Math.max(0, Math.trunc(finite(model.context_length ?? model.max_sequence_length ?? geometry.context_length)));
+    const dtype = "unknown";
+    const inputId = "input.hidden";
+    const hiddenId = "backbone.output";
+    const operators = [
+      { operator_id: "input", op_kind: "model_input", sequence_index: 0, ports: [{ port_id: "out0", direction: "output", tensor_id: inputId, dtype, shape: ["B", "T"], layout: "logical" }] },
+      { operator_id: "gguf-backbone", op_kind: "unsupported_component_group", sequence_index: 1, ports: [{ port_id: "in0", direction: "input", tensor_id: inputId, dtype, shape: ["B", "T", hidden || "H"], layout: "logical" }, { port_id: "out0", direction: "output", tensor_id: hiddenId, dtype, shape: ["B", "T", hidden || "H"], layout: "logical" }], parameters: { architecture, layer_count: layers, attention_heads: heads, kv_heads: kvHeads, hidden_size: hidden, context_length: context }, attributes: { unsupported: true, source: "gguf", reason: "GGUF metadata does not prove the executable operator graph" } },
+      { operator_id: "output", op_kind: "model_output", sequence_index: 2, ports: [{ port_id: "in0", direction: "input", tensor_id: hiddenId, dtype, shape: ["B", "T", hidden || "H"], layout: "logical" }] },
+    ];
+    return normalizeModelGraph({
+      graph_id: String(preset.id || name), operators, tensors: [], transforms: [], executable: false,
+      attributes: {
+        authoritative: false, architecture, support_level: "metadata_only", source: "gguf_import",
+        symbols: { B: "batch", T: "sequence", H: hidden || "hidden", V: vocabulary },
+        max_sequence_length: context,
+        gguf_preset: clone(root),
+        ui: { collapsed_groups: ["gguf-backbone"], positions: {} },
+      }, provenance: [{ source: "gguf", architecture, layer_count: layers, tensor_count: Number(object(root.weights).tensor_count) || 0 }],
+    });
+  }
+
   function modelGraphAuthoringSummary(graphValue) {
     const graph = normalizeModelGraph(graphValue);
     const attributes = object(graph.attributes);
@@ -2903,6 +2941,7 @@
     modelPortCompatibility,
     updatePortContract,
     normalizeModelGraph,
+    buildGraphFromGGUFPreset,
     modelGraphAuthoringSummary,
     layerTemplate,
     groupRepeatedLayers,

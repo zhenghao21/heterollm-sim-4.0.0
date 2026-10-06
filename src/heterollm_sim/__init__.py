@@ -61,15 +61,51 @@ def __getattr__(name):
     if name in {"NativeCalibrationProfile", "load_native_calibration", "apply_native_calibration"}:
         from .calibration import NativeCalibrationProfile, load_native_calibration, apply_native_calibration
         return {"NativeCalibrationProfile": NativeCalibrationProfile, "load_native_calibration": load_native_calibration, "apply_native_calibration": apply_native_calibration}[name]
-    if name in {"GGUFError", "GGUFTensor", "GGUFMetadata", "read_gguf_metadata", "compare_gguf_to_model", "assert_gguf_parity", "build_model_from_gguf"}:
+    if name in {"GGUFError", "GGUFTensor", "GGUFMetadata", "read_gguf_metadata", "compare_gguf_to_model", "assert_gguf_parity", "build_model_from_gguf", "build_gguf_model_preset", "import_gguf_model_preset", "GGUFArchitectureAdapter", "resolve_gguf_architecture_adapter", "list_gguf_architecture_adapters"}:
         from .gguf_parity import (GGUFError, GGUFTensor, GGUFMetadata,
                                   read_gguf_metadata, compare_gguf_to_model,
-                                  assert_gguf_parity, build_model_from_gguf)
+                                  assert_gguf_parity, build_model_from_gguf,
+                                  build_gguf_model_preset, import_gguf_model_preset)
+        from .architecture_adapters import (GGUFArchitectureAdapter,
+                                             resolve_gguf_architecture_adapter,
+                                             list_gguf_architecture_adapters)
         return {"GGUFError": GGUFError, "GGUFTensor": GGUFTensor,
                 "GGUFMetadata": GGUFMetadata, "read_gguf_metadata": read_gguf_metadata,
                 "compare_gguf_to_model": compare_gguf_to_model,
                 "assert_gguf_parity": assert_gguf_parity,
-                "build_model_from_gguf": build_model_from_gguf}[name]
+                "build_model_from_gguf": build_model_from_gguf,
+                "build_gguf_model_preset": build_gguf_model_preset,
+                "import_gguf_model_preset": import_gguf_model_preset,
+                "GGUFArchitectureAdapter": GGUFArchitectureAdapter,
+                "resolve_gguf_architecture_adapter": resolve_gguf_architecture_adapter,
+                "list_gguf_architecture_adapters": list_gguf_architecture_adapters}[name]
+    if name in {
+        "MODEL_ARTIFACT_SCHEMA",
+        "ModelArtifactError",
+        "default_model_artifact_dir",
+        "make_model_artifact",
+        "save_model_artifact",
+        "load_model_artifact",
+        "list_model_artifacts",
+    }:
+        from .model_artifacts import (
+            MODEL_ARTIFACT_SCHEMA,
+            ModelArtifactError,
+            default_model_artifact_dir,
+            make_model_artifact,
+            save_model_artifact,
+            load_model_artifact,
+            list_model_artifacts,
+        )
+        return {
+            "MODEL_ARTIFACT_SCHEMA": MODEL_ARTIFACT_SCHEMA,
+            "ModelArtifactError": ModelArtifactError,
+            "default_model_artifact_dir": default_model_artifact_dir,
+            "make_model_artifact": make_model_artifact,
+            "save_model_artifact": save_model_artifact,
+            "load_model_artifact": load_model_artifact,
+            "list_model_artifacts": list_model_artifacts,
+        }[name]
     if name in {
         "ControllerKind",
         "ControllerTransactionBatch",
@@ -117,6 +153,18 @@ __all__ = [
     "compare_gguf_to_model",
     "assert_gguf_parity",
     "build_model_from_gguf",
+    "build_gguf_model_preset",
+    "import_gguf_model_preset",
+    "GGUFArchitectureAdapter",
+    "resolve_gguf_architecture_adapter",
+    "list_gguf_architecture_adapters",
+    "MODEL_ARTIFACT_SCHEMA",
+    "ModelArtifactError",
+    "default_model_artifact_dir",
+    "make_model_artifact",
+    "save_model_artifact",
+    "load_model_artifact",
+    "list_model_artifacts",
     "RuntimeExecutionPlan",
     "VLLMAdapter",
     "AccessRequest",

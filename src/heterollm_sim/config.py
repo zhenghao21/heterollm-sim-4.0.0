@@ -1181,7 +1181,9 @@ def hardware_from_dict(data: Mapping[str, Any]) -> HardwareSpec:
     )
 
 
-def model_from_dict(data: Mapping[str, Any]) -> ModelSpec:
+def model_from_dict(
+    data: Mapping[str, Any], *, artifact_dir: Optional[Path] = None
+) -> ModelSpec:
     _reject_training_fields(data, "model")
     _reject_unknown_fields(
         data,
@@ -1190,12 +1192,27 @@ def model_from_dict(data: Mapping[str, Any]) -> ModelSpec:
             "schema_version",
             "name",
             "graph",
+            "artifact_id",
             "text_backbone_only",
             "supported_modalities",
             "excluded_subgraphs",
             "metadata",
         ),
     )
+    artifact_id = data.get("artifact_id")
+    if artifact_id is not None:
+        if "graph" in data:
+            raise ValueError("model.graph 与 model.artifact_id 只能二选一")
+        from .model_artifacts import load_model_artifact
+
+        artifact = load_model_artifact(str(artifact_id), artifact_dir=artifact_dir)
+        loaded = artifact.get("model")
+        if not isinstance(loaded, Mapping):
+            raise ValueError("模型文件缺少有效的 model 定义")
+        data = dict(loaded)
+        metadata = dict(data.get("metadata", {}))
+        metadata["artifact_id"] = str(artifact_id)
+        data["metadata"] = metadata
     schema_version = _schema_version(
         data.get("schema_version", SCHEMA_VERSION), "model schema_version"
     )
@@ -2926,7 +2943,9 @@ def _bind_local_memory_link_sources(data: Mapping[str, Any]) -> Mapping[str, Any
     return {**data, "hardware": {**hardware, "components": components}}
 
 
-def scenario_from_dict(data: Mapping[str, Any]) -> ScenarioConfig:
+def scenario_from_dict(
+    data: Mapping[str, Any], *, model_artifact_dir: Optional[Path] = None
+) -> ScenarioConfig:
     data = _scenario_with_hardware_input(data)
     data = _bind_local_rtx5080_hardware_presets(data)
     data = _bind_local_memory_link_sources(data)
@@ -3001,7 +3020,9 @@ def scenario_from_dict(data: Mapping[str, Any]) -> ScenarioConfig:
     return ScenarioConfig(
         name=str(data.get("name", "")),
         hardware=hardware,
-        model=model_from_dict(section_data["model"]),
+        model=model_from_dict(
+            section_data["model"], artifact_dir=model_artifact_dir
+        ),
         placement=placement_from_dict(section_data["placement"]),
         workload=workload_from_dict(section_data["workload"]),
         component_profiles=component_profiles,

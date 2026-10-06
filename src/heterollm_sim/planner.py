@@ -22099,7 +22099,7 @@ def _nonflash_kv_view_audit(
                 or l.kv_materialized_tokens != 1 for l in lanes)):
         return uncovered("only_ordinary_materialized_prefill_decode_covered")
     if scenario.model.architecture not in {
-        "llama", "qwen2", "llama_decoder", "qwen2_decoder", "qwen3_5_hybrid_transformer",
+        "llama", "qwen2", "qwen3", "llama_decoder", "qwen2_decoder", "qwen3_5_hybrid_transformer",
     }:
         return uncovered("ordinary_full_attention_cache_architecture_unverified")
     binding = raw.get("configuration", {})

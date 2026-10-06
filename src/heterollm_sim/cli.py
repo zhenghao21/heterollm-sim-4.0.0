@@ -178,6 +178,14 @@ def build_parser() -> argparse.ArgumentParser:
     catalog_search.add_argument("query")
     catalog_search.add_argument("--limit", type=int, default=20)
 
+    gguf_parser = subparsers.add_parser(
+        "gguf-preset", help="将任意可解析 GGUF 转为保守的通用模型预设"
+    )
+    gguf_parser.add_argument("path", type=Path)
+    gguf_parser.add_argument(
+        "--output", type=Path, help="写入预设 JSON；未指定时输出到标准输出"
+    )
+
     architecture_parser = subparsers.add_parser(
         "architecture-presets", help="列出、查看或导出架构拓扑预设"
     )
@@ -232,6 +240,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         if args.command == "catalog":
             return _run_catalog_command(args)
+
+        if args.command == "gguf-preset":
+            from .gguf_parity import import_gguf_model_preset
+
+            payload = import_gguf_model_preset(args.path)
+            if args.output:
+                write_json(args.output, payload)
+                print("GGUF 通用模型预设已写入：{}".format(args.output))
+            else:
+                print(canonical_json(payload))
+            return 0
 
         if args.command == "architecture-presets":
             return _run_architecture_presets_command(args)

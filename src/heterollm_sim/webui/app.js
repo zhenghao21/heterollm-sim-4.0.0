@@ -2409,6 +2409,13 @@ function hardwareInputForScenario(scenario = state.scenario) {
 function scenarioPayloadForTransport(scenario = state.scenario) {
   if (!scenario) return null;
   const payload = ensureScenarioShape(deepClone(scenario));
+  const artifactId = String(payload.model?.metadata?.artifact_id || "").trim();
+  if (artifactId) {
+    payload.model = {
+      schema_version: AUTHORING_SCHEMA_VERSION,
+      artifact_id: artifactId,
+    };
+  }
   // Do not send a previous run's derived placement back as authoring input.
   // Keep policy and unrelated metadata; the V4 backend recomputes decisions.
   const controlPlane = payload.placement.metadata.control_plane;
@@ -3222,8 +3229,12 @@ function restoreRenderInteractionState(snapshot) {
 function markScenarioChanged(message = "", {
   mappingImpact = true,
   mappingReason = "影响映射的模型、拓扑、并行、驻留或结构性优化输入已修改。",
+  preserveModelArtifact = false,
 } = {}) {
   if (!state.scenario) return;
+  if (!preserveModelArtifact && state.scenario.model?.metadata) {
+    delete state.scenario.model.metadata.artifact_id;
+  }
   // Any draft edit invalidates backend-derived values. Authoring fields stay
   // visible until /normalize returns the newly resolved service.
   asArray(state.scenario.hardware?.components).forEach((component) => {
@@ -4206,13 +4217,14 @@ function runProgressDetailText(progressValue) {
 
 function syncRunButtons() {
   const active = runJobIsActive() || state.runJobSubmitting;
+  const modelGraphReadOnly = state.scenario?.model?.graph?.executable === false;
   if (dom.runButton) dom.runButton.textContent = active ? uiText("查看仿真进度", "View simulation progress") : uiText("运行仿真", "Run simulation");
   if (dom.rerunButton) dom.rerunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("重新运行", "Run again");
   if (dom.emptyRunButton) dom.emptyRunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("运行当前场景", "Run current scenario");
   for (const button of [dom.runButton, dom.rerunButton, dom.emptyRunButton]) {
-    if (button) button.disabled = state.busy;
+    if (button) button.disabled = state.busy || modelGraphReadOnly;
   }
-  if (dom.compareButton) dom.compareButton.disabled = state.busy || active;
+  if (dom.compareButton) dom.compareButton.disabled = state.busy || active || modelGraphReadOnly;
 }
 
 function renderRunJobDialog() {
@@ -10924,7 +10936,6 @@ function applyArchitecturePresetDetail(detail) {
     state.scenario.hardware = hardware;
     const rebuiltProfiles = resetArchitectureDependentProfiles(state.scenario);
     resetPlacementForArchitecturePreset(state.scenario.placement, hardware.name);
-    seedDeepseekV3HbfWeightTargets(state.scenario);
     state.topologyView = normalized.view;
     state.nodePositions = normalized.view.layout.positions;
     state.nodeSizes = {};
@@ -11477,40 +11488,6 @@ function resetModelGraphForPreset(graphValue) {
   return graph;
 }
 
-// DeepSeek-V3's routed expert weights are much larger than its dense and
-// attention weights. On the capacity-expanded 3-HBF analysis topology, seed
-// only the routed expert tensors across HBF0/1/2; the runtime control plane
-// still generates and owns the final placement decision.
-function seedDeepseekV3HbfWeightTargets(scenario = state.scenario) {
-  if (!scenario || String(scenario?.model?.metadata?.preset_id || "") !== "deepseek-v3-671b") return 0;
-  const hbfIds = asArray(scenario?.hardware?.components)
-    .filter((component) => normalizedComponentKind(component?.kind) === "hbf"
-      && asObject(component?.metadata).access_mode === "memory"
-      && asObject(component?.metadata).writable !== false)
-    .map((component) => String(component.component_id || "").trim())
-    .filter(Boolean)
-    .sort();
-  if (hbfIds.length < 3) return 0;
-  const routedLayers = asArray(scenario?.model?.graph?.operators)
-    .filter((operator) => operator?.op_kind === "layer_group")
-    .flatMap((operator) => {
-      const overrides = asObject(asObject(operator.parameters).overrides);
-      return Object.entries(overrides)
-        .filter(([, value]) => asObject(asObject(value).metadata).preset_pattern === "routed_moe")
-        .map(([layerId]) => String(layerId));
-    })
-    .filter(Boolean)
-    .sort();
-  if (!routedLayers.length) return 0;
-  const options = controlPlanePolicyOptionsForPlacement(scenario.placement, { create: true });
-  const targets = asObject(options.weight_tensor_targets);
-  routedLayers.forEach((layerId, index) => {
-    targets[`${layerId}.expert_weights`] = hbfIds[index % hbfIds.length];
-  });
-  options.weight_tensor_targets = targets;
-  return routedLayers.length;
-}
-
 function applyPresetDetailToScenario(payload) {
   const preset = asObject(payload?.preset);
   const readiness = presetMaterializationReadiness(payload);
@@ -11534,7 +11511,6 @@ function applyPresetDetailToScenario(payload) {
   resetModelGraphForPreset(nextModel.graph);
   state.scenario.model = nextModel;
   state.scenario.placement.model_name = nextModel.name;
-  seedDeepseekV3HbfWeightTargets(state.scenario);
   markScenarioChanged();
   return { preset, level, nextModel, removedByGroup, layerToStage };
 }
@@ -11612,6 +11588,7 @@ const MODEL_OPERATOR_LABELS = Object.freeze({
   mtp_prediction_layer: "多 Token 预测层（MTP Prediction Layer）", mtp_aux_head: "多 Token 辅助头（MTP Auxiliary Head）",
   output: "输出（Output）", model_output: "模型输出（Model Output）",
   linear: "线性层（Linear）", transform: "显式变换（Transform）",
+  unsupported_component_group: "未验证 GGUF 主干（Unverified GGUF Backbone）",
 });
 
 const MODEL_OVERVIEW_PATTERN_LABELS = Object.freeze({
@@ -11670,7 +11647,12 @@ function modelPortCompatibility(outputPort, inputPort) {
 function normalizeModelGraphPayload(payloadValue, modelValue = {}) {
   const root = asObject(payloadValue);
   const model = asObject(modelValue);
-  const candidate = asObject(root.graph_id ? root : asObject(root.model).graph || root.graph || model.graph);
+  let candidate = asObject(root.graph_id ? root : asObject(root.model).graph || root.graph || model.graph);
+  // A metadata-only GGUF preset has no executable model.graph.  Materialize
+  // its compact display graph here so imported presets remain inspectable.
+  if (!Object.keys(candidate).length && (root.schema_version === "heterollm.gguf-model-preset/v1" || root.preset?.source === "gguf_import")) {
+    candidate = ModelGraph.buildGraphFromGGUFPreset(root);
+  }
   if (!Object.keys(candidate).length) throw new Error("V4 model.graph 是必填的唯一执行定义。");
   return ModelGraph.normalizeModelGraph(candidate, model);
 }
@@ -13330,7 +13312,10 @@ function renderModelGraphDiagnostics() {
         ? `${modelGraphOverviewName(selected)} selected · details are shown in the component inspector · typed ports preserve contract validation`
         : "No component selected · select a component to inspect it · typed ports preserve contract validation",
     );
-  dom.modelGraphStatus.textContent = messages.at(-1) || (state.modelGraphEditor.connectMode
+  const readOnlyNotice = graph.executable === false
+    ? uiText("GGUF 证据图：架构连接未验证，只读查看。", "GGUF evidence graph: architecture connections are unverified and read-only.")
+    : "";
+  dom.modelGraphStatus.textContent = messages.at(-1) || readOnlyNotice || (state.modelGraphEditor.connectMode
     ? uiText("连接模式：先选输出端口，再选输入端口", "Connect mode: select an output port, then an input port")
     : fallback);
   dom.modelGraphStatus.title = dom.modelGraphStatus.textContent;
@@ -13947,12 +13932,13 @@ function bindModelGraphDynamicEvents() {
 function syncModelGraphControls() {
   if (!dom.modelGraphUndoButton) return;
   const graphUi = modelGraphUi();
+  const readOnly = ensureScenarioModelGraph().executable === false;
   const focus = graphUi.mode === "focus";
   if (dom.modelGraphBackButton) dom.modelGraphBackButton.hidden = !focus;
-  dom.modelGraphConnectButton.disabled = false;
+  dom.modelGraphConnectButton.disabled = readOnly;
   dom.modelGraphConnectButton.setAttribute("aria-pressed", String(state.modelGraphEditor.connectMode));
-  dom.modelGraphUndoButton.disabled = !state.modelGraphEditor.history.undo.length;
-  dom.modelGraphRedoButton.disabled = !state.modelGraphEditor.history.redo.length;
+  dom.modelGraphUndoButton.disabled = readOnly || !state.modelGraphEditor.history.undo.length;
+  dom.modelGraphRedoButton.disabled = readOnly || !state.modelGraphEditor.history.redo.length;
 }
 
 function travelModelGraphHistory(direction) {
@@ -14284,7 +14270,14 @@ function endModelGraphPointer(event) {
 function renderModel() {
   const model = state.scenario.model;
   ensureScenarioModelGraph(model);
-  const summary = ModelGraph.modelGraphAuthoringSummary(model.graph);
+  const graph = model.graph;
+  const summary = graph.executable === false
+    ? {
+      architecture: String(graph.attributes?.architecture || "unknown"),
+      vocabulary_size: Number(graph.attributes?.symbols?.V || 0),
+      max_sequence_length: Number(graph.attributes?.max_sequence_length || 0),
+    }
+    : ModelGraph.modelGraphAuthoringSummary(graph);
   dom.modelMetaForm.innerHTML = [
     modelSummaryFact("模型名称（Model Name）", "name", model.name),
     modelSummaryFact("模型架构（Architecture）", "architecture", summary.architecture),
@@ -19340,6 +19333,139 @@ function exportScenario() {
   toast("JSON 已导出", anchor.download, "success");
 }
 
+async function saveCurrentModelArtifact() {
+  if (!state.scenario?.model || state.busy) return;
+  try {
+    if (state.scenario.model.graph?.executable === false) {
+      throw new Error("当前模型图仅包含未验证的证据结构，不能保存为可仿真的模型文件。");
+    }
+    const existingArtifactId = String(state.scenario.model.metadata?.artifact_id || "").trim();
+    const payload = await apiRequest("/model-files", {
+      method: "POST",
+      body: JSON.stringify({
+        model: deepClone(state.scenario.model),
+        ...(existingArtifactId ? { artifact_id: existingArtifactId } : {}),
+        provenance: { source_type: "frontend_model_graph" },
+      }),
+    });
+    const artifactId = String(payload?.artifact_id || "").trim();
+    if (!artifactId) throw new Error("模型文件 API 未返回 artifact_id。" );
+    state.scenario.model.metadata = {
+      ...asObject(state.scenario.model.metadata),
+      artifact_id: artifactId,
+    };
+    markScenarioChanged("", { preserveModelArtifact: true });
+    toast("模型文件已保存", `${state.scenario.model.name || "模型"} · ${artifactId}`, "success", 5000);
+  } catch (error) {
+    toast("模型文件保存失败", chineseMessage(error, "无法保存当前模型图。"), "error", 7000);
+  }
+}
+
+function promptModelInteger(label, defaultValue, minimum = 1) {
+  const raw = window.prompt(`${label}：`, String(defaultValue));
+  if (raw == null) return null;
+  const value = Number(raw.trim());
+  if (!Number.isInteger(value) || value < minimum) {
+    throw new Error(`${label} 必须是大于等于 ${minimum} 的整数。`);
+  }
+  return value;
+}
+
+function createCustomModelGraph() {
+  if (state.busy || !state.scenario) return;
+  try {
+    if (!ModelGraph?.buildModelGraphFromLayerSpecs) throw new Error("模型图编辑器尚未加载完成，请稍后重试。");
+    const name = String(window.prompt("模型名称：", "custom-decoder-model") || "").trim();
+    if (!name) return;
+    const layerCount = promptModelInteger("Transformer 层数", 4);
+    if (layerCount == null) return;
+    const hiddenSize = promptModelInteger("隐藏维度 hidden_size", 4096);
+    if (hiddenSize == null) return;
+    const intermediateSize = promptModelInteger("前馈维度 intermediate_size", hiddenSize * 4);
+    if (intermediateSize == null) return;
+    const attentionHeads = promptModelInteger("注意力头数 attention_heads", 32);
+    if (attentionHeads == null) return;
+    const kvHeads = promptModelInteger("KV 头数 kv_heads", attentionHeads);
+    if (kvHeads == null) return;
+    const vocabularySize = promptModelInteger("词表大小 vocabulary_size", 32000);
+    if (vocabularySize == null) return;
+    const maxSequenceLength = promptModelInteger("最大序列长度 max_sequence_length", 4096);
+    if (maxSequenceLength == null) return;
+    if (hiddenSize % attentionHeads !== 0) throw new Error("hidden_size 必须能被 attention_heads 整除，才能推导 attention_head_dim。");
+    if (kvHeads > attentionHeads || attentionHeads % kvHeads !== 0) throw new Error("kv_heads 必须不大于 attention_heads，且能被 attention_heads 整除。");
+
+    const attentionHeadDim = hiddenSize / attentionHeads;
+    const layers = Array.from({ length: layerCount }, (_, index) => ({
+      schema_version: AUTHORING_SCHEMA_VERSION,
+      layer_id: `layer-${String(index).padStart(3, "0")}`,
+      kind: "dense",
+      hidden_size: hiddenSize,
+      intermediate_size: intermediateSize,
+      attention_heads: attentionHeads,
+      kv_heads: kvHeads,
+      attention_head_dim: attentionHeadDim,
+      sequence_mixer: "full_attention",
+      linear_attention: null,
+      num_experts: 1,
+      experts_per_token: 1,
+      shared_expert_intermediate_size: 0,
+      shared_expert_gate: false,
+      dtype: "bf16",
+      quantization: null,
+      gated_mlp: true,
+      weight_bytes: 0,
+      metadata: { source: "frontend_custom_model_graph" },
+    }));
+    const graph = ModelGraph.buildModelGraphFromLayerSpecs(layers, {
+      schema_version: AUTHORING_SCHEMA_VERSION,
+      graph_id: name,
+      name,
+      architecture: "custom_decoder_only_transformer",
+      vocabulary_size: vocabularySize,
+      max_sequence_length: maxSequenceLength,
+      embedding_weight_bytes: 0,
+      output_weight_bytes: 0,
+    });
+    const next = deepClone(state.scenario);
+    next.model = {
+      schema_version: AUTHORING_SCHEMA_VERSION,
+      name,
+      graph,
+      text_backbone_only: true,
+      supported_modalities: ["text"],
+      excluded_subgraphs: [],
+      metadata: {
+        source: "frontend_custom_model_graph",
+        architecture: "custom_decoder_only_transformer",
+        authoring: "standard_decoder_template",
+      },
+    };
+    setScenario(next, { dirty: true, message: "已创建模型图模板；可在画布中编辑端口 Shape、DType 与连接。" });
+    toast("模型图已创建", `${name} · ${layerCount} 层`, "success", 5000);
+  } catch (error) {
+    toast("无法创建模型图", chineseMessage(error, "请检查模型维度参数。"), "error", 7000);
+  }
+}
+
+async function loadModelArtifactById() {
+  if (state.busy) return;
+  const artifactId = window.prompt("输入模型文件 artifact_id：", String(state.scenario?.model?.metadata?.artifact_id || "").trim());
+  if (!artifactId?.trim()) return;
+  try {
+    const payload = await apiRequest(`/model-files/${encodeURIComponent(artifactId.trim())}`, { method: "GET", headers: {} });
+    const model = asObject(payload?.model);
+    if (!model.graph) throw new Error("模型文件缺少 model.graph。" );
+    const next = deepClone(state.scenario || {});
+    next.model = model;
+    next.model.metadata = { ...asObject(next.model.metadata), artifact_id: String(payload.artifact_id || artifactId.trim()) };
+    ensureScenarioShape(next);
+    setScenario(next, { dirty: true, message: `模型文件已加载：${payload.artifact_id || artifactId.trim()}` });
+    toast("模型文件已加载", String(next.model.name || artifactId.trim()), "success", 5000);
+  } catch (error) {
+    toast("模型文件加载失败", chineseMessage(error, "无法读取指定模型文件。"), "error", 7000);
+  }
+}
+
 function exportHardwareInput() {
   if (!state.scenario) return;
   const text = `${JSON.stringify(hardwareInputForScenario(state.scenario), null, 2)}\n`;
@@ -19383,7 +19509,32 @@ async function importScenarioFile(file) {
   try {
     const text = await file.text();
     const value = JSON.parse(text);
-    if (value?.kind === "hardware_input" && value.hardware) {
+    if (value?.schema_version === "heterollm.model-artifact/v1") {
+      const model = asObject(value.model);
+      if (!model.graph) throw new Error("模型文件缺少可执行 model.graph。" );
+      const next = deepClone(state.scenario || {});
+      next.model = model;
+      next.model.metadata = { ...asObject(next.model.metadata), artifact_id: String(value.artifact_id || "") };
+      ensureScenarioShape(next);
+      setScenario(next, { dirty: true, message: "模型文件已导入；已恢复模型算子图与张量合同" });
+    } else if (value?.schema_version === "heterollm.gguf-model-preset/v1" || value?.preset?.source === "gguf_import") {
+      const graph = value?.graph?.operators?.length
+        ? ModelGraph.normalizeModelGraph(value.graph)
+        : ModelGraph.buildGraphFromGGUFPreset(value);
+      const preset = asObject(value.preset);
+      const next = deepClone(state.scenario || {});
+      next.model = {
+        schema_version: AUTHORING_SCHEMA_VERSION,
+        name: String(preset.name || preset.id || "GGUF model"),
+        graph,
+        text_backbone_only: true,
+        supported_modalities: ["text"],
+        excluded_subgraphs: ["unproven_execution_graph"],
+        metadata: { gguf_preset: deepClone(value), source: "gguf_import", support_level: "metadata_only" },
+      };
+      ensureScenarioShape(next);
+      setScenario(next, { dirty: true, message: "GGUF 模型预设已导入；已生成可查看的模型架构图" });
+    } else if (value?.kind === "hardware_input" && value.hardware) {
       if (String(value.contract_version || "") !== "2") {
         throw new Error("统一硬件参数必须使用 contract_version=2。旧的双表格式已移除。");
       }
@@ -19454,7 +19605,7 @@ async function importScenarioFile(file) {
       setScenario(normalized, { dirty: true, message: "JSON 已导入；硬件已绑定到组件预设" });
     }
   } catch (error) {
-    const message = "导入文件不是有效的场景 JSON，或者场景结构不完整。";
+    const message = "导入文件不是有效的场景 JSON 或模型文件，或者结构不完整。";
     state.validation = { errors: [normalizeIssue({ code: "import_error", message_zh: message }, "json", "error")], warnings: [], information: [] };
     renderDiagnostics();
     openDiagnostics();
@@ -19473,7 +19624,7 @@ function cacheDom() {
     "diagnosticContent", "closeDiagnosticsButton", "hardwareName", "topologySummary", "hardwarePresetsButton", "topologyEditMenuButton", "topologyGroupMenuButton", "topologyConnectMenuButton", "selectModeButton", "connectModeButton", "protocolSelect", "protocolCatalogButton", "protocolVersionInput", "protocolUnitsInput", "protocolBandwidthInput", "protocolLatencyInput", "protocolPayloadInput", "protocolPresetSelection",
     "connectionHint", "topologySelectionStatus", "topologyRouteStatus", "undoTopologyButton", "redoTopologyButton", "createGroupButton", "setGroupRootButton", "toggleGroupButton", "releaseGroupButton", "copyTopologyButton", "pasteTopologyButton",
     "topologyZoomValue", "fitCanvasButton", "topologyCanvas", "topologyWorld", "linkLayer", "groupLayer", "nodeLayer", "topologyLinkTooltip", "topologyMarquee", "canvasEmpty", "inspectorTitle", "deleteSelectionButton",
-    "inspectorContent", "modelMetaForm", "modelPresetsButton", "modelGraphBackButton", "modelGraphConnectButton", "modelGraphAutoLayoutButton", "modelGraphFitButton", "modelGraphZoomOutButton", "modelGraphZoomValue", "modelGraphZoomInButton", "modelGraphUndoButton", "modelGraphRedoButton", "modelGraphStatus", "modelGraphCanvas", "modelGraphWorld", "modelGraphEdgeLayer", "modelGraphGroupLayer", "modelGraphNodeLayer", "modelGraphInspectorTitle", "modelGraphInspectorContent", "modelGraphDiagnostics",
+    "inspectorContent", "modelMetaForm", "modelPresetsButton", "modelNewGraphButton", "modelSaveFileButton", "modelLoadFileButton", "modelGraphBackButton", "modelGraphConnectButton", "modelGraphAutoLayoutButton", "modelGraphFitButton", "modelGraphZoomOutButton", "modelGraphZoomValue", "modelGraphZoomInButton", "modelGraphUndoButton", "modelGraphRedoButton", "modelGraphStatus", "modelGraphCanvas", "modelGraphWorld", "modelGraphEdgeLayer", "modelGraphGroupLayer", "modelGraphNodeLayer", "modelGraphInspectorTitle", "modelGraphInspectorContent", "modelGraphDiagnostics",
     "placementControls", "controlPlaneStatus", "controlPlaneStatusBadge", "controlPlaneStatusSummary", "controlPlaneStatusMetrics", "controlPlaneMemoryTiers", "controlPlaneMemoryTierBody", "effectiveMappingMeta", "effectiveMappingSummary", "effectiveMappingFilterForm", "effectiveMappingSearchInput", "effectiveMappingRankFilter", "effectiveMappingComponentFilter", "resetEffectiveMappingFiltersButton", "effectiveOpMappingMeta", "effectiveOpMappingBody", "effectiveOpPreviousButton", "effectiveOpNextButton", "effectiveOpPageStatus", "effectiveTensorShardMeta", "effectiveTensorShardBody", "effectiveTensorPreviousButton", "effectiveTensorNextButton", "effectiveTensorPageStatus", "workloadMetaForm", "addRequestButton", "requestTableBody", "compareButton", "rerunButton",
     "playbackFidelity", "traceEmpty", "traceRunButton", "traceContent", "traceResetButton", "tracePreviousButton", "tracePlayButton", "traceNextButton", "traceTimeline", "playbackTime", "traceRequestFilter", "traceBatchFilter", "traceRankFilter", "tracePlaybackMeta", "traceEventMeta", "tracePageBar", "tracePageStatus", "tracePagePreviousButton", "tracePageNextButton", "traceNarrativeState", "traceNarrativePrimary", "traceNarrativeSecondary", "traceTopologyPanel", "traceTopologyCanvas", "traceTopologyWorld", "traceGroupLayer", "traceLinkLayer", "traceParticleLayer", "traceNodeLayer", "traceLinkTooltip", "traceProtocolLegend", "traceLocateActiveButton", "traceEventDrawer", "traceDrawerCloseButton", "traceDrawerOpenButton", "traceArrangeFitButton", "traceAutoLayoutButton", "traceFitButton", "traceZoomOutButton", "traceZoomValue", "traceZoomInButton", "traceFullscreenButton", "traceEventDetails", "traceDiagnosticCopyButton", "traceEventStreamDisclosure", "traceEventKeywordFilter", "traceEventCategoryFilter", "traceEventPhaseFilter", "traceEventTemporalFilter", "traceEventPreviousPageButton", "traceEventNextPageButton", "traceEventPageStatus", "traceEventBody", "traceLimitations",
     "resultsEmpty", "emptyRunButton", "resultsContent", "runManifestBar", "comparisonStrip", "metricGrid", "componentTimeseriesPanel", "componentTimeseriesFidelity", "componentTimeseriesFilterForm", "addTimeseriesChartButton", "timeseriesPointMeta", "componentTimeseriesCharts", "runtimeModeMeta", "runtimeSummary", "bottleneckMeta", "utilizationList",
@@ -19514,6 +19665,9 @@ function bindStaticEvents() {
   dom.canonicalExportButton.addEventListener("click", () => { void exportCanonicalIr(); });
   dom.jsonButton.addEventListener("click", openJsonDialog);
   dom.modelPresetsButton.addEventListener("click", openModelPresetsDialog);
+  dom.modelNewGraphButton.addEventListener("click", createCustomModelGraph);
+  dom.modelSaveFileButton.addEventListener("click", () => { void saveCurrentModelArtifact(); });
+  dom.modelLoadFileButton.addEventListener("click", () => { void loadModelArtifactById(); });
   dom.hardwarePresetsButton.addEventListener("click", () => { void openHardwarePresetsDialog("architectures"); });
   dom.createComponentPresetButton.addEventListener("click", () => { void openComponentPresetEditor(); });
   dom.componentPresetEditorForm.addEventListener("submit", (event) => {
