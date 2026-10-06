@@ -1006,6 +1006,21 @@ def _build_model_graph(
         pp_degree,
     )
     canonical_tensors = {tensor.tensor_id: tensor for tensor in tensors}
+    def execution_attributes(value: Mapping[str, Any]) -> Dict[str, Any]:
+        """Drop compiler-only placement bookkeeping from semantic comparison.
+
+        ``placement_extension_tensor`` only records why a tensor was included
+        by the placement projection.  It does not change storage identity,
+        dtype, shape, layout, or bytes and therefore must not make an
+        otherwise lossless execution projection appear lossy.
+        """
+
+        return {
+            str(key): item
+            for key, item in value.items()
+            if str(key) != "placement_extension_tensor"
+        }
+
     authoritative_contracts_match = all(
         (
             canonical_tensors[tensor.tensor_id].role == tensor.role
@@ -1014,8 +1029,10 @@ def _build_model_graph(
             and canonical_tensors[tensor.tensor_id].dtype == tensor.dtype
             and canonical_tensors[tensor.tensor_id].shape == tensor.shape
             and canonical_tensors[tensor.tensor_id].layout == tensor.layout
-            and dict(canonical_tensors[tensor.tensor_id].attributes)
-            == dict(tensor.attributes)
+            and execution_attributes(
+                canonical_tensors[tensor.tensor_id].attributes
+            )
+            == execution_attributes(tensor.attributes)
         )
         for tensor in (source_lm_head_weight, source_lm_head_output)
     )
