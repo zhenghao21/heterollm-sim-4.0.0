@@ -1,7 +1,11 @@
 import pytest
 
 from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
-from heterollm_sim.data_motion import PhysicalRuntimeContext, resolve_physical_task
+from heterollm_sim.data_motion import (
+    PhysicalRuntimeContext,
+    register_physical_allocations,
+    resolve_physical_task,
+)
 from heterollm_sim.memory_types import AccessRequest, DramConfig, MemoryKind, Operation, parse_physical_memory_config
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.event_kernel import UnifiedEventKernel
@@ -92,6 +96,84 @@ def test_unified_event_kernel_commits_gddr_at_dispatch():
     event = kernel.step()
     assert event is not None
     assert event.task.metadata["physical_execution"]["physical_bytes"] == 64
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("offset_bytes", 1.5, "offset_bytes"),
+        ("generation", 2.5, "generation"),
+        ("alias_offset_bytes", 3.5, "alias_offset_bytes"),
+    ),
+)
+def test_physical_descriptor_rejects_fractional_integer_fields(
+    field, value, message
+):
+    """Malformed descriptor integers must not be silently truncated."""
+
+    raw = _config().__dict__
+    access = {
+        "operation": "read",
+        "buffer_id": "activation",
+        "byte_count": 1,
+        "physical_owner": "gddr0",
+        "resource_id": "gddr0",
+        "offset_bytes": 0,
+    }
+    if field == "alias_offset_bytes":
+        declarations = (
+            {
+                "buffer_id": "base",
+                "size_bytes": 64,
+                "physical_owner": "gddr0",
+            },
+            {
+                "buffer_id": "activation",
+                "size_bytes": 1,
+                "physical_owner": "gddr0",
+                "alias_of": "base",
+                "alias_offset_bytes": value,
+            },
+        )
+    else:
+        declarations = ()
+        access[field] = value
+    task = TaskSpec(
+        task_id="malformed.descriptor",
+        request_id="request-0",
+        name="malformed physical descriptor",
+        category=TaskCategory.MEMORY,
+        metadata={
+            "physical_memory_config": raw,
+            "physical_owner": "gddr0",
+            "physical_allocations": declarations,
+            "memory_access": access,
+        },
+    )
+    with pytest.raises(ValueError, match=message):
+        register_physical_allocations(task, PhysicalRuntimeContext())
+
+
+def test_physical_allocation_accepts_allocation_generation_alias():
+    runtime = PhysicalRuntimeContext()
+    task = TaskSpec(
+        task_id="generation.alias",
+        request_id="request-0",
+        name="allocation generation alias",
+        category=TaskCategory.MEMORY,
+        metadata={
+            "physical_memory_config": _config().__dict__,
+            "physical_allocations": ({
+                "buffer_id": "activation",
+                "size_bytes": 64,
+                "allocation_generation": 7,
+                "physical_owner": "gddr0",
+            },),
+        },
+    )
+    register_physical_allocations(task, runtime)
+    allocation = runtime.allocators["gddr0"].lookup("activation", 7)
+    assert allocation.generation == 7
 
 
 @pytest.mark.parametrize("offset", (0, 64, 128))

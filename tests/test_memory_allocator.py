@@ -75,3 +75,22 @@ def test_alias_generation_and_canonical_range_are_explicit_and_transitive():
         allocator.release("buffer", generation=3)
     allocator.release("view", generation=7)
     allocator.release("buffer", generation=3)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    (
+        ("size_bytes", 64.5),
+        ("size_bytes", "64"),
+        ("generation", 1.5),
+        ("generation", "1"),
+        ("alias_offset_bytes", 1.5),
+        ("alias_offset_bytes", "0"),
+    ),
+)
+def test_register_rejects_non_integer_descriptor_values(field, value):
+    allocator = PhysicalAddressAllocator(256)
+    declaration = {"buffer_id": "buffer", "size_bytes": 64}
+    declaration[field] = value
+    with pytest.raises(AllocationError):
+        allocator.register(declaration)

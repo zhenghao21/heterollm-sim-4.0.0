@@ -1184,6 +1184,35 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
         raise GGUFError("GGUF tie_word_embeddings metadata conflicts with independent output.weight")
     if tie_metadata is False and output_tied_to_embedding:
         raise GGUFError("GGUF tie_word_embeddings=false but output.weight is absent")
+    # The output projection is a physical GGUF tensor in its own right.  Keep
+    # its descriptor at graph scope instead of making the planner infer it from
+    # the final decoder block.  Tied embeddings reuse the same bytes and GGML
+    # stores that matrix in the same [hidden, vocabulary] orientation used by
+    # the output projection.
+    quantized_projection_types = {
+        "Q4_K", "Q5_K", "Q6_K", "Q4_0", "Q5_0", "Q8_0",
+        "IQ2_XXS", "IQ2_XS", "IQ3_XXS", "IQ3_S", "IQ4_NL", "IQ4_XS",
+        "IQ2_S", "IQ1_S", "IQ1_M",
+    }
+    output_projection: dict[str, Any] = {}
+    if output.type_name in quantized_projection_types:
+        output_k, output_n = _matrix_extent(output)
+        output_projection = {
+            "schema_version": "heterollm.weight-projections/v1",
+            "projections": {
+                "lm_head": {
+                    "segments": [{
+                        "segment_id": "lm-head-0",
+                        "physical_tensor_name": output.name,
+                        "k": output_k,
+                        "n": output_n,
+                        "format": output.type_name,
+                        "physical_bytes": output.n_bytes,
+                        "tp_shard_axis": "n",
+                    }]
+                }
+            },
+        }
     graph_architecture = adapter.graph_family if is_qwen35 else gguf.architecture
     graph = build_model_graph_from_layer_specs("GGUF-" + gguf.architecture, layers, architecture=graph_architecture,
         vocabulary_size=int(gguf.vocab_size), max_sequence_length=int(gguf.context_length), embedding_weight_bytes=embedding.n_bytes,
@@ -1215,6 +1244,8 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
                   # audit fields as one global artifact format.
                   "gguf_embedding_binding": {k: v for k, v in binding(embedding).items() if k != "block_size"},
                   "gguf_output_binding": {k: v for k, v in binding(output).items() if k != "block_size"},
+                  **({"weight_projection_descriptors": output_projection}
+                     if output_projection else {}),
                   # Static input only; these bytes already belong to the model
                   # artifact and must not create a second capacity allocation.
                   "gguf_output_norm_binding": ({k: v for k, v in binding(output_norm).items() if k != "block_size"}

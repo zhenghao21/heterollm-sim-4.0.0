@@ -1233,6 +1233,20 @@ def hardware_input_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
 
 
 def scenario_to_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
+    # This is an authoring payload: /normalize output must be accepted by the
+    # same input parser. Runtime placement is recomputed from the policy; its
+    # materialized maps are not legal V4 authoring fields. Cached decisions
+    # and preparation markers must leave with those maps so reimport runs
+    # placement again instead of treating an empty mapping as prepared.
+    placement = to_primitive(scenario.placement)
+    for field_name in ("op_to_component", "tensor_to_component", "tensor_bytes"):
+        placement[field_name] = {}
+    placement_metadata = placement.get("metadata", {})
+    for field_name in ("llama_cpp_runtime_fingerprint", "llama_device_memory_input_fingerprint"):
+        placement_metadata.pop(field_name, None)
+    control_plane = placement_metadata.get("control_plane", {})
+    control_plane.pop("decision", None)
+    control_plane.pop("evidence", None)
     component_profiles = to_primitive(scenario.component_profiles)
     profiles: Dict[str, Any] = {
         "components": component_profiles,
@@ -1258,7 +1272,7 @@ def scenario_to_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
         "assumptions": list(scenario.assumptions),
         "hardware": to_primitive(scenario.hardware),
         "model": to_primitive(scenario.model),
-        "placement": to_primitive(scenario.placement),
+        "placement": placement,
         "workload": to_primitive(scenario.workload),
         "profiles": profiles,
     }

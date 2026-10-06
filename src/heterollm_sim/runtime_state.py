@@ -24,6 +24,12 @@ def _checked_string_set(
     values: Iterable[object],
     field_name: str,
 ) -> Set[str]:
+    # A bare string is iterable, but it represents one cache/request id, not
+    # a collection of one-character ids.  Reject it explicitly so callers do
+    # not silently corrupt the state shape (e.g. ``"request-1"`` becoming a
+    # set of characters).
+    if isinstance(values, (str, bytes)):
+        raise ValueError("{} must be an iterable of non-empty strings, not a string".format(field_name))
     result: Set[str] = set()
     for value in values:
         if not isinstance(value, str) or not value:

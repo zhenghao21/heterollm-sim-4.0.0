@@ -368,6 +368,8 @@ class NandConfig:
             _positive_int("parallel_units", self.parallel_units)
         if self.internal_transfer_bytes is not None:
             _positive_int("internal_transfer_bytes", self.internal_transfer_bytes)
+        if not isinstance(self.planes_independent, bool):
+            raise ValueError("planes_independent must be a boolean")
         if self.capacity_bytes is not None:
             _positive_int("capacity_bytes", self.capacity_bytes)
         _positive_int("max_outstanding_requests", self.max_outstanding_requests)

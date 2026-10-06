@@ -3015,6 +3015,7 @@
     });
     const outputProducer = new Map();
     const rawInputConsumers = new Map();
+    const rawPortContracts = new Map();
     const adjacency = new Map([...rawOperatorIds].map((id) => [id, new Set()]));
     const rawRefs = (operator, direction) => {
       const fields = { input: "input_tensor_ids", output: "output_tensor_ids", weight: "weight_tensor_ids" };
@@ -3073,6 +3074,21 @@
           return;
         }
         const contractKeys = ["dtype", "shape", "layout"];
+        // A tensor may omit a contract field and inherit it from its ports.
+        // Compare those declarations before the first port fills the tensor;
+        // otherwise normalization would silently erase later disagreements.
+        if (!rawPortContracts.has(tensorId)) rawPortContracts.set(tensorId, new Map());
+        const declaredFields = rawPortContracts.get(tensorId);
+        for (const key of contractKeys) {
+          if (!Object.hasOwn(port, key)) continue;
+          const value = stableStringify(normalizedContract({ [key]: port[key] })[key]);
+          const previous = declaredFields.get(key);
+          if (previous && previous.value !== value) {
+            preflightErrors.push(`张量 ${tensorId} 的端口契约 ${key} 不一致：${previous.operatorId}.${previous.portId}、${operatorId}.${portId}。`);
+          } else if (!previous) {
+            declaredFields.set(key, { value, operatorId, portId });
+          }
+        }
         const conflictingKey = contractKeys.find((key) => Object.hasOwn(port, key)
           && Object.hasOwn(tensor, key)
           && stableStringify(normalizedContract({ [key]: port[key] })[key])

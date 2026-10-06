@@ -213,11 +213,17 @@ class PhysicalAddressAllocator:
         if size is None:
             raise AllocationError("physical allocation requires size_bytes")
         return self.allocate(
-            buffer_id, int(size), int(declaration.get("generation", declaration.get("allocation_generation", 0))),
+            # Keep the allocator's strict type checks in force.  Coercing
+            # descriptor values with ``int`` silently truncated malformed
+            # floating-point/string input (for example ``64.9`` -> ``64``),
+            # producing an extent different from the one the caller declared.
+            buffer_id,
+            size,
+            declaration.get("generation", declaration.get("allocation_generation", 0)),
             alias_of=declaration.get("alias_of"),
             alias_generation=declaration.get("alias_generation"),
             address=declaration.get("base_address"),
-            alias_offset_bytes=int(declaration.get("alias_offset_bytes", 0)),
+            alias_offset_bytes=declaration.get("alias_offset_bytes", 0),
         )
 
     def lookup(self, buffer_id: str, generation: int = 0) -> PhysicalAllocation:

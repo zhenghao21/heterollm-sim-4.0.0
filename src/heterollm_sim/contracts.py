@@ -198,9 +198,25 @@ class ResourceDemand:
     def __post_init__(self) -> None:
         if not self.resource_id:
             raise ValueError("resource_id must not be empty")
+        # A transfer count is a byte quantity, not a continuous metric.  A
+        # float here used to survive construction and was later truncated by
+        # reporting/planner code, making the simulated traffic differ from
+        # the declared demand without an error.
+        if isinstance(self.bytes_moved, bool) or not isinstance(self.bytes_moved, int):
+            raise ValueError("bytes_moved must be a non-negative integer")
+        for name, value in (
+            ("service_ns", self.service_ns),
+            ("energy_pj", self.energy_pj),
+            ("work_units", self.work_units),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+            ):
+                raise ValueError("{} must be a finite number".format(name))
         numeric_values = (
             self.service_ns,
-            self.bytes_moved,
             self.energy_pj,
             self.work_units,
         )
@@ -284,8 +300,18 @@ class TaskSpec:
     def __post_init__(self) -> None:
         if not self.task_id or not self.request_id or not self.name:
             raise ValueError("task_id, request_id, and name must not be empty")
-        if not math.isfinite(self.earliest_start_ns):
-            raise ValueError("earliest_start_ns must be finite")
+        if self.token_index is not None and (
+            isinstance(self.token_index, bool)
+            or not isinstance(self.token_index, int)
+            or self.token_index < 0
+        ):
+            raise ValueError("token_index must be a non-negative integer")
+        if (
+            isinstance(self.earliest_start_ns, bool)
+            or not isinstance(self.earliest_start_ns, (int, float))
+            or not math.isfinite(float(self.earliest_start_ns))
+        ):
+            raise ValueError("earliest_start_ns must be a finite number")
         if self.earliest_start_ns < 0:
             raise ValueError("earliest_start_ns must be non-negative")
         resource_ids = [d.resource_id for d in self.demands]

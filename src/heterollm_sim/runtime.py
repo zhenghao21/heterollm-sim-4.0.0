@@ -18,6 +18,31 @@ from .runtime_lowering import (
 from .runtime_state import RuntimeState
 
 
+def _validated_capacity_bytes(
+    values: object,
+    *,
+    label: str,
+) -> Dict[str, int]:
+    """Validate a complete capacity declaration before mutating state."""
+
+    if not isinstance(values, Mapping):
+        raise TypeError(f"{label} must be a mapping")
+    validated: Dict[str, int] = {}
+    for resource_id, capacity in values.items():
+        if (
+            not isinstance(resource_id, str)
+            or not resource_id
+            or isinstance(capacity, bool)
+            or not isinstance(capacity, int)
+            or capacity < 0
+        ):
+            raise ValueError(
+                f"{label} require non-negative integer values"
+            )
+        validated[resource_id] = capacity
+    return validated
+
+
 @dataclass(frozen=True)
 class RuntimeRunResult:
     """Completed dynamic DAG plus aggregate scheduler/runtime state."""
@@ -63,21 +88,12 @@ class ControlPlaneRuntime:
             raise TypeError("profile.resource_owners must be a mapping")
         self.resource_owners = dict(profile_owners)
 
-        profile_bytes = self.profile.get("capacity_bytes", {})
-        if not isinstance(profile_bytes, Mapping):
-            raise TypeError("profile.capacity_bytes must be a mapping")
+        profile_bytes = _validated_capacity_bytes(
+            self.profile.get("capacity_bytes", {}),
+            label="profile.capacity_bytes",
+        )
         for resource_id, capacity in profile_bytes.items():
             if resource_id not in self.state.capacity_bytes:
-                if (
-                    not isinstance(resource_id, str)
-                    or not resource_id
-                    or isinstance(capacity, bool)
-                    or not isinstance(capacity, int)
-                    or capacity < 0
-                ):
-                    raise ValueError(
-                        "profile capacity bytes require non-negative integer values"
-                    )
                 self.state.capacity_bytes[resource_id] = capacity
 
         self.dispatcher = RuntimeDispatcher(self.profile)
@@ -160,23 +176,13 @@ class ControlPlaneRuntime:
     ) -> RuntimeRunResult:
         """Execute a run after its rollback snapshot has been taken."""
 
-        context_capacities = context_data.get("capacity_bytes", {})
-        if context_capacities and not isinstance(context_capacities, Mapping):
-            raise TypeError("context.capacity_bytes must be a mapping")
-        if isinstance(context_capacities, Mapping):
-            for resource_id, capacity in context_capacities.items():
-                if resource_id not in self.state.capacity_bytes:
-                    if (
-                        not isinstance(resource_id, str)
-                        or not resource_id
-                        or isinstance(capacity, bool)
-                        or not isinstance(capacity, int)
-                        or capacity < 0
-                    ):
-                        raise ValueError(
-                            "context capacity bytes require non-negative integers"
-                        )
-                    self.state.capacity_bytes[resource_id] = capacity
+        context_capacities = _validated_capacity_bytes(
+            context_data.get("capacity_bytes", {}),
+            label="context.capacity_bytes",
+        )
+        for resource_id, capacity in context_capacities.items():
+            if resource_id not in self.state.capacity_bytes:
+                self.state.capacity_bytes[resource_id] = capacity
 
         roots: Iterable[RuntimeTask]
         if initial_tasks is None:

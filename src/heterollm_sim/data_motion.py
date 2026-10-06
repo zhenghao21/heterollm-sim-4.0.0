@@ -193,16 +193,35 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
                 buffer_id = access.get("buffer_id") or access.get("tensor_id")
                 if not buffer_id:
                     continue
-                offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
-                size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
+                # Descriptor fields are part of the physical-address
+                # contract.  Do not coerce floats/strings with ``int`` here:
+                # ``64.9`` silently becoming ``64`` would register and later
+                # access a different extent than the caller declared.
+                offset = _descriptor_non_negative_int(
+                    access.get("offset_bytes", access.get("offset", 0)),
+                    "offset_bytes",
+                )
+                size = _descriptor_non_negative_int(
+                    access.get("byte_count", access.get("size_bytes", 0)),
+                    "byte_count",
+                )
                 declared_extent = access.get("allocation_size_bytes")
                 if declared_extent is None:
                     declared_extent = access.get("buffer_size_bytes")
-                extent = int(declared_extent if declared_extent is not None else (offset + size))
+                extent = (
+                    _descriptor_non_negative_int(declared_extent, "allocation_size_bytes")
+                    if declared_extent is not None
+                    else offset + size
+                )
                 if declared_extent is None and isinstance(contract, Mapping):
-                    line_bytes = int(contract["line_bytes"])
+                    line_bytes = _positive_descriptor_int(
+                        contract["line_bytes"], "line_bytes"
+                    )
                     extent = ((extent + line_bytes - 1) // line_bytes) * line_bytes
-                generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
+                generation = _descriptor_non_negative_int(
+                    access.get("generation", access.get("allocation_generation", 0)),
+                    "generation",
+                )
                 key = (str(buffer_id), generation)
                 previous = derived.get(key)
                 if previous is None or extent > previous["size_bytes"]:
@@ -212,8 +231,14 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
                     if access.get("alias_of") is not None:
                         declaration.update({
                             "alias_of": str(access["alias_of"]),
-                            "alias_generation": int(access.get("alias_generation", generation) or 0),
-                            "alias_offset_bytes": int(access.get("alias_offset_bytes", 0) or 0),
+                            "alias_generation": _descriptor_non_negative_int(
+                                access.get("alias_generation", generation),
+                                "alias_generation",
+                            ),
+                            "alias_offset_bytes": _descriptor_non_negative_int(
+                                access.get("alias_offset_bytes", 0),
+                                "alias_offset_bytes",
+                            ),
                         })
                     if str(access.get("address_source", "")).startswith("explicit"):
                         explicit_address = access.get("address")
@@ -234,13 +259,20 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
                 raise ValueError("physical allocation entries must be mappings")
             alias_of = declaration.get("alias_of")
             owner = str(declaration.get("physical_owner") or metadata.get("physical_owner") or "")
-            generation = int(declaration.get("generation", declaration.get("allocation_generation", 0)) or 0)
+            generation = _descriptor_non_negative_int(
+                declaration.get("generation", declaration.get("allocation_generation", 0)),
+                "generation",
+            )
             alias_generation = declaration.get("alias_generation")
             if alias_of is not None and alias_generation is None:
                 alias_generation = generation
+            elif alias_generation is not None:
+                alias_generation = _descriptor_non_negative_int(
+                    alias_generation, "alias_generation"
+                )
             if alias_of is not None and owner:
                 existing_allocator = runtime.allocators.get(owner)
-                if existing_allocator is not None and existing_allocator.get_allocation(str(alias_of), int(alias_generation)) is None:
+                if existing_allocator is not None and existing_allocator.get_allocation(str(alias_of), alias_generation) is None:
                     deferred.append(declaration)
                     continue
             try:
@@ -273,12 +305,18 @@ def _register_physical_allocation(declaration, metadata, runtime, raw_config):
     if allocator is None:
         raise ValueError("physical owner has no address allocator: {}".format(owner))
     allocator.allocate(
-        str(buffer_id), size_bytes, int(declaration.get("generation", 0) or 0),
+        str(buffer_id), size_bytes,
+        _descriptor_non_negative_int(
+            declaration.get("generation", declaration.get("allocation_generation", 0)),
+            "generation",
+        ),
         alias_of=declaration.get("alias_of"),
         address=declaration.get("address", declaration.get("base_address")),
         alias_generation=declaration.get("alias_generation"),
-        alias_offset_bytes=int(declaration.get("alias_offset_bytes", 0) or 0),
-        inferred=bool(declaration.get("inferred", False)),
+        alias_offset_bytes=_descriptor_non_negative_int(
+            declaration.get("alias_offset_bytes", 0), "alias_offset_bytes"
+        ),
+        inferred=_descriptor_bool(declaration.get("inferred", False), "inferred"),
     )
 
 
@@ -339,20 +377,37 @@ def resolve_physical_task(
             allocator = runtime.allocators.get(owner)
             if allocator is None:
                 raise ValueError("physical owner has no address allocator: {}".format(owner))
-            generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
-            offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
+            generation = _descriptor_non_negative_int(
+                access.get("generation", access.get("allocation_generation", 0)),
+                "generation",
+            )
+            offset = _descriptor_non_negative_int(
+                access.get("offset_bytes", access.get("offset", 0)),
+                "offset_bytes",
+            )
             address = allocator.address(str(buffer_id), offset, byte_count, generation)
         elif address is None:
             if not buffer_id:
                 raise ValueError("physical access without address requires buffer_id")
-            generation = int(access.get("generation", access.get("allocation_generation", 0)) or 0)
+            generation = _descriptor_non_negative_int(
+                access.get("generation", access.get("allocation_generation", 0)),
+                "generation",
+            )
             allocator = runtime.allocators.get(owner)
             if allocator is None:
                 raise ValueError("physical owner has no address allocator: {}".format(owner))
             if not any(a.buffer_id == str(buffer_id) and a.generation == generation
                        for a in allocator.allocations()):
                 raise ValueError("physical access has no declared allocation: {}".format(buffer_id))
-            address = allocator.address(str(buffer_id), int(access.get("offset_bytes", access.get("offset", 0)) or 0), byte_count, generation)
+            address = allocator.address(
+                str(buffer_id),
+                _descriptor_non_negative_int(
+                    access.get("offset_bytes", access.get("offset", 0)),
+                    "offset_bytes",
+                ),
+                byte_count,
+                generation,
+            )
         if isinstance(address, bool) or not isinstance(address, int) or address < 0:
             raise ValueError("physical task address must be a non-negative integer")
         validated.append((access, operation, address, byte_count))
@@ -524,6 +579,33 @@ def _non_negative(value: Any, name: str) -> float:
 def _non_negative_int(value: Any, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a non-negative integer")
+    return value
+
+
+def _descriptor_non_negative_int(value: Any, name: str) -> int:
+    """Validate an optional integer field from physical descriptors.
+
+    Descriptor producers may omit optional offsets/generations (represented
+    as ``None``), but an explicitly supplied value must already be an integer.
+    In particular, avoid ``int(value)`` because it silently truncates a
+    malformed float or accepts a numeric string and changes the declared
+    physical range.
+    """
+
+    if value is None:
+        return 0
+    return _non_negative_int(value, name)
+
+
+def _positive_descriptor_int(value: Any, name: str) -> int:
+    if value is None:
+        raise ValueError(f"{name} must be a positive integer")
+    return _positive_int(value, name)
+
+
+def _descriptor_bool(value: Any, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
     return value
 
 

@@ -1062,6 +1062,14 @@ def _planner_message_zh(
             ),
         ),
         (
+            r"host output vocabulary_size (\d+) does not match model vocabulary_size (\d+)",
+            lambda match: "主机输出 vocabulary_size {} 与模型 vocabulary_size {} 不一致；当前未建模词表投影".format(*match.groups()),
+        ),
+        (
+            r"host output logits_dtype (.+) does not match model logits_dtype (.+); logits conversion is not modeled",
+            lambda match: "主机输出 logits_dtype {} 与模型 logits_dtype {} 不一致；当前未建模 logits 转换".format(*match.groups()),
+        ),
+        (
             r"tensor placement (.+) references unknown component (.+)",
             lambda match: "张量放置 {} 引用了未知组件 {}".format(*match.groups()),
         ),
@@ -1749,6 +1757,25 @@ def _validate_scenario_uncached(
     execution_layers = tuple(
         descriptor.layer for descriptor in execution_view.layer_instances
     )
+    host_output = scenario.host_output_contract
+    if host_output is not None:
+        # No vocabulary projection or logits conversion is currently lowered
+        # between the model output and the host transfer. Accepting a different
+        # representation here would silently cost a different tensor.
+        if host_output.vocabulary_size != execution_view.vocabulary_size:
+            errors.append(
+                "host output vocabulary_size {} does not match model vocabulary_size {}".format(
+                    host_output.vocabulary_size, execution_view.vocabulary_size
+                )
+            )
+        model_logits_dtype, _ = _lm_head_output_dtype(scenario)
+        if canonical_dtype(host_output.logits_dtype) != canonical_dtype(model_logits_dtype):
+            errors.append(
+                "host output logits_dtype {} does not match model logits_dtype {}; "
+                "logits conversion is not modeled".format(
+                    host_output.logits_dtype, model_logits_dtype
+                )
+            )
     declared_weight_bytes = _execution_view_declared_weight_bytes(
         execution_view
     )
@@ -9646,6 +9673,8 @@ def _cpu_profiles(
     scenario: ScenarioConfig,
     cpu_component_id: Optional[str] = None,
     memory_component_id: Optional[str] = None,
+    *,
+    graph_rows: Optional[int] = None,
 ) -> Tuple[CPUProfile, HostMemoryProfile]:
     """Resolve CPU/host-memory profiles from the exact CPU target."""
 
@@ -9663,7 +9692,16 @@ def _cpu_profiles(
         # existing typed CPU pipeline so ngl=0 runs carry real timing changes.
         llama_cfg = getattr(scenario, "llama_cpp_config", None)
         if llama_cfg is not None:
-            thread_count = llama_cfg.threads if llama_cfg.threads > 0 else cpu_profile.pipeline.core_count
+            # llama.cpp uses ``n_threads`` for a one-row graph and
+            # ``n_threads_batch`` for a graph invocation with multiple rows.
+            # The latter also applies to a prefill graph's final one-row
+            # logits operation: that operation is still part of the batched
+            # graph invocation.  Host-side sampling and controller work leave
+            # graph_rows unset and therefore retain the ordinary thread count.
+            requested_threads = llama_cfg.threads
+            if graph_rows is not None and int(graph_rows) > 1:
+                requested_threads = llama_cfg.threads_batch
+            thread_count = requested_threads if requested_threads > 0 else cpu_profile.pipeline.core_count
             thread_count = min(cpu_profile.pipeline.core_count, thread_count)
             if thread_count != cpu_profile.pipeline.core_count:
                 cpu_profile = replace(
@@ -9705,7 +9743,7 @@ def _cpu_profiles(
     if context is None:
         return resolve()
     value = context.invariant(
-        ("cpu_profiles", selected_cpu, selected_memory), resolve
+        ("cpu_profiles", selected_cpu, selected_memory, graph_rows), resolve
     )
     return value
 
@@ -11941,7 +11979,8 @@ def _add_rank_gemm(
         )
     elif _kind(target) == "cpu":
         cpu_profile, host_memory_profile = _cpu_profiles(
-            scenario, target_component_id
+            scenario, target_component_id,
+            graph_rows=getattr(builder, "_cpu_graph_rows", None),
         )
         # CPU packed-weight transform work is part of the capability-selected
         # instruction schedule in estimate_cpu_gemm().  Keeping the old
@@ -12737,6 +12776,7 @@ def _estimate_typed_primitive(
     workload: object,
     *,
     memory_component_id: Optional[str] = None,
+    graph_rows: Optional[int] = None,
 ) -> CostEstimate:
     target = _component(scenario, target_component_id)
     if _kind(target) == "gpu":
@@ -12796,6 +12836,7 @@ def _estimate_typed_primitive(
             scenario,
             target_component_id,
             memory_component_id=cpu_memory_component_id,
+            graph_rows=graph_rows,
         )
         if operator_class == OperatorClass.ELEMENTWISE:
             return _memoized_cost_estimate(
@@ -12951,6 +12992,7 @@ def _add_rank_primitive(
         operator_class,
         workload,
         memory_component_id=rank.memory_component_id,
+        graph_rows=getattr(builder, "_cpu_graph_rows", None),
     )
     last = ""
     operation_metadata = {
@@ -14267,6 +14309,7 @@ def _task_segment_dynamic_task_overrides(
                         cpu_profile, host_memory_profile = _cpu_profiles(
                             scenario,
                             payload.target_component_id,
+                            graph_rows=getattr(builder, "_cpu_graph_rows", None),
                         )
                         estimate = _memoized_cost_estimate(
                             scenario,
@@ -14310,6 +14353,7 @@ def _task_segment_dynamic_task_overrides(
                         memory_component_id=(
                             payload.rank.memory_component_id
                         ),
+                        graph_rows=getattr(builder, "_cpu_graph_rows", None),
                     )
                 estimates[estimate_key] = estimate
             if (
@@ -15448,6 +15492,7 @@ def _compile_parallel_mtp_proposer(
     draft position.  Lanes share the step's GEMM invocation; later draft steps
     are strictly dependent and read the typed weights again in full.
     """
+    builder._cpu_graph_rows = max(1, max((int(v) for v in draft_step_lanes), default=1))
 
     if invocation_family not in {"proposer", "draft_context_catchup"}:
         raise ValueError("unsupported MTP invocation family")
@@ -15817,6 +15862,7 @@ def _compile_parallel_mtp_draft_catchup(
     prediction block, but their output flags are false, so the auxiliary LM
     head is deliberately excluded here.
     """
+    builder._cpu_graph_rows = max(1, int(token_batch))
 
     rows = max(0, int(token_batch))
     if rows <= 0:
@@ -15897,6 +15943,7 @@ def _compile_parallel_embedding(
     token_batch: int,
 ) -> str:
     """Lower one typed embedding lookup for a backbone invocation."""
+    builder._cpu_graph_rows = max(1, int(token_batch))
 
     from .llama_tensor_storage import (
         qualify_llama_tensor_storage_contract, resolve_embedding_gather_access,
@@ -16471,6 +16518,10 @@ def _compile_parallel_iteration(
     phase: str,
     dependencies: Sequence[str],
 ) -> str:
+    # Carry the physical graph invocation row count to every CPU operator
+    # lowered below.  This is intentionally builder-local: host orchestration
+    # and sampling tasks do not get treated as batch graph work.
+    builder._cpu_graph_rows = max(1, int(token_batch))
     previous = _add_join(
         builder,
         phase + ".start",
@@ -20959,6 +21010,9 @@ def _compile_parallel_lm_head(
     if vocabulary_size <= 0:
         return _add_join(builder, phase + ".lm_head.none", dependencies)
     layer = execution_view.layer_instances[-1].layer
+    lm_head_layer = _lm_head_layer_for_gemm(scenario)
+    if lm_head_layer is None:
+        raise ValueError("lm_head requires at least one executable decoder layer")
     stage = plan.pp_degree - 1
     ranks = plan.tp_group(stage, 0)
     final_norm_ends = _compile_parallel_final_norm(
@@ -21032,17 +21086,24 @@ def _compile_parallel_lm_head(
                     )
                 )
         workload = _layer_gemm(
-            layer,
+            lm_head_layer,
             max(1, token_batch),
             layer.hidden_size,
             vocab_shard.local_size,
             name="lm_head_tp",
+            projection_id="lm_head",
+            projection_tp_degree=plan.tp_degree,
+            projection_tp_rank=rank.tp_rank,
+            projection_allow_padding=plan.allow_padding,
             f32_storage=_f32_hidden_storage_enabled(scenario),
         )
         if workload.output_bits != logit_bits:
             workload = replace(workload, output_bits=logit_bits)
         rank_weight_bytes = workload.weight_bytes
-        if declared_weight_bytes > 0:
+        # A materialized descriptor already contains TP-local payload and
+        # metadata bytes.  Re-sharding the total GGUF byte count here would
+        # erase block metadata and misprice non-divisible quantized rows.
+        if declared_weight_bytes > 0 and not workload.packed_weight_formats:
             weight_shard = shard_extent(
                 declared_weight_bytes,
                 plan.tp_degree,
@@ -21072,6 +21133,10 @@ def _compile_parallel_lm_head(
                     "stage": stage,
                     "phase": phase,
                     "event_kind": "lm_head_projection",
+                    "projection_id": "lm_head",
+                    "projection_tp_degree": plan.tp_degree,
+                    "projection_tp_rank": rank.tp_rank,
+                    "projection_allow_padding": plan.allow_padding,
                     "logits_output_bits": logit_bits,
                     "logits_precision_source": logit_precision_source,
                     "logits_vocabulary_size": vocabulary_size,
@@ -22920,6 +22985,10 @@ def _compile_or_replay_serving_invocation(
     dependencies: Sequence[str],
 ) -> str:
     """Compile one group once, then emit its exact dynamic slots on replay."""
+
+    # Replay can bypass _compile_parallel_iteration, so establish the graph
+    # row count before either the cache lookup or dynamic task reconstruction.
+    builder._cpu_graph_rows = max(1, int(group.token_batch))
 
     physical_k = (int(group.nonflash_kv_view["physical_k_tokens"])
                   if group.nonflash_kv_view.get("applied") is True else 0)
@@ -28345,6 +28414,11 @@ def _layer_for_gemm_operation(
     name: str,
     metadata: Mapping[str, object],
 ) -> Optional[LayerSpec]:
+    # lm_head is not a decoder layer.  Resolve its graph-owned descriptor
+    # explicitly; falling through to layers[-1] would silently apply the last
+    # block's quantization to an independently formatted output tensor.
+    if metadata.get("projection_id") == "lm_head":
+        return _lm_head_layer_for_gemm(scenario)
     layer_id = metadata.get("layer_id")
     layers = _execution_layers(scenario)
     if layer_id is not None:
@@ -28357,6 +28431,40 @@ def _layer_for_gemm_operation(
     return layers[-1] if layers else None
 
 
+def _lm_head_layer_for_gemm(scenario: ScenarioConfig) -> Optional[LayerSpec]:
+    """Build an immutable synthetic layer carrying only lm_head metadata."""
+    layers = _execution_layers(scenario)
+    if not layers:
+        return None
+    graph = scenario.model.graph
+    graph_metadata = graph.attributes.get("metadata", {})
+    if not isinstance(graph_metadata, Mapping):
+        graph_metadata = {}
+    descriptor = graph_metadata.get("weight_projection_descriptors")
+    head_metadata: Dict[str, object] = {}
+    if isinstance(descriptor, Mapping):
+        head_metadata["weight_projection_descriptors"] = descriptor
+    binding = graph_metadata.get("gguf_output_binding")
+    if isinstance(binding, Mapping):
+        physical_bytes = binding.get("n_bytes")
+        if isinstance(physical_bytes, int) and physical_bytes >= 0:
+            head_metadata["physical_weight_storage_bytes"] = physical_bytes
+    elif _execution_view(scenario).output_weight_bytes > 0:
+        # Preset graphs carry an explicit output byte contract even when they
+        # do not have a GGUF tensor binding.
+        head_metadata["physical_weight_storage_bytes"] = int(
+            _execution_view(scenario).output_weight_bytes
+        )
+    output_storage_bits = graph_metadata.get("output_weight_storage_bits")
+    if isinstance(output_storage_bits, int) and output_storage_bits > 0:
+        head_metadata["runtime_cost_contract"] = "w{}a{}".format(
+            output_storage_bits, _dtype_bits(layers[-1].dtype)
+        )
+    # Deliberately clear quantization and layer-specific metadata.  Only the
+    # graph-level output descriptor/physical binding may describe this GEMM.
+    return replace(layers[-1], quantization=None, metadata=head_metadata)
+
+
 def _workload_quantization_metadata(
     scenario: ScenarioConfig,
     workload: GemmWorkload,
@@ -28367,8 +28475,12 @@ def _workload_quantization_metadata(
 ) -> Dict[str, object]:
     """Expose physical/dequant facts alongside each lowered GEMM estimate."""
 
-    layer = _layer_for_gemm_operation(scenario, name, operation_metadata)
     projection_id = operation_metadata.get("projection_id")
+    layer = (
+        _lm_head_layer_for_gemm(scenario)
+        if projection_id == "lm_head"
+        else _layer_for_gemm_operation(scenario, name, operation_metadata)
+    )
     if projection_id is not None:
         if not isinstance(projection_id, str) or not projection_id.strip():
             raise ValueError("projection_id must be non-empty text")

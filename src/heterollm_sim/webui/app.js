@@ -375,16 +375,17 @@ const CONCEPT_HELP_ZH = Object.freeze({
   workload: "Workload 描述请求、到达时间、Prompt/Output Token、调度、MTP 与 SLO；它影响报告，但普通负载编辑不改变部署映射指纹。",
   request: "Request 是一次推理请求，可声明到达时间、Prompt Token、最大输出 Token、优先级和 SLO。",
   explicit_requests: "显式请求是逐行声明的权威请求集合；只要该集合非空，运行时就不会使用合成请求生成参数替代它。",
-  request_generation: "请求生成是负载配置区，决定合成请求的数量、默认 Token 长度与随机种子；它不是已经生成的请求数。",
-  synthetic_workload: "Synthetic Workload 用固定请求数、Token 长度与随机种子生成可复现的合成请求；显式 requests 存在时以显式请求为准。",
+  request_generation: "请求生成是负载配置区，决定合成请求的数量、默认 Token 长度与到达率；它不是已经生成的请求数。",
+  synthetic_workload: "Synthetic Workload 用固定请求数、Token 长度与到达率生成确定性的合成请求；显式 requests 存在时以显式请求为准。",
   synthetic_request_count: "合成请求数是没有显式 requests 时要生成的请求条目数量；它与结果中的达标请求数、请求率均不同。",
   synthetic_prompt_tokens: "合成提示 Token 数是每个生成请求的默认 Prompt 长度；显式请求行可拥有各自的 Prompt Token 数。",
   synthetic_output_tokens: "合成输出 Token 数是每个生成请求的最大输出长度；它不是报告中实际提交或可见的 Token 数。",
+  synthetic_arrival_rate: "合成到达率的单位为请求/秒；0 表示全部请求在 0 ns 同时到达，正值表示按 1/到达率秒的固定间隔到达。仅在没有显式请求时生效。",
   arrival_time: "Arrival Time 是请求进入调度器的绝对仿真时间戳，单位为 ns；它决定调度先后，不是相对时间格式化列。",
   relative_time: "相对时间是把请求到达时间换算为更易读的持续时间文本；它是只读展示，不是第二个可编辑时间戳。",
   prompt_tokens: "Prompt Tokens 是请求在 Prefill 阶段输入的 Token 数，决定初始注意力计算与 KV Cache 建立规模。",
   output_tokens: "Output Tokens 是请求允许生成的最大可见 Token 数；实际数量仍可能受 EOS、MTP 接受率或 SLO 影响。",
-  random_seed: "Random Seed 固定合成到达与随机决策，使相同场景可以重复生成同一负载。",
+  random_seed: "Random Seed 是场景的随机种子配置；当前合成到达采用固定间隔或同时到达，不受随机种子影响。",
   scheduler: "Scheduler 决定请求如何组成批次、Prefill/Decode 优先级、Token 预算、抢占与饥饿保护。",
   max_sequences: "Max Sequences 限制同一时刻可参与调度的活动序列数，并不等同于单次批次的 Token 总量。",
   batched_tokens: "Max Batched Tokens 是一次调度步可处理的 Token 总预算；Prefill 与 Decode 会共同占用该预算。",
@@ -627,16 +628,17 @@ const CONCEPT_HELP_EN = Object.freeze({
   workload: "Workload describes requests, arrivals, Prompt/Output Tokens, scheduling, MTP, and SLO. Ordinary workload edits do not alter the placement fingerprint.",
   request: "A Request is one inference request with arrival time, Prompt Tokens, maximum Output Tokens, priority, and optional SLO.",
   explicit_requests: "Explicit Requests are the authoritative row-by-row request set. Whenever non-empty, runtime does not replace them with synthetic-generation parameters.",
-  request_generation: "Request Generation is the configuration area for synthetic count, default Token lengths, and random seed; it is not the number already generated.",
-  synthetic_workload: "Synthetic Workload generates reproducible requests from counts, Token lengths, and a seed. Explicit requests take precedence.",
+  request_generation: "Request Generation is the configuration area for synthetic count, default Token lengths, and arrival rate; it is not the number already generated.",
+  synthetic_workload: "Synthetic Workload generates deterministic requests from counts, Token lengths, and arrival rate. Explicit requests take precedence.",
   synthetic_request_count: "Synthetic Request Count is the number of rows generated only when explicit requests are absent; it is neither qualified-request count nor request rate.",
   synthetic_prompt_tokens: "Synthetic Prompt Tokens is the default Prompt length of each generated request; explicit request rows can each use a different Prompt length.",
   synthetic_output_tokens: "Synthetic Output Tokens is the maximum output length of each generated request; it is not the reported committed or visible Token count.",
+  synthetic_arrival_rate: "Synthetic Arrival Rate uses requests/s. Zero means all requests arrive at 0 ns; a positive rate gives fixed intervals of 1/rate seconds. It applies only when explicit requests are absent.",
   arrival_time: "Arrival Time is the absolute simulated timestamp at which a request enters the scheduler in ns; it determines ordering and is not the relative-time display column.",
   relative_time: "Relative Time formats a request arrival as a human-readable duration. It is read-only presentation, not a second editable timestamp.",
   prompt_tokens: "Prompt Tokens are processed during Prefill and determine initial attention work and KV Cache construction.",
   output_tokens: "Output Tokens is the maximum visible generation length; EOS, MTP acceptance, or SLO behavior can reduce the actual count.",
-  random_seed: "Random Seed fixes synthetic arrivals and randomized decisions so the same scenario can reproduce a workload.",
+  random_seed: "Random Seed is the scenario's seed setting. Current synthetic arrivals use fixed intervals or simultaneous arrival and are unaffected by the seed.",
   scheduler: "Scheduler controls batching, Prefill/Decode priority, Token budgets, preemption, and starvation protection.",
   max_sequences: "Max Sequences limits simultaneously schedulable active sequences; it is not the total Token count of one batch.",
   batched_tokens: "Max Batched Tokens is the Token budget of one scheduling step, shared by Prefill and Decode.",
@@ -837,7 +839,7 @@ const CONCEPT_HELP_PROFILE_KEYS = Object.freeze({
     "acceptance_rate", "proposal_cost", "slo", "continuous_batching", "token_budget", "request_deadline",
     "request_priority", "starvation_protection", "eos", "request_admission", "queue_wait", "offload", "prefetch",
     "swap", "page_size", "context_length", "explicit_requests", "request_generation", "synthetic_request_count",
-    "synthetic_prompt_tokens", "synthetic_output_tokens", "prefill_chunk_tokens", "mtp_enabled", "relative_time",
+    "synthetic_prompt_tokens", "synthetic_output_tokens", "synthetic_arrival_rate", "prefill_chunk_tokens", "mtp_enabled", "relative_time",
   ]),
   replay: new Set([
     "trace", "des", "roofline", "playback_speed", "selected_event", "active_event", "simulation_time",
@@ -1014,8 +1016,8 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: the workload.requests array.|Enter request ID, arrival, Tokens, priority, and deadline per row.|Time uses ns; Token counts are non-negative integers.|Any non-empty array overrides synthetic generation.|Only deleting every explicit row permits fallback to a valid synthetic workload.",
   ),
   request_generation: conceptHelp220Detail(
-    "来源是 Workload 页的合成生成配置区。｜配置名称、合成数量、默认 Token 长度与随机种子。｜计数为非负整数，种子为整数。｜它决定没有显式 requests 时生成何种请求集。｜它是配置入口，不是 Synthetic Request Count 本身。",
-    "Source: the Workload page's synthetic-generation section.|Configures name, synthetic count, default Token lengths, and seed.|Counts are non-negative integers and the seed is integral.|It determines the request set only when explicit requests are absent.|It is a configuration section, not Synthetic Request Count itself.",
+    "来源是 Workload 页的合成生成配置区。｜配置名称、合成数量、默认 Token 长度与到达率。｜计数为非负整数，到达率为非负请求/秒。｜它决定没有显式 requests 时生成何种请求集。｜它是配置入口，不是 Synthetic Request Count 本身。",
+    "Source: the Workload page's synthetic-generation section.|Configures name, synthetic count, default Token lengths, and arrival rate.|Counts are non-negative integers and arrival rate uses non-negative requests/s.|It determines the request set only when explicit requests are absent.|It is a configuration section, not Synthetic Request Count itself.",
   ),
   synthetic_request_count: conceptHelp220Detail(
     "来源是 workload.request_count。｜填写要生成的请求条目数。｜单位是 requests，取非负整数。｜它线性影响合成负载规模与样本数。｜它不是批次数、达标请求数或 Requests/s。",
@@ -1028,6 +1030,10 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
   synthetic_output_tokens: conceptHelp220Detail(
     "来源是 workload.output_tokens。｜填写每个合成请求的最大输出长度。｜单位是 Token，取非负整数。｜它影响 Decode 上限与预期完成时间。｜它不是最终 Visible Tokens、MTP Committed 或 Token/s。",
     "Source: workload.output_tokens.|Enter the maximum output length of each synthetic request.|Unit: Tokens; non-negative integer.|It affects the Decode limit and expected completion time.|It is not final Visible Tokens, MTP Committed Tokens, or Tokens/s.",
+  ),
+  synthetic_arrival_rate: conceptHelp220Detail(
+    "来源是 workload.arrival_rate_rps。｜单位是请求/秒。｜0 表示所有合成请求在 0 ns 同时到达；正值按固定间隔 1/到达率秒到达。｜仅在没有显式 requests 时生效。",
+    "Source: workload.arrival_rate_rps.|Unit: requests per second.|Zero means all synthetic requests arrive simultaneously at 0 ns; a positive rate uses a fixed 1/rate-second interval.|It applies only when explicit requests are absent.",
   ),
   relative_time: conceptHelp220Detail(
     "来源是 Arrival ns 的前端格式化结果。｜只读显示友好时间，不可单独编辑。｜自动选择 ns/µs/ms/s 等显示单位。｜它只改善可读性，不改变调度顺序。｜它不是第二个到达字段；修改 Arrival 后会同步刷新。",
@@ -1424,7 +1430,7 @@ const CONCEPT_HELP_COVERAGE_BY_VIEW = Object.freeze({
   ]),
   workload: Object.freeze([
     "workload", "request", "explicit_requests", "request_generation", "synthetic_workload", "synthetic_request_count",
-    "synthetic_prompt_tokens", "synthetic_output_tokens", "request_admission", "arrival_time", "relative_time", "request_deadline", "request_priority",
+    "synthetic_prompt_tokens", "synthetic_output_tokens", "synthetic_arrival_rate", "request_admission", "arrival_time", "relative_time", "request_deadline", "request_priority",
     "prompt_tokens", "output_tokens", "context_length", "eos", "random_seed", "continuous_batching", "scheduler",
     "max_sequences", "token_budget", "batched_tokens", "prefill_chunk_tokens", "preemption", "starvation_protection", "queue_wait", "prefill",
     "decode", "mtp", "mtp_enabled", "mtp_candidates", "acceptance_rate", "proposal_cost", "page_size", "offload", "prefetch", "swap", "slo",
@@ -3053,6 +3059,7 @@ function ensureScenarioShape(scenario) {
   scenario.workload.request_count ??= 1;
   scenario.workload.prompt_tokens ??= 512;
   scenario.workload.output_tokens ??= 128;
+  scenario.workload.arrival_rate_rps ??= 0;
   scenario.workload.random_seed ??= 0;
   scenario.workload.scheduler = asObject(scenario.workload.scheduler);
   const scheduler = scenario.workload.scheduler;
@@ -15257,6 +15264,7 @@ function renderWorkload() {
         ${workloadField("合成请求数", "Synthetic Request Count", "request_count", workload.request_count, "number", 0, "synthetic_request_count")}
         ${workloadField("合成提示 Token 数", "Synthetic Prompt Tokens", "prompt_tokens", workload.prompt_tokens, "number", 0, "synthetic_prompt_tokens")}
         ${workloadField("合成输出 Token 数", "Synthetic Output Tokens", "output_tokens", workload.output_tokens, "number", 0, "synthetic_output_tokens")}
+        ${workloadField("合成到达率（请求/秒）", "Synthetic Arrival Rate (req/s)", "arrival_rate_rps", workload.arrival_rate_rps, "number", 0, "synthetic_arrival_rate", "any")}
         ${workloadField("随机种子", "Random Seed", "random_seed", workload.random_seed, "number", 0, "random_seed")}
       </div>
     </section>
@@ -15283,12 +15291,41 @@ function renderWorkload() {
   $("#workloadPresetSelect", dom.workloadMetaForm)?.addEventListener("change", (event) => applyWorkloadPreset(event.target.value));
   $$('[data-workload-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
     const field = control.dataset.workloadField;
-    workload[field] = control.type === "number" ? Number(control.value) : control.value.trim();
+    if (control.type === "number") {
+      const integer = field !== "arrival_rate_rps";
+      const parsed = parseNumericInput(control.value, {
+        integer,
+        minimum: 0,
+        label: uiText("负载数值", "Workload value"),
+      });
+      if (!parsed.ok) {
+        toast("负载输入无效", parsed.error, "error");
+        renderWorkload();
+        return;
+      }
+      workload[field] = parsed.value;
+    } else {
+      workload[field] = control.value.trim();
+    }
     markWorkloadChanged();
   }));
   $$('[data-scheduler-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
     const field = control.dataset.schedulerField;
-    scheduler[field] = control.type === "checkbox" ? control.checked : control.type === "number" ? Number(control.value) : control.value;
+    if (control.type === "number") {
+      const parsed = parseNumericInput(control.value, {
+        integer: true,
+        minimum: 1,
+        label: uiText("调度器数值", "Scheduler value"),
+      });
+      if (!parsed.ok) {
+        toast("调度器输入无效", parsed.error, "error");
+        renderWorkload();
+        return;
+      }
+      scheduler[field] = parsed.value;
+    } else {
+      scheduler[field] = control.type === "checkbox" ? control.checked : control.value;
+    }
     markWorkloadChanged();
   }));
   const mtpEnabledInput = $("#mtpEnabledInput", dom.workloadMetaForm);
@@ -15310,11 +15347,37 @@ function renderWorkload() {
   if (mtp) {
     $$('[data-mtp-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
       const field = control.dataset.mtpField;
-      mtp[field] = field === "acceptance_rate" && control.value === "" ? null : Number(control.value);
+      if (field === "acceptance_rate" && control.value.trim() === "") {
+        mtp[field] = null;
+      } else {
+        const parsed = parseNumericInput(control.value, {
+          integer: field === "candidate_tokens",
+          minimum: field === "candidate_tokens" ? 1 : 0,
+          maximum: field === "acceptance_rate" ? 1 : null,
+          label: uiText("MTP 数值", "MTP value"),
+        });
+        if (!parsed.ok) {
+          toast("MTP 输入无效", parsed.error, "error");
+          renderWorkload();
+          return;
+        }
+        mtp[field] = parsed.value;
+      }
       markWorkloadChanged();
     }));
   }
   renderRequestTable();
+}
+
+function parseNumericInput(rawValue, { integer = false, minimum = null, maximum = null, label = "数值" } = {}) {
+  const raw = String(rawValue ?? "").trim();
+  if (!raw) return { ok: false, error: `${label}不能为空。` };
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return { ok: false, error: `${label}必须是有限数字。` };
+  if (integer && !Number.isSafeInteger(value)) return { ok: false, error: `${label}必须是安全范围内的整数。` };
+  if (minimum != null && value < minimum) return { ok: false, error: `${label}不能小于 ${minimum}。` };
+  if (maximum != null && value > maximum) return { ok: false, error: `${label}不能大于 ${maximum}。` };
+  return { ok: true, value };
 }
 
 function workloadFieldLabel(primary, secondary, helpKey = "") {
@@ -15326,8 +15389,8 @@ function nestedNumberField(primary, secondary, group, field, value, { min = "", 
   return `<label class="field">${workloadFieldLabel(primary, secondary, helpKey)}<input type="number" ${dataAttribute}="${escapeHtml(field)}" value="${escapeHtml(value ?? "")}" ${min !== "" ? `min="${min}"` : ""} ${max !== "" ? `max="${max}"` : ""} step="${escapeHtml(step)}" ${disabled ? "disabled" : ""}></label>`;
 }
 
-function workloadField(primary, secondary, field, value, type = "text", min = "", helpKey = "") {
-  return `<label class="field">${workloadFieldLabel(primary, secondary, helpKey)}<input type="${type}" data-workload-field="${field}" value="${escapeHtml(value ?? "")}" ${min !== "" ? `min="${min}"` : ""} ${type === "number" ? 'step="1"' : ""}></label>`;
+function workloadField(primary, secondary, field, value, type = "text", min = "", helpKey = "", step = "1") {
+  return `<label class="field">${workloadFieldLabel(primary, secondary, helpKey)}<input type="${type}" data-workload-field="${field}" value="${escapeHtml(value ?? "")}" ${min !== "" ? `min="${min}"` : ""} ${type === "number" ? `step="${escapeHtml(step)}"` : ""}></label>`;
 }
 
 function renderRequestTable() {
@@ -15356,11 +15419,7 @@ function updateRequestField(index, control) {
   if (!request) return;
   const field = control.dataset.requestField;
   const rawValue = control.value.trim();
-  let value = field === "deadline_ns" && rawValue === ""
-    ? null
-    : control.type === "number"
-      ? Number(rawValue)
-      : rawValue;
+  let value = field === "deadline_ns" && rawValue === "" ? null : rawValue;
   if (field === "request_id") {
     if (!value || requests.some((item, otherIndex) => otherIndex !== index && item.request_id === value)) {
       toast("请求 ID 无效", value ? `${value} 已存在` : "请求 ID 不能为空。", "error");
@@ -15368,12 +15427,24 @@ function updateRequestField(index, control) {
       return;
     }
   }
-  if (field === "priority" && !Number.isInteger(value)) {
-    toast("优先级无效", "优先级必须是整数。", "error");
-    renderRequestTable();
-    return;
+  if (control.type === "number" && !(field === "deadline_ns" && rawValue === "")) {
+    const parsed = field === "arrival_ns"
+      ? parseNumericInput(rawValue, { minimum: 0, label: "到达时间" })
+      : field === "prompt_tokens" || field === "output_tokens"
+        ? parseNumericInput(rawValue, { integer: true, minimum: 0, label: field === "prompt_tokens" ? "Prompt Token 数" : "Output Token 数" })
+        : field === "priority"
+          ? parseNumericInput(rawValue, { integer: true, label: "优先级" })
+          : field === "deadline_ns"
+            ? parseNumericInput(rawValue, { minimum: 0, label: "截止时间" })
+            : { ok: false, error: "不支持的请求数值字段。" };
+    if (!parsed.ok) {
+      toast("请求输入无效", parsed.error, "error", 5200);
+      renderRequestTable();
+      return;
+    }
+    value = parsed.value;
   }
-  if (field === "deadline_ns" && value !== null && (!Number.isFinite(value) || value < Number(request.arrival_ns))) {
+  if (field === "deadline_ns" && value !== null && value < Number(request.arrival_ns)) {
     toast("截止时间无效", "截止时间必须是数字，并且不能早于到达时间。", "error", 5200);
     renderRequestTable();
     return;
@@ -15389,17 +15460,20 @@ function updateRequestField(index, control) {
 
 function addRequest() {
   const requests = state.scenario.workload.requests;
+  const workload = state.scenario.workload;
   const used = new Set(requests.map((request) => request.request_id));
   let index = requests.length;
   let id = `request-${String(index).padStart(4, "0")}`;
   while (used.has(id)) id = `request-${String(++index).padStart(4, "0")}`;
   const previous = requests.at(-1);
+  const promptTokens = Number.isSafeInteger(workload.prompt_tokens) && workload.prompt_tokens >= 0 ? workload.prompt_tokens : 512;
+  const outputTokens = Number.isSafeInteger(workload.output_tokens) && workload.output_tokens >= 0 ? workload.output_tokens : 128;
   requests.push({
     schema_version: AUTHORING_SCHEMA_VERSION,
     request_id: id,
     arrival_ns: previous ? Number(previous.arrival_ns) : 0,
-    prompt_tokens: previous?.prompt_tokens ?? 64,
-    output_tokens: previous?.output_tokens ?? 4,
+    prompt_tokens: previous?.prompt_tokens ?? promptTokens,
+    output_tokens: previous?.output_tokens ?? outputTokens,
     priority: previous?.priority ?? 0,
     deadline_ns: null,
   });
