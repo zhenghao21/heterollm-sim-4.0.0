@@ -3109,6 +3109,8 @@
       const declaredProducer = tensor.producer_operator_id == null ? null : String(tensor.producer_operator_id).trim();
       if (declaredProducer && !rawOperatorIds.has(declaredProducer)) {
         preflightErrors.push(`张量 ${tensorId} 的生产组件不存在：${declaredProducer}。`);
+      } else if (declaredProducer && !outputProducer.has(tensorId)) {
+        preflightErrors.push(`张量 ${tensorId} 的 producer_operator_id 没有对应的输出端口。`);
       } else if (declaredProducer && outputProducer.has(tensorId) && outputProducer.get(tensorId) !== declaredProducer) {
         preflightErrors.push(`张量 ${tensorId} 的 producer_operator_id 与输出端口不一致。`);
       }
