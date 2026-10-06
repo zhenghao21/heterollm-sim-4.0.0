@@ -530,6 +530,46 @@ def _build_model_graph(
         scenario.model.graph,
         schema_version=scenario.model.schema_version,
     )
+    # The compact authoring graph is the authority for the output contract.
+    # The expanded backbone below is a projection, so it must not silently
+    # choose the embedding tensor (or the last layer dtype) for the LM head.
+    # Keep the source tensor IDs and their full typed/storage contracts here;
+    # this also covers an explicit independent head and FP32 logits.
+    authoring_tensors = {
+        tensor.tensor_id: tensor for tensor in scenario.model.graph.tensors
+    }
+    lm_head_sources = [
+        operator
+        for operator in scenario.model.graph.operators
+        if operator.op_kind == "lm_head"
+    ]
+    if len(lm_head_sources) != 1:
+        raise CanonicalizationError(
+            CompilationPhase.BUILD_GRAPHS,
+            "authoritative model.graph must contain exactly one lm_head operator",
+            "ScenarioConfig.model.graph.operators",
+        )
+    source_lm_head = lm_head_sources[0]
+    if (
+        len(source_lm_head.weight_tensor_ids) != 1
+        or len(source_lm_head.output_tensor_ids) != 1
+    ):
+        raise CanonicalizationError(
+            CompilationPhase.BUILD_GRAPHS,
+            "authoritative lm_head must declare exactly one weight and output tensor",
+            "ScenarioConfig.model.graph.operators",
+        )
+    source_lm_head_weight_id = source_lm_head.weight_tensor_ids[0]
+    source_lm_head_output_id = source_lm_head.output_tensor_ids[0]
+    try:
+        source_lm_head_weight = authoring_tensors[source_lm_head_weight_id]
+        source_lm_head_output = authoring_tensors[source_lm_head_output_id]
+    except KeyError as exc:
+        raise CanonicalizationError(
+            CompilationPhase.BUILD_GRAPHS,
+            "authoritative lm_head references missing tensor {}".format(exc.args[0]),
+            "ScenarioConfig.model.graph.tensors",
+        ) from exc
     source_operators = _source_operator_registry(scenario)
     source_ids = {item.operator_id for item in source_operators}
     layer_groups = _layer_group_registry(execution_view)
@@ -832,16 +872,43 @@ def _build_model_graph(
         )
         previous = output
 
-    ensure_tensor("logits", "output", dtype=execution_layers[-1].dtype, shape=("B", "T", "V"))
+    # Seed both records from the authoritative graph before adding the
+    # expanded operator.  ``add_operator`` then reuses these records when it
+    # creates ports, preserving dtype/shape/layout/logical_bytes and storage
+    # aliases instead of overwriting them with backbone defaults.
+    ensure_tensor(
+        source_lm_head_weight.tensor_id,
+        source_lm_head_weight.role,
+        logical_bytes=source_lm_head_weight.logical_bytes,
+        source_id=source_lm_head_weight.tensor_id,
+        attributes=dict(source_lm_head_weight.attributes),
+        dtype=source_lm_head_weight.dtype,
+        shape=source_lm_head_weight.shape,
+        layout=source_lm_head_weight.layout,
+    )
+    ensure_tensor(
+        source_lm_head_output.tensor_id,
+        source_lm_head_output.role,
+        logical_bytes=source_lm_head_output.logical_bytes,
+        source_id=source_lm_head_output.tensor_id,
+        attributes=dict(source_lm_head_output.attributes),
+        dtype=source_lm_head_output.dtype,
+        shape=source_lm_head_output.shape,
+        layout=source_lm_head_output.layout,
+    )
     add_operator(
         "lm_head",
         "lm_head",
         layer=None,
         inputs=(previous,),
-        outputs=("logits",),
-        weights=("embedding_weights",),
+        outputs=(source_lm_head_output_id,),
+        weights=(source_lm_head_weight_id,),
         placement_group="lm_head",
-        attributes={"vocabulary_size": scenario.model.vocabulary_size},
+        attributes={
+            "vocabulary_size": scenario.model.vocabulary_size,
+            "authoritative_parameters": dict(source_lm_head.parameters),
+            "authoritative_attributes": dict(source_lm_head.attributes),
+        },
     )
 
     # The canonical execution graph expands validated backbone layer groups and
@@ -938,6 +1005,20 @@ def _build_model_graph(
         resolved_layer_stages,
         pp_degree,
     )
+    canonical_tensors = {tensor.tensor_id: tensor for tensor in tensors}
+    authoritative_contracts_match = all(
+        (
+            canonical_tensors[tensor.tensor_id].role == tensor.role
+            and canonical_tensors[tensor.tensor_id].logical_bytes
+            == tensor.logical_bytes
+            and canonical_tensors[tensor.tensor_id].dtype == tensor.dtype
+            and canonical_tensors[tensor.tensor_id].shape == tensor.shape
+            and canonical_tensors[tensor.tensor_id].layout == tensor.layout
+            and dict(canonical_tensors[tensor.tensor_id].attributes)
+            == dict(tensor.attributes)
+        )
+        for tensor in (source_lm_head_weight, source_lm_head_output)
+    )
     return ModelGraph(
         graph_id=scenario.model.name,
         operators=tuple(operators),
@@ -965,7 +1046,7 @@ def _build_model_graph(
             "authoring_graph_digest": authoring_graph_digest,
             "execution_projection": {
                 "validated": True,
-                "lossless": True,
+                "lossless": authoritative_contracts_match,
                 "source": "ModelSpec.graph",
                 "target": "expanded_per_layer_execution_graph",
             },

@@ -3099,7 +3099,17 @@
       const producer = outputProducer.get(tensorId);
       if (!producer) return;
       consumers.forEach((consumer) => {
-        if (producer !== consumer) adjacency.get(producer)?.add(consumer);
+        if (producer === consumer) {
+          // A tensor cannot be both produced and consumed by the same
+          // operator in the authoritative execution graph.  Keeping this
+          // edge out of the Kahn graph would make A -> tensor -> A look
+          // acyclic, while the backend's bipartite DAG validator correctly
+          // rejects it.  Reject the raw graph before normalization rewrites
+          // the producer/consumer indexes.
+          preflightErrors.push(`张量 ${tensorId} 的生产组件 ${producer} 同时消费该张量，形成自环。`);
+          return;
+        }
+        adjacency.get(producer)?.add(consumer);
       });
     });
     rawTensorRecords.forEach((rawTensor, tensorIndex) => {
