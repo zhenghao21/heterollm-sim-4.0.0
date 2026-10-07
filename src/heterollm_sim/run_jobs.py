@@ -556,9 +556,19 @@ class RunJobManager:
             if isinstance(details, Mapping):
                 error["details"] = _json_safe(details)
             if not isinstance(exc, ScenarioValidationError):
-                error["diagnostic_id"] = record_unexpected_exception(
-                    exc, context="background simulation job {}".format(job_id)
-                )
+                try:
+                    error["diagnostic_id"] = record_unexpected_exception(
+                        exc, context="background simulation job {}".format(job_id)
+                    )
+                except Exception as diagnostic_exc:
+                    # Diagnostics may fail too (for example, a closed stderr
+                    # pipe). Never leave a finished worker marked RUNNING:
+                    # preserve the simulation error and expose the logging
+                    # failure alongside it before committing terminal state.
+                    error["diagnostic_error"] = {
+                        "message": str(diagnostic_exc) or "未提供异常消息",
+                        "exception_type": type(diagnostic_exc).__name__,
+                    }
             with self._lock:
                 current = self._jobs.get(job_id)
                 if current is not None and current.status not in TERMINAL_STATUSES:

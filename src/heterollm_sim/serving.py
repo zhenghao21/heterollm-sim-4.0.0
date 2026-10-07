@@ -1,10 +1,9 @@
 """Deterministic analysis-level online serving scheduler.
 
-This module deliberately models scheduling policy rather than individual model
-kernels.  A cost provider can lower each homogeneous serving cohort into a
-calibrated duration; the default provider is a small, non-zero analytical
-roofline.  Preemption is only considered between completed prefill/decode/MTP
-units, so the resulting trace is deterministic and straightforward to audit.
+The default provider lowers each serving cohort into a topology-aware task
+graph. Physical memory tasks execute on the persistent live kernel, while
+preview costs support planning without committing device state. Preemption is
+considered between completed prefill/decode/MTP units.
 """
 
 from __future__ import annotations
@@ -83,6 +82,7 @@ from .planner import (
     _kv_dtype_bits,
     _kv_tensor_bytes,
     _parallel_plan,
+    _rank_memory_resource,
     _request_modalities,
     _topology_router,
     _trusted_execution_stages,
@@ -473,6 +473,19 @@ class BatchCost:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
+def _live_task_metadata(metadata, namespace):
+    bound = bind_l2_invocation(metadata, namespace)
+    if bound.get("physical_memory_config") is not None:
+        return {**bound, "physical_allocation_scope": "closed_cohort"}
+    return bound
+
+
+def _has_live_physical_tasks(stages):
+    return any(task.metadata.get("physical_memory_config") is not None
+               or task.metadata.get("stateful_l2") is not None
+               for stage in stages for task in stage.execution_tasks)
+
+
 @dataclass(frozen=True)
 class _ExecutionStageTaskLayout:
     """One task's immutable position in a cached stage replay graph."""
@@ -565,7 +578,7 @@ class _ExecutionStageReplayLayout:
                         demands=task.demands,
                         earliest_start_ns=0.0,
                         metadata={
-                            **bind_l2_invocation(task.metadata, namespace),
+                            **_live_task_metadata(task.metadata, namespace),
                             "execution_stage_id": stage.stage_id,
                         },
                     )
@@ -648,7 +661,7 @@ class _ExecutionStageReplayLayout:
                     demands=task.demands,
                     earliest_start_ns=ready_by_stage[stage.stage_id],
                     metadata={
-                        **bind_l2_invocation(task.metadata, namespace),
+                        **_live_task_metadata(task.metadata, namespace),
                         "execution_stage_id": stage.stage_id,
                     },
                 )
@@ -730,7 +743,7 @@ class _ExecutionStageReplayLayout:
             )
             object.__setattr__(spec, "marker", None)
             object.__setattr__(spec, "token_index", None)
-            object.__setattr__(spec, "metadata", bind_l2_invocation(task.metadata, namespace))
+            object.__setattr__(spec, "metadata", _live_task_metadata(task.metadata, namespace))
             specs.append(spec)
         return tuple(specs)
 
@@ -5292,6 +5305,7 @@ class _OnlineRuntime:
             self._execution_resource_kernel = UnifiedEventKernel(
                 resource_capacities=resource_capacities,
                 resource_owners=resource_owners,
+                capture_physical_details=False,
             )
         else:
             if dict(execution_kernel.resource_owners) != dict(resource_owners):
@@ -5299,6 +5313,7 @@ class _OnlineRuntime:
             execution_kernel.ensure_resource_capacities(resource_capacities)
             self._execution_resource_kernel = execution_kernel
         self._execution_task_sequence = 0
+        self._live_cohort_metrics = None
         self._request_stage_ready_ns: Dict[Tuple[str, str, int], float] = {}
         self._request_device_ready_ns: Dict[str, float] = {
             state.spec.request_id: max(
@@ -9418,6 +9433,13 @@ class _OnlineRuntime:
             self._terminal_count += 1
         if status in _TERMINAL_STATUSES:
             self._release_residency_slot(state.spec.request_id)
+            # Prompt-cache save and retained-slot contracts can still use KV
+            # after the request finishes. Ordinary requests have no later
+            # owner: release their persistent physical buffers at this boundary.
+            if not self.prompt_cache.enabled and self._retained_kv_state is None:
+                self._execution_resource_kernel.release_request_physical_allocations(
+                    state.spec.request_id
+                )
         self._record_schedule_trace(
             "state_transition",
             request_id=state.spec.request_id,
@@ -12460,7 +12482,7 @@ class _OnlineRuntime:
                         demands=task.demands,
                         earliest_start_ns=ready_by_stage[stage.stage_id],
                         metadata={
-                            **bind_l2_invocation(task.metadata, namespace),
+                            **_live_task_metadata(task.metadata, namespace),
                             "execution_stage_id": stage.stage_id,
                         },
                     )
@@ -12476,6 +12498,8 @@ class _OnlineRuntime:
         ready_by_stage: Mapping[str, float],
         namespace: str,
         isolated_shadow: Optional[_UniformIsolatedReplay] = None,
+        live_metrics=None,
+        execution_control: Optional[ExecutionControl] = None,
     ) -> Mapping[str, Tuple[float, float]]:
         specs, source_by_id = cls._stage_task_specs(
             stages, ready_by_stage, namespace
@@ -12483,16 +12507,23 @@ class _OnlineRuntime:
         if isolated_shadow is not None:
             isolated_shadow.bind(specs)
         kernel.add_tasks(specs)
+        if live_metrics is not None:
+            kernel._index_physical_allocation_uses(specs)
         min_start_by_stage: Dict[str, float] = {}
         max_end_by_stage: Dict[str, float] = {}
         remaining = len(specs)
         completed_ids: List[str] = []
+        if execution_control is not None:
+            execution_control.raise_if_cancelled()
+            execution_control.report("cohort_tasks", 0, len(specs), message="正在连续物理状态上执行当前批次")
         while remaining:
             event = kernel.step()
             if event is None:
                 raise ValueError("execution stage task graph could not drain")
             if isolated_shadow is not None:
                 isolated_shadow.observe(event)
+            if live_metrics is not None:
+                live_metrics.observe(event)
             stage_id, _source = source_by_id[event.task.task_id]
             min_start_by_stage[stage_id] = min(
                 min_start_by_stage.get(stage_id, event.start_ns),
@@ -12504,6 +12535,10 @@ class _OnlineRuntime:
             )
             completed_ids.append(event.task.task_id)
             remaining -= 1
+            if execution_control is not None and (remaining == 0 or (len(specs) - remaining) % 256 == 0):
+                execution_control.raise_if_cancelled()
+                execution_control.report("cohort_tasks", len(specs) - remaining, len(specs),
+                    message="正在连续物理状态上执行当前批次", simulated_time_ns=event.end_ns)
         for task_id in completed_ids:
             kernel.release_completed(task_id)
         return {
@@ -12546,6 +12581,7 @@ class _OnlineRuntime:
                 or any(
                     "stateful_l2" in task.metadata
                     or "memory_access" in task.metadata
+                    or "physical_memory_config" in task.metadata
                     for stage in stages
                     for task in stage.execution_tasks
                 )):
@@ -13210,402 +13246,119 @@ class _OnlineRuntime:
         }
 
     def _with_gpu_controller_stages(
-        self,
-        stages: Sequence[_ExecutionStage],
-        cohort: BatchCohort,
+        self, stages: Sequence[_ExecutionStage], cohort: BatchCohort,
     ) -> Tuple[_ExecutionStage, ...]:
-        """Overlay aggregate GPU translation and memory-controller work.
+        """Add translation work; physical memory already owns access latency.
 
-        Existing planner tasks already carry the useful compute and memory
-        quantities.  V4 exposes MMU translation as a short causal prefix for
-        each GPU execution root.  Linked L2 traffic is an observer of the
-        planner-owned cache domain, while independent VRAM access waves are
-        composed in parallel with the root memory phase.  Quantities remain
-        aggregate per cohort/root; this must never expand per page, cache
-        line, memory request, or PCIe packet.
+        L2 demands and physical DRAM/NAND descriptors retain their sole data
+        service ownership. Only an explicitly nonphysical custom memory task
+        can use the separate analytical VRAM controller service.
         """
-
         original = tuple(stages)
-        if not original:
-            return original
-        replacements: Dict[str, _ExecutionStage] = {}
-        inserted_before: Dict[str, Tuple[_ExecutionStage, ...]] = {}
-        runtime_profile = self.plan.scenario.runtime_profile
-
-        for gpu_id, controllers in sorted(
-            runtime_profile.gpu_controllers.items()
-        ):
-            # Resolve the planner-owned cache/backing domains before adding
-            # runtime controller observers.  The analytical GPU cost model
-            # already owns L2 hit/bandwidth service on its declared cache
-            # resource; charging the same hit latency again in a serial
-            # controller prefix would violate exactly-once service ownership.
-            # VRAM backing demands own only bulk bandwidth, so the independent
-            # controller access-wave term remains a runtime-owned domain.
+        replacements = {}
+        inserted_before = {}
+        scenario = self.plan.scenario
+        for gpu_id, controllers in sorted(scenario.runtime_profile.gpu_controllers.items()):
             cached_domains = self._gpu_controller_resource_domains.get(gpu_id)
             if cached_domains is None:
-                l2_resource_id: Optional[str] = None
-                memory_resource_ids = set()
-                try:
-                    gpu_profile = self.plan.scenario.resolve_component_profile(
-                        gpu_id, GPUProfile
-                    )
-                    l2_level = next(
-                        (
-                            level
-                            for level in reversed(
-                                gpu_profile.cache_hierarchy.levels
-                            )
-                            if str(level.name).strip().lower() == "l2"
-                        ),
-                        None,
-                    )
-                    reference_gpu_id = (
-                        self.plan.scenario.host_orchestration_profile.gpu_component_id
-                    )
-                    if l2_level is not None:
-                        l2_resource_id = _component_resource_id(
-                            l2_level.resource_id,
-                            reference_component_id=reference_gpu_id,
-                            target_component_id=gpu_id,
-                        )
-                    parallel_plan = _parallel_plan(self.plan.scenario)
-                    for rank in parallel_plan.ranks:
-                        if rank.component_id != gpu_id:
-                            continue
-                        memory_component_id = rank.memory_component_id
-                        if memory_component_id is None:
-                            continue
-                        hbm_profile = (
-                            self.plan.scenario.resolve_component_profile(
-                                memory_component_id, HBMProfile
-                            )
-                        )
-                        memory_resource_ids.add(
-                            _component_resource_id(
-                                hbm_profile.resource_id,
-                                reference_component_id=reference_gpu_id,
-                                target_component_id=memory_component_id,
-                            )
-                        )
-                except (KeyError, StopIteration, TypeError, ValueError) as exc:
-                    raise ValueError(
-                        "GPU controller resource domains cannot be resolved "
-                        "for {}".format(gpu_id)
-                    ) from exc
-                cached_domains = (
-                    l2_resource_id,
-                    frozenset(memory_resource_ids),
-                )
+                gpu_profile = scenario.resolve_component_profile(gpu_id, GPUProfile)
+                l2_level = next((level for level in reversed(gpu_profile.cache_hierarchy.levels)
+                                 if str(level.name).strip().lower() == "l2"), None)
+                reference_gpu = scenario.host_orchestration_profile.gpu_component_id
+                l2_resource_id = (_component_resource_id(l2_level.resource_id,
+                    reference_component_id=reference_gpu, target_component_id=gpu_id) if l2_level else None)
+                memory_resource_ids = frozenset(_rank_memory_resource(scenario, rank)
+                    for rank in _parallel_plan(scenario).ranks if rank.component_id == gpu_id)
+                cached_domains = l2_resource_id, memory_resource_ids
                 self._gpu_controller_resource_domains[gpu_id] = cached_domains
-            l2_resource_id, frozen_memory_resource_ids = cached_domains
-            memory_resource_ids = set(frozen_memory_resource_ids)
+            l2_resource_id, memory_resource_ids = cached_domains
 
-            # Classify from physical resource ownership, which survives the
-            # compact stage handoff (task metadata may be omitted there).
-            # CPU command work, ingress links, and command processors address
-            # this GPU but do not consume the cohort's future model traffic.
-            controller_markers = (
-                "command_processor", "command_queue", "launch", "mmu_tlb",
-                "l2_controller", "vram_controller",
-            )
-            gpu_candidates = tuple(
-                stage for stage in original
-                if stage.component_id == gpu_id and any(
-                    (demand.bytes_moved > 0 or demand.work_units > 0)
-                    and (
-                        demand.resource_id in memory_resource_ids
-                        or demand.resource_id == l2_resource_id
-                        or (
-                            demand.resource_id.startswith(gpu_id + ".")
-                            and not any(marker in demand.resource_id
-                                        for marker in controller_markers)
-                        )
-                    )
-                    for task in stage.execution_tasks for demand in task.demands
-                )
-            )
-            if not gpu_candidates:
-                continue
-            candidate_ids = {stage.stage_id for stage in gpu_candidates}
-            roots = tuple(
-                stage for stage in gpu_candidates
-                if not any(dependency in candidate_ids for dependency in stage.dependencies)
-            )
+            def physical(task):
+                return (task.metadata.get("physical_memory_config") is not None
+                        or bool(task.metadata.get("physical_memory_configs"))
+                        or task.metadata.get("stateful_l2") is not None)
+
+            def physical_bytes(task):
+                rows = task.metadata.get("memory_accesses", task.metadata.get("memory_access", ()))
+                if isinstance(rows, Mapping):
+                    rows = (rows,)
+                return sum(int(row.get("byte_count", row.get("size_bytes", 0))) for row in rows)
+
+            def task_translation_bytes(task):
+                l2 = sum(d.bytes_moved for d in task.demands if d.resource_id == l2_resource_id)
+                # This is a declared choice of address-translation input, not
+                # a substitution of another resource's bytes for zero VRAM.
+                if l2:
+                    return l2
+                if physical(task):
+                    return physical_bytes(task)
+                return sum(d.bytes_moved for d in task.demands if d.resource_id in memory_resource_ids)
+
+            candidates = tuple(stage for stage in original if stage.component_id == gpu_id
+                and any(task_translation_bytes(task) for task in stage.execution_tasks))
+            candidate_ids = {stage.stage_id for stage in candidates}
+            roots = tuple(stage for stage in candidates
+                          if not any(dependency in candidate_ids for dependency in stage.dependencies))
             if not roots:
                 continue
+            translation_total = sum(task_translation_bytes(task) for stage in candidates for task in stage.execution_tasks)
+            # Physical tasks' actual traffic is reported by the live DRAM
+            # ledger. Do not create a second observer that looks like IO.
+            custom_vram_total = sum(d.bytes_moved for stage in candidates for task in stage.execution_tasks
+                if not physical(task) for d in task.demands if d.resource_id in memory_resource_ids)
+            def root_bytes(total, index):
+                base, extra = divmod(total, len(roots))
+                return base + int(index < extra)
 
-            # A task can expose the same byte fact on concurrent compute and
-            # memory resources.  ``fallback_total_bytes`` therefore retains
-            # the historical max-per-task rule only for profiles that do not
-            # expose planner resource provenance.
-            fallback_total_bytes = sum(
-                max(
-                    (demand.bytes_moved for demand in task.demands),
-                    default=0,
-                )
-                for stage in gpu_candidates
-                for task in stage.execution_tasks
-            )
-            l2_total_bytes = sum(
-                demand.bytes_moved
-                for stage in gpu_candidates
-                for task in stage.execution_tasks
-                for demand in task.demands
-                if l2_resource_id is not None
-                and demand.resource_id == l2_resource_id
-            )
-            vram_total_bytes = sum(
-                demand.bytes_moved
-                for stage in gpu_candidates
-                for task in stage.execution_tasks
-                for demand in task.demands
-                if demand.resource_id in memory_resource_ids
-            )
-            root_count = len(roots)
-
-            def root_bytes(total: int, root_index: int) -> int:
-                base, extra = divmod(max(0, int(total)), root_count)
-                return base + (1 if root_index < extra else 0)
-
-            for root_index, root in enumerate(roots):
-                fallback_bytes = root_bytes(
-                    fallback_total_bytes, root_index
-                )
-                l2_bytes = root_bytes(l2_total_bytes, root_index)
-                vram_bytes = root_bytes(vram_total_bytes, root_index)
-                translation_bytes = max(
-                    1,
-                    l2_bytes if l2_bytes > 0 else fallback_bytes,
-                )
-                prefix = "runtime.controller.{}.{}.root{:04d}".format(
-                    cohort.cohort_id,
-                    gpu_id,
-                    root_index,
-                )
+            for index, root in enumerate(roots):
+                translation_bytes = root_bytes(translation_total, index)
+                custom_vram_bytes = root_bytes(custom_vram_total, index)
+                prefix = "runtime.controller.{}.{}.root{:04d}".format(cohort.cohort_id, gpu_id, index)
                 request_ids = root.request_ids or cohort.request_ids
-                mmu = controllers.mmu_tlb
-                pages = max(
-                    1,
-                    (translation_bytes + mmu.page_size_bytes - 1)
-                    // mmu.page_size_bytes,
-                )
-                translation_batches = max(
-                    1,
-                    (pages + mmu.translation_batch_size - 1)
-                    // mmu.translation_batch_size,
-                )
-                translation_waves = max(
-                    1,
-                    (
-                        translation_batches
-                        + mmu.max_outstanding_page_walks
-                        - 1
-                    )
-                    // mmu.max_outstanding_page_walks,
-                )
-                mmu_task_id = prefix + ".mmu_tlb"
-                mmu_task = _ExecutionTask(
-                    task_id=mmu_task_id,
-                    dependencies=(),
-                    request_ids=request_ids,
-                    demands=(
-                        ResourceDemand(
-                            "{}.mmu_tlb".format(gpu_id),
-                            translation_waves * mmu.page_walk_latency_ns,
-                            bytes_moved=translation_bytes,
-                            work_units=float(pages),
-                        ),
-                    ),
-                    category=TaskCategory.MEMORY,
-                    metadata={
-                        "event_kind": "gpu_mmu_tlb_batch",
-                        "runtime_phase": "gpu_mmu_tlb",
-                        "aggregation": "controller_transaction_batch",
-                        "transaction_count": pages,
-                        "movement_id": prefix + ".gpu_memory_access",
-                        "service_domain": "gpu_address_translation",
-                        "service_role": "controller_owner",
-                        "bulk_service_owner": False,
-                    },
-                )
-                mmu_stage = _ExecutionStage(
-                    stage_id=mmu_task_id,
-                    stage_index=root.stage_index * 10 - 3,
-                    dependencies=root.dependencies,
-                    request_ids=request_ids,
-                    component_id=gpu_id,
-                    service_ns=sum(
-                        demand.service_ns for demand in mmu_task.demands
-                    ),
-                    execution_tasks=(mmu_task,),
-                    invocation_group_id=root.invocation_group_id,
-                    covered_invocation_group_ids=(
-                        root.covered_invocation_group_ids
-                    ),
-                )
-
-                l2 = controllers.l2_cache
-                observed_l2_bytes = (
-                    l2_bytes if l2_bytes > 0 else fallback_bytes
-                )
-                cache_requests = (
-                    (observed_l2_bytes + l2.line_size_bytes - 1)
-                    // l2.line_size_bytes
-                    if observed_l2_bytes > 0
-                    else 0
-                )
-                cache_batches = max(
-                    0,
-                    (cache_requests + l2.request_batch_size - 1)
-                    // l2.request_batch_size,
-                )
-                cache_waves = max(
-                    0,
-                    (cache_batches + l2.max_outstanding_misses - 1)
-                    // l2.max_outstanding_misses,
-                )
-                planner_owns_l2_service = (
-                    l2_resource_id is not None and l2_total_bytes > 0
-                )
-                # CacheHierarchyProfile already charges both L2 bandwidth and
-                # hit-latency waves.  The runtime L2 controller is therefore
-                # a byte/work observer for linked planner tasks.
-                if observed_l2_bytes > 0 and l2_resource_id is None:
-                    raise ValueError(
-                        "GPU {} has L2 traffic without a resolved planner cache domain".format(gpu_id)
-                    )
-                l2_service_ns = (
-                    0.0
-                    if planner_owns_l2_service
-                    else cache_waves * l2.hit_latency_ns
-                )
-
-                vram = controllers.vram_controller
-                observed_vram_bytes = (
-                    vram_bytes if vram_bytes > 0 else fallback_bytes
-                )
-                controller_requests = (
-                    (observed_vram_bytes + l2.line_size_bytes - 1)
-                    // l2.line_size_bytes
-                    if observed_vram_bytes > 0
-                    else 0
-                )
-                controller_batches = max(
-                    0,
-                    (controller_requests + vram.request_batch_size - 1)
-                    // vram.request_batch_size,
-                )
-                controller_parallelism = max(
-                    1,
-                    vram.controller_count
-                    * vram.channel_count
-                    * vram.lanes_per_channel,
-                )
-                controller_waves = max(
-                    0,
-                    (
-                        controller_batches
-                        + min(
-                            controller_parallelism,
-                            vram.max_outstanding_requests,
-                        )
-                        - 1
-                    )
-                    // min(
-                        controller_parallelism,
-                        vram.max_outstanding_requests,
-                    ),
-                )
-                # Planner roots already include useful VRAM bulk bandwidth.
-                # This overlay models only the independent access-wave domain
-                # and runs in the root memory phase instead of serially
-                # charging the same physical movement after L2.
-                vram_service_ns = controller_waves * vram.access_latency_ns
-                memory_task_id = prefix + ".memory_pipeline"
-                memory_task = _ExecutionTask(
-                    task_id=memory_task_id,
-                    dependencies=(),
-                    request_ids=request_ids,
-                    demands=(
-                        ResourceDemand(
-                            "{}.l2_controller".format(gpu_id),
-                            l2_service_ns,
-                            bytes_moved=observed_l2_bytes,
-                            work_units=float(cache_requests),
-                        ),
-                        ResourceDemand(
-                            "{}.vram_controller".format(gpu_id),
-                            vram_service_ns,
-                            bytes_moved=observed_vram_bytes,
-                            work_units=float(controller_requests),
-                        ),
-                    ),
-                    category=TaskCategory.MEMORY,
-                    metadata={
-                        "event_kind": "gpu_memory_controller_pipeline",
-                        "runtime_phase": "gpu_memory_pipeline",
-                        "aggregation": "controller_transaction_batch",
-                        "movement_id": prefix + ".gpu_memory_access",
-                        "service_domains": (
-                            {
-                                "resource_id": "{}.l2_controller".format(
-                                    gpu_id
-                                ),
-                                "service_domain": "gpu_l2_data_access",
-                                "service_role": (
-                                    "controller_observer"
-                                    if planner_owns_l2_service
-                                    else "controller_owner_fallback"
-                                ),
-                                "observed_resource_id": l2_resource_id,
-                                "observed_bytes": observed_l2_bytes,
-                                "service_ns": l2_service_ns,
-                                "transaction_count": cache_requests,
-                            },
-                            {
-                                "resource_id": "{}.vram_controller".format(
-                                    gpu_id
-                                ),
-                                "service_domain": "gpu_vram_access_latency",
-                                "service_role": "controller_owner",
-                                "observed_resource_ids": tuple(
-                                    sorted(memory_resource_ids)
-                                ),
-                                "observed_bytes": observed_vram_bytes,
-                                "service_ns": vram_service_ns,
-                                "transaction_count": controller_requests,
-                            },
-                        ),
-                        "bulk_service_owner": False,
-                        "composition": "parallel_roofline_with_gpu_root",
-                    },
-                )
-                inserted_before[root.stage_id] = (mmu_stage,)
-                replacements[root.stage_id] = _ExecutionStage(
-                    stage_id=root.stage_id,
-                    stage_index=root.stage_index,
-                    dependencies=(mmu_stage.stage_id,),
-                    request_ids=root.request_ids,
-                    component_id=root.component_id,
-                    service_ns=max(
-                        root.service_ns,
-                        l2_service_ns,
-                        vram_service_ns,
-                    ),
-                    execution_tasks=(
-                        *root.execution_tasks,
-                        memory_task,
-                    ),
-                    invocation_group_id=root.invocation_group_id,
-                    covered_invocation_group_ids=(
-                        root.covered_invocation_group_ids
-                    ),
-                )
-
-        if not inserted_before:
-            return original
-        expanded: List[_ExecutionStage] = []
+                dependencies = root.dependencies
+                if translation_bytes:
+                    mmu = controllers.mmu_tlb
+                    pages = (translation_bytes + mmu.page_size_bytes - 1) // mmu.page_size_bytes
+                    batches = (pages + mmu.translation_batch_size - 1) // mmu.translation_batch_size
+                    waves = (batches + mmu.max_outstanding_page_walks - 1) // mmu.max_outstanding_page_walks
+                    task_id = prefix + ".mmu_tlb"
+                    demand = ResourceDemand(gpu_id + ".mmu_tlb", waves * mmu.page_walk_latency_ns,
+                                            bytes_moved=translation_bytes, work_units=float(pages))
+                    task = _ExecutionTask(task_id=task_id, dependencies=(), request_ids=request_ids,
+                        demands=(demand,), category=TaskCategory.MEMORY,
+                        metadata={"event_kind": "gpu_mmu_tlb_batch", "runtime_phase": "gpu_mmu_tlb",
+                            "aggregation": "controller_transaction_batch", "transaction_count": pages,
+                            "translation_byte_basis": "declared_L2_else_physical_access_else_custom_memory_domain",
+                            "movement_id": prefix + ".gpu_memory_access", "service_domain": "gpu_address_translation",
+                            "service_role": "controller_owner", "bulk_service_owner": False})
+                    mmu_stage = _ExecutionStage(stage_id=task_id, stage_index=root.stage_index * 10 - 3,
+                        dependencies=dependencies, request_ids=request_ids, component_id=gpu_id,
+                        service_ns=demand.service_ns, execution_tasks=(task,),
+                        invocation_group_id=root.invocation_group_id,
+                        covered_invocation_group_ids=root.covered_invocation_group_ids)
+                    inserted_before[root.stage_id] = (mmu_stage,)
+                    dependencies = (mmu_stage.stage_id,)
+                tasks = root.execution_tasks
+                service_ns = root.service_ns
+                if custom_vram_bytes:
+                    vram, l2 = controllers.vram_controller, controllers.l2_cache
+                    requests = (custom_vram_bytes + l2.line_size_bytes - 1) // l2.line_size_bytes
+                    batches = (requests + vram.request_batch_size - 1) // vram.request_batch_size
+                    parallelism = min(vram.controller_count * vram.channel_count * vram.lanes_per_channel,
+                                      vram.max_outstanding_requests)
+                    waves = (batches + parallelism - 1) // parallelism
+                    latency = waves * vram.access_latency_ns
+                    tasks += (_ExecutionTask(task_id=prefix + ".memory_pipeline", dependencies=(),
+                        request_ids=request_ids, demands=(ResourceDemand(gpu_id + ".vram_controller", latency,
+                            bytes_moved=custom_vram_bytes, work_units=float(requests)),), category=TaskCategory.MEMORY,
+                        metadata={"event_kind": "gpu_memory_controller_pipeline", "runtime_phase": "gpu_memory_pipeline",
+                            "service_domain": "gpu_vram_access_latency", "service_role": "explicit_nonphysical_controller_owner",
+                            "observed_resource_ids": tuple(sorted(memory_resource_ids)),
+                            "bulk_service_owner": False, "composition": "parallel_roofline_with_gpu_root"}),)
+                    service_ns = max(service_ns, latency)
+                replacements[root.stage_id] = replace(root, dependencies=dependencies, execution_tasks=tasks,
+                                                     service_ns=service_ns)
+        expanded = []
         for stage in original:
             expanded.extend(inserted_before.get(stage.stage_id, ()))
             expanded.append(replacements.get(stage.stage_id, stage))
@@ -13782,6 +13535,8 @@ class _OnlineRuntime:
         device_ns: float,
         request_ready_ns: float,
         runtime_controller_stage_count: int = 0,
+        planning_energy_pj: Optional[float] = None,
+        planning_duration_ns: Optional[float] = None,
     ) -> Tuple[
         float,
         float,
@@ -13792,6 +13547,13 @@ class _OnlineRuntime:
         Tuple[Mapping[str, Any], ...],
         float,
     ]:
+        live_physical = _has_live_physical_tasks(stages)
+        self._live_cohort_metrics = None
+        if live_physical:
+            from .live_execution_metrics import LiveCohortMetrics
+            self._live_cohort_metrics = LiveCohortMetrics(
+                resource_owners=self._execution_resource_kernel.resource_owners
+            )
         component_count = len({stage.component_id for stage in stages})
         workload_metadata = self.plan.scenario.workload.metadata
         if not isinstance(workload_metadata, Mapping):
@@ -13833,10 +13595,26 @@ class _OnlineRuntime:
             cost.metadata,
         )
         scheduled_stages = list(causally_placed_stages)
-        total_extension_ns = self._runtime_stage_extension_ns(
-            cost.metadata,
-            device_ns,
-        )
+        extension_energy_pj = 0.0
+        if live_physical and planning_energy_pj is not None:
+            def stage_energy(rows):
+                return sum(d.energy_pj for s in rows for t in s.execution_tasks for d in t.demands)
+            represented_overlay_energy = stage_energy(causally_placed_stages) - stage_energy(stages)
+            extension_energy_pj = max(
+                0.0, cost.energy_pj - planning_energy_pj - represented_overlay_energy
+            )
+        if live_physical:
+            if planning_duration_ns is None:
+                raise ValueError("live physical stages require the pre-adjustment planning duration")
+            # The actual task graph already resolves all resource waits.
+            # A difference between its cold preview and the stage-only
+            # envelope is not additional work to append to live execution.
+            total_extension_ns = max(0.0, cost.duration_ns - planning_duration_ns)
+        else:
+            total_extension_ns = self._runtime_stage_extension_ns(
+                cost.metadata,
+                device_ns,
+            )
         owner_transfer_ns = max(
             0.0,
             float(
@@ -13859,7 +13637,7 @@ class _OnlineRuntime:
                 owner_transfer_ns,
             ),
         )
-        if extension_ns > 0.0:
+        if extension_ns > 0.0 or extension_energy_pj > 0.0:
             dependency_ids = {
                 dependency
                 for stage in scheduled_stages
@@ -13889,7 +13667,8 @@ class _OnlineRuntime:
                             cohort.request_ids,
                             (
                                 ResourceDemand(
-                                    last_stage.component_id, extension_ns
+                                    last_stage.component_id, extension_ns,
+                                    energy_pj=extension_energy_pj,
                                 ),
                             ),
                             True,
@@ -13971,7 +13750,7 @@ class _OnlineRuntime:
 
         isolated_shadow: Optional[_UniformIsolatedReplay] = None
         uniform_origin_ns: Optional[float] = None
-        if causal_transfer_stage_count > 0:
+        if causal_transfer_stage_count > 0 and not live_physical:
             uniform_origin_ns = self._uniform_live_replay_origin_ns(
                 self._execution_resource_kernel,
                 scheduled_stages,
@@ -13983,7 +13762,7 @@ class _OnlineRuntime:
         # shadow derives its isolated duration.  Non-uniform causal graphs
         # still share one validated final layout between the live and
         # isolated kernels.
-        replay_layout = self._execution_stage_metadata_cache.replay_layout(
+        replay_layout = None if live_physical else self._execution_stage_metadata_cache.replay_layout(
             cost.metadata,
             scheduled_stages,
             has_runtime_extension=extension_ns > 0.0,
@@ -14043,6 +13822,8 @@ class _OnlineRuntime:
                     self._execution_task_sequence
                 ),
                 isolated_shadow,
+                self._live_cohort_metrics,
+                self.execution_control if live_physical else None,
             )
         else:
             stage_envelopes = self._replay_cached_execution_stage_tasks(
@@ -14177,9 +13958,17 @@ class _OnlineRuntime:
             max((float(stage["end_ns"]) for stage in realized), default=host_end_ns),
         )
 
-        isolated_duration_ns = None
+        # Stateful physical service is resolved at the actual ready times.
+        # A cold isolated replay is a different experiment, not an equivalent
+        # duration; retain the observed cohort span without executing it twice.
+        isolated_duration_ns = (
+            host_ns + max((end for _start, end in stage_envelopes.values()), default=host_end_ns)
+            - min((start for start, _end in stage_envelopes.values()), default=host_end_ns)
+            if live_physical else None
+        )
         if (
-            causal_transfer_stage_count == 0
+            not live_physical
+            and causal_transfer_stage_count == 0
             and runtime_controller_stage_count == 0
         ):
             isolated_duration_ns = self._trusted_execution_stage_duration(
@@ -14552,6 +14341,8 @@ class _OnlineRuntime:
     def _execute_cohort(self, cohort: BatchCohort) -> None:
         cohort = self._with_kv_scan_lower_bound(cohort)
         cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+        planning_energy_pj = cost.energy_pj
+        planning_duration_ns = cost.duration_ns
         execution_plan = self._execution_plan_for(cohort, cost.metadata)
         cost = BatchCost(
             cost.duration_ns,
@@ -14649,12 +14440,22 @@ class _OnlineRuntime:
                 device_ns,
                 request_ready_ns,
                 runtime_controller_stage_count,
+                planning_energy_pj,
+                planning_duration_ns,
             )
-            cost = BatchCost(
-                max(1.0e-9, isolated_duration_ns),
-                cost.energy_pj,
-                cost.metadata,
-            )
+            if self._live_cohort_metrics is not None:
+                actual = self._live_cohort_metrics.summary()
+                cost = BatchCost(
+                    max(1.0e-9, isolated_duration_ns), actual.energy_pj,
+                    {**cost.metadata, **self._live_cohort_metrics.metadata(),
+                     "physical_execution_scope": "persistent_live_kernel",
+                     "cost_duration_semantics": "live_cohort_span"},
+                )
+                self._live_cohort_metrics = None
+            else:
+                cost = BatchCost(
+                    max(1.0e-9, isolated_duration_ns), cost.energy_pj, cost.metadata,
+                )
         else:
             previous_gpu_available_ns = self._gpu_available_ns
             host_start_ns = max(self._host_available_ns, request_ready_ns)
@@ -15965,13 +15766,16 @@ def _execution_stages_from_metadata(
                         )
                     )
                     demand_resource_ids.add(resource_id)
-                raw_metadata = raw_task.get("metadata")
-                source_metadata = {
-                    key: dict(value)
-                    for key in ("mmq_source_work", "native_kv_work")
-                    for value in ((raw_metadata.get(key) if isinstance(raw_metadata, _ABCMapping) else None),)
-                    if isinstance(value, _ABCMapping)
-                }
+                raw_metadata = raw_task.get("metadata", {})
+                if not isinstance(raw_metadata, _ABCMapping):
+                    return (), "execution task metadata is invalid"
+                try:
+                    category = TaskCategory(raw_task.get("category", TaskCategory.COMPUTE))
+                except (TypeError, ValueError):
+                    return (), "execution task category is invalid"
+                # Preserve the unresolved physical descriptors across JSON
+                # handoffs just as the trusted in-process handoff does.
+                source_metadata = dict(raw_metadata)
                 execution_task_rows.append(
                     _ExecutionTask(
                         raw_task_id,
@@ -15979,6 +15783,7 @@ def _execution_stages_from_metadata(
                         task_request_ids,
                         tuple(demands),
                         opaque_device_fence=raw_opaque_device_fence,
+                        category=category,
                         metadata=source_metadata,
                     )
                 )
@@ -15987,6 +15792,10 @@ def _execution_stages_from_metadata(
                 demand.service_ns > 0.0
                 for task in execution_task_rows
                 for demand in task.demands
+            ) and not any(
+                task.metadata.get("physical_memory_config") is not None
+                or task.metadata.get("stateful_l2") is not None
+                for task in execution_task_rows
             ):
                 return (), "execution stage task graph has no positive service"
             execution_tasks = tuple(execution_task_rows)

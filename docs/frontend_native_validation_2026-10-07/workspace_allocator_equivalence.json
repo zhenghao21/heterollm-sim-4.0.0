@@ -1,0 +1,58 @@
+{
+  "schema": "workspace-allocator-equivalence/v1",
+  "scope": "Only arena candidate filtering before sorting; all workspace placement, arena boundaries, physical costs and HBF energy fixes held identical.",
+  "comparison_exclusions": [],
+  "models": [
+    {
+      "numeric_fields_compared": 26817,
+      "nonnumeric_fields_compared": 31693,
+      "numeric_mismatch_count": 0,
+      "other_mismatch_count": 0,
+      "max_absolute_difference": 0,
+      "max_relative_difference": 0,
+      "undefined_relative_difference_count": 0,
+      "mismatches": [],
+      "nonnumeric_mismatches": [],
+      "all_report_fields_identical": true,
+      "model_id": "qwen3-32b",
+      "before_seconds": 22.910871100000804,
+      "after_seconds": 22.39636210000026,
+      "workload": {
+        "prompt_tokens": 512,
+        "output_tokens": 1,
+        "context": 640
+      }
+    },
+    {
+      "numeric_fields_compared": 26561,
+      "nonnumeric_fields_compared": 31117,
+      "numeric_mismatch_count": 0,
+      "other_mismatch_count": 0,
+      "max_absolute_difference": 0,
+      "max_relative_difference": 0,
+      "undefined_relative_difference_count": 0,
+      "mismatches": [],
+      "nonnumeric_mismatches": [],
+      "all_report_fields_identical": true,
+      "model_id": "qwen2_5-32b",
+      "before_seconds": 22.208724600001005,
+      "after_seconds": 22.74921040001209,
+      "workload": {
+        "prompt_tokens": 512,
+        "output_tokens": 1,
+        "context": 640
+      }
+    }
+  ],
+  "allocator_sequence": {
+    "resident_allocations": 2300,
+    "allocation_alias_rejection_events_compared": 3600,
+    "identical": true,
+    "address_difference_bytes": 0,
+    "before_seconds": 0.9941708999976981,
+    "after_seconds": 0.5271247000200674,
+    "speedup": 1.8860260199528698,
+    "scope": "Fixed synthetic lifetime sequence; wall time is a microbenchmark, not a model prediction."
+  },
+  "status": "completed"
+}

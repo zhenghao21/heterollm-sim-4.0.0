@@ -344,3 +344,30 @@ def test_physical_runtime_snapshot_keeps_interval_history_by_reference():
     runtime.timeline._intervals = {"gddr0:data:0": [(0.0, 1.0)] * 1000}
     snapshot = runtime.snapshot()
     assert snapshot["timeline"]["_intervals"] is runtime.timeline._intervals
+
+
+def test_physical_snapshot_copies_native_and_custom_bank_state_for_rollback():
+    from dataclasses import dataclass
+    from heterollm_sim.dram_core import _BankState
+
+    @dataclass
+    class CustomBank(_BankState):
+        label: str = "custom"
+
+    runtime = PhysicalRuntimeContext()
+    core = runtime.runtime(_config(), "gddr0").core
+    native = _BankState(open_row=3, ready_ns=42.5)
+    custom = CustomBank(open_row=4, ready_ns=63.25)
+    core._banks.update({"native": native, "custom": custom})
+    snapshot = runtime.snapshot()
+    saved = snapshot["runtime_state"]["gddr0"]["core"]["_banks"]
+    assert saved == core._banks
+    assert saved["native"] is not native
+    assert saved["custom"] is not custom
+    assert isinstance(saved["custom"], CustomBank)
+
+    native.open_row, native.ready_ns = 17, 999.0
+    custom.label = "changed"
+    runtime.restore(snapshot)
+    assert core._banks["native"] == _BankState(open_row=3, ready_ns=42.5)
+    assert core._banks["custom"] == CustomBank(open_row=4, ready_ns=63.25)

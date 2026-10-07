@@ -187,9 +187,13 @@ def test_mixed_dram_nand_task_reports_only_each_physical_owners_costs():
     for demand in resolved.demands:
         if demand.resource_id in dram_report["resource_totals"]:
             assert demand.energy_pj == demand.bytes_moved * 2.0
-        elif demand.resource_id in nand_report["resource_totals"]:
-            assert demand.energy_pj == demand.bytes_moved * 7.0
     by_owner = resolved.metadata["physical_execution_by_owner"]
+    # NAND channel and internal hops describe the same media transfer. Charge
+    # its physical page bytes once, rather than charging each hop again.
+    nand_energy = nand_report["physical_read_bytes"] * 7.0
+    assert by_owner["hbf0.memory"]["energy_pj"] == pytest.approx(nand_energy)
+    assert sum(demand.energy_pj for demand in resolved.demands
+               if demand.resource_id in nand_report["resource_totals"]) == pytest.approx(nand_energy)
     assert sum(row["energy_pj"] for row in by_owner.values()) == resolved.metadata["physical_execution"]["energy_pj"]
     assert nand_report["energy_pj"] == sum(row["energy_pj"] for row in nand_report["resource_totals"].values())
 

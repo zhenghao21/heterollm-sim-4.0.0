@@ -187,7 +187,10 @@ def run_scenario(
         1,
         message="正在执行 CPU 动态放置与运行时初始化",
     )
-    bootstrap = bootstrap_control_plane(scenario)
+    bootstrap = bootstrap_control_plane(
+        scenario,
+        capture_physical_details=selected_policy is not RetentionPolicy.AGGREGATE,
+    )
     mapped_scenario = bootstrap.scenario
     if (
         batch_lowerer is not None
@@ -548,18 +551,19 @@ def _sum_batch_storage_traffic(
         "physical_bytes": 0,
         "physical_read_bytes": 0,
         "physical_write_bytes": 0,
-        "pages_touched": 0,
-        "media_waves": 0,
         "queue_wait_ns": 0.0,
-        "host_queue_wait_ns": 0.0,
-        "media_queue_wait_ns": 0.0,
-        "read_operations": 0,
-        "program_operations": 0,
         "erase_operations": 0,
-        "rmw_read_operations": 0,
         "service_ns": 0.0,
         "energy_pj": 0.0,
     }
+    optional = {key: 0 for key in (
+        "logical_read_bytes", "logical_write_bytes", "internal_transfer_bytes",
+        "pages_read", "pages_programmed", "pages_touched", "media_waves",
+        "read_operations", "program_operations", "rmw_read_operations")}
+    optional.update(host_queue_wait_ns=0.0, media_queue_wait_ns=0.0)
+    observed = {key: 0 for key in optional}
+    physical_batches = 0
+    organization_batches = 0
     operations: Dict[str, int] = {}
     resources: Dict[str, Dict[str, Any]] = {}
     profiles: List[str] = []
@@ -569,10 +573,16 @@ def _sum_batch_storage_traffic(
         ledger = batch.cost.metadata.get("storage_traffic", {})
         if not isinstance(ledger, Mapping) or not ledger.get("task_count"):
             continue
+        physical_batches += 1
         for key in numeric:
             value = ledger.get(key, 0)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 numeric[key] += value
+        for key in optional:
+            value = ledger.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                optional[key] += value
+                observed[key] += 1
         for operation, count in (ledger.get("operation_counts", {}) or {}).items():
             if isinstance(count, int) and not isinstance(count, bool):
                 operations[str(operation)] = operations.get(str(operation), 0) + count
@@ -594,7 +604,10 @@ def _sum_batch_storage_traffic(
         for value in ledger.get("background_work", ()) or ():
             if value not in backgrounds and len(backgrounds) < 32:
                 backgrounds.append(to_primitive(value))
-        for value in ledger.get("organization_profiles", ()) or ():
+        batch_organizations = ledger.get("organization_profiles", ()) or ()
+        if batch_organizations:
+            organization_batches += 1
+        for value in batch_organizations:
             value = to_primitive(value)
             if value not in organizations and len(organizations) < 32:
                 organizations.append(value)
@@ -604,6 +617,14 @@ def _sum_batch_storage_traffic(
         "schema_version": "heterollm.nand-traffic/v1",
         **{key: (int(value) if key not in {"service_ns", "energy_pj", "queue_wait_ns", "host_queue_wait_ns", "media_queue_wait_ns"} else value)
            for key, value in numeric.items()},
+        **{key: value if observed[key] == physical_batches else None for key, value in optional.items()},
+        "metric_availability": {
+            key: {
+                "status": ("recorded" if count == physical_batches else "partial" if count else "not_recorded"),
+                "recorded_batch_count": count, "physical_batch_count": physical_batches,
+            }
+            for key, count in {**observed, "organization_profiles": organization_batches}.items()
+        },
         "operation_counts": dict(sorted(operations.items())),
         "resource_totals": dict(sorted(resources.items())),
         "owner_ids": tuple(sorted({str(row["owner"]) for row in resources.values()})),
@@ -612,8 +633,9 @@ def _sum_batch_storage_traffic(
         "organization_profiles": organizations,
         "organization_profile_limit": 32,
         "accounting_semantics": (
-            "host_transfer_bytes is logical host payload; physical_* and pages/waves "
-            "are NAND media accounting; service_ns/energy_pj are analytical"
+            "host_transfer_bytes is logical host payload; physical_* and pages_read/pages_programmed "
+            "are NAND media accounting; null means not fully recorded; operation_counts classifies "
+            "task-owner ledgers, not media operations; service_ns/energy_pj are analytical"
         ),
     }
 
@@ -624,19 +646,28 @@ def _sum_batch_dram_traffic(result: OnlineScenarioResult) -> Dict[str, Any]:
         "task_count": 0, "logical_read_bytes": 0, "logical_write_bytes": 0,
         "physical_read_bytes": 0, "physical_write_bytes": 0, "physical_bytes": 0,
         "logical_bytes": 0, "burst_count": 0, "row_hits": 0, "row_misses": 0,
-        "row_conflicts": 0, "read_write_switches": 0, "queue_wait_ns": 0.0,
-        "refresh_wait_ns": 0.0, "turnaround_wait_ns": 0.0, "service_ns": 0.0,
+        "row_conflicts": 0, "queue_wait_ns": 0.0, "service_ns": 0.0,
     }
+    optional = {"read_write_switches": 0, "refresh_wait_ns": 0.0, "turnaround_wait_ns": 0.0}
+    observed = {key: 0 for key in optional}
+    physical_batches = 0
+    profile_batches = 0
     resources: Dict[str, Dict[str, Any]] = {}
     profiles: List[Any] = []
     for batch in result.serving.batches:
         ledger = batch.cost.metadata.get("dram_traffic", {})
         if not isinstance(ledger, Mapping) or not ledger.get("task_count"):
             continue
+        physical_batches += 1
         for key in numeric:
             value = ledger.get(key, 0)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 numeric[key] += value
+        for key in optional:
+            value = ledger.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                optional[key] += value
+                observed[key] += 1
         for resource_id, raw in (ledger.get("resource_totals", {}) or {}).items():
             if not isinstance(raw, Mapping):
                 continue
@@ -646,17 +677,34 @@ def _sum_batch_dram_traffic(result: OnlineScenarioResult) -> Dict[str, Any]:
             row["bytes_moved"] += int(raw.get("bytes_moved", 0) or 0)
             row["service_ns"] += float(raw.get("service_ns", 0.0) or 0.0)
             row["energy_pj"] += float(raw.get("energy_pj", 0.0) or 0.0)
-        for value in ledger.get("organization_profiles", ()) or ():
+        batch_profiles = ledger.get("organization_profiles", ()) or ()
+        if batch_profiles:
+            profile_batches += 1
+        for value in batch_profiles:
             if value not in profiles and len(profiles) < 32:
                 profiles.append(to_primitive(value))
     return {
         "schema_version": "heterollm.dram-traffic/v1",
-        **{key: (int(value) if key not in {"queue_wait_ns", "refresh_wait_ns", "turnaround_wait_ns", "service_ns"} else value)
+        **{key: (int(value) if key not in {"queue_wait_ns", "service_ns"} else value)
            for key, value in numeric.items()},
+        **{key: value if physical_batches and observed[key] == physical_batches else None
+           for key, value in optional.items()},
+        "metric_availability": {
+            key: {
+                "status": ("recorded" if physical_batches and count == physical_batches
+                           else "partial" if count else "not_recorded"),
+                "recorded_batch_count": count,
+                "physical_batch_count": physical_batches,
+            }
+            for key, count in {**observed, "organization_profiles": profile_batches}.items()
+        },
         "resource_totals": dict(sorted(resources.items())),
         "owner_ids": sorted({str(row.get("owner", "unknown")) for row in resources.values()}),
         "organization_profiles": profiles, "organization_profile_limit": 32,
-        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "accounting_semantics": (
+            "resolved analytical burst bytes and controller waits; null means not fully recorded; "
+            "empty organization_profiles is not evidence of complete geometry reporting; no device accuracy claim"
+        ),
     }
 
 
@@ -5507,6 +5555,10 @@ def _online_report_core(
         "task_count": task_count,
         **_host_output_contract_projection(result.scenario),
         "batch_count": len(serving.batches),
+        "physical_live_batch_count": sum(
+            batch.cost.metadata.get("physical_execution_scope") == "persistent_live_kernel"
+            for batch in serving.batches
+        ),
         "completed_requests": completed,
         "rejected_requests": sum(
             metric.status == RequestStatus.REJECTED

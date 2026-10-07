@@ -19,6 +19,20 @@ from .parallel import build_parallel_plan
 from .serde import stable_hash
 
 
+class LlamaDeviceMemoryCapacityError(ValueError):
+    """An authored placement cannot fit a tensor in its available buffers."""
+
+    def __init__(self, allocation_name: str, size_bytes: int, device: str | None):
+        self.allocation_name = allocation_name
+        self.size_bytes = size_bytes
+        self.device = device
+        super().__init__(
+            "llama.cpp shared device-memory capacity exhausted for {} ({} bytes; device {})".format(
+                allocation_name, size_bytes, device or "CPU"
+            )
+        )
+
+
 def device_memory_input_fingerprint(scenario: ScenarioConfig) -> str:
     """Exclude generated placement/evidence to avoid self-referential hashes."""
     return stable_hash({
@@ -28,6 +42,8 @@ def device_memory_input_fingerprint(scenario: ScenarioConfig) -> str:
         "kv_dtype": scenario.placement.kv_policy.dtype,
         "kv_page_tokens": scenario.placement.kv_policy.tokens_per_page,
         "weights_resident": scenario.weights_resident,
+        "workspace_policy": "dependency_barrier_lifetime_upper_bound/v1",
+        "workspace_workload": scenario.workload,
     })
 
 
@@ -92,6 +108,7 @@ def _device_buffers(scenario: ScenarioConfig) -> tuple[ScenarioConfig, dict[str,
 
 def prepare_device_memory_policy(
     scenario: ScenarioConfig, policy: PlacementPolicy,
+    *, workspace_bytes: dict[str, int] | None = None,
 ) -> tuple[ScenarioConfig, PlacementPolicy]:
     """Reserve static state, then allocate weights against the same byte ledger.
 
@@ -117,6 +134,22 @@ def prepare_device_memory_policy(
     generated = _mapping_controls(scenario, []).previous_generated_tensor_ids
     used = _base_capacity_usage(scenario, generated | {r.tensor_id for r in requirements})
     capacities = _component_capacities(scenario)
+    workspace_bytes = dict(workspace_bytes or {})
+    # Exported/explicit arena configurations already constrain the physical
+    # allocator. Honor them before initial first-fit placement as well, even
+    # when a subsequently edited workload needs a smaller computed bound.
+    for component in scenario.hardware.components:
+        physical = component.metadata.get("physical_memory_config", {})
+        existing = physical.get("metadata", {}).get("workspace_capacity_bytes", 0)
+        if type(existing) is not int or existing < 0:
+            raise ValueError("workspace_capacity_bytes must be a non-negative integer")
+        if existing:
+            workspace_bytes[component.component_id] = max(
+                workspace_bytes.get(component.component_id, 0), existing)
+    for target, size in (workspace_bytes or {}).items():
+        if size < 0 or used.get(target, 0) + size > capacities.get(target, 0):
+            raise LlamaDeviceMemoryCapacityError("physical_workspace", size, target)
+        used[target] = used.get(target, 0) + size
     state_bytes: dict[str, int] = {}
     weight_bytes: dict[str, int] = {}
     kv_targets: dict[str, str] = {}
@@ -139,7 +172,7 @@ def prepare_device_memory_policy(
                 used[target] = used.get(target, 0) + size
                 ledger[target] = ledger.get(target, 0) + size
                 return target
-        raise ValueError("llama.cpp shared device-memory capacity exhausted for {} ({} bytes; device {})".format(name, size, device or "CPU"))
+        raise LlamaDeviceMemoryCapacityError(name, size, device)
 
     page = scenario.placement.kv_policy.tokens_per_page
     reserved_tokens = ((config.context + page - 1) // page) * page
@@ -185,6 +218,7 @@ def prepare_device_memory_policy(
         "allocation_order": "static_context_state_then_weights; HBM_before_HBF",
         "reserved_kv_tokens": reserved_tokens, "reserved_state_slots": config.parallel,
         "state_reserved_bytes": state_bytes, "weight_bytes": weight_bytes,
+        "workspace_reserved_bytes": dict(workspace_bytes or {}),
         "total_allocated_bytes": used, "capacity_bytes": capacities,
         "scope": "one TP/EP rank per pipeline stage; distinct directly accessed buffers on each CUDA device",
     }
@@ -200,3 +234,104 @@ def prepare_device_memory_policy(
         weight_tensor_targets=weight_targets, kv_cache_target=kv_default,
         linear_state_target=state_default, kv_layer_targets=kv_targets,
         linear_state_layer_targets=state_targets)
+
+
+def refine_workspace_placement(scenario: ScenarioConfig, policy: PlacementPolicy):
+    """Reserve a declared conservative graph bound and verify the final mapping."""
+    from .control_plane_planner import plan_runtime_placement
+    from .workspace_memory import device_workspace_reservation
+    original_mapping = dict(scenario.placement.tensor_to_component)
+    budget = {}
+    iterations = []
+    partition_targets = set()
+    for iteration in range(4):
+        audit = device_workspace_reservation(scenario)
+        if audit is None:
+            return scenario
+        memory = scenario.placement.metadata["llama_device_memory_policy"]
+        capacities = memory["capacity_bytes"]
+        occupied = {target: used - memory.get("workspace_reserved_bytes", {}).get(target, 0)
+                    for target, used in memory["total_allocated_bytes"].items()}
+        for target, size in audit["bytes_by_component"].items():
+            budget[target] = max(budget.get(target, 0), size)
+        # The placement ledger holds logical tensor payloads.  Physical
+        # allocations include declared shard envelopes and burst alignment.
+        # Reserve their measured structural excess rather than losing it.
+        physical_excess = {target: max(0, size - occupied.get(target, 0))
+            for target, size in audit["resident_physical_bytes_by_component"].items()}
+        reservation = {target: budget.get(target, 0) + physical_excess.get(target, 0)
+                       for target in set(budget) | set(physical_excess)}
+        deficits = {target: size + occupied.get(target, 0) - capacities.get(target, 0)
+                    for target, size in reservation.items()
+                    if size + occupied.get(target, 0) > capacities.get(target, 0)}
+        iterations.append({"iteration": iteration, "workspace_bound_bytes": dict(budget),
+            "physical_resident_excess_bytes": physical_excess,
+            "resident_bytes": occupied,
+            "headroom_bytes": {target: capacities.get(target, 0) - occupied.get(target, 0)
+                               for target in budget},
+            "conservative_bound_shortfall_bytes": deficits})
+        if not deficits:
+            audit["iterations"] = iterations
+            audit["changed_tensor_ids"] = sorted(key for key, target in scenario.placement.tensor_to_component.items()
+                if original_mapping.get(key) != target)
+            # Report the final mapping's recomputed reservation, including
+            # owners whose ample headroom required no remapping.  Do not
+            # carry excess from a superseded placement or lose host work
+            # when an exported scenario is prepared again.
+            final_reservation = dict(reservation)
+            for component in scenario.hardware.components:
+                explicit = component.metadata.get("physical_memory_config", {}).get(
+                    "metadata", {}).get("workspace_capacity_bytes", 0)
+                if explicit:
+                    final_reservation[component.component_id] = max(
+                        final_reservation.get(component.component_id, 0), explicit)
+            memory = {**memory, "workspace_reserved_bytes": final_reservation,
+                "total_allocated_bytes": {target: occupied.get(target, 0) + final_reservation.get(target, 0)
+                    for target in set(occupied) | set(final_reservation)}}
+            scenario = replace(scenario, placement=replace(scenario.placement, metadata={
+                **scenario.placement.metadata, "llama_device_memory_policy": memory}))
+            if partition_targets:
+                components = []
+                partitions = {}
+                for component in scenario.hardware.components:
+                    workspace = budget.get(component.component_id, 0)
+                    if component.component_id not in partition_targets or workspace <= 0:
+                        components.append(component)
+                        continue
+                    physical = dict(component.metadata["physical_memory_config"])
+                    burst = int(physical.get("burst_bytes", 64))
+                    capacity = int(physical["capacity_bytes"])
+                    workspace = ((workspace + burst - 1) // burst) * burst
+                    if (capacity - workspace) % burst or not 0 < workspace < capacity:
+                        raise ValueError("physical workspace partition requires aligned positive capacity")
+                    physical["metadata"] = {**physical.get("metadata", {}),
+                        "workspace_capacity_bytes": workspace,
+                        "workspace_partition_basis": "dependency_barrier_lifetime_upper_bound"}
+                    components.append(replace(component, metadata={
+                        **component.metadata, "physical_memory_config": physical}))
+                    partitions[component.component_id] = {
+                        "resident_start_bytes": 0, "resident_end_bytes": capacity - workspace,
+                        "workspace_start_bytes": capacity - workspace, "workspace_end_bytes": capacity}
+                scenario = replace(scenario, hardware=replace(scenario.hardware, components=tuple(components)))
+                audit["physical_address_partitions"] = partitions
+                # The physical address partition is an explicit hardware
+                # input. Rebind the final control-plane decision after that
+                # input changes, rather than leaving valid UI stale checks
+                # pointing at the provisional unpartitioned hardware.
+                final_decision = plan_runtime_placement(scenario, policy)
+                if not final_decision.fully_placed:
+                    raise ValueError("physical workspace partition leaves incomplete placement")
+                scenario = final_decision.apply(scenario)
+            return replace(scenario, placement=replace(scenario.placement, metadata={
+                **scenario.placement.metadata, "physical_workspace_reservation": audit}))
+        if iteration == 3:
+            raise ValueError("device workspace placement did not stabilize after four graph analyses")
+        partition_targets.update(deficits)
+        revised, revised_policy = prepare_device_memory_policy(
+            scenario, policy, workspace_bytes=reservation)
+        decision = plan_runtime_placement(revised, revised_policy)
+        if not decision.fully_placed:
+            raise ValueError("physical workspace reservation leaves incomplete device-memory placement")
+        revised = decision.apply(revised)
+        scenario = revised
+        policy = revised_policy

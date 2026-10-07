@@ -155,3 +155,178 @@ def execute_compiled(core, request):
             "pages_read": 0, "pages_programmed": 0, "erase_operations": 0,
         },
     )
+
+
+def execute_compiled_many(core, requests):
+    """Pack once for a bounded ordered batch, or decline without mutation."""
+    from .memory_types import AccessRequest
+    if not requests:
+        return ()
+    if len(requests) > 1024 or any(r.operation not in (Operation.READ, Operation.WRITE) for r in requests):
+        return None
+    # A conservative envelope is used only for integer-overflow validation;
+    # execution below retains every separate address, size and arrival.
+    low = min(r.address for r in requests)
+    high = max(r.address + r.byte_count for r in requests)
+    request = AccessRequest("batch-pack", requests[0].operation, low, high - low,
+                            min(r.arrival_ns for r in requests))
+    from .dram_core import DramCore, _BankState
+
+    if (type(core) is not DramCore or request.operation not in (Operation.READ, Operation.WRITE)
+            or request.byte_count <= 0 or not core._can_accelerate()):
+        return None
+    config, timeline = core.config, core.timeline
+    lanes, banks = config.lane_count, config.bank_count
+    total_banks = config.stacks * config.dies_per_stack * lanes * banks
+    burst = config.burst_bytes
+    first = request.address // burst
+    stop = (request.address + request.byte_count - 1) // burst + 1
+    physical = (stop - first) * burst
+    if (total_banks > 8192 or burst > 2 ** 53 or config.computed_capacity_bytes > _INT64_MAX
+            or request.address < 0 or request.address + request.byte_count > config.effective_capacity_bytes
+            or stop > _INT64_MAX or physical > _INT64_MAX):
+        return None
+    metadata = config.metadata
+    bank_prefix = str(metadata.get("bank_resource_prefix", "dram:bank"))
+    command_prefix = str(metadata.get("command_resource_prefix", "dram:command"))
+    data_prefix = str(metadata.get("data_resource_prefix", "dram:data"))
+    shared_value = metadata.get("shared_command_resource")
+    shared = str(shared_value) if shared_value else None
+    ids = _resource_ids(config.stacks, config.dies_per_stack, lanes, banks,
+                        config.bank_groups_per_rank, config.banks_per_group,
+                        bank_prefix, command_prefix, data_prefix, shared)
+    if len(set(ids)) != len(ids):
+        return None
+    read = request.operation is Operation.READ
+    geometry = np.array([lanes, banks, (config.interleave_bytes or burst) // burst,
+                         config.row_bytes // burst, config.rows_per_bank, config.dies_per_stack], dtype=np.int64)
+    durations = np.array([
+        burst, config.burst_interval_ns, burst / config.directional_lane_bandwidth_gb_s(request.operation),
+        config.read_latency_ns if read else config.write_latency_ns,
+        config.read_recovery_ns if read else config.write_recovery_ns,
+        config.open_ns, config.close_ns, config.read_to_write_ns, config.write_to_read_ns,
+    ], dtype=np.float64)
+    count = len(ids)
+    bankrows = np.full(total_banks, -1, dtype=np.int64)
+    bankready = np.zeros(total_banks, dtype=np.float64)
+    banktouched = np.zeros(total_banks, dtype=np.bool_)
+    calendar = np.zeros(count, dtype=np.float64)
+    busy = np.zeros(count, dtype=np.float64)
+    moved = np.zeros(count, dtype=np.int64)
+    directions = np.zeros(count, dtype=np.int8)
+    last_start, last_end = np.zeros(count), np.zeros(count)
+    touched = np.zeros(count, dtype=np.bool_)
+    live_slots = set()
+    try:
+        for index, rid in enumerate(ids):
+            slots = timeline.lane_available.get(rid)
+            if slots is not None:
+                if len(slots) != 1 or id(slots) in live_slots:
+                    return None
+                live_slots.add(id(slots))
+            calendar[index] = slots[0] if slots is not None else timeline.available_ns(rid)
+            busy[index] = timeline.busy_ns.get(rid, 0.0)
+            previous_bytes = timeline.bytes_moved.get(rid, 0)
+            if (isinstance(previous_bytes, bool) or not isinstance(previous_bytes, (int, np.integer))
+                    or previous_bytes < 0 or previous_bytes > _INT64_MAX - physical):
+                return None
+            moved[index] = previous_bytes
+            previous_direction = timeline.directions.get(rid)
+            directions[index] = 1 if previous_direction == "read" else 2 if previous_direction == "write" else 3 if previous_direction else 0
+            last_start[index], last_end[index] = timeline.last_intervals.get(rid, (0.0, 0.0))
+            if index < total_banks:
+                bank = core._banks.get(rid)
+                if bank is not None:
+                    if bank.open_row is not None:
+                        if (isinstance(bank.open_row, bool) or not isinstance(bank.open_row, int)
+                                or not 0 <= bank.open_row <= _INT64_MAX):
+                            return None
+                        bankrows[index] = bank.open_row
+                    bankready[index] = bank.ready_ns
+    except (ValueError, TypeError, OverflowError):
+        return None
+    if (not math.isfinite(request.arrival_ns)
+            or not all(np.isfinite(values).all() for values in
+                       (bankready, calendar, busy, last_start, last_end, durations))):
+        return None
+    if (not math.isfinite(core._acceptance_ns)
+            or not all(math.isfinite(value) for value in core._inflight)
+            or not all(math.isfinite(r.arrival_ns) for r in requests)):
+        return None
+    physical_total = sum(((r.address + r.byte_count - 1) // burst - r.address // burst + 1) * burst for r in requests)
+    if any(value > _INT64_MAX - physical_total for value in moved):
+        return None
+    duration_pairs = np.array([[burst, config.burst_interval_ns,
+        burst / config.directional_lane_bandwidth_gb_s(operation),
+        config.read_latency_ns if operation is Operation.READ else config.write_latency_ns,
+        config.read_recovery_ns if operation is Operation.READ else config.write_recovery_ns,
+        config.open_ns, config.close_ns, config.read_to_write_ns, config.write_to_read_ns]
+        for operation in (Operation.READ, Operation.WRITE)], dtype=np.float64)
+    if not np.isfinite(duration_pairs).all():
+        return None
+    firsts = np.array([r.address // burst for r in requests], dtype=np.int64)
+    stops = np.array([(r.address + r.byte_count - 1) // burst + 1 for r in requests], dtype=np.int64)
+    arrivals = np.array([r.arrival_ns for r in requests], dtype=np.float64)
+    reads = np.array([r.operation is Operation.READ for r in requests], dtype=np.bool_)
+    inflight = np.empty(len(core._inflight) + len(requests), dtype=np.float64)
+    inflight[:len(core._inflight)] = core._inflight
+    from ._dram_numeric import run_numeric_many
+    output = run_numeric_many(firsts, stops, arrivals, reads, config.max_outstanding_requests,
+        float(core._acceptance_ns), inflight, len(core._inflight), geometry, duration_pairs, bool(shared),
+        bankrows, bankready, banktouched, calendar, busy, moved, directions, last_start, last_end, touched)
+    ends, waits, counts, busy_delta, byte_delta, starts_by_request, ends_by_request, touched_by_request, acceptance, inflight_count = output
+    if (not np.isfinite(ends).all() or not all(np.isfinite(values).all()
+            for values in (bankready, calendar, busy, last_start, last_end))):
+        return None
+    results = []
+    for index, item in enumerate(requests):
+        transfers = int(stops[index] - firsts[index]) * burst
+        hits, misses, conflicts, skipped = (int(value) for value in counts[index])
+        result_counters = {"row_hits": hits, "row_misses": misses, "row_conflicts": conflicts,
+            "burst_count": int(stops[index] - firsts[index]),
+            "details_truncated": int(stops[index] - firsts[index]) > config.max_expanded_segments,
+            "compiled_batch_float64": True,
+            "physical_read_bytes": transfers if reads[index] else 0,
+            "physical_write_bytes": 0 if reads[index] else transfers,
+            "queue_wait_ns": float(waits[index]),
+            "bandwidth_ceiling_gb_s": config.directional_bandwidth_gb_s(item.operation),
+            "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
+            "pages_read": 0, "pages_programmed": 0, "erase_operations": 0,
+            "resource_busy_ns": {ids[i]: float(busy_delta[index, i]) for i in np.flatnonzero(busy_delta[index])},
+            "resource_bytes": {ids[i]: int(byte_delta[index, i]) for i in np.flatnonzero(byte_delta[index])},
+            "resource_last_intervals": {ids[i]: (float(starts_by_request[index, i]), float(ends_by_request[index, i]))
+                                        for i in np.flatnonzero(touched_by_request[index])},
+            "resource_intervals": {}, "resource_interval_payloads": {}, "intervals_truncated": True}
+        if stops[index] - firsts[index] >= 64:
+            result_counters.update(accelerated_row_hit_bursts=skipped, compiled_float64=True)
+        results.append(TransactionResult(request_id=item.request_id, operation=item.operation,
+            arrival_ns=item.arrival_ns, completion_ns=float(ends[index]), logical_bytes=item.byte_count,
+            transfer_bytes=transfers, counters=result_counters))
+    # Commit only after every input/result has been checked, retaining the
+    # caller's lane-calendar list identities and unrelated resource entries.
+    for index in np.flatnonzero(banktouched):
+        rid = ids[index]
+        bank = core._banks.get(rid)
+        if bank is None:
+            bank = _BankState()
+            core._banks[rid] = bank
+        bank.open_row, bank.ready_ns = int(bankrows[index]), float(bankready[index])
+    first_data = total_banks + (1 if shared else lanes)
+    all_touched = touched_by_request.any(axis=0)
+    for index in np.flatnonzero(all_touched):
+        rid = ids[index]
+        timeline.lane_available.setdefault(rid, [0.0])[0] = float(calendar[index])
+        timeline.ready_ns[rid] = float(calendar[index])
+        timeline.busy_ns[rid] = float(busy[index])
+        timeline.last_intervals[rid] = (float(last_start[index]), float(last_end[index]))
+        if index >= first_data:
+            timeline.bytes_moved[rid] = int(moved[index])
+            timeline.directions[rid] = "read" if directions[index] == 1 else "write"
+    timeline._touched = {ids[index] for index in np.flatnonzero(touched)}
+    timeline._intervals = {}
+    timeline._interval_payloads = {}
+    timeline._interval_limit = timeline._interval_count = 0
+    timeline._intervals_truncated = True
+    core._acceptance_ns = float(acceptance)
+    core._inflight = [float(value) for value in inflight[:inflight_count]]
+    return tuple(results)

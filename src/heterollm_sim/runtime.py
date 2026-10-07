@@ -70,7 +70,11 @@ class ControlPlaneRuntime:
         state: Optional[RuntimeState] = None,
         *,
         resource_capacities: Optional[Mapping[str, int]] = None,
+        capture_physical_details: bool = True,
     ) -> None:
+        if not isinstance(capture_physical_details, bool):
+            raise TypeError("capture_physical_details must be a boolean")
+        self.capture_physical_details = capture_physical_details
         self.profile = dict(profile or {})
         _reject_callbacks(self.profile, "profile")
         self.state = state if state is not None else RuntimeState()
@@ -198,6 +202,7 @@ class ControlPlaneRuntime:
         kernel = UnifiedEventKernel(
             resource_capacities=self.resource_capacities,
             resource_owners=self.resource_owners,
+            capture_physical_details=self.capture_physical_details,
         )
         self.kernel = kernel
         submissions = [kernel.submit(lowered_roots)]

@@ -1,0 +1,80 @@
+{
+  "qwen3-30b-a3b": {
+    "tasks": 117,
+    "counts": {
+      "input_norm_reduce": 1,
+      "input_norm_apply": 1,
+      "null": 21,
+      "attention_q_norm_reduce": 1,
+      "attention_q_norm_apply": 1,
+      "attention_k_norm_reduce": 1,
+      "attention_k_norm_apply": 1,
+      "rope": 1,
+      "softmax_reduce": 1,
+      "softmax_normalize": 1,
+      "fused_residual_norm": 1,
+      "router_softmax_reduce": 1,
+      "router_softmax_normalize": 1,
+      "router_topk": 1,
+      "router_weight_gather": 1,
+      "router_weight_sum": 1,
+      "router_weight_clamp": 1,
+      "router_weight_normalize": 1,
+      "expert_route_weight": 1,
+      "expert_weighted_sum": 1,
+      "moe_residual": 1
+    },
+    "qk_norm": {
+      "kind": "rmsnorm",
+      "head_dim": 128,
+      "weight_storage_bits": 16,
+      "weight_bytes": 512,
+      "source": "Qwen3 per-head q_norm/k_norm; llama.cpp qwen3.cpp/qwen3moe.cpp",
+      "weight_basis": "two head-dimension vectors in declared model dtype"
+    },
+    "moe_routing": {
+      "gating": "softmax",
+      "normalize_selected_weights": true,
+      "weight_scale": 1.0
+    }
+  },
+  "qwen3-235b-a22b": {
+    "tasks": 117,
+    "counts": {
+      "input_norm_reduce": 1,
+      "input_norm_apply": 1,
+      "null": 21,
+      "attention_q_norm_reduce": 1,
+      "attention_q_norm_apply": 1,
+      "attention_k_norm_reduce": 1,
+      "attention_k_norm_apply": 1,
+      "rope": 1,
+      "softmax_reduce": 1,
+      "softmax_normalize": 1,
+      "fused_residual_norm": 1,
+      "router_softmax_reduce": 1,
+      "router_softmax_normalize": 1,
+      "router_topk": 1,
+      "router_weight_gather": 1,
+      "router_weight_sum": 1,
+      "router_weight_clamp": 1,
+      "router_weight_normalize": 1,
+      "expert_route_weight": 1,
+      "expert_weighted_sum": 1,
+      "moe_residual": 1
+    },
+    "qk_norm": {
+      "kind": "rmsnorm",
+      "head_dim": 128,
+      "weight_storage_bits": 16,
+      "weight_bytes": 512,
+      "source": "Qwen3 per-head q_norm/k_norm; llama.cpp qwen3.cpp/qwen3moe.cpp",
+      "weight_basis": "two head-dimension vectors in declared model dtype"
+    },
+    "moe_routing": {
+      "gating": "softmax",
+      "normalize_selected_weights": true,
+      "weight_scale": 1.0
+    }
+  }
+}

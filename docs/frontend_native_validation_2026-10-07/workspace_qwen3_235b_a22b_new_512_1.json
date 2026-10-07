@@ -1,0 +1,4512 @@
+{
+  "model": "qwen3-235b-a22b",
+  "mode": "new",
+  "workload": {
+    "prompt_tokens": 512,
+    "output_tokens": 1,
+    "context": 640
+  },
+  "prepare_seconds": 173.52663930002018,
+  "workspace": {
+    "schema": "physical-workspace-reservation/v1",
+    "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+    "slot_multiplier": 1,
+    "bytes_by_component": {
+      "hostmem0": 12585088,
+      "hbm0": 92274688
+    },
+    "resident_physical_bytes_by_component": {
+      "hbm1": 35999711232,
+      "hbm0": 35907222528,
+      "hbf0": 397095731200
+    },
+    "cohorts": [
+      {
+        "bytes_by_owner": {
+          "hostmem0.memory": 12585088,
+          "hbm0.hbm_fabric": 92274688
+        },
+        "serial_region_count": 5758,
+        "resident_bytes_by_owner": {
+          "hbm1.hbm_fabric": 35999711232,
+          "hbm0.hbm_fabric": 35907222528,
+          "hbf0.memory": 397095731200
+        },
+        "buffer_count": 51902,
+        "task_count": 79095,
+        "bound_kind": "dependency_barrier_lifetime_upper_bound",
+        "phase": "prefill"
+      }
+    ],
+    "iterations": [
+      {
+        "iteration": 0,
+        "workspace_bound_bytes": {
+          "hostmem0": 12585088,
+          "hbm0": 92274688
+        },
+        "physical_resident_excess_bytes": {
+          "hbm1": 0,
+          "hbm0": 44439,
+          "hbf0": 0
+        },
+        "resident_bytes": {
+          "hbm0": 35979529833,
+          "hostmem0": 1244659712,
+          "hbm1": 35961966200,
+          "hbf0": 397061168927
+        },
+        "headroom_bytes": {
+          "hostmem0": 30755340288,
+          "hbm0": 20470167
+        },
+        "conservative_bound_shortfall_bytes": {
+          "hbm0": 71848960
+        }
+      },
+      {
+        "iteration": 1,
+        "workspace_bound_bytes": {
+          "hostmem0": 12585088,
+          "hbm0": 92274688
+        },
+        "physical_resident_excess_bytes": {
+          "hbm1": 0,
+          "hbm0": 44439,
+          "hbf0": 0
+        },
+        "resident_bytes": {
+          "hbm1": 35999714936,
+          "hbf0": 397095771935,
+          "hbm0": 35907178089,
+          "hostmem0": 1244659712
+        },
+        "headroom_bytes": {
+          "hostmem0": 30755340288,
+          "hbm0": 92821911
+        },
+        "conservative_bound_shortfall_bytes": {}
+      }
+    ],
+    "changed_tensor_ids": [
+      "layer-025.router_weights",
+      "layer-026.router_weights",
+      "layer-027.router_weights",
+      "layer-028.router_weights",
+      "layer-029.router_weights",
+      "layer-030.router_weights",
+      "layer-031.router_weights",
+      "layer-032.router_weights",
+      "layer-033.router_weights",
+      "layer-034.router_weights",
+      "layer-035.router_weights",
+      "layer-036.router_weights",
+      "layer-037.router_weights",
+      "layer-038.router_weights",
+      "layer-039.router_weights",
+      "layer-040.router_weights",
+      "layer-041.router_weights",
+      "layer-042.router_weights",
+      "layer-043.router_weights",
+      "layer-044.router_weights",
+      "layer-045.router_weights",
+      "layer-046.router_weights",
+      "layer-047.router_weights",
+      "layer-048.router_weights",
+      "layer-049.router_weights",
+      "layer-050.router_weights",
+      "layer-051.router_weights",
+      "layer-052.router_weights",
+      "layer-053.router_weights",
+      "layer-054.router_weights",
+      "layer-055.router_weights",
+      "layer-056.router_weights",
+      "layer-057.router_weights",
+      "layer-058.router_weights",
+      "layer-059.router_weights",
+      "layer-060.router_weights",
+      "layer-061.router_weights",
+      "layer-062.router_weights",
+      "layer-063.router_weights",
+      "layer-064.router_weights",
+      "layer-065.router_weights",
+      "layer-066.router_weights",
+      "layer-067.router_weights",
+      "layer-068.router_weights",
+      "layer-069.router_weights",
+      "layer-070.router_weights",
+      "layer-071.router_weights",
+      "layer-072.router_weights",
+      "layer-073.router_weights",
+      "layer-074.router_weights",
+      "layer-075.router_weights",
+      "layer-076.router_weights",
+      "layer-077.router_weights",
+      "layer-078.router_weights",
+      "layer-079.router_weights",
+      "layer-080.router_weights",
+      "layer-081.router_weights",
+      "layer-082.router_weights",
+      "layer-083.router_weights",
+      "layer-084.router_weights",
+      "layer-085.router_weights",
+      "layer-086.router_weights",
+      "layer-087.router_weights",
+      "layer-088.router_weights",
+      "layer-089.router_weights",
+      "layer-090.router_weights",
+      "layer-091.router_weights",
+      "layer-092.router_weights",
+      "layer-093.router_weights"
+    ],
+    "physical_address_partitions": {
+      "hbm0": {
+        "resident_start_bytes": 0,
+        "resident_end_bytes": 35907725312,
+        "workspace_start_bytes": 35907725312,
+        "workspace_end_bytes": 36000000000
+      }
+    }
+  },
+  "repeat_prepare_seconds": 3.818778199987719,
+  "status": "completed",
+  "summary": {
+    "makespan_ns": 3144301639.0616846,
+    "task_count": 79093,
+    "model_graph_vocabulary_size": 151936,
+    "host_contract_vocabulary_size": null,
+    "logits_vocabulary_status": "consistent",
+    "model_graph_logits_dtype": "bf16",
+    "model_graph_logits_dtype_source": "model_logits_tensor_dtype",
+    "host_contract_logits_dtype": null,
+    "host_contract_logits_element_bytes": null,
+    "logits_precision_status": "partial",
+    "host_output_contract_status": "partial",
+    "host_output_contract_partial_reason": "host_output_contract_not_declared",
+    "batch_count": 1,
+    "physical_live_batch_count": 1,
+    "completed_requests": 1,
+    "rejected_requests": 0,
+    "total_energy_pj": 9962114870527.678,
+    "resource_accounted_bytes": 2893703641558,
+    "storage_traffic": {
+      "schema_version": "heterollm.nand-traffic/v1",
+      "task_count": 20644,
+      "logical_bytes": 397095731200,
+      "host_transfer_bytes": 397095731200,
+      "physical_bytes": 397095731200,
+      "physical_read_bytes": 397095731200,
+      "physical_write_bytes": 0,
+      "queue_wait_ns": 107268050916.74731,
+      "erase_operations": 0,
+      "service_ns": 269697232814.19315,
+      "energy_pj": 4765148774400.0,
+      "logical_read_bytes": 397095731200,
+      "logical_write_bytes": 0,
+      "internal_transfer_bytes": 397095731200,
+      "pages_read": 24236800,
+      "pages_programmed": 0,
+      "pages_touched": null,
+      "media_waves": null,
+      "read_operations": null,
+      "program_operations": null,
+      "rmw_read_operations": null,
+      "host_queue_wait_ns": null,
+      "media_queue_wait_ns": null,
+      "metric_availability": {
+        "logical_read_bytes": {
+          "status": "recorded",
+          "recorded_batch_count": 1,
+          "physical_batch_count": 1
+        },
+        "logical_write_bytes": {
+          "status": "recorded",
+          "recorded_batch_count": 1,
+          "physical_batch_count": 1
+        },
+        "internal_transfer_bytes": {
+          "status": "recorded",
+          "recorded_batch_count": 1,
+          "physical_batch_count": 1
+        },
+        "pages_read": {
+          "status": "recorded",
+          "recorded_batch_count": 1,
+          "physical_batch_count": 1
+        },
+        "pages_programmed": {
+          "status": "recorded",
+          "recorded_batch_count": 1,
+          "physical_batch_count": 1
+        },
+        "pages_touched": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "media_waves": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "read_operations": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "program_operations": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "rmw_read_operations": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "host_queue_wait_ns": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "media_queue_wait_ns": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "organization_profiles": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        }
+      },
+      "operation_counts": {
+        "read": 20644
+      },
+      "resource_totals": {
+        "hbf0.memory:nand:array:0": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:1": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:10": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:11": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:12": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:13": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:14": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:15": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:16": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:17": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:18": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:19": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:2": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:20": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:21": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:22": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:23": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:24": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:25": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:26": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:27": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:28": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:29": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:3": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:30": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:31": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:4": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:5": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:6": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:7": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:8": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:array:9": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 0,
+          "service_ns": 3029600000.0,
+          "energy_pj": 0.0
+        },
+        "hbf0.memory:nand:channel:0": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:channel:1": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:channel:2": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:channel:3": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:channel:4": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:channel:5": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:channel:6": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:channel:7": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 49636966400,
+          "service_ns": 101715095.08197111,
+          "energy_pj": 297821798400.0
+        },
+        "hbf0.memory:nand:host": {
+          "owner": "hbf0.memory",
+          "bytes_moved": 397095731200,
+          "service_ns": 813720760.6558051,
+          "energy_pj": 2382574387200.0
+        }
+      },
+      "owner_ids": [
+        "hbf0.memory"
+      ],
+      "profile_evidence": [],
+      "background_work": [],
+      "organization_profiles": [],
+      "organization_profile_limit": 32,
+      "accounting_semantics": "host_transfer_bytes is logical host payload; physical_* and pages_read/pages_programmed are NAND media accounting; null means not fully recorded; operation_counts classifies task-owner ledgers, not media operations; service_ns/energy_pj are analytical"
+    },
+    "dram_traffic": {
+      "schema_version": "heterollm.dram-traffic/v1",
+      "task_count": 26612,
+      "logical_read_bytes": 91405170802,
+      "logical_write_bytes": 16084997062,
+      "physical_read_bytes": 91405177728,
+      "physical_write_bytes": 16084997248,
+      "physical_bytes": 107490174976,
+      "logical_bytes": 107490167864,
+      "burst_count": 1679533984,
+      "row_hits": 1662040496,
+      "row_misses": 528,
+      "row_conflicts": 17492960,
+      "queue_wait_ns": 0.0,
+      "service_ns": 419703416.7725543,
+      "read_write_switches": null,
+      "refresh_wait_ns": null,
+      "turnaround_wait_ns": null,
+      "metric_availability": {
+        "read_write_switches": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "refresh_wait_ns": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "turnaround_wait_ns": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        },
+        "organization_profiles": {
+          "status": "not_recorded",
+          "recorded_batch_count": 0,
+          "physical_batch_count": 1
+        }
+      },
+      "resource_totals": {
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:0:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:10:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:11:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:12:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:13:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:14:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:15:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:1:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:2:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:3:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:4:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:5:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:6:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444982.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444926.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:7:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442182.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:8:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425690.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425634.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:1:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:1:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:1:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:1:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425606.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:2:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:2:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1425578.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:2:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444898.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:2:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:3:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:3:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1444842.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:3:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442210.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:bank:0:0:9:0:3:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 1442126.0,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60698073.10486001,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697990.49616423,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:10": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:11": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:12": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:13": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:14": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:15": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:4": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:5": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:6": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:7": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:8": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:command:9": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 0.0
+        },
+        "hbm0.hbm_fabric:dram:data:0": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467378176,
+          "service_ns": 60698073.10486001,
+          "energy_pj": 17869512704.0
+        },
+        "hbm0.hbm_fabric:dram:data:1": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467372096,
+          "service_ns": 60697990.49616423,
+          "energy_pj": 17869488384.0
+        },
+        "hbm0.hbm_fabric:dram:data:10": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:11": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:12": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467365952,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 17869463808.0
+        },
+        "hbm0.hbm_fabric:dram:data:13": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467365952,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 17869463808.0
+        },
+        "hbm0.hbm_fabric:dram:data:14": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467365952,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 17869463808.0
+        },
+        "hbm0.hbm_fabric:dram:data:15": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467365952,
+          "service_ns": 60697907.01790324,
+          "energy_pj": 17869463808.0
+        },
+        "hbm0.hbm_fabric:dram:data:2": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:3": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:4": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:5": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:6": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:7": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:8": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm0.hbm_fabric:dram:data:9": {
+          "owner": "hbm0.hbm_fabric",
+          "bytes_moved": 4467366016,
+          "service_ns": 60697907.88746846,
+          "energy_pj": 17869464064.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:0:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:10:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:11:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:12:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:13:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:14:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:15:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:1:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:2:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:3:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:4:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:5:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:6:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:7:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:8:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:0:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:0:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:0:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:0:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:1:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:1:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:1:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:1:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:2:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:2:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:2:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:2:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:3:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:3:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:3:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:bank:0:0:9:0:3:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 480634.0,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:10": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:11": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:12": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:13": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:14": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:15": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:4": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:5": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:6": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:7": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:8": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:command:9": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 0,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 0.0
+        },
+        "hbm1.hbm_fabric:dram:data:0": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:1": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:10": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:11": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:12": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:13": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:14": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:15": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:2": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:3": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:4": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:5": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:6": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:7": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:8": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hbm1.hbm_fabric:dram:data:9": {
+          "owner": "hbm1.hbm_fabric",
+          "bytes_moved": 2249981952,
+          "service_ns": 30570406.97300977,
+          "energy_pj": 8999927808.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:0:0": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:0:1": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:0:2": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:0:3": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:1:0": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:1:1": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:1:2": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:1:3": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:2:0": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:2:1": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:2:2": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:2:3": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:3:0": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:3:1": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:3:2": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:bank:0:0:0:0:3:3": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 2702.0,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:command:0": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 0,
+          "service_ns": 281015.7142863327,
+          "energy_pj": 0.0
+        },
+        "hostmem0.memory:dram:data:0": {
+          "owner": "hostmem0.memory",
+          "bytes_moved": 12589504,
+          "service_ns": 281015.7142863327,
+          "energy_pj": 151074048.0
+        }
+      },
+      "owner_ids": [
+        "hbm0.hbm_fabric",
+        "hbm1.hbm_fabric",
+        "hostmem0.memory"
+      ],
+      "organization_profiles": [],
+      "organization_profile_limit": 32,
+      "accounting_semantics": "resolved analytical burst bytes and controller waits; null means not fully recorded; empty organization_profiles is not evidence of complete geometry reporting; no device accuracy claim"
+    },
+    "throughput": {
+      "requests_per_s": 0.3180356450465795,
+      "visible_output_tokens_per_s": 0.3180356450465795,
+      "active_requests_per_s": 0.3180356450465795,
+      "active_visible_tokens_per_s": 0.3180356450465795,
+      "steady_requests_per_s": 0.3180356450465795,
+      "steady_visible_tokens_per_s": 0.3180356450465795
+    },
+    "goodput": {
+      "requests_per_s": 0.3180356450465795,
+      "visible_output_tokens_per_s": 0.3180356450465795,
+      "qualified_requests": 1
+    },
+    "measurement_windows_ns": {
+      "wall_clock": [
+        0.0,
+        3144301639.0616846
+      ],
+      "active": [
+        0.0,
+        3144301639.0616846
+      ],
+      "steady": [
+        0.0,
+        3144301639.0616846
+      ]
+    },
+    "ttft_ns": {
+      "p50": 3144227278.808351,
+      "p95": 3144227278.808351,
+      "p99": 3144227278.808351
+    },
+    "tbt_ns": {
+      "p50": null,
+      "p95": null,
+      "p99": null
+    },
+    "tpot_ns": {
+      "p50": null,
+      "p95": null,
+      "p99": null
+    },
+    "e2e_ns": {
+      "p50": 3144227278.808351,
+      "p95": 3144227278.808351,
+      "p99": 3144227278.808351
+    },
+    "engine_ttft_ns": {
+      "p50": 3144227278.808351,
+      "p95": 3144227278.808351,
+      "p99": 3144227278.808351
+    },
+    "engine_tpot_ns": {
+      "p50": null,
+      "p95": null,
+      "p99": null
+    },
+    "engine_e2e_ns": {
+      "p50": 3144227278.808351,
+      "p95": 3144227278.808351,
+      "p99": 3144227278.808351
+    },
+    "bottleneck_resource": {
+      "resource_id": "hbf0.memory:nand:array:9",
+      "utilization": 0.9635207902331172
+    },
+    "mtp": {
+      "enabled": false,
+      "prediction_layers": 0,
+      "auxiliary_head": false,
+      "declared_weight_bytes": 0,
+      "operator_ids": [],
+      "weight_tensor_ids": [],
+      "method": "disabled",
+      "candidate_tokens": 1,
+      "candidate_tokens_semantics": "max_draft_tokens",
+      "verifier_width_at_max": 2,
+      "min_draft_tokens": 0,
+      "continuation_threshold": null,
+      "proposal_length_model": "max",
+      "expected_draft_tokens_per_round": null,
+      "draft_length_trace": [],
+      "proposed_tokens": 0,
+      "accepted_tokens": 0,
+      "committed_tokens": 0,
+      "rejected_tokens": 0,
+      "effective_acceptance_rate": null
+    },
+    "parallel": {
+      "tp_degree": 1,
+      "pp_degree": 1,
+      "ep_degree": 1,
+      "world_size": 1,
+      "collective_algorithm": "auto",
+      "routing_policy": "lowest_latency"
+    },
+    "simulated_subtargets": {
+      "schema_version": "heterollm.simulated-subtargets/v1",
+      "source": "ServingResult.batches/items/request_metrics/events",
+      "quality": {
+        "available": true,
+        "status": "complete",
+        "batch_item_coverage": "complete",
+        "token_event_coverage": "complete",
+        "gpu_active_proxy_coverage": "complete"
+      },
+      "guardrails": [
+        "prefill_service_ns is an additive diagnostic: it counts full batch wall for every request with prefill or recompute work and may exceed TTFT when chunks overlap",
+        "prefill_wall_union_ns is the union of each request's prefill/recompute batch wall intervals; overlapping chunks are counted once; it is the key-path source for flat prefill_service_ms/prefill_tps",
+        "mixed_prefill_wall_union_ns is the same interval-union metric restricted to mixed batches",
+        "flat prefill_service_ms and prefill_tps use prefill_wall_union_mean_ms; flat prefill_service_additive_ms preserves the additive service diagnostic",
+        "initial_queue_delay_ns is ServingRequestMetrics.queue_delay_ns/start_ns minus arrival_ns, not TTFT residual",
+        "ttft_residual_ns is TTFT minus prefill_wall_union_ns and is the formal prompt-eval residual; ttft_residual_additive_ns remains the additive diagnostic",
+        "generation_wall_ns counts each visible-token batch once, even when multiple requests commit tokens",
+        "MTP draft_acceptance_rate uses accepted_draft_tokens / draft_tokens and excludes main tokens",
+        "vram.session_peak_mib is an owner_residency proxy, not device telemetry",
+        "vram interval fields use the physical-total residency baseline captured at replay start and the peak observed before temporary workspace release",
+        "modeled_total_dynamic_power_mean_w is analytical dynamic energy over wall time, not GPU board power"
+      ],
+      "counts": {
+        "request_count": 1,
+        "completed_requests": 1,
+        "batch_count": 1,
+        "batch_item_count": 1,
+        "tokens_committed_events": 1,
+        "visible_generation_cohorts": 0,
+        "truncated_batches": 0,
+        "malformed_batches": 0,
+        "malformed_token_events": 0
+      },
+      "latency": {
+        "request_entry_count": 1,
+        "completed_request_entry_count": 1,
+        "ttft_count": 1,
+        "ttft_sum_ns": 3144301639.0616846,
+        "ttft_mean_ms": 3144.3016390616845,
+        "tpot_count": 0,
+        "tpot_sum_ns": 0,
+        "tpot_mean_ms": null,
+        "e2e_count": 1,
+        "e2e_sum_ns": 3144301639.0616846,
+        "e2e_mean_ms": 3144.3016390616845,
+        "prefill_service_count": 1,
+        "prefill_service_sum_ns": 3144227278.808351,
+        "prefill_service_mean_ms": 3144.227278808351,
+        "mixed_prefill_service_count": 1,
+        "mixed_prefill_service_sum_ns": 0.0,
+        "mixed_prefill_service_mean_ms": 0.0,
+        "prefill_wall_union_count": 1,
+        "prefill_wall_union_sum_ns": 3144227278.808351,
+        "prefill_wall_union_mean_ms": 3144.227278808351,
+        "mixed_prefill_wall_union_count": 1,
+        "mixed_prefill_wall_union_sum_ns": 0.0,
+        "mixed_prefill_wall_union_mean_ms": 0.0,
+        "initial_queue_delay_count": 1,
+        "initial_queue_delay_sum_ns": 74360.25333333334,
+        "initial_queue_delay_mean_ms": 0.07436025333333335,
+        "ttft_residual_count": 1,
+        "ttft_residual_sum_ns": 74360.25333356857,
+        "ttft_residual_mean_ms": 0.07436025333356858,
+        "negative_ttft_residual_count": 0,
+        "ttft_residual_additive_count": 1,
+        "ttft_residual_additive_sum_ns": 74360.25333356857,
+        "ttft_residual_additive_mean_ms": 0.07436025333356858,
+        "negative_ttft_residual_additive_count": 0
+      },
+      "prefill": {
+        "service_ns": {
+          "p50": 3144227278.808351,
+          "p95": 3144227278.808351,
+          "p99": 3144227278.808351
+        },
+        "service_mean_ms": 3144.227278808351,
+        "service_additive_mean_ms": 3144.227278808351,
+        "mixed_service_mean_ms": 0.0,
+        "mixed_service_additive_mean_ms": 0.0,
+        "wall_union_ns": {
+          "p50": 3144227278.808351,
+          "p95": 3144227278.808351,
+          "p99": 3144227278.808351
+        },
+        "wall_union_mean_ms": 3144.227278808351,
+        "mixed_wall_union_mean_ms": 0.0,
+        "service_semantics": "additive sum of full batch wall per request where that request has prefill or recompute work; diagnostic only",
+        "service_additive_semantics": "same additive full-batch wall diagnostic exposed explicitly to distinguish it from the flat wall-union target",
+        "wall_union_semantics": "union of each request's prefill/recompute batch wall intervals; overlapping chunks are counted once; this is the flat prefill_service_ms/prefill_tps source",
+        "mixed_wall_union_semantics": "union of each request's mixed prefill/recompute batch wall intervals; overlapping chunks are counted once"
+      },
+      "generation": {
+        "generation_wall_ns": 0.0,
+        "generation_wall_ms": 0.0,
+        "mixed_generation_wall_ns": 0.0,
+        "mixed_generation_wall_ms": 0.0,
+        "visible_output_tokens": 1,
+        "eval_ms_per_token": 0.0,
+        "wall_counting_semantics": "each batch with positive visible generation tokens contributes its wall interval once per cohort",
+        "visible_output_token_source": "tokens_committed.details.visible_tokens grouped by cohort_id"
+      },
+      "mtp": {
+        "draft_tokens": 0,
+        "accepted_draft_tokens": 0,
+        "rejected_draft_tokens": 0,
+        "draft_acceptance_rate": null,
+        "draft_acceptance_rate_semantics": "accepted_draft_tokens / draft_tokens; main tokens are excluded",
+        "source": "tokens_committed.details.draft_tokens and accepted_draft_tokens",
+        "valid": true,
+        "malformed_token_events": 0
+      },
+      "hardware_phase_ledger": {
+        "schema_version": "heterollm.hardware-phase-ledger/v1",
+        "source": "ServingBatch.cost.metadata + ServingBatch.items",
+        "coverage": {
+          "status": "complete",
+          "cohorts": "complete",
+          "physical_rows": "complete",
+          "invocation_groups": "complete",
+          "rows": "complete",
+          "owner_residency": "complete",
+          "runtime_controller": "complete",
+          "causal": "complete"
+        },
+        "counts": {
+          "cohort_count": 1,
+          "batch_count": 1,
+          "physical_rows": 512,
+          "by_cohort_kind": {
+            "prefill": {
+              "batch_count": 1,
+              "physical_rows": 512
+            }
+          },
+          "operator_invocation_group_count": 1,
+          "target_invocation_group_count": 1,
+          "mtp_proposer_invocation_group_count": 0,
+          "mtp_draft_catchup_invocation_group_count": 0
+        },
+        "rows": {
+          "main_rows": 0,
+          "draft_rows": 0,
+          "committed_rows": 0,
+          "rejected_rows": 0
+        },
+        "owner_residency": {
+          "migration_event_count": 0,
+          "fault_batch_count": 0,
+          "clean_eviction_batch_count": 0,
+          "page_in_bytes": 0,
+          "page_out_bytes": 0,
+          "clean_discard_bytes": 0,
+          "dirty_writeback_bytes": 0,
+          "causal_transfer_stage_count": 0,
+          "causal_violation_count": 0,
+          "unattributed_positive_batch_count": 0,
+          "unattributed_positive_bytes": 0,
+          "unattributed_page_in_bytes": 0,
+          "page_in_ns": 0,
+          "dirty_writeback_ns": 0,
+          "clean_discard_ns": 0,
+          "transfer_service_ns": 0,
+          "causally_placed_transfer_ns": 0,
+          "tail_transfer_ns": 0,
+          "unattributed_positive_service_ns": 0,
+          "unattributed_page_in_service_ns": 0,
+          "service_batch_count": 0,
+          "transfer_bytes": 0,
+          "transfer_service_ms": 0.0,
+          "coverage": "complete"
+        },
+        "runtime_controller": {
+          "stage_count": 1,
+          "task_count": 1,
+          "domain_service_ns": 1132200.0,
+          "domain_count": 1,
+          "domain_service_ns_by_domain": {
+            "gpu_address_translation": 1132200.0
+          },
+          "domain_service_ns_by_domain_truncated": false,
+          "dropped_domain_count": 0,
+          "observed_bytes": 506500181892.0,
+          "coverage": "complete"
+        },
+        "causal_quality": {
+          "coverage": "complete",
+          "causality_degraded": false,
+          "causally_placed_transfer_ns": 0,
+          "tail_transfer_ns": 0,
+          "causal_violation_count": 0,
+          "unattributed_positive_batch_count": 0,
+          "unattributed_positive_bytes": 0,
+          "unattributed_positive_service_ns": 0
+        },
+        "guardrails": [
+          "aggregate current-V4 facts only; timeline details are omitted",
+          "controller observed bytes may overlap bulk traffic and remain separately labeled",
+          "owner transfer rows count service batches and bytes; batch totals own duration"
+        ]
+      },
+      "vram": {
+        "session_peak_mib": null,
+        "interval_baseline_resident_mib": null,
+        "interval_peak_resident_mib": null,
+        "interval_resident_delta_mib": null,
+        "source": "owner_residency_metrics.peak_resident_bytes",
+        "proxy": true,
+        "semantics": "owner_residency peak; local replay aggregates this across constructor, warmup, and all measured replays",
+        "interval_semantics": "physical-total resident bytes at this replay runtime start; peak sampled during the replay before temporary allocations are released; delta is peak minus baseline",
+        "guardrail": "not nvidia-smi telemetry and not GPU board memory accounting"
+      },
+      "gpu_active_proxy": {
+        "active_ratio": 0.9999740418197932,
+        "active_ns": 3144220018.7131133,
+        "measurement_wall_ns": 3144301639.0616846,
+        "coverage": "complete",
+        "proxy": true,
+        "semantics": "union of GPU execution_stage_schedule intervals divided by wall-clock measurement window"
+      },
+      "power": {
+        "modeled_total_dynamic_power_mean_w": 3.168307628876392,
+        "source": "sum(batch.cost.energy_pj) / serving.makespan_ns",
+        "guardrail": "modeled dynamic workload power only; not GPU board power"
+      }
+    }
+  },
+  "allocator_peaks": {
+    "hostmem0.memory": {
+      "capacity_bytes": 32000000000,
+      "workspace_capacity_bytes": 0,
+      "peak_resident_bytes": 0,
+      "peak_transient_bytes": 8390752,
+      "peak_total_bytes": 8390752
+    },
+    "hbm0.hbm_fabric": {
+      "capacity_bytes": 36000000000,
+      "workspace_capacity_bytes": 92274688,
+      "peak_resident_bytes": 35907222528,
+      "peak_transient_bytes": 67117056,
+      "peak_total_bytes": 35974339584
+    },
+    "hbm1.hbm_fabric": {
+      "capacity_bytes": 36000000000,
+      "workspace_capacity_bytes": 0,
+      "peak_resident_bytes": 35999711232,
+      "peak_transient_bytes": 0,
+      "peak_total_bytes": 35999711232
+    },
+    "hbf0.memory": {
+      "capacity_bytes": 512000000000,
+      "workspace_capacity_bytes": 0,
+      "peak_resident_bytes": 397095731200,
+      "peak_transient_bytes": 0,
+      "peak_total_bytes": 397095731200
+    }
+  },
+  "elapsed_seconds": 1409.774028200016
+}

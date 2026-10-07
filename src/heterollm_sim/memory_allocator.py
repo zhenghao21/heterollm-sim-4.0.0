@@ -51,13 +51,18 @@ class PhysicalAddressAllocator:
     an address range with another allocation.
     """
 
-    def __init__(self, capacity_bytes: int, alignment_bytes: int = 64) -> None:
+    def __init__(self, capacity_bytes: int, alignment_bytes: int = 64, *, workspace_capacity_bytes: int = 0) -> None:
         if type(capacity_bytes) is not int or capacity_bytes <= 0:
             raise AllocationError("capacity_bytes must be a positive integer")
         if type(alignment_bytes) is not int or alignment_bytes <= 0:
             raise AllocationError("alignment_bytes must be a positive integer")
+        if type(workspace_capacity_bytes) is not int or not 0 <= workspace_capacity_bytes < capacity_bytes:
+            raise AllocationError("workspace_capacity_bytes must be an integer in [0, capacity_bytes)")
+        if workspace_capacity_bytes and (capacity_bytes - workspace_capacity_bytes) % alignment_bytes:
+            raise AllocationError("workspace partition boundary must be aligned")
         self.capacity_bytes = capacity_bytes
         self.alignment_bytes = alignment_bytes
+        self.workspace_capacity_bytes = workspace_capacity_bytes
         self._allocations: Dict[Tuple[str, int], PhysicalAllocation] = {}
 
     @staticmethod
@@ -97,19 +102,50 @@ class PhysicalAddressAllocator:
             if base < item.base_address + item.size_bytes and item.base_address < end:
                 yield item
 
-    def _find_first_fit(self, size: int) -> int:
-        cursor = 0
-        for item in self.allocations():
+    def _arena(self, generation: int) -> Tuple[int, int]:
+        if not self.workspace_capacity_bytes:
+            return 0, self.capacity_bytes
+        boundary = self.capacity_bytes - self.workspace_capacity_bytes
+        return (0, boundary) if generation == 0 else (boundary, self.capacity_bytes)
+
+    def _check_arena_extent(self, base: int, size: int, generation: int) -> None:
+        self._check_extent(base, size)
+        lower, upper = self._arena(generation)
+        if base < lower or base + size > upper:
+            raise AllocationError("allocation generation {} range {} + {} exceeds its {} arena [{}, {})".format(
+                generation, base, size, "resident" if generation == 0 else "workspace", lower, upper))
+
+    def _find_first_fit(self, size: int, generation: int = 0) -> int:
+        lower, upper = self._arena(generation)
+        cursor = lower
+        if self.workspace_capacity_bytes:
+            # Filtering a sorted list and sorting its retained subsequence
+            # produce the same order.  Arena allocations never inspect the
+            # other arena, so avoid sorting thousands of resident weights
+            # for each short-lived activation.
+            candidates = sorted(
+                (item for item in self._allocations.values()
+                 if item.alias_of is None and item.base_address + item.size_bytes > lower
+                 and item.base_address < upper),
+                key=lambda item: (item.base_address, item.buffer_id, item.generation),
+            )
+        else:
+            candidates = self.allocations()
+        for item in candidates:
             if item.alias_of is not None:
+                continue
+            if item.base_address + item.size_bytes <= lower or item.base_address >= upper:
                 continue
             cursor = self._align(cursor, self.alignment_bytes)
             if cursor + size <= item.base_address:
                 return cursor
             cursor = max(cursor, item.base_address + item.size_bytes)
         cursor = self._align(cursor, self.alignment_bytes)
-        if cursor + size > self.capacity_bytes:
+        if cursor + size > upper:
             raise AllocationError(
-                "unable to allocate {} bytes in capacity {}".format(size, self.capacity_bytes)
+                "unable to allocate {} bytes in capacity {}{}".format(size, self.capacity_bytes,
+                    " ({} arena [{}, {}))".format("resident" if generation == 0 else "workspace", lower, upper)
+                    if self.workspace_capacity_bytes else "")
             )
         return cursor
 
@@ -149,7 +185,7 @@ class PhysicalAddressAllocator:
             if size_bytes != existing.size_bytes and size_bytes > existing.size_bytes:
                 if existing.alias_of is not None or not existing.inferred or not inferred:
                     raise AllocationError("allocation {} cannot grow".format(buffer_id))
-                self._check_extent(existing.base_address, size_bytes)
+                self._check_arena_extent(existing.base_address, size_bytes, generation)
                 if tuple(self._overlaps(existing.base_address, size_bytes, ignore=key)):
                     raise AllocationError(
                         "allocation {} generation {} cannot grow without moving".format(*key)
@@ -185,7 +221,7 @@ class PhysicalAddressAllocator:
             if type(address) is not int or address < 0:
                 raise AllocationError("address must be a non-negative integer")
             base = address
-            self._check_extent(base, size_bytes)
+            self._check_arena_extent(base, size_bytes, generation)
             conflicts = tuple(self._overlaps(base, size_bytes))
             if conflicts:
                 raise AllocationError(
@@ -194,7 +230,7 @@ class PhysicalAddressAllocator:
                     )
                 )
         else:
-            base = self._find_first_fit(size_bytes)
+            base = self._find_first_fit(size_bytes, generation)
 
         allocation = PhysicalAllocation(buffer_id=key[0], base_address=base, size_bytes=size_bytes,
                                         generation=key[1], alias_of=alias_key,
@@ -289,15 +325,19 @@ class PhysicalAddressAllocator:
         self._allocations.pop(key)
 
     def snapshot(self) -> dict:
-        return {
+        snapshot = {
             "capacity_bytes": self.capacity_bytes,
             "alignment_bytes": self.alignment_bytes,
             "allocations": tuple(self.allocations()),
         }
+        if self.workspace_capacity_bytes:
+            snapshot["workspace_capacity_bytes"] = self.workspace_capacity_bytes
+        return snapshot
 
     @classmethod
     def from_snapshot(cls, snapshot: dict) -> "PhysicalAddressAllocator":
-        allocator = cls(snapshot["capacity_bytes"], snapshot["alignment_bytes"])
+        allocator = cls(snapshot["capacity_bytes"], snapshot["alignment_bytes"],
+                        workspace_capacity_bytes=snapshot.get("workspace_capacity_bytes", 0))
         for item in snapshot.get("allocations", ()):
             if isinstance(item, PhysicalAllocation):
                 if item.alias_of is not None and item.alias_generation is None:

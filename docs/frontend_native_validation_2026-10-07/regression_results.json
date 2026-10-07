@@ -1,0 +1,463 @@
+{
+  "schema": "frontend-validation-regression-results/v1",
+  "current_code_validation_status": "passed",
+  "runs": [
+    {
+      "id": "python_full",
+      "scope": "Python 完整测试",
+      "command": ".venv/Scripts/python.exe -m pytest -q --tb=short",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 1587,
+      "failed": 0,
+      "duration_seconds": 254.79,
+      "source_log": "F:/codex_project/_scratch/37-final-arena-full-pytest.log"
+    },
+    {
+      "id": "python_post_collection",
+      "scope": "最终收集后 workspace 缓存与能耗重计回归",
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_physical_workspace_reservation.py tests/test_frontend_energy_repricing.py -q --tb=short",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 27,
+      "failed": 0,
+      "duration_seconds": 22.97,
+      "source_log": "F:/codex_project/_scratch/37-final-arena-followup-pytest.log"
+    },
+    {
+      "id": "python_analysis_repricing",
+      "scope": "配对门禁、报告分析与物理能耗重计回归",
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_frontend_validation_analysis.py tests/test_frontend_energy_repricing.py -q --tb=short",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 88,
+      "failed": 0,
+      "duration_seconds": 0.53,
+      "source": "Captured output: 88 passed in 0.53s; includes actual B200 inline-owner reporting regression"
+    },
+    {
+      "id": "javascript_frontend",
+      "scope": "JavaScript 前端回归",
+      "command": "node --test tests/test_webui_input_regressions.cjs",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 25,
+      "failed": 0,
+      "duration_seconds": 0.4135105,
+      "source_log": "F:/codex_project/_scratch/37-final-arena-js.log"
+    },
+    {
+      "id": "javascript_syntax",
+      "scope": "前端语法检查",
+      "command": "node --check src/heterollm_sim/webui/app.js",
+      "status": "completed",
+      "exit_code": 0
+    }
+  ],
+  "notes": [
+    "完整 Python 回归通过 1587 项；后续定向回归与完整套件有重叠，不简单相加为独立测试总数。",
+    "收集后仅新增 workspace 纯 UI 标记缓存键修正和报告后处理；完整 workspace 文件及报告定向回归已补齐。",
+    "JavaScript 25 项含运行状态同步、硬件撤销重做/失败回滚、显式 F32 与源存储/RoPE 合同保留。",
+    "historical_runs 保留过去测试事实。当前通过不表示 63 组合全部完成，也不设定 native 预测精度阈值。"
+  ],
+  "historical_runs": [
+    {
+      "id": "python_full",
+      "scope": "Python 完整测试",
+      "command": ".venv/Scripts/python.exe -m pytest -q",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 1290,
+      "duration_seconds": 60.77,
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-final-pytest.log"
+    },
+    {
+      "id": "python_new_transaction",
+      "scope": "新增物理事务回归",
+      "command": ".venv/Scripts/python.exe -m pytest -q tests/test_physical_transaction_ownership.py",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 8,
+      "duration_seconds": 0.12,
+      "source": "Captured command output: 8 passed in 0.12s"
+    },
+    {
+      "id": "javascript_frontend",
+      "scope": "JavaScript 前端回归",
+      "command": "node --test tests/test_webui_input_regressions.cjs",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 24,
+      "duration_seconds": 0.3450529,
+      "source": "Captured command output: tests 24, pass 24, fail 0, duration_ms 345.0529"
+    },
+    {
+      "id": "javascript_syntax",
+      "scope": "前端语法检查",
+      "command": "node --check src/heterollm_sim/webui/app.js",
+      "status": "completed",
+      "exit_code": 0,
+      "source": "Captured command completed with exit code 0"
+    },
+    {
+      "id": "python_full",
+      "scope": "Python 完整测试（待修复后重跑）",
+      "command": ".venv/Scripts/python.exe -m pytest -q --tb=short",
+      "status": "completed",
+      "exit_code": 1,
+      "passed": 1419,
+      "failed": 4,
+      "duration_seconds": 63.27,
+      "started_at_utc": "2026-10-07 15:49:45 UTC",
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-final-pytest-latest.log"
+    },
+    {
+      "id": "javascript_frontend",
+      "scope": "JavaScript 前端回归",
+      "command": "node --test tests/test_webui_input_regressions.cjs",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 24,
+      "failed": 0,
+      "duration_seconds": 0.3103278,
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-final-js-latest.log"
+    },
+    {
+      "id": "javascript_syntax",
+      "scope": "前端语法检查",
+      "command": "node --check src/heterollm_sim/webui/app.js",
+      "status": "completed",
+      "exit_code": 0
+    },
+    {
+      "id": "python_full",
+      "scope": "Python 完整测试",
+      "command": ".venv/Scripts/python.exe -m pytest -q --tb=short",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 1425,
+      "failed": 0,
+      "duration_seconds": 59.05,
+      "started_at_utc": "2026-10-07 15:53:57 UTC",
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-final-pytest-rerun.log"
+    },
+    {
+      "id": "javascript_frontend",
+      "scope": "JavaScript 前端回归",
+      "command": "node --test tests/test_webui_input_regressions.cjs",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 24,
+      "failed": 0,
+      "duration_seconds": 0.269794,
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-final-js-rerun.log"
+    },
+    {
+      "id": "python_full",
+      "scope": "Python 完整测试",
+      "command": ".venv/Scripts/python.exe -m pytest -q --tb=short",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 1489,
+      "failed": 0,
+      "duration_seconds": 210.27,
+      "started_at_utc": "2026-10-07 16:21:02 UTC",
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-physical-live-full-pytest-rerun.log"
+    },
+    {
+      "id": "python_post_collection",
+      "scope": "完整收集后新增或修改的核心回归",
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_live_duration_accounting.py tests/test_generic_kv_physical_flow.py tests/test_physical_gpu_controller_ownership.py tests/test_source_f32_attention_storage.py tests/test_live_execution_metrics.py tests/test_frontend_validation_analysis.py -q --tb=short",
+      "status": "completed",
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-physical-live-followup-pytest.log",
+      "exit_code": 0,
+      "passed": 75,
+      "failed": 0,
+      "duration_seconds": 16.01
+    },
+    {
+      "id": "javascript_frontend",
+      "scope": "JavaScript 前端回归",
+      "command": "node --test tests/test_webui_input_regressions.cjs",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 25,
+      "failed": 0,
+      "duration_seconds": 0.3072595,
+      "source_log": "F:/codex_project/_scratch/37-frontend-validation-final-sidebar-js.log"
+    },
+    {
+      "id": "javascript_syntax",
+      "scope": "前端语法检查",
+      "command": "node --check src/heterollm_sim/webui/app.js",
+      "status": "completed",
+      "exit_code": 0
+    },
+    {
+      "id": "python_report_portability_and_availability",
+      "scope": "报告可移植性、唯一记录引用及DRAM/NAND未计量指标回归",
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_live_execution_metrics.py tests/test_dram_reporting_availability.py tests/test_frontend_validation_analysis.py -q --tb=short",
+      "status": "completed",
+      "exit_code": 0,
+      "passed": 66,
+      "failed": 0,
+      "duration_seconds": 0.72,
+      "source": "Captured command output: 66 passed in 0.72s; overlaps prior regressions."
+    },
+    {
+      "id": "python_full_before_final_arena",
+      "scope": "workspace/energy full run before final arena changes",
+      "command": ".venv/Scripts/python.exe -m pytest -q --tb=short",
+      "status": "completed",
+      "exit_code": 1,
+      "passed": 1568,
+      "failed": 1,
+      "duration_seconds": 242.31,
+      "source_log": "F:/codex_project/_scratch/37-final-workspace-energy-full-pytest.log",
+      "resolution": "One outdated per-resource NAND energy expectation was corrected; all 23 strict contract tests passed in 0.40s, then the later complete run passed."
+    }
+  ],
+  "result_consistency_audit": {
+    "recorded_at_utc": "2026-10-07T19:24:26.368204+00:00",
+    "scope": "Saved formal result consistency checks, not an optimization-toggle experiment or hardware accuracy threshold.",
+    "completed_matrix_rows_checked": 53,
+    "matrix_status_at_check": {
+      "completed": 53,
+      "capacity_rejected": 10
+    },
+    "checked_contract": {
+      "input_tokens": 512,
+      "output_tokens": 128,
+      "mapping_policy": "llama_cpp",
+      "submitted_requests": 1,
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batch_count": 128,
+      "physical_live_batch_count": 128
+    },
+    "contract_result": "all_53_passed",
+    "hardware_activity_explanation": {
+      "case": "llama3_1-405b",
+      "source_prefixes": [
+        "ui_b200_2hbf_llama3_1_405b",
+        "ui_b200_3hbf_llama3_1_405b"
+      ],
+      "hbf_capacity_bytes_each": 512000000000,
+      "active_nand_owners": [
+        "hbf0.memory",
+        "hbf1.memory"
+      ],
+      "extra_3hbf_owner": "hbf2.memory",
+      "extra_owner_active": false,
+      "interpretation": "The extra HBF exists in the submitted 3HBF hardware but is unused by this placement; identical results for already sufficient 2HBF capacity do not imply the extra component was omitted from configuration."
+    },
+    "moe_cross_hardware": {
+      "model_id": "qwen3-30b-a3b",
+      "source_prefixes": [
+        "ui_b200_2hbf_qwen3_30b_a3b",
+        "ui_b200_3hbf_qwen3_30b_a3b"
+      ],
+      "job_ids": [
+        "8e44a7a9a1b94ec09da73904c9a38b34",
+        "32fbb7a9c9184a199ea102f8843b61fc"
+      ],
+      "e2e_ns_2hbf": 939129820.0743636,
+      "e2e_ns_3hbf": 939129820.0744655,
+      "signed_difference_3hbf_minus_2hbf_ns": 0.00010192394256591797,
+      "signed_relative_difference_to_2hbf": 1.0853019506701136e-13,
+      "signed_relative_difference_percent": 1.0853019506701137e-11,
+      "physical_dram_bytes_each": 848613472256,
+      "physical_dram_tasks_each": 276992,
+      "nand_task_count_each": 0,
+      "interpretation": "The two hardware configurations have equal physical traffic and original energy. The E2E difference is at floating-point accumulation scale; no performance implementation was toggled."
+    },
+    "nand_energy_distribution": {
+      "source_prefix": "ui_b200_2hbf_qwen2_5_72b",
+      "job_id": "964148e9a3654183ba45dbaac27127ce",
+      "scope": "Largest observed resource-sum versus owner/media ledger difference among the audited completed v2 NAND results.",
+      "media_energy_pj": 109824134086656.0,
+      "resource_energy_sum_pj": 109824134086655.73,
+      "signed_difference_resource_minus_media_pj": -0.265625,
+      "signed_relative_difference_to_media": -2.4186396023884e-15,
+      "signed_relative_difference_percent": -2.4186396023884e-13,
+      "interpretation": "Resource energy apportions one media bill across transfer resources. Summing those floating-point shares can differ in the last digits; this is accounting aggregation, not an optimization-toggle error."
+    },
+    "limits": [
+      "51 earlier completed rows plus the final two 235B rows were checked; all 53 completed rows satisfy the execution contract.",
+      "Does not assert equality of all hardware configurations or all fields.",
+      "Old energy results remain distinct from v2 execution and separately repriced records."
+    ],
+    "final_235b_results": {
+      "cases": [
+        {
+          "prefix": "ui_b200_2hbf_qwen3_235b_a22b",
+          "job_id": "fd26e1b7f9554ca8ad16fa113ba560c3",
+          "execution_contract": "passed",
+          "total_energy_pj": 89599275414299.56,
+          "energy_accounting": "physical_profile_energy_v2",
+          "latency_ns": {
+            "engine_ttft_ns": 3144227278.808351,
+            "engine_tpot_ns": 277700026.2275469,
+            "engine_e2e_ns": 38412130609.7068
+          },
+          "physical_traffic": {
+            "dram_traffic": {
+              "task_count": 541216,
+              "logical_bytes": 1195370062966,
+              "logical_read_bytes": 1174280747998,
+              "logical_write_bytes": 21089314968,
+              "physical_bytes": 1195378769792,
+              "physical_read_bytes": 1174284274816,
+              "physical_write_bytes": 21094494976,
+              "service_ns": 1521104170.645914,
+              "owners": {
+                "hbm0.hbm_fabric": {
+                  "resource_bytes": 614435121024,
+                  "resource_energy_pj": 2457740484096.0,
+                  "coefficient_pj_per_byte": 4
+                },
+                "hbm1.hbm_fabric": {
+                  "resource_bytes": 580927881216,
+                  "resource_energy_pj": 2323711524864.0,
+                  "coefficient_pj_per_byte": 4
+                },
+                "hostmem0.memory": {
+                  "resource_bytes": 15767552,
+                  "resource_energy_pj": 189210624.0,
+                  "coefficient_pj_per_byte": 12
+                }
+              }
+            },
+            "storage_traffic": {
+              "task_count": 204032,
+              "logical_bytes": 4804994662400,
+              "logical_read_bytes": 4804994662400,
+              "logical_write_bytes": 0,
+              "physical_bytes": 4804994662400,
+              "physical_read_bytes": 4804994662400,
+              "physical_write_bytes": 0,
+              "service_ns": 422133163371.8026,
+              "owners": {
+                "hbf0.memory": {
+                  "resource_bytes": 9609989324800,
+                  "resource_energy_pj": 57659935948800.0,
+                  "coefficient_pj_per_byte": 12
+                }
+              },
+              "media_energy_pj": 57659935948800.0,
+              "resource_sum_minus_media_energy_pj": 0.0,
+              "pages_read": 293273600,
+              "pages_programmed": 0,
+              "resource_byte_semantics": "host and media transfers are both recorded; energy bills media bytes once"
+            }
+          },
+          "unused_hbf_owners": [
+            "hbf1.memory"
+          ]
+        },
+        {
+          "prefix": "ui_b200_3hbf_qwen3_235b_a22b",
+          "job_id": "47743a6dfa0d4dcc9b05c380fb341826",
+          "execution_contract": "passed",
+          "total_energy_pj": 89599275414299.56,
+          "energy_accounting": "physical_profile_energy_v2",
+          "latency_ns": {
+            "engine_ttft_ns": 3144227278.8083644,
+            "engine_tpot_ns": 277700026.2275469,
+            "engine_e2e_ns": 38412130609.70682
+          },
+          "physical_traffic": {
+            "dram_traffic": {
+              "task_count": 541216,
+              "logical_bytes": 1195370062966,
+              "logical_read_bytes": 1174280747998,
+              "logical_write_bytes": 21089314968,
+              "physical_bytes": 1195378769792,
+              "physical_read_bytes": 1174284274816,
+              "physical_write_bytes": 21094494976,
+              "service_ns": 1521104170.648862,
+              "owners": {
+                "hbm0.hbm_fabric": {
+                  "resource_bytes": 614435121024,
+                  "resource_energy_pj": 2457740484096.0,
+                  "coefficient_pj_per_byte": 4
+                },
+                "hbm1.hbm_fabric": {
+                  "resource_bytes": 580927881216,
+                  "resource_energy_pj": 2323711524864.0,
+                  "coefficient_pj_per_byte": 4
+                },
+                "hostmem0.memory": {
+                  "resource_bytes": 15767552,
+                  "resource_energy_pj": 189210624.0,
+                  "coefficient_pj_per_byte": 12
+                }
+              }
+            },
+            "storage_traffic": {
+              "task_count": 204032,
+              "logical_bytes": 4804994662400,
+              "logical_read_bytes": 4804994662400,
+              "logical_write_bytes": 0,
+              "physical_bytes": 4804994662400,
+              "physical_read_bytes": 4804994662400,
+              "physical_write_bytes": 0,
+              "service_ns": 422133163371.80255,
+              "owners": {
+                "hbf0.memory": {
+                  "resource_bytes": 9609989324800,
+                  "resource_energy_pj": 57659935948800.0,
+                  "coefficient_pj_per_byte": 12
+                }
+              },
+              "media_energy_pj": 57659935948800.0,
+              "resource_sum_minus_media_energy_pj": 0.0,
+              "pages_read": 293273600,
+              "pages_programmed": 0,
+              "resource_byte_semantics": "host and media transfers are both recorded; energy bills media bytes once"
+            }
+          },
+          "unused_hbf_owners": [
+            "hbf1.memory",
+            "hbf2.memory"
+          ]
+        }
+      ],
+      "cross_hardware_differences": {
+        "engine_ttft_ns": {
+          "two_hbf": 3144227278.808351,
+          "three_hbf": 3144227278.8083644,
+          "signed_difference_3hbf_minus_2hbf": 1.33514404296875e-05,
+          "signed_relative_difference_to_2hbf": 4.2463343918152255e-15
+        },
+        "engine_tpot_ns": {
+          "two_hbf": 277700026.2275469,
+          "three_hbf": 277700026.2275469,
+          "signed_difference_3hbf_minus_2hbf": 0.0,
+          "signed_relative_difference_to_2hbf": 0.0
+        },
+        "engine_e2e_ns": {
+          "two_hbf": 38412130609.7068,
+          "three_hbf": 38412130609.70682,
+          "signed_difference_3hbf_minus_2hbf": 1.52587890625e-05,
+          "signed_relative_difference_to_2hbf": 3.972388102482418e-16
+        },
+        "dram_traffic.service_ns": {
+          "two_hbf": 1521104170.645914,
+          "three_hbf": 1521104170.648862,
+          "signed_difference_3hbf_minus_2hbf": 0.0029478073120117188,
+          "signed_relative_difference_to_2hbf": 1.9379391424322874e-12
+        },
+        "storage_traffic.service_ns": {
+          "two_hbf": 422133163371.8026,
+          "three_hbf": 422133163371.80255,
+          "signed_difference_3hbf_minus_2hbf": -6.103515625e-05,
+          "signed_relative_difference_to_2hbf": -1.4458744667791478e-16
+        }
+      },
+      "equal_fields": "logical/physical directional byte totals, physical task counts, DRAM row counters, NAND page counts, owner resource bytes and total energy are equal",
+      "interpretation": "Both use only hbf0 for NAND; hbf1 (and hbf2 in 3HBF) are unused. Nonzero timing differences are retained exactly; resource service totals overlap and are not end-to-end latency. This is result consistency, not an optimization-toggle experiment.",
+      "ui_screenshot": "ui_final_qwen3_235b_b200_3hbf.png"
+    }
+  }
+}

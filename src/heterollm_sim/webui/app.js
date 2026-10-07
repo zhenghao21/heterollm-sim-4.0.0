@@ -2071,10 +2071,18 @@ function topologyHistorySnapshot() {
   if (!state.scenario || !state.topologyView) return null;
   const topologyView = deepClone(state.topologyView);
   delete topologyView.viewport;
+  const workloadMetadata = asObject(state.scenario.workload?.metadata);
+  const hardwareWorkloadMetadata = {};
+  if (Object.hasOwn(workloadMetadata, "llama_cpp_kernel_model_preset")) {
+    hardwareWorkloadMetadata.llama_cpp_kernel_model_preset = workloadMetadata.llama_cpp_kernel_model_preset;
+  }
   return {
     hardware: deepClone(state.scenario.hardware),
     placement: deepClone(state.scenario.placement),
     profiles: deepClone(asObject(state.scenario.profiles)),
+    // Hardware replacement also changes this authoring field. Do not capture
+    // the whole workload: unrelated edits must survive a topology undo.
+    hardwareWorkloadMetadata: deepClone(hardwareWorkloadMetadata),
     weights_resident: state.scenario.weights_resident,
     topologyView,
     mappingState: {
@@ -2117,6 +2125,14 @@ function restoreTopologyHistorySnapshot(snapshot, { restorePlacement = true } = 
   state.scenario.hardware = deepClone(snapshot.hardware);
   if (snapshot.profiles && typeof snapshot.profiles === "object" && !Array.isArray(snapshot.profiles)) {
     state.scenario.profiles = deepClone(snapshot.profiles);
+  }
+  if (snapshot.hardwareWorkloadMetadata && typeof snapshot.hardwareWorkloadMetadata === "object") {
+    state.scenario.workload = asObject(state.scenario.workload);
+    state.scenario.workload.metadata = asObject(state.scenario.workload.metadata);
+    const metadata = state.scenario.workload.metadata;
+    if (Object.hasOwn(snapshot.hardwareWorkloadMetadata, "llama_cpp_kernel_model_preset")) {
+      metadata.llama_cpp_kernel_model_preset = deepClone(snapshot.hardwareWorkloadMetadata.llama_cpp_kernel_model_preset);
+    } else delete metadata.llama_cpp_kernel_model_preset;
   }
   const hasPlacementSnapshot = snapshot.placement && typeof snapshot.placement === "object" && !Array.isArray(snapshot.placement);
   if (restorePlacement && !hasPlacementSnapshot) {
@@ -4293,6 +4309,7 @@ function renderRunJobDialog() {
     ? uiText("正在取消（Cancelling）", "Cancelling")
     : uiText("取消仿真（Cancel）", "Cancel simulation");
   dom.dismissRunJobButton.textContent = active ? uiText("转入后台", "Continue in background") : uiText("关闭", "Close");
+  renderRunStepSummary();
   syncRunButtons();
 }
 
@@ -4846,13 +4863,34 @@ function traceStepSummary() {
 }
 
 function renderTraceStepSummary() {
+  if (!dom.playbackCount || !dom.playbackStatus) return;
   const summary = traceStepSummary();
-  dom.playbackCount.textContent = state.report ? formatNumber(summary.count) : "—";
-  dom.playbackStatus.textContent = state.report
+  const running = activeRunStepLabel();
+  dom.playbackCount.textContent = state.report && !running ? formatNumber(summary.count) : "—";
+  dom.playbackStatus.textContent = running || (state.report
     ? summary.label
     : state.reportStale
       ? uiText("结果已过期", "Results stale")
-      : uiText("未运行", "Not run");
+      : uiText("未运行", "Not run"));
+}
+
+function activeRunStepLabel() {
+  if (state.runJobSubmitting) return uiText("正在提交", "Submitting");
+  if (!runJobIsActive()) return "";
+  return state.runJob.cancellation_requested
+    ? uiText("正在取消", "Cancelling")
+    : runStatusLabel(state.runJob.status);
+}
+
+function renderRunStepSummary() {
+  renderTraceStepSummary();
+  const active = Boolean(activeRunStepLabel());
+  if (dom.resultsCount) dom.resultsCount.innerHTML = state.report && !active
+    ? formatResultNumber(Object.keys(asObject(state.report.requests)).length).html : "—";
+  if (dom.resultsStatus) dom.resultsStatus.textContent = active
+    ? uiText("等待结果", "Awaiting results")
+    : state.reportStale ? uiText("结果已过期", "Results stale")
+      : state.report ? uiText("报告就绪", "Report ready") : uiText("未运行", "Not run");
 }
 
 function renderSteps() {
@@ -4874,8 +4912,7 @@ function renderSteps() {
   dom.modelCount.textContent = layerSummary.count == null ? "—" : String(layerSummary.count);
   dom.mappingCount.textContent = String(opMappings + tensorMappings);
   dom.workloadCount.textContent = String(requests);
-  renderTraceStepSummary();
-  dom.resultsCount.innerHTML = state.report ? formatResultNumber(Object.keys(asObject(state.report.requests)).length).html : "—";
+  renderRunStepSummary();
   dom.architectureStatus.textContent = uiText(`${components} 组件 · ${links} 链路 · ${groups} 组`, `${components} components · ${links} links · ${groups} groups`);
   dom.modelStatus.textContent = layerSummary.count == null ? "—" : uiText(`${layerSummary.count} 层`, `${layerSummary.count} layers`);
   dom.modelStatus.title = layerSummary.reason || "";
@@ -4884,7 +4921,6 @@ function renderSteps() {
     : uiText(`${opMappings} 算子 · ${tensorMappings} 张量`, `${opMappings} operators · ${tensorMappings} tensors`);
   dom.mappingStatus.classList.toggle("is-stale", state.mappingStale);
   dom.workloadStatus.textContent = uiText(`${requests} 请求`, `${requests} requests`);
-  dom.resultsStatus.textContent = state.reportStale ? uiText("结果已过期", "Results stale") : state.report ? uiText("报告就绪", "Report ready") : uiText("未运行", "Not run");
   $$(".step-count").forEach((node) => node.classList.toggle("has-errors", errors > 0));
 }
 
@@ -8244,6 +8280,36 @@ function costProfileDraft(profileKey, selectedComponent, scenario = state.scenar
   return { ...current };
 }
 
+// Explicit authoring defaults, including the instruction and API boundary
+// costs. A hardware replacement invalidates the previous host calibration;
+// the resulting draft must not depend on omitted backend dataclass defaults.
+const HOST_ORCHESTRATION_DRAFT_DEFAULTS = Object.freeze({
+  request_parse_ns: 180,
+  batch_fixed_ns: 350,
+  token_pack_ns: 12,
+  submission_ns: 250,
+  capacity_fixed_instructions: 96,
+  capacity_instructions_per_request: 64,
+  schedule_fixed_instructions: 192,
+  schedule_instructions_per_request: 48,
+  schedule_instructions_per_token: 8,
+  command_build_fixed_instructions: 128,
+  command_build_instructions_per_invocation: 12,
+  dma_queue_submission_ns: 62.5,
+  descriptor_bytes_per_request: 96,
+  token_bytes: 4,
+  dma_bandwidth_gb_s: 48,
+  dma_latency_ns: 800,
+  max_inflight_batches: 4,
+  pinned_memory: true,
+  kv_page_lookup_ns: 8,
+  kv_descriptor_ns: 4,
+  kv_descriptor_bytes: 32,
+  admission_ns: 0,
+  input_decode_ns_per_token: 0,
+  output_encode_ns_per_token: 0,
+});
+
 function hostOrchestrationProfileDraft(scenario = state.scenario, currentProfile = null) {
   const components = asArray(scenario?.hardware?.components);
   const firstOfKind = (kind) => components.find((component) => normalizedComponentKind(component.kind) === kind) || null;
@@ -8254,19 +8320,10 @@ function hostOrchestrationProfileDraft(scenario = state.scenario, currentProfile
   const cpuId = String(cpu.component_id);
   const gpuId = String(gpu.component_id);
   return {
-    request_parse_ns: nonnegativeProfileNumber(current.request_parse_ns, 180),
-    batch_fixed_ns: nonnegativeProfileNumber(current.batch_fixed_ns, 350),
-    token_pack_ns: nonnegativeProfileNumber(current.token_pack_ns, 12),
-    submission_ns: nonnegativeProfileNumber(current.submission_ns, 250),
-    descriptor_bytes_per_request: positiveProfileNumber(current.descriptor_bytes_per_request, 96),
-    token_bytes: positiveProfileNumber(current.token_bytes, 4),
-    dma_bandwidth_gb_s: positiveProfileNumber(current.dma_bandwidth_gb_s, 48),
-    dma_latency_ns: nonnegativeProfileNumber(current.dma_latency_ns, 800),
-    max_inflight_batches: positiveProfileNumber(current.max_inflight_batches, 4),
-    pinned_memory: typeof current.pinned_memory === "boolean" ? current.pinned_memory : true,
-    kv_page_lookup_ns: nonnegativeProfileNumber(current.kv_page_lookup_ns, 8),
-    kv_descriptor_ns: nonnegativeProfileNumber(current.kv_descriptor_ns, 4),
-    kv_descriptor_bytes: positiveProfileNumber(current.kv_descriptor_bytes, 32),
+    ...HOST_ORCHESTRATION_DRAFT_DEFAULTS,
+    // Rebinding references is not recalibration. Keep every explicit cost,
+    // including invalid values so validation can report rather than replace it.
+    ...deepClone(current),
     cpu_component_id: cpuId,
     gpu_component_id: gpuId,
     scheduler_resource_id: `${cpuId}.scheduler`,
@@ -8427,6 +8484,7 @@ function resetArchitectureDependentProfiles(scenario = state.scenario) {
     scenario,
   );
   if (rebuildRuntimeGpuControllers(scenario)) created.push("runtime.gpu_controllers");
+  resetLlamaHardwareKernelPreset(scenario);
   return created;
 }
 
@@ -11045,6 +11103,8 @@ function applyArchitecturePresetDetail(detail) {
 }
 
 async function loadArchitectureFromPreset(id, button) {
+  const previousText = button.textContent;
+  const wasDisabled = button.disabled;
   button.disabled = true;
   button.textContent = "正在载入…";
   try {
@@ -11062,6 +11122,11 @@ async function loadArchitectureFromPreset(id, button) {
   } catch (error) {
     showOperationError("架构预设载入失败", error);
     renderArchitecturePresets();
+  } finally {
+    // Successful loads close the dialog without rerendering its cached list.
+    // Restore the action as well as on cancellation or a failed request.
+    button.disabled = wasDisabled;
+    button.textContent = previousText;
   }
 }
 
@@ -14973,10 +15038,20 @@ function bindControlPlanePolicyControls(placement) {
 }
 
 function clearLlamaRuntimeExposure(scenario) {
+  const authoringFields = new Set([
+    "llama_cpp_runtime_identity",
+    "llama_cpp_recurrent_batching_contract",
+    "llama_cpp_slot_order_contract",
+    "llama_cpp_kernel_model_preset",
+    "llama_cpp_f32_hidden_storage",
+    "llama_cpp_tensor_storage_contract",
+  ]);
   for (const metadata of [scenario?.workload?.metadata, scenario?.placement?.metadata]) {
     if (!metadata) continue;
     for (const key of Object.keys(metadata)) {
-      if (key.startsWith("llama_cpp_") && !["llama_cpp_runtime_identity", "llama_cpp_recurrent_batching_contract", "llama_cpp_slot_order_contract"].includes(key)) delete metadata[key];
+      // These are authored inputs, not a previous run's results.
+      // Removing them here silently changes the cost model after every UI edit.
+      if (key.startsWith("llama_cpp_") && !authoringFields.has(key)) delete metadata[key];
     }
   }
   const controlPlane = asObject(scenario?.placement?.metadata?.control_plane);
@@ -15057,15 +15132,19 @@ function setLlamaRuntimeMode(mode, scenario = state.scenario) {
     }
   } else delete scenario.profiles.llama_cpp;
   clearLlamaRuntimeExposure(scenario);
+  resetLlamaHardwareKernelPreset(scenario);
+  return true;
+}
+
+function resetLlamaHardwareKernelPreset(scenario = state.scenario) {
   scenario.workload = asObject(scenario.workload);
   scenario.workload.metadata = asObject(scenario.workload.metadata);
-  if (mode === "llama_cpp" && asArray(scenario.hardware?.components).some(
+  if (scenario.profiles?.llama_cpp && asArray(scenario.hardware?.components).some(
     (c) => c.metadata?.component_preset_id === "nvidia-rtx-5080")) {
     scenario.workload.metadata.llama_cpp_kernel_model_preset = "blackwell_analytical_v1";
   } else {
     delete scenario.workload.metadata.llama_cpp_kernel_model_preset;
   }
-  return true;
 }
 
 function updateLlamaRuntimeField(field, value, scenario = state.scenario) {

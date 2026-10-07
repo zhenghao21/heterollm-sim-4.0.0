@@ -24,7 +24,7 @@ from .ir import (
 from .serde import to_primitive
 from .schema_v1 import ModelGraph, OperatorNode, OperatorPort, TensorValue
 from .model_presets_shas import SOURCE_SHAS
-from .precision import weight_storage_bits
+from .precision import dtype_bits, weight_storage_bits
 
 
 EXACT = "exact"
@@ -780,6 +780,15 @@ def materialize_preset_definition(definition: PresetDefinition) -> Dict[str, Any
     layer_index = 0
     for pattern_index, pattern in enumerate(definition.patterns):
         for offset in range(pattern.repeat):
+            qk_norm = definition.family == "Qwen3" and pattern.sequence_mixer == "full_attention"
+            norm_head_dim = pattern.attention_head_dim or pattern.hidden_size // pattern.attention_heads
+            norm_storage_bits = dtype_bits(pattern.dtype, unsupported_message="unsupported Q/K norm dtype") if qk_norm else 0
+            qk_norm_bytes = (2 * norm_head_dim * norm_storage_bits + 7) // 8 if qk_norm else 0
+            qkv_bias = definition.family == "Qwen2.5" and pattern.sequence_mixer == "full_attention"
+            bias_storage_bits = dtype_bits(pattern.dtype, unsupported_message="unsupported QKV bias dtype") if qkv_bias else 0
+            q_bias_elements = pattern.attention_heads * norm_head_dim
+            kv_bias_elements = pattern.kv_heads * norm_head_dim
+            qkv_bias_bytes = ((q_bias_elements + 2 * kv_bias_elements) * bias_storage_bits + 7) // 8 if qkv_bias else 0
             layer_payload: Dict[str, Any] = {
                     "schema_version": SCHEMA_VERSION,
                     "layer_id": "layer-{:03d}".format(layer_index),
@@ -797,7 +806,7 @@ def materialize_preset_definition(definition: PresetDefinition) -> Dict[str, Any
                     "gated_mlp": pattern.gated_mlp,
                     "dtype": pattern.dtype,
                     "quantization": pattern.quantization,
-                    "weight_bytes": _layer_weight_bytes(pattern),
+                    "weight_bytes": _layer_weight_bytes(pattern) + qk_norm_bytes + qkv_bias_bytes,
                     "metadata": {
                         "preset_pattern": pattern.label,
                         "pattern_index": pattern_index,
@@ -809,6 +818,26 @@ def materialize_preset_definition(definition: PresetDefinition) -> Dict[str, Any
                             _pattern_weight_storage_bits(pattern)
                         ),
                     },
+                }
+            if qk_norm:
+                layer_payload["metadata"]["attention_qk_norm"] = {
+                    "kind": "rmsnorm", "head_dim": norm_head_dim,
+                    "weight_storage_bits": norm_storage_bits,
+                    "weight_bytes": qk_norm_bytes,
+                    "source": "Qwen3 per-head q_norm/k_norm; llama.cpp qwen3.cpp/qwen3moe.cpp",
+                    "weight_basis": "two head-dimension vectors in declared model dtype",
+                }
+            if definition.family == "Qwen3" and pattern.kind == "moe":
+                layer_payload["metadata"]["moe_routing"] = {
+                    "gating": "softmax", "normalize_selected_weights": True, "weight_scale": 1.0,
+                }
+            if qkv_bias:
+                layer_payload["metadata"]["attention_qkv_bias"] = {
+                    "schema_version": "heterollm.attention-qkv-bias/v1",
+                    "query_elements": q_bias_elements,
+                    "key_elements": kv_bias_elements, "value_elements": kv_bias_elements,
+                    "storage_bits": bias_storage_bits, "weight_bytes": qkv_bias_bytes,
+                    "source": "Qwen2.5 Q/K/V projection bias; llama.cpp llama-graph.cpp build_qkv",
                 }
             if pattern.linear_attention is not None:
                 linear = pattern.linear_attention

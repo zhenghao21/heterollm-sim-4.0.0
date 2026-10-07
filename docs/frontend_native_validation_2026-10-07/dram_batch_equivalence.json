@@ -1,0 +1,297 @@
+{
+  "scope": "False-capture serial submit versus ordered submit_many; no changed physical parameters or merged accesses.",
+  "reference": "Current production scalar/compiled per-request executor; unlike True/False capture comparison, this isolates the new batching change.",
+  "core_cases": [
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "component": "hostmem0",
+      "requests": 41,
+      "serial_wall_seconds": 0.016557199996896088,
+      "batch_wall_seconds": 0.0019257999956607819,
+      "speedup": 8.597569858865313,
+      "difference": {
+        "numeric_values_compared": 3715,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "component": "gddr0",
+      "requests": 41,
+      "serial_wall_seconds": 0.00221649999730289,
+      "batch_wall_seconds": 0.0008702999912202358,
+      "speedup": 2.546822957214058,
+      "difference": {
+        "numeric_values_compared": 2663,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "component": "hbm0",
+      "requests": 41,
+      "serial_wall_seconds": 0.004158099996857345,
+      "batch_wall_seconds": 0.0012737000070046633,
+      "speedup": 3.2645834764780064,
+      "difference": {
+        "numeric_values_compared": 4261,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "component": "hbm1",
+      "requests": 41,
+      "serial_wall_seconds": 0.004928199981804937,
+      "batch_wall_seconds": 0.0021072000090498477,
+      "speedup": 2.3387433374334026,
+      "difference": {
+        "numeric_values_compared": 4261,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "component": "hostmem0",
+      "requests": 41,
+      "serial_wall_seconds": 0.0012787999876309186,
+      "batch_wall_seconds": 0.00048499999684281647,
+      "speedup": 2.636701022588593,
+      "difference": {
+        "numeric_values_compared": 1296,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "component": "hbm0",
+      "requests": 41,
+      "serial_wall_seconds": 0.002875899983337149,
+      "batch_wall_seconds": 0.0011301000195089728,
+      "speedup": 2.544818983886687,
+      "difference": {
+        "numeric_values_compared": 4261,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "component": "hbm1",
+      "requests": 41,
+      "serial_wall_seconds": 0.005058100010501221,
+      "batch_wall_seconds": 0.0020451000018510967,
+      "speedup": 2.4732775932340445,
+      "difference": {
+        "numeric_values_compared": 4261,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "component": "hostmem0",
+      "requests": 41,
+      "serial_wall_seconds": 0.0019400999881327152,
+      "batch_wall_seconds": 0.0008230000094044954,
+      "speedup": 2.357351112956279,
+      "difference": {
+        "numeric_values_compared": 1296,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    }
+  ],
+  "native_v_columns": {
+    "requests": 1024,
+    "serial_wall_seconds": 0.037306800018996,
+    "batch_wall_seconds": 0.018013000022619963,
+    "speedup": 2.0711042009741685,
+    "difference": {
+      "numeric_values_compared": 24860,
+      "changed_values": 0,
+      "max_absolute_difference": 0.0,
+      "max_relative_difference": 0.0,
+      "max_relative_difference_percent": 0.0,
+      "max_absolute_path": null,
+      "non_numeric_mismatches": []
+    }
+  },
+  "interleaved_multiowner_overlap_case": {
+    "access_count": 2075,
+    "serial_wall_seconds": 0.21728909999364987,
+    "batch_wall_seconds": 0.11698320001596585,
+    "speedup": 1.8574385036825312,
+    "difference": {
+      "numeric_values_compared": 9269,
+      "changed_values": 0,
+      "max_absolute_difference": 0.0,
+      "max_relative_difference": 0.0,
+      "max_relative_difference_percent": 0.0,
+      "max_absolute_path": null,
+      "non_numeric_mismatches": []
+    }
+  },
+  "real_source_layers": [
+    {
+      "case": "qwen3_0_6b_f16",
+      "scope": "Actual full-attention layer, decode at logical context 513 / padded read 768.",
+      "repetitions": 5,
+      "serial_wall_seconds": 0.13899609999498352,
+      "batch_wall_seconds": 0.09587520000059158,
+      "serial_wall_samples": [
+        0.16630320000695065,
+        0.12465819998760708,
+        0.13734699998167343,
+        0.13899609999498352,
+        0.14972889999626204
+      ],
+      "batch_wall_samples": [
+        0.09587520000059158,
+        0.09187590001965873,
+        0.12326419999590144,
+        0.07452299998840317,
+        0.09677979999105446
+      ],
+      "speedup": 1.4497607305551996,
+      "difference": {
+        "numeric_values_compared": 9770,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    },
+    {
+      "case": "qwen3_8_27b_mixed",
+      "scope": "Actual full-attention layer, decode at logical context 513 / padded read 768.",
+      "repetitions": 5,
+      "serial_wall_seconds": 0.16017300001112744,
+      "batch_wall_seconds": 0.10797760001150891,
+      "serial_wall_samples": [
+        0.15589900000486523,
+        0.16017300001112744,
+        0.22990299999946728,
+        0.17551189998630434,
+        0.15465089998906478
+      ],
+      "batch_wall_samples": [
+        0.09911469998769462,
+        0.10797760001150891,
+        0.11793760000728071,
+        0.10011100000701845,
+        0.15215169999282807
+      ],
+      "speedup": 1.4833909995596792,
+      "difference": {
+        "numeric_values_compared": 9770,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      }
+    }
+  ],
+  "real_source_whole_model": {
+    "case": "qwen3_0_6b_f16",
+    "scope": "Complete actual GGUF model, input 4/output 3; original 768-token capacity and all source contracts, host output, live physical state preserved. This is an implementation comparison, not a 512/128 native error estimate.",
+    "repetitions": 3,
+    "serial_wall_seconds": 79.6344975999964,
+    "batch_wall_seconds": 41.35532870001043,
+    "serial_wall_samples": [
+      76.81915640001534,
+      79.6344975999964,
+      80.25198000000091
+    ],
+    "batch_wall_samples": [
+      42.29081980002229,
+      41.31167110000388,
+      41.35532870001043
+    ],
+    "speedup": 1.9256163619847206,
+    "difference": {
+      "numeric_values_compared": 23679,
+      "changed_values": 0,
+      "max_absolute_difference": 0.0,
+      "max_relative_difference": 0.0,
+      "max_relative_difference_percent": 0.0,
+      "max_absolute_path": null,
+      "non_numeric_mismatches": []
+    }
+  },
+  "production_gate": "At least 16 consecutive same-owner same-direction requests, each fewer than 64 bursts; writes must have ascending nonoverlapping logical byte ranges; at most 1024 requests per batch. Detailed capture retains the original scalar path.",
+  "timing_context": "Repeated diagnostic timings were collected while UI simulations were also running. Medians demonstrate a net benefit in this environment; they are not an isolated machine throughput guarantee.",
+  "enabled_by_default": true,
+  "interpretation": "Maximum absolute/relative differences are 0 for all measured values. This establishes equivalence on the recorded cases, not universal bitwise equality or improved native predictive accuracy.",
+  "moe_profile_review": {
+    "scope": "B200 2HBF Qwen3 30B-A3B, complete model 1/2, cProfile instrumentation; no optimization applied after this review",
+    "instrumented_wall_seconds": 143.002,
+    "execute_compiled": {
+      "calls": 14444,
+      "self_seconds": 19.812,
+      "cumulative_seconds": 34.039
+    },
+    "geometry_resource_ids_cache_misses": 5,
+    "numpy_geometry_duration_array_seconds": 0.124,
+    "can_accelerate": {
+      "calls": 28888,
+      "cumulative_seconds": 9.206,
+      "duplicate_internal_check_seconds": 4.349
+    },
+    "snapshot_cumulative_seconds": 3.832,
+    "decision": "Geometry identifiers are already cached. Removing the second same-call eligibility check might save about 3% of this instrumented wall time, but cross-request caching is unsafe because calendars and list aliases change. Mutable-state packing dominates; a larger redesign is outside this validation round. No further performance change made."
+  },
+  "additional_representative_generic_runs": {
+    "file": "dram_batch_representative_equivalence.json",
+    "cases": [
+      "qwen3_30b_a3b",
+      "qwen2_5_7b",
+      "llama3_1_8b"
+    ],
+    "hardware": "B200-2HBF unchanged",
+    "load": "1 input / 2 output, all layers",
+    "maximum_absolute_and_relative_difference": 0,
+    "qualification": "All three have zero submit_many calls. This is non-triggering compatibility coverage, not evidence of batched execution or speedup. Earlier 63-case equivalence covers three other optimizations and must remain distinct."
+  }
+}

@@ -13,6 +13,80 @@ import numpy as np
 
 
 @njit(cache=True, nogil=True, fastmath=False)
+def run_numeric_many(firsts, stops, arrivals, reads, max_outstanding, acceptance,
+                     inflight, inflight_count, geometry, duration_pairs, shared,
+                     bankrows, bankready, banktouched, calendar, busy, moved,
+                     directions, last_start, last_end, touched):
+    """Execute ordered requests with the same admission gate as submit()."""
+    count, resources = len(firsts), len(calendar)
+    ends = np.empty(count, dtype=np.float64)
+    waits = np.empty(count, dtype=np.float64)
+    counts = np.empty((count, 4), dtype=np.int64)
+    busy_delta = np.empty((count, resources), dtype=np.float64)
+    byte_delta = np.empty((count, resources), dtype=np.int64)
+    last_starts = np.empty((count, resources), dtype=np.float64)
+    last_ends = np.empty((count, resources), dtype=np.float64)
+    touches = np.empty((count, resources), dtype=np.bool_)
+    before_busy, before_moved = np.empty(resources), np.empty(resources, dtype=np.int64)
+    for index in range(count):
+        effective = max(arrivals[index], acceptance)
+        remaining = 0
+        for pos in range(inflight_count):
+            if inflight[pos] > effective:
+                inflight[remaining] = inflight[pos]
+                remaining += 1
+        inflight_count = remaining
+        if inflight_count >= max_outstanding:
+            earliest = inflight[0]
+            for pos in range(1, inflight_count):
+                earliest = min(earliest, inflight[pos])
+            effective = max(effective, earliest)
+            remaining = 0
+            for pos in range(inflight_count):
+                if inflight[pos] > effective:
+                    inflight[remaining] = inflight[pos]
+                    remaining += 1
+            inflight_count = remaining
+        before_busy[:] = busy
+        before_moved[:] = moved
+        touched[:] = False
+        first, stop, read = firsts[index], stops[index], reads[index]
+        durations = duration_pairs[0 if read else 1]
+        if stop - first >= 64:
+            completion, hits, misses, conflicts, skipped = run_numeric(
+                first, stop, effective, read, geometry, durations, shared,
+                bankrows, bankready, banktouched, calendar, busy, moved,
+                directions, last_start, last_end, touched)
+        else:
+            # Small requests normally use the Python burst loop. Preserve its
+            # individual transitions and addition order, without row folding.
+            cursor, completion = first, effective
+            hits = misses = conflicts = skipped = 0
+            row_span = geometry[0] * geometry[1] * geometry[3]
+            while cursor < stop:
+                linear_row = cursor // row_span
+                unit, row = linear_row // geometry[4], linear_row % geometry[4]
+                row_stop = min(stop, (linear_row + 1) * row_span)
+                cursor, completion, h, m, c = _burst_range(
+                    cursor, row_stop, row, unit, effective, read, geometry, durations, shared,
+                    bankrows, bankready, banktouched, calendar, busy, moved,
+                    directions, last_start, last_end, touched, completion)
+                hits += h
+                misses += m
+                conflicts += c
+        ends[index], waits[index] = completion, effective - arrivals[index]
+        counts[index, 0], counts[index, 1], counts[index, 2], counts[index, 3] = hits, misses, conflicts, skipped
+        busy_delta[index] = busy - before_busy
+        byte_delta[index] = moved - before_moved
+        last_starts[index], last_ends[index], touches[index] = last_start, last_end, touched
+        acceptance = effective
+        inflight[inflight_count] = completion
+        inflight_count += 1
+    return (ends, waits, counts, busy_delta, byte_delta, last_starts, last_ends,
+            touches, acceptance, inflight_count)
+
+
+@njit(cache=True, nogil=True, fastmath=False)
 def _repeat_add(value, increment, count):
     while count:
         value += increment

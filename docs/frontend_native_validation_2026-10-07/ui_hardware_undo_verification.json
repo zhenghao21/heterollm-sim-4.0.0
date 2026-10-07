@@ -1,0 +1,41 @@
+[
+  {
+    "f32Present": false,
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "kernelPresent": false,
+    "label": "B200_after_replace"
+  },
+  {
+    "f32Present": false,
+    "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+    "kernel": "blackwell_analytical_v1",
+    "kernelPresent": true,
+    "label": "local_after_undo"
+  },
+  {
+    "f32Present": false,
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "kernelPresent": false,
+    "label": "B200_after_redo"
+  },
+  {
+    "f32Present": false,
+    "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+    "kernel": "blackwell_analytical_v1",
+    "kernelPresent": true,
+    "label": "local_after_replace"
+  },
+  {
+    "f32Present": false,
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "kernelPresent": false,
+    "label": "B200_after_reverse_undo"
+  },
+  {
+    "f32Present": false,
+    "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+    "kernel": "blackwell_analytical_v1",
+    "kernelPresent": true,
+    "label": "local_after_reverse_redo"
+  }
+]

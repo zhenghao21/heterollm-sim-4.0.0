@@ -1,0 +1,68 @@
+{
+  "comparison": "Same prepared scenario and code; only _add_qkv_projection_bias was replaced by an identity return for the before run. Control-plane requirements and fusion blocking were identical.",
+  "interpretation": "Isolated correction of missing QKV bias, not a performance approximation and not native prediction error. This reduced regression fixture is not a full production model.",
+  "execution": "Actual run_scenario and report_dict, physical DRAM traffic included",
+  "source_evidence": [
+    "llama.cpp d3146f2b56c2db4711ac8391871c9e529d1946d7 src/llama-graph.cpp build_qkv GGML ADD for Q/K/V",
+    "transformers v4.51.3 src/transformers/models/qwen2/modeling_qwen2.py Q/K/V bias=True"
+  ],
+  "cases": [
+    {
+      "case": "Qwen2.5-0.5B geometry, one-layer regression fixture (FFN=128, vocab=32)",
+      "prompt_tokens": 4,
+      "output_tokens": 3,
+      "activation_bits": 16,
+      "bias_bits": 16,
+      "query_width": 896,
+      "key_width": 128,
+      "value_width": 128,
+      "added_bias_add_operations": 6912,
+      "added_bias_kernel_invocations": 9,
+      "metrics": {
+        "engine_ttft_ns": {
+          "before": 35411.450520833336,
+          "after": 38531.450520833336,
+          "delta": 3120.0,
+          "relative_change_percent": 8.810709400803661
+        },
+        "engine_tpot_ns": {
+          "before": 35223.46028645834,
+          "after": 38343.46028645834,
+          "delta": 3120.0,
+          "relative_change_percent": 8.857732813943564
+        },
+        "engine_e2e_ns": {
+          "before": 105858.37109375001,
+          "after": 115218.37109375001,
+          "delta": 9360.0,
+          "relative_change_percent": 8.842002671390647
+        },
+        "total_energy_pj": {
+          "before": 107995262.19999999,
+          "after": 108251841.39999998,
+          "delta": 256579.19999998808,
+          "relative_change_percent": 0.23758375578071247
+        },
+        "logical_read_bytes": {
+          "before": 13378199,
+          "after": 13398935,
+          "delta": 20736,
+          "relative_change_percent": 0.15499844186799733
+        },
+        "logical_write_bytes": {
+          "before": 119806,
+          "after": 133630,
+          "delta": 13824,
+          "relative_change_percent": 11.538654157554713
+        },
+        "physical_bytes": {
+          "before": 13499520,
+          "after": 13534080,
+          "delta": 34560,
+          "relative_change_percent": 0.2560091025458683
+        }
+      }
+    }
+  ],
+  "raw_local_record": "F:/codex_project/_scratch/37-bias-isolated-before-after.json"
+}

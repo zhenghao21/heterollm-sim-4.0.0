@@ -24,6 +24,7 @@ import time
 from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .communication import TopologyRouter
+from .attention_bias import resolve_attention_qkv_bias
 from .config import ScenarioConfig
 from .contracts import OperatorClass
 from .cost_models import (
@@ -69,6 +70,7 @@ from .precision import layer_precision_bits
 from .projection_descriptors import (
     materialize_weight_projection,
     resolve_attention_execution_descriptor,
+    resolve_attention_qk_norm,
 )
 from .planner import non_gemm_cim_mapping_diagnostics, validate_scenario
 from .serde import to_primitive
@@ -362,6 +364,7 @@ class _Requirement:
     fixed_transcendental_operations_per_token: int = 0
     input_count: int = 1
     read_bytes_per_token: int = 0
+    fixed_read_bytes: int = 0
     write_bytes_per_token: int = 0
     dynamic_rhs: bool = False
     context_scaled_elements: bool = False
@@ -1728,13 +1731,13 @@ def _derive_requirements(
         "lm_head_weights",
     )
     untied_lm_head = lm_head_physical_owner != "embedding_weights"
-    embedding_bytes = model.embedding_weight_bytes or _matrix_bytes(
+    embedding_bytes = execution_view.embedding_weight_bytes or _matrix_bytes(
         first_layer.hidden_size,
-        max(1, model.vocabulary_size),
+        max(1, execution_view.vocabulary_size),
         _weight_bits(first_layer),
     )
-    output_head_bytes = model.output_weight_bytes
-    if model.vocabulary_size > 0 or embedding_bytes > 0:
+    output_head_bytes = execution_view.output_weight_bytes
+    if execution_view.vocabulary_size > 0 or embedding_bytes > 0:
         requirements.append(
             _Requirement(
                 item_id="embedding",
@@ -1743,7 +1746,7 @@ def _derive_requirements(
                 tensor_id=(
                     "embedding_weights"
                     if (
-                        model.vocabulary_size <= 0
+                        execution_view.vocabulary_size <= 0
                         or untied_lm_head
                         or split_tied_runtime_copies
                     )
@@ -1752,7 +1755,7 @@ def _derive_requirements(
                 tensor_bytes=(
                     embedding_bytes
                     if (
-                        model.vocabulary_size <= 0
+                        execution_view.vocabulary_size <= 0
                         or untied_lm_head
                         or split_tied_runtime_copies
                     )
@@ -1783,6 +1786,9 @@ def _derive_requirements(
                 head_dim = attention_descriptor.head_dim
                 q_width = attention_descriptor.query_width
                 kv_width = attention_descriptor.kv_heads * head_dim
+        qkv_bias = resolve_attention_qkv_bias(layer.metadata, query_width=q_width, kv_width=kv_width)
+        if qkv_bias is not None and (layer.is_linear_attention or attention_descriptor is not None):
+            raise ValueError("attention_qkv_bias currently requires ordinary, ungated attention")
         if layer.is_linear_attention and layer.linear_attention is not None:
             geometry = layer.linear_attention
             mixer_matrices = [
@@ -1929,7 +1935,14 @@ def _derive_requirements(
             )
             for spec in group_specs
         ]
-        declared_bytes = _allocate_declared_bytes(raw_bytes, layer.weight_bytes)
+        bias_bytes = qkv_bias.weight_bytes if qkv_bias is not None else 0
+        if layer.weight_bytes < bias_bytes:
+            raise ValueError("layer weight capacity is smaller than its declared QKV bias vectors")
+        declared_bytes = list(_allocate_declared_bytes(raw_bytes, layer.weight_bytes - bias_bytes))
+        # Bias vectors belong to attention, not to a proportional FFN share.
+        if bias_bytes:
+            attention_index = next(i for i, spec in enumerate(group_specs) if spec[1] == "attention")
+            declared_bytes[attention_index] += bias_bytes
         for spec, byte_count in zip(group_specs, declared_bytes):
             item_id, kind, key, tensor_id, matrices, eligible = spec
             requirements.append(
@@ -1959,6 +1972,7 @@ def _derive_requirements(
             fixed_transcendental_operations_per_token: int = 0,
             input_count: int = 1,
             read_bytes_per_token: int = 0,
+            fixed_read_bytes: int = 0,
             write_bytes_per_token: int = 0,
             context_scaled_elements: bool = False,
         ) -> None:
@@ -1991,6 +2005,7 @@ def _derive_requirements(
                     ),
                     input_count=max(1, input_count),
                     read_bytes_per_token=max(0, read_bytes_per_token),
+                    fixed_read_bytes=max(0, fixed_read_bytes),
                     write_bytes_per_token=max(0, write_bytes_per_token),
                     context_scaled_elements=context_scaled_elements,
                 )
@@ -2065,10 +2080,20 @@ def _derive_requirements(
                 input_count=2,
             )
         else:
-            if attention_descriptor is not None and attention_descriptor.qk_norm:
+            if qkv_bias is not None:
+                for label, width in (("q", q_width), ("k", kv_width), ("v", kv_width)):
+                    add_primitive(
+                        "attention.{}_bias".format(label), "{}_bias".format(label),
+                        OperatorClass.ELEMENTWISE, elements_per_token=width,
+                        read_bytes_per_token=_storage_bytes(width, _activation_bits(layer)),
+                        fixed_read_bytes=_storage_bytes(width, qkv_bias.storage_bits),
+                        write_bytes_per_token=_storage_bytes(width, _activation_bits(layer)),
+                    )
+            if ((attention_descriptor is not None and attention_descriptor.qk_norm)
+                    or resolve_attention_qk_norm(layer.metadata, head_dim=layer.effective_attention_head_dim)):
                 for prefix, width, groups in (
-                    ("q", q_width, attention_descriptor.query_heads),
-                    ("k", kv_width, attention_descriptor.kv_heads),
+                    ("q", q_width, layer.attention_heads),
+                    ("k", kv_width, layer.effective_kv_heads),
                 ):
                     add_primitive(
                         "attention.{}_norm.reduce".format(prefix),
@@ -2291,7 +2316,7 @@ def _derive_requirements(
                 input_count=2,
             )
 
-    if model.vocabulary_size > 0:
+    if execution_view.vocabulary_size > 0:
         lm_head_owns_tensor = untied_lm_head and output_head_bytes > 0
         requirements.append(
             _Requirement(
@@ -2320,7 +2345,7 @@ def _derive_requirements(
                         else 0
                     )
                 ),
-                matrices=(_Matrix(last_layer.hidden_size, model.vocabulary_size),),
+                matrices=(_Matrix(last_layer.hidden_size, execution_view.vocabulary_size),),
                 layer=last_layer,
                 cim_eligible=True,
                 logical_alias=(
@@ -3674,8 +3699,8 @@ def _operator_cost(
                     * requirement.fixed_transcendental_operations_per_token
                 ),
                 read_storage_bytes=(
-                    max(1, m) * requirement.read_bytes_per_token
-                    if requirement.read_bytes_per_token
+                    max(1, m) * requirement.read_bytes_per_token + requirement.fixed_read_bytes
+                    if requirement.read_bytes_per_token or requirement.fixed_read_bytes
                     else (
                         _storage_bytes(
                             input_elements * requirement.input_count,
@@ -4197,7 +4222,9 @@ def _derive_fusion_opportunities(
             rope_local = _ceil_div(q_width + kv_width, tp_degree)
             qkv_elements = max(1, tokens * qkv_local)
             rope_elements = max(1, tokens * rope_local)
-            if attention_descriptor is None or not attention_descriptor.qk_norm:
+            if not ((attention_descriptor is not None and attention_descriptor.qk_norm)
+                    or resolve_attention_qk_norm(layer.metadata, head_dim=layer.effective_attention_head_dim)
+                    or resolve_attention_qkv_bias(layer.metadata, query_width=q_width, kv_width=kv_width)):
                 add(
                     layer,
                     "qkv_rope",
@@ -4215,29 +4242,20 @@ def _derive_fusion_opportunities(
                 context_tokens=max(
                     1, options.design_prefill_tokens, tokens
                 ),
-                hidden_size=(
-                    max(1, _ceil_div(q_width, tp_degree))
-                    if attention_descriptor is not None
-                    else max(1, hidden_local)
-                ),
+                hidden_size=max(1, _ceil_div(q_width, tp_degree)),
                 input_bits=bits,
                 output_bits=bits,
                 kv_hidden_size=max(1, _ceil_div(kv_width, tp_degree)),
                 kv_input_bits=bits,
-                score_heads=(
-                    max(
-                        1,
-                        _ceil_div(
-                            attention_descriptor.query_heads, tp_degree
-                        ),
-                    )
-                    if attention_descriptor is not None
-                    else 1
-                ),
+                score_heads=max(1, _ceil_div(
+                    attention_descriptor.query_heads
+                    if attention_descriptor is not None else layer.attention_heads,
+                    tp_degree,
+                )),
                 qk_scale=(
                     attention_descriptor.qk_scale
                     if attention_descriptor is not None
-                    else None
+                    else 1.0 / math.sqrt(head_dim)
                 ),
                 name="control_plane_flash_attention",
             )

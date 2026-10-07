@@ -882,6 +882,7 @@ class UnifiedEventKernel:
         self._physical_allocation_cache_owners: Dict[str, Set[str]] = {}
         self._physical_allocation_last_end: Dict[Tuple[str, str, int], float] = {}
         self._pending_physical_releases: Dict[Tuple[str, str, int], float] = {}
+        self._request_physical_buffers: Dict[str, Set[Tuple[str, str, int]]] = {}
 
     @classmethod
     def from_closed_graph(
@@ -1020,6 +1021,32 @@ class UnifiedEventKernel:
         representation details.
         """
 
+        for task in tasks:
+            declared = task.metadata.get("persistent_request_buffers", {})
+            if not declared:
+                continue
+            if not isinstance(declared, Mapping):
+                raise ValueError("persistent_request_buffers must map requests to buffer ids")
+            contract = task.metadata.get("stateful_l2")
+            default_owner = task.metadata.get("physical_owner") or (
+                contract.get("memory_resource") if isinstance(contract, Mapping) else None
+            )
+            rows = self._physical_descriptor_rows(task)
+            for request, buffers in declared.items():
+                if (not isinstance(request, str) or not request
+                        or not isinstance(buffers, (tuple, list))
+                        or any(not isinstance(value, str) or not value for value in buffers)):
+                    raise ValueError("persistent_request_buffers requires explicit request and buffer ids")
+                identities = set(buffers)
+                for row in rows:
+                    buffer_id = row.get("buffer_id") or row.get("tensor_id")
+                    owner = row.get("physical_owner") or default_owner
+                    if buffer_id in identities and owner:
+                        generation = int(row.get("allocation_generation", row.get("generation", 0)))
+                        self._request_physical_buffers.setdefault(request, set()).add(
+                            (str(owner), str(buffer_id), generation)
+                        )
+
         alias_targets = {}
         for task in tasks:
             contract = task.metadata.get("stateful_l2")
@@ -1042,7 +1069,8 @@ class UnifiedEventKernel:
             # Only a complete serving graph owns the full lifetime of these
             # derived cohort buffers.  Dynamic submit() chunks may acquire
             # more users later, so they deliberately do not call this index.
-            if not task.request_id.startswith(("cohort-", "online-cohort", "serving-")):
+            if (not task.request_id.startswith(("cohort-", "online-cohort", "serving-"))
+                    and task.metadata.get("physical_allocation_scope") != "closed_cohort"):
                 continue
             contract = task.metadata.get("stateful_l2")
             default_owner = task.metadata.get("physical_owner") or (
@@ -1116,6 +1144,26 @@ class UnifiedEventKernel:
                 self._pending_physical_releases[key] = self._physical_allocation_last_end.pop(key)
             else:
                 self._physical_allocation_last_end.pop(key, None)
+
+    def release_request_physical_allocations(self, request_id: str) -> None:
+        """Release explicitly request-owned buffers after their last use.
+
+        Generation zero keeps KV alive between closed cohorts. The serving
+        scheduler supplies the terminal request boundary; resident weights
+        remain unowned here and are never released by this operation.
+        """
+        keys = self._request_physical_buffers.get(request_id)
+        if not keys:
+            return
+        shared = set().union(*(value for request, value in self._request_physical_buffers.items()
+                               if request != request_id))
+        releasable = keys - shared
+        if any(self._physical_allocation_uses.get(key, 0) for key in releasable):
+            raise ValueError("cannot release request physical buffers before their tasks complete")
+        self._request_physical_buffers.pop(request_id)
+        for key in releasable:
+            self._pending_physical_releases[key] = self.makespan_ns
+        self._reclaim_physical_allocations(self.makespan_ns)
 
     def _reclaim_physical_allocations(self, arrival_ns: float) -> None:
         """Reclaim only buffers completed before the next task's arrival."""
@@ -2413,7 +2461,10 @@ class UnifiedEventKernel:
                     task = resolve_l2_task(task, self._l2_states, self.physical_runtime)
                     task, is_physical = _materialize_l2_physical_access(task, self.physical_runtime)
                 if is_physical:
-                    task = resolve_physical_task(task, self.physical_runtime, start_ns)
+                    task = resolve_physical_task(
+                        task, self.physical_runtime, start_ns,
+                        _caller_managed_transaction=True,
+                    )
                     contract = task.metadata.get("stateful_l2")
                     if contract is not None:
                         completion_span = float(task.metadata["physical_completion_ns"]) - float(start_ns)
@@ -2424,7 +2475,7 @@ class UnifiedEventKernel:
                                 if d.resource_id == order_resource else d
                                 for d in task.demands
                             ))
-            except (ValueError, TypeError, KeyError):
+            except Exception:
                 if l2_snapshot is not None:
                     owner, previous = l2_snapshot
                     if previous is None:

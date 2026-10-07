@@ -123,7 +123,7 @@ def _stream_completion(base_url: str, payload: dict[str, Any], timeout: float
         raise RuntimeError("completion stream ended without a visible token")
     final = next((event for event in reversed(events) if event.get("stop") is True), None)
     if final is None:
-        final = events[-1] if events else {}
+        raise RuntimeError("completion stream ended without a final stop event")
     return {
         "events": events,
         "final": final,
@@ -146,6 +146,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--prompt-tokens", type=int, default=512)
     parser.add_argument("--output-tokens", type=int, default=128)
     parser.add_argument("--context", type=int, default=640)
+    parser.add_argument("--expected-effective-context", type=int,
+                        help="require the server's observed context to match the paired simulation")
     parser.add_argument("--batch", type=int, default=512)
     parser.add_argument("--ubatch", type=int, default=512)
     parser.add_argument("--threads", type=int, default=16)
@@ -154,6 +156,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--flash-attn", choices=("off", "on"), required=True)
+    parser.add_argument("--disable-cuda-graphs", action="store_true",
+                        help="set GGML_CUDA_DISABLE_GRAPHS=1 only in the llama-server child environment")
     parser.add_argument("--startup-timeout", type=float, default=180.0)
     parser.add_argument("--request-timeout", type=float, default=900.0)
     return parser.parse_args()
@@ -165,6 +169,8 @@ def _validate_args(args: argparse.Namespace) -> None:
             raise ValueError("--{} must be positive".format(name.replace("_", "-")))
     if args.warmup < 0:
         raise ValueError("--warmup must be zero or positive")
+    if args.expected_effective_context is not None and args.expected_effective_context <= 0:
+        raise ValueError("--expected-effective-context must be positive")
     if args.gpu_layers < -1:
         raise ValueError("--gpu-layers must be -1 or greater")
     if args.parallel != 1:
@@ -280,6 +286,18 @@ def _actual_context(props: Any, stderr_lines: list[str], requested: int) -> dict
     }
 
 
+def _require_effective_context(props: Any, stderr_lines: list[str], requested: int,
+                               expected: int | None) -> None:
+    if expected is None:
+        return
+    actual = _actual_context(props, stderr_lines, requested)
+    observed = [actual[key] for key in ("props_n_ctx", "startup_n_ctx_slot")
+                if actual[key] is not None]
+    if not observed or any(type(value) is not int or value != expected for value in observed):
+        raise RuntimeError("server effective context does not match paired simulation: "
+                           "expected {}, observed {}".format(expected, actual))
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     _validate_args(args)
     args.server = args.server.resolve()
@@ -296,9 +314,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "--cache-type-k", "f16", "--cache-type-v", "f16", "--kv-unified", "--no-cache-prompt", "--fit", "off", "--perf",
     ]
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    child_env = os.environ.copy()
+    if args.disable_cuda_graphs:
+        child_env["GGML_CUDA_DISABLE_GRAPHS"] = "1"
+    # The locked source tests presence, not numeric truth. Record only this
+    # relevant key, never the complete inherited environment or credentials.
+    effective_env = {"GGML_CUDA_DISABLE_GRAPHS": child_env.get("GGML_CUDA_DISABLE_GRAPHS")}
+    graph_configuration = {
+        "effective_env": effective_env,
+        "cuda_graphs_disabled": "GGML_CUDA_DISABLE_GRAPHS" in child_env,
+        "cuda_graphs_disable_requested": args.disable_cuda_graphs,
+    }
     process = subprocess.Popen(
         command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-        creationflags=creationflags,
+        creationflags=creationflags, env=child_env,
     )
     stderr_lines: list[str] = []
     stderr_thread = threading.Thread(target=_read_stderr, args=(process, stderr_lines), daemon=True)
@@ -312,6 +341,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         status, props = _json_request(base_url, "GET", "/props")
         if status != 200 or not isinstance(props, dict):
             raise RuntimeError("GET /props failed: HTTP {} {!r}".format(status, props))
+        _require_effective_context(props, stderr_lines, args.context, args.expected_effective_context)
         prompt_tokens = _make_prompt_tokens(base_url, args.prompt_tokens)
         payload = _completion_payload(prompt_tokens, args)
         for index in range(args.warmup):
@@ -437,11 +467,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             },
             "actual_server_context": _actual_context(props, stderr_lines, args.context),
             "configuration": {
+                **graph_configuration,
                 "model_path": str(args.model),
                 "server_command": command,
                 "prompt_tokens": args.prompt_tokens,
                 "output_tokens": args.output_tokens,
                 "context": args.context,
+                "expected_effective_context": args.expected_effective_context,
                 "batch": args.batch,
                 "ubatch": args.ubatch,
                 "threads": args.threads,
@@ -477,7 +509,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "error": failure,
             "identity": {"model_path": str(args.model), "server_path": str(args.server)},
             "actual_server_context": _actual_context(props, stderr_lines, args.context),
-            "configuration": {"server_command": command},
+            "configuration": {"server_command": command, **graph_configuration},
             "native_server_props": props,
             "prompt": {"token_count": len(prompt_tokens), "token_ids": prompt_tokens},
             "warmups": warmups,

@@ -1,0 +1,161 @@
+[
+  {
+    "port": 8765,
+    "prefix": "ui_local_",
+    "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+    "queue": [
+      "qwen3-0_6b",
+      "qwen3-1_7b",
+      "qwen3-4b",
+      "qwen3-8b",
+      "qwen3-14b",
+      "qwen3-30b-a3b",
+      "qwen3-32b",
+      "qwen3-235b-a22b"
+    ],
+    "tab_id": "5"
+  },
+  {
+    "port": 8770,
+    "prefix": "ui_local_",
+    "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+    "queue": [
+      "qwen2_5-0_5b",
+      "llama3_2-1b",
+      "qwen2_5-1_5b",
+      "llama3_2-3b",
+      "qwen2_5-3b",
+      "qwen2_5-7b",
+      "llama3_1-8b",
+      "qwen2_5-14b",
+      "qwen2_5-32b",
+      "llama3_1-70b",
+      "llama3_3-70b",
+      "qwen2_5-72b",
+      "llama3_1-405b"
+    ],
+    "tab_id": "9"
+  },
+  {
+    "port": 8766,
+    "prefix": "ui_b200_2hbf_",
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "queue": [
+      "qwen3-235b-a22b"
+    ],
+    "tab_id": "3"
+  },
+  {
+    "port": 8773,
+    "prefix": "ui_b200_2hbf_",
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "queue": [
+      "llama3_1-405b"
+    ],
+    "tab_id": "12"
+  },
+  {
+    "port": 8769,
+    "prefix": "ui_b200_2hbf_",
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "queue": [
+      "qwen3-0_6b",
+      "qwen2_5-0_5b",
+      "llama3_2-1b",
+      "qwen2_5-1_5b",
+      "qwen3-1_7b",
+      "llama3_2-3b",
+      "qwen2_5-3b"
+    ],
+    "tab_id": "8"
+  },
+  {
+    "port": 8771,
+    "prefix": "ui_b200_2hbf_",
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "queue": [
+      "qwen3-30b-a3b",
+      "qwen3-32b",
+      "qwen2_5-32b",
+      "qwen3-14b",
+      "qwen2_5-14b",
+      "qwen3-4b",
+      "qwen3-8b",
+      "qwen2_5-7b",
+      "llama3_1-8b"
+    ],
+    "tab_id": "10"
+  },
+  {
+    "port": 8775,
+    "prefix": "ui_b200_2hbf_",
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "queue": [
+      "llama3_1-70b",
+      "llama3_3-70b",
+      "qwen2_5-72b"
+    ],
+    "tab_id": "14"
+  },
+  {
+    "port": 8772,
+    "prefix": "ui_b200_3hbf_",
+    "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+    "queue": [
+      "qwen3-235b-a22b"
+    ],
+    "tab_id": "11"
+  },
+  {
+    "port": 8774,
+    "prefix": "ui_b200_3hbf_",
+    "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+    "queue": [
+      "llama3_1-405b"
+    ],
+    "tab_id": "13"
+  },
+  {
+    "port": 8767,
+    "prefix": "ui_b200_3hbf_",
+    "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+    "queue": [
+      "qwen3-0_6b",
+      "qwen2_5-0_5b",
+      "llama3_2-1b",
+      "qwen2_5-1_5b",
+      "qwen3-1_7b",
+      "llama3_2-3b",
+      "qwen2_5-3b"
+    ],
+    "tab_id": "7"
+  },
+  {
+    "port": 8768,
+    "prefix": "ui_b200_3hbf_",
+    "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+    "queue": [
+      "qwen3-30b-a3b",
+      "qwen3-32b",
+      "qwen2_5-32b",
+      "qwen3-14b",
+      "qwen2_5-14b",
+      "qwen3-4b",
+      "qwen3-8b",
+      "qwen2_5-7b",
+      "llama3_1-8b"
+    ],
+    "tab_id": "6"
+  },
+  {
+    "port": 8776,
+    "prefix": "ui_b200_3hbf_",
+    "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+    "queue": [
+      "llama3_1-70b",
+      "llama3_3-70b",
+      "qwen2_5-72b"
+    ],
+    "tab_id": "15"
+  }
+]

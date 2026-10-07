@@ -1,0 +1,524 @@
+[
+  {
+    "prefix": "ui_before_fix_host_pair_qwen3_8_27b_mixed",
+    "job_id": "7c283d2c7b464300b880519f7ebf3d5b",
+    "tab_id": "6",
+    "base_url": "http://127.0.0.1:8768",
+    "model": "GGUF-qwen35",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_qwen3_0_6b",
+    "job_id": "aec6f78d84d64f91be49e12ef338153b",
+    "tab_id": "5",
+    "base_url": "http://127.0.0.1:8765",
+    "model": "Qwen3-0.6B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_qwen2_5_0_5b",
+    "job_id": "23979483037d4805bf41fc4ccf41e08c",
+    "tab_id": "9",
+    "base_url": "http://127.0.0.1:8770",
+    "model": "Qwen2.5-0.5B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_30b_a3b",
+    "job_id": "8e44a7a9a1b94ec09da73904c9a38b34",
+    "tab_id": "10",
+    "base_url": "http://127.0.0.1:8771",
+    "model": "Qwen3-30B-A3B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_30b_a3b",
+    "job_id": "32fbb7a9c9184a199ea102f8843b61fc",
+    "tab_id": "6",
+    "base_url": "http://127.0.0.1:8768",
+    "model": "Qwen3-30B-A3B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_0_6b",
+    "job_id": "48b4f7ed2da84334b455fdc673217e4d",
+    "tab_id": "8",
+    "base_url": "http://127.0.0.1:8769",
+    "model": "Qwen3-0.6B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_0_6b",
+    "job_id": "d0973902bbbe44dfae23c2b2e1703fcf",
+    "tab_id": "7",
+    "base_url": "http://127.0.0.1:8767",
+    "model": "Qwen3-0.6B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_1_7b",
+    "job_id": "94a926b2e5054a7882ff6ce4cc45955d",
+    "tab_id": "18",
+    "base_url": "http://127.0.0.1:8779",
+    "model": "Qwen3-1.7B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_1_7b",
+    "job_id": "23bfc7efd9254fc786da28fe4ccba9cf",
+    "tab_id": "19",
+    "base_url": "http://127.0.0.1:8780",
+    "model": "Qwen3-1.7B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_local_qwen3_1_7b",
+    "job_id": "466baf2f91444d67a6977b80c7482f60",
+    "tab_id": "5",
+    "base_url": "http://127.0.0.1:8765",
+    "model": "Qwen3-1.7B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_pair_qwen3_0_6b_f16",
+    "job_id": "47eb38940cfc45dfa3c90e7f718741d7",
+    "tab_id": "16",
+    "base_url": "http://127.0.0.1:8777",
+    "model": "GGUF-qwen3",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_pair_qwen3_8_27b_mixed",
+    "job_id": "88cdd3f24f494a308f9dd816f9f481b6",
+    "tab_id": "17",
+    "base_url": "http://127.0.0.1:8778",
+    "model": "GGUF-qwen35",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_local_llama3_2_1b",
+    "job_id": "75dbb8e771ef4ae4bd5ce76ad08b0da6",
+    "tab_id": "9",
+    "base_url": "http://127.0.0.1:8770",
+    "model": "Llama 3.2 1B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_qwen3_4b",
+    "job_id": "c4426a970155491b91709771940f2bc9",
+    "tab_id": "20",
+    "base_url": "http://127.0.0.1:8781",
+    "model": "Qwen3-4B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "running"
+  },
+  {
+    "prefix": "ui_local_qwen2_5_7b",
+    "job_id": "98447d3ee5f14d8faa9bf7f3b804cf92",
+    "tab_id": "21",
+    "base_url": "http://127.0.0.1:8782",
+    "model": "Qwen2.5-7B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_qwen2_5_1_5b",
+    "job_id": "06cb70ee6a43476a91cc70aafc39f6d4",
+    "tab_id": "9",
+    "base_url": "http://127.0.0.1:8770",
+    "model": "Qwen2.5-1.5B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_qwen3_8b",
+    "job_id": "82c547a876524d3bbff3c40e5adaf49d",
+    "tab_id": "5",
+    "base_url": "http://127.0.0.1:8765",
+    "model": "Qwen3-8B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen2_5_0_5b",
+    "job_id": "97debfc247ab46529a8ec1517c8a2fa5",
+    "tab_id": "8",
+    "base_url": "http://127.0.0.1:8769",
+    "model": "Qwen2.5-0.5B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen2_5_0_5b",
+    "job_id": "5441fb20c1614a4da136a98074ef20cd",
+    "tab_id": "7",
+    "base_url": "http://127.0.0.1:8767",
+    "model": "Qwen2.5-0.5B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_llama3_2_3b",
+    "job_id": "bf040dcac1694bb28dc9f70d4f90a1d8",
+    "tab_id": "18",
+    "base_url": "http://127.0.0.1:8779",
+    "model": "Llama 3.2 3B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_llama3_2_3b",
+    "job_id": "e17c24719ea64a108779e28da7d961f5",
+    "tab_id": "19",
+    "base_url": "http://127.0.0.1:8780",
+    "model": "Llama 3.2 3B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_llama3_1_8b",
+    "job_id": "803aa5aca82c409893a4630eda99a75b",
+    "tab_id": "21",
+    "base_url": "http://127.0.0.1:8782",
+    "model": "Llama 3.1 8B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_llama3_2_3b",
+    "job_id": "edd3c33b8eb64790baa7549333c71b09",
+    "tab_id": "9",
+    "base_url": "http://127.0.0.1:8770",
+    "model": "Llama 3.2 3B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_llama3_2_1b",
+    "job_id": "58f3310d64c54cff85b0a3f102ad1aab",
+    "tab_id": "8",
+    "base_url": "http://127.0.0.1:8769",
+    "model": "Llama 3.2 1B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_llama3_2_1b",
+    "job_id": "05b3c9f2057f47a7822ce93b2a46a201",
+    "tab_id": "7",
+    "base_url": "http://127.0.0.1:8767",
+    "model": "Llama 3.2 1B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen2_5_3b",
+    "job_id": "27d2d2be361c4cfea7526152e48aa7ba",
+    "tab_id": "18",
+    "base_url": "http://127.0.0.1:8779",
+    "model": "Qwen2.5-3B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen2_5_3b",
+    "job_id": "43af39d389894811bff089198081f61d",
+    "tab_id": "19",
+    "base_url": "http://127.0.0.1:8780",
+    "model": "Qwen2.5-3B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_4b",
+    "job_id": "d150b04f9434441782df4b5e3734cdab",
+    "tab_id": "5",
+    "base_url": "http://127.0.0.1:8765",
+    "model": "Qwen3-4B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_4b",
+    "job_id": "798adbd1cfa149a6ba9216d5eb95a71d",
+    "tab_id": "21",
+    "base_url": "http://127.0.0.1:8782",
+    "model": "Qwen3-4B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_local_qwen2_5_3b",
+    "job_id": "9bb94d7bb5484319a7994719fc750ff9",
+    "tab_id": "9",
+    "base_url": "http://127.0.0.1:8770",
+    "model": "Qwen2.5-3B",
+    "hardware": "本机 Native RTX 5080 + Ryzen 9 9950X3D",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen2_5_1_5b",
+    "job_id": "ebf3ddb4f2444909ae29e8feeca5efb1",
+    "tab_id": "8",
+    "base_url": "http://127.0.0.1:8769",
+    "model": "Qwen2.5-1.5B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen2_5_1_5b",
+    "job_id": "e2e4b7fe5388475fb5dcd7d1c324672a",
+    "tab_id": "7",
+    "base_url": "http://127.0.0.1:8767",
+    "model": "Qwen2.5-1.5B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_llama3_1_8b",
+    "job_id": "854fa2a2bdab466181a8679ac2be97bb",
+    "tab_id": "16",
+    "base_url": "http://127.0.0.1:8777",
+    "model": "Llama 3.1 8B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_llama3_1_8b",
+    "job_id": "19537175d0164d0092eb95f08eb0944f",
+    "tab_id": "3",
+    "base_url": "http://127.0.0.1:8766",
+    "model": "Llama 3.1 8B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_8b",
+    "job_id": "8d09d62f7c3b4a6d96fe5a0a92bd93fb",
+    "tab_id": "11",
+    "base_url": "http://127.0.0.1:8772",
+    "model": "Qwen3-8B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen2_5_7b",
+    "job_id": "10b320e46ece4482b5f5647f0edf21c4",
+    "tab_id": "20",
+    "base_url": "http://127.0.0.1:8781",
+    "model": "Qwen2.5-7B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen2_5_7b",
+    "job_id": "97cce1cb822c453683aad42ebdf501ae",
+    "tab_id": "5",
+    "base_url": "http://127.0.0.1:8765",
+    "model": "Qwen2.5-7B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_14b",
+    "job_id": "8c10541e5a06489c85b55c6905546eef",
+    "tab_id": "9",
+    "base_url": "http://127.0.0.1:8770",
+    "model": "Qwen3-14B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen2_5_14b",
+    "job_id": "bf25c980ca9e4a21a74daddf5125cc75",
+    "tab_id": "18",
+    "base_url": "http://127.0.0.1:8779",
+    "model": "Qwen2.5-14B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_14b",
+    "job_id": "2eb89393bc5443779e631302fddbda34",
+    "tab_id": "19",
+    "base_url": "http://127.0.0.1:8780",
+    "model": "Qwen3-14B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen2_5_14b",
+    "job_id": "2556f4b5246441d9a5308b131a0313bf",
+    "tab_id": "8",
+    "base_url": "http://127.0.0.1:8769",
+    "model": "Qwen2.5-14B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_32b",
+    "job_id": "471763d34b654dd6adc0ae201af9734f",
+    "tab_id": "15",
+    "base_url": "http://127.0.0.1:8776",
+    "model": "Qwen3-32B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_8b",
+    "job_id": "a79256b0e3ab4ae6a58525391b60e4e7",
+    "tab_id": "21",
+    "base_url": "http://127.0.0.1:8782",
+    "model": "Qwen3-8B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_32b",
+    "job_id": "85996de709314d7297ff3877b08b9c06",
+    "tab_id": "22",
+    "base_url": "http://127.0.0.1:8783",
+    "model": "Qwen3-32B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen2_5_32b",
+    "job_id": "5f263d9c709743729234d9e476d2a37f",
+    "tab_id": "7",
+    "base_url": "http://127.0.0.1:8767",
+    "model": "Qwen2.5-32B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen2_5_32b",
+    "job_id": "5e1e148ba666449590d58923f032dbb1",
+    "tab_id": "20",
+    "base_url": "http://127.0.0.1:8781",
+    "model": "Qwen2.5-32B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_llama3_1_70b",
+    "job_id": "ca027e800d314f6486b22b23f135a0aa",
+    "tab_id": "16",
+    "base_url": "http://127.0.0.1:8777",
+    "model": "Llama 3.1 70B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_llama3_1_70b",
+    "job_id": "fceaf7a4f7c8405d8a538cfdb6748f07",
+    "tab_id": "17",
+    "base_url": "http://127.0.0.1:8778",
+    "model": "Llama 3.1 70B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_llama3_1_405b",
+    "job_id": "49be4a41dc8f4c60ab78002e4c04f97f",
+    "tab_id": "12",
+    "base_url": "http://127.0.0.1:8773",
+    "model": "Llama 3.1 405B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_llama3_1_405b",
+    "job_id": "1489084156ea4b7898307fe8965be684",
+    "tab_id": "13",
+    "base_url": "http://127.0.0.1:8774",
+    "model": "Llama 3.1 405B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_llama3_3_70b",
+    "job_id": "85b58763d27345599780f3989006c8ad",
+    "tab_id": "14",
+    "base_url": "http://127.0.0.1:8775",
+    "model": "Llama 3.3 70B Instruct",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_llama3_3_70b",
+    "job_id": "269c3d4052c4420a8ee64bf32a50b490",
+    "tab_id": "5",
+    "base_url": "http://127.0.0.1:8765",
+    "model": "Llama 3.3 70B Instruct",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen2_5_72b",
+    "job_id": "964148e9a3654183ba45dbaac27127ce",
+    "tab_id": "23",
+    "base_url": "http://127.0.0.1:8784",
+    "model": "Qwen2.5-72B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "queued",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen2_5_72b",
+    "job_id": "4b30b2151d2f45fda9825dce320e73a6",
+    "tab_id": "24",
+    "base_url": "http://127.0.0.1:8785",
+    "model": "Qwen2.5-72B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "queued",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_2hbf_qwen3_235b_a22b",
+    "job_id": "fd26e1b7f9554ca8ad16fa113ba560c3",
+    "tab_id": "3",
+    "base_url": "http://127.0.0.1:8766",
+    "model": "Qwen3-235B-A22B",
+    "hardware": "NVIDIA B200 + 2×HBF + 2×HBM3E",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  },
+  {
+    "prefix": "ui_b200_3hbf_qwen3_235b_a22b",
+    "job_id": "47743a6dfa0d4dcc9b05c380fb341826",
+    "tab_id": "11",
+    "base_url": "http://127.0.0.1:8772",
+    "model": "Qwen3-235B-A22B",
+    "hardware": "NVIDIA B200 + 3×HBF + 2×HBM3E（DeepSeek-V3 capacity analysis）",
+    "status": "running",
+    "energy_accounting": "physical_profile_energy_v2"
+  }
+]

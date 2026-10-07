@@ -28,6 +28,7 @@ from .mmvq_work import (
     UnsupportedMMVQ, derive_mmvq_work,
 )
 from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
+from .mmvf_work import MMVFWork
 from .memory_service import realtime_memory_metrics
 from .data_motion import memory_service as _memory_service
 from .kernel_model import KernelModelProfile, estimate_kernel
@@ -222,6 +223,7 @@ class GemmWorkload:
     execution_phase: str = "unspecified"
     activation_dtype: Optional[str] = None
     layout: str = "contiguous"
+    mmvf_work: Optional[MMVFWork] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.cache_protocol, str) or not self.cache_protocol.strip():
@@ -328,8 +330,21 @@ class GemmWorkload:
                     or self.epilogue_output_elements or self.epilogue_name
                     or self.source_partial_service_ns or self.source_partial_work_units):
                 raise ValueError("MMVQ issue bound excludes mismatched runtime, fused epilogue and other partial costs")
-        if self.mmq_work is not None and self.mmvq_work is not None:
-            raise ValueError("MMQ and MMVQ source work are mutually exclusive")
+        if sum(work is not None for work in (self.mmq_work, self.mmvq_work, self.mmvf_work)) > 1:
+            raise ValueError("MMQ, MMVQ and MMVF source work are mutually exclusive")
+        if self.mmvf_work is not None:
+            if not isinstance(self.mmvf_work, MMVFWork):
+                raise ValueError("mmvf_work must be an MMVFWork or None")
+            vector = self.mmvf_work
+            if ((self.m, self.k, self.n) != (1, vector.k, vector.n)
+                    or self.weight_bits != 16 or self.output_bits != 32
+                    or self.activation_bits != 16 or self.activation_dtype not in (None, "fp16")
+                    or self.layout != "contiguous" or self.packed_weight_formats
+                    or self.weight_metadata_bytes
+                    or (self.weight_bytes, self.activation_bytes, self.output_bytes)
+                        != (vector.weight_bytes, vector.activation_bytes, vector.output_bytes)
+                    or self.epilogue_name != ("swiglu" if vector.fused_gate else "")):
+                raise ValueError("mmvf_work requires matching contiguous F16 weights and F32 input/output storage")
         if self.mmvq_work is not None:
             if not isinstance(self.mmvq_work, MMVQWork):
                 raise ValueError("mmvq_work must be an MMVQWork or None")
@@ -523,6 +538,7 @@ class FusedAttentionWorkload:
     hidden_size: int
     input_bits: int = 16
     output_bits: int = 16
+    # Tiled softmax work excludes the separately represented QK scale.
     softmax_scalar_ops_per_score: int = 5
     softmax_transcendental_ops_per_score: int = 1
     query_tile_tokens: int = 64
@@ -2973,6 +2989,8 @@ def estimate_gpu_gemm(
     mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
 ) -> CostEstimate:
     validate_mmvq_hbm_mode(mmvq_hbm_mode)
+    if workload.mmvf_work is not None and gpu.kernel_model is None:
+        raise ValueError("MMVF source work requires a GPU kernel model with a matching MMVF dispatch")
     unsupported_formats = tuple(
         value for value in workload.packed_weight_formats
         if value.strip().casefold() not in {

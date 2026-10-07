@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 import json
+from math import prod
 from threading import Thread
 from urllib.request import Request, urlopen
 
@@ -626,6 +627,8 @@ def test_imported_qwen3_weights_use_inferred_gpu_memory_without_duplicate_transf
         ("blk.0.attn_q.weight", (8, 8)),
         ("blk.0.attn_k.weight", (8, 4)),
         ("blk.0.attn_v.weight", (8, 4)),
+        ("blk.0.attn_q_norm.weight", (4,)),
+        ("blk.0.attn_k_norm.weight", (4,)),
         ("blk.0.attn_output.weight", (8, 8)),
         ("blk.0.ffn_gate.weight", (8, 16)),
         ("blk.0.ffn_up.weight", (8, 16)),
@@ -633,7 +636,7 @@ def test_imported_qwen3_weights_use_inferred_gpu_memory_without_duplicate_transf
         ("token_embd.weight", (8, 16)),
         ("output.weight", (8, 16)),
     ):
-        size = shape[0] * shape[1] * 2
+        size = prod(shape) * 2
         tensors.append(GGUFTensor(name, shape, 1, "F16", 1, size, offset))
         offset += size
     model = build_model_from_gguf(GGUFMetadata(

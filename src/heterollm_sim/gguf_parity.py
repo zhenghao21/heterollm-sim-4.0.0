@@ -1078,6 +1078,19 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
         else:
             resolved_head_dim = declared_head_dim
         metadata: dict[str, Any] = {"gguf_tensor_bindings": [binding(t) for t in tensors], "gguf_physical_weight_bytes": _unique_tensor_bytes(tensors)}
+        if gguf.architecture in {"qwen3", "qwen3moe"} and not is_linear_block:
+            q_norm, k_norm = find("attn_q_norm"), find("attn_k_norm")
+            if q_norm is None or k_norm is None:
+                raise GGUFError("Qwen3 requires both per-head Q/K RMSNorm weight tensors")
+            norm = {"kind": "rmsnorm", "head_dim": int(resolved_head_dim),
+                    "weight_bindings": {"q": binding(q_norm), "k": binding(k_norm)},
+                    "source": "GGUF Qwen3 physical Q/K norm tensors"}
+            from .projection_descriptors import resolve_attention_qk_norm
+            resolve_attention_qk_norm({"attention_qk_norm": norm}, head_dim=int(resolved_head_dim))
+            metadata["attention_qk_norm"] = norm
+        if gguf.architecture == "qwen3moe":
+            metadata["moe_routing"] = {"gating": "softmax", "normalize_selected_weights": True,
+                                       "weight_scale": 1.0}
         projections: dict[str, Any] = {}
         def add_projection(pid, ts, shard_axis="n", segment_ids=None):
             segments = []

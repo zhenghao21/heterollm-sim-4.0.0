@@ -138,6 +138,20 @@ class DramCore:
         self._inflight = [*inflight, result.completion_ns]
         return result
 
+    def submit_many(self, requests: Iterable[AccessRequest]) -> tuple[TransactionResult, ...]:
+        """Execute the same ordered requests, amortizing numeric state packing."""
+        items = tuple(requests)
+        for request in items:
+            if request.operation is Operation.ERASE:
+                raise ValueError("DRAM does not support ERASE operations")
+            validate_dram_request(request, self.config)
+        if len(items) > 1 and self._can_accelerate():
+            from ._compiled_dram import execute_compiled_many
+            results = execute_compiled_many(self, items)
+            if results is not None:
+                return results
+        return tuple(self.submit(request) for request in items)
+
     def _execute_accepted(self, request: AccessRequest) -> TransactionResult:
         # Summary execution can compress repeated row-hit cycles, but must
         # retain the same bank and command/data state as the burst loop below.

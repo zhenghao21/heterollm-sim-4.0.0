@@ -1,0 +1,4351 @@
+{
+  "schema": "workspace-capacity-mapping-audit/v1",
+  "workload": "actual 512/128 (native pairs retain actual source contracts)",
+  "cases": [
+    {
+      "hardware_id": "native_pair",
+      "model_id": "qwen3_8_27b_mixed",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": null,
+      "mapping_changed": false,
+      "elapsed_s": 2.521664600004442
+    },
+    {
+      "hardware_id": "native_pair",
+      "model_id": "qwen3_0_6b_f16",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": null,
+      "mapping_changed": false,
+      "elapsed_s": 0.704419699992286
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-8b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "gddr0": 27262976
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 15183398912
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "gddr0.gddr_fabric": 27262976
+            },
+            "serial_region_count": 1355,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 15183398912
+            },
+            "buffer_count": 878,
+            "task_count": 1801,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "gddr0.gddr_fabric": 312064
+            },
+            "serial_region_count": 1355,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 15183398912
+            },
+            "buffer_count": 878,
+            "task_count": 1801,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "gddr0": 27262976
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 15183398912,
+              "hostmem0": 1244659712
+            },
+            "headroom_bytes": {
+              "hostmem0": 136194293760,
+              "gddr0": 816601088
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 5.140346100000897
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "llama3_1-8b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "gddr0": 18874368
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 15051259904
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "gddr0.gddr_fabric": 18874368
+            },
+            "serial_region_count": 1111,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 15051259904
+            },
+            "buffer_count": 590,
+            "task_count": 1253,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "gddr0.gddr_fabric": 264704
+            },
+            "serial_region_count": 1111,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 15051259904
+            },
+            "buffer_count": 590,
+            "task_count": 1253,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "gddr0": 18874368
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 15051259904,
+              "hostmem0": 1050673152
+            },
+            "headroom_bytes": {
+              "hostmem0": 136388280320,
+              "gddr0": 948740096
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.417460900003789
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-32b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-016.mlp_weights 分配 786432413 字节（750.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-016.mlp_weights 分配 786432413 字节（750.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-016.mlp_weights 分配 786432413 字节（750.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (786432413 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (786432413 bytes; device gpu0)')",
+      "elapsed_s": 0.07478520000586286
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-30b-a3b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-012.expert_weights 分配 1207960048 字节（1152.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-012.expert_weights 分配 1207960048 字节（1152.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-012.expert_weights 分配 1207960048 字节（1152.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-012.expert_weights (1207960048 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-012.expert_weights (1207960048 bytes; device gpu0)')",
+      "elapsed_s": 0.17451479998999275
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "llama3_1-405b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-002.mlp_weights 分配 5234491392 字节（4992.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-002.mlp_weights 分配 5234491392 字节（4992.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-002.mlp_weights 分配 5234491392 字节（4992.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-002.mlp_weights (5234491392 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-002.mlp_weights (5234491392 bytes; device gpu0)')",
+      "elapsed_s": 0.08630310001899488
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "llama3_1-70b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-009.mlp_weights 分配 1409286144 字节（1344.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-009.mlp_weights 分配 1409286144 字节（1344.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-009.mlp_weights 分配 1409286144 字节（1344.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)')",
+      "elapsed_s": 0.07850929998676293
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "llama3_2-1b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "gddr0": 16908288
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 2481979392
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "gddr0.gddr_fabric": 16908288
+            },
+            "serial_region_count": 567,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 2481979392
+            },
+            "buffer_count": 302,
+            "task_count": 645,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "gddr0.gddr_fabric": 260608
+            },
+            "serial_region_count": 567,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 2481979392
+            },
+            "buffer_count": 302,
+            "task_count": 645,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "gddr0": 16908288
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 2481979392,
+              "hostmem0": 525336576
+            },
+            "headroom_bytes": {
+              "hostmem0": 136913616896,
+              "gddr0": 13518020608
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 1.6508988999994472
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "llama3_2-3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 9439360,
+          "gddr0": 12681216
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 6461849600
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 9439360,
+              "gddr0.gddr_fabric": 12681216
+            },
+            "serial_region_count": 975,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 6461849600
+            },
+            "buffer_count": 518,
+            "task_count": 1101,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 18560,
+              "gddr0.gddr_fabric": 262656
+            },
+            "serial_region_count": 975,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 6461849600
+            },
+            "buffer_count": 518,
+            "task_count": 1101,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 9439360,
+              "gddr0": 12681216
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 6461849600,
+              "hostmem0": 788004864
+            },
+            "headroom_bytes": {
+              "hostmem0": 136650948608,
+              "gddr0": 9538150400
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.011675899993861
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "llama3_3-70b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-009.mlp_weights 分配 1409286144 字节（1344.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-009.mlp_weights 分配 1409286144 字节（1344.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-009.mlp_weights 分配 1409286144 字节（1344.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)')",
+      "elapsed_s": 0.08013310001115315
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen2_5-0_5b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 2754688,
+          "gddr0": 7397376
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 991909888
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 2754688,
+              "gddr0.gddr_fabric": 7397376
+            },
+            "serial_region_count": 911,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 991909888
+            },
+            "buffer_count": 494,
+            "task_count": 1165,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 5504,
+              "gddr0.gddr_fabric": 305664
+            },
+            "serial_region_count": 911,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 991909888
+            },
+            "buffer_count": 494,
+            "task_count": 1165,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 2754688,
+              "gddr0": 7397376
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 991909888,
+              "hostmem0": 272269312
+            },
+            "headroom_bytes": {
+              "hostmem0": 137166684160,
+              "gddr0": 15008090112
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.9917449000058696
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen2_5-14b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-028.mlp_weights 分配 424673280 字节（405.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-028.mlp_weights 分配 424673280 字节（405.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-028.mlp_weights 分配 424673280 字节（405.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-028.mlp_weights (424673280 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-028.mlp_weights (424673280 bytes; device gpu0)')",
+      "elapsed_s": 0.06512829998973757
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen2_5-1_5b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 4720768,
+          "gddr0": 10747904
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 3096428544
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 4720768,
+              "gddr0.gddr_fabric": 10747904
+            },
+            "serial_region_count": 1059,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 3096428544
+            },
+            "buffer_count": 574,
+            "task_count": 1353,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 9344,
+              "gddr0.gddr_fabric": 306944
+            },
+            "serial_region_count": 1059,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 3096428544
+            },
+            "buffer_count": 574,
+            "task_count": 1353,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 4720768,
+              "gddr0": 10747904
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 3096428544,
+              "hostmem0": 466747392
+            },
+            "headroom_bytes": {
+              "hostmem0": 136972206080,
+              "gddr0": 12903571456
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.6243684999935795
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen2_5-32b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-016.mlp_weights 分配 849346560 字节（810.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-016.mlp_weights 分配 849346560 字节（810.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-016.mlp_weights 分配 849346560 字节（810.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (849346560 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (849346560 bytes; device gpu0)')",
+      "elapsed_s": 0.063216900016414
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen2_5-3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "gddr0": 13369344
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 6183374848
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "gddr0.gddr_fabric": 13369344
+            },
+            "serial_region_count": 1355,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 6183374848
+            },
+            "buffer_count": 734,
+            "task_count": 1729,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "gddr0.gddr_fabric": 307968
+            },
+            "serial_region_count": 1355,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 6183374848
+            },
+            "buffer_count": 734,
+            "task_count": 1729,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "gddr0": 13369344
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 6183374848,
+              "hostmem0": 622329856
+            },
+            "headroom_bytes": {
+              "hostmem0": 136816623616,
+              "gddr0": 9816625152
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 4.329084299999522
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen2_5-72b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-009.attention_weights 分配 302010368 字节（288.02 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-009.attention_weights 分配 302010368 字节（288.02 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-009.attention_weights 分配 302010368 字节（288.02 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-009.attention_weights (302010368 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-009.attention_weights (302010368 bytes; device gpu0)')",
+      "elapsed_s": 0.06782719999318942
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen2_5-7b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 11012224,
+          "gddr0": 42467328
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 14159179776
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 11012224,
+              "gddr0.gddr_fabric": 42467328
+            },
+            "serial_region_count": 1115,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 14159179776
+            },
+            "buffer_count": 630,
+            "task_count": 1409,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 21632,
+              "gddr0.gddr_fabric": 311296
+            },
+            "serial_region_count": 1059,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 14159179776
+            },
+            "buffer_count": 574,
+            "task_count": 1353,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 11012224,
+              "gddr0": 42467328
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 14159179776,
+              "hostmem0": 1089994752
+            },
+            "headroom_bytes": {
+              "hostmem0": 136348958720,
+              "gddr0": 1840820224
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.643222600017907
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-0_6b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 3147904,
+          "gddr0": 16777216
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 1228683264
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 3147904,
+              "gddr0.gddr_fabric": 16777216
+            },
+            "serial_region_count": 1059,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 1228683264
+            },
+            "buffer_count": 686,
+            "task_count": 1409,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6272,
+              "gddr0.gddr_fabric": 305920
+            },
+            "serial_region_count": 1059,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 1228683264
+            },
+            "buffer_count": 686,
+            "task_count": 1409,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 3147904,
+              "gddr0": 16777216
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 1228683264,
+              "hostmem0": 311164928
+            },
+            "headroom_bytes": {
+              "hostmem0": 137127788544,
+              "gddr0": 14771316736
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.6048385000030976
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-14b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-024.attention_weights 分配 125829218 字节（120.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-024.attention_weights 分配 125829218 字节（120.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-024.attention_weights 分配 125829218 字节（120.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-024.attention_weights (125829218 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-024.attention_weights (125829218 bytes; device gpu0)')",
+      "elapsed_s": 0.04811229999177158
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-1_7b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "gddr0": 16777216
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 3477616640
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "gddr0.gddr_fabric": 16777216
+            },
+            "serial_region_count": 1059,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 3477616640
+            },
+            "buffer_count": 686,
+            "task_count": 1409,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "gddr0.gddr_fabric": 307968
+            },
+            "serial_region_count": 1059,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 3477616640
+            },
+            "buffer_count": 686,
+            "task_count": 1409,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "gddr0": 16777216
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 3477616640,
+              "hostmem0": 622329856
+            },
+            "headroom_bytes": {
+              "hostmem0": 136816623616,
+              "gddr0": 12522383360
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.337604999978794
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-235b-a22b",
+      "status": "rejected",
+      "exception": "HttpError",
+      "message": "(422, 'device_memory_capacity_exhausted', '设备 gpu0 的显存容量不足，无法为 layer-003.expert_weights 分配 4831838705 字节（4608.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', {'valid': False, 'errors': {'topology': [], 'scenario': [{'code': 'device_memory_capacity_exhausted', 'message': '设备 gpu0 的显存容量不足，无法为 layer-003.expert_weights 分配 4831838705 字节（4608.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_zh': '设备 gpu0 的显存容量不足，无法为 layer-003.expert_weights 分配 4831838705 字节（4608.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。', 'message_en': 'llama.cpp shared device-memory capacity exhausted for layer-003.expert_weights (4831838705 bytes; device gpu0)'}]}, 'warnings': {'topology': [], 'scenario': []}, 'information': {'topology': [], 'scenario': []}}, 'llama.cpp shared device-memory capacity exhausted for layer-003.expert_weights (4831838705 bytes; device gpu0)')",
+      "elapsed_s": 0.10682230000384152
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model_id": "qwen3-4b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 7866496,
+          "gddr0": 27262976
+        },
+        "resident_physical_bytes_by_component": {
+          "gddr0": 8091748352
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 7866496,
+              "gddr0.gddr_fabric": 27262976
+            },
+            "serial_region_count": 1355,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 8091748352
+            },
+            "buffer_count": 878,
+            "task_count": 1801,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15488,
+              "gddr0.gddr_fabric": 308992
+            },
+            "serial_region_count": 1355,
+            "resident_bytes_by_owner": {
+              "gddr0.gddr_fabric": 8091748352
+            },
+            "buffer_count": 878,
+            "task_count": 1801,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 7866496,
+              "gddr0": 27262976
+            },
+            "physical_resident_excess_bytes": {
+              "gddr0": 0
+            },
+            "resident_bytes": {
+              "gddr0": 8091748352,
+              "hostmem0": 777912320
+            },
+            "headroom_bytes": {
+              "hostmem0": 136661041152,
+              "gddr0": 7908251648
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 4.2995509000029415
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-8b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "hbm0": 27262976
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 15183398912
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "hbm0.hbm_fabric": 27262976
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15183398912
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "hbm0.hbm_fabric": 312064
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15183398912
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 27262976
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 15183398912,
+              "hostmem0": 1244659712
+            },
+            "headroom_bytes": {
+              "hostmem0": 30755340288,
+              "hbm0": 20816601088
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.156651899975259
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "llama3_1-8b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "hbm0": 18874368
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 15051259904
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "hbm0.hbm_fabric": 18874368
+            },
+            "serial_region_count": 1112,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15051259904
+            },
+            "buffer_count": 590,
+            "task_count": 1257,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "hbm0.hbm_fabric": 264704
+            },
+            "serial_region_count": 1112,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15051259904
+            },
+            "buffer_count": 590,
+            "task_count": 1257,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 18874368
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 15051259904,
+              "hostmem0": 1050673152
+            },
+            "headroom_bytes": {
+              "hostmem0": 30949326848,
+              "hbm0": 20948740096
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.62653379997937
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-32b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 57671680
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 28294512640,
+          "hbm0": 35756474368
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 57671680
+            },
+            "serial_region_count": 2520,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28294512640,
+              "hbm0.hbm_fabric": 35756474368
+            },
+            "buffer_count": 1678,
+            "task_count": 3305,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314112
+            },
+            "serial_region_count": 2392,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28294512640,
+              "hbm0.hbm_fabric": 35756474368
+            },
+            "buffer_count": 1550,
+            "task_count": 3177,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 57671680
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 13940
+            },
+            "resident_bytes": {
+              "hbm0": 35945204108,
+              "hostmem0": 1555824640,
+              "hbm1": 28105782900
+            },
+            "headroom_bytes": {
+              "hostmem0": 30444175360,
+              "hbm0": 54795892
+            },
+            "conservative_bound_shortfall_bytes": {
+              "hbm0": 2889728
+            }
+          },
+          {
+            "iteration": 1,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 57671680
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 14039
+            },
+            "resident_bytes": {
+              "hbm0": 35756460329,
+              "hbm1": 28294526679,
+              "hostmem0": 1555824640
+            },
+            "headroom_bytes": {
+              "hostmem0": 30444175360,
+              "hbm0": 243539671
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": [
+          "layer-039.attention_weights"
+        ]
+      },
+      "mapping_changed": true,
+      "elapsed_s": 11.347605399991153
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-30b-a3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 46137344
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 24781520896,
+          "hbm0": 35691454464
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 46137344
+            },
+            "serial_region_count": 2952,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 24781520896,
+              "hbm0.hbm_fabric": 35691454464
+            },
+            "buffer_count": 26510,
+            "task_count": 40409,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 307968
+            },
+            "serial_region_count": 2952,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 2132279296,
+              "hbm0.hbm_fabric": 3982516224
+            },
+            "buffer_count": 3470,
+            "task_count": 5849,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 46137344
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 9920
+            },
+            "resident_bytes": {
+              "hbm0": 35691444544,
+              "hostmem0": 622329856,
+              "hbm1": 24781530816
+            },
+            "headroom_bytes": {
+              "hostmem0": 31377670144,
+              "hbm0": 308555456
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 35.80634690000443
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "llama3_1-405b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 50333824,
+          "hbm0": 137296256
+        },
+        "resident_physical_bytes_by_component": {
+          "hbf1": 225057964032,
+          "hbm1": 35970351104,
+          "hbm0": 35464413184,
+          "hbf0": 511168217088
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 50333824,
+              "hbm0.hbm_fabric": 137296256
+            },
+            "serial_region_count": 5316,
+            "resident_bytes_by_owner": {
+              "hbf1.memory": 225057964032,
+              "hbm1.hbm_fabric": 35970351104,
+              "hbm0.hbm_fabric": 35464413184,
+              "hbf0.memory": 511168217088
+            },
+            "buffer_count": 3290,
+            "task_count": 5837,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 98432,
+              "hbm0.hbm_fabric": 327680
+            },
+            "serial_region_count": 4308,
+            "resident_bytes_by_owner": {
+              "hbf1.memory": 225057964032,
+              "hbm1.hbm_fabric": 35970351104,
+              "hbm0.hbm_fabric": 35464413184,
+              "hbf0.memory": 511168217088
+            },
+            "buffer_count": 2282,
+            "task_count": 4829,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 50333824,
+              "hbm0": 137296256
+            },
+            "physical_resident_excess_bytes": {
+              "hbf1": 0,
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35464413184,
+              "hostmem0": 4202692608,
+              "hbm1": 35970351104,
+              "hbf0": 511168217088,
+              "hbf1": 225057964032
+            },
+            "headroom_bytes": {
+              "hostmem0": 27797307392,
+              "hbm0": 535586816
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 11.207207400002517
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "llama3_1-70b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 25168000,
+          "hbm0": 67108864
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35936796672,
+          "hbm0": 35840327680,
+          "hbf0": 67331162112
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 25168000,
+              "hbm0.hbm_fabric": 67108864
+            },
+            "serial_region_count": 2904,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1614,
+            "task_count": 3241,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 49280,
+              "hbm0.hbm_fabric": 272896
+            },
+            "serial_region_count": 2744,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1454,
+            "task_count": 3081,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 25168000,
+              "hbm0": 67108864
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35840327680,
+              "hostmem0": 2101346304,
+              "hbm1": 35936796672,
+              "hbf0": 67331162112
+            },
+            "headroom_bytes": {
+              "hostmem0": 29898653696,
+              "hbm0": 159672320
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 6.9731185999989975
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "llama3_2-1b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 16908288
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 2481979392
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 16908288
+            },
+            "serial_region_count": 568,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 2481979392
+            },
+            "buffer_count": 302,
+            "task_count": 649,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 260608
+            },
+            "serial_region_count": 568,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 2481979392
+            },
+            "buffer_count": 302,
+            "task_count": 649,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 16908288
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 2481979392,
+              "hostmem0": 525336576
+            },
+            "headroom_bytes": {
+              "hostmem0": 31474663424,
+              "hbm0": 33518020608
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 1.290738199983025
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "llama3_2-3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 9439360,
+          "hbm0": 12681216
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 6461849600
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 9439360,
+              "hbm0.hbm_fabric": 12681216
+            },
+            "serial_region_count": 976,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6461849600
+            },
+            "buffer_count": 518,
+            "task_count": 1105,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 18560,
+              "hbm0.hbm_fabric": 262656
+            },
+            "serial_region_count": 976,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6461849600
+            },
+            "buffer_count": 518,
+            "task_count": 1105,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 9439360,
+              "hbm0": 12681216
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 6461849600,
+              "hostmem0": 788004864
+            },
+            "headroom_bytes": {
+              "hostmem0": 31211995136,
+              "hbm0": 29538150400
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.2036412000015844
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "llama3_3-70b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 25168000,
+          "hbm0": 67108864
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35936796672,
+          "hbm0": 35840327680,
+          "hbf0": 67331162112
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 25168000,
+              "hbm0.hbm_fabric": 67108864
+            },
+            "serial_region_count": 2904,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1614,
+            "task_count": 3241,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 49280,
+              "hbm0.hbm_fabric": 272896
+            },
+            "serial_region_count": 2744,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1454,
+            "task_count": 3081,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 25168000,
+              "hbm0": 67108864
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35840327680,
+              "hostmem0": 2101346304,
+              "hbm1": 35936796672,
+              "hbf0": 67331162112
+            },
+            "headroom_bytes": {
+              "hostmem0": 29898653696,
+              "hbm0": 159672320
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 7.169525699981023
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen2_5-0_5b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 2754688,
+          "hbm0": 7397376
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 991909888
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 2754688,
+              "hbm0.hbm_fabric": 7397376
+            },
+            "serial_region_count": 912,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 991909888
+            },
+            "buffer_count": 494,
+            "task_count": 1169,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 5504,
+              "hbm0.hbm_fabric": 305664
+            },
+            "serial_region_count": 912,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 991909888
+            },
+            "buffer_count": 494,
+            "task_count": 1169,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 2754688,
+              "hbm0": 7397376
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 991909888,
+              "hostmem0": 272269312
+            },
+            "headroom_bytes": {
+              "hostmem0": 31727730688,
+              "hbm0": 35008090112
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.3177431999938563
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen2_5-14b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 26214400
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 28044853248
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 26214400
+            },
+            "serial_region_count": 1800,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28044853248
+            },
+            "buffer_count": 974,
+            "task_count": 2297,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314368
+            },
+            "serial_region_count": 1800,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28044853248
+            },
+            "buffer_count": 974,
+            "task_count": 2297,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 26214400
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 28044853248,
+              "hostmem0": 1557135360
+            },
+            "headroom_bytes": {
+              "hostmem0": 30442864640,
+              "hbm0": 7955146752
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 4.692346499999985
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen2_5-1_5b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 4720768,
+          "hbm0": 10747904
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 3096428544
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 4720768,
+              "hbm0.hbm_fabric": 10747904
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3096428544
+            },
+            "buffer_count": 574,
+            "task_count": 1357,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 9344,
+              "hbm0.hbm_fabric": 306944
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3096428544
+            },
+            "buffer_count": 574,
+            "task_count": 1357,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 4720768,
+              "hbm0": 10747904
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 3096428544,
+              "hostmem0": 466747392
+            },
+            "headroom_bytes": {
+              "hostmem0": 31533252608,
+              "hbm0": 32903571456
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.7394100000092294
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen2_5-32b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 61865984
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 28233238528,
+          "hbm0": 35819943936
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 61865984
+            },
+            "serial_region_count": 2520,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28233238528,
+              "hbm0.hbm_fabric": 35819943936
+            },
+            "buffer_count": 1422,
+            "task_count": 3177,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314368
+            },
+            "serial_region_count": 2392,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28233238528,
+              "hbm0.hbm_fabric": 35819943936
+            },
+            "buffer_count": 1294,
+            "task_count": 3049,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 61865984
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35945787392,
+              "hostmem0": 1557135360,
+              "hbm1": 28107395072
+            },
+            "headroom_bytes": {
+              "hostmem0": 30442864640,
+              "hbm0": 54212608
+            },
+            "conservative_bound_shortfall_bytes": {
+              "hbm0": 7653376
+            }
+          },
+          {
+            "iteration": 1,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 61865984
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35819943936,
+              "hbm1": 28233238528,
+              "hostmem0": 1557135360
+            },
+            "headroom_bytes": {
+              "hostmem0": 30442864640,
+              "hbm0": 180056064
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": [
+          "layer-041.attention_weights"
+        ]
+      },
+      "mapping_changed": true,
+      "elapsed_s": 12.331697400019038
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen2_5-3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 13369344
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 6183374848
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 13369344
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6183374848
+            },
+            "buffer_count": 734,
+            "task_count": 1733,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 307968
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6183374848
+            },
+            "buffer_count": 734,
+            "task_count": 1733,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 13369344
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 6183374848,
+              "hostmem0": 622329856
+            },
+            "headroom_bytes": {
+              "hostmem0": 31377670144,
+              "hbm0": 29816625152
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.462249600008363
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen2_5-72b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 25168000,
+          "hbm0": 68943872
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35710754816,
+          "hbm0": 35815612416,
+          "hbf0": 71496843264
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 25168000,
+              "hbm0.hbm_fabric": 68943872
+            },
+            "serial_region_count": 3144,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35710754816,
+              "hbm0.hbm_fabric": 35815612416,
+              "hbf0.memory": 71496843264
+            },
+            "buffer_count": 1774,
+            "task_count": 3961,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 49280,
+              "hbm0.hbm_fabric": 320512
+            },
+            "serial_region_count": 2984,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35710754816,
+              "hbm0.hbm_fabric": 35815612416,
+              "hbf0.memory": 71496843264
+            },
+            "buffer_count": 1614,
+            "task_count": 3801,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 25168000,
+              "hbm0": 68943872
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35815612416,
+              "hostmem0": 2491416576,
+              "hbm1": 35710754816,
+              "hbf0": 71496843264
+            },
+            "headroom_bytes": {
+              "hostmem0": 29508583424,
+              "hbm0": 184387584
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 8.351945400005206
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen2_5-7b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 11012224,
+          "hbm0": 42467328
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 14159179776
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 11012224,
+              "hbm0.hbm_fabric": 42467328
+            },
+            "serial_region_count": 1116,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 14159179776
+            },
+            "buffer_count": 630,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 21632,
+              "hbm0.hbm_fabric": 311296
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 14159179776
+            },
+            "buffer_count": 574,
+            "task_count": 1357,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 11012224,
+              "hbm0": 42467328
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 14159179776,
+              "hostmem0": 1089994752
+            },
+            "headroom_bytes": {
+              "hostmem0": 30910005248,
+              "hbm0": 21840820224
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.646787100005895
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-0_6b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 3147904,
+          "hbm0": 16777216
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 1228683264
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 3147904,
+              "hbm0.hbm_fabric": 16777216
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 1228683264
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6272,
+              "hbm0.hbm_fabric": 305920
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 1228683264
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 3147904,
+              "hbm0": 16777216
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 1228683264,
+              "hostmem0": 311164928
+            },
+            "headroom_bytes": {
+              "hostmem0": 31688835072,
+              "hbm0": 34771316736
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.6464267000264954
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-14b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 40894464
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 28032389120
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 40894464
+            },
+            "serial_region_count": 1584,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28032389120
+            },
+            "buffer_count": 1054,
+            "task_count": 2081,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314112
+            },
+            "serial_region_count": 1504,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28032389120
+            },
+            "buffer_count": 974,
+            "task_count": 2001,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 40894464
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 28032389120,
+              "hostmem0": 1555824640
+            },
+            "headroom_bytes": {
+              "hostmem0": 30444175360,
+              "hbm0": 7967610880
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.771280899993144
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-1_7b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 16777216
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 3477616640
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 16777216
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3477616640
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 307968
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3477616640
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 16777216
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 3477616640,
+              "hostmem0": 622329856
+            },
+            "headroom_bytes": {
+              "hostmem0": 31377670144,
+              "hbm0": 32522383360
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.6786981000041123
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-235b-a22b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "hbm0": 92274688
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35999711232,
+          "hbm0": 35907222528,
+          "hbf0": 397095731200
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "hbm0.hbm_fabric": 92274688
+            },
+            "serial_region_count": 5758,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35999711232,
+              "hbm0.hbm_fabric": 35907222528,
+              "hbf0.memory": 397095731200
+            },
+            "buffer_count": 51902,
+            "task_count": 79095,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "hbm0.hbm_fabric": 312064
+            },
+            "serial_region_count": 5758,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 4290772992,
+              "hbm0.hbm_fabric": 4198284288,
+              "hbf0.memory": 34707865600
+            },
+            "buffer_count": 6782,
+            "task_count": 11415,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 92274688
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 44439,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35979529833,
+              "hostmem0": 1244659712,
+              "hbm1": 35961966200,
+              "hbf0": 397061168927
+            },
+            "headroom_bytes": {
+              "hostmem0": 30755340288,
+              "hbm0": 20470167
+            },
+            "conservative_bound_shortfall_bytes": {
+              "hbm0": 71848960
+            }
+          },
+          {
+            "iteration": 1,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 92274688
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 44439,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm1": 35999714936,
+              "hbm0": 35907178089,
+              "hbf0": 397095771935,
+              "hostmem0": 1244659712
+            },
+            "headroom_bytes": {
+              "hostmem0": 30755340288,
+              "hbm0": 92821911
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": [
+          "layer-025.router_weights",
+          "layer-026.router_weights",
+          "layer-027.router_weights",
+          "layer-028.router_weights",
+          "layer-029.router_weights",
+          "layer-030.router_weights",
+          "layer-031.router_weights",
+          "layer-032.router_weights",
+          "layer-033.router_weights",
+          "layer-034.router_weights",
+          "layer-035.router_weights",
+          "layer-036.router_weights",
+          "layer-037.router_weights",
+          "layer-038.router_weights",
+          "layer-039.router_weights",
+          "layer-040.router_weights",
+          "layer-041.router_weights",
+          "layer-042.router_weights",
+          "layer-043.router_weights",
+          "layer-044.router_weights",
+          "layer-045.router_weights",
+          "layer-046.router_weights",
+          "layer-047.router_weights",
+          "layer-048.router_weights",
+          "layer-049.router_weights",
+          "layer-050.router_weights",
+          "layer-051.router_weights",
+          "layer-052.router_weights",
+          "layer-053.router_weights",
+          "layer-054.router_weights",
+          "layer-055.router_weights",
+          "layer-056.router_weights",
+          "layer-057.router_weights",
+          "layer-058.router_weights",
+          "layer-059.router_weights",
+          "layer-060.router_weights",
+          "layer-061.router_weights",
+          "layer-062.router_weights",
+          "layer-063.router_weights",
+          "layer-064.router_weights",
+          "layer-065.router_weights",
+          "layer-066.router_weights",
+          "layer-067.router_weights",
+          "layer-068.router_weights",
+          "layer-069.router_weights",
+          "layer-070.router_weights",
+          "layer-071.router_weights",
+          "layer-072.router_weights",
+          "layer-073.router_weights",
+          "layer-074.router_weights",
+          "layer-075.router_weights",
+          "layer-076.router_weights",
+          "layer-077.router_weights",
+          "layer-078.router_weights",
+          "layer-079.router_weights",
+          "layer-080.router_weights",
+          "layer-081.router_weights",
+          "layer-082.router_weights",
+          "layer-083.router_weights",
+          "layer-084.router_weights",
+          "layer-085.router_weights",
+          "layer-086.router_weights",
+          "layer-087.router_weights",
+          "layer-088.router_weights",
+          "layer-089.router_weights",
+          "layer-090.router_weights",
+          "layer-091.router_weights",
+          "layer-092.router_weights",
+          "layer-093.router_weights"
+        ]
+      },
+      "mapping_changed": true,
+      "elapsed_s": 183.99002389999805
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model_id": "qwen3-4b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 7866496,
+          "hbm0": 27262976
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 8091748352
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 7866496,
+              "hbm0.hbm_fabric": 27262976
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 8091748352
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15488,
+              "hbm0.hbm_fabric": 308992
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 8091748352
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 7866496,
+              "hbm0": 27262976
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 8091748352,
+              "hostmem0": 777912320
+            },
+            "headroom_bytes": {
+              "hostmem0": 31222087680,
+              "hbm0": 27908251648
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.263203100010287
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-8b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "hbm0": 27262976
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 15183398912
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "hbm0.hbm_fabric": 27262976
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15183398912
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "hbm0.hbm_fabric": 312064
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15183398912
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 27262976
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 15183398912,
+              "hostmem0": 1244659712
+            },
+            "headroom_bytes": {
+              "hostmem0": 30755340288,
+              "hbm0": 20816601088
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.7718101000064053
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "llama3_1-8b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "hbm0": 18874368
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 15051259904
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "hbm0.hbm_fabric": 18874368
+            },
+            "serial_region_count": 1112,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15051259904
+            },
+            "buffer_count": 590,
+            "task_count": 1257,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "hbm0.hbm_fabric": 264704
+            },
+            "serial_region_count": 1112,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 15051259904
+            },
+            "buffer_count": 590,
+            "task_count": 1257,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 18874368
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 15051259904,
+              "hostmem0": 1050673152
+            },
+            "headroom_bytes": {
+              "hostmem0": 30949326848,
+              "hbm0": 20948740096
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.927305499993963
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-32b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 57671680
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 28294512640,
+          "hbm0": 35756474368
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 57671680
+            },
+            "serial_region_count": 2520,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28294512640,
+              "hbm0.hbm_fabric": 35756474368
+            },
+            "buffer_count": 1678,
+            "task_count": 3305,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314112
+            },
+            "serial_region_count": 2392,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28294512640,
+              "hbm0.hbm_fabric": 35756474368
+            },
+            "buffer_count": 1550,
+            "task_count": 3177,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 57671680
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 13940
+            },
+            "resident_bytes": {
+              "hbm0": 35945204108,
+              "hostmem0": 1555824640,
+              "hbm1": 28105782900
+            },
+            "headroom_bytes": {
+              "hostmem0": 30444175360,
+              "hbm0": 54795892
+            },
+            "conservative_bound_shortfall_bytes": {
+              "hbm0": 2889728
+            }
+          },
+          {
+            "iteration": 1,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 57671680
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 14039
+            },
+            "resident_bytes": {
+              "hbm0": 35756460329,
+              "hbm1": 28294526679,
+              "hostmem0": 1555824640
+            },
+            "headroom_bytes": {
+              "hostmem0": 30444175360,
+              "hbm0": 243539671
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": [
+          "layer-039.attention_weights"
+        ]
+      },
+      "mapping_changed": true,
+      "elapsed_s": 12.767775699991034
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-30b-a3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 46137344
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 24781520896,
+          "hbm0": 35691454464
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 46137344
+            },
+            "serial_region_count": 2952,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 24781520896,
+              "hbm0.hbm_fabric": 35691454464
+            },
+            "buffer_count": 26510,
+            "task_count": 40409,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 307968
+            },
+            "serial_region_count": 2952,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 2132279296,
+              "hbm0.hbm_fabric": 3982516224
+            },
+            "buffer_count": 3470,
+            "task_count": 5849,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 46137344
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 9920
+            },
+            "resident_bytes": {
+              "hbm0": 35691444544,
+              "hostmem0": 622329856,
+              "hbm1": 24781530816
+            },
+            "headroom_bytes": {
+              "hostmem0": 31377670144,
+              "hbm0": 308555456
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 38.420677300018724
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "llama3_1-405b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 50333824,
+          "hbm0": 137296256
+        },
+        "resident_physical_bytes_by_component": {
+          "hbf1": 225057964032,
+          "hbm1": 35970351104,
+          "hbm0": 35464413184,
+          "hbf0": 511168217088
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 50333824,
+              "hbm0.hbm_fabric": 137296256
+            },
+            "serial_region_count": 5316,
+            "resident_bytes_by_owner": {
+              "hbf1.memory": 225057964032,
+              "hbm1.hbm_fabric": 35970351104,
+              "hbm0.hbm_fabric": 35464413184,
+              "hbf0.memory": 511168217088
+            },
+            "buffer_count": 3290,
+            "task_count": 5837,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 98432,
+              "hbm0.hbm_fabric": 327680
+            },
+            "serial_region_count": 4308,
+            "resident_bytes_by_owner": {
+              "hbf1.memory": 225057964032,
+              "hbm1.hbm_fabric": 35970351104,
+              "hbm0.hbm_fabric": 35464413184,
+              "hbf0.memory": 511168217088
+            },
+            "buffer_count": 2282,
+            "task_count": 4829,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 50333824,
+              "hbm0": 137296256
+            },
+            "physical_resident_excess_bytes": {
+              "hbf1": 0,
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35464413184,
+              "hostmem0": 4202692608,
+              "hbm1": 35970351104,
+              "hbf0": 511168217088,
+              "hbf1": 225057964032
+            },
+            "headroom_bytes": {
+              "hostmem0": 27797307392,
+              "hbm0": 535586816
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 12.479883499996504
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "llama3_1-70b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 25168000,
+          "hbm0": 67108864
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35936796672,
+          "hbm0": 35840327680,
+          "hbf0": 67331162112
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 25168000,
+              "hbm0.hbm_fabric": 67108864
+            },
+            "serial_region_count": 2904,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1614,
+            "task_count": 3241,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 49280,
+              "hbm0.hbm_fabric": 272896
+            },
+            "serial_region_count": 2744,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1454,
+            "task_count": 3081,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 25168000,
+              "hbm0": 67108864
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35840327680,
+              "hostmem0": 2101346304,
+              "hbm1": 35936796672,
+              "hbf0": 67331162112
+            },
+            "headroom_bytes": {
+              "hostmem0": 29898653696,
+              "hbm0": 159672320
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 7.870989599992754
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "llama3_2-1b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 16908288
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 2481979392
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 16908288
+            },
+            "serial_region_count": 568,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 2481979392
+            },
+            "buffer_count": 302,
+            "task_count": 649,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 260608
+            },
+            "serial_region_count": 568,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 2481979392
+            },
+            "buffer_count": 302,
+            "task_count": 649,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 16908288
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 2481979392,
+              "hostmem0": 525336576
+            },
+            "headroom_bytes": {
+              "hostmem0": 31474663424,
+              "hbm0": 33518020608
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 1.4325119999994058
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "llama3_2-3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 9439360,
+          "hbm0": 12681216
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 6461849600
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 9439360,
+              "hbm0.hbm_fabric": 12681216
+            },
+            "serial_region_count": 976,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6461849600
+            },
+            "buffer_count": 518,
+            "task_count": 1105,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 18560,
+              "hbm0.hbm_fabric": 262656
+            },
+            "serial_region_count": 976,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6461849600
+            },
+            "buffer_count": 518,
+            "task_count": 1105,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 9439360,
+              "hbm0": 12681216
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 6461849600,
+              "hostmem0": 788004864
+            },
+            "headroom_bytes": {
+              "hostmem0": 31211995136,
+              "hbm0": 29538150400
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.5824467000202276
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "llama3_3-70b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 25168000,
+          "hbm0": 67108864
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35936796672,
+          "hbm0": 35840327680,
+          "hbf0": 67331162112
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 25168000,
+              "hbm0.hbm_fabric": 67108864
+            },
+            "serial_region_count": 2904,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1614,
+            "task_count": 3241,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 49280,
+              "hbm0.hbm_fabric": 272896
+            },
+            "serial_region_count": 2744,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35936796672,
+              "hbm0.hbm_fabric": 35840327680,
+              "hbf0.memory": 67331162112
+            },
+            "buffer_count": 1454,
+            "task_count": 3081,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 25168000,
+              "hbm0": 67108864
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35840327680,
+              "hostmem0": 2101346304,
+              "hbm1": 35936796672,
+              "hbf0": 67331162112
+            },
+            "headroom_bytes": {
+              "hostmem0": 29898653696,
+              "hbm0": 159672320
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 7.842701500019757
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen2_5-0_5b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 2754688,
+          "hbm0": 7397376
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 991909888
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 2754688,
+              "hbm0.hbm_fabric": 7397376
+            },
+            "serial_region_count": 912,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 991909888
+            },
+            "buffer_count": 494,
+            "task_count": 1169,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 5504,
+              "hbm0.hbm_fabric": 305664
+            },
+            "serial_region_count": 912,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 991909888
+            },
+            "buffer_count": 494,
+            "task_count": 1169,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 2754688,
+              "hbm0": 7397376
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 991909888,
+              "hostmem0": 272269312
+            },
+            "headroom_bytes": {
+              "hostmem0": 31727730688,
+              "hbm0": 35008090112
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.415788499987684
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen2_5-14b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 26214400
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 28044853248
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 26214400
+            },
+            "serial_region_count": 1800,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28044853248
+            },
+            "buffer_count": 974,
+            "task_count": 2297,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314368
+            },
+            "serial_region_count": 1800,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28044853248
+            },
+            "buffer_count": 974,
+            "task_count": 2297,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 26214400
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 28044853248,
+              "hostmem0": 1557135360
+            },
+            "headroom_bytes": {
+              "hostmem0": 30442864640,
+              "hbm0": 7955146752
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 5.2789526999986265
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen2_5-1_5b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 4720768,
+          "hbm0": 10747904
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 3096428544
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 4720768,
+              "hbm0.hbm_fabric": 10747904
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3096428544
+            },
+            "buffer_count": 574,
+            "task_count": 1357,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 9344,
+              "hbm0.hbm_fabric": 306944
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3096428544
+            },
+            "buffer_count": 574,
+            "task_count": 1357,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 4720768,
+              "hbm0": 10747904
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 3096428544,
+              "hostmem0": 466747392
+            },
+            "headroom_bytes": {
+              "hostmem0": 31533252608,
+              "hbm0": 32903571456
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.92911009999807
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen2_5-32b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 61865984
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 28233238528,
+          "hbm0": 35819943936
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 61865984
+            },
+            "serial_region_count": 2520,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28233238528,
+              "hbm0.hbm_fabric": 35819943936
+            },
+            "buffer_count": 1422,
+            "task_count": 3177,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314368
+            },
+            "serial_region_count": 2392,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 28233238528,
+              "hbm0.hbm_fabric": 35819943936
+            },
+            "buffer_count": 1294,
+            "task_count": 3049,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 61865984
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35945787392,
+              "hostmem0": 1557135360,
+              "hbm1": 28107395072
+            },
+            "headroom_bytes": {
+              "hostmem0": 30442864640,
+              "hbm0": 54212608
+            },
+            "conservative_bound_shortfall_bytes": {
+              "hbm0": 7653376
+            }
+          },
+          {
+            "iteration": 1,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 61865984
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35819943936,
+              "hbm1": 28233238528,
+              "hostmem0": 1557135360
+            },
+            "headroom_bytes": {
+              "hostmem0": 30442864640,
+              "hbm0": 180056064
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": [
+          "layer-041.attention_weights"
+        ]
+      },
+      "mapping_changed": true,
+      "elapsed_s": 13.244653900008416
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen2_5-3b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 13369344
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 6183374848
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 13369344
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6183374848
+            },
+            "buffer_count": 734,
+            "task_count": 1733,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 307968
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 6183374848
+            },
+            "buffer_count": 734,
+            "task_count": 1733,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 13369344
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 6183374848,
+              "hostmem0": 622329856
+            },
+            "headroom_bytes": {
+              "hostmem0": 31377670144,
+              "hbm0": 29816625152
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.695735399989644
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen2_5-72b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 25168000,
+          "hbm0": 68943872
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35710754816,
+          "hbm0": 35815612416,
+          "hbf0": 71496843264
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 25168000,
+              "hbm0.hbm_fabric": 68943872
+            },
+            "serial_region_count": 3144,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35710754816,
+              "hbm0.hbm_fabric": 35815612416,
+              "hbf0.memory": 71496843264
+            },
+            "buffer_count": 1774,
+            "task_count": 3961,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 49280,
+              "hbm0.hbm_fabric": 320512
+            },
+            "serial_region_count": 2984,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35710754816,
+              "hbm0.hbm_fabric": 35815612416,
+              "hbf0.memory": 71496843264
+            },
+            "buffer_count": 1614,
+            "task_count": 3801,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 25168000,
+              "hbm0": 68943872
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 0,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35815612416,
+              "hostmem0": 2491416576,
+              "hbm1": 35710754816,
+              "hbf0": 71496843264
+            },
+            "headroom_bytes": {
+              "hostmem0": 29508583424,
+              "hbm0": 184387584
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 9.169008199998643
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen2_5-7b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 11012224,
+          "hbm0": 42467328
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 14159179776
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 11012224,
+              "hbm0.hbm_fabric": 42467328
+            },
+            "serial_region_count": 1116,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 14159179776
+            },
+            "buffer_count": 630,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 21632,
+              "hbm0.hbm_fabric": 311296
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 14159179776
+            },
+            "buffer_count": 574,
+            "task_count": 1357,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 11012224,
+              "hbm0": 42467328
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 14159179776,
+              "hostmem0": 1089994752
+            },
+            "headroom_bytes": {
+              "hostmem0": 30910005248,
+              "hbm0": 21840820224
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.00650429999223
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-0_6b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 3147904,
+          "hbm0": 16777216
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 1228683264
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 3147904,
+              "hbm0.hbm_fabric": 16777216
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 1228683264
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6272,
+              "hbm0.hbm_fabric": 305920
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 1228683264
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 3147904,
+              "hbm0": 16777216
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 1228683264,
+              "hostmem0": 311164928
+            },
+            "headroom_bytes": {
+              "hostmem0": 31688835072,
+              "hbm0": 34771316736
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.9515552000084426
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-14b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 15730816,
+          "hbm0": 40894464
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 28032389120
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15730816,
+              "hbm0.hbm_fabric": 40894464
+            },
+            "serial_region_count": 1584,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28032389120
+            },
+            "buffer_count": 1054,
+            "task_count": 2081,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 30848,
+              "hbm0.hbm_fabric": 314112
+            },
+            "serial_region_count": 1504,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 28032389120
+            },
+            "buffer_count": 974,
+            "task_count": 2001,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 15730816,
+              "hbm0": 40894464
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 28032389120,
+              "hostmem0": 1555824640
+            },
+            "headroom_bytes": {
+              "hostmem0": 30444175360,
+              "hbm0": 7967610880
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 4.383718900004169
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-1_7b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 6293632,
+          "hbm0": 16777216
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 3477616640
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 6293632,
+              "hbm0.hbm_fabric": 16777216
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3477616640
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12416,
+              "hbm0.hbm_fabric": 307968
+            },
+            "serial_region_count": 1060,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 3477616640
+            },
+            "buffer_count": 686,
+            "task_count": 1413,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 6293632,
+              "hbm0": 16777216
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 3477616640,
+              "hostmem0": 622329856
+            },
+            "headroom_bytes": {
+              "hostmem0": 31377670144,
+              "hbm0": 32522383360
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 2.8065019999921788
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-235b-a22b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 12585088,
+          "hbm0": 92274688
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm1": 35999711232,
+          "hbm0": 35907222528,
+          "hbf0": 397095731200
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 12585088,
+              "hbm0.hbm_fabric": 92274688
+            },
+            "serial_region_count": 5758,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 35999711232,
+              "hbm0.hbm_fabric": 35907222528,
+              "hbf0.memory": 397095731200
+            },
+            "buffer_count": 51902,
+            "task_count": 79095,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 24704,
+              "hbm0.hbm_fabric": 312064
+            },
+            "serial_region_count": 5758,
+            "resident_bytes_by_owner": {
+              "hbm1.hbm_fabric": 4290772992,
+              "hbm0.hbm_fabric": 4198284288,
+              "hbf0.memory": 34707865600
+            },
+            "buffer_count": 6782,
+            "task_count": 11415,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 92274688
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 44439,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 35979529833,
+              "hostmem0": 1244659712,
+              "hbm1": 35961966200,
+              "hbf0": 397061168927
+            },
+            "headroom_bytes": {
+              "hostmem0": 30755340288,
+              "hbm0": 20470167
+            },
+            "conservative_bound_shortfall_bytes": {
+              "hbm0": 71848960
+            }
+          },
+          {
+            "iteration": 1,
+            "workspace_bound_bytes": {
+              "hostmem0": 12585088,
+              "hbm0": 92274688
+            },
+            "physical_resident_excess_bytes": {
+              "hbm1": 0,
+              "hbm0": 44439,
+              "hbf0": 0
+            },
+            "resident_bytes": {
+              "hbm1": 35999714936,
+              "hbm0": 35907178089,
+              "hbf0": 397095771935,
+              "hostmem0": 1244659712
+            },
+            "headroom_bytes": {
+              "hostmem0": 30755340288,
+              "hbm0": 92821911
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": [
+          "layer-025.router_weights",
+          "layer-026.router_weights",
+          "layer-027.router_weights",
+          "layer-028.router_weights",
+          "layer-029.router_weights",
+          "layer-030.router_weights",
+          "layer-031.router_weights",
+          "layer-032.router_weights",
+          "layer-033.router_weights",
+          "layer-034.router_weights",
+          "layer-035.router_weights",
+          "layer-036.router_weights",
+          "layer-037.router_weights",
+          "layer-038.router_weights",
+          "layer-039.router_weights",
+          "layer-040.router_weights",
+          "layer-041.router_weights",
+          "layer-042.router_weights",
+          "layer-043.router_weights",
+          "layer-044.router_weights",
+          "layer-045.router_weights",
+          "layer-046.router_weights",
+          "layer-047.router_weights",
+          "layer-048.router_weights",
+          "layer-049.router_weights",
+          "layer-050.router_weights",
+          "layer-051.router_weights",
+          "layer-052.router_weights",
+          "layer-053.router_weights",
+          "layer-054.router_weights",
+          "layer-055.router_weights",
+          "layer-056.router_weights",
+          "layer-057.router_weights",
+          "layer-058.router_weights",
+          "layer-059.router_weights",
+          "layer-060.router_weights",
+          "layer-061.router_weights",
+          "layer-062.router_weights",
+          "layer-063.router_weights",
+          "layer-064.router_weights",
+          "layer-065.router_weights",
+          "layer-066.router_weights",
+          "layer-067.router_weights",
+          "layer-068.router_weights",
+          "layer-069.router_weights",
+          "layer-070.router_weights",
+          "layer-071.router_weights",
+          "layer-072.router_weights",
+          "layer-073.router_weights",
+          "layer-074.router_weights",
+          "layer-075.router_weights",
+          "layer-076.router_weights",
+          "layer-077.router_weights",
+          "layer-078.router_weights",
+          "layer-079.router_weights",
+          "layer-080.router_weights",
+          "layer-081.router_weights",
+          "layer-082.router_weights",
+          "layer-083.router_weights",
+          "layer-084.router_weights",
+          "layer-085.router_weights",
+          "layer-086.router_weights",
+          "layer-087.router_weights",
+          "layer-088.router_weights",
+          "layer-089.router_weights",
+          "layer-090.router_weights",
+          "layer-091.router_weights",
+          "layer-092.router_weights",
+          "layer-093.router_weights"
+        ]
+      },
+      "mapping_changed": true,
+      "elapsed_s": 197.5514938000124
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model_id": "qwen3-4b",
+      "original_preparation": "accepted",
+      "status": "accepted",
+      "audit": {
+        "schema": "physical-workspace-reservation/v1",
+        "scope": "configured_prefill_final_decode_and_maximum_mtp_acceptance_endpoints",
+        "slot_multiplier": 1,
+        "bytes_by_component": {
+          "hostmem0": 7866496,
+          "hbm0": 27262976
+        },
+        "resident_physical_bytes_by_component": {
+          "hbm0": 8091748352
+        },
+        "cohorts": [
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 7866496,
+              "hbm0.hbm_fabric": 27262976
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 8091748352
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "prefill"
+          },
+          {
+            "bytes_by_owner": {
+              "hostmem0.memory": 15488,
+              "hbm0.hbm_fabric": 308992
+            },
+            "serial_region_count": 1356,
+            "resident_bytes_by_owner": {
+              "hbm0.hbm_fabric": 8091748352
+            },
+            "buffer_count": 878,
+            "task_count": 1805,
+            "bound_kind": "dependency_barrier_lifetime_upper_bound",
+            "phase": "decode"
+          }
+        ],
+        "iterations": [
+          {
+            "iteration": 0,
+            "workspace_bound_bytes": {
+              "hostmem0": 7866496,
+              "hbm0": 27262976
+            },
+            "physical_resident_excess_bytes": {
+              "hbm0": 0
+            },
+            "resident_bytes": {
+              "hbm0": 8091748352,
+              "hostmem0": 777912320
+            },
+            "headroom_bytes": {
+              "hostmem0": 31222087680,
+              "hbm0": 27908251648
+            },
+            "conservative_bound_shortfall_bytes": {}
+          }
+        ],
+        "changed_tensor_ids": []
+      },
+      "mapping_changed": false,
+      "elapsed_s": 3.373604599997634
+    }
+  ],
+  "expected_cases": 65
+}

@@ -1,0 +1,92 @@
+{
+  "comparison": "HEAD embedding lowering versus audit-only fix; actual run_scenario/report_dict, source-qualified and unqualified tied resident CPU input copy",
+  "model": "one-layer fp16 llama test fixture",
+  "prompt_tokens": 4,
+  "output_tokens": 3,
+  "cases": [
+    {
+      "source_get_rows": false,
+      "before_engine_tpot_ns": {
+        "p50": 26002.210286458325,
+        "p95": 26002.210286458325,
+        "p99": 26002.210286458325
+      },
+      "after_engine_tpot_ns": {
+        "p50": 26002.210286458325,
+        "p95": 26002.210286458325,
+        "p99": 26002.210286458325
+      },
+      "before_e2e_ns": {
+        "p50": 78056.87109374999,
+        "p95": 78056.87109374999,
+        "p99": 78056.87109374999
+      },
+      "after_e2e_ns": {
+        "p50": 78056.87109374999,
+        "p95": 78056.87109374999,
+        "p99": 78056.87109374999
+      },
+      "changes_count": 0,
+      "numeric_changes": [],
+      "timing_or_energy_changes": [],
+      "changes_sample": [],
+      "numeric_fields_compared": 18151,
+      "max_prediction_absolute_error": 0,
+      "max_prediction_relative_error": 0
+    },
+    {
+      "source_get_rows": true,
+      "before_engine_tpot_ns": {
+        "p50": 26002.210286458325,
+        "p95": 26002.210286458325,
+        "p99": 26002.210286458325
+      },
+      "after_engine_tpot_ns": {
+        "p50": 26002.210286458325,
+        "p95": 26002.210286458325,
+        "p99": 26002.210286458325
+      },
+      "before_e2e_ns": {
+        "p50": 78056.87109374999,
+        "p95": 78056.87109374999,
+        "p99": 78056.87109374999
+      },
+      "after_e2e_ns": {
+        "p50": 78056.87109374999,
+        "p95": 78056.87109374999,
+        "p99": 78056.87109374999
+      },
+      "changes_count": 0,
+      "numeric_changes": [],
+      "timing_or_energy_changes": [],
+      "changes_sample": [],
+      "numeric_fields_compared": 16023,
+      "max_prediction_absolute_error": 0,
+      "max_prediction_relative_error": 0
+    }
+  ],
+  "actual_local_qwen3_0_6b_embedding_lowering": [
+    {
+      "token_rows": 1,
+      "task_count": 4,
+      "all_task_demands_equal": true,
+      "memory_access_descriptors_equal": true,
+      "before_reported_weight_read_bytes": 2048,
+      "after_reported_weight_read_bytes": 311164928,
+      "before_actual_workload_read_bytes": 311164928,
+      "after_actual_workload_read_bytes": 311164928,
+      "after_traffic_semantics": "legacy_cpu_full_table"
+    },
+    {
+      "token_rows": 512,
+      "task_count": 4,
+      "all_task_demands_equal": true,
+      "memory_access_descriptors_equal": true,
+      "before_reported_weight_read_bytes": 1048576,
+      "after_reported_weight_read_bytes": 311164928,
+      "before_actual_workload_read_bytes": 311164928,
+      "after_actual_workload_read_bytes": 311164928,
+      "after_traffic_semantics": "legacy_cpu_full_table"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "source": "ui_diagnostic_reference_to_preset_validation.json",
+  "method": "in_process_validation_only_no_simulation",
+  "response": {
+    "valid": false,
+    "errors": {
+      "topology": [],
+      "scenario": [
+        {
+          "code": "device_memory_capacity_exhausted",
+          "message": "设备 gpu0 的显存容量不足，无法为 layer-024.attention_weights 分配 125829120 字节（120.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。",
+          "message_zh": "设备 gpu0 的显存容量不足，无法为 layer-024.attention_weights 分配 125829120 字节（120.00 MiB）。请选择容量足够的硬件，或显式调整模型与放置配置。",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-024.attention_weights (125829120 bytes; device gpu0)"
+        }
+      ]
+    },
+    "warnings": {
+      "topology": [],
+      "scenario": []
+    },
+    "information": {
+      "topology": [],
+      "scenario": []
+    }
+  }
+}

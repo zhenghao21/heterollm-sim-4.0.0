@@ -1,0 +1,48 @@
+{
+  "current_input_fingerprint": "05a518b56c0c95d4b8224d9396aed3810fcc4a11d48b42cd14ff4e77eeeec7ed",
+  "diagnostics": [],
+  "errors": {
+    "scenario": [],
+    "topology": []
+  },
+  "fingerprint_algorithm": "sha256",
+  "information": {
+    "scenario": [
+      {
+        "code": "validation_information",
+        "message": "常驻模型权重按 6 个组件上的物理 TP/PP/EP 分片校验容量；其中 2.302 GiB 为显式详细放置",
+        "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 6 component(s); 2471493632 bytes are explicit detailed placements",
+        "message_zh": "常驻模型权重按 6 个组件上的物理 TP/PP/EP 分片校验容量；其中 2.302 GiB 为显式详细放置"
+      },
+      {
+        "code": "validation_information",
+        "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+        "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+        "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+      },
+      {
+        "code": "validation_information",
+        "message": "请求调度采用确定性的连续批处理",
+        "message_en": "request scheduling uses deterministic continuous batching",
+        "message_zh": "请求调度采用确定性的连续批处理"
+      }
+    ],
+    "topology": []
+  },
+  "input_fingerprint": "05a518b56c0c95d4b8224d9396aed3810fcc4a11d48b42cd14ff4e77eeeec7ed",
+  "mapping": {
+    "current_fingerprint_schema": "runtime-control-plane-v4",
+    "current_input_fingerprint": "05a518b56c0c95d4b8224d9396aed3810fcc4a11d48b42cd14ff4e77eeeec7ed",
+    "fingerprint_algorithm": "sha256",
+    "fingerprint_present": true,
+    "fingerprint_schema": "runtime-control-plane-v4",
+    "input_fingerprint": "05a518b56c0c95d4b8224d9396aed3810fcc4a11d48b42cd14ff4e77eeeec7ed",
+    "mapping_stale": false
+  },
+  "mapping_stale": false,
+  "valid": true,
+  "warnings": {
+    "scenario": [],
+    "topology": []
+  }
+}

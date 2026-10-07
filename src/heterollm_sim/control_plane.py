@@ -910,6 +910,8 @@ def _control_plane_evidence_equal(left: object, right: object) -> bool:
 def bootstrap_control_plane(
     scenario: ScenarioConfig,
     policy: Optional[PlacementPolicy] = None,
+    *,
+    capture_physical_details: bool = True,
 ) -> ControlPlaneBootstrap:
     """Plan placement and realize its CPU/controller work in one live kernel."""
 
@@ -983,6 +985,7 @@ def bootstrap_control_plane(
             decision=decision,
         ),
         state,
+        capture_physical_details=capture_physical_details,
     )
     runtime_profile = runtime.profile
     control_bytes = int(runtime_profile["control_byte_count"])

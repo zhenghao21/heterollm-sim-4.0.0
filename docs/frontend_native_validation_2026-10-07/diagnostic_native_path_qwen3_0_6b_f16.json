@@ -1,0 +1,232 @@
+{
+  "schema": "heterollm.native-path-diagnostic/v1",
+  "purpose": "Placement and operation-path audit only; all diagnostic timings are excluded from comparison.",
+  "used_for_latency_comparison": false,
+  "reference_measurement": "native_qwen3_0_6b_f16.json",
+  "command": [
+    "F:\\codex_project\\_runtime_sources\\llama.cpp\\build-native-5080-sm120\\bin\\llama-server.exe",
+    "--model",
+    "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "56478",
+    "--ctx-size",
+    "768",
+    "--batch-size",
+    "512",
+    "--ubatch-size",
+    "512",
+    "--threads",
+    "16",
+    "--threads-batch",
+    "16",
+    "--parallel",
+    "1",
+    "--gpu-layers",
+    "-1",
+    "--flash-attn",
+    "off",
+    "--cache-type-k",
+    "f16",
+    "--cache-type-v",
+    "f16",
+    "--kv-unified",
+    "--no-cache-prompt",
+    "--fit",
+    "off",
+    "--perf",
+    "--verbosity",
+    "5"
+  ],
+  "effective_env": {
+    "GGML_CUDA_DISABLE_GRAPHS": "1"
+  },
+  "stdout_file": null,
+  "stderr_file": "diagnostic_native_path_qwen3_0_6b_f16_stderr.log",
+  "status": "completed",
+  "pid": 49120,
+  "server_build_info": "b1-d3146f2",
+  "effective_context": {
+    "requested_context": 768,
+    "props_n_ctx": 768,
+    "startup_n_ctx_slot": null
+  },
+  "gpu_after_loading": "NVIDIA GeForce RTX 5080, 3916 MiB, 16303 MiB, 41 %",
+  "request_contract": {
+    "prompt_n": 512,
+    "cache_n": 0,
+    "tokens_evaluated": 512,
+    "tokens_predicted": 128
+  },
+  "gpu_after_request_server_alive": "NVIDIA GeForce RTX 5080, 4066 MiB, 16303 MiB, 78 %",
+  "gpu_snapshot_scope": "Device-wide allocations at these instants, including other processes; not peak VRAM or per-process allocation. Model/KV/compute buffer sizes are in stderr.",
+  "placement_log_evidence": {
+    "layers": [
+      {
+        "line": 92,
+        "text": "0.00.477.858 I print_info: n_layer               = 28"
+      },
+      {
+        "line": 93,
+        "text": "0.00.477.858 I print_info: n_layer_all           = 28"
+      },
+      {
+        "line": 151,
+        "text": "0.00.478.002 D load_tensors: layer   0 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 152,
+        "text": "0.00.478.002 D load_tensors: layer   1 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 153,
+        "text": "0.00.478.003 D load_tensors: layer   2 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 154,
+        "text": "0.00.478.003 D load_tensors: layer   3 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 155,
+        "text": "0.00.478.003 D load_tensors: layer   4 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 156,
+        "text": "0.00.478.004 D load_tensors: layer   5 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 157,
+        "text": "0.00.478.004 D load_tensors: layer   6 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 158,
+        "text": "0.00.478.005 D load_tensors: layer   7 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 159,
+        "text": "0.00.478.005 D load_tensors: layer   8 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 160,
+        "text": "0.00.478.005 D load_tensors: layer   9 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 161,
+        "text": "0.00.478.006 D load_tensors: layer  10 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 162,
+        "text": "0.00.478.006 D load_tensors: layer  11 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 163,
+        "text": "0.00.478.007 D load_tensors: layer  12 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 164,
+        "text": "0.00.478.007 D load_tensors: layer  13 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 165,
+        "text": "0.00.478.008 D load_tensors: layer  14 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 166,
+        "text": "0.00.478.008 D load_tensors: layer  15 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 167,
+        "text": "0.00.478.008 D load_tensors: layer  16 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 168,
+        "text": "0.00.478.009 D load_tensors: layer  17 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 169,
+        "text": "0.00.478.009 D load_tensors: layer  18 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 170,
+        "text": "0.00.478.010 D load_tensors: layer  19 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 171,
+        "text": "0.00.478.010 D load_tensors: layer  20 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 172,
+        "text": "0.00.478.011 D load_tensors: layer  21 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 173,
+        "text": "0.00.478.011 D load_tensors: layer  22 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 174,
+        "text": "0.00.478.012 D load_tensors: layer  23 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 175,
+        "text": "0.00.478.012 D load_tensors: layer  24 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 176,
+        "text": "0.00.478.012 D load_tensors: layer  25 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 177,
+        "text": "0.00.478.013 D load_tensors: layer  26 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 178,
+        "text": "0.00.478.013 D load_tensors: layer  27 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 179,
+        "text": "0.00.478.014 D load_tensors: layer  28 assigned to device CUDA0, is_swa = 0"
+      },
+      {
+        "line": 999,
+        "text": "0.00.609.969 I load_tensors: offloaded 29/29 layers to GPU"
+      }
+    ],
+    "buffers": [
+      {
+        "line": 1000,
+        "text": "0.00.609.978 I load_tensors:   CPU_Mapped model buffer size =   296.75 MiB"
+      },
+      {
+        "line": 1001,
+        "text": "0.00.609.979 I load_tensors:        CUDA0 model buffer size =  1137.00 MiB"
+      },
+      {
+        "line": 1024,
+        "text": "0.01.133.778 I llama_context:  CUDA_Host  output buffer size =     0.58 MiB"
+      },
+      {
+        "line": 1053,
+        "text": "0.01.134.125 I llama_kv_cache:      CUDA0 KV buffer size =    84.00 MiB"
+      },
+      {
+        "line": 1073,
+        "text": "0.01.141.253 I sched_reserve:      CUDA0 compute buffer size =    41.51 MiB"
+      },
+      {
+        "line": 1074,
+        "text": "0.01.141.258 I sched_reserve:  CUDA_Host compute buffer size =     9.51 MiB"
+      }
+    ],
+    "buffer_changes": [
+      {
+        "line": 996,
+        "text": "0.00.481.865 D done_getting_tensors: tensor 'token_embd.weight' (f16) (and 0 others) cannot be used with preferred buffer type CUDA_Host, using CPU instead"
+      }
+    ],
+    "ignored_mtp_tensors": [],
+    "allocation_error_lines": []
+  },
+  "interpretation": "28 main layers plus output assigned CUDA0; native reports 29/29. All 28 KV layers use CUDA0. Only token_embd.weight changes CUDA_Host to CPU (and 0 others), matching the fixed CPU input/mmap path. INFO repeating-layer count is not used because the pinned logger subtracts one; DEBUG assignments are authoritative.",
+  "stdout_retention": "Empty output; no file retained."
+}

@@ -1,0 +1,125 @@
+{
+  "scope": "Separate coverage for ordered DRAM submit_many only, not the earlier 63-case proof of three different optimizations.",
+  "timing_context": "One serial and one batched run per case while UI simulations continue; wall times are indicative, not isolated throughput measurements.",
+  "status": "completed",
+  "cases": [
+    {
+      "model": "qwen3_30b_a3b",
+      "submission_file": "ui_b200_2hbf_qwen3_30b_a3b_submission.json",
+      "scope": "Complete original model and B200-2HBF hardware; only workload length changed to input 1/output 2. Current identical code toggles _USE_COMPILED_DRAM_BATCH False/True.",
+      "comparison": "All report fields and complete DRAM/NAND core, physical timeline, allocator and L2 final state; only compiled_batch_float64 implementation marker omitted.",
+      "serial_wall_seconds": 52.60341020001215,
+      "batch_wall_seconds": 46.998495600011665,
+      "wall_speedup": 1.1192573193768163,
+      "cohort_count": 2,
+      "difference": {
+        "numeric_values_compared": 39912,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      },
+      "raw_results_directory": "F:\\codex_project\\_scratch\\37-native-validation-raw\\dram-batch-representative",
+      "active_path_verification": {
+        "counters": {
+          "submit_many_calls": 0,
+          "requests_submitted_to_many": 0,
+          "compiled_batch_results": 0
+        },
+        "replay_against_saved_batch_report_and_final_state": {
+          "numeric_values_compared": 39912,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "verification_wall_seconds": 52.04347910001525,
+        "interpretation": "Zero calls means this short generic path verifies non-triggering compatibility only; its wall-time variation must not be attributed to batching. Positive compiled results establish actual batched execution."
+      },
+      "performance_conclusion": "No submit_many invocation; do not attribute wall-time variation to batching."
+    },
+    {
+      "model": "qwen2_5_7b",
+      "submission_file": "ui_b200_2hbf_qwen2_5_7b_submission.json",
+      "scope": "Complete original model and B200-2HBF hardware; only workload length changed to input 1/output 2. Current identical code toggles _USE_COMPILED_DRAM_BATCH False/True.",
+      "comparison": "All report fields and complete DRAM/NAND core, physical timeline, allocator and L2 final state; only compiled_batch_float64 implementation marker omitted.",
+      "serial_wall_seconds": 11.997205100022256,
+      "batch_wall_seconds": 10.401664300006814,
+      "wall_speedup": 1.1533928373380014,
+      "cohort_count": 2,
+      "difference": {
+        "numeric_values_compared": 20227,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      },
+      "raw_results_directory": "F:\\codex_project\\_scratch\\37-native-validation-raw\\dram-batch-representative",
+      "active_path_verification": {
+        "counters": {
+          "submit_many_calls": 0,
+          "requests_submitted_to_many": 0,
+          "compiled_batch_results": 0
+        },
+        "replay_against_saved_batch_report_and_final_state": {
+          "numeric_values_compared": 20227,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "verification_wall_seconds": 11.32717970001977,
+        "interpretation": "Zero calls means this short generic path verifies non-triggering compatibility only; its wall-time variation must not be attributed to batching. Positive compiled results establish actual batched execution."
+      },
+      "performance_conclusion": "No submit_many invocation; do not attribute wall-time variation to batching."
+    },
+    {
+      "model": "llama3_1_8b",
+      "submission_file": "ui_b200_2hbf_llama3_1_8b_submission.json",
+      "scope": "Complete original model and B200-2HBF hardware; only workload length changed to input 1/output 2. Current identical code toggles _USE_COMPILED_DRAM_BATCH False/True.",
+      "comparison": "All report fields and complete DRAM/NAND core, physical timeline, allocator and L2 final state; only compiled_batch_float64 implementation marker omitted.",
+      "serial_wall_seconds": 10.51096499999403,
+      "batch_wall_seconds": 9.34099579998292,
+      "wall_speedup": 1.1252510144596413,
+      "cohort_count": 2,
+      "difference": {
+        "numeric_values_compared": 20280,
+        "changed_values": 0,
+        "max_absolute_difference": 0.0,
+        "max_relative_difference": 0.0,
+        "max_relative_difference_percent": 0.0,
+        "max_absolute_path": null,
+        "non_numeric_mismatches": []
+      },
+      "raw_results_directory": "F:\\codex_project\\_scratch\\37-native-validation-raw\\dram-batch-representative",
+      "active_path_verification": {
+        "counters": {
+          "submit_many_calls": 0,
+          "requests_submitted_to_many": 0,
+          "compiled_batch_results": 0
+        },
+        "replay_against_saved_batch_report_and_final_state": {
+          "numeric_values_compared": 20280,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "verification_wall_seconds": 10.19593950000126,
+        "interpretation": "Zero calls means this short generic path verifies non-triggering compatibility only; its wall-time variation must not be attributed to batching. Positive compiled results establish actual batched execution."
+      },
+      "performance_conclusion": "No submit_many invocation; do not attribute wall-time variation to batching."
+    }
+  ],
+  "coverage_conclusion": "All three complete 1/2 generic model reports and physical final states match exactly, but none triggered submit_many. These cases establish compatibility of the non-triggering path only. Observed wall ratios are not evidence of batching speedup on these models; no MoE job restart is justified by them."
+}

@@ -1,0 +1,22 @@
+{
+  "comparison": "HEAD PhysicalRuntimeContext.snapshot versus direct native BankState copy; no other functions replaced",
+  "numeric_fields_compared": 20880,
+  "numeric_mismatches": [],
+  "other_mismatches": [],
+  "max_absolute_error": 0,
+  "max_relative_error": 0,
+  "model": "reference-mixed-transformer",
+  "prompt_tokens": 4,
+  "output_tokens": 3,
+  "microbenchmark": {
+    "bank_count": 2048,
+    "iterations_per_sample": 20,
+    "samples": 7,
+    "median_seconds_per_snapshot": {
+      "before": 0.0021045250003226103,
+      "after": 0.00038024499954190103
+    },
+    "speedup": 5.534655295554262,
+    "note": "Measures snapshot alone; not an end-to-end simulator speedup."
+  }
+}

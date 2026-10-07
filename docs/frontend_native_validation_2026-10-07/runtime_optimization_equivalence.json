@@ -1,0 +1,27 @@
+{
+  "comparison": "HEAD functions versus current execution-view reuse; real run_scenario and report_dict",
+  "model": "reference-mixed-transformer",
+  "prompt_tokens": 4,
+  "output_tokens": 3,
+  "gpu_layers": -1,
+  "changed_functions": {
+    "heterollm_sim.planner": [
+      "_direct_memory_address",
+      "_host_recurrent_offload_decision",
+      "_compile_parallel_embedding",
+      "_final_output_selection",
+      "_nonflash_kv_view_audit"
+    ],
+    "heterollm_sim.control_plane_planner": [
+      "_derive_requirements"
+    ]
+  },
+  "numeric_fields_compared": 20880,
+  "numeric_mismatches": [],
+  "other_mismatches": [],
+  "max_absolute_error": 0,
+  "max_relative_error": 0,
+  "before_elapsed_seconds": 1.1364166999992449,
+  "after_elapsed_seconds": 0.5473163000133354,
+  "timing_note": "First run includes possible JIT/cache warmup and two other active jobs; timing is not a speedup measurement."
+}

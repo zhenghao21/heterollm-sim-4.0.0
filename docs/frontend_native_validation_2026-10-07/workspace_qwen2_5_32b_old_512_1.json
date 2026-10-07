@@ -1,0 +1,40 @@
+{
+  "model": "qwen2_5-32b",
+  "mode": "old",
+  "workload": {
+    "prompt_tokens": 512,
+    "output_tokens": 1,
+    "context": 640
+  },
+  "prepare_seconds": 1.0417164000100456,
+  "workspace": null,
+  "repeat_prepare_seconds": 1.0393419999745674,
+  "status": "failed",
+  "exception": "AllocationError",
+  "message": "unable to allocate 73400320 bytes in capacity 36000000000",
+  "traceback": "Traceback (most recent call last):\n  File \"F:\\codex_project\\_scratch\\37-workspace-first-cohort.py\", line 72, in <module>\n    r=report_dict(run_scenario(scenario,retention_policy='aggregate'))\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\reporting.py\", line 216, in run_scenario\n    return _run_scenario_in_context(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\reporting.py\", line 250, in _run_scenario_in_context\n    serving = simulate_online(\n              ^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\serving.py\", line 2697, in simulate_online\n    return runtime.run()\n           ^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\serving.py\", line 9533, in run\n    self._execute(cohort)\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\serving.py\", line 14286, in _execute\n    self._execute_cohort(cohort)\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\serving.py\", line 14343, in _execute_cohort\n    cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\serving.py\", line 15442, in _lower_cost\n    raw = estimator(scenario, cohort)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\planner.py\", line 26280, in estimate\n    return self._estimate_exact_in_context(scenario, cohort)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\planner.py\", line 26287, in _estimate_exact_in_context\n    return self._templates.get_or_create(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\scalable_serving.py\", line 520, in get_or_create\n    value = factory()\n            ^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\planner.py\", line 26289, in <lambda>\n    lambda: _estimate_serving_cohort_cost(\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\planner.py\", line 28183, in _estimate_serving_cohort_cost\n    summary = execute_cost_schedule(\n              ^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\scalable_serving.py\", line 279, in execute_cost_schedule\n    event = kernel.step()\n            ^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\event_kernel.py\", line 2464, in step\n    task = resolve_physical_task(\n           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py\", line 613, in resolve_physical_task\n    register_physical_allocations(task, runtime, config=config)\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py\", line 508, in register_physical_allocations\n    _register_physical_allocation(\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py\", line 539, in _register_physical_allocation\n    allocator.allocate(\n  File \"F:\\codex_project\\_scratch\\37-workspace-first-cohort.py\", line 45, in allocate\n    result=oldallocate(self,buffer_id,size_bytes,generation,**kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_allocator.py\", line 220, in allocate\n    base = self._find_first_fit(size_bytes, generation)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_allocator.py\", line 132, in _find_first_fit\n    raise AllocationError(\nheterollm_sim.memory_allocator.AllocationError: unable to allocate 73400320 bytes in capacity 36000000000\n",
+  "allocator_peaks": {
+    "hostmem0.memory": {
+      "capacity_bytes": 32000000000,
+      "workspace_capacity_bytes": 0,
+      "peak_resident_bytes": 0,
+      "peak_transient_bytes": 10487904,
+      "peak_total_bytes": 10487904
+    },
+    "hbm0.hbm_fabric": {
+      "capacity_bytes": 36000000000,
+      "workspace_capacity_bytes": 0,
+      "peak_resident_bytes": 35789797376,
+      "peak_transient_bytes": 61865984,
+      "peak_total_bytes": 35851663360
+    },
+    "hbm1.hbm_fabric": {
+      "capacity_bytes": 36000000000,
+      "workspace_capacity_bytes": 0,
+      "peak_resident_bytes": 4246732800,
+      "peak_transient_bytes": 0,
+      "peak_total_bytes": 4246732800
+    }
+  },
+  "elapsed_seconds": 10.166556999989552
+}

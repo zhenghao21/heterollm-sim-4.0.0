@@ -20,6 +20,11 @@ from .ir import ComponentSpec, LinkSpec, OFFLOAD_STORAGE_COMPONENT_KINDS, defaul
 from .memory_service import realtime_memory_metrics
 
 
+# Ordered small-request batching retains individual DRAM admission, accesses
+# and results. Keep the switch private for strict serial equivalence tests.
+_USE_COMPILED_DRAM_BATCH = True
+
+
 class _OverlapCompletionIndex:
     """Online interval overlap maxima for physical access ordering.
 
@@ -157,12 +162,13 @@ class PhysicalRuntimeContext:
             if isinstance(config, DramConfig)
             else NandCore(config, self.timeline, capture_details=self.capture_details)
         )
-        current = _PhysicalRuntime(core=core, signature=signature)
-        self.runtimes[key] = current
         capacity = int(getattr(config, "effective_capacity_bytes", getattr(config, "capacity_bytes", 0)) or 0)
         if capacity > 0:
             alignment = int(getattr(config, "burst_bytes", 64) or 64)
-            self.allocators.setdefault(key, PhysicalAddressAllocator(capacity, alignment))
+            self.allocators.setdefault(key, PhysicalAddressAllocator(capacity, alignment,
+                workspace_capacity_bytes=metadata.get("workspace_capacity_bytes", 0)))
+        current = _PhysicalRuntime(core=core, signature=signature)
+        self.runtimes[key] = current
         return current
 
     def preview_runtime(
@@ -201,6 +207,8 @@ class PhysicalRuntimeContext:
         are replaced at ``metrics_snapshot`` and can therefore be retained by
         reference for rollback.
         """
+        from .dram_core import _BankState
+
         runtime_state = {}
         for owner, active in self.runtimes.items():
             core = active.core
@@ -217,8 +225,15 @@ class PhysicalRuntimeContext:
                 if key == "_banks" and isinstance(value, dict):
                     # Bank rows are mutable dataclasses; copy the small bank
                     # index so a failed transaction cannot leak row state.
+                    # The native row state has exactly these two scalar
+                    # fields. Construct it directly instead of invoking
+                    # copy's reflection/reconstruction protocol for every
+                    # bank before every physical task. Custom row objects
+                    # retain their original shallow-copy behavior.
                     core_state[key] = {
-                        name: copy.copy(bank) for name, bank in value.items()
+                        name: (_BankState(bank.open_row, bank.ready_ns)
+                               if type(bank) is _BankState else copy.copy(bank))
+                        for name, bank in value.items()
                     }
                 elif key in {"_array_ready", "_buffer_ready"} and isinstance(value, dict):
                     # NAND readiness values are scalars, so a shallow dict
@@ -541,12 +556,17 @@ def resolve_physical_task(
     task: TaskSpec,
     runtime: PhysicalRuntimeContext,
     arrival_ns: float,
+    *,
+    _caller_managed_transaction: bool = False,
 ) -> TaskSpec:
     """Commit one physical task at its event-kernel arrival time.
 
     Planner pricing remains a preview.  This function is the single formal
     submission point used by the event kernel; the core's own resource
     timeline supplies the task completion time and per-resource busy demand.
+    The event kernel already protects allocation and L2 changes with a wider
+    transaction. Its internal call can reuse that boundary; standalone calls
+    continue to own their physical-submission rollback.
     """
     metadata = dict(task.metadata)
     energy_per_byte = _non_negative(
@@ -677,7 +697,7 @@ def resolve_physical_task(
         for owner, endpoints in endpoints_by_owner.items()
     }
 
-    snapshot = runtime.snapshot()
+    snapshot = None if _caller_managed_transaction else runtime.snapshot()
     placeholder_ids = set()
     for access, _op, _address, _bytes, _owner, _config in validated:
         for key in ("resource_id", "physical_resource_id", "physical_owner"):
@@ -687,28 +707,52 @@ def resolve_physical_task(
     results = []
     resolved_accesses = []
     try:
-      for index, (access, operation, address, byte_count, owner, access_config) in enumerate(validated):
+      index = 0
+      while index < len(validated):
+        access, operation, address, byte_count, owner, access_config = validated[index]
         active = runtime.runtime(access_config, owner)
-        access_arrival = float(arrival_ns)
-        if operation is Operation.WRITE:
-            access_arrival = max(
-                access_arrival,
-                all_completion[owner].query(address, byte_count),
-            )
+        stop = index + 1
+        if (_USE_COMPILED_DRAM_BATCH and not runtime.capture_details
+                and hasattr(active.core, "submit_many")
+                and operation in (Operation.READ, Operation.WRITE)
+                and (address + byte_count - 1) // active.core.config.burst_bytes
+                    - address // active.core.config.burst_bytes + 1 < 64):
+            # Reads do not depend on each other. Writes are batched only while
+            # their byte ranges are ascending and disjoint. Thus each arrival
+            # depends solely on already executed groups; no intra-batch RAW,
+            # WAR or WAW completion is guessed or discarded.
+            previous_end = address + byte_count
+            while stop < min(len(validated), index + 1024):
+                _next_access, next_op, next_address, next_bytes, next_owner, _next_config = validated[stop]
+                if next_owner != owner or next_op is not operation:
+                    break
+                if ((next_address + next_bytes - 1) // active.core.config.burst_bytes
+                        - next_address // active.core.config.burst_bytes + 1 >= 64):
+                    break
+                if operation is Operation.WRITE and next_address < previous_end:
+                    break
+                previous_end = next_address + next_bytes
+                stop += 1
+        requests = []
+        for position in range(index, stop):
+            _access, op, addr, count, _owner, _config = validated[position]
+            prior = all_completion[owner] if op is Operation.WRITE else write_completion[owner]
+            access_arrival = max(float(arrival_ns), prior.query(addr, count))
+            requests.append(AccessRequest(f"{task.request_id or task.task_id}:{position}", op, addr, count, access_arrival))
+        if len(requests) >= 16:
+            group_results = active.core.submit_many(requests)
         else:
-            access_arrival = max(
-                access_arrival,
-                write_completion[owner].query(address, byte_count),
-            )
-        request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation, address, byte_count, access_arrival)
-        submit = getattr(active.core, "submit", active.core.execute)
-        result = submit(request)
-        active.clock_ns = max(active.clock_ns, result.completion_ns)
-        results.append(result)
-        all_completion[owner].update(address, byte_count, result.completion_ns)
-        if operation is Operation.WRITE:
-            write_completion[owner].update(address, byte_count, result.completion_ns)
-        resolved_accesses.append({**dict(access), "address": address})
+            submit = getattr(active.core, "submit", active.core.execute)
+            group_results = tuple(submit(request) for request in requests)
+        for position, result in zip(range(index, stop), group_results):
+            access, op, addr, count, _owner, _config = validated[position]
+            active.clock_ns = max(active.clock_ns, result.completion_ns)
+            results.append(result)
+            all_completion[owner].update(addr, count, result.completion_ns)
+            if op is Operation.WRITE:
+                write_completion[owner].update(addr, count, result.completion_ns)
+            resolved_accesses.append({**dict(access), "address": addr})
+        index = stop
       completion_ns = max(item.completion_ns for item in results)
     except Exception:
         if snapshot is not None:
@@ -797,12 +841,32 @@ def resolve_physical_task(
             values = [item.counters.get(key) for item in results]
             if any(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
                 counters[key] = sum(float(value or 0) for value in values)
-    # Timing comes from the physical core. An explicitly carried energy
-    # coefficient remains analytical, priced once against resolved bursts.
+    # Timing comes from the physical core. An explicitly carried endpoint
+    # coefficient prices resolved media bytes once. NAND records both host
+    # and internal transfers, so charging the full coefficient to each hop
+    # would double count. Apportion that one bill by each resource's bytes;
+    # this is an accounting split, not a claim of measured per-hop power.
+    energy_rates = dict(owner_energy)
+    for owner, execution in execution_by_owner.items():
+        moved = sum(int(value) for resource, value in resource_bytes.items()
+                    if resource_owners.get(resource) == owner)
+        physical = execution["physical_bytes"]
+        if physical and not moved and owner_energy[owner]:
+            if snapshot is not None:
+                runtime.restore(snapshot)
+            raise ValueError("physical memory energy requires resource byte accounting")
+        if moved and moved != physical:
+            energy_rates[owner] *= physical / moved
+            execution["energy_accounting"] = {
+                "basis": "resolved_media_bytes",
+                "energy_pj_per_byte": owner_energy[owner],
+                "resource_distribution": "transfer_byte_fraction",
+                "resource_transfer_bytes": moved,
+            }
     demands = tuple(ResourceDemand(str(resource_id), float(duration),
                     bytes_moved=int(resource_bytes.get(resource_id, 0)),
                     energy_pj=int(resource_bytes.get(resource_id, 0))
-                    * owner_energy[resource_owners[str(resource_id)]])
+                    * energy_rates[resource_owners[str(resource_id)]])
                     for resource_id, duration in sorted(resource_busy.items()) if float(duration) > 0)
     if not demands:
         raise ValueError("physical memory core returned no resource timing for a positive-byte access")
@@ -1803,6 +1867,7 @@ def endpoint_service(
             "address": address,
             "physical_memory_config": component.metadata.get("physical_memory_config"),
             "physical_execution": dict(billed),
+            "physical_execution_role": "construction_preview" if runtime is None else "runtime_dispatch",
             "physical_bytes": physical,
             "transferred_bytes": int(billed.get("host_transfer_bytes", billed.get("logical_bytes", byte_count))),
             "physical_kind": component.normalized_kind,

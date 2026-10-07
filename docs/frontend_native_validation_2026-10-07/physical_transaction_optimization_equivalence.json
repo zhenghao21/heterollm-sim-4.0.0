@@ -1,0 +1,56 @@
+{
+  "comparison": "same current code with duplicate inner snapshot enabled versus caller-managed single snapshot; fresh scenarios and actual run_scenario/report_dict",
+  "timing_note": "Wall times include concurrent work and first-run JIT; not a speedup claim. Short requests only for equivalence testing, production workload remains128 output tokens.",
+  "cases": [
+    {
+      "model": "qwen3_0_6b",
+      "hardware": "local submitted UI preset",
+      "prompt_tokens": 4,
+      "output_tokens": 3,
+      "before": {
+        "snapshot_calls": 2356,
+        "elapsed_seconds": 5.289388900011545
+      },
+      "after": {
+        "snapshot_calls": 1178,
+        "elapsed_seconds": 4.721281399979489
+      },
+      "numeric_fields_compared": 22588,
+      "all_fields_identical": true,
+      "mismatches": [],
+      "max_absolute_prediction_error": 0,
+      "max_relative_prediction_error": 0,
+      "engine_tpot_ns": {
+        "p50": 9113752.675649144,
+        "p95": 9113752.675649144,
+        "p99": 9113752.675649144
+      },
+      "dram_physical_bytes": 4161447808
+    },
+    {
+      "model": "qwen2_5_0_5b",
+      "hardware": "local submitted UI preset",
+      "prompt_tokens": 4,
+      "output_tokens": 3,
+      "before": {
+        "snapshot_calls": 2028,
+        "elapsed_seconds": 4.39769489999162
+      },
+      "after": {
+        "snapshot_calls": 1014,
+        "elapsed_seconds": 4.181346900004428
+      },
+      "numeric_fields_compared": 22064,
+      "all_fields_identical": true,
+      "mismatches": [],
+      "max_absolute_prediction_error": 0,
+      "max_relative_prediction_error": 0,
+      "engine_tpot_ns": {
+        "p50": 8807122.263461139,
+        "p95": 8807122.263461139,
+        "p99": 8807122.263461139
+      },
+      "dram_physical_bytes": 3782981184
+    }
+  ]
+}

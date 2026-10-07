@@ -1,0 +1,27 @@
+{
+  "scope": "same explicit HBM/HBF read/write transaction including partial-page RMW; zero HBF coefficient reproduces prior omission",
+  "kind": "cost-correction, not performance optimization",
+  "owners": [
+    {
+      "owner": "hbm0.hbm_fabric",
+      "physical_bytes": 128,
+      "coefficient_pj_per_byte": 4.0,
+      "energy_before_pj": 512.0,
+      "energy_after_pj": 512.0,
+      "energy_delta_pj": 0.0,
+      "completion_difference_ns": 0.0
+    },
+    {
+      "owner": "hbf0.memory",
+      "physical_bytes": 65536,
+      "coefficient_pj_per_byte": 12.0,
+      "energy_before_pj": 0.0,
+      "energy_after_pj": 786432.0,
+      "energy_delta_pj": 786432.0,
+      "completion_difference_ns": 0.0
+    }
+  ],
+  "resource_timing_and_byte_fields_identical": true,
+  "relative_energy_error_against_prior_zero": "undefined",
+  "source_test": "tests/test_direct_backing_physical_ownership.py::test_remote_hbf_and_local_hbm_keep_independent_physical_owners"
+}

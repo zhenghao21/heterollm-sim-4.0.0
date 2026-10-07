@@ -719,6 +719,9 @@ def apply_llama_runtime_config(
             missing = "; ".join(item.item_id + ": " + item.reason for item in decision.unplaced)
             raise ValueError("llama.cpp device-memory placement is incomplete: " + missing)
         lowered = decision.apply(lowered)
+        if config.device_memory_tiering:
+            from .llama_memory import refine_workspace_placement
+            lowered = refine_workspace_placement(lowered, placement_policy)
         # Keep the runtime evidence alongside planner evidence after apply().
         metadata = dict(lowered.placement.metadata)
         cp = dict(metadata.get("control_plane", {}))

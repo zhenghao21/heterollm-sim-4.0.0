@@ -18,6 +18,29 @@ WEIGHT_PROJECTION_DESCRIPTOR_SCHEMA = "heterollm.weight-projections/v1"
 ATTENTION_EXECUTION_DESCRIPTOR_SCHEMA = "heterollm.attention-execution/v1"
 
 
+def resolve_attention_qk_norm(metadata: Mapping[str, object], *, head_dim: int):
+    """Validate ordinary per-head Q/K RMSNorm separately from gated attention."""
+    raw = metadata.get("attention_qk_norm")
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping) or raw.get("kind") != "rmsnorm" or raw.get("head_dim") != head_dim:
+        raise ValueError("attention_qk_norm requires RMSNorm over the declared head dimension")
+    bindings = raw.get("weight_bindings")
+    if bindings is not None:
+        if not isinstance(bindings, Mapping) or set(bindings) != {"q", "k"}:
+            raise ValueError("attention_qk_norm needs both Q and K physical weights")
+        for tensor in bindings.values():
+            if not isinstance(tensor, Mapping):
+                raise ValueError("attention_qk_norm weight must be a physical tensor binding")
+            width = {"F32": 4, "F16": 2, "BF16": 2}.get(tensor.get("type"))
+            if (width is None or tuple(tensor.get("shape", ())) != (head_dim,)
+                    or tensor.get("n_bytes") != head_dim * width):
+                raise ValueError("attention_qk_norm physical weight shape or storage differs from head dimension")
+    elif raw.get("weight_storage_bits") not in (16, 32):
+        raise ValueError("attention_qk_norm requires an explicit floating-point weight storage width")
+    return raw
+
+
 @dataclass(frozen=True)
 class ArtifactQuantizationSpec:
     name: str

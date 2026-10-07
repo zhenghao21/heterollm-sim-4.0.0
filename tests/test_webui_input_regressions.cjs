@@ -51,7 +51,10 @@ function loadApp() {
       workloadPresets: WORKLOAD_PRESETS,
       setWorkloadPresetCatalog(items) { workloadPresetCatalog = items; },
       setLlamaRuntimeMode,
+      updateLlamaRuntimeField,
+      markScenarioChanged,
       renderRunJobDialog,
+      renderRunStepSummary,
       setStubs(changed, notices) {
         markWorkloadChanged = changed;
         toast = (...args) => notices.push(args);
@@ -61,7 +64,46 @@ function loadApp() {
       setScenarioChangedStub(changed) {
         markScenarioChanged = changed;
       },
+      stubScenarioRendering() {
+        resetTracePlaybackState = () => {};
+        captureRenderInteractionState = () => null;
+        restoreRenderInteractionState = () => {};
+        renderAll = () => {};
+        markMappingStale = () => {};
+      },
       resetPlacementForArchitecturePreset,
+      resetArchitectureDependentProfiles,
+      applyArchitecturePresetDetail,
+      travelTopologyHistory,
+      loadArchitectureFromPreset,
+      hostOrchestrationProfileDraft,
+      remapPresetProfileResources,
+      stubArchitectureHistoryRendering({ failFirstSave = false } = {}) {
+        architecturePresetIsLoadable = () => true;
+        collisionSafeArchitectureTopologyView = () => ({
+          view: { layout: { positions: {}, bounds: {} }, viewport: { x: 0, y: 0, scale: 1 } },
+          adjusted: false,
+        });
+        Topology.normalizeTopologyView = (view) => view;
+        commitPendingGroupLabel = () => {};
+        globalThis.requestAnimationFrame = () => {};
+        toast = () => {};
+        let saves = 0;
+        saveTopologyView = () => {
+          saves += 1;
+          if (failFirstSave && saves === 1) throw new Error("save failure after hardware replacement");
+        };
+      },
+      setArchitectureLoadStubs({ detail, apply, confirm, notices }) {
+        architecturePresetDetail = detail;
+        architecturePresetIsLoadable = () => true;
+        applyArchitecturePresetDetail = apply;
+        architecturePresetNames = () => ({ zh: "test preset" });
+        globalThis.confirm = confirm;
+        renderArchitecturePresets = () => {};
+        showOperationError = (...args) => notices.push(args);
+        toast = (...args) => notices.push(args);
+      },
       applyPresetDetailToScenario,
       validatePhysicalMemoryConfig,
       physicalMemoryContractIssues,
@@ -316,6 +358,7 @@ test("run dialog scopes risk to logical scale and explains the first cohort coun
     "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount",
     "runProgressBar", "runProgressMessage", "startRunJobButton", "cancelRunJobButton",
     "dismissRunJobButton",
+    "playbackStatus", "playbackCount", "resultsStatus", "resultsCount",
   ]) api.dom[name] = element();
   api.state.runEstimate = { schema_version: "4.0.0", risk_level: "low", risk_level_zh: "低", warnings: [] };
   api.state.runJob = {
@@ -327,9 +370,45 @@ test("run dialog scopes risk to logical scale and explains the first cohort coun
   assert.match(api.dom.runEstimateWarnings.innerHTML, /不保证运行耗时或峰值内存/);
   assert.match(api.dom.runProgressMessage.textContent, /完成前批次计数保持 0/);
   assert.match(api.dom.runProgressMessage.textContent, /详细事件可能耗时较长/);
+  assert.equal(api.dom.playbackStatus.textContent, "运行中");
+  assert.equal(api.dom.resultsStatus.textContent, "等待结果");
   api.state.runJob.progress.completed = 1;
   api.renderRunJobDialog();
   assert.doesNotMatch(api.dom.runProgressMessage.textContent, /完成前批次计数保持 0/);
+});
+
+test("sidebar run status follows submission and polling while preserving completed report semantics", () => {
+  const api = loadApp();
+  for (const name of ["playbackStatus", "playbackCount", "resultsStatus", "resultsCount"]) {
+    api.dom[name] = { textContent: "", innerHTML: "" };
+  }
+  api.renderRunStepSummary();
+  assert.equal(api.dom.playbackStatus.textContent, "未运行");
+  api.state.report = { requests: { old: {} } };
+  api.state.runJobSubmitting = true;
+  api.renderRunStepSummary();
+  assert.equal(api.dom.playbackStatus.textContent, "正在提交");
+  assert.equal(api.dom.resultsStatus.textContent, "等待结果");
+  assert.equal(api.dom.resultsCount.innerHTML, "—");
+  api.state.runJobSubmitting = false;
+  for (const [status, expected] of [["queued", "已排队"], ["running", "运行中"]]) {
+    api.state.runJob = { status, job_id: "new" };
+    api.renderRunStepSummary();
+    assert.equal(api.dom.playbackStatus.textContent, expected);
+    assert.equal(api.dom.playbackCount.textContent, "—");
+    assert.equal(api.dom.resultsStatus.textContent, "等待结果");
+  }
+  api.state.runJob.cancellation_requested = true;
+  api.renderRunStepSummary();
+  assert.equal(api.dom.playbackStatus.textContent, "正在取消");
+  api.state.runJob = { status: "completed", job_id: "new" };
+  api.state.tracePlayback.batchTraceIndex = [{}, {}];
+  api.renderRunStepSummary();
+  assert.equal(api.dom.playbackStatus.textContent, "2 个批次摘要");
+  assert.equal(api.dom.resultsStatus.textContent, "报告就绪");
+  api.state.reportStale = true;
+  api.renderRunStepSummary();
+  assert.equal(api.dom.resultsStatus.textContent, "结果已过期");
 });
 
 test("architecture preset reset removes model-specific placement while preserving parallel policy", () => {
@@ -607,4 +686,271 @@ test("invalid protocol connection fields are rejected without replacing the ente
   assert.throws(() => api.currentProtocolConnectionDefaults(), /通道数必须/);
   assert.equal(api.protocolInputs.protocolUnitsInput.value, "bad");
   assert.equal(api.protocolInputs.protocolBandwidthInput.value, "32 GB/s");
+});
+
+test("host orchestration rebinding preserves explicit costs for validation", () => {
+  const api = loadApp();
+  const original = {
+    capacity_fixed_instructions: 555,
+    schedule_instructions_per_token: 19,
+    command_build_instructions_per_invocation: 27,
+    dma_queue_submission_ns: 13.5,
+    admission_ns: 650,
+    input_decode_ns_per_token: 2,
+    output_encode_ns_per_token: 7,
+    pinned_memory: false,
+    request_parse_ns: -1,
+    cpu_component_id: "old-cpu",
+    gpu_component_id: "old-gpu",
+    scheduler_resource_id: "old-cpu.scheduler",
+    pack_resource_id: "old-cpu.pack",
+    dma_resource_id: "old-cpu.h2d_dma",
+    submission_resource_id: "old-gpu.command_queue",
+  };
+  const scenario = {
+    hardware: { components: [
+      { component_id: "cpu-next", kind: "cpu" },
+      { component_id: "gpu-next", kind: "gpu" },
+    ] },
+    profiles: { host_orchestration: original },
+  };
+  const rebound = api.hostOrchestrationProfileDraft(scenario);
+  for (const [field, value] of Object.entries(original)) {
+    if (!field.endsWith("_id")) assert.equal(rebound[field], value, field);
+  }
+  assert.equal(rebound.cpu_component_id, "cpu-next");
+  assert.equal(rebound.gpu_component_id, "gpu-next");
+  assert.equal(rebound.scheduler_resource_id, "cpu-next.scheduler");
+  assert.equal(rebound.submission_resource_id, "gpu-next.command_queue");
+  assert.equal(original.cpu_component_id, "old-cpu");
+});
+
+test("hardware replacement rebuilds a complete host profile and isolates memory resources", () => {
+  const api = loadApp();
+  const component = (component_id, kind, profileKind, template) => ({
+    component_id, kind,
+    metadata: { cost_profile_key: profileKind, cost_profile_template: template },
+  });
+  const scenario = {
+    hardware: { components: [
+      component("cpu-next", "cpu", "cpu", { pipeline: { resource_id: "cpu-template.pipeline" } }),
+      component("gpu-next", "gpu", "gpu", { tensor_core: { resource_id: "gpu-template.tensor_core" } }),
+      component("hbm0", "hbm", "hbm", { resource_id: "hbm-template.hbm_fabric" }),
+      component("hbm1", "hbm", "hbm", { resource_id: "hbm-template.hbm_fabric" }),
+    ] },
+    profiles: {
+      components: {},
+      host_orchestration: { capacity_fixed_instructions: 555, admission_ns: 999, cpu_component_id: "old-cpu" },
+      fusion: { flash_attention: false },
+      runtime: { gpu_controllers: { "old-gpu": { launch_ns: 5 } } },
+    },
+  };
+  api.resetArchitectureDependentProfiles(scenario);
+  const profile = scenario.profiles.host_orchestration;
+  assert.equal(profile.capacity_fixed_instructions, 96);
+  assert.equal(profile.capacity_instructions_per_request, 64);
+  assert.equal(profile.schedule_fixed_instructions, 192);
+  assert.equal(profile.schedule_instructions_per_request, 48);
+  assert.equal(profile.schedule_instructions_per_token, 8);
+  assert.equal(profile.command_build_fixed_instructions, 128);
+  assert.equal(profile.command_build_instructions_per_invocation, 12);
+  assert.equal(profile.dma_queue_submission_ns, 62.5);
+  assert.equal(profile.admission_ns, 0);
+  assert.equal(profile.input_decode_ns_per_token, 0);
+  assert.equal(profile.output_encode_ns_per_token, 0);
+  assert.equal(profile.cpu_component_id, "cpu-next");
+  assert.equal(profile.gpu_component_id, "gpu-next");
+  assert.equal(scenario.profiles.fusion.flash_attention, false);
+  const resources = Object.values(scenario.profiles.components.hbm).map((entry) => entry.resource_id).sort();
+  assert.deepEqual(resources, ["hbm0.hbm_fabric", "hbm1.hbm_fabric"]);
+  assert.equal(scenario.profiles.runtime.gpu_controllers["gpu-next"].launch_ns, 5);
+});
+
+test("llama kernel selection survives the actual scenario-changed and runtime-edit paths", () => {
+  const api = loadApp();
+  api.stubScenarioRendering();
+  api.state.scenario = {
+    hardware: { components: [{
+      component_id: "gpu0", kind: "gpu", metadata: { component_preset_id: "nvidia-rtx-5080" },
+    }] },
+    profiles: {},
+    placement: { metadata: {} },
+    workload: {
+      requests: [{ prompt_tokens: 512, output_tokens: 128 }],
+      scheduler: { max_num_seqs: 1, max_num_batched_tokens: 512 },
+      metadata: {},
+    },
+  };
+  api.setLlamaRuntimeMode("llama_cpp");
+  api.state.scenario.workload.metadata.llama_cpp_runtime_fingerprint = "previous-run";
+  api.markScenarioChanged();
+  assert.equal(api.state.scenario.workload.metadata.llama_cpp_kernel_model_preset, "blackwell_analytical_v1");
+  assert.equal(api.state.scenario.workload.metadata.llama_cpp_runtime_fingerprint, undefined);
+  assert.equal(JSON.parse(api.localStorage.getItem(api.storageScenarioKey)).workload.metadata.llama_cpp_kernel_model_preset, "blackwell_analytical_v1");
+  assert.equal(api.updateLlamaRuntimeField("context", 1024), true);
+  api.markScenarioChanged();
+  assert.equal(api.state.scenario.workload.metadata.llama_cpp_kernel_model_preset, "blackwell_analytical_v1");
+  api.setLlamaRuntimeMode("auto");
+  api.markScenarioChanged();
+  assert.equal(api.state.scenario.workload.metadata.llama_cpp_kernel_model_preset, undefined);
+});
+
+test("explicit llama F32 hidden storage survives runtime edits and scenario persistence", () => {
+  for (const enabled of [true, false]) {
+    const api = loadApp();
+    const storageContract = { schema: "llama.cpp.gguf.tensor-storage/v1", embedding_output_storage_bits: 32 };
+    const ropeContract = { schema: "llama.cpp.cuda-rope/v1", strategy: "runtime_sin_cos" };
+    api.stubScenarioRendering();
+    api.state.scenario = {
+      hardware: { components: [{ component_id: "gpu0", kind: "gpu", metadata: {} }] },
+      profiles: {},
+      placement: { metadata: {} },
+      workload: {
+        requests: [{ prompt_tokens: 512, output_tokens: 128 }],
+        scheduler: { max_num_seqs: 1, max_num_batched_tokens: 512 },
+        metadata: { llama_cpp_f32_hidden_storage: enabled, llama_cpp_tensor_storage_contract: storageContract, native_rope_source_contract: ropeContract },
+      },
+    };
+    api.setLlamaRuntimeMode("llama_cpp");
+    assert.equal(api.state.scenario.workload.metadata.llama_cpp_f32_hidden_storage, enabled);
+    assert.equal(api.updateLlamaRuntimeField("context", 1024), true);
+    api.state.scenario.workload.metadata.llama_cpp_runtime_fingerprint = "previous-run";
+    api.markScenarioChanged();
+    assert.equal(api.state.scenario.workload.metadata.llama_cpp_f32_hidden_storage, enabled);
+    assert.deepEqual(api.state.scenario.workload.metadata.llama_cpp_tensor_storage_contract, storageContract);
+    assert.deepEqual(api.state.scenario.workload.metadata.native_rope_source_contract, ropeContract);
+    assert.equal(api.state.scenario.workload.metadata.llama_cpp_runtime_fingerprint, undefined);
+    const saved = JSON.parse(api.localStorage.getItem(api.storageScenarioKey));
+    assert.equal(saved.workload.metadata.llama_cpp_f32_hidden_storage, enabled);
+    assert.deepEqual(saved.workload.metadata.llama_cpp_tensor_storage_contract, storageContract);
+    assert.deepEqual(saved.workload.metadata.native_rope_source_contract, ropeContract);
+    assert.equal(saved.workload.metadata.llama_cpp_runtime_fingerprint, undefined);
+  }
+});
+
+test("hardware replacement selects a kernel for the new hardware while llama mode is active", () => {
+  const api = loadApp();
+  const gpu = {
+    component_id: "gpu0", kind: "gpu",
+    metadata: {
+      component_preset_id: "nvidia-rtx-5080", cost_profile_key: "gpu",
+      cost_profile_template: { launch_resource_id: "gpu0.frontend" },
+    },
+  };
+  const scenario = {
+    hardware: { components: [gpu] },
+    profiles: { llama_cpp: { policy: "llama_cpp" } },
+    workload: { metadata: {} },
+  };
+  api.resetArchitectureDependentProfiles(scenario);
+  assert.equal(scenario.workload.metadata.llama_cpp_kernel_model_preset, "blackwell_analytical_v1");
+  gpu.metadata.component_preset_id = "nvidia-b200";
+  api.resetArchitectureDependentProfiles(scenario);
+  assert.equal(scenario.workload.metadata.llama_cpp_kernel_model_preset, undefined);
+});
+
+test("architecture preset load restores its button after success, cancellation, and failure", async () => {
+  for (const outcome of ["success", "cancel", "failure"]) {
+    const api = loadApp();
+    const notices = [];
+    const button = { textContent: "Load hardware", disabled: false };
+    let applied = 0;
+    let closed = 0;
+    api.state.scenario = { hardware: { components: [{}], links: [] } };
+    api.dom.hardwarePresetsDialog = { close() { closed += 1; } };
+    api.setArchitectureLoadStubs({
+      async detail() {
+        if (outcome === "failure") throw new Error("preset unavailable");
+        return {};
+      },
+      apply() {
+        applied += 1;
+        return { hardware: { components: [], links: [] }, adjusted: false };
+      },
+      confirm() { return outcome !== "cancel"; },
+      notices,
+    });
+    await api.loadArchitectureFromPreset("local-hardware", button);
+    assert.equal(button.disabled, false, outcome);
+    assert.equal(button.textContent, "Load hardware", outcome);
+    assert.equal(applied, outcome === "success" ? 1 : 0, outcome);
+    assert.equal(closed, outcome === "success" ? 1 : 0, outcome);
+    assert.equal(notices.length, outcome === "cancel" ? 0 : 1, outcome);
+  }
+});
+
+function historyHardware(preset) {
+  return {
+    schema_version: "4.0.0",
+    name: preset,
+    components: [{
+      component_id: "gpu0", kind: "gpu", ports: [],
+      metadata: {
+        component_preset_id: preset,
+        cost_profile_key: "gpu", cost_profile_template: { launch_resource_id: "gpu0.frontend" },
+      },
+    }],
+    links: [], metadata: {},
+  };
+}
+
+function prepareArchitectureHistory(api, preset, metadata = {}) {
+  api.stubScenarioRendering();
+  api.state.scenario = {
+    hardware: historyHardware(preset),
+    profiles: { llama_cpp: { policy: "llama_cpp" } },
+    placement: { metadata: {} },
+    workload: { metadata },
+  };
+  api.state.topologyView = { layout: { positions: {}, bounds: {} }, viewport: { x: 0, y: 0, scale: 1 } };
+}
+
+test("hardware import undo and redo restore the matching kernel without reverting workload edits", () => {
+  for (const originalPreset of ["nvidia-rtx-5080", "nvidia-b200"]) {
+    for (const hiddenStorage of [undefined, false, true]) {
+      const api = loadApp();
+      prepareArchitectureHistory(api, originalPreset);
+      api.stubArchitectureHistoryRendering();
+      api.setLlamaRuntimeMode("llama_cpp");
+      const replacement = originalPreset === "nvidia-rtx-5080" ? "nvidia-b200" : "nvidia-rtx-5080";
+      api.applyArchitecturePresetDetail({ id: replacement, hardware: historyHardware(replacement) });
+      // A workload edit after import must not be undone with the hardware.
+      api.state.scenario.workload.metadata.user_note = "later workload edit";
+      if (hiddenStorage !== undefined) api.state.scenario.workload.metadata.llama_cpp_f32_hidden_storage = hiddenStorage;
+      api.markScenarioChanged();
+      const assertState = (preset) => {
+        const metadata = api.state.scenario.workload.metadata;
+        assert.equal(api.state.scenario.hardware.components[0].metadata.component_preset_id, preset);
+        assert.equal(metadata.llama_cpp_kernel_model_preset, preset === "nvidia-rtx-5080" ? "blackwell_analytical_v1" : undefined);
+        assert.equal(Object.hasOwn(metadata, "llama_cpp_kernel_model_preset"), preset === "nvidia-rtx-5080");
+        assert.equal(metadata.user_note, "later workload edit");
+        assert.equal(metadata.llama_cpp_f32_hidden_storage, hiddenStorage);
+        assert.equal(Object.hasOwn(metadata, "llama_cpp_f32_hidden_storage"), hiddenStorage !== undefined);
+      };
+      assert.equal(api.travelTopologyHistory("undo"), true);
+      assertState(originalPreset);
+      assert.equal(api.travelTopologyHistory("redo"), true);
+      assertState(replacement);
+    }
+  }
+});
+
+test("failed hardware import rolls back the exact kernel field and preserves explicit author inputs", () => {
+  for (const kernel of [undefined, false, true, "blackwell_analytical_v1"]) {
+    const api = loadApp();
+    const metadata = { llama_cpp_f32_hidden_storage: false, user_note: "original workload" };
+    if (kernel !== undefined) metadata.llama_cpp_kernel_model_preset = kernel;
+    prepareArchitectureHistory(api, "nvidia-b200", metadata);
+    api.stubArchitectureHistoryRendering({ failFirstSave: true });
+    assert.throws(() => api.applyArchitecturePresetDetail({
+      id: "nvidia-rtx-5080", hardware: historyHardware("nvidia-rtx-5080"),
+    }), /save failure after hardware replacement/);
+    const restored = api.state.scenario.workload.metadata;
+    assert.equal(api.state.scenario.hardware.components[0].metadata.component_preset_id, "nvidia-b200");
+    assert.equal(restored.llama_cpp_kernel_model_preset, kernel);
+    assert.equal(Object.hasOwn(restored, "llama_cpp_kernel_model_preset"), kernel !== undefined);
+    assert.equal(restored.llama_cpp_f32_hidden_storage, false);
+    assert.equal(restored.user_note, "original workload");
+    assert.equal(api.state.topologyHistory.undo.length, 0);
+  }
 });

@@ -10,10 +10,10 @@ The scheduler and critical-path ordering are identical to ``engine.py``.
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, Hashable, List, Mapping, Optional, Tuple
 
-from .contracts import ResourceDemand, TaskCategory
+from .contracts import ResourceDemand, TaskCategory, TaskSpec
 from .engine import ScheduleIR
 from .event_kernel import CompiledGraphExecutor, UnifiedEventKernel
 from .execution_control import ExecutionControl
@@ -30,6 +30,7 @@ class TaskExecutionRecord:
     dependencies: Tuple[str, ...]
     metadata: Mapping[str, Any]
     demands: Tuple[ResourceDemand, ...]
+    original_task: Optional[TaskSpec] = None
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,83 @@ def _extend_path(
     return _better_path(candidate, None)
 
 
+def compact_execution_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Keep scalar/audit execution facts, without expanded physical traces."""
+    record_metadata = {
+        key: metadata[key]
+        for key in (
+            "persistent_request_buffers", "persistent_buffer_ids",
+            "native_kv_work", "source_f32_kv", "native_rope_source_contract",
+            "mmvf_source_work", "mmq_source_work", "native_get_rows_storage",
+            "kernel_prediction", "qwen35_attention_work", "qwen35_tensor_geometry",
+            "qwen35_shared_input_work", "qwen35_attention_geometry",
+            "final_layer_output_selection", "output_selection_tensor_geometry",
+            "runtime_phase", "instruction_class", "instruction_count",
+            "transaction_kind", "transaction_batches", "aggregation",
+            "analytical_ops", "bytes", "cohort_id", "coverage_component", "model_operator_id",
+            "memory_direction", "phase", "submission_count",
+            "dma_engine_resource_id", "event_kind",
+            "execution_component", "gpu_consumer_component_id",
+            "gpu_consumer_request_ids", "layer_id", "modeled_memory_write_bytes",
+            "opaque_device_fence", "operator_id", "operator_invocation_group_id",
+            "orchestration_stage",
+            "output_source_component_id", "output_transfer_source_component_id",
+            "physical_invocation_group_ids", "physical_memory_config",
+            "physical_execution_by_owner",
+            "request_ids", "resource_directions", "serving_cohort_complete",
+            "serving_output_stage", "target_component", "tensor_id",
+            "transfer_execution", "weight_tensor_id",
+        )
+        if key in metadata
+    }
+    if metadata.get("cost_model"):
+        # Stage refinement only checks presence; retaining the full
+        # kernel model per task needlessly repeats a large mapping.
+        record_metadata["cost_model"] = True
+    physical_execution = metadata.get("physical_execution")
+    if isinstance(physical_execution, Mapping):
+        # Preserve scalar traffic accounting for aggregate reports,
+        # while dropping the expanded interval/payload tuples that
+        # the details-disabled physical runtime never needs.
+        heavy_physical_keys = {
+            "resource_intervals",
+            "resource_interval_payloads",
+            "resource_last_intervals",
+            "physical_resource_intervals",
+            "physical_resource_last_intervals",
+        }
+        record_metadata["physical_execution"] = {
+            key: value
+            for key, value in physical_execution.items()
+            if key not in heavy_physical_keys
+        }
+    by_owner = metadata.get("physical_execution_by_owner")
+    if isinstance(by_owner, Mapping):
+        excluded = {"resource_intervals", "resource_interval_payloads", "resource_last_intervals",
+                    "physical_resource_intervals", "physical_resource_last_intervals"}
+        record_metadata["physical_execution_by_owner"] = {
+            owner: {key: value for key, value in values.items() if key not in excluded}
+            for owner, values in by_owner.items() if isinstance(values, Mapping)
+        }
+    return record_metadata
+
+
+def _unresolved_physical_task(task: TaskSpec) -> TaskSpec:
+    """Remove only explicitly marked endpoint construction-preview billing."""
+    if task.metadata.get("physical_execution_role") != "construction_preview":
+        return task
+    owner_resource = task.metadata.get("physical_resource_id")
+    if (not owner_resource or task.metadata.get("memory_access") is None
+            or not any(d.resource_id == owner_resource for d in task.demands)
+            or "physical_demands_resource_ids" in task.metadata):
+        raise ValueError("endpoint construction preview lacks its original physical access contract")
+    metadata = {key: value for key, value in task.metadata.items()
+                if key not in {"physical_execution", "physical_execution_role"}}
+    return replace(task, metadata=metadata, demands=tuple(
+        replace(demand, service_ns=0.0, bytes_moved=0, energy_pj=0.0)
+        if demand.resource_id == owner_resource else demand for demand in task.demands))
+
+
 def execute_cost_schedule(
     schedule: ScheduleIR,
     *,
@@ -166,6 +244,9 @@ def execute_cost_schedule(
             resource_owners=getattr(schedule, "resource_owners", {}),
             capture_physical_details=retain_task_metadata,
         )
+    original_physical_tasks = {task.task_id: _unresolved_physical_task(task) for task in schedule.tasks
+        if task.metadata.get("physical_memory_config") is not None
+        or task.metadata.get("stateful_l2") is not None}
     total_tasks = len(schedule.tasks)
     execution_control.report("cohort_tasks", 0, total_tasks)
     resource_last_path: Dict[
@@ -250,52 +331,7 @@ def execute_cost_schedule(
                 interval_path,
             )
 
-        if retain_task_metadata:
-            record_metadata = task.metadata
-        else:
-            # Serving estimation only consumes these envelope fields after
-            # execution.  Drop large physical descriptors (memory_accesses,
-            # allocation tables, cache contracts) from the retained record;
-            # the live event has already committed them and the schedule
-            # remains the source of task-level detail for exact replay.
-            record_metadata = {
-                key: task.metadata[key]
-                for key in (
-                    "analytical_ops", "cohort_id", "coverage_component",
-                    "dma_engine_resource_id", "event_kind",
-                    "execution_component", "gpu_consumer_component_id",
-                    "gpu_consumer_request_ids", "layer_id", "modeled_memory_write_bytes",
-                    "opaque_device_fence", "operator_id", "operator_invocation_group_id",
-                    "orchestration_stage",
-                    "physical_invocation_group_ids", "physical_memory_config",
-                    "physical_execution_by_owner",
-                    "request_ids", "resource_directions", "serving_cohort_complete",
-                    "serving_output_stage", "target_component", "tensor_id",
-                    "transfer_execution", "weight_tensor_id",
-                )
-                if key in task.metadata
-            }
-            if task.metadata.get("cost_model"):
-                # Stage refinement only checks presence; retaining the full
-                # kernel model per task needlessly repeats a large mapping.
-                record_metadata["cost_model"] = True
-            physical_execution = task.metadata.get("physical_execution")
-            if isinstance(physical_execution, Mapping):
-                # Preserve scalar traffic accounting for aggregate reports,
-                # while dropping the expanded interval/payload tuples that
-                # the details-disabled physical runtime never needs.
-                heavy_physical_keys = {
-                    "resource_intervals",
-                    "resource_interval_payloads",
-                    "resource_last_intervals",
-                    "physical_resource_intervals",
-                    "physical_resource_last_intervals",
-                }
-                record_metadata["physical_execution"] = {
-                    key: value
-                    for key, value in physical_execution.items()
-                    if key not in heavy_physical_keys
-                }
+        record_metadata = task.metadata if retain_task_metadata else compact_execution_metadata(task.metadata)
         records.append(
             (
                 start_ns,
@@ -424,6 +460,7 @@ def execute_cost_schedule(
                 dependencies=dependencies,
                 metadata=metadata,
                 demands=demands,
+                original_task=original_physical_tasks.get(task_id),
             )
             for start_ns, end_ns, task_id, category, _duration, metadata, demands, dependencies in ordered
         ),
@@ -498,4 +535,5 @@ __all__ = [
     "ScheduleCostResult",
     "TaskExecutionRecord",
     "execute_cost_schedule",
+    "compact_execution_metadata",
 ]

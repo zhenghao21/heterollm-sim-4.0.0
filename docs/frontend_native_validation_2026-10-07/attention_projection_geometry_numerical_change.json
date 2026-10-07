@@ -1,0 +1,110 @@
+{
+  "comparison": "Only Q width and output-projection K restored to former hidden-size assumption versus declared head dimensions; all other code/settings identical",
+  "interpretation": "Correctness repair, not approximation. Relative changes are against the defective simulator baseline, not native prediction error. Short requests only for regression; production remains 512/128.",
+  "cases": [
+    {
+      "case": "ui_before_fix_geometry_local_qwen3_0_6b",
+      "prompt_tokens": 4,
+      "output_tokens": 3,
+      "numeric_fields_compared": 22588,
+      "numeric_fields_changed": 5670,
+      "whole_report_identical": false,
+      "metrics": {
+        "engine_ttft_ns": {
+          "before": 9142934.036800874,
+          "after": 9998988.53680087,
+          "delta": 856054.4999999963,
+          "relative_change_percent": 9.363017348198335
+        },
+        "engine_tpot_ns": {
+          "before": 9113752.675649144,
+          "after": 9928965.675649151,
+          "delta": 815213.0000000075,
+          "relative_change_percent": 8.94486639052823
+        },
+        "engine_e2e_ns": {
+          "before": 27370439.388099164,
+          "after": 29856919.888099175,
+          "delta": 2486480.500000011,
+          "relative_change_percent": 9.084547254587182
+        },
+        "total_energy_pj": {
+          "before": 28029019860.89996,
+          "after": 29581777825.699913,
+          "delta": 1552757964.7999535,
+          "relative_change_percent": 5.539822557142023
+        },
+        "logical_read_bytes": {
+          "before": 4159761104,
+          "after": 4512312016,
+          "delta": 352550912,
+          "relative_change_percent": 8.475268247039217
+        },
+        "logical_write_bytes": {
+          "before": 1674066,
+          "after": 1903442,
+          "delta": 229376,
+          "relative_change_percent": 13.70172980037824
+        },
+        "physical_bytes": {
+          "before": 4161447808,
+          "after": 4514228096,
+          "delta": 352780288,
+          "relative_change_percent": 8.477345007711316
+        }
+      }
+    },
+    {
+      "case": "ui_local_qwen2_5_0_5b",
+      "prompt_tokens": 4,
+      "output_tokens": 3,
+      "numeric_fields_compared": 22064,
+      "numeric_fields_changed": 0,
+      "whole_report_identical": true,
+      "metrics": {
+        "engine_ttft_ns": {
+          "before": 8856663.49287136,
+          "after": 8856663.49287136,
+          "delta": 0.0,
+          "relative_change_percent": 0.0
+        },
+        "engine_tpot_ns": {
+          "before": 8807122.263461139,
+          "after": 8807122.263461139,
+          "delta": 0.0,
+          "relative_change_percent": 0.0
+        },
+        "engine_e2e_ns": {
+          "before": 26470908.01979364,
+          "after": 26470908.01979364,
+          "delta": 0.0,
+          "relative_change_percent": 0.0
+        },
+        "total_energy_pj": {
+          "before": 25152128496.90004,
+          "after": 25152128496.90004,
+          "delta": 0.0,
+          "relative_change_percent": 0.0
+        },
+        "logical_read_bytes": {
+          "before": 3781925112,
+          "after": 3781925112,
+          "delta": 0,
+          "relative_change_percent": 0.0
+        },
+        "logical_write_bytes": {
+          "before": 1038402,
+          "after": 1038402,
+          "delta": 0,
+          "relative_change_percent": 0.0
+        },
+        "physical_bytes": {
+          "before": 3782981184,
+          "after": 3782981184,
+          "delta": 0,
+          "relative_change_percent": 0.0
+        }
+      }
+    }
+  ]
+}

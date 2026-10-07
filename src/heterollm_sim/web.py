@@ -1094,14 +1094,14 @@ def validation_payload(
             scenario_from_dict(payload, model_artifact_dir=model_artifact_dir)
         )
     except (ValueError, TypeError, KeyError) as exc:
-        message_zh, message_en = _scenario_parse_messages(exc)
+        code, message_zh, message_en = _scenario_failure_diagnostic(exc)
         return {
             "valid": False,
             "errors": {
                 "topology": [],
                 "scenario": [
                     _message_issue(
-                        "parse_error",
+                        code,
                         message_zh,
                         message_en,
                     )
@@ -1111,6 +1111,21 @@ def validation_payload(
             "information": {"topology": [], "scenario": []},
         }
     return validation_payload_for_scenario(scenario)
+
+
+def _scenario_failure_diagnostic(exc: BaseException) -> Tuple[str, str, str]:
+    """Separate an expected allocation rejection from invalid JSON inputs."""
+    from .llama_memory import LlamaDeviceMemoryCapacityError
+
+    if isinstance(exc, LlamaDeviceMemoryCapacityError):
+        owner = "设备 {} 的显存".format(exc.device) if exc.device else "主机内存"
+        message_zh = (
+            "{}容量不足，无法为 {} 分配 {} 字节（{:.2f} MiB）。"
+            "请选择容量足够的硬件，或显式调整模型与放置配置。"
+        ).format(owner, exc.allocation_name, exc.size_bytes, exc.size_bytes / 1024 ** 2)
+        return "device_memory_capacity_exhausted", message_zh, str(exc)
+    message_zh, message_en = _scenario_parse_messages(exc)
+    return "parse_error", message_zh, message_en
 
 
 def _scenario_parse_messages(exc: BaseException) -> Tuple[str, str]:
@@ -1350,10 +1365,10 @@ def scenario_or_http_error(
         )
     except (ValueError, TypeError, KeyError) as exc:
         details = validation_payload(payload, model_artifact_dir=model_artifact_dir)
-        message_zh, message_en = _scenario_parse_messages(exc)
+        code, message_zh, message_en = _scenario_failure_diagnostic(exc)
         raise HttpError(
             422,
-            "invalid_scenario",
+            code if code != "parse_error" else "invalid_scenario",
             message_zh,
             details,
             message_en,

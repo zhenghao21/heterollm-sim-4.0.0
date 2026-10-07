@@ -1,0 +1,29 @@
+{
+  "started_at_utc": "2026-10-07T15:08:37.989242+00:00",
+  "gpu_before": "NVIDIA GeForce RTX 5080, 617.14, 1686 MiB, 16303 MiB, 8 %, 39, 49.81 W",
+  "cpu_before_load_percent": 1,
+  "competing_inference_processes_before": [],
+  "active_python_before": [
+    "heterollm_sim.cli ui --no-browser --port 8765 (server idle, parent confirmed no simulation)"
+  ],
+  "server_version": "version: 0.4.0-dev (build 1, commit d3146f2)\nbuilt with MSVC 19.44.35228.0 for Windows AMD64",
+  "runs": [
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "exit_code": 0,
+      "wall_seconds": 4.246821600012481,
+      "stdout": "completed: F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\frontend_native_validation_2026-10-07\\native_qwen3_0_6b_f16.json\n",
+      "stderr": "",
+      "gpu_after": "NVIDIA GeForce RTX 5080, 617.14, 1690 MiB, 16303 MiB, 77 %, 50, 203.05 W"
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "exit_code": 0,
+      "wall_seconds": 27.070502499991562,
+      "stdout": "completed: F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\frontend_native_validation_2026-10-07\\native_qwen3_8_27b_mixed.json\n",
+      "stderr": "",
+      "gpu_after": "NVIDIA GeForce RTX 5080, 617.14, 1683 MiB, 16303 MiB, 1 %, 51, 61.90 W"
+    }
+  ],
+  "completed_at_utc": "2026-10-07T15:09:09.568367+00:00"
+}

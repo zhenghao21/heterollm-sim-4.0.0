@@ -468,6 +468,9 @@ def kernel_calibration_dispatch_signature(workload):
     contains only compile/source specialization fields; shape is still carried
     by ``KernelSample`` so interpolation cannot cross a different template.
     """
+    vector = getattr(workload, 'mmvf_work', None)
+    if vector is not None:
+        return vector.signature
     type_ids = {
         'q4_k': 12, 'q5_k': 13, 'q6_k': 14,
         'iq3_s': 21, 'iq4_xs': 23,
@@ -585,6 +588,15 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
     if not attention and workload.mmq_work is not None and 'mmq' not in kernel.kernel_family.casefold():
         return None
     source_residency = None
+    vector = None if attention else getattr(workload, 'mmvf_work', None)
+    if vector is not None:
+        if ('mmvf' not in kernel.kernel_family or workload.m != 1
+                or (workload.k, workload.n, workload.weight_bytes, workload.activation_bytes, workload.output_bytes)
+                != (vector.k, vector.n, vector.weight_bytes, vector.activation_bytes, vector.output_bytes)):
+            raise ValueError('MMVF source work differs from physical workload')
+        kernel = replace(kernel, warps_per_cta=vector.block_threads // 32,
+                         shared_memory_per_cta=vector.shared_bytes)
+        source_residency = 'mmvf_source_block_shared_registers_descriptor'
     if not attention and workload.mmvq_work is not None:
         source = workload.mmvq_work
         kernel = replace(kernel, warps_per_cta=source.warps_per_cta,
@@ -633,7 +645,8 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
                         heads_per_tile=kernel.attention_heads_per_tile)
         if not stream_k['uniform']:
             return None  # General fixup requires a different work contract.
-    ctas = (workload.mmq_work.block_count if not attention and workload.mmq_work is not None else
+    ctas = (vector.cta_count if vector is not None else
+            workload.mmq_work.block_count if not attention and workload.mmq_work is not None else
             workload.mmvq_work.cta_count if not attention and workload.mmvq_work is not None else
             math.ceil(m / kernel.cta_geometry[0]) * math.ceil(n / kernel.cta_geometry[1]))
     if stream_k is not None:
@@ -676,6 +689,9 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
         if kernel.unpack_ops_per_weight or kernel.scale_ops_per_weight:
             scalar_ops -= workload.packed_weight_transform_operations
         reduce_ops = m * n * kernel.reduction_ops_per_output
+        if vector is not None:
+            scalar_ops += vector.conversion_operations
+            reduce_ops += vector.reduction_operations
         sfu_ops = workload.epilogue_transcendental_operations
     if kernel.compute_primitive == 'tensor':
         internal_dtype = kernel.internal_dtype
@@ -688,7 +704,9 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
         dot_ns = issued / (gpu.tensor_core.peak_tops(internal_dtype) * 1000 * efficiency)
         dot_resource = gpu.tensor_core.resource_id
     else:
-        dot_ns = operations / (gpu.sm_count * gpu.tensor_core.frequency_ghz * kernel.dot_ops_per_sm_cycle * efficiency)
+        dot_rate = (gpu.scalar_lanes_per_sm * gpu.scalar_ops_per_cycle
+                    if vector is not None else kernel.dot_ops_per_sm_cycle)
+        dot_ns = operations / (gpu.sm_count * gpu.tensor_core.frequency_ghz * dot_rate * efficiency)
         dot_resource = gpu.scalar_resource_id
     scalar_rate = gpu.sm_count * gpu.scalar_lanes_per_sm * gpu.scalar_ops_per_cycle * gpu.tensor_core.frequency_ghz * efficiency
     unpack_ns, scale_ns = unpack / scalar_rate, scalar_ops / scalar_rate
@@ -795,6 +813,7 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
                  if measured_bw is not None else 'analytical_logical_resource_demand'
              ),
              'kernel_count': 1, 'read_bytes': read, 'write_bytes': write,
+             **({'mmvf_source_work': vector.audit()} if vector is not None else {}),
              **({'scratch_traffic': scratch_traffic} if scratch_traffic else {}),
              'cache_protocol': kernel.cache_protocol,
              'epilogue': kernel.epilogue,
@@ -1080,14 +1099,33 @@ def llama_blackwell_analytical_profile(hardware_id, runtime_id, *, calibrated=Fa
     )
     for phase in ('prefill', 'decode'):
         for epilogue in ('', 'rope', 'swiglu'):
+            # ggml_mul_mat returns F32 even for F16 weights.  Output storage
+            # is independent of the declared F16 matrix arithmetic; pricing
+            # its four-byte stores must not require an F16 output cast.
+            for output in (16, 32):
+                kernels.append(KernelCapability(
+                    'cuda_dense_fp16_' + (epilogue or 'plain'),
+                    ('fp16',), 'fp16', phase, 'tensor', dense_evidence,
+                    internal_dtype='fp16', output_bits=output, epilogue=epilogue,
+                    min_shape=(1, 1, 1),
+                    cta_geometry=(16, 64, 32), warps_per_cta=4,
+                    registers_per_thread=32, shared_memory_per_cta=0,
+                    attainable_efficiency=0.65, transaction_efficiency=0.8,
+                ))
+    # Source-qualified M=1 F16 matrices use CUDA vector arithmetic, not MMA.
+    # The workload carries exact physical row/block geometry; these entries
+    # cannot match an ordinary analytical workload without that source key.
+    for phase in ('prefill', 'decode'):
+        for epilogue in ('', 'swiglu'):
             kernels.append(KernelCapability(
-                'cuda_dense_fp16_' + (epilogue or 'plain'),
-                ('fp16',), 'fp16', phase, 'tensor', dense_evidence,
-                internal_dtype='fp16', output_bits=16, epilogue=epilogue,
-                min_shape=(1, 1, 1),
-                cta_geometry=(16, 64, 32), warps_per_cta=4,
-                registers_per_thread=32, shared_memory_per_cta=0,
+                'cuda_mmvf_fp16', ('fp16',), 'fp16', phase, 'simt',
+                'llama.cpp d3146f2; ggml-cuda/mmvf.cu ordinary contiguous F16/F32 M=1; scalar rates unmeasured',
+                internal_dtype='fp16', output_bits=32, epilogue=epilogue,
+                min_shape=(1, 1, 2), max_shape=(1, 2147483647, 2147483647),
+                cta_geometry=(1, 1, 2), warps_per_cta=1,
+                registers_per_thread=32, shared_memory_per_cta=128,
                 attainable_efficiency=0.65, transaction_efficiency=0.8,
+                dispatch_signature='mmvf:f16:f32:contiguous:m1:gate={}'.format(int(epilogue == 'swiglu')),
             ))
     # Attention is a separate source family.  The independent synthetic
     # probes are diagnostic only (the probe DLL SHA differs from the calibrated

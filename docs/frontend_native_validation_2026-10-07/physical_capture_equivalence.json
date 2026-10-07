@@ -1,0 +1,499 @@
+{
+  "scope": "Retention True per-burst versus False production exact acceleration; all DRAM components of the three formal architecture presets.",
+  "excluded": [
+    "expanded traces/mappings, deliberately absent for False",
+    "acceleration implementation markers"
+  ],
+  "interpretation": "Exact numeric differences are measured, not rounded to pytest tolerance. This measures implementation equivalence, not native predictive accuracy.",
+  "energy_basis": "Production declared physical bytes times each preset's unchanged pJ/byte; DRAM core itself has no independent energy calibration.",
+  "core_comparisons": [
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "component_id": "hostmem0",
+      "kind": "DDR",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.44512640015454963,
+      "capture_false_wall_seconds": 0.4201356998528354,
+      "energy_rate_pj_per_byte": 12.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 3,
+          "max_absolute_difference": 9.094947017729282e-13,
+          "max_relative_difference": 1.3540192076416245e-16,
+          "max_relative_difference_percent": 1.3540192076416244e-14,
+          "max_absolute_path": "bulk-read/completion_ns",
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 67986,
+          "changed_values": 297,
+          "max_absolute_difference": 9.094947017729282e-13,
+          "max_relative_difference": 1.4142666857140048e-16,
+          "max_relative_difference_percent": 1.4142666857140048e-14,
+          "max_absolute_path": "bulk-read/last_intervals/dram:data:0/0",
+          "non_numeric_mismatches": []
+        }
+      }
+    },
+    {
+      "hardware_id": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "component_id": "gddr0",
+      "kind": "GDDR",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.42123289994196966,
+      "capture_false_wall_seconds": 0.0032776999287307262,
+      "energy_rate_pj_per_byte": 4.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 37304,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        }
+      }
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "component_id": "hbm0",
+      "kind": "HBM",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.46215979996486567,
+      "capture_false_wall_seconds": 0.004173300054389983,
+      "energy_rate_pj_per_byte": 4.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 73712,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        }
+      }
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "component_id": "hbm1",
+      "kind": "HBM",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.4353837000380736,
+      "capture_false_wall_seconds": 0.0035420999920461327,
+      "energy_rate_pj_per_byte": 4.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 73712,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        }
+      }
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-2hbf-2hbm",
+      "component_id": "hostmem0",
+      "kind": "DDR",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.35959519995958544,
+      "capture_false_wall_seconds": 0.0021476001129485667,
+      "energy_rate_pj_per_byte": 12.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 70,
+          "max_absolute_difference": 7.275957614183426e-12,
+          "max_relative_difference": 1.8010496624432846e-16,
+          "max_relative_difference_percent": 1.8010496624432845e-14,
+          "max_absolute_path": "bulk-read-again/completion_ns",
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 5447,
+          "changed_values": 3780,
+          "max_absolute_difference": 7.275957614183426e-12,
+          "max_relative_difference": 1.871209514790186e-16,
+          "max_relative_difference_percent": 1.871209514790186e-14,
+          "max_absolute_path": "bulk-read-again/last_intervals/dram:bank:0:0:0:0:2:0/0",
+          "non_numeric_mismatches": []
+        }
+      }
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "component_id": "hbm0",
+      "kind": "HBM",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.39704769995296374,
+      "capture_false_wall_seconds": 0.004034400073578581,
+      "energy_rate_pj_per_byte": 4.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 73712,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        }
+      }
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "component_id": "hbm1",
+      "kind": "HBM",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.4226178999815602,
+      "capture_false_wall_seconds": 0.003424900001846254,
+      "energy_rate_pj_per_byte": 4.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 73712,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        }
+      }
+    },
+    {
+      "hardware_id": "nvidia-b200-1gpu-3hbf-2hbm",
+      "component_id": "hostmem0",
+      "kind": "DDR",
+      "request_count": 41,
+      "compiled_or_accelerated_requests": 3,
+      "capture_true_wall_seconds": 0.38711560002411716,
+      "capture_false_wall_seconds": 0.0025117000041063875,
+      "energy_rate_pj_per_byte": 12.0,
+      "differences": {
+        "times": {
+          "numeric_values_compared": 164,
+          "changed_values": 70,
+          "max_absolute_difference": 7.275957614183426e-12,
+          "max_relative_difference": 1.8010496624432846e-16,
+          "max_relative_difference_percent": 1.8010496624432845e-14,
+          "max_absolute_path": "bulk-read-again/completion_ns",
+          "non_numeric_mismatches": []
+        },
+        "bytes": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "energy_pj": {
+          "numeric_values_compared": 41,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "counters": {
+          "numeric_values_compared": 164,
+          "changed_values": 0,
+          "max_absolute_difference": 0.0,
+          "max_relative_difference": 0.0,
+          "max_relative_difference_percent": 0.0,
+          "max_absolute_path": null,
+          "non_numeric_mismatches": []
+        },
+        "state": {
+          "numeric_values_compared": 5447,
+          "changed_values": 3780,
+          "max_absolute_difference": 7.275957614183426e-12,
+          "max_relative_difference": 1.871209514790186e-16,
+          "max_relative_difference_percent": 1.871209514790186e-14,
+          "max_absolute_path": "bulk-read-again/last_intervals/dram:bank:0:0:0:0:2:0/0",
+          "non_numeric_mismatches": []
+        }
+      }
+    }
+  ],
+  "whole_run_comparison": {
+    "scope": "Synthetic 1-layer llama, hidden 64, FFN 128, vocabulary 32; input 4/output 3; complete bootstrap and serving.",
+    "capture_flags": [
+      {
+        "requested": true,
+        "context": true,
+        "cores": {
+          "cpu0.memory": true,
+          "hbm0.hbm_fabric": true
+        }
+      },
+      {
+        "requested": false,
+        "context": false,
+        "cores": {
+          "cpu0.memory": false,
+          "hbm0.hbm_fabric": false
+        }
+      }
+    ],
+    "capture_true_wall_seconds": 0.26894360000733286,
+    "capture_false_wall_seconds": 0.24952509999275208,
+    "differences": {
+      "numeric_values_compared": 5703,
+      "changed_values": 0,
+      "max_absolute_difference": 0.0,
+      "max_relative_difference": 0.0,
+      "max_relative_difference_percent": 0.0,
+      "max_absolute_path": null,
+      "non_numeric_mismatches": []
+    }
+  }
+}

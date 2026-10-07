@@ -353,8 +353,27 @@ def bind_l2_invocation(metadata, namespace):
     if not contract or not contract.get('invocation_buffers') or namespace is None:
         return metadata
     buffers = set(contract['invocation_buffers'])
-    accesses = tuple({**access, 'buffer_id': namespace + ':' + access['buffer_id']}
-                     if access['buffer_id'] in buffers else access
-                     for access in contract['accesses'])
-    return {**metadata, 'stateful_l2': {**contract, 'accesses': accesses,
-            'invocation_buffers': (), 'invocation_namespace': namespace}}
+    def bind_row(row):
+        bound = dict(row)
+        for key in ('buffer_id', 'tensor_id', 'alias_of'):
+            if bound.get(key) in buffers:
+                bound[key] = namespace + ':' + bound[key]
+        return bound
+    accesses = tuple(bind_row(access) for access in contract['accesses'])
+    bound = {**metadata, 'stateful_l2': {**contract, 'accesses': accesses,
+             'invocation_buffers': (), 'invocation_namespace': namespace}}
+    # L2 keys and backing allocations must refer to the same temporary.
+    # Rebinding the cache alone creates a second allocation and separates
+    # producer writes from subsequent physical reads during live replay.
+    for key in ('memory_access', 'memory_accesses', 'physical_allocations',
+                'buffer_accesses', 'rhs_buffer_accesses'):
+        rows = metadata.get(key)
+        if isinstance(rows, dict):
+            bound[key] = bind_row(rows)
+        elif isinstance(rows, (tuple, list)):
+            bound[key] = tuple(bind_row(row) for row in rows)
+    for key in ('input_buffer_id', 'output_buffer_id', 'input_tensor_id',
+                'output_tensor_id', 'weight_buffer_id', 'weight_tensor_id'):
+        if metadata.get(key) in buffers:
+            bound[key] = namespace + ':' + metadata[key]
+    return bound

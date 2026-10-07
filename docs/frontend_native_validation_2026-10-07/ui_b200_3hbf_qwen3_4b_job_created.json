@@ -1,0 +1,59 @@
+{
+  "cancellation_requested": false,
+  "created_at": "2026-10-07T16:54:18.245229Z",
+  "error": null,
+  "estimate": {
+    "dynamic_preemption_modeled": false,
+    "estimate_basis": "no_preemption_baseline",
+    "estimate_basis_zh": "无抢占基线",
+    "estimated_cohort_count": 128,
+    "estimated_event_task_count": 147456,
+    "estimated_mtp_round_count": 0,
+    "event_tasks_per_layer_rank": 32,
+    "explanation": [
+      "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+      "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+      "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+      "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+      "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+      "连续批处理推荐 aggregate，只保留完整精确汇总。"
+    ],
+    "layer_count": 36,
+    "mtp_candidate_tokens": 1,
+    "mtp_candidate_tokens_semantics": "max_draft_tokens",
+    "mtp_enabled": false,
+    "mtp_proposal_length_model": "disabled",
+    "mtp_verifier_width_at_max": 1,
+    "output_tokens": 128,
+    "prompt_tokens": 512,
+    "recommended_retention_policy": "aggregate",
+    "request_count": 1,
+    "risk_level": "medium",
+    "risk_level_zh": "中",
+    "scheduler_mode": "continuous",
+    "schema_version": "4.0.0",
+    "total_tokens": 640,
+    "warnings": [
+      "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+      "该连续场景不建议保留完整事件历史。"
+    ],
+    "world_size": 1
+  },
+  "finished_at": null,
+  "job_id": "d150b04f9434441782df4b5e3734cdab",
+  "progress": {
+    "completed": 0,
+    "message": "仿真任务已排队",
+    "metadata": {},
+    "ratio": 0,
+    "scope": "primary",
+    "stage": "queued",
+    "total": 1,
+    "unit": "workflow_steps",
+    "unit_label_zh": "流程步骤"
+  },
+  "report": null,
+  "retention_policy": "aggregate",
+  "started_at": null,
+  "status": "queued"
+}

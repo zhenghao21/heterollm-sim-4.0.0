@@ -1,0 +1,40 @@
+[
+  {
+    "case": "qwen3_0_6b_f16",
+    "debug_only": true,
+    "input_tokens": 16,
+    "output_tokens": 2,
+    "wall_seconds": 4.181,
+    "status": "finished",
+    "completed_requests": 1,
+    "batch_count": 2,
+    "host_output_contract_status": "complete",
+    "logits_precision_status": "consistent",
+    "dram_tasks": 1086,
+    "dram_physical_bytes": 2492261376,
+    "engine_ttft_ns": 8679022.396071069,
+    "engine_tpot_ns": 2939459.333184462,
+    "native_error_not_compared": true,
+    "superseded_diagnostic": true,
+    "superseded_reason": "Before F32/KV full-chain and persistent live physical execution fixes; metrics are not current predictions."
+  },
+  {
+    "case": "qwen3_8_27b_mixed",
+    "debug_only": true,
+    "input_tokens": 16,
+    "output_tokens": 2,
+    "wall_seconds": 10.453,
+    "status": "finished",
+    "completed_requests": 1,
+    "batch_count": 2,
+    "host_output_contract_status": "complete",
+    "logits_precision_status": "consistent",
+    "dram_tasks": 2390,
+    "dram_physical_bytes": 28166755136,
+    "engine_ttft_ns": 29827153.834509254,
+    "engine_tpot_ns": 18947083.940237865,
+    "native_error_not_compared": true,
+    "superseded_diagnostic": true,
+    "superseded_reason": "Before F32/KV full-chain and persistent live physical execution fixes; metrics are not current predictions."
+  }
+]
