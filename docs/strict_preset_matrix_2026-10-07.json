@@ -1,0 +1,795 @@
+{
+  "schema": "heterollm.strict-preset-short-matrix/v1",
+  "finished_at_utc": "2026-10-07T14:28:14+00:00",
+  "python_environment": ".venv/Scripts/python.exe (Python 3.12.13)",
+  "scenario_builder": "tools/validate_preset_matrix.py:scenario_for",
+  "run_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+  "workload": {
+    "requests": 1,
+    "prompt_tokens": 2,
+    "output_tokens": 2,
+    "llama_cpp_policy": "llama_cpp",
+    "retention_policy": "aggregate"
+  },
+  "scope": {
+    "public_hardware_presets": 3,
+    "public_model_presets": 21,
+    "combinations": 63
+  },
+  "summary_by_hardware": {
+    "local-native-rtx5080-9950x3d-gddr7-ddr5": {
+      "total": 21,
+      "completed": 11,
+      "capacity_rejected": 10,
+      "other_rejected": 0,
+      "errors": 0
+    },
+    "nvidia-b200-1gpu-2hbf-2hbm": {
+      "total": 21,
+      "completed": 21,
+      "capacity_rejected": 0,
+      "other_rejected": 0,
+      "errors": 0
+    },
+    "nvidia-b200-1gpu-3hbf-2hbm": {
+      "total": 21,
+      "completed": 21,
+      "capacity_rejected": 0,
+      "other_rejected": 0,
+      "errors": 0
+    }
+  },
+  "total": {
+    "completed": 53,
+    "capacity_rejected": 10,
+    "other_rejected": 0,
+    "errors": 0
+  },
+  "physical_recheck": {
+    "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+    "model": "llama3_1-405b",
+    "status": "completed",
+    "completed_requests": 1,
+    "rejected_requests": 0,
+    "batches": 2,
+    "dram_tasks": 3422,
+    "dram_bytes": 151199623552,
+    "nand_tasks": 918,
+    "nand_bytes": 1472452362240,
+    "dram_owners": [
+      "hbm0.hbm_fabric",
+      "hbm1.hbm_fabric",
+      "hostmem0.memory"
+    ],
+    "nand_owners": [
+      "hbf0.memory",
+      "hbf1.memory"
+    ],
+    "seconds": 23.485
+  },
+  "traffic_note": "Only physical_recheck traffic metrics were rerun after the final mixed DRAM/NAND reporting changes. Earlier completion rows omit superseded traffic metrics.",
+  "results": [
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-0_5b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 3.641,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-0_6b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 3.875,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-1b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 2.375,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-1_5b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 3.828,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-1_7b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 3.89,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 3.969,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.906,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-4b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.032,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-7b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.0,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-8b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.171,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-8b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.563,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-14b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-028.mlp_weights (424673280 bytes; device gpu0)",
+      "seconds": 0.031,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-14b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-024.attention_weights (125829120 bytes; device gpu0)",
+      "seconds": 0.031,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-30b-a3b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-012.expert_weights (1207959552 bytes; device gpu0)",
+      "seconds": 0.047,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-32b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (849346560 bytes; device gpu0)",
+      "seconds": 0.032,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-32b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (786432000 bytes; device gpu0)",
+      "seconds": 0.046,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-70b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+      "seconds": 0.032,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_3-70b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+      "seconds": 0.047,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-72b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-009.attention_weights (301989888 bytes; device gpu0)",
+      "seconds": 0.046,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-235b-a22b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-003.expert_weights (4831838208 bytes; device gpu0)",
+      "seconds": 0.047,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-405b",
+      "status": "capacity_rejected",
+      "error_type": "ValueError",
+      "error": "llama.cpp shared device-memory capacity exhausted for layer-002.mlp_weights (5234491392 bytes; device gpu0)",
+      "seconds": 0.047,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-0_5b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 3.906,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-0_6b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.203,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_2-1b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 2.578,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-1_5b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.578,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-1_7b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.61,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_2-3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.875,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.89,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-4b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 6.219,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-7b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.109,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-8b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.907,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-8b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 6.609,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-14b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 9.219,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-14b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 7.781,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-30b-a3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 26.297,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-32b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 11.36,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-32b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 11.625,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-70b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 14.532,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_3-70b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 14.484,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-72b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 14.312,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-235b-a22b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 56.625,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-405b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "dram_tasks": 3422,
+      "dram_bytes": 151199623552,
+      "nand_tasks": 918,
+      "nand_bytes": 1472452362240,
+      "dram_owners": [
+        "hbm0.hbm_fabric",
+        "hbm1.hbm_fabric",
+        "hostmem0.memory"
+      ],
+      "nand_owners": [
+        "hbf0.memory",
+        "hbf1.memory"
+      ],
+      "seconds": 23.485,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "rechecked_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-0_5b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 3.953,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-0_6b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.266,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_2-1b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 2.609,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-1_5b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.579,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-1_7b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.703,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_2-3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 4.922,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.906,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-4b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 6.39,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-7b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.11,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-8b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 5.984,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-8b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 6.719,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-14b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 9.25,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-14b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 7.984,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-30b-a3b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 26.235,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-32b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 11.406,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-32b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 11.75,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-70b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 14.563,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_3-70b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 14.562,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-72b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 14.375,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-235b-a22b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 56.828,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-405b",
+      "status": "completed",
+      "completed_requests": 1,
+      "rejected_requests": 0,
+      "batches": 2,
+      "seconds": 23.766,
+      "execution_method": "scenario_from_dict -> reporting.run_scenario -> report_dict",
+      "traffic_diagnostics_status": "not_revalidated_under_final_reporting_code"
+    }
+  ],
+  "regression_tests": {
+    "python_passed": 1242,
+    "python_failed": 0,
+    "javascript_passed": 16,
+    "javascript_failed": 0,
+    "javascript_syntax_check": "passed"
+  },
+  "http_short_validation": {
+    "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+    "model": "qwen3-0_6b",
+    "prompt_tokens": 2,
+    "output_tokens": 2,
+    "status": "completed",
+    "physical_owner_ids": [
+      "gddr0.gddr_fabric",
+      "hostmem0.memory"
+    ]
+  },
+  "http_default_workload_validation": {
+    "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+    "model": "qwen3-0_6b",
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "status": "completed",
+    "completed_requests": 1,
+    "rejected_requests": 0,
+    "batch_count": 128,
+    "elapsed_seconds": 176.55,
+    "report_check_problems": [],
+    "physical_owner_ids": [
+      "gddr0.gddr_fabric",
+      "hostmem0.memory"
+    ],
+    "physical_read_bytes": 186176960512,
+    "physical_write_bytes": 481206784
+  }
+}

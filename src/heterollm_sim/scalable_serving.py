@@ -268,6 +268,7 @@ def execute_cost_schedule(
                     "opaque_device_fence", "operator_id", "operator_invocation_group_id",
                     "orchestration_stage",
                     "physical_invocation_group_ids", "physical_memory_config",
+                    "physical_execution_by_owner",
                     "request_ids", "resource_directions", "serving_cohort_complete",
                     "serving_output_stage", "target_component", "tensor_id",
                     "transfer_execution", "weight_tensor_id",

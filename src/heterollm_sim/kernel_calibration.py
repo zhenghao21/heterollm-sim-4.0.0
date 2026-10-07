@@ -1189,8 +1189,7 @@ def apply_kernel_calibration(phase: CostPhase, profile: KernelCalibrationProfile
     resolution = resolve_kernel_calibration(profile, query)
 
     def unchanged(reason: str) -> CostPhase:
-        return replace(phase, metadata={**phase.metadata, "kernel_calibration_resolution": {
-            **resolution, "mode": "analytical_fallback", "reason": reason}})
+        raise ValueError("configured kernel calibration cannot be applied: " + reason)
 
     if resolution["mode"] != "exact":
         return unchanged(str(resolution["reason"]))

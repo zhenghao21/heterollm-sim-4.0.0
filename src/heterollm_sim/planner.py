@@ -3080,8 +3080,8 @@ def _validate_scenario_uncached(
                 if declared_total is not None:
                     try:
                         explicit_cim_bytes += max(0, int(declared_total))
-                    except (TypeError, ValueError):
-                        pass
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError("CIM physical weight bytes must be an explicit integer") from exc
                     continue
                 replica_count = _physical_cim_replica_count(
                     scenario,
@@ -3094,9 +3094,12 @@ def _validate_scenario_uncached(
                 )
                 if replica_count > 0 and placement_bytes is not None:
                     explicit_cim_bytes += int(placement_bytes) * replica_count
-            cim_required_bytes = explicit_cim_bytes or _estimated_cim_weight_bytes(
-                scenario, execution_view=execution_view
-            )
+            cim_required_bytes = explicit_cim_bytes
+            if cim_required_bytes <= 0:
+                errors.append(
+                    "warm CIM execution requires explicit physical weight tensor placements; "
+                    "estimated layer weight capacity is not an executable placement"
+                )
             cim_capacity = sum(
                 _resident_weight_capacity(scenario, component_id)
                 for component_id in cim_targets
@@ -3644,6 +3647,8 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
     gpu, hbm = _gpu_profiles(scenario, target_id, rank.memory_component_id)
     if gpu.kernel_model is None or not gpu.kernel_model.stateful_l2:
         return task
+    if len(task.metadata.get("physical_memory_configs", {})) > 1:
+        raise ValueError("stateful L2 requires per-access backing ownership for multi-memory kernels; this configuration is not supported")
     memory_resource = _rank_memory_resource(scenario, rank)
     if not any(d.resource_id == memory_resource for d in task.demands):
         return task
@@ -4030,16 +4035,77 @@ def _gddr_access_alias(metadata: Mapping[str, object], side: str) -> Tuple[Optio
 def _physical_dram_config(scenario: ScenarioConfig, component: ComponentSpec):
     """Resolve once per compilation; NAND is not a CPU cache backing model."""
     def resolve():
-        from .memory_types import DramConfig, parse_physical_memory_config
-        raw = component.metadata.get("physical_memory_config")
-        if not isinstance(raw, Mapping):
-            return None
-        return raw if isinstance(parse_physical_memory_config(raw), DramConfig) else None
+        from .memory_types import DramConfig
+        from .physical_contract import require_physical_memory_config
+        parsed = require_physical_memory_config(component)
+        return component.metadata["physical_memory_config"] if isinstance(parsed, DramConfig) else None
 
     context = _active_compilation_context(scenario)
     return resolve() if context is None else context.invariant(
         ("physical_dram_config", component.component_id), resolve
     )
+
+
+def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Optional[TaskSpec]:
+    """Preserve both operand owners of a direct remote-memory compute phase."""
+    phase = task.metadata.get("phase_metadata", {})
+    direct = phase.get("direct_memory_access") if isinstance(phase, Mapping) else None
+    if not isinstance(direct, Mapping):
+        return None
+    component = _component(scenario, str(direct["component_id"]))
+    from .physical_contract import require_physical_memory_config
+    require_physical_memory_config(component)
+    remote_config = component.metadata["physical_memory_config"]
+    remote_owner = str(direct["physical_owner"])
+    remote_resource = str(direct["resource_id"])
+    remote_accesses = phase.get("memory_accesses", phase.get("memory_access"))
+    if isinstance(remote_accesses, Mapping):
+        remote_accesses = (remote_accesses,)
+    if not isinstance(remote_accesses, (tuple, list)) or not remote_accesses:
+        raise ValueError("direct memory phase requires physical access descriptors")
+    remote_accesses = tuple({**row, "physical_memory_component_id": component.component_id}
+                            for row in remote_accesses)
+    local_metadata = dict(task.metadata)
+    local_metadata["phase_metadata"] = {key: value for key, value in phase.items()
+        if key not in {"direct_memory_access", "physical_memory_config", "memory_access", "memory_accesses"}}
+    local_metadata["cost_model"] = {
+        **task.metadata.get("cost_model", {}),
+        "activation_bytes": 0, "weight_bytes": 0,
+        "physical_read_bytes": _gddr_non_negative_int(direct["local_read_bytes"], "local_read_bytes"),
+        "physical_write_bytes": _gddr_non_negative_int(direct["local_write_bytes"], "local_write_bytes"),
+    }
+    local_task = replace(task,
+        demands=tuple(d for d in task.demands if str(d.resource_id) not in {remote_owner, remote_resource}),
+        metadata=local_metadata)
+    local_task = _attach_gddr_physical_task(local_task, scenario)
+    local_accesses = local_task.metadata.get("memory_accesses", ())
+    configs = {remote_owner: remote_config}
+    local_config = local_task.metadata.get("physical_memory_config")
+    from .physical_contract import DRAM_COMPONENT_KINDS
+    energy_by_owner = {remote_owner: (
+        _resolve_component_profile(scenario, component.component_id).energy_pj_per_byte
+        if _kind(component) in DRAM_COMPONENT_KINDS
+        else float(component.metadata.get("energy_pj_per_byte", 0.0))
+    )}
+    if local_config is not None:
+        configs[str(local_task.metadata["physical_owner"])] = local_config
+        energy_by_owner[str(local_task.metadata["physical_owner"])] = local_task.metadata["physical_energy_pj_per_byte"]
+    accesses = tuple(local_accesses) + remote_accesses
+    primary = local_task.metadata if local_config is not None else {
+        "physical_owner": remote_owner, "physical_memory_component_id": component.component_id,
+    }
+    metadata = {**task.metadata,
+        "physical_memory_config": local_config if local_config is not None else remote_config,
+        "physical_memory_configs": configs,
+        "physical_energy_pj_per_byte_by_owner": energy_by_owner,
+        "physical_owner": primary["physical_owner"],
+        "physical_memory_component_id": primary["physical_memory_component_id"],
+        "memory_access": accesses, "memory_accesses": accesses,
+        "physical_address_bindings": local_task.metadata.get("physical_address_bindings", ()),
+    }
+    bound = replace(task, metadata=metadata)
+    _assert_physical_memory_demands(bound, scenario)
+    return bound
 
 
 def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
@@ -4051,36 +4117,45 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     """
 
     if task.metadata.get("physical_memory_config") is not None:
+        _assert_physical_memory_demands(task, scenario)
         return task
+    direct_task = _attach_direct_backing_physical_task(task, scenario)
+    if direct_task is not None:
+        return direct_task
     target_id = task.metadata.get("target_component")
     target = scenario.hardware.component_map().get(target_id)
     target_kind = _kind(target) if target is not None else None
     if target_kind not in {None, "cpu", "gpu"}:
+        _assert_physical_memory_demands(task, scenario)
         return task
+    from .physical_contract import DRAM_COMPONENT_KINDS
     candidates = []
     for component in scenario.hardware.components:
         component_kind = _kind(component)
-        if component_kind not in ({"gddr", "hbm", "hbm_stack"} if target_kind == "gpu" else {"host_memory"}):
-            continue
-        raw_config = _physical_dram_config(scenario, component)
-        if raw_config is None:
+        if component_kind not in DRAM_COMPONENT_KINDS:
             continue
         service = component.metadata.get("memory_service", {})
         owner = str(service.get("physical_owner") or component.metadata.get("physical_owner") or default_memory_resource_id(component))
         resource_ids = {owner, str(service.get("resource_id") or owner), component.component_id + ".access"}
-        if component_kind == "host_memory":
-            profile = _resolve_component_profile(scenario, component.component_id, HostMemoryProfile)
-            resource_ids.add(profile.resource_id)
+        profile = _resolve_component_profile(scenario, component.component_id)
+        resource_ids.add(profile.resource_id)
+        if isinstance(profile, HostMemoryProfile):
             if target_kind == "cpu":
                 resource_ids.add(_component_resource_id(profile.resource_id,
                     reference_component_id=scenario.host_orchestration_profile.cpu_component_id,
                     target_component_id=target_id))
         if any(str(d.resource_id) in resource_ids and d.bytes_moved > 0 for d in task.demands):
+            raw_config = _physical_dram_config(scenario, component)
+            if raw_config is None:
+                raise ValueError("task {} requires a DRAM backing component: {}".format(task.task_id, component.component_id))
             candidates.append((component, raw_config, owner, resource_ids))
-    if len(candidates) != 1:
+    if not candidates:
+        _assert_physical_memory_demands(task, scenario)
         return task
+    if len(candidates) != 1:
+        raise ValueError("task {} has ambiguous physical memory owners {}; bind a unique memory component and split multi-memory accesses".format(task.task_id, ", ".join(item[0].component_id for item in candidates)))
     component, raw_config, owner, resource_ids = candidates[0]
-    if _kind(component) == "host_memory":
+    if target_kind != "gpu" and isinstance(profile := _resolve_component_profile(scenario, component.component_id), HostMemoryProfile):
         # CPU cache estimates already determine misses and writebacks. Feed
         # their payload to DRAM, not the old profile's rounded transactions;
         # otherwise both the old 256-byte and physical burst padding are paid.
@@ -4133,7 +4208,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         )
     try:
         capacity = int(raw_config.get("capacity_bytes") or 0)
-        burst = int(raw_config.get("burst_bytes") or 64)
+        burst = int(raw_config["burst_bytes"])
     except (TypeError, ValueError):
         raise ValueError(
             "GDDR task {} has invalid capacity_bytes or burst_bytes".format(
@@ -4585,6 +4660,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     metadata = dict(task.metadata)
     metadata.update({
         "physical_memory_config": raw_config,
+        "physical_energy_pj_per_byte": _resolve_component_profile(scenario, component.component_id).energy_pj_per_byte,
         "memory_access": descriptors[0] if len(descriptors) == 1 else tuple(descriptors),
         "memory_accesses": tuple(descriptors),
         "physical_memory_component_id": component.component_id,
@@ -4592,7 +4668,40 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         "physical_address_scope": "stable_buffer_tensor_allocation_offset",
         "physical_address_bindings": tuple(address_bindings),
     })
-    return replace(task, metadata=metadata)
+    bound_task = replace(task, metadata=metadata)
+    _assert_physical_memory_demands(bound_task, scenario)
+    return bound_task
+
+
+def _assert_physical_memory_demands(task: TaskSpec, scenario: ScenarioConfig) -> None:
+    """Reject a memory demand left outside the task's physical descriptors."""
+    from .physical_contract import PHYSICAL_MEMORY_COMPONENT_KINDS
+    def owners():
+        result = {}
+        for component in scenario.hardware.components:
+            if component.normalized_kind not in PHYSICAL_MEMORY_COMPONENT_KINDS:
+                continue
+            service = component.metadata.get("memory_service", {})
+            resource = service.get("resource_id") or service.get("physical_owner") or default_memory_resource_id(component)
+            result[str(resource)] = component.component_id
+            if component.cost_profile_id is not None and scenario.component_profile_kind(component) is not None:
+                profile = _resolve_component_profile(scenario, component.component_id)
+                if hasattr(profile, "resource_id"):
+                    result[str(profile.resource_id)] = component.component_id
+        return result
+    context = _active_compilation_context(scenario)
+    resources = owners() if context is None else context.invariant(("physical_memory_resource_owners",), owners)
+    accesses = task.metadata.get("memory_accesses", task.metadata.get("memory_access", ()))
+    if isinstance(accesses, Mapping):
+        accesses = (accesses,)
+    represented = {str(row.get("resource_id") or row.get("physical_owner"))
+                   for row in accesses if isinstance(row, Mapping)}
+    represented.update(str(row) for row in task.metadata.get("physical_placeholder_resource_ids", ()))
+    missing = {resources[str(d.resource_id)] for d in task.demands
+               if d.bytes_moved > 0 and str(d.resource_id) in resources
+               and str(d.resource_id) not in represented}
+    if missing:
+        raise ValueError("task {} has memory traffic without physical access descriptors for {}; aggregate-cost fallback is disabled".format(task.task_id, ", ".join(sorted(missing))))
 
 
 def _apply_planned_graph_launches(tasks):
@@ -7179,12 +7288,11 @@ def _host_gemm_offload_decision(
     scenarios retain their exact task metadata and schedule.
     """
 
-    try:
-        gpu_profile = _resolve_component_profile(
-            scenario, rank.component_id, GPUProfile
-        )
-    except (AttributeError, KeyError, TypeError, ValueError):
+    if _kind(_component(scenario, rank.component_id)) != "gpu":
         return None
+    gpu_profile = _resolve_component_profile(
+        scenario, rank.component_id, GPUProfile
+    )
     capability = gpu_profile.host_gemm_offload
     if capability is None:
         return None
@@ -7227,37 +7335,33 @@ def _host_gemm_offload_decision(
         if not host_cpu_local:
             reason = "weight_owner_not_host_cpu_local"
         else:
-            try:
-                _gpu_profiles(
-                    scenario,
-                    rank.component_id,
-                    rank.memory_component_id,
-                )
-            except (AttributeError, KeyError, TypeError, ValueError):
-                reason = "gpu_hbm_profile_unavailable"
+            _gpu_profiles(
+                scenario,
+                rank.component_id,
+                rank.memory_component_id,
+            )
+            weight_route = _route_is_available(
+                router,
+                weight_owner,
+                rank.component_id,
+                workload.weight_bytes,
+                routing_policy=plan.routing_policy,
+            )
+            activation_route = _route_is_available(
+                router,
+                activation_source_component_id,
+                rank.component_id,
+                workload.activation_bytes,
+                routing_policy=plan.routing_policy,
+            )
+            if not weight_route:
+                reason = "weight_route_unavailable"
+            elif not activation_route:
+                reason = "activation_route_unavailable"
             else:
-                weight_route = _route_is_available(
-                    router,
-                    weight_owner,
-                    rank.component_id,
-                    workload.weight_bytes,
-                    routing_policy=plan.routing_policy,
-                )
-                activation_route = _route_is_available(
-                    router,
-                    activation_source_component_id,
-                    rank.component_id,
-                    workload.activation_bytes,
-                    routing_policy=plan.routing_policy,
-                )
-                if not weight_route:
-                    reason = "weight_route_unavailable"
-                elif not activation_route:
-                    reason = "activation_route_unavailable"
-                else:
-                    execution_component_id = rank.component_id
-                    applied = True
-                    reason = "eligible_host_model_weight_gemm"
+                execution_component_id = rank.component_id
+                applied = True
+                reason = "eligible_host_model_weight_gemm"
 
     return _HostGemmOffloadDecision(
         placement_component_id=placement_component_id,
@@ -7328,67 +7432,6 @@ def _direct_device_memory(scenario: ScenarioConfig, storage: Optional[str], devi
                 and entry.get("device_id") == device)
 
 
-def _derive_direct_memory_page_offset(
-    scenario: ScenarioConfig,
-    rank: LogicalRank,
-    phase: object,
-    storage: str,
-    byte_count: int,
-) -> Optional[int]:
-    """Derive a stable physical address for an authored direct backing access.
-
-    GEMM phases normally carry only logical byte counts.  Physical DRAM/GDDR
-    services additionally require an address so that row/bank accounting can
-    be evaluated.  Keep an authored address authoritative, then derive a
-    deterministic, burst-aligned address from the execution identity and clamp
-    it to the storage capacity.  This is an analytical placement address; it
-    does not claim a native allocator offset.
-    """
-
-    component = _component(scenario, storage)
-    raw_config = component.metadata.get("physical_memory_config")
-    if raw_config is None:
-        return None
-    if not isinstance(raw_config, Mapping):
-        return None
-    try:
-        requested = max(1, int(byte_count))
-    except (TypeError, ValueError, OverflowError):
-        requested = 1
-    try:
-        capacity = int(raw_config.get("capacity_bytes") or component.capacity_bytes or 0)
-    except (TypeError, ValueError, OverflowError):
-        capacity = 0
-    if capacity <= 0:
-        # The physical service will provide the final contract error if its
-        # configuration is incomplete; do not invent an unbounded address.
-        return 0
-    alignment = raw_config.get("burst_bytes") or component.metadata.get("transfer_granularity_bytes") or 1
-    try:
-        alignment = max(1, int(alignment))
-    except (TypeError, ValueError, OverflowError):
-        alignment = 1
-    # Never pass an address whose request would exceed the physical geometry.
-    max_address = max(0, capacity - requested)
-    slots = max(1, max_address // alignment + 1)
-    phase_metadata = getattr(phase, "metadata", {})
-    phase_label = str(phase_metadata.get("phase", "")) if isinstance(phase_metadata, Mapping) else ""
-    # Use only stable numeric fields from the authored execution identity.
-    # Python's hash is process-randomized, and a cryptographic digest adds no
-    # meaning to an analytical address.  This keeps the fallback reproducible
-    # without introducing another hash-based contract.
-    phase_name = str(getattr(phase, "name", ""))
-    label = "{}|{}".format(phase_name, phase_label)
-    label_index = sum((index + 1) * ord(char) for index, char in enumerate(label))
-    try:
-        rank_index = max(0, int(rank.rank))
-    except (TypeError, ValueError):
-        rank_index = 0
-    candidate = (rank_index * 131 + label_index) * alignment
-    slot = (candidate // alignment) % slots
-    return int(slot * alignment)
-
-
 def _direct_memory_address(
     scenario: ScenarioConfig,
     rank: LogicalRank,
@@ -7418,50 +7461,27 @@ def _direct_memory_address(
         "memory_access_offset_bytes",
     ):
         value = values.get(key)
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-            return value
-    raw_config = component.metadata.get("physical_memory_config")
-    raw_capacity = raw_config.get("capacity_bytes") if isinstance(raw_config, Mapping) else None
-    try:
-        capacity = max(0, int(raw_capacity or component.capacity_bytes or 0))
-    except (TypeError, ValueError, OverflowError):
-        capacity = max(0, int(component.capacity_bytes or 0))
-    if capacity <= 0:
-        return 0
-    try:
-        rank_index = max(0, int(rank.rank))
-    except (TypeError, ValueError):
-        rank_index = 0
+        if value is not None:
+            return _gddr_non_negative_int(value, key)
+    from .physical_contract import require_physical_memory_config
+    from .memory_types import DramConfig
+    physical = require_physical_memory_config(component)
+    capacity = physical.capacity_bytes
+    rank_index = _gddr_non_negative_int(rank.rank, "rank")
     label = "|".join(
         str(values.get(key, ""))
         for key in ("layer_id", "operator_id", "projection_id", "op_name")
     )
     match = re.search(r"(\d+)(?:\D*)$", label)
     label_index = int(match.group(1)) if match else sum(ord(char) for char in label)
-    # ``placement.kv_policy`` is the authoring IR and only carries
-    # ``tokens_per_page``.  Physical page/transfer geometry belongs to the
-    # memory component, so do not read the runtime plan's ``bytes_per_page``
-    # field here (it is not present during planning).
-    page_bytes = None
-    if isinstance(raw_config, Mapping):
-        page_bytes = (
-            raw_config.get("page_bytes")
-            or raw_config.get("burst_bytes")
-            or raw_config.get("interleave_bytes")
-        )
-    if page_bytes is None:
-        page_bytes = component.metadata.get("transfer_granularity_bytes")
-    if page_bytes is None:
-        page_bytes = 256
-    try:
-        page_bytes = max(1, int(page_bytes))
-    except (TypeError, ValueError, OverflowError):
-        page_bytes = 256
-    try:
-        transfer_bytes = max(1, int(values.get("transfer_granularity_bytes", page_bytes) or page_bytes))
-    except (TypeError, ValueError, OverflowError):
-        transfer_bytes = page_bytes
+    page_bytes = physical.burst_bytes if isinstance(physical, DramConfig) else physical.page_bytes
+    transfer_bytes = _gddr_non_negative_int(values.get("transfer_granularity_bytes", page_bytes), "transfer_granularity_bytes")
+    if transfer_bytes <= 0:
+        raise ValueError("transfer_granularity_bytes must be positive")
     stride = max(page_bytes, transfer_bytes)
+    byte_count = _gddr_non_negative_int(byte_count, "byte_count")
+    if byte_count > capacity:
+        raise ValueError("direct physical memory access exceeds component capacity")
     candidate = (rank_index * max(1, int(scenario.model.num_layers)) + label_index) * stride
     max_address = max(0, capacity - max(1, int(byte_count)))
     # Wrap in page slots rather than raw bytes so the fallback remains aligned
@@ -7492,11 +7512,16 @@ def _direct_memory_phase(
     profile = _resolve_component_profile(scenario, storage)
     service = resolve_service(_component(scenario, storage), profile)
     cache = dict(phase.metadata.get("cache", {}))
-    reads = int(cache.get("physical_read_bytes", 0))
-    writes = int(cache.get("physical_write_bytes", 0))
-    if not cache:
-        reads = max(0, backing.bytes_moved - write_bytes)
-        writes = write_bytes
+    directions = _gddr_formal_directional_bytes(cache)
+    if directions is None:
+        kernel = phase.metadata.get("kernel_model", phase.metadata)
+        if not isinstance(kernel, Mapping) or "read_bytes" not in kernel or "write_bytes" not in kernel:
+            raise ValueError("direct memory phase requires explicit post-cache read/write byte counts")
+        directions = (_gddr_non_negative_int(kernel["read_bytes"], "read_bytes"),
+                      _gddr_non_negative_int(kernel["write_bytes"], "write_bytes"))
+    reads, writes = directions
+    if reads + writes != backing.bytes_moved:
+        raise ValueError("direct memory phase directional bytes do not match its backing demand")
     moved_reads = min(reads, max(0, int(read_bytes)))
     moved_writes = min(writes, max(0, int(write_bytes)))
     if not (moved_reads or moved_writes):
@@ -7536,8 +7561,8 @@ def _direct_memory_phase(
             candidate = storage_metadata.get(key)
             if candidate is None and isinstance(physical_metadata, Mapping):
                 candidate = physical_metadata.get(key)
-            if isinstance(candidate, int) and not isinstance(candidate, bool) and candidate >= 0:
-                page_offset = candidate
+            if candidate is not None:
+                page_offset = _gddr_non_negative_int(candidate, key)
                 break
     if page_offset is None and storage_component.metadata.get("physical_memory_config") is not None:
         page_offset = _direct_memory_address(
@@ -7546,30 +7571,7 @@ def _direct_memory_phase(
             phase_metadata,
         )
     if not isinstance(page_offset, int) or isinstance(page_offset, bool) or page_offset < 0:
-        page_offset = None
-    if page_offset is None:
-        page_offset = _derive_direct_memory_page_offset(
-            scenario,
-            rank,
-            phase,
-            storage,
-            max(moved_reads, moved_writes),
-        )
-    # Some normalized llama scenarios resolve the physical service from a
-    # profile-owned component even when the logical storage component has no
-    # copied physical metadata.  The service remains the authoritative
-    # contract; provide its first aligned address rather than passing None to
-    # PhysicalService.price.
-    if page_offset is None:
-        service_component = getattr(service, "component", None)
-        if service_component is not None and service_component.metadata.get("physical_memory_config") is not None:
-            page_offset = 0
-    if page_offset is None:
-        # Direct backing phases are authored without a buffer offset.  A
-        # physical service still requires an address; zero is the stable base
-        # of the component-local analytical address space and is valid for
-        # every non-empty configured component.
-        page_offset = 0
+        raise ValueError("direct backing access requires a valid explicit or allocator-derived memory address")
     def compact_service_bill(bill):
         """Keep scalar pricing facts without embedding the full DRAM trace.
 
@@ -7889,35 +7891,21 @@ def _logical_weight_tensor_bytes(
     canonical = _canonical_weight_tensor_id(scenario, tensor_id)
     mtp_descriptor = _mtp_descriptor_for_weight(scenario, canonical)
     if mtp_descriptor is not None:
-        return max(0, int(mtp_descriptor.weight_bytes))
+        return _gddr_non_negative_int(mtp_descriptor.weight_bytes, "MTP weight bytes")
     decision = _control_plane_decision_metadata(scenario)
     details_raw = decision.get("weight_tensor_details", {})
     if isinstance(details_raw, Mapping):
         detail_raw = details_raw.get(canonical, {})
         if isinstance(detail_raw, Mapping) and detail_raw.get("logical_bytes") is not None:
-            try:
-                return max(0, int(detail_raw["logical_bytes"]))
-            except (TypeError, ValueError):
-                return 0
+            return _gddr_non_negative_int(detail_raw["logical_bytes"], "weight logical_bytes")
     for metadata_key in ("derived_tensor_bytes", "logical_weight_views"):
         values = decision.get(metadata_key, {})
         if isinstance(values, Mapping) and canonical in values:
-            try:
-                return max(0, int(values[canonical]))
-            except (TypeError, ValueError):
-                return 0
-    try:
-        return max(
-            0,
-            int(
-                scenario.placement.tensor_bytes.get(
-                    canonical,
-                    scenario.placement.tensor_bytes.get(tensor_id, 0),
-                )
-            ),
-        )
-    except (TypeError, ValueError):
-        return 0
+            return _gddr_non_negative_int(values[canonical], metadata_key)
+    return _gddr_non_negative_int(
+        scenario.placement.tensor_bytes.get(canonical, scenario.placement.tensor_bytes.get(tensor_id, 0)),
+        "placement tensor_bytes",
+    )
 
 
 def _weight_execution_targets(
@@ -8211,47 +8199,6 @@ def _unallocated_component_capacity(
     return max(0, physical_capacity - occupied)
 
 
-def _estimated_cim_weight_bytes(
-    scenario: ScenarioConfig,
-    *,
-    execution_view: Optional[ModelGraphExecutionView] = None,
-) -> int:
-    """Conservative fallback when warm CIM weights lack detailed tensors."""
-
-    if execution_view is None:
-        execution_view = _execution_view(scenario)
-    layers = tuple(
-        descriptor.layer for descriptor in execution_view.layer_instances
-    )
-    components = _component_map(scenario)
-    total = 0
-    for layer in layers:
-        groups = [
-            "linear_attention" if layer.is_linear_attention else "attention",
-            "experts" if layer.is_moe else "mlp",
-        ]
-        if layer.has_shared_expert:
-            groups.append("shared_expert")
-        if any(
-            target in components and _is_cim(components[target])
-            for target in (_resolve_target(scenario, layer, group) for group in groups)
-        ):
-            total += int(layer.weight_bytes)
-    lm_target = scenario.placement.op_to_component.get("lm_head")
-    if lm_target in components and _is_cim(components[lm_target]):
-        total += int(
-            execution_view.output_weight_bytes
-            or execution_view.embedding_weight_bytes
-        )
-    for descriptor in execution_view.mtp_descriptors:
-        target = scenario.placement.op_to_component.get(
-            descriptor.operator.operator_id
-        )
-        if target in components and _is_cim(components[target]):
-            total += int(descriptor.weight_bytes)
-    return min(_execution_view_declared_weight_bytes(execution_view), total)
-
-
 def _physical_cim_replica_count(
     scenario: ScenarioConfig,
     tensor_name: str,
@@ -8366,7 +8313,7 @@ def _add_transfer_tasks(
     # optional component model from a stale context whose router is not the
     # router that owns this transfer.
     if context is not None and router is not context.router():
-        context = None
+        raise ValueError("transfer router does not belong to the active scenario compilation")
     # Host-resident model weights use pageable H2D staging in the locked
     # llama.cpp CUDA path.  A component benchmark may opt in a measured
     # staging curve; the default remains the topology-only transfer model.
@@ -8387,10 +8334,10 @@ def _add_transfer_tasks(
                 target_kind = _kind(_component(scenario, target_component))
                 bandwidth_gbps = float(raw_spec.get("bandwidth_gbps", 0.0))
                 fixed_latency_ns = float(raw_spec.get("fixed_latency_ns", 0.0))
-            except (KeyError, TypeError, ValueError):
-                bandwidth_gbps = 0.0
-                fixed_latency_ns = 0.0
-                source_kind = target_kind = ""
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("enabled pageable transfer model has invalid parameters") from exc
+            if not math.isfinite(bandwidth_gbps) or bandwidth_gbps <= 0 or not math.isfinite(fixed_latency_ns) or fixed_latency_ns < 0:
+                raise ValueError("enabled pageable transfer model requires finite positive bandwidth and non-negative latency")
             if (
                 source_kind in {"host_memory", "cpu"}
                 and target_kind == "gpu"
@@ -8426,10 +8373,10 @@ def _add_transfer_tasks(
                 target_kind = _kind(_component(scenario, target_component))
                 bandwidth_gbps = float(raw_spec.get("bandwidth_gbps", 0.0))
                 fixed_latency_ns = float(raw_spec.get("fixed_latency_ns", 0.0))
-            except (KeyError, TypeError, ValueError):
-                bandwidth_gbps = 0.0
-                fixed_latency_ns = 0.0
-                source_kind = target_kind = ""
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("enabled pageable transfer model has invalid parameters") from exc
+            if not math.isfinite(bandwidth_gbps) or bandwidth_gbps <= 0 or not math.isfinite(fixed_latency_ns) or fixed_latency_ns < 0:
+                raise ValueError("enabled pageable transfer model requires finite positive bandwidth and non-negative latency")
             if (
                 source_kind in {"gpu", "hbm"}
                 and target_kind in {"host_memory", "cpu"}
@@ -8446,42 +8393,35 @@ def _add_transfer_tasks(
                     ),
                     "evidence": raw_spec.get("evidence"),
                 }
-    if scenario is not None:
-        # A physical host backing store must participate in CPU DMA as well
-        # as CPU cache misses. Keep the topology's CPU/GPU controller hops,
-        # but originate/terminate the payload at the attached memory.
-        host_physical = False
+    if scenario is not None and byte_count > 0 and transfer_metadata.get("transfer_kind", "data") != "instruction":
+        # Every data movement originates/terminates at physical storage.
+        # The CPU/GPU remains on the topology route as the controller.
         endpoints = [source_component, target_component]
         for index, endpoint in enumerate(endpoints):
-            if _kind(_component(scenario, endpoint)) == "cpu":
-                memory_id = _nearest_profile_component_id(scenario, endpoint, "host_memory")
-                if memory_id is not None and _physical_dram_config(scenario, _component(scenario, memory_id)) is not None:
-                    endpoints[index] = memory_id
-                    host_physical = True
-        if host_physical:
-            for index, endpoint in enumerate(endpoints):
-                if _kind(_component(scenario, endpoint)) == "gpu":
-                    ranks = tuple(rank for rank in _parallel_plan(scenario).ranks
-                                  if rank.component_id == endpoint)
-                    requested_rank = transfer_metadata.get("rank")
-                    matching = tuple(rank for rank in ranks if rank.rank == requested_rank)
-                    memories = {rank.memory_component_id for rank in (matching or ranks)
-                                if rank.memory_component_id
-                                and _component(scenario, rank.memory_component_id).is_active_memory
-                                and _component(scenario, rank.memory_component_id).cost_profile_id is not None}
-                    if len(memories) == 1:
-                        endpoints[index] = next(iter(memories))
-                    elif len(memories) > 1:
-                        # A controller-level payload has no declared shard.
-                        # Preserve that endpoint instead of inventing a bank
-                        # or rejecting an otherwise valid multi-memory GPU.
-                        transfer_metadata["gpu_memory_endpoint_resolution"] = "logical_controller_multiple_backends"
-                    else:
-                        memory_id = next((candidate for kind in ("gddr", "hbm", "dram", "ddr", "lpddr")
-                            if (candidate := _nearest_profile_component_id(scenario, endpoint, kind)) is not None), None)
-                        if memory_id is not None:
-                            endpoints[index] = memory_id
-            source_component, target_component = endpoints
+            endpoint_kind = _kind(_component(scenario, endpoint))
+            if endpoint_kind == "cpu":
+                endpoints[index] = _compute_local_runtime_memory_component_id(scenario, endpoint)
+            elif endpoint_kind == "gpu":
+                ranks = tuple(rank for rank in _parallel_plan(scenario).ranks if rank.component_id == endpoint)
+                requested_rank = transfer_metadata.get("rank")
+                matching = tuple(rank for rank in ranks if rank.rank == requested_rank) if requested_rank is not None else ranks
+                if requested_rank is not None and ranks and not matching:
+                    raise ValueError("transfer {} has no rank {} on GPU {}".format(name, requested_rank, endpoint))
+                memories = {rank.memory_component_id for rank in matching if rank.memory_component_id}
+                if len(memories) > 1:
+                    raise ValueError("transfer {} has multiple physical memory backends on {}; specify its rank or memory endpoint".format(name, endpoint))
+                endpoints[index] = next(iter(memories)) if memories else _compute_local_runtime_memory_component_id(scenario, endpoint)
+            if endpoint_kind in {"cpu", "gpu"}:
+                from .physical_contract import require_physical_memory_config
+                require_physical_memory_config(_component(scenario, endpoints[index]))
+        if endpoints[0] == endpoints[1] and source_component != target_component and str(transfer_metadata.get("event_kind", "")).startswith("linear_state_"):
+            read = _component(scenario, source_component).is_storage
+            device = target_component if read else source_component
+            return _add_direct_state_access(
+                builder, scenario, router, endpoints[0], device, byte_count,
+                dependencies, name=name, read=read, metadata=transfer_metadata,
+            )
+        source_component, target_component = endpoints
     shared_page_offset = transfer_metadata.get("page_offset_bytes")
     if shared_page_offset is None:
         shared_page_offset = transfer_metadata.get("offset_bytes")
@@ -9162,37 +9102,8 @@ def _add_host_cohort_gpu_transfer(
             }
         ),
     )
-    h2d_source_component = cpu_id
-    h2d_target_component = gpu_id
-    try:
-        candidate_source = _compute_local_runtime_memory_component_id(
-            scenario,
-            cpu_id,
-        )
-        candidate_target = _compute_local_runtime_memory_component_id(
-            scenario,
-            gpu_id,
-        )
-        coherent_h2d_probe = _transfer_phases(
-            scenario,
-            router,
-            candidate_source,
-            candidate_target,
-            payload_bytes,
-            policy=plan.routing_policy,
-            name=name + ".h2d_probe",
-        )
-    except (KeyError, TypeError, ValueError):
-        coherent_h2d_probe = ()
-    if (
-        len(coherent_h2d_probe) == 1
-        and coherent_h2d_probe[0].metadata.get("transfer_execution")
-        == "coherent_dma"
-    ):
-        h2d_source_component = candidate_source
-        h2d_target_component = candidate_target
-    # A topology that has not explicitly opted its whole memory span into
-    # coherent DMA retains the legacy one-hop logical CPU-to-GPU transfer.
+    h2d_source_component = _compute_local_runtime_memory_component_id(scenario, cpu_id)
+    h2d_target_component = _compute_local_runtime_memory_component_id(scenario, gpu_id)
     transferred = _add_transfer_tasks(
         builder,
         router,
@@ -9663,15 +9574,15 @@ def _add_request_marker_boundary(
     Request marker timing is a request-level additive action.  It is never
     inferred from phase totals or spread over operators.  The calibration
     helper requires a covered marker row, model/hardware/runtime identity,
-    and exact prompt/output shape, so an absent or mismatched profile leaves
-    the dependency unchanged (fail-closed).
+    and exact prompt/output shape. An enabled marker with absent or mismatched
+    evidence is rejected before returning a predicted request time.
     """
     metadata = scenario.placement.metadata
     if metadata.get("native_calibration_apply_request_boundary") is not True:
         return dependency
     profile = profile_from_mapping(metadata.get("native_calibration"))
     if profile is None:
-        return dependency
+        raise ValueError("request boundary calibration is enabled without a profile")
     request_metadata = request.metadata if isinstance(request.metadata, Mapping) else {}
     prompt_fingerprint = (
         request_metadata.get("prompt_fingerprint")
@@ -9689,10 +9600,11 @@ def _add_request_marker_boundary(
         prompt_tokens=request.prompt_tokens,
         output_tokens=request.output_tokens,
         prompt_fingerprint=str(prompt_fingerprint) if prompt_fingerprint is not None else None,
+        required=True,
     )
     # A zero-valued measured marker is valid evidence but needs no task.  Do
     # not create a synthetic zero-duration event that could perturb ordering.
-    if value is None or value <= 0:
+    if value <= 0:
         return dependency
     return builder.add(
         "request_boundary." + str(marker),
@@ -10353,9 +10265,7 @@ def _gpu_profiles(
             if not memory_component.is_active_memory or not memory_component.is_writable:
                 raise ValueError("rank memory must be writable active memory: " + selected_memory)
             if memory_component.cost_profile_id is None and _kind(memory_component) in {"sram", "shared_memory", "memory"}:
-                # Compatibility: these legacy scratch endpoints have no typed
-                # backing profile; GPU kernel traffic still uses attached HBM.
-                selected_memory = None
+                raise ValueError("explicit rank memory {} has no cost profile; select a configured physical backing memory".format(selected_memory))
         if selected_memory is None:
             # Resolve the GPU's attached local DRAM by its canonical family.
             # GDDR is a first-class memory component; do not require callers
@@ -10501,6 +10411,7 @@ def _compute_local_runtime_memory_component_id(
             memory = _component(scenario, selected)
             if memory.is_active_memory and memory.cost_profile_id is not None:
                 return selected
+            raise ValueError("explicit rank memory {} is not a configured active memory backend".format(selected))
         if len(declared) > 1:
             raise ValueError("runtime memory target needs an explicit rank for multiple memory backends")
     memory_component_id = None
@@ -11180,15 +11091,15 @@ def _source_conversion_parallelism(scenario, target, workload, conversion, path)
     from .conversion_work import ConversionSourceContract, derive_conversion_work, UnsupportedConversion
     raw = target.metadata.get("llama_cpp_conversion_source_contract")
     if not isinstance(raw, Mapping):
-        return conversion, {"applied": False, "reason": "missing_conversion_source_contract"}
+        raise ValueError("enabled conversion CTA costs require a conversion source contract")
     formats = tuple(workload.packed_weight_formats)
     if len(formats) != 1:
-        return conversion, {"applied": False, "reason": "not_one_physical_weight_format"}
+        raise ValueError("enabled conversion CTA costs require one physical weight format")
     try:
         work = derive_conversion_work(m=workload.m, k=workload.k,
             weight_format=formats[0], path=path, contract=ConversionSourceContract(**dict(raw)))
     except UnsupportedConversion as error:
-        return conversion, {"applied": False, "reason": str(error)}
+        raise ValueError("enabled conversion CTA costs are unsupported: " + str(error)) from error
     if (work.partial_scalar_operations, work.read_bytes, work.write_bytes) != (
             conversion.operations, conversion.read_bytes, conversion.write_bytes):
         raise ValueError("conversion source work differs from lowered physical work")
@@ -11685,7 +11596,9 @@ def _declared_mmq_work(
     }
 
     def uncovered(reason: str):
-        return None, {**audit, "reason": reason}, 0
+        if reason in {"runtime_rhs_is_not_a_physical_model_weight", "unsupported_or_mixed_physical_weight_format", "expert_or_scatter_layout", "fused_epilogue_has_no_native_mmq_contract"}:
+            return None, {**audit, "status": "not_applicable", "reason": reason}, 0
+        raise ValueError("enabled MMQ source implementation is incomplete: " + reason)
 
     if not model_weight_read or rhs_is_activation:
         return uncovered("runtime_rhs_is_not_a_physical_model_weight")
@@ -11806,7 +11719,7 @@ def _declared_mmvq_work(
     }
 
     def uncovered(reason: str) -> Tuple[None, Mapping[str, object]]:
-        return None, {**audit, "reason": reason}
+        raise ValueError("selected MMVQ source implementation is unsupported: " + reason)
 
     if not model_weight_read or rhs_is_activation:
         return uncovered("runtime_rhs_is_not_a_physical_model_weight")
@@ -11907,17 +11820,17 @@ def _declared_mmvq_issue_contract(scenario, workload, target, gpu_profile):
     if workload.mmvq_work is None:
         return None, {**audit, "reason": "no_supported_source_MMVQ_work"}
     if workload.mmvq_work.weight_format == "IQ4_XS":
-        return None, {**audit, "reason": "IQ4_XS_geometry_only_no_issue_rate_contract"}
+        raise ValueError("requested MMVQ issue bound has no IQ4_XS issue-rate contract")
     competing = scenario.hardware.metadata.get("llama_cpp_mmvq_prmt_partial_contract", {})
     if isinstance(competing, Mapping) and competing.get("enabled") is True:
-        return None, {**audit, "reason": "competing_PRMT_partial_cost_treatment"}
+        raise ValueError("MMVQ issue bound conflicts with enabled PRMT partial cost treatment")
     try:
         contract = MMVQIssueContract.from_mapping(
             target.metadata.get("llama_cpp_mmvq_vector_issue_contract"))
         bound = derive_issue_bound(workload.mmvq_work, contract,
             sm_count=gpu_profile.sm_count, frequency_ghz=gpu_profile.tensor_core.frequency_ghz)
     except (TypeError, ValueError, UnsupportedMMVQ) as error:
-        return None, {**audit, "reason": str(error)}
+        raise ValueError("requested MMVQ issue bound has an invalid contract: " + str(error)) from error
     return contract, {"requested": True, "status": "applied_conditional_lower_bound",
         "capacity_kind": bound["capacity_kind"], "clock_condition": bound["clock_condition"],
         "source_condition": bound["source_condition"], "native_instruction_mapping_proven": False}
@@ -12882,6 +12795,7 @@ def _add_rank_gemm(
                                      or (scenario.llama_cpp_config.fingerprint
                                          if scenario.llama_cpp_config is not None else None)),
                 apply_memory=scenario.placement.metadata.get("native_calibration_apply_memory") is True,
+                apply_stage=scenario.placement.metadata.get("native_calibration_apply_stage") is True,
             )
             demands = calibrated_phase.demands
             effective_phase_metadata = dict(calibrated_phase.metadata)
@@ -13181,44 +13095,47 @@ def _add_rank_tensor_kernel(
     )
     stage_surface_audit = {}
     # MMQ conversion and fixup have independent accepted Level-2 surfaces.
-    # Bind them from the actual lowered source metadata; a missing runtime,
-    # signature, or calibrated cell leaves the analytical tensor cost intact.
+    # Bind them from actual lowered source metadata.  A selected measured
+    # surface must match its runtime, signature, and calibrated cell.
     source_meta = (metadata or {}).get("mmq_source_work", {}) if metadata else {}
     stage_binding = (metadata or {}).get("mmq_stage_binding", {}) if metadata else {}
     stage = source_meta.get("stage") if isinstance(source_meta, Mapping) else None
     if stage in {"conversion", "fixup"} and isinstance(stage_binding, Mapping):
         stage_name = "activation_repack" if stage == "conversion" else "stream_k_fixup"
-        try:
-            from .mmq_level2_stage_data import mmq_stage_surface
-            surface = mmq_stage_surface(
-                stage_name,
-                str(source_meta.get("weight_format", "")).casefold(),
-                str(stage_binding.get("dispatch_signature", "")),
-            )
-            if surface is not None:
+        from .mmq_level2_stage_data import mmq_stage_surface
+        surface = mmq_stage_surface(
+            stage_name,
+            str(source_meta.get("weight_format", "")).casefold(),
+            str(stage_binding.get("dispatch_signature", "")),
+        )
+        if surface is not None:
+            try:
                 shape = (int(source_meta["m"]), int(source_meta["n"]), int(source_meta["k"]))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("selected MMQ stage surface has invalid source shape") from exc
+            try:
                 runtime = str(stage_binding.get("runtime_binary_sha256", ""))
                 analytical = max((phase.demands and max(d.service_ns for d in phase.demands)
                                   for phase in estimate.phases if phase.name != "kernel_launch"), default=0.0)
                 prediction = surface.predict(shape, runtime_binary_sha256=runtime,
                                              dispatch_signature=surface.dispatch_signature,
                                              analytical_ns=analytical)
-                if prediction.get("accepted") and prediction.get("prediction_ns") and analytical > 0:
-                    factor = float(prediction["prediction_ns"]) / analytical
-                    estimate = replace(estimate, phases=tuple(
-                        replace(phase, demands=tuple(replace(d, service_ns=d.service_ns * factor)
-                                                     for d in phase.demands))
-                        if phase.name != "kernel_launch" else phase
-                        for phase in estimate.phases))
-                    stage_surface_audit = {"mmq_stage_surface": {**prediction,
-                        "status": "applied", "stage": stage_name, "factor": factor}}
-                else:
-                    stage_surface_audit = {"mmq_stage_surface": {**prediction,
-                        "status": "uncovered", "stage": stage_name}}
-        except (KeyError, TypeError, ValueError):
-            stage_surface_audit = {"mmq_stage_surface": {
-                "status": "uncovered", "stage": stage_name,
-                "reason": "stage_binding_or_shape_invalid"}}
+            except (TypeError, ValueError) as exc:
+                raise ValueError("selected MMQ stage surface prediction failed") from exc
+            if not prediction.get("accepted") or not prediction.get("prediction_ns") or analytical <= 0:
+                raise ValueError(
+                    "selected MMQ stage surface does not cover {} {}: {}".format(
+                        stage_name, shape, prediction.get("reason", "invalid prediction")
+                    )
+                )
+            factor = float(prediction["prediction_ns"]) / analytical
+            estimate = replace(estimate, phases=tuple(
+                replace(phase, demands=tuple(replace(d, service_ns=d.service_ns * factor)
+                                             for d in phase.demands))
+                if phase.name != "kernel_launch" else phase
+                for phase in estimate.phases))
+            stage_surface_audit = {"mmq_stage_surface": {**prediction,
+                "status": "applied", "stage": stage_name, "factor": factor}}
     last = ""
     for phase in estimate.phases:
         if phase.name == "kernel_launch" and not emit_kernel_launch:
@@ -13275,6 +13192,7 @@ def _add_rank_tensor_kernel(
                                      or (scenario.llama_cpp_config.fingerprint
                                          if scenario.llama_cpp_config is not None else None)),
                 apply_memory=scenario.placement.metadata.get("native_calibration_apply_memory") is True,
+                apply_stage=scenario.placement.metadata.get("native_calibration_apply_stage") is True,
             )
             demands = calibrated_phase.demands
             # A phase-scoped launch measurement belongs only to the explicit
@@ -13434,6 +13352,7 @@ def _add_rank_fused_attention(
                                      or (scenario.llama_cpp_config.fingerprint
                                          if scenario.llama_cpp_config is not None else None)),
                 apply_memory=scenario.placement.metadata.get("native_calibration_apply_memory") is True,
+                apply_stage=scenario.placement.metadata.get("native_calibration_apply_stage") is True,
             )
             demands = calibrated_phase.demands
             effective_phase_metadata = dict(calibrated_phase.metadata)
@@ -13793,6 +13712,7 @@ def _add_rank_primitive(
                                      or (scenario.llama_cpp_config.fingerprint
                                          if scenario.llama_cpp_config is not None else None)),
                 apply_memory=scenario.placement.metadata.get("native_calibration_apply_memory") is True,
+                apply_stage=scenario.placement.metadata.get("native_calibration_apply_stage") is True,
             )
             demands = calibrated_phase.demands
             effective_phase_metadata = dict(calibrated_phase.metadata)
@@ -14112,12 +14032,11 @@ def _host_recurrent_offload_decision(
 ) -> Optional[_HostRecurrentOffloadDecision]:
     """Select the evidenced CUDA recurrent path without moving state ownership."""
 
-    try:
-        gpu_profile = _resolve_component_profile(
-            scenario, rank.component_id, GPUProfile
-        )
-    except (AttributeError, KeyError, TypeError, ValueError):
+    if _kind(_component(scenario, rank.component_id)) != "gpu":
         return None
+    gpu_profile = _resolve_component_profile(
+        scenario, rank.component_id, GPUProfile
+    )
     capability = gpu_profile.host_recurrent_offload
     if capability is None:
         return None
@@ -14135,17 +14054,14 @@ def _host_recurrent_offload_decision(
         _kind(_component(scenario, placement_component_id)) == "cpu"
     )
     if placement_is_cpu:
-        try:
-            state_owner_component_id, _offload, _ratio = (
-                _linear_state_components(
-                    scenario,
-                    rank,
-                    placement_component_id,
-                    layer,
-                )
+        state_owner_component_id, _offload, _ratio = (
+            _linear_state_components(
+                scenario,
+                rank,
+                placement_component_id,
+                layer,
             )
-        except (AttributeError, KeyError, TypeError, ValueError):
-            state_owner_component_id = None
+        )
 
     if not placement_is_cpu:
         reason = "placement_not_cpu"
@@ -14728,30 +14644,8 @@ def _add_kv_access(
         # transaction model.  Keep it inside the declared component capacity
         # for small analytical test memories as well as full-size VRAM.
         owner_component = _component(scenario, owner)
-        if offset is None and owner_component.metadata.get("physical_memory_config") is not None:
-            raw_layer = str(metadata.get("layer_id", ""))
-            try:
-                layer_index = int(raw_layer.rsplit("-", 1)[-1])
-            except (TypeError, ValueError):
-                layer_index = 0
-            rank_index = int(metadata.get("rank", rank.rank) or 0)
-            raw_config = owner_component.metadata.get("physical_memory_config")
-            page_bytes = None
-            if isinstance(raw_config, Mapping):
-                page_bytes = raw_config.get("page_bytes") or raw_config.get("burst_bytes")
-            if page_bytes is None:
-                page_bytes = owner_component.metadata.get("transfer_granularity_bytes")
-            if page_bytes is None:
-                page_bytes = getattr(scenario.placement.kv_policy, "tokens_per_page", 16)
-            try:
-                page_bytes = max(1, int(page_bytes))
-            except (TypeError, ValueError, OverflowError):
-                page_bytes = 256
-            candidate = (rank_index * max(1, int(scenario.model.num_layers)) + layer_index) * page_bytes
-            capacity = int(owner_component.capacity_bytes or 0)
-            max_address = max(0, capacity - max(1, int(byte_count)))
-            slots = max(1, max_address // page_bytes + 1)
-            offset = (candidate // page_bytes % slots) * page_bytes
+        if offset is None:
+            offset = _direct_memory_address(scenario, rank, owner, byte_count, metadata)
         service = endpoint_service(
             _component(scenario, owner), byte_count, read=is_read, name=name,
             page_offset_bytes=offset, compact_preview=True)
@@ -16325,48 +16219,9 @@ def _compile_parallel_mtp_proposer(
             if descriptor.operator.op_kind in allowed_kinds
         )
     if not descriptors:
-        proposer_scale = float(getattr(policy, "proposal_cost_scale", 0.15))
-        demands = (
-            (
-                ResourceDemand(
-                    _rank_compute_resource(
-                        scenario, plan.rank_at(0, plan.pp_degree - 1, 0)
-                    ),
-                    max(50.0, proposer_scale * 1000.0 * draft_tokens),
-                    work_units=float(draft_tokens),
-                ),
-            )
-            if draft_tokens
-            else ()
-        )
-        return builder.add(
-            prefix
-            + (
-                ".propose"
-                if invocation_family == "proposer"
-                else ".catchup"
-            ),
-            TaskCategory.POLICY,
-            demands,
-            dependencies=dependencies,
-            advance=False,
-            metadata={
-                "event_kind": (
-                    "mtp_propose"
-                    if invocation_family == "proposer"
-                    else "mtp_draft_context_catchup"
-                ),
-                "mtp_invocation_family": invocation_family,
-                "mtp_coverage": "policy_cost_fallback",
-                "model_operator_ids": (),
-                "weight_tensor_ids": (),
-                "proposed_tokens": verifier_tokens,
-                "draft_tokens": draft_tokens,
-                "draft_steps": len(step_lanes),
-                "proposal_cost_scale_applied": proposer_scale,
-                "accepted_tokens": accepted_tokens,
-                **single_group_metadata,
-            },
+        raise ValueError(
+            "MTP execution requires explicit model operator and weight descriptors; "
+            "proposal_cost_scale cannot substitute for modeled execution"
         )
 
     layer = _execution_layers(scenario)[-1]
@@ -21716,19 +21571,7 @@ def _compile_parallel_final_norm(
         actual_source = builder.rank_value_component(dependencies, rank.rank) or rank.component_id
         native_norm = _llama_final_norm_plan(scenario, rank, actual_source, batch_tokens, hidden_size)
         if native_norm is not None and activation_bits != 32:
-            # A static norm weight does not prove F32 activation storage. Keep
-            # the pre-existing analytical path for ordinary GGUF/runtime inputs
-            # that lack this optional source-mechanism prerequisite. The binding
-            # was still validated above, so contradictory shapes/bytes fail.
-            metadata["final_norm_placement_fallback"] = {
-                "status": "analytical_fallback",
-                "reason": "f32_hidden_storage_not_declared",
-                "timing_completeness": "partial",
-                "activation_bits": activation_bits,
-                "weight_bits": native_norm["weight"]["bits"],
-                "native_mechanism_applied": False,
-                "accuracy_validated": False,
-            }
+            raise ValueError("native final_norm requires declared F32 hidden storage; analytical placement fallback is disabled")
         elif native_norm is not None:
             ends[rank.rank] = _add_llama_final_norm(
                 builder, scenario, router, plan, rank, native_norm, phase, dependencies,
@@ -22025,8 +21868,7 @@ def _lm_head_output_dtype(scenario: ScenarioConfig) -> Tuple[str, str]:
         )
         if len(output_dtypes) == 1:
             return output_dtypes[0], "model_logits_tensor_dtype"
-        layer = execution_view.layer_instances[-1].layer
-        return layer.dtype, "partial_last_layer_activation_fallback"
+        raise ValueError("lm_head requires an unambiguous output tensor dtype in the model graph; last-layer dtype fallback is disabled")
 
     context = _active_compilation_context(scenario)
     if context is None:
@@ -22309,33 +22151,9 @@ def _add_host_visible_logits_sampling_commit(
     rank = plan.rank_at(0, plan.pp_degree - 1, 0)
     source_component = rank.component_id
     tail_target = _host_output_tail_target(scenario, router)
-    transfer_source_component = source_component
-    if tail_target.memory_component_id is not None:
-        try:
-            candidate_source = (
-                rank.memory_component_id
-                or _compute_local_runtime_memory_component_id(
-                    scenario,
-                    source_component,
-                )
-            )
-            coherent_d2h_probe = _transfer_phases(
-                scenario,
-                router,
-                candidate_source,
-                tail_target.memory_component_id,
-                logits_bytes,
-                policy=plan.routing_policy,
-                name=phase + ".output.d2h_probe",
-            )
-        except (KeyError, TypeError, ValueError):
-            coherent_d2h_probe = ()
-        if (
-            len(coherent_d2h_probe) == 1
-            and coherent_d2h_probe[0].metadata.get("transfer_execution")
-            == "coherent_dma"
-        ):
-            transfer_source_component = candidate_source
+    transfer_source_component = (
+        rank.memory_component_id or _compute_local_runtime_memory_component_id(scenario, source_component)
+    ) if tail_target.memory_component_id is not None else source_component
     contract_projection = _host_output_contract_projection(scenario)
     common = {
         "logit_rows": rows,
@@ -27233,9 +27051,17 @@ def _resource_busy_by_direction(
 
 def _physical_execution_rows(tasks):
     for task in tasks:
+        by_owner = task.metadata.get("physical_execution_by_owner")
+        if isinstance(by_owner, Mapping):
+            for raw in by_owner.values():
+                if isinstance(raw, Mapping):
+                    yield task, raw, str(raw["kind"]).upper()
+            continue
         raw = task.metadata.get("physical_execution")
         if isinstance(raw, Mapping):
-            yield task, raw
+            config = task.metadata.get("physical_memory_config")
+            kind_value = config.get("kind", "") if isinstance(config, Mapping) else getattr(config, "kind", "")
+            yield task, raw, str(getattr(kind_value, "value", kind_value)).upper()
 
 
 def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=None) -> Mapping[str, object]:
@@ -27245,29 +27071,32 @@ def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
     totals = {key: 0.0 for key in fields}
     operations: Dict[str, int] = {}
     resources: Dict[str, Dict[str, object]] = {}
-    count = 0
-    for task, raw in _physical_execution_rows(tasks):
-        config = task.metadata.get("physical_memory_config")
-        kind_value = config.get("kind", "") if isinstance(config, Mapping) else getattr(config, "kind", "")
-        kind = str(getattr(kind_value, "value", kind_value)).upper()
+    task_ids = set()
+    for task, raw, kind in _physical_execution_rows(tasks):
         if kind not in {"SSD", "HBF", "MEMORYKIND.SSD", "MEMORYKIND.HBF"}:
             continue
-        count += 1
+        task_ids.add(task.task_id)
         operation = str(raw.get("operation", "unknown"))
         operations[operation] = operations.get(operation, 0) + 1
         for key in fields:
             value = raw.get(key, 0)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 totals[key] += float(value)
+        physical_resources = raw.get("resource_busy_ns", {})
+        resolved_owners = raw.get("resource_owners", {})
         for demand in task.demands:
-            row = resources.setdefault(str(demand.resource_id), {"owner": "unknown", "bytes_moved": 0, "service_ns": 0.0, "energy_pj": 0.0})
+            resource_id = str(demand.resource_id)
+            if resource_id not in physical_resources:
+                continue
+            owner = (resource_owners or {}).get(resource_id, resolved_owners.get(resource_id, "unknown"))
+            row = resources.setdefault(resource_id, {"owner": owner, "bytes_moved": 0, "service_ns": 0.0, "energy_pj": 0.0})
             row["bytes_moved"] += int(demand.bytes_moved)
             row["service_ns"] += float(demand.service_ns)
             row["energy_pj"] += float(demand.energy_pj)
-    if not count:
+    if not task_ids:
         return {"schema_version": "heterollm.nand-traffic/v2", "task_count": 0}
     return {
-        "schema_version": "heterollm.nand-traffic/v2", "task_count": count,
+        "schema_version": "heterollm.nand-traffic/v2", "task_count": len(task_ids),
         **{key: int(round(value)) for key, value in totals.items() if key not in {"queue_wait_ns", "service_ns", "energy_pj"}},
         "queue_wait_ns": totals["queue_wait_ns"], "service_ns": totals["service_ns"], "energy_pj": totals["energy_pj"],
         "operation_counts": dict(sorted(operations.items())), "resource_totals": dict(sorted(resources.items())),
@@ -27280,15 +27109,12 @@ def _summarize_dram_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
               "physical_read_bytes", "physical_write_bytes", "physical_bytes", "burst_count",
               "row_hits", "row_misses", "row_conflicts", "queue_wait_ns", "service_ns")
     totals = {key: 0.0 for key in fields}
-    count = 0
+    task_ids = set()
     resources: Dict[str, Dict[str, object]] = {}
-    for task, raw in _physical_execution_rows(tasks):
-        config = task.metadata.get("physical_memory_config")
-        kind_value = config.get("kind", "") if isinstance(config, Mapping) else getattr(config, "kind", "")
-        kind = str(getattr(kind_value, "value", kind_value)).upper()
+    for task, raw, kind in _physical_execution_rows(tasks):
         if kind not in {"DDR", "LPDDR", "HBM", "GDDR", "MEMORYKIND.DDR", "MEMORYKIND.LPDDR", "MEMORYKIND.HBM", "MEMORYKIND.GDDR"}:
             continue
-        count += 1
+        task_ids.add(task.task_id)
         for key in fields:
             value = raw.get(key, 0)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -27308,7 +27134,7 @@ def _summarize_dram_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
             row["service_ns"] += float(demand.service_ns)
             row["energy_pj"] += float(demand.energy_pj)
     return {
-        "schema_version": "heterollm.dram-traffic/v2", "task_count": count,
+        "schema_version": "heterollm.dram-traffic/v2", "task_count": len(task_ids),
         **{key: int(round(value)) if key not in {"queue_wait_ns", "service_ns"} else value for key, value in totals.items()},
         "logical_bytes": int(round(totals["logical_bytes"])),
         "resource_totals": dict(sorted(resources.items())),
@@ -29631,5 +29457,3 @@ __all__ = [
     "summarize_analytical_coverage",
     "validate_scenario",
 ]
-
-

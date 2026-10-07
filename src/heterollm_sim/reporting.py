@@ -813,6 +813,7 @@ def _memory_layout(
     placement = scenario.placement
     parallel = placement.parallel
     raw_segments: List[Dict[str, Any]] = []
+    missing_physical_shards: List[Dict[str, Any]] = []
     represented_weight_tensors = set()
     metadata = placement.metadata
     decision = control_plane_decision(scenario)
@@ -853,13 +854,27 @@ def _memory_layout(
             )
         )
         if shards:
-            fallback_count = max(1, len(shards))
-            fallback_length = int(math.ceil(logical_bytes / float(fallback_count))) if logical_bytes else 0
             for physical_index, shard in enumerate(shards):
                 component_id = str(shard.get("storage_component_id", ""))
-                length_bytes = _non_negative_int(
-                    shard.get("physical_bytes"), fallback_length
+                raw_physical_bytes = shard.get("physical_bytes")
+                valid_physical_bytes = (
+                    isinstance(raw_physical_bytes, int)
+                    and not isinstance(raw_physical_bytes, bool)
+                    and raw_physical_bytes > 0
                 )
+                length_bytes = raw_physical_bytes if valid_physical_bytes else 0
+                if not valid_physical_bytes:
+                    missing_physical_shards.append(
+                        {
+                            "logical_id": logical_id,
+                            "rank": _integer_or_none(
+                                shard.get("rank_id", shard.get("rank"))
+                            ),
+                            "component_id": component_id or None,
+                            "reason": "physical_bytes_missing_or_invalid",
+                        }
+                    )
+                    continue
                 if not component_id or length_bytes <= 0:
                     continue
                 rank = _integer_or_none(shard.get("rank_id", shard.get("rank")))
@@ -1093,6 +1108,7 @@ def _memory_layout(
         "components": dict(sorted(components.items())),
         "component_totals_bytes": dict(sorted(component_totals.items())),
         "segment_count": len(raw_segments),
+        "missing_physical_weight_shards": missing_physical_shards,
         "returned_segment_count": len(returned),
         "segment_limit": segment_limit,
         "truncated": truncated,

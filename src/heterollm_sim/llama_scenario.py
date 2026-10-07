@@ -346,35 +346,7 @@ def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntime
         if not gpu_ranks:
             fallback = scenario.placement.kv_policy.cache_component
             if not fallback:
-                # A fresh UI scenario has no explicit rank mapping yet; the
-                # control plane materializes it later during the same
-                # lowering pass.  Keep llama.cpp validation usable by
-                # selecting a writable active memory endpoint as the
-                # provisional KV owner instead of rejecting the scenario
-                # before placement can run.  Prefer device-local memory so
-                # the default single-GPU path follows native llama.cpp
-                # residency semantics.
-                candidates = [
-                    component
-                    for component in scenario.hardware.components
-                    if component.is_active_memory and component.is_writable
-                ]
-                priority = {
-                    "hbm": 0,
-                    "gddr": 1,
-                    "hbf": 2,
-                    "dram": 3,
-                    "host_memory": 4,
-                    "ddr": 5,
-                    "ddr_memory": 6,
-                }
-                if candidates:
-                    fallback = min(
-                        candidates,
-                        key=lambda item: (priority.get(item.normalized_kind, 99), item.component_id),
-                    ).component_id
-            if not fallback:
-                raise ValueError("llama.cpp KV placement requires rank memory or writable active memory")
+                raise ValueError("llama.cpp KV placement requires rank memory or an explicit KV cache component")
             owner = {layer.layer_id: fallback for layer in layers}
         elif config.split_mode == "layer":
             owner = {
@@ -389,7 +361,9 @@ def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntime
                     if r.pp_rank == 0 and r.tp_rank == config.main_gpu
                 ),
                 None,
-            ) or gpu_ranks[min(config.main_gpu, len(gpu_ranks) - 1)]
+            )
+            if main is None:
+                raise ValueError("llama.cpp main_gpu {} has no matching GPU memory rank".format(config.main_gpu))
             owner = {layer.layer_id: main.memory_component_id for layer in layers}
         # llama.cpp's ``-ngl N`` keeps the earliest repeating blocks on host
         # and places the last N loadable layers on GPU.  The output layer is
@@ -603,7 +577,25 @@ def apply_llama_runtime_config(
         ),
     )
     placement_metadata = dict(scenario.placement.metadata)
-    native_kv = llama_cpp_kv_layer_mapping(scenario, config)
+    # Device-memory tiering chooses concrete HBM/HBF owners in its allocator.
+    # Before that policy runs, an unbound rank is deliberately left unbound.
+    gpu_count = sum(component.normalized_kind == "gpu" for component in scenario.hardware.components)
+    if config.offload_kqv and config.split_mode != "layer" and config.main_gpu >= gpu_count:
+        raise ValueError("llama.cpp main_gpu {} is outside {} available GPUs".format(config.main_gpu, gpu_count))
+    has_rank_memory = any(
+        rank.memory_component_id
+        for rank in build_parallel_plan(scenario).ranks
+    )
+    if config.device_memory_tiering and config.offload_kqv and not has_rank_memory and not kv_cache_component:
+        native_kv = {
+            "kv_layer_components": {}, "kv_layer_ranks": {},
+            "split_mode": config.split_mode, "kv_unified": config.kv_unified,
+            "offload_kqv": config.offload_kqv,
+            "gpu_layer_mapping": dict(loading_mapping),
+            "owner_resolution": "deferred_to_device_memory_policy",
+        }
+    else:
+        native_kv = llama_cpp_kv_layer_mapping(scenario, config)
     placement_metadata["llama_cpp_kv_layer_components"] = dict(native_kv["kv_layer_components"])
     placement_metadata["llama_cpp_kv_layer_ranks"] = dict(native_kv["kv_layer_ranks"])
     placement_metadata["llama_cpp_kv_contract"] = native_kv

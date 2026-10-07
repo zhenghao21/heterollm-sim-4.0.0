@@ -125,9 +125,10 @@ def evaluate_batched_gemm(
 ) -> BatchedGemmResult:
     """Evaluate independent GEMM candidates with vectorized roofline formulae.
 
-    ``backend`` accepts ``"auto"``, ``"numpy"``, or ``"cupy"``.  Both auto
-    selection and an explicit CuPy request safely fall back to NumPy when CuPy
-    or CUDA is unavailable; the Chinese ``diagnostics`` explain that choice.
+    ``backend`` accepts ``"auto"``, ``"numpy"``, or ``"cupy"``.  Auto
+    selects NumPy when CuPy or CUDA is unavailable.  An explicit CuPy request
+    fails if that backend cannot run; the Chinese ``diagnostics`` explain an
+    automatic selection.
     CuPy never appears in module-level imports or package dependencies.
     """
 
@@ -315,10 +316,10 @@ def _select_backend(requested: str) -> Tuple[Any, str, Tuple[str, ...]]:
         return cupy, "cupy", ("已使用 CuPy/CUDA 批量后端。",)
 
     if requested == "cupy":
-        prefix = "请求的 CuPy/CUDA 后端不可用，已回退到 NumPy CPU"
-    else:
-        prefix = "未检测到可用的 CuPy/CUDA，auto 已回退到 NumPy CPU"
-    return np, "numpy", ("{}：{}。".format(prefix, reason),)
+        raise RuntimeError("请求的 CuPy/CUDA 后端不可用：{}".format(reason))
+    return np, "numpy", (
+        "未检测到可用的 CuPy/CUDA，auto 已选择 NumPy CPU：{}。".format(reason),
+    )
 
 
 def _probe_cupy() -> Tuple[Optional[Any], str]:

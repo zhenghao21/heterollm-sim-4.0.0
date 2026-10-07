@@ -143,16 +143,7 @@ def scan_architecture_candidates(
                 )
             )
 
-    plan: Optional[ParallelPlan]
-    try:
-        plan = build_parallel_plan(scenario)
-    except ValueError as exc:
-        plan = None
-        diagnostics.append(
-            "当前并行/rank 配置无法形成有效 ParallelPlan（{}）；本次退化为不带逻辑 rank 的组件级扫描。".format(
-                exc
-            )
-        )
+    plan = build_parallel_plan(scenario)
 
     operator_diagnostics: List[str] = []
     operators = _representative_operators(scenario, plan, operator_diagnostics)
@@ -241,10 +232,7 @@ def build_batched_gemm_candidates(
         raise ValueError("scenario 必须是 ScenarioConfig")
     router = TopologyRouter(scenario.hardware)
     capabilities = _component_capabilities(scenario)
-    try:
-        plan: Optional[ParallelPlan] = build_parallel_plan(scenario)
-    except ValueError:
-        plan = None
+    plan = build_parallel_plan(scenario)
     operators = _representative_operators(scenario, plan, [])
     candidates, _ = _build_candidates(
         scenario, plan, operators, capabilities, router
@@ -742,28 +730,17 @@ def _gpu_peak_tops_for_operator(
         if operator.activation_bits <= 16 and operator.weight_bits <= 16
         else "fp32"
     )
-    try:
-        dtype_peak = float(profile.tensor_core.peak_tops(dtype))
-        default_peak = float(
-            profile.tensor_core.peak_tops(profile.default_tensor_dtype)
-        )
-    except ValueError:
-        return authored
-    if default_peak <= 0.0:
-        return authored
+    dtype_peak = float(profile.tensor_core.peak_tops(dtype))
+    default_peak = float(
+        profile.tensor_core.peak_tops(profile.default_tensor_dtype)
+    )
+    if default_peak <= 0.0 or dtype_peak <= 0.0:
+        raise ValueError("GPU tensor-core peak for {} must be positive".format(dtype))
     return authored * dtype_peak / default_peak
 
 
 def _shard_size(global_size: int, degree: int, allow_padding: bool) -> int:
-    try:
-        return shard_extent(
-            global_size, degree, 0, allow_padding=allow_padding
-        ).local_size
-    except ValueError:
-        # The invalid no-padding configuration is reported by ParallelPlan.
-        # A component-level fallback still needs a positive representative
-        # shape, so use the mathematical shard ceiling and label it analytical.
-        return int(math.ceil(global_size / float(max(1, degree))))
+    return shard_extent(global_size, degree, 0, allow_padding=allow_padding).local_size
 
 
 def _layer_precision_bits(layer: LayerSpec) -> Tuple[int, int]:

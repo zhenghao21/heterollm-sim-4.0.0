@@ -29,10 +29,11 @@ def test_cim_kv_access_preserves_remote_explicit_and_same_endpoint_pairs(
         pytest.fail("CIM KV access must not infer a CPU/GPU runtime backend")
 
     monkeypatch.setattr(planner, "_compute_local_runtime_memory_component_id", gpu_cpu_only)
-    task_id = planner._add_kv_access(
-        builder, scenario, TopologyRouter(scenario.hardware), plan, rank,
-        "cim0", target, 64, (), name="kv.append", metadata={"memory_direction": "write"},
-    )
+    with planner._compilation_scope(scenario):
+        task_id = planner._add_kv_access(
+            builder, scenario, planner._topology_router(scenario), plan, rank,
+            "cim0", target, 64, (), name="kv.append", metadata={"memory_direction": "write"},
+        )
     assert task_id == builder.tasks[-1].task_id
     assert builder.tasks[-1].metadata["resource_accounting"] == accounting
     if accounting == "explicit_remote_transfer":

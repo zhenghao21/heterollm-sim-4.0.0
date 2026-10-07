@@ -24,6 +24,8 @@ def test_compact_dram_summary_preserves_mixed_direction_and_owners():
                  ResourceDemand("gpu0.l2", 3.0, bytes_moved=512)),
         metadata={
             "physical_memory_config": _config(),
+            "physical_memory_configs": {"memory-a.fabric": _config(), "memory-b.fabric": _config()},
+            "physical_energy_pj_per_byte_by_owner": {"memory-a.fabric": 0.0, "memory-b.fabric": 0.0},
             "memory_accesses": (
                 {"operation": "read", "address": 1, "byte_count": 70,
                  "physical_owner": "memory-a.fabric"},

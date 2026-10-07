@@ -1,7 +1,7 @@
 """Kernel-specific service models; rates are declarations, never inferred measurements.
 
 A profile is scoped to one device/runtime build. Surfaces interpolate only complete
-joint grid cells. Unknown kernels and out-of-domain shapes retain analytical costs.
+joint grid cells. Unknown dispatches and uncovered measured shapes fail explicitly.
 """
 from __future__ import annotations
 
@@ -528,9 +528,8 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
                                                    if not attention else None))
     if kernel is None:
         return None
-    cache_surface_excluded = bool(kernel.samples and kernel.cache_protocol != workload.cache_protocol)
-    if cache_surface_excluded:
-        kernel = replace(kernel, samples=(), calibration_source_bound=False, calibration_cells=(), validation_relative_error=None)
+    if kernel.samples and kernel.cache_protocol != workload.cache_protocol:
+        raise ValueError('measured kernel cache protocol differs from workload')
     source_surface_excluded = False
     source_surface_exclusion_reason = None
     if kernel.samples and not attention:
@@ -568,7 +567,10 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
                 source_surface_excluded = True
                 source_surface_exclusion_reason = 'source_calibration_binding_mismatch'
     if source_surface_excluded:
-        kernel = replace(kernel, samples=(), calibration_source_bound=False, calibration_cells=(), validation_relative_error=None)
+        raise ValueError(
+            'measured kernel source binding is invalid: '
+            + (source_surface_exclusion_reason or 'source_launch_geometry_not_bound_to_surface')
+        )
     if kernel.output_bits != workload.output_bits:
         return None
     if not attention and kernel.accumulator_bits != workload.accumulator_bits:
@@ -652,8 +654,7 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
                                   key_tile_tokens=kernel.attention_kv_tile,
                                   tile_source='kernel_descriptor')
         if kernel.samples and workload.causal_query_positions:
-            # A rectangular sample does not qualify a causal visibility pattern.
-            kernel = replace(kernel, samples=(), calibration_source_bound=False, calibration_cells=(), validation_relative_error=None)
+            raise ValueError('rectangular attention sample does not cover causal visibility')
         ratio = attention_work['executed_pairs'] / (workload.batch_tokens * workload.context_tokens)
         read, write = workload.read_bytes, workload.write_bytes
         operations = workload.tensor_operations * ratio
@@ -721,6 +722,12 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
     if profile.stateful_l2 and kernel.samples:
         raise ValueError('measured kernel surfaces require a fixed cache protocol; disable stateful_l2')
     predicted, measured_bw, prediction = performance_surface(kernel, shape, analytical)
+    if kernel.samples and prediction['model'] == 'analytical':
+        raise ValueError(
+            'measured kernel surface has no covered sample for shape {!r}: {}'.format(
+                shape, prediction.get('reason', 'unknown coverage gap')
+            )
+        )
     if attention:
         # Descriptor integration must not turn diagnostic hot-buffer evidence
         # into a production timing surface.  Report the explicit acceptance
@@ -734,10 +741,6 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
         if prediction['model'] == 'analytical':
             prediction['reason'] = 'attention_level2_not_production_qualified'
             prediction['fallback_kind'] = 'explicit_attention_analytical'
-    if cache_surface_excluded:
-        prediction['reason'] = 'measurement_cache_protocol_mismatch'
-    if source_surface_excluded:
-        prediction['reason'] = source_surface_exclusion_reason or 'source_launch_geometry_not_bound_to_surface'
     if measured_bw is not None:
         if measured_bw > hbm.bandwidth_gb_s:
             raise ValueError('measured achieved HBM bandwidth exceeds declared physical peak')
@@ -1066,6 +1069,26 @@ def llama_blackwell_analytical_profile(hardware_id, runtime_id, *, calibrated=Fa
                             registers_per_thread=32, shared_memory_per_cta=0,
                             dot_ops_per_sm_cycle=128, attainable_efficiency=0.65,
                             transaction_efficiency=0.8, reduction_ops_per_output=5))
+    # Dense FP16 projections are part of the same llama.cpp execution graph,
+    # including the QKV RoPE and FFN SwiGLU epilogues.  Declare these source
+    # paths explicitly so a selected Blackwell profile covers ordinary model
+    # weights as well as its quantized MMQ/MMVQ families.
+    dense_evidence = (
+        'source:ggml-cuda ordinary contiguous FP16 MUL_MAT; '
+        'RoPE/SwiGLU fused epilogue work is charged by the workload; '
+        'rates and resources are caller-declared analytical assumptions'
+    )
+    for phase in ('prefill', 'decode'):
+        for epilogue in ('', 'rope', 'swiglu'):
+            kernels.append(KernelCapability(
+                'cuda_dense_fp16_' + (epilogue or 'plain'),
+                ('fp16',), 'fp16', phase, 'tensor', dense_evidence,
+                internal_dtype='fp16', output_bits=16, epilogue=epilogue,
+                min_shape=(1, 1, 1),
+                cta_geometry=(16, 64, 32), warps_per_cta=4,
+                registers_per_thread=32, shared_memory_per_cta=0,
+                attainable_efficiency=0.65, transaction_efficiency=0.8,
+            ))
     # Attention is a separate source family.  The independent synthetic
     # probes are diagnostic only (the probe DLL SHA differs from the calibrated
     # MMQ runtime and the causal M=64 fixup holdout is over the production

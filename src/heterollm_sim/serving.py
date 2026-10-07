@@ -6411,8 +6411,10 @@ class _OnlineRuntime:
     ]:
         """Return bulk transfer work without residency or translation work."""
 
-        if byte_count <= 0 or not source_component or not target_component:
+        if byte_count <= 0:
             return 0.0, 0.0, "no_declared_backing_path", (), ()
+        if not source_component or not target_component:
+            raise ValueError("positive transfer requires declared source and target components")
         source = str(source_component)
         target = str(target_component)
         if source == target:
@@ -6453,25 +6455,14 @@ class _OnlineRuntime:
                     topology_phases.append(demands)
                 route_ns += max((demand["service_ns"] for demand in demands), default=0.0)
                 route_energy += sum(demand["energy_pj"] for demand in demands)
-        except ValueError:
-            route_kind = "declared_dma_fallback"
+        except ValueError as exc:
+            raise ValueError(
+                "no valid topology route for transfer {} -> {}".format(source, target)
+            ) from exc
         if route_ns > 0.0:
             return route_ns, route_energy, route_kind, tuple(topology_phases), route_component_ids
-        bandwidth = self.resource_policy.page_transfer_bandwidth_gb_s
-        if bandwidth is None:
-            bandwidth = float(self.plan.scenario.host_orchestration_profile.dma_bandwidth_gb_s)
-        bulk_ns = byte_count / max(1.0e-12, float(bandwidth))
-        return (
-            bulk_ns,
-            route_energy,
-            route_kind,
-            (({
-                "resource_id": "owner_residency.dma.{}->{}".format(source, target),
-                "service_ns": float(bulk_ns),
-                "bytes_moved": int(byte_count),
-                "energy_pj": 0.0,
-            },),),
-            route_component_ids,
+        raise ValueError(
+            "topology transfer {} -> {} has no positive service".format(source, target)
         )
 
     def _tensor_get_copy_cost_details(
@@ -13297,11 +13288,11 @@ class _OnlineRuntime:
                                 target_component_id=memory_component_id,
                             )
                         )
-                except (KeyError, StopIteration, TypeError, ValueError):
-                    # Custom lowerers/profiles without a linkable cache domain
-                    # retain the conservative controller-owned fallback below.
-                    l2_resource_id = None
-                    memory_resource_ids.clear()
+                except (KeyError, StopIteration, TypeError, ValueError) as exc:
+                    raise ValueError(
+                        "GPU controller resource domains cannot be resolved "
+                        "for {}".format(gpu_id)
+                    ) from exc
                 cached_domains = (
                     l2_resource_id,
                     frozenset(memory_resource_ids),
@@ -13479,9 +13470,11 @@ class _OnlineRuntime:
                 )
                 # CacheHierarchyProfile already charges both L2 bandwidth and
                 # hit-latency waves.  The runtime L2 controller is therefore
-                # a byte/work observer for linked planner tasks.  A custom
-                # lowerer with no declared L2 provenance retains the former
-                # controller-owned latency as an explicit degraded fallback.
+                # a byte/work observer for linked planner tasks.
+                if observed_l2_bytes > 0 and l2_resource_id is None:
+                    raise ValueError(
+                        "GPU {} has L2 traffic without a resolved planner cache domain".format(gpu_id)
+                    )
                 l2_service_ns = (
                     0.0
                     if planner_owns_l2_service
@@ -14586,6 +14579,23 @@ class _OnlineRuntime:
         stages, stage_fallback_reason = (
             self._execution_stage_metadata_cache.resolve(cost.metadata)
         )
+        if cost.metadata.get("execution_stage_source") == "serial_fallback":
+            raise ValueError(
+                "executed task DAG could not be compacted into serving stages: {}".format(
+                    cost.metadata.get("execution_stage_fallback_reason")
+                    or stage_fallback_reason or "unknown reason"
+                )
+            )
+        if not stages and (
+            cost.metadata.get("execution_stages") is not None
+            or cost.metadata.get("execution_stage_source")
+            == "executed_task_dag_kernel_timeline"
+        ):
+            raise ValueError(
+                "declared execution stages are invalid: {}".format(
+                    stage_fallback_reason or "empty execution stage graph"
+                )
+            )
         host_orchestration_is_explicit = bool(
             stages
             and cost.metadata.get(
@@ -14880,6 +14890,12 @@ class _OnlineRuntime:
                 "owner_transfer_service_remains_in_cohort_tail"
             )
         causality_degraded = bool(causality_degraded_reasons)
+        if causality_degraded:
+            raise ValueError(
+                "owner residency transfer has no valid consumer timing: {}".format(
+                    ", ".join(causality_degraded_reasons)
+                )
+            )
         cost = BatchCost(
             cost.duration_ns,
             cost.energy_pj,
@@ -16952,15 +16968,11 @@ def _physical_runtime_limits(plan: ServingPlan) -> Mapping[str, int]:
         ),
     )
     names_by_component: Dict[str, set] = {}
-    fallback_by_component: Dict[str, int] = {}
-    for component_id, tensor_name, fallback in roles:
+    for component_id, tensor_name, _declared_role_bytes in roles:
         if not component_id:
             continue
         component = str(component_id)
         names_by_component.setdefault(component, set()).add(tensor_name)
-        fallback_by_component[component] = (
-            fallback_by_component.get(component, 0) + int(fallback)
-        )
     limits: Dict[str, int] = {}
     for component_id, dynamic_tensors in names_by_component.items():
         physical = _component_capacity(plan.scenario, component_id)
@@ -16971,7 +16983,11 @@ def _physical_runtime_limits(plan: ServingPlan) -> Mapping[str, int]:
                 plan.scenario, component_id, tuple(dynamic_tensors)
             )
         else:
-            limits[component_id] = fallback_by_component[component_id]
+            raise ValueError(
+                "runtime state component {} has no declared physical capacity".format(
+                    component_id
+                )
+            )
     return limits
 
 
@@ -17006,10 +17022,11 @@ def _add_prompt_cache_runtime_limits(
                 plan.scenario, component, (tensor_name,)
             )
         else:
-            # Unknown capacity is intentionally left unbounded here.  The
-            # physical ledger's existing fallback semantics apply, while all
-            # derived prompt-cache sizes remain explicit in metadata.
-            continue
+            raise ValueError(
+                "prompt-cache component {} has no declared physical capacity".format(
+                    component
+                )
+            )
 
 
 def _dynamic_component_capacity(

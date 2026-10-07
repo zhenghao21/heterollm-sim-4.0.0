@@ -1,7 +1,11 @@
+import pytest
+
 from heterollm_sim.model_presets import (
     get_model_preset,
     materialize_model_payload,
+    materialize_preset_definition,
     list_model_presets,
+    UnsupportedPresetError,
 )
 from heterollm_sim.model_catalog import definition_from_huggingface, _import_preset_id
 from heterollm_sim.config import model_from_dict
@@ -111,6 +115,7 @@ def test_catalog_import_accepts_explicitly_disabled_sliding_window():
         "max_position_embeddings": 131072,
         "sliding_window": 4096,
         "use_sliding_window": False,
+        "torch_dtype": "bfloat16",
         "tie_word_embeddings": False,
     }
     definition = definition_from_huggingface(
@@ -124,6 +129,34 @@ def test_catalog_import_accepts_explicitly_disabled_sliding_window():
     assert definition.support_level == "exact"
     assert definition.patterns[0].attention_head_dim == 128
     assert definition.tie_word_embeddings is False
+
+
+def test_import_with_missing_dtype_or_tied_embedding_contract_is_metadata_only():
+    config = {
+        "model_type": "qwen2",
+        "num_hidden_layers": 2,
+        "hidden_size": 64,
+        "intermediate_size": 128,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "vocab_size": 256,
+        "max_position_embeddings": 1024,
+    }
+    definition = definition_from_huggingface(
+        "Example/model",
+        "main",
+        "a" * 40,
+        "b" * 64,
+        {"id": "Example/model", "gated": False},
+        config,
+    )
+
+    assert definition.support_level == "out_of_domain"
+    assert definition.coverage == "metadata_only"
+    assert any("torch_dtype/dtype is absent or auto" in item for item in definition.limitations)
+    assert any("tie_word_embeddings must be a boolean" in item for item in definition.limitations)
+    with pytest.raises(UnsupportedPresetError):
+        materialize_preset_definition(definition)
 
 
 def test_import_identity_includes_revision_or_commit():

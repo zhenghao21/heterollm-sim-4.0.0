@@ -455,49 +455,19 @@ class DynamicKVPool:
             return False
 
     def _transfer_time_ns(self, source: str, target: str, bytes_: int) -> float:
-        """Price one logical page move exactly once per physical stage.
+        """Reject migrations until they are lowered through the shared event core.
 
-        A migration reads from the current owner and writes into the target.
-        The topology owns only link service; endpoint descriptors own the
-        memory service at either end.  Keeping those terms explicit prevents
-        a route from silently replacing the medium cost (or charging a
-        source *write* / target *read* in the wrong direction).
+        The pool knows ownership and capacity, but has no physical address or
+        shared DRAM/NAND queue state. Bandwidth-only pricing here used to bypass
+        the memory simulator while advancing serving time.
         """
-        if source == target:
+        if source == target or bytes_ == 0:
             return 0.0
-
-        source_desc, target_desc = self.components[source], self.components[target]
-
-        def endpoint_time(component: KvPoolComponent, *, read: bool) -> float:
-            direction = "read" if read else "write"
-            bandwidth = float(
-                component.read_bandwidth_gbps
-                if read
-                else component.write_bandwidth_gbps
-            )
-            # KvPoolComponent historically exposes one latency value.  Honor
-            # a direction-specific metadata override when a catalog provides
-            # one, while retaining that public shape for existing callers.
-            latency = float(component.metadata.get(
-                "{}_latency_ns".format(direction), component.latency_ns
-            ))
-            if bandwidth <= 0.0:
-                # Unknown endpoint bandwidth contributes its declared fixed
-                # latency only; communication.py applies the same fail-open
-                # rule for active memories and fails closed for storage media.
-                return max(0.0, latency)
-            return max(0.0, latency) + (8.0 * float(bytes_)) / bandwidth
-
-        endpoint_ns = endpoint_time(source_desc, read=True) + endpoint_time(
-            target_desc, read=False
+        raise KvPoolUnsupported(
+            "paged_pool migration requires physical address and shared memory-event "
+            "lowering; aggregate transfer costs are disabled. Use fixed/manual "
+            "KV placement until this migration path is implemented."
         )
-        if self.topology is not None:
-            hops = self._route(source, target, bytes_)
-            link_ns = sum(float(hop.transfer_ns(bytes_)) for hop in hops)
-            return float(endpoint_ns + link_ns)
-        # Without a topology there is no link stage to price.  Source-read
-        # and target-write remain separate serialized endpoint services.
-        return float(endpoint_ns)
 
     @staticmethod
     def _require_storage_bandwidth(
@@ -965,10 +935,11 @@ class DynamicKVPool:
             self._last_error = "target component has insufficient physical capacity: " + target_component
             return False
         source = page.owner_component
+        # Validate the execution path before changing ownership or capacity.
+        duration = self._transfer_time_ns(source, target_component, page.bytes)
         if not self._ledger.transfer(source, target_component, page.bytes):
             self._last_error = "physical ledger rejected transfer {} -> {}".format(source, target_component)
             return False
-        duration = self._transfer_time_ns(source, target_component, page.bytes)
         self._owned_bytes[source] -= page.bytes
         self._owned_bytes[target_component] += page.bytes
         page.allocation_generation += 1

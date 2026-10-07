@@ -23,7 +23,7 @@ from heterollm_sim.ir import (
     RequestSpec,
     build_model_graph_from_layer_specs,
 )
-from heterollm_sim.kernel_model import KernelModelProfile
+from heterollm_sim.kernel_model import KernelCapability, KernelModelProfile
 from heterollm_sim.memory_types import AccessRequest, Operation, parse_physical_memory_config
 from heterollm_sim.planner import (
     _direct_memory_address,
@@ -204,7 +204,8 @@ def test_direct_memory_phase_drops_expanded_physical_trace_from_phase_metadata()
     phase = CostPhase(
         "gpu_gemm",
         TaskCategory.COMPUTE,
-        (ResourceDemand("gpu0.hbm_fabric", 10.0, bytes_moved=1024),),
+        (ResourceDemand("hbm1.hbm_fabric", 10.0, bytes_moved=1024),),
+        metadata={"read_bytes": 1024, "write_bytes": 0},
     )
 
     lowered = _direct_memory_phase(
@@ -475,6 +476,98 @@ def _tiny_dense_gddr_scenario(prompt_tokens, *, stateful_l2):
             runtime_id="analytical",
             architecture="tiny-dense-transformer",
             stateful_l2=stateful_l2,
+            kernels=(
+                *(
+                    KernelCapability(
+                        kernel_family="tiny-{}-{}-{}".format(
+                            phase, output_bits, epilogue or "plain"
+                        ),
+                        weight_formats=("int8",),
+                        activation_dtype="int8",
+                        phase=phase,
+                        compute_primitive="simt",
+                        internal_dtype="int8",
+                        evidence="explicit analytical tiny test kernel contract",
+                        output_bits=output_bits,
+                        epilogue=epilogue,
+                        cta_geometry=(1, 8, 8),
+                    )
+                    for phase, output_bits, epilogue in (
+                        ("prefill", 8, ""),
+                        ("prefill", 16, ""),
+                        ("prefill", 16, "rope"),
+                        ("prefill", 16, "swiglu"),
+                        ("decode", 8, ""),
+                        ("decode", 16, ""),
+                        ("decode", 16, "rope"),
+                        ("decode", 16, "swiglu"),
+                    )
+                ),
+                *(
+                    KernelCapability(
+                        kernel_family="tiny-attention-{}".format(phase),
+                        weight_formats=("int8",),
+                        activation_dtype="int8",
+                        phase=phase,
+                        compute_primitive="simt",
+                        internal_dtype="int8",
+                        operator="attention",
+                        evidence="explicit analytical tiny test attention contract",
+                        output_bits=8,
+                        cta_geometry=(1, 8, 8),
+                    )
+                    for phase in ("prefill", "decode")
+                ),
+                *(
+                    KernelCapability(
+                        kernel_family="tiny-fp16-{}-{}".format(
+                            phase, epilogue or "plain"
+                        ),
+                        weight_formats=("fp16",),
+                        activation_dtype="fp16",
+                        phase=phase,
+                        compute_primitive="simt",
+                        internal_dtype="fp16",
+                        evidence="explicit analytical imported-F16 test kernel contract",
+                        output_bits=16,
+                        epilogue=epilogue,
+                        cta_geometry=(1, 8, 8),
+                    )
+                    for phase in ("prefill", "decode")
+                    for epilogue in ("", "rope", "swiglu")
+                ),
+                *(
+                    KernelCapability(
+                        kernel_family="tiny-int8-f32-{}".format(phase),
+                        weight_formats=("int8",),
+                        activation_dtype="int8",
+                        phase=phase,
+                        compute_primitive="simt",
+                        internal_dtype="int8",
+                        evidence="explicit analytical F32-hidden test kernel contract",
+                        output_bits=32,
+                        epilogue=epilogue,
+                        cta_geometry=(1, 8, 8),
+                    )
+                    for phase in ("prefill", "decode")
+                    for epilogue in ("", "swiglu")
+                ),
+                *(
+                    KernelCapability(
+                        kernel_family="tiny-fp16-int8kv-attention-{}".format(phase),
+                        weight_formats=("int8",),
+                        activation_dtype="fp16",
+                        phase=phase,
+                        compute_primitive="simt",
+                        internal_dtype="fp16",
+                        operator="attention",
+                        evidence="explicit analytical imported-F16 INT8-KV test contract",
+                        output_bits=16,
+                        cta_geometry=(1, 8, 8),
+                    )
+                    for phase in ("prefill", "decode")
+                ),
+            ),
         ),
     )
     profiles = {kind: dict(registry)
@@ -881,7 +974,10 @@ def test_tiny_dense_gddr_runs_prefill_and_two_decode_steps(
         if task.metadata.get("physical_memory_config")
     ]
     assert physical_tasks
-    assert all(task.metadata.get("target_component") == "gpu0"
+    assert any(task.metadata.get("target_component") == "gpu0"
+               and task.metadata["physical_memory_config"]["kind"] == "GDDR"
+               for task in physical_tasks)
+    assert any(task.metadata["physical_memory_config"]["kind"] == "DDR"
                for task in physical_tasks)
 
     kernel = UnifiedEventKernel.from_closed_graph(
@@ -904,7 +1000,14 @@ def test_tiny_dense_gddr_runs_prefill_and_two_decode_steps(
         if "physical_execution" in event.task.metadata
     ]
     assert physical_events
-    for event in physical_events:
+    assert any(event.task.metadata["physical_memory_config"]["kind"] == "DDR"
+               for event in physical_events)
+    gddr_events = [event for event in physical_events
+                   if event.task.metadata["physical_memory_config"]["kind"] == "GDDR"]
+    assert gddr_events
+    assert any(access["operation"] == "read" for event in gddr_events
+               for access in event.task.metadata["memory_accesses"])
+    for event in gddr_events:
         metadata = event.task.metadata
         config = metadata["physical_memory_config"]
         assert config["kind"] == "GDDR"
@@ -912,13 +1015,13 @@ def test_tiny_dense_gddr_runs_prefill_and_two_decode_steps(
         capacity = config["capacity_bytes"]
         accesses = metadata["memory_accesses"]
         assert accesses
-        assert any(item["operation"] == "read" for item in accesses)
         for access in accesses:
             assert access["physical_owner"] == "hbm0.memory"
             assert access["resource_id"] == "hbm0.memory"
             assert access["operation"] in {"read", "write"}
             assert access["offset_bytes"] >= 0
-            assert access["generation"] == 0
+            assert isinstance(access["generation"], int)
+            assert access["generation"] >= 0
             assert 0 <= access["address"]
             assert access["address"] + access["byte_count"] <= capacity
         assert event.task.dependencies
@@ -926,7 +1029,7 @@ def test_tiny_dense_gddr_runs_prefill_and_two_decode_steps(
 
     if stateful_l2:
         l2 = [event.task.metadata["l2_execution"]
-              for event in physical_events]
+              for event in gddr_events if "l2_execution" in event.task.metadata]
         assert any(item["miss_lines"] for item in l2)
         assert any(item["hit_lines"] for item in l2)
         assert any(item["dirty_eviction_bytes"] for item in l2)

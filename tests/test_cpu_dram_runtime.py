@@ -2,6 +2,8 @@
 
 from dataclasses import asdict, replace
 
+import pytest
+
 from heterollm_sim.cost_models import MemoryWorkload, estimate_cpu_memory
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.event_kernel import UnifiedEventKernel
@@ -48,12 +50,13 @@ def _scenario(config=None):
     if config is not None:
         metadata["physical_memory_config"] = asdict(config)
         metadata["physical_owner"] = "hostmem0.ddr"
+        host = replace(host, capacity_bytes=config.capacity_bytes)
         memory_service = dict(metadata.get("memory_service", {}))
         memory_service["physical_owner"] = "hostmem0.ddr"
         metadata["memory_service"] = memory_service
-        host = replace(host, metadata=metadata)
     else:
-        host = replace(host, metadata=metadata)
+        metadata.pop("physical_memory_config", None)
+    host = replace(host, metadata=metadata)
     components = tuple(host if item.component_id == "hostmem0" else item
                        for item in scenario.hardware.components)
     return replace(scenario, hardware=replace(scenario.hardware, components=components))
@@ -63,11 +66,11 @@ def _compiled_cpu_schedule():
     from heterollm_sim.planner import compile_scenario
 
     scenario = build_reference_scenario()
-    config = _ddr_config(rows_per_bank=65536, capacity_bytes=256 * 1024 * 1024)
+    config = _ddr_config(rows_per_bank=65536, capacity_bytes=256 * 1024**2)
     host = scenario.hardware.get_component("hostmem0")
     metadata = dict(host.metadata)
     metadata["physical_memory_config"] = asdict(config)
-    host = replace(host, metadata=metadata)
+    host = replace(host, capacity_bytes=config.capacity_bytes, metadata=metadata)
     hbm = scenario.hardware.get_component("hbm0")
     hbm_metadata = dict(hbm.metadata)
     hbm_metadata["physical_memory_config"] = asdict(DramConfig(
@@ -81,7 +84,7 @@ def _compiled_cpu_schedule():
         row_bytes=8192,
         burst_bytes=64,
         interleave_bytes=64,
-        interface_bandwidth_gb_s=500.0,
+        interface_bandwidth_gb_s=512.0,
         capacity_bytes=hbm.capacity_bytes,
     ))
     hbm = replace(hbm, metadata=hbm_metadata)
@@ -203,27 +206,9 @@ def test_physical_ddr_parameters_change_runtime_service_not_cpu_cache_model():
     assert slow.task.metadata["physical_execution"]["service_ns"] > fast.task.metadata["physical_execution"]["service_ns"]
 
 
-def test_cpu_memory_without_physical_ddr_keeps_analytical_backing_semantics():
-    # Rebuild without an explicit physical config to exercise the legacy path.
-    scenario = _scenario(None)
-    cpu, memory = _cpu_profiles(scenario, "cpu0")
-    estimate = estimate_cpu_memory(cpu, memory, MemoryWorkload(
-        read_bytes=4096, write_bytes=1024, working_set_bytes=32 * 1024,
-        streaming_fraction=1.0, name="cpu-dram-regression"))
-    phase = next(item for item in estimate.phases if item.name == "cpu_memory")
-    builder = _TaskBuilder(RequestSpec("cpu-analytical-test", 0.0, 1, 1))
-    with _compilation_scope(scenario):
-        builder.add("cpu.memory", phase.category, phase.demands, metadata={
-            "target_component": "cpu0", "phase": phase.name,
-            "cost_model": dict(estimate.metadata), "phase_metadata": dict(phase.metadata),
-            "input_tensor_id": "cpu-analytical-buffer",
-            "output_tensor_id": "cpu-analytical-buffer",
-        })
-    task = builder.tasks[0]
-    assert "physical_memory_config" not in task.metadata
-    assert "memory_accesses" not in task.metadata
-    assert any(item.resource_id == memory.resource_id and item.bytes_moved > 0 for item in task.demands)
-    assert task.demands == phase.demands
+def test_cpu_memory_without_physical_ddr_is_rejected():
+    with pytest.raises(ValueError, match="physical_memory_config is required"):
+        _scenario(None)
 
 
 def test_same_buffer_extent_promotion_is_scoped_by_physical_owner():
@@ -325,14 +310,25 @@ def test_cpu_to_gpu_dma_keeps_link_path_and_physical_memory_endpoints():
 def test_physical_dram_resolver_does_not_treat_valid_nand_as_dram():
     scenario = build_reference_scenario()
     host = scenario.hardware.get_component("hostmem0")
-    component = replace(host, metadata={
+    nand = NandConfig(kind=MemoryKind.SSD)
+    ssd_config = asdict(nand)
+    host_with_nand = replace(host, metadata={
         **host.metadata,
-        "physical_memory_config": asdict(NandConfig(kind=MemoryKind.SSD)),
+        "physical_memory_config": ssd_config,
     })
-    assert _physical_dram_config(scenario, component) is None
+    with pytest.raises(ValueError):
+        _physical_dram_config(scenario, host_with_nand)
+
+    from heterollm_sim.ir import ComponentSpec
+
+    ssd = ComponentSpec(
+        "ssd0", "ssd", capacity_bytes=nand.capacity_bytes,
+        metadata={"physical_memory_config": ssd_config},
+    )
+    assert _physical_dram_config(scenario, ssd) is None
 
 
-def test_transfer_rank_selects_gpu_backend_and_no_rank_keeps_controller_endpoint(monkeypatch):
+def test_transfer_rank_selects_gpu_backend_and_no_rank_rejects_multiple_backends(monkeypatch):
     from types import SimpleNamespace
     from heterollm_sim.parallel import LogicalRank
     from heterollm_sim import planner
@@ -353,10 +349,8 @@ def test_transfer_rank_selects_gpu_backend_and_no_rank_keeps_controller_endpoint
             )
         return builder.tasks
 
-    unresolved = compile_transfer("multi-backend-no-rank", {})
-    assert any(task.metadata.get("gpu_memory_endpoint_resolution")
-               == "logical_controller_multiple_backends" for task in unresolved)
-    assert any(task.metadata.get("target_component") == "gpu0" for task in unresolved)
+    with pytest.raises(ValueError, match="multiple physical memory backends"):
+        compile_transfer("multi-backend-no-rank", {})
 
     selected = compile_transfer("multi-backend-rank-one", {"rank": 1})
     assert any(task.metadata.get("target_component") == "hbm1" for task in selected)

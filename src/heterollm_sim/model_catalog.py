@@ -649,8 +649,7 @@ def definition_from_huggingface(
         tie_word_embeddings_raw if isinstance(tie_word_embeddings_raw, bool) else False
     )
     tie_word_embeddings_invalid = (
-        tie_word_embeddings_raw is not None
-        and not isinstance(tie_word_embeddings_raw, bool)
+        not isinstance(tie_word_embeddings_raw, bool)
     )
     expert_count = _positive_int(_first(text, "num_experts", "num_local_experts")) or 1
     top_k = _positive_int(_first(text, "num_experts_per_tok", "num_experts_per_token")) or 1
@@ -1030,11 +1029,6 @@ def _import_precision(
     supported = dtype_error is None
     if dtype_error is not None:
         limitations.append(dtype_error)
-    elif dtype_raw is None or str(dtype_raw).strip().lower() in {"", "auto"}:
-        limitations.append(
-            "torch_dtype/dtype is absent or auto; BF16 is retained as an explicit analytical precision fallback."
-        )
-
     nested_quantization = (
         text.get("quantization_config") if text is not config else None
     )
@@ -1070,7 +1064,9 @@ def _import_precision(
 
 def _canonical_import_dtype(value: Any) -> Tuple[str, Optional[str]]:
     if value is None or str(value).strip().lower() in {"", "auto"}:
-        return "bf16", None
+        return "bf16", (
+            "torch_dtype/dtype is absent or auto; the import remains metadata-only."
+        )
     if not isinstance(value, str):
         return "bf16", (
             "torch_dtype/dtype must be a supported string; the import remains metadata-only."

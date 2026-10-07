@@ -3,24 +3,36 @@ from types import SimpleNamespace
 import pytest
 
 from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
+from heterollm_sim.cost_models import GDDRProfile
 from heterollm_sim.ir import ComponentSpec
+from heterollm_sim.memory_types import DramConfig, MemoryKind
 from heterollm_sim.planner import _attach_gddr_physical_task
 
 
 def _scenario(capacity=4096):
-    raw = {
-        "kind": "GDDR",
-        "generation": "GDDR7",
-        "capacity_bytes": capacity,
-        "burst_bytes": 64,
-    }
+    physical = DramConfig(
+        kind=MemoryKind.GDDR,
+        generation="GDDR7",
+        channels=1,
+        ranks_per_channel=1,
+        bank_groups_per_rank=1,
+        banks_per_group=8,
+        rows_per_bank=1,
+        row_bytes=8192,
+        burst_bytes=64,
+        data_width_bits=64,
+        data_rate_mt_s=64000,
+        interface_bandwidth_gb_s=512,
+        capacity_bytes=capacity,
+    )
     gpu = ComponentSpec("gpu0", "gpu")
     gddr = ComponentSpec(
         "gddr0",
         "gddr",
+        cost_profile_id="gddr-profile",
         capacity_bytes=capacity,
         metadata={
-            "physical_memory_config": raw,
+            "physical_memory_config": physical,
             "memory_service": {"physical_owner": "gddr0.gddr_fabric"},
         },
     )
@@ -31,6 +43,12 @@ def _scenario(capacity=4096):
     return SimpleNamespace(
         hardware=hardware,
         placement=SimpleNamespace(tensor_bytes={"weight-W": 1024}),
+        component_profile_kind=lambda _component: "gddr",
+        resolve_component_profile=lambda _component, _expected_type=None: GDDRProfile(
+            bandwidth_gb_s=512,
+            resource_id="gddr0.gddr_fabric",
+            generation="GDDR7",
+        ),
     )
 
 

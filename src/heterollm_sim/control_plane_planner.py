@@ -43,7 +43,7 @@ from .cost_models import (
     estimate_cpu_memory,
     estimate_cpu_reduction,
     estimate_gpu_elementwise,
-    estimate_gpu_gemm,
+    estimate_gpu_gemm_placement_proxy,
     estimate_gpu_memory,
     estimate_gpu_reduction,
 )
@@ -3925,7 +3925,7 @@ def _operator_cost(
                         rank_target.memory_component_id,
                     )
                     total += (
-                        estimate_gpu_gemm(
+                        estimate_gpu_gemm_placement_proxy(
                             gpu_profile,
                             hbm_profile,
                             workload,
@@ -4751,9 +4751,11 @@ def _solve_optimal(
     if options.solver in {"auto", "ortools"}:
         try:
             importlib.import_module("ortools.sat.python.cp_model")
-        except ImportError:
+        except ImportError as exc:
+            if options.solver == "ortools":
+                raise RuntimeError("显式选择的 OR-Tools 求解器不可用") from exc
             warnings.append(
-                "OR-Tools 不可用；已回退到确定性的内置分支定界求解器。"
+                "OR-Tools 不可用；auto 已选择确定性的内置分支定界求解器。"
             )
         else:
             try:
@@ -4765,9 +4767,7 @@ def _solve_optimal(
                     missing_weights=missing_weights,
                 )
             except Exception as exc:  # pragma: no cover - optional adapter guard
-                warnings.append(
-                    "OR-Tools 适配器运行失败；已回退到内置分支定界求解器。"
-                )
+                raise RuntimeError("OR-Tools 求解器运行失败") from exc
     return _solve_builtin(
         candidate_lists,
         capacities,

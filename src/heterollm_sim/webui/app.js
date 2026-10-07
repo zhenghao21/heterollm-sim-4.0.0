@@ -240,10 +240,10 @@ const WORKLOAD_PRESETS = Object.freeze([
     prefillChunkTokens: 512,
   }),
 ]);
-// The bundled catalog keeps the editor usable while the local API is starting
-// or when an older server is serving this static bundle.  bootstrap() refreshes
-// it from GET /api/workload-presets when the endpoint is available.
-let workloadPresetCatalog = WORKLOAD_PRESETS;
+// Keep a fixed catalog for explicit offline/default selection. The active UI
+// catalog starts empty and is populated only by GET /api/workload-presets.
+let workloadPresetCatalog = [];
+let workloadPresetCatalogError = "";
 
 function uiText(zh, en, parameters = {}) {
   if (globalThis.UiI18n?.pair) return globalThis.UiI18n.pair(zh, en, parameters);
@@ -2962,7 +2962,6 @@ function ensureScenarioShape(scenario) {
   requireScenarioSchemaV4(scenario, "scenario");
   scenario.name ??= "untitled-scenario";
   scenario.assumptions = asArray(scenario.assumptions);
-  scenario.weights_resident ??= true;
 
   scenario.hardware = asObject(scenario.hardware);
   requireScenarioSchemaV4(scenario.hardware, "hardware", { inherited: true });
@@ -2977,12 +2976,6 @@ function ensureScenarioShape(scenario) {
       `hardware.components[${componentIndex}].ports[${portIndex}]`,
       { inherited: true },
     ));
-    if (String(component.kind || "").toLowerCase().replaceAll("-", "_") === "hbf") {
-      component.metadata = asObject(component.metadata);
-      const declaredWritable = Number(component.write_bandwidth_gbps) > 0;
-      component.metadata.read_only ??= !declaredWritable;
-      component.metadata.writable ??= declaredWritable;
-    }
   });
   scenario.hardware.links = objectArray(scenario.hardware.links, "硬件链路（hardware.links）");
   scenario.hardware.links.forEach((link, linkIndex) => requireScenarioSchemaV4(
@@ -3013,14 +3006,8 @@ function ensureScenarioShape(scenario) {
   }
   scenario.placement.parallel = asObject(scenario.placement.parallel);
   const parallel = scenario.placement.parallel;
-  parallel.tp_degree ??= 1;
-  parallel.pp_degree ??= 1;
-  parallel.ep_degree ??= 1;
   parallel.rank_mapping = objectArray(parallel.rank_mapping, "并行 Rank 映射（placement.parallel.rank_mapping）");
   parallel.layer_to_stage = asObject(parallel.layer_to_stage);
-  parallel.collective_algorithm ??= "auto";
-  parallel.routing_policy ??= "lowest_latency";
-  parallel.allow_padding ??= true;
   scenario.placement.metadata = asObject(scenario.placement.metadata);
   const controlPlanePolicyValue = asObject(asObject(scenario.placement.metadata.control_plane).policy);
   const retiredControlPlaneFields = ["locked_op_keys", "locked_tensor_ids"]
@@ -3029,20 +3016,9 @@ function ensureScenarioShape(scenario) {
     throw new Error(`V4 authoring 不接受已退役控制平面字段：${retiredControlPlaneFields.map((field) => `placement.metadata.control_plane.policy.${field}`).join("、")}`);
   }
   scenario.placement.metadata.ui = asObject(scenario.placement.metadata.ui);
-  scenario.placement.metadata.ui.allow_colocated_logical_ranks ??= false;
   scenario.placement.kv_policy = asObject(scenario.placement.kv_policy);
   const kvPolicy = scenario.placement.kv_policy;
-  kvPolicy.layout_mode ??= "auto";
   kvPolicy.pool_components = asArray(kvPolicy.pool_components).map(String).filter(Boolean);
-  kvPolicy.kv_unified ??= true;
-  kvPolicy.cache_component ??= null;
-  kvPolicy.offload_component ??= null;
-  kvPolicy.tokens_per_page ??= 16;
-  if (!Object.hasOwn(kvPolicy, "dtype")) kvPolicy.dtype = null;
-  kvPolicy.offload_ratio ??= 1;
-  kvPolicy.allocation_policy ??= "lazy";
-  kvPolicy.preemption_mode ??= "auto";
-  kvPolicy.prefetch_distance ??= 0;
 
   scenario.workload = asObject(scenario.workload);
   requireScenarioSchemaV4(scenario.workload, "workload", { inherited: true });
@@ -3056,54 +3032,16 @@ function ensureScenarioShape(scenario) {
     `workload.requests[${requestIndex}]`,
     { inherited: true },
   ));
-  scenario.workload.request_count ??= 1;
-  scenario.workload.prompt_tokens ??= 512;
-  scenario.workload.output_tokens ??= 128;
-  scenario.workload.arrival_rate_rps ??= 0;
-  scenario.workload.random_seed ??= 0;
   scenario.workload.scheduler = asObject(scenario.workload.scheduler);
-  const scheduler = scenario.workload.scheduler;
-  scheduler.mode ??= "continuous";
-  scheduler.max_num_seqs ??= 1;
-  scheduler.max_num_batched_tokens ??= 512;
-  scheduler.max_num_ubatch_tokens ??= 512;
-  scheduler.prefill_chunk_tokens ??= 512;
-  scheduler.policy ??= "decode_first";
-  scheduler.starvation_ns ??= 5_000_000;
-  scheduler.preemption_enabled ??= false;
-  scheduler.preemption_granularity ??= "boundary";
-  scheduler.preemption_policy ??= "auto";
-  if (scenario.workload.mtp === undefined) scenario.workload.mtp = null;
-  if (scenario.workload.mtp !== null) {
+  if (Object.hasOwn(scenario.workload, "mtp") && scenario.workload.mtp !== null) {
     scenario.workload.mtp = asObject(scenario.workload.mtp);
-    const mtp = scenario.workload.mtp;
-    mtp.method ??= "head_based";
-    mtp.candidate_tokens ??= 4;
-    mtp.acceptance_model ??= "expected";
-    if (!Object.hasOwn(mtp, "acceptance_rate")) mtp.acceptance_rate = null;
-    mtp.proposal_cost_scale ??= 0.15;
-    mtp.acceptance_trace = asArray(mtp.acceptance_trace);
+    if (Object.hasOwn(scenario.workload.mtp, "acceptance_trace")) {
+      scenario.workload.mtp.acceptance_trace = asArray(scenario.workload.mtp.acceptance_trace);
+    }
   }
 
   scenario.profiles = asObject(scenario.profiles);
   rejectLegacyComponentProfiles(scenario);
-  materializeRequiredV4Profiles(scenario);
-  for (const component of scenario.hardware.components) {
-    const profileKey = costProfileKeyForComponentKind(component);
-    if (!profileKey) continue;
-    const issue = componentProfileBindingIssue(component, scenario);
-    if (issue) throw new Error(issue);
-    const profile = boundCostProfile(profileKey, component, scenario);
-    if (profileKey === "gpu" && (!Object.keys(asObject(profile.tensor_core)).length
-        || !asArray(profile.cache_hierarchy?.levels).length)) {
-      throw new Error(`组件 ${component.component_id} 绑定的 GPU Profile ${component.cost_profile_id} 必须使用 tensor_core/cache_hierarchy 嵌套结构`);
-    }
-    if (profileKey === "cpu" && (!Object.keys(asObject(profile.pipeline)).length
-        || !asArray(profile.cache_hierarchy?.levels).length)) {
-      throw new Error(`组件 ${component.component_id} 绑定的 CPU Profile ${component.cost_profile_id} 必须使用 pipeline/cache_hierarchy 嵌套结构`);
-    }
-  }
-  sanitizeV4ScenarioCapabilities(scenario);
   return scenario;
 }
 
@@ -4069,6 +4007,29 @@ async function validateScenario({ quiet = false, navigation = false } = {}) {
   if (!state.scenario) return null;
   const requestGeneration = ++validationRequestGeneration;
   const requestSnapshot = scenarioRequestSnapshot();
+  const physicalIssues = physicalMemoryContractIssues();
+  if (physicalIssues.length) {
+    const validation = {
+      valid: false,
+      errors: physicalIssues.map((issue) => normalizeIssue(issue, "physical_memory_contract", "error")),
+      warnings: [],
+      information: [],
+    };
+    state.validation = validation;
+    if (navigation) {
+      if (state.validationNavigation?.active) advanceValidationNavigation(validation.errors);
+      else beginValidationNavigation(validation.errors);
+    }
+    renderSteps();
+    renderDiagnostics();
+    if (!quiet || validation.errors.length) openDiagnostics();
+    toast(
+      uiText("物理内存配置未通过", "Physical memory configuration failed"),
+      uiText("请先修复所有 DRAM/NAND 组件的 physical_memory_config。", "Complete physical_memory_config for every DRAM/NAND component first."),
+      "error",
+    );
+    return validation;
+  }
   setBusy(true, uiText("正在校验场景", "Validating scenario"), uiText("检查拓扑、容量、映射与降级转换支持范围…", "Checking topology, capacity, mapping, and current lowering support…"));
   try {
     const payload = await apiRequest("/validate", {
@@ -4547,6 +4508,8 @@ async function runDirectSimulationScore() {
     showOperationError(uiText("Native 参考结果无效", "Invalid Native reference"), error);
     return;
   }
+  const validation = await validateScenario({ quiet: true, navigation: true });
+  if (!validation?.valid) return;
   const requestSnapshot = scenarioRequestSnapshot();
   setBusy(
     true,
@@ -4673,6 +4636,8 @@ async function compareScenario() {
     toast(uiText("仿真仍在运行", "Simulation still running"), uiText("请等待当前任务完成或取消后再比较 GPU 基线。", "Wait for the current job to finish or cancel it before comparing the GPU baseline."), "info");
     return;
   }
+  const validation = await validateScenario({ quiet: true, navigation: true });
+  if (!validation?.valid) return;
   const requestSnapshot = scenarioRequestSnapshot();
   setBusy(true, "正在构建 GPU 基线", "POST /api/compare · 候选场景与 GPU-only placement 分析…");
   try {
@@ -4995,10 +4960,23 @@ function isFlashStorage(kind) {
 // describe a topology endpoint, while this object is the canonical DRAM/NAND
 // contract consumed by the physical cores.
 const PHYSICAL_MEMORY_COMPONENT_KINDS = new Set([
-  "hbm", "hbm_stack", "gddr", "dram", "ddr", "ddr_memory", "host_memory", "cxl_memory",
-  "hbf", "ssd", "high_io_ssd",
+  "hbm", "hbm_stack", "gddr", "gddr_memory", "dram", "ddr", "ddr_memory",
+  "lpddr", "lpddr_memory", "host_memory", "cxl_memory", "memory",
+  "hbf", "ssd", "high_io_ssd", "nvme",
 ]);
 const PHYSICAL_MEMORY_KINDS = new Set(["DDR", "LPDDR", "HBM", "GDDR", "SSD", "HBF"]);
+const DRAM_PHYSICAL_REQUIRED_FIELDS = [
+  "channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack",
+  "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes",
+  "open_ns", "close_ns", "read_latency_ns", "write_latency_ns", "burst_interval_ns",
+  "read_recovery_ns", "write_recovery_ns", "read_to_write_ns", "write_to_read_ns", "max_outstanding_requests",
+];
+const NAND_PHYSICAL_REQUIRED_FIELDS = [
+  "channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun",
+  "blocks_per_plane", "pages_per_block", "page_bytes", "host_granularity_bytes",
+  "host_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns",
+  "block_erase_ns", "front_ns", "planes_independent", "partial_page_policy", "max_outstanding_requests",
+];
 
 function physicalMemoryConfigForComponent(component) {
   const kind = normalizedComponentKind(component?.kind);
@@ -5018,28 +4996,90 @@ function validatePhysicalMemoryConfig(value, component) {
   const componentKind = normalizedComponentKind(component?.kind);
   const allowed = componentKind === "hbf"
     ? new Set(["HBF"])
-    : ["ssd", "high_io_ssd"].includes(componentKind)
+    : ["ssd", "high_io_ssd", "nvme"].includes(componentKind)
       ? new Set(["SSD"])
-      : componentKind === "gddr"
+      : ["gddr", "gddr_memory"].includes(componentKind)
         ? new Set(["GDDR"])
-        : componentKind === "hbm" || componentKind === "hbm_stack"
-        ? new Set(["HBM"])
-        : new Set(["DDR", "LPDDR", "HBM"]);
+        : ["hbm", "hbm_stack"].includes(componentKind)
+          ? new Set(["HBM"])
+          : ["ddr", "ddr_memory"].includes(componentKind)
+            ? new Set(["DDR"])
+            : ["lpddr", "lpddr_memory"].includes(componentKind)
+              ? new Set(["LPDDR"])
+              : new Set(["DDR", "LPDDR", "HBM", "GDDR"]);
   if (!allowed.has(kind)) {
     throw new Error(`组件 ${component?.component_id || ""} 的物理配置类型 ${kind} 与组件类型不匹配。`);
   }
   if (kind === "GDDR" && !["GDDR6", "GDDR6X", "GDDR7"].includes(String(value.generation || "").toUpperCase())) {
     throw new Error("physical_memory_config.generation 必须是 GDDR6、GDDR6X 或 GDDR7。");
   }
-  const integerFields = kind === "SSD" || kind === "HBF"
-    ? ["channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes"]
-    : ["channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "data_width_bits"];
+  const nand = kind === "SSD" || kind === "HBF";
+  const requiredFields = nand ? NAND_PHYSICAL_REQUIRED_FIELDS : DRAM_PHYSICAL_REQUIRED_FIELDS;
+  requiredFields.forEach((field) => {
+    if (!Object.hasOwn(value, field) || value[field] == null) {
+      throw new Error(`physical_memory_config.${field} 是必填字段。`);
+    }
+  });
+  const integerFields = nand
+    ? ["channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes", "host_granularity_bytes", "max_outstanding_requests"]
+    : ["channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "max_outstanding_requests"];
   integerFields.forEach((field) => {
     if (!Number.isSafeInteger(Number(value[field])) || Number(value[field]) <= 0) {
       throw new Error(`physical_memory_config.${field} 必须是正整数。`);
     }
   });
+  const numericFields = nand
+    ? ["host_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns", "block_erase_ns", "front_ns"]
+    : ["open_ns", "close_ns", "read_latency_ns", "write_latency_ns", "burst_interval_ns", "read_recovery_ns", "write_recovery_ns", "read_to_write_ns", "write_to_read_ns"];
+  numericFields.forEach((field) => {
+    if (!Number.isFinite(Number(value[field])) || Number(value[field]) < 0) {
+      throw new Error(`physical_memory_config.${field} 必须是非负有限数。`);
+    }
+  });
+  if (nand && typeof value.planes_independent !== "boolean") {
+    throw new Error("physical_memory_config.planes_independent 必须是布尔值。");
+  }
+  if (nand && !["read_modify_write", "reject"].includes(String(value.partial_page_policy))) {
+    throw new Error("physical_memory_config.partial_page_policy 必须是 read_modify_write 或 reject。");
+  }
+  if (!nand && !(
+    Number(value.interface_bandwidth_gb_s) > 0
+    || Number(value.lane_bandwidth_gb_s) > 0
+    || (Number(value.data_width_bits) > 0 && (Number(value.data_rate_mt_s) > 0 || Number(value.effective_pin_data_rate_gbps) > 0))
+  )) {
+    throw new Error("physical_memory_config 必须明确提供 interface_bandwidth_gb_s、lane_bandwidth_gb_s 或 data_width_bits 与 data_rate_mt_s/effective_pin_data_rate_gbps。");
+  }
+  const capacity = Number(value.capacity_bytes);
+  if (!Number.isSafeInteger(capacity) || capacity <= 0 || capacity !== Number(component?.capacity_bytes)) {
+    throw new Error("physical_memory_config.capacity_bytes 必须为正整数且与组件 capacity_bytes 一致。");
+  }
   return { ...value, kind };
+}
+
+function physicalMemoryContractIssues(scenario = state.scenario) {
+  const issues = [];
+  asArray(scenario?.hardware?.components).forEach((component, index) => {
+    if (!PHYSICAL_MEMORY_COMPONENT_KINDS.has(normalizedComponentKind(component?.kind))) return;
+    const componentId = String(component?.component_id || `components[${index}]`);
+    const path = `hardware.components[${index}].metadata.physical_memory_config`;
+    const value = asObject(asObject(component?.metadata).physical_memory_config);
+    try {
+      if (!Object.keys(value).length) {
+        throw new Error("缺少必需的 physical_memory_config；请导入完整硬件预设或配置物理内存核心。");
+      }
+      validatePhysicalMemoryConfig(value, component);
+    } catch (error) {
+      issues.push({
+        code: "physical_memory_config_invalid",
+        source: "physical_memory_contract",
+        component_id: componentId,
+        field_path: path,
+        message_zh: `组件 ${componentId} 的物理内存配置无效：${error.message}`,
+        message_en: `Component ${componentId} has an invalid physical memory configuration: ${error.message}`,
+      });
+    }
+  });
+  return issues;
 }
 
 function componentCanHostOperator(component) {
@@ -6896,16 +6936,30 @@ function syncProtocolManualControls(defaults, presetId = null) {
 
 function currentProtocolConnectionDefaults() {
   const protocol = dom.protocolSelect.value;
-  const fallback = PROTOCOL_DEFAULTS[protocol] || { version: "1.0", lanes: 1, bandwidth_gbps: 0, latency_ns: 0 };
+  const fallback = PROTOCOL_DEFAULTS[protocol];
+  if (!fallback) throw new Error(`协议 ${protocol || "(空)"} 没有可用配置`);
   const parsedBandwidth = parseBandwidthToGbps(dom.protocolBandwidthInput.value);
-  const lanes = Math.trunc(Number(dom.protocolUnitsInput.value));
+  const rawLanes = String(dom.protocolUnitsInput.value ?? "").trim();
+  const lanes = Number(rawLanes);
+  const rawLatency = String(dom.protocolLatencyInput.value ?? "").trim();
   const latency = Number(dom.protocolLatencyInput.value);
+  const version = String(dom.protocolVersionInput.value ?? "").trim();
+  if (!rawLanes || !Number.isInteger(lanes) || lanes <= 0) {
+    throw new Error("协议通道数必须是大于 0 的整数；请修正输入后重试");
+  }
+  if (parsedBandwidth == null || parsedBandwidth <= 0) {
+    throw new Error("协议带宽必须是大于 0 的有效数值；请修正输入后重试");
+  }
+  if (!rawLatency || !Number.isFinite(latency) || latency < 0) {
+    throw new Error("协议延迟必须是大于或等于 0 的有效数值；请修正输入后重试");
+  }
+  if (!version) throw new Error("协议版本不能为空；请修正输入后重试");
   return {
     protocol,
-    version: String(dom.protocolVersionInput.value || fallback.version).trim() || fallback.version,
-    lanes: Number.isInteger(lanes) && lanes > 0 ? lanes : fallback.lanes,
-    bandwidth_gbps: parsedBandwidth == null ? fallback.bandwidth_gbps : parsedBandwidth,
-    latency_ns: Number.isFinite(latency) && latency >= 0 ? latency : fallback.latency_ns,
+    version,
+    lanes,
+    bandwidth_gbps: parsedBandwidth,
+    latency_ns: latency,
     payload: String(dom.protocolPayloadInput.value || "").trim() || null,
     protocol_preset_id: state.selectedProtocolPresetId,
   };
@@ -15086,9 +15140,9 @@ function renderPlacementControls() {
     <section class="control-section" aria-labelledby="kvControlsTitle">
       <strong class="control-section-title" id="kvControlsTitle" data-concept-help="kv_residency_policy">${escapeHtml(uiText("KV 驻留策略", "KV residency strategy"))}</strong>
       <div class="kv-grid">
-         <label class="field"><span>${escapeHtml(uiText("KV 驻留模式", "KV residency mode"))}</span><select data-placement-group="kv_policy" data-placement-field="layout_mode" aria-describedby="kvLayoutModeHelp">${fixedOptions([["auto", uiText("跟随 llama.cpp layer placement", "Follow llama.cpp layer placement")], ["fixed", uiText("固定单组件", "Fixed single component")], ["manual", uiText("手动按 layer 指定", "Manual per-layer mapping")], ["paged_pool", uiText("动态 KV Pool（实验性）", "Dynamic KV Pool (experimental)")]], kvPolicy.layout_mode)}</select><small id="kvLayoutModeHelp" class="field-hint">${escapeHtml(uiText(state.scenario?.profiles?.llama_cpp?.device_memory_tiering ? "HBM/HBF统一显存已开启：按层归属与剩余容量分配，HBM 优先，超出时在可直接访问的 HBF 上存放 KV。" : "有 llama.cpp 运行时层归属证据时才按 layer owner；没有该证据时退回当前映射的单组件策略，也不会按剩余容量自动换 HBM。需要容量避让请使用固定组件或控制平面目标。", state.scenario?.profiles?.llama_cpp?.device_memory_tiering ? "Unified HBM/HBF device memory: layer owners and available capacity determine placement; HBM first, then directly accessible HBF for overflowing KV." : "Layer owners are followed only when llama.cpp runtime evidence exists; without it, auto falls back to the current single-component mapping and does not rebalance by remaining capacity. Use a fixed component or a control-plane target for capacity avoidance."))}</small></label>
+         <label class="field"><span>${escapeHtml(uiText("KV 驻留模式", "KV residency mode"))}</span><select data-placement-group="kv_policy" data-placement-field="layout_mode" aria-describedby="kvLayoutModeHelp">${fixedOptions([["auto", uiText("跟随 llama.cpp layer placement", "Follow llama.cpp layer placement")], ["fixed", uiText("固定单组件", "Fixed single component")], ["manual", uiText("手动按 layer 指定", "Manual per-layer mapping")], ["paged_pool", uiText("动态 KV Pool（实验性）", "Dynamic KV Pool (experimental)")]], kvPolicy.layout_mode)}</select><small id="kvLayoutModeHelp" class="field-hint">${escapeHtml(uiText(state.scenario?.profiles?.llama_cpp?.device_memory_tiering ? "已配置 HBM/HBF layer 映射：按显式层归属放置 KV，不会根据剩余容量自动迁移。" : "auto 仅在存在 llama.cpp 或 memory_tiers 的 layer 映射时采用该映射；否则使用当前单组件策略。它不会按剩余容量自动选择或迁移组件。", state.scenario?.profiles?.llama_cpp?.device_memory_tiering ? "An HBM/HBF layer map places KV by its explicit owner; placement does not migrate pages based on remaining capacity." : "Auto follows a layer map only when llama.cpp or memory_tiers provides one; otherwise it uses the current single-component policy. It does not select or migrate components based on remaining capacity."))}</small></label>
          ${kvPolicy.layout_mode === "auto" ? `<label class="field"><span>${escapeHtml(uiText("默认活动组件 / fallback", "Default active / fallback component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("自动决定", "Auto"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>` : ""}
-         ${kvPolicy.layout_mode === "paged_pool" ? `<label class="field"><span>${escapeHtml(uiText("Pool 组件（实验性）", "Pool components (experimental)"))}</span><select multiple size="3" data-placement-group="kv_policy" data-placement-field="pool_components">${componentOptions(kvPolicy.pool_components, activeMemoryFilter)}</select></label>` : ""}
+         ${kvPolicy.layout_mode === "paged_pool" ? `<label class="field"><span>${escapeHtml(uiText("Pool 组件（实验性）", "Pool components (experimental)"))}</span><select multiple size="3" data-placement-group="kv_policy" data-placement-field="pool_components">${componentOptions(kvPolicy.pool_components, activeMemoryFilter)}</select><small class="field-hint">${escapeHtml(uiText("实验池仅在分配时选择页面归属；跨组件迁移尚未计入物理地址和共享内存队列，会报错。需要稳定执行请使用固定或手动映射。", "The experimental pool assigns page owners during allocation. Cross-component migration is not yet modeled with physical addresses and shared memory queues, so it errors; use fixed or manual mapping for stable execution."))}</small></label>` : ""}
          ${kvPolicy.layout_mode === "fixed" ? `<label class="field"><span data-concept-help="kv_cache_component">${escapeHtml(uiText("缓存组件", "Cache Component"))}</span><select data-placement-group="kv_policy" data-placement-field="cache_component"><option value="">${escapeHtml(uiText("未指定", "Unspecified"))}</option>${componentOptions(kvPolicy.cache_component || "", activeMemoryFilter)}</select></label>` : ""}
          ${kvPolicy.layout_mode === "manual" ? `<div class="span-all kv-layer-mapping-editor"><strong>${escapeHtml(uiText("手动 layer -> 组件映射", "Manual layer → component mapping"))}</strong><p class="muted">${escapeHtml(uiText("请在控制平面 KV layer targets 中指定；此模式不会把多个组件自动合并成统一容量池。", "Set mappings in Control-plane KV layer targets; components are not silently merged into one pool."))}</p></div>` : ""}
          <label class="field"><span data-concept-help="kv_offload_component">${escapeHtml(uiText("卸载组件", "Offload Component"))}</span><select data-placement-group="kv_policy" data-placement-field="offload_component"><option value="">${escapeHtml(uiText("不卸载", "No Offload"))}</option>${componentOptions(kvPolicy.offload_component || "")}</select></label>
@@ -15215,11 +15269,18 @@ async function loadWorkloadPresetCatalog() {
     const payload = await apiRequest("/workload-presets", { method: "GET", headers: {} });
     const items = asArray(asObject(payload).items ?? asObject(payload).presets);
     const normalized = items.map(normalizeWorkloadPresetCatalogItem).filter(Boolean);
-    if (normalized.length) workloadPresetCatalog = Object.freeze(normalized);
+    workloadPresetCatalog = Object.freeze(normalized);
+    workloadPresetCatalogError = "";
     return workloadPresetCatalog;
-  } catch (_error) {
-    // Keep the bundled definitions for offline mode and older local servers.
-    workloadPresetCatalog = WORKLOAD_PRESETS;
+  } catch (error) {
+    workloadPresetCatalog = [];
+    workloadPresetCatalogError = chineseMessage(error, "无法读取当前服务端的负载预设目录；请使用自定义负载或修复本地 API 后重试。");
+    toast(
+      uiText("负载预设不可用", "Workload presets unavailable"),
+      workloadPresetCatalogError,
+      "warning",
+      6500,
+    );
     return workloadPresetCatalog;
   }
 }
@@ -15354,7 +15415,7 @@ function renderWorkload() {
       <header class="workload-section-heading"><div><h2 id="workloadGenerationTitle" data-concept-help="request_generation">${escapeHtml(uiText("请求生成", "Request Generation"))}</h2></div></header>
       <div class="workload-preset-toolbar">
         <label class="field"><span>${escapeHtml(uiText("负载预设", "Workload Preset"))}</span><select id="workloadPresetSelect"><option value="">${escapeHtml(uiText("自定义负载", "Custom workload"))}</option>${workloadPresetOptions(selectedPresetId)}</select></label>
-        <p class="workload-preset-note">${escapeHtml(selectedPresetId ? workloadPresetDescription(workloadPresetById(selectedPresetId)) : uiText("预设来自 llama.cpp 对齐基线和 35 项目 v6.2 典型负载；选择后会重建显式请求行。", "Presets come from the llama.cpp-aligned baseline and the v6.2 typical workload table in project 35; selecting one rebuilds explicit request rows."))}</p>
+        <p class="workload-preset-note">${escapeHtml(workloadPresetCatalogError || (selectedPresetId ? workloadPresetDescription(workloadPresetById(selectedPresetId)) : uiText("预设来自当前服务端目录；选择后会重建显式请求行。", "Presets come from the current server catalog; selecting one rebuilds explicit request rows.")))}${workloadPresetCatalogError ? ` <button type="button" class="button button-quiet" data-retry-workload-presets>${escapeHtml(uiText("重试", "Retry"))}</button>` : ""}</p>
       </div>
       <div class="workload-field-grid">
         ${workloadField("负载名称", "Workload Name", "name", workload.name, "text", "", "workload")}
@@ -15386,6 +15447,9 @@ function renderWorkload() {
     </section>`;
   hydrateConceptHelp(dom.workloadMetaForm);
   $("#workloadPresetSelect", dom.workloadMetaForm)?.addEventListener("change", (event) => applyWorkloadPreset(event.target.value));
+  $("[data-retry-workload-presets]", dom.workloadMetaForm)?.addEventListener("click", () => {
+    void loadWorkloadPresetCatalog().then(() => renderWorkload());
+  });
   $$('[data-workload-field]', dom.workloadMetaForm).forEach((control) => control.addEventListener("change", () => {
     const field = control.dataset.workloadField;
     if (control.type === "number") {
@@ -20254,6 +20318,42 @@ async function probeConnection({ notify = false } = {}) {
   }
 }
 
+async function restoreStoredScenario(stored) {
+  try {
+    setScenario(stored, { dirty: false });
+    return true;
+  } catch (error) {
+    toast(
+      "本地场景无法载入",
+      `${chineseMessage(error, "本地保存的场景与当前配置不兼容。")} 请修正或重新导入该场景；如需参考场景，请主动点击“载入参考场景”。`,
+      "warning",
+      9000,
+    );
+    return false;
+  }
+}
+
+async function restoreScenarioFromStorage() {
+  const raw = localStorage.getItem(STORAGE_SCENARIO);
+  if (raw == null) {
+    await loadReference({ quiet: true });
+    return false;
+  }
+  let stored;
+  try {
+    stored = JSON.parse(raw);
+  } catch (error) {
+    toast(
+      "本地场景无法载入",
+      `本地保存的场景不是有效 JSON（${chineseMessage(error, "格式错误")}）。原内容已保留；请修正或重新导入，或主动点击“载入参考场景”。`,
+      "warning",
+      9000,
+    );
+    return false;
+  }
+  return restoreStoredScenario(stored);
+}
+
 async function bootstrap() {
   Topology = await topologyCoreReady;
   if (!Topology) throw new Error("拓扑核心模块载入失败。");
@@ -20271,18 +20371,7 @@ async function bootstrap() {
   renderConnectionState();
   await probeConnection();
   await loadWorkloadPresetCatalog();
-  const stored = readStoredJson(STORAGE_SCENARIO, null);
-  if (stored) {
-    try {
-      setScenario(stored, { dirty: false });
-    } catch (error) {
-      localStorage.removeItem(STORAGE_SCENARIO);
-      toast("本地场景不可读", chineseMessage(error, "本地保存的场景已损坏，已改为载入参考场景。"), "warning");
-      await loadReference({ quiet: true });
-    }
-  } else {
-    await loadReference({ quiet: true });
-  }
+  await restoreScenarioFromStorage();
 }
 
 document.addEventListener("DOMContentLoaded", bootstrap);

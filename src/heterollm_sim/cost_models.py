@@ -2945,85 +2945,82 @@ def _mmvq_nominal_hbm_eligibility(workload: GemmWorkload) -> Tuple[bool, str]:
     return True, "canonical_unfused_mmvq_source_geometry_only"
 
 
-def _kernel_fallback(estimate: CostEstimate, gpu: GPUProfile, workload: object) -> CostEstimate:
-    if gpu.kernel_model is None:
-        prediction = {
-            "model": "analytical", "prediction_ns": estimate.service_ns,
-            "confidence": "low", "distance_to_calibration_domain": None,
-            "uncertainty_ns": None, "uncertainty_kind": "unvalidated",
-            "reason": "kernel_model_profile_unavailable", "extrapolated": False,
-            "fallback_kind": "legacy_analytical",
-            "format_coverage": "profile_unavailable",
-            "phase": getattr(workload, "execution_phase", "unspecified"),
-            "validated_llm_scope": False,
-        }
-        return replace(
-            estimate,
-            metadata={**estimate.metadata, "prediction": prediction},
-            phases=tuple(
-                replace(p, metadata={**p.metadata, "kernel_prediction": prediction})
-                for p in estimate.phases
-            ),
-        )
-    known_quantization_formats = frozenset({
-        "q2_k", "q3_k", "q4_0", "q4_1", "q4_k", "q5_0", "q5_1",
-        "q5_k", "q6_k", "q8_0", "iq1_m", "iq1_s", "iq2_s", "iq2_xs",
-        "iq2_xxs", "iq3_s", "iq3_xxs", "iq4_nl", "iq4_xs",
-    })
-    formats = tuple(
-        str(value).strip().casefold()
-        for value in getattr(workload, "packed_weight_formats", ())
-    )
-    dispatch_candidate = (
-        quantized_dispatch_candidate(workload)
-        if isinstance(workload, GemmWorkload)
-        else None
-    )
-    if formats and any(value not in known_quantization_formats for value in formats):
-        fallback_reason = "unsupported_quantization_format"
-        format_coverage = "unsupported"
-    elif dispatch_candidate == "mixed_format_dispatch_unresolved":
-        fallback_reason = "mixed_quantization_dispatch_unresolved"
-        format_coverage = "mixed_unresolved"
-    else:
-        fallback_reason = "kernel_dispatch_not_covered"
-        format_coverage = "known_format_outside_kernel_domain"
-    supported_formats = tuple(sorted({
-        value.casefold()
-        for kernel in gpu.kernel_model.kernels
-        for value in kernel.weight_formats
-    }))
+def _annotate_analytical_estimate(
+    estimate: CostEstimate, workload: object,
+) -> CostEstimate:
+    """Label an explicitly analytical GPU estimate without claiming kernel coverage."""
     prediction = {
         "model": "analytical", "prediction_ns": estimate.service_ns,
         "confidence": "low", "distance_to_calibration_domain": None,
         "uncertainty_ns": None, "uncertainty_kind": "unvalidated",
-        "reason": fallback_reason, "extrapolated": False,
-        "fallback_kind": "legacy_analytical",
-        "format_coverage": format_coverage,
-        "weight_formats": formats,
-        "unsupported_weight_formats": tuple(
-            value for value in formats if value not in supported_formats
-        ),
-        "profile_weight_formats": supported_formats,
-        "dispatch_candidate": dispatch_candidate,
+        "reason": "analytical_gpu_profile", "extrapolated": False,
+        "fallback_kind": None,
+        "format_coverage": "analytical_profile",
         "phase": getattr(workload, "execution_phase", "unspecified"),
-        "hardware_id": gpu.kernel_model.hardware_id,
-        "runtime_id": gpu.kernel_model.runtime_id, "validated_llm_scope": False,
+        "validated_llm_scope": False,
     }
-    return replace(estimate, metadata={**estimate.metadata, "prediction": prediction},
-                   phases=tuple(replace(p, metadata={**p.metadata, "kernel_prediction": prediction}) for p in estimate.phases))
-
+    return replace(
+        estimate,
+        metadata={**estimate.metadata, "prediction": prediction},
+        phases=tuple(
+            replace(p, metadata={**p.metadata, "kernel_prediction": prediction})
+            for p in estimate.phases
+        ),
+    )
 
 def estimate_gpu_gemm(
     gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload, *,
     mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
 ) -> CostEstimate:
     validate_mmvq_hbm_mode(mmvq_hbm_mode)
+    unsupported_formats = tuple(
+        value for value in workload.packed_weight_formats
+        if value.strip().casefold() not in {
+            "q2_k", "q3_k", "q4_0", "q4_1", "q4_k", "q5_0", "q5_1",
+            "q5_k", "q6_k", "q8_0", "iq1_m", "iq1_s", "iq2_s", "iq2_xs",
+            "iq2_xxs", "iq3_s", "iq3_xxs", "iq4_nl", "iq4_xs",
+        }
+    )
+    if unsupported_formats:
+        raise ValueError(
+            "unsupported packed weight formats: {!r}".format(unsupported_formats)
+        )
     kernel = estimate_kernel(gpu, hbm, workload)
     if kernel is not None:
         return kernel
-    return _kernel_fallback(_estimate_gpu_gemm_analytical(
-        gpu, hbm, workload, mmvq_hbm_mode=mmvq_hbm_mode), gpu, workload)
+    if gpu.kernel_model is not None:
+        raise ValueError(
+            "configured GPU kernel model has no GEMM dispatch for "
+            "phase={!r}, formats={!r}, activation_dtype={!r}, "
+            "bits=(activation={!r}, weight={!r}, output={!r}, accumulator={!r}), "
+            "epilogue={!r}, shape={!r}".format(
+                workload.execution_phase, workload.packed_weight_formats,
+                workload.activation_dtype, workload.activation_bits,
+                workload.weight_bits, workload.output_bits,
+                workload.accumulator_bits, workload.epilogue_name,
+                (workload.m, workload.n, workload.k),
+            )
+        )
+    return _annotate_analytical_estimate(_estimate_gpu_gemm_analytical(
+        gpu, hbm, workload, mmvq_hbm_mode=mmvq_hbm_mode), workload)
+
+
+def estimate_gpu_gemm_placement_proxy(
+    gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload,
+) -> CostEstimate:
+    """Return the disclosed analytical objective for placement candidate search.
+
+    Candidate probes do not carry an executable kernel invocation contract.
+    This surrogate is never used to price the final simulated task graph.
+    """
+    estimate = _estimate_gpu_gemm_analytical(gpu, hbm, workload)
+    return replace(
+        estimate,
+        metadata={
+            **estimate.metadata,
+            "planning_proxy_kind": "analytical_gemm_candidate_objective",
+        },
+    )
 
 
 def _estimate_gpu_gemm_analytical(
@@ -3824,7 +3821,20 @@ def estimate_gpu_fused_attention(
     kernel = estimate_kernel(gpu, hbm, workload, attention=True)
     if kernel is not None:
         return kernel
-    return _kernel_fallback(_estimate_gpu_fused_attention_analytical(gpu, hbm, workload), gpu, workload)
+    if gpu.kernel_model is not None:
+        raise ValueError(
+            "configured GPU kernel model has no attention dispatch for "
+            "phase={!r}, KV format={!r}, activation_dtype={!r}, "
+            "bits=(input={!r}, output={!r}), shape={!r}".format(
+                workload.execution_phase, workload.kv_artifact_format,
+                workload.activation_dtype, workload.input_bits,
+                workload.output_bits,
+                (workload.batch_tokens, workload.context_tokens, workload.hidden_size),
+            )
+        )
+    return _annotate_analytical_estimate(
+        _estimate_gpu_fused_attention_analytical(gpu, hbm, workload), workload,
+    )
 
 
 def _estimate_gpu_fused_attention_analytical(

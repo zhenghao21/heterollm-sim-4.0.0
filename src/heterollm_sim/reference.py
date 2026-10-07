@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from .config import FusionPolicy, InterconnectProfile, ScenarioConfig
+from .component_presets import _analytical_dram_config
 from .cost_models import (
     CPUPipelineProfile,
     CPUProfile,
@@ -132,6 +133,18 @@ def build_reference_scenario() -> ScenarioConfig:
                 die_id="ddr_die",
                 capacity_bytes=256 * 1024**3,
                 bandwidth_gbps=3276.8,
+                read_bandwidth_gbps=3276.8,
+                write_bandwidth_gbps=3276.8,
+                metadata={
+                    "memory_service_owner": "cpu0.memory",
+                    "physical_memory_config": _analytical_dram_config(
+                        kind="DDR", generation="DDR5",
+                        capacity_bytes=256 * 1024**3,
+                        read_bandwidth_gbps=3276.8,
+                        write_bandwidth_gbps=3276.8,
+                        channels=8, scope="bundled_reference_host_ddr5_aggregate",
+                    ),
+                },
             ),
         )
     )
@@ -172,7 +185,7 @@ def build_reference_scenario() -> ScenarioConfig:
             ComponentSpec(
                 component_id=hbm_id,
                 kind="hbm",
-                cost_profile_id="legacy-hbm",
+                cost_profile_id="legacy-hbm-{}".format(index),
                 ports=(
                     PortSpec(
                         port_id="host",
@@ -187,9 +200,18 @@ def build_reference_scenario() -> ScenarioConfig:
                 die_id="{}_die".format(hbm_id),
                 capacity_bytes=16 * 1024**3,
                 bandwidth_gbps=hbm_port_bandwidth_gbps,
+                read_bandwidth_gbps=hbm_port_bandwidth_gbps,
+                write_bandwidth_gbps=hbm_port_bandwidth_gbps,
                 metadata={
-                    "memory_bandwidth_scope": "aggregate",
-                    "memory_aggregate_owner": "gpu0",
+                    "memory_service_owner": "{}.hbm_fabric".format(hbm_id),
+                    "physical_memory_config": _analytical_dram_config(
+                        kind="HBM", generation="HBM3",
+                        capacity_bytes=16 * 1024**3,
+                        read_bandwidth_gbps=hbm_port_bandwidth_gbps,
+                        write_bandwidth_gbps=hbm_port_bandwidth_gbps,
+                        channels=16,
+                        scope="bundled_reference_individual_hbm_stack",
+                    ),
                 },
             )
         )
@@ -435,12 +457,14 @@ def build_reference_scenario() -> ScenarioConfig:
             special_function_resource_id="gpu0.sfu",
             launch_resource_id="gpu0.frontend",
             )},
-            "hbm": {"legacy-hbm": HBMProfile(
-            bandwidth_gb_s=4096.0,
-            efficiency=0.75,
-            energy_pj_per_byte=4.0,
-            resource_id="gpu0.hbm_fabric",
-            )},
+            "hbm": {
+                "legacy-hbm-{}".format(index): HBMProfile(
+                    bandwidth_gb_s=hbm_port_bandwidth_gbps / 8.0,
+                    efficiency=0.75,
+                    energy_pj_per_byte=4.0,
+                    resource_id="hbm{}.hbm_fabric".format(index),
+                ) for index in range(8)
+            },
             "cpu": {"legacy-cpu": CPUProfile(
             pipeline=CPUPipelineProfile(
                 core_count=16,

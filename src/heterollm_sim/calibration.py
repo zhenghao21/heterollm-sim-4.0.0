@@ -658,13 +658,14 @@ def calibrate_cost_phase(
     model_sha256: str | None = None,
     hardware_fingerprint: str | None = None,
     runtime_fingerprint: str | None = None,
+    apply_stage: bool = True,
     apply_memory: bool = False,
 ) -> CostPhase:
     """Apply one exact stage coefficient to one planner phase.
 
-    The caller must provide a projection invocation id.  Unknown stages,
-    missing shape evidence, identity mismatches, and blocked coverage return
-    the original phase unchanged.
+    The caller must provide a projection invocation id.  An explicitly
+    selected calibration cannot silently revert to analytical costs when
+    the corresponding invocation is eligible but lacks evidence.
     """
     if not isinstance(phase, CostPhase) or not isinstance(metadata, Mapping):
         return phase
@@ -674,7 +675,7 @@ def calibrate_cost_phase(
         hardware_fingerprint=hardware_fingerprint,
         runtime_fingerprint=runtime_fingerprint,
     ):
-        return phase
+        raise ValueError("native calibration profile identity does not match this scenario")
     stage, execution_phase, token_shape = _invocation_fields(metadata)
     if not stage or not execution_phase or stage == "unknown":
         return phase
@@ -705,7 +706,10 @@ def calibrate_cost_phase(
         and isinstance(profile_mapping.get("exact_operator_keys") or profile_mapping.get("_exact_operator_keys"), Mapping)
     )
     exact_key_policy = explicit_exact_policy or profile_has_exact_table
-    if exact_key_policy:
+    if not apply_stage:
+        resolution = None
+        coefficient = None
+    elif exact_key_policy:
         resolution = resolve_exact_operator_calibration(
             profile,
             stage=stage,
@@ -732,26 +736,14 @@ def calibrate_cost_phase(
         "interpolate_within_evidence",
         "kernel_shape_interpolate_within_evidence",
     }
-    if not exact_key_policy and kernel_shape_mode and profile.calibration_basis == "kernel":
+    if apply_stage and not exact_key_policy and kernel_shape_mode and profile.calibration_basis == "kernel":
         resolution = resolve_stage_calibration(
             profile, stage=stage, phase=execution_phase, token_shape=token_shape,
             allow_interpolation=interpolation_requested,
         )
         coefficient = (float(resolution["coefficient"])
                        if resolution.get("coefficient") is not None else None)
-        # Preserve the historical explicit kernel-shape policy: a missing
-        # bucket may use the phase aggregate, but only as a labelled
-        # analytical fallback (never as an unreported exact hit).
-        if coefficient is None and not interpolation_requested:
-            fallback = resolve_stage_calibration(
-                profile, stage=stage, phase=execution_phase, token_shape=None,
-            )
-            coefficient = (float(fallback["coefficient"])
-                           if fallback.get("coefficient") is not None else None)
-            if resolution.get("mode") == "extrapolation" and fallback.get("coefficient") is not None:
-                resolution["mode"] = "analytical_fallback"
-                resolution["fallback_mode"] = fallback.get("mode")
-    elif not exact_key_policy:
+    elif apply_stage and not exact_key_policy:
         resolution = resolve_stage_calibration(
             profile, stage=stage, phase=execution_phase,
             token_shape=None if kernel_shape_mode else token_shape,
@@ -760,19 +752,31 @@ def calibrate_cost_phase(
         coefficient = (float(resolution["coefficient"])
                        if resolution.get("coefficient") is not None else None)
     memory_ns = memory_calibration_ns(phase, metadata, profile) if apply_memory else None
+    if apply_stage and coefficient is None and any(
+        any(marker in demand.resource_id.lower() for marker in ("tensor", "scalar", "compute", "sfu"))
+        for demand in phase.demands
+    ):
+        raise ValueError(
+            "native stage calibration has no covered sample for "
+            "stage={!r}, phase={!r}, shape={!r} (resolution={!r})".format(
+                stage, execution_phase, token_shape, resolution,
+            )
+        )
+    if apply_memory and memory_ns is None and any(
+        ".memory" in demand.resource_id.lower() and demand.bytes_moved > 0
+        for demand in phase.demands
+    ):
+        raise ValueError(
+            "native memory calibration has no covered bandwidth for "
+            "stage={!r}, phase={!r}, shape={!r}".format(
+                stage, execution_phase, token_shape,
+            )
+        )
     if coefficient is None and memory_ns is None:
-        # Keep provenance even when calibration is blocked or out of range;
-        # the analytical phase remains intact, but callers can distinguish a
-        # deliberate fallback from a shape hit.
-        if token_shape is not None and interpolation_requested:
-            phase_metadata = dict(phase.metadata)
-            phase_metadata["native_calibration_shape_resolution"] = resolution
-            return CostPhase(name=phase.name, category=phase.category,
-                             demands=phase.demands, metadata=phase_metadata)
         return phase
     instances = _finite_non_negative(metadata.get("calibration_instances", 1))
     if instances is None or instances <= 0:
-        return phase
+        raise ValueError("native calibration_instances must be positive and finite")
     target_ns = coefficient * instances if coefficient is not None else None
     phase_launch = (profile.prefill_launch_ns_per_call if execution_phase == "prefill"
                     else profile.decode_launch_ns_per_call if execution_phase == "decode"
@@ -941,6 +945,7 @@ def request_marker_calibration_ns(
     prompt_tokens: int | None = None,
     output_tokens: int | None = None,
     prompt_fingerprint: str | None = None,
+    required: bool = False,
 ) -> float | None:
     """Return one exact request-marker additive cost, or ``None``.
 
@@ -950,46 +955,52 @@ def request_marker_calibration_ns(
     prevents a request boundary measured for one prompt from being reused on
     another shape or from silently applying a total request wall time twice.
     """
+    def missing(reason: str) -> None:
+        if required:
+            raise ValueError("request marker calibration is unavailable: " + reason)
+        return None
+
     if not isinstance(profile, NativeCalibrationProfile):
         profile = profile_from_mapping(profile)
     if profile is None or profile.request_marker_policy != "additive_once_per_request":
-        return None
+        return missing("profile or additive_once_per_request policy missing")
     if profile.coverage_status is not None and profile.coverage_status != "covered":
-        return None
+        return missing("profile coverage is blocked")
     if profile.identity_mismatch or not _profile_identity_matches(
         profile,
         model_sha256=model_sha256,
         hardware_fingerprint=hardware_fingerprint,
         runtime_fingerprint=runtime_fingerprint,
     ):
-        return None
+        return missing("profile identity does not match this scenario")
     canonical = _REQUEST_MARKER_ALIASES.get(str(marker or "").strip().lower())
     if canonical is None or not isinstance(profile.request_marker_ns, Mapping):
-        return None
+        return missing("marker or marker-cost table missing")
     evidence = profile.request_marker_evidence
     evidence_row = evidence.get(canonical) if isinstance(evidence, Mapping) else None
     if not isinstance(evidence_row, Mapping) or str(evidence_row.get("status", "")) != "calibrated":
-        return None
+        return missing("marker has no calibrated evidence row")
     shape = profile.request_shape
     # Marker evidence without an exact shape is not safe to apply.  Require
     # both dimensions even when the caller only wants the first-token marker.
     if not isinstance(shape, Mapping) or "prompt_tokens" not in shape or "output_tokens" not in shape:
-        return None
+        return missing("request shape is incomplete")
     try:
         expected_prompt = int(shape["prompt_tokens"])
         expected_output = int(shape["output_tokens"])
     except (TypeError, ValueError, OverflowError):
-        return None
+        return missing("request shape is invalid")
     if prompt_tokens is None or output_tokens is None:
-        return None
+        return missing("request token counts are missing")
     if int(prompt_tokens) != expected_prompt or int(output_tokens) != expected_output:
-        return None
+        return missing("request token counts differ from evidence")
     expected_fingerprint = shape.get("prompt_fingerprint")
     if expected_fingerprint is not None and (
         prompt_fingerprint is None or str(expected_fingerprint) != str(prompt_fingerprint)
     ):
-        return None
-    return _finite_non_negative(profile.request_marker_ns.get(canonical))
+        return missing("prompt fingerprint differs from evidence")
+    value = _finite_non_negative(profile.request_marker_ns.get(canonical))
+    return value if value is not None else missing("marker coefficient is missing")
 
 
 def launch_calibration_ns(
@@ -1045,6 +1056,13 @@ def apply_native_calibration(
         runtime_fingerprint=(scenario.llama_cpp_config.fingerprint
                              if scenario.llama_cpp_config is not None else None),
     )
+    if not identity_ok and (
+        apply_launch or apply_stage or apply_memory
+        or apply_phase_boundary or apply_request_boundary
+    ):
+        raise ValueError("native calibration profile identity does not match this scenario")
+    if apply_launch and _finite_non_negative(profile.launch_ns_per_call) is None:
+        raise ValueError("native launch calibration has no covered launch coefficient")
     # Stage, memory, phase-boundary and request-boundary calibration are
     # independent of the optional CUDA launch override.  The previous
     # implementation returned here whenever ``apply_launch`` was false,

@@ -18,6 +18,8 @@ from .component_presets import (
     _gpu_cost_profile_template,
     _hbm_cost_profile_template,
     _host_memory_cost_profile_template,
+    _analytical_dram_config,
+    _analytical_nand_config,
     materialize_component_payload,
 )
 from .serde import to_primitive
@@ -690,6 +692,38 @@ def _component(
         component_metadata["topology_evidence"] = topology_evidence
     if extra_metadata:
         component_metadata.update(dict(extra_metadata))
+    # This builder is used only by the bundled architecture definitions.  Its
+    # synthetic arrays are explicit preset assumptions; catalog/user payloads
+    # pass through _catalog_component and are never repaired implicitly here.
+    if kind in {"hbm", "dram", "host_memory", "cxl_memory", "ssd", "high_io_ssd", "hbf"} and "physical_memory_config" not in component_metadata:
+        read_gbps = read_bandwidth_gbps or bandwidth_gbps
+        write_gbps = write_bandwidth_gbps or bandwidth_gbps or read_gbps
+        if capacity_bytes <= 0 or read_gbps <= 0 or write_gbps <= 0:
+            raise ValueError("{} preset storage needs capacity and directional bandwidth".format(component_id))
+        version = ports[0].version if ports else ""
+        protocol = ports[0].protocol.upper() if ports else ""
+        if kind in {"ssd", "high_io_ssd", "hbf"}:
+            component_metadata["physical_memory_config"] = _analytical_nand_config(
+                kind="HBF" if kind == "hbf" else "SSD",
+                capacity_bytes=capacity_bytes,
+                read_bandwidth_gbps=read_gbps,
+                write_bandwidth_gbps=write_gbps,
+                read_latency_ns=float(component_metadata.get("read_latency_ns", 50_000.0)),
+                write_latency_ns=float(component_metadata.get("write_latency_ns", 800_000.0)),
+                scope="architecture_preset_{}".format(component_id),
+            )
+        else:
+            memory_kind = "HBM" if kind == "hbm" else "LPDDR" if "LPDDR" in protocol else "DDR"
+            component_metadata["physical_memory_config"] = _analytical_dram_config(
+                kind=memory_kind, generation=version or memory_kind,
+                capacity_bytes=capacity_bytes,
+                read_bandwidth_gbps=read_gbps,
+                write_bandwidth_gbps=write_gbps,
+                channels=16 if kind == "hbm" else 8 if kind == "host_memory" else 1,
+                read_latency_ns=float(component_metadata.get("read_latency_ns", 35.0)),
+                write_latency_ns=float(component_metadata.get("write_latency_ns", 35.0)),
+                scope="architecture_preset_{}".format(component_id),
+            )
     return ComponentSpec(
         component_id=component_id,
         kind=kind,

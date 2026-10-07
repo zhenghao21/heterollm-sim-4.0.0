@@ -43,13 +43,14 @@ def _physical_allocator(allocator, task, contract):
     owner = str(task.metadata.get('physical_owner') or contract.get('memory_resource') or '')
     allocators = getattr(allocator, 'allocators', None)
     if not isinstance(allocators, dict):
-        return None
+        raise ValueError('physical runtime must expose its memory allocators')
     if owner in allocators:
         return allocators[owner]
-    # A runtime normally has one memory owner for a task. This fallback keeps
-    # the optional adapter usable before physical_owner is promoted into task
-    # metadata by the event dispatcher.
-    return next(iter(allocators.values())) if len(allocators) == 1 else None
+    if allocators:
+        raise ValueError('L2 task has no physical allocator for memory owner ' + owner)
+    # No allocation has been dispatched yet. This task will declare its own
+    # allocations; there is no unrelated owner to substitute.
+    return None
 
 
 def _canonical_access(item, allocator):

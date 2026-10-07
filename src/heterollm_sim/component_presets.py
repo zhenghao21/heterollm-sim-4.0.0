@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 import re
 import json
 import os
@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .ir import ComponentSpec, LinkSpec, PortSpec, SCHEMA_VERSION
+from .memory_types import DramConfig, NandConfig
 from .serde import to_primitive
 
 
@@ -236,6 +237,88 @@ class TopologyBundleDefinition:
 
 def _gb(value: float) -> int:
     return int(value * 1_000_000_000)
+
+
+def _analytical_dram_config(
+    *, kind: str, generation: str, capacity_bytes: int,
+    read_bandwidth_gbps: float, write_bandwidth_gbps: float,
+    channels: int = 1, data_width_bits: int = 64,
+    read_latency_ns: float = 35.0, write_latency_ns: float = 35.0,
+    scope: str = "equivalent_memory_subsystem",
+) -> Dict[str, Any]:
+    """Represent published capacity/bandwidth with explicitly synthetic geometry."""
+    groups, banks, row_bytes, burst_bytes = 4, 4, 8192, 64
+    bank_count = channels * groups * banks
+    rows = (capacity_bytes + bank_count * row_bytes - 1) // (bank_count * row_bytes)
+    interface_gb_s = max(read_bandwidth_gbps, write_bandwidth_gbps) / 8.0
+    lane_gb_s = interface_gb_s / channels
+    return asdict(DramConfig(
+        kind=kind, generation=generation, channels=channels,
+        ranks_per_channel=1, bank_groups_per_rank=groups,
+        banks_per_group=banks, rows_per_bank=rows, row_bytes=row_bytes,
+        burst_bytes=burst_bytes, interleave_bytes=burst_bytes,
+        data_width_bits=data_width_bits,
+        data_rate_mt_s=interface_gb_s * 8_000.0 / (channels * data_width_bits),
+        interface_bandwidth_gb_s=interface_gb_s,
+        read_bandwidth_gb_s=read_bandwidth_gbps / 8.0,
+        write_bandwidth_gb_s=write_bandwidth_gbps / 8.0,
+        open_ns=14.0, close_ns=14.0,
+        read_latency_ns=read_latency_ns, write_latency_ns=write_latency_ns,
+        burst_interval_ns=burst_bytes / lane_gb_s,
+        capacity_bytes=capacity_bytes, max_outstanding_requests=64,
+        metadata={
+            "parameter_basis": "analytical_equivalent_assumptions",
+            "configuration_scope": scope,
+            "known_values": "component capacity and one-way directional bandwidth",
+            "analytical_assumptions": [
+                "channel count unless separately cited by the preset",
+                "rank, bank, row and burst organization",
+                "open/close, command-to-data and recovery timings",
+                "burst interval is a payload scheduling budget, not measured tCCD",
+            ],
+            "capacity_basis": "declared capacity with an equivalent geometry rounded upward to whole rows",
+            "bandwidth_basis": "explicit component one-way bandwidth; synthetic lane width does not infer pin speed",
+            "data_rate_basis": "equivalent interface rate derived from declared aggregate bandwidth and synthetic width; not a measured pin speed",
+        },
+    ))
+
+
+def _analytical_nand_config(
+    *, kind: str, capacity_bytes: int, read_bandwidth_gbps: float,
+    write_bandwidth_gbps: float, read_latency_ns: float,
+    write_latency_ns: float, scope: str = "equivalent_flash_device",
+) -> Dict[str, Any]:
+    """Model a NAND-backed device without claiming undisclosed die layout."""
+    channels, targets, dies, luns, planes = 8, 2, 2, 1, 2
+    pages, page_bytes = 256, 16384
+    block_bytes = channels * targets * dies * luns * planes * pages * page_bytes
+    blocks = (capacity_bytes + block_bytes - 1) // block_bytes
+    return asdict(NandConfig(
+        kind=kind, channels=channels, targets_per_channel=targets,
+        dies_per_target=dies, luns_per_die=luns, planes_per_lun=planes,
+        blocks_per_plane=blocks, pages_per_block=pages, page_bytes=page_bytes,
+        host_granularity_bytes=4096,
+        host_bandwidth_gb_s=max(read_bandwidth_gbps, write_bandwidth_gbps) / 8.0,
+        internal_bandwidth_gb_s=max(read_bandwidth_gbps, write_bandwidth_gbps) / 8.0,
+        page_read_ns=read_latency_ns, page_program_ns=write_latency_ns,
+        block_erase_ns=3_000_000.0,
+        capacity_bytes=capacity_bytes, max_outstanding_requests=64,
+        metadata={
+            "parameter_basis": "analytical_equivalent_assumptions",
+            "configuration_scope": scope,
+            "known_values": "component capacity and sequential read/write bandwidth",
+            "analytical_assumptions": [
+                "channel, target, die, LUN, plane, block and page organization",
+                "page read/program and block erase timings",
+                "internal bandwidth and scheduling parallelism",
+            ],
+            "directional_bandwidth_gb_s": {
+                "read": read_bandwidth_gbps / 8.0,
+                "write": write_bandwidth_gbps / 8.0,
+            },
+            "capacity_basis": "declared capacity with equivalent array rounded upward to whole blocks",
+        },
+    ))
 
 
 def _tb(value: float) -> int:
@@ -756,6 +839,11 @@ def _hbm_preset(
                 "cost_profile_template": cost_profile_template,
                 "cost_profile_parameter_basis": cost_profile_parameter_basis,
                 "cost_profile_key": "hbm",
+                "physical_memory_config": _analytical_dram_config(
+                    kind="HBM", generation=generation, capacity_bytes=_gb(capacity_gb),
+                    read_bandwidth_gbps=bandwidth_gbps, write_bandwidth_gbps=bandwidth_gbps,
+                    channels=channels, scope="single_hbm_stack_template",
+                ),
             },
         ),
     )
@@ -872,6 +960,8 @@ def _gddr_preset(
                     "kind": "GDDR",
                     "generation": generation,
                     "channels": 1,
+                    "subchannels_per_channel": 1,
+                    "pseudo_channels_per_channel": 1,
                     "data_lanes": data_lanes,
                     "data_width_bits": data_width_bits,
                     "data_rate_mt_s": data_rate_gbps * 1000.0,
@@ -890,6 +980,10 @@ def _gddr_preset(
                     "read_latency_ns": 35.0,
                     "write_latency_ns": 35.0,
                     "burst_interval_ns": burst_interval_ns,
+                    "read_recovery_ns": 0.0,
+                    "write_recovery_ns": 15.0,
+                    "read_to_write_ns": 0.0,
+                    "write_to_read_ns": 0.0,
                     "max_outstanding_requests": 64,
                     "capacity_bytes": _gb(capacity_gb),
                     "metadata": {
@@ -1055,6 +1149,13 @@ def _hbm_product_slice_preset(
                 "cost_profile_parameter_basis": cost_profile_parameter_basis,
                 "cost_profile_key": "hbm",
                 "expires_at": "2027-08-23",
+                "physical_memory_config": _analytical_dram_config(
+                    kind="HBM", generation=generation,
+                    capacity_bytes=_gb(visible_capacity_gb),
+                    read_bandwidth_gbps=bandwidth_gbps,
+                    write_bandwidth_gbps=bandwidth_gbps,
+                    channels=16, scope="derived_product_visible_hbm_stack_slice",
+                ),
             },
         ),
     )
@@ -1298,6 +1399,13 @@ def _ssd_preset(
             measurement_basis="read_gbps/write_gbps 已是 IR 十进制 Gb/s；调用方必须先把厂商 MB/s 或 GB/s 除/乘换算后传入；随机 IOPS 不直接折算。",
             extras={
                 **analytical_transport,
+                "physical_memory_config": _analytical_nand_config(
+                    kind="SSD", capacity_bytes=capacity_bytes,
+                    read_bandwidth_gbps=read_gbps, write_bandwidth_gbps=write_gbps,
+                    read_latency_ns=analytical_transport["read_latency_ns"],
+                    write_latency_ns=analytical_transport["write_latency_ns"],
+                    scope=preset_id,
+                ),
                 "value_scope": "单个 NVMe SSD 组件模板",
                 "conditions": list(conditions or default_conditions),
                 "derived_formula": "厂商 MB/s ÷ 1000 × 8 = IR Gb/s（或厂商 GB/s × 8）；具体换算保存在 vendor_parameter_provenance",
@@ -1632,6 +1740,13 @@ def _grace_lpddr_preset(
                 "cost_profile_template": cost_profile_template,
                 "cost_profile_parameter_basis": cost_profile_parameter_basis,
                 "cost_profile_key": "host_memory",
+                "physical_memory_config": _analytical_dram_config(
+                    kind="LPDDR", generation="LPDDR5X",
+                    capacity_bytes=_gb(480.0),
+                    read_bandwidth_gbps=bandwidth_gbps,
+                    write_bandwidth_gbps=bandwidth_gbps,
+                    channels=8, scope="aggregate_per_grace_memory_synthetic_channels",
+                ),
             },
         ),
     )
@@ -2434,6 +2549,13 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
                 extras={
                     "read_latency_ns": 4000.0,
                     "write_latency_ns": 75000.0,
+                    "physical_memory_config": _analytical_nand_config(
+                        kind="HBF", capacity_bytes=_gb(512.0),
+                        read_bandwidth_gbps=3904.0,
+                        write_bandwidth_gbps=217.6,
+                        read_latency_ns=4000.0, write_latency_ns=75000.0,
+                        scope="single_hbf_reference_stack",
+                    ),
                     "transfer_granularity_bytes": 4096,
                     "max_outstanding_requests": 32,
                     "dma_bandwidth_gbps": 2048.0,
@@ -2939,6 +3061,15 @@ _SAMSUNG_DDR5.component.metadata["parameter_basis"] = {
     "read_bandwidth_gbps": "5600 MT/s × 64-bit payload ÷ 8 × 8 = 358.4 Gb/s",
     "write_bandwidth_gbps": "directional payload envelope; controller efficiency remains analytical",
 }
+_SAMSUNG_DDR5.component.metadata["physical_memory_config"] = _analytical_dram_config(
+    kind="DDR", generation="DDR5", capacity_bytes=_gb(32.0),
+    read_bandwidth_gbps=358.4, write_bandwidth_gbps=358.4,
+    channels=1, scope="single_samsung_ddr5_32gb_udimm_module",
+)
+_SAMSUNG_DDR5.component.metadata["physical_memory_config"]["data_rate_mt_s"] = 5600.0
+_SAMSUNG_DDR5.component.metadata["physical_memory_config"]["metadata"]["known_values"] = (
+    "32 GB module capacity; DDR5-5600 grade; 64-bit payload width and 44.8 GB/s peak"
+)
 _SAMSUNG_DDR5.component.metadata["value_scope"] = "单条 Samsung DDR5 32GB UDIMM 模块"
 _SAMSUNG_DDR5.component.metadata["conditions"] = [
     "Samsung DDR5 module page; DDR5-5600 speed class",
@@ -3033,6 +3164,10 @@ _ACER_LOCAL_DDR5 = replace(
                 "kind": "DDR",
                 "generation": "DDR5",
                 "channels": 2,
+                "stacks": 1,
+                "dies_per_stack": 1,
+                "subchannels_per_channel": 1,
+                "pseudo_channels_per_channel": 1,
                 "ranks_per_channel": 4,
                 "bank_groups_per_rank": 8,
                 "banks_per_group": 4,
@@ -3050,6 +3185,8 @@ _ACER_LOCAL_DDR5 = replace(
                 "burst_interval_ns": 64.0 / 44.8,
                 "read_recovery_ns": 0.0,
                 "write_recovery_ns": 15.0,
+                "read_to_write_ns": 0.0,
+                "write_to_read_ns": 0.0,
                 "capacity_bytes": 128 * 1024 ** 3,
                 "max_outstanding_requests": 32,
                 "metadata": {

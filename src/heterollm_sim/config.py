@@ -417,6 +417,17 @@ class ScenarioConfig:
         ):
             raise ValueError("llama_cpp_config must be a LlamaCppRuntimeConfig or None")
         component_map = self.hardware.component_map()
+        calibration_flags = ("native_calibration_apply_stage", "native_calibration_apply_memory", "native_calibration_apply_launch", "native_calibration_apply_request_boundary")
+        for flag in calibration_flags:
+            if flag in self.placement.metadata and not isinstance(self.placement.metadata[flag], bool):
+                raise ValueError(flag + " must be boolean")
+        if any(self.placement.metadata.get(flag) is True for flag in calibration_flags):
+            if not isinstance(self.placement.metadata.get("native_calibration"), Mapping) or not self.placement.metadata["native_calibration"]:
+                raise ValueError("enabled native calibration requires an explicit non-empty native_calibration profile")
+        from .physical_contract import PHYSICAL_MEMORY_COMPONENT_KINDS, require_physical_memory_config
+        for component in self.hardware.components:
+            if component.normalized_kind in PHYSICAL_MEMORY_COMPONENT_KINDS:
+                require_physical_memory_config(component)
         if self.host_output_contract is not None:
             output_component = component_map.get(
                 self.host_output_contract.target_component_id
@@ -561,13 +572,7 @@ class ScenarioConfig:
             # link capacities form the cap for that profile.
             caps = self._memory_bandwidth_caps(component)
             if caps[0] <= 0.0:
-                # Profile-only memory tiers are valid.  Their profile value is
-                # the only known ceiling and is checked by the profile class.
-                caps = (
-                    float(profile.bandwidth_gb_s) * 8.0,
-                    float(profile.bandwidth_gb_s) * 8.0,
-                    float(profile.bandwidth_gb_s) * 8.0,
-                )
+                raise ValueError("component {} requires a physical memory bandwidth; profile-only fallback is disabled".format(component.component_id))
             shared_cap, read_cap, write_cap = (value / 8.0 for value in caps)
             if profile.measured_effective_bandwidth_gb_s is not None:
                 measured = float(profile.measured_effective_bandwidth_gb_s)
@@ -721,7 +726,7 @@ class ScenarioConfig:
             # defaults into authoring metadata would mask later profile edits.
             caps = self._memory_bandwidth_caps(component)
             if caps[0] <= 0:
-                caps = (profile.bandwidth_gb_s * 8,) * 3
+                raise ValueError("component {} requires a physical memory bandwidth".format(component.component_id))
             metadata["memory_service"] = {
                 "service_id": component.component_id + ".access",
                 "physical_owner": profile.resource_id,
@@ -802,15 +807,8 @@ class ScenarioConfig:
 
         metadata = component.metadata
         scope = str(metadata.get("memory_bandwidth_scope", "per_component")).strip().lower()
-        if scope != "aggregate" and component.cost_profile_id is not None:
-            # A copied component metadata mapping may omit the marker while
-            # its profile group still has explicitly marked aggregate banks.
-            # Preserve that group contract across such metadata edits.
-            scope = "aggregate" if any(
-                item.cost_profile_id == component.cost_profile_id
-                and str(item.metadata.get("memory_bandwidth_scope", "")).strip().lower() == "aggregate"
-                for item in self.hardware.components
-            ) else scope
+        if scope not in {"per_component", "aggregate"}:
+            raise ValueError("component {} has invalid memory_bandwidth_scope".format(component.component_id))
         if scope != "aggregate":
             shared = component.shared_bandwidth_gbps
             physical = metadata.get("physical_memory_config")
@@ -840,15 +838,6 @@ class ScenarioConfig:
                 component.directional_bandwidth_gbps("write") or shared,
             )
         owner = str(metadata.get("memory_aggregate_owner", "")).strip()
-        if not owner and component.cost_profile_id is not None:
-            owners = {
-                str(item.metadata.get("memory_aggregate_owner", "")).strip()
-                for item in self.hardware.components
-                if item.cost_profile_id == component.cost_profile_id
-                and str(item.metadata.get("memory_aggregate_owner", "")).strip()
-            }
-            if len(owners) == 1:
-                owner = next(iter(owners))
         if not owner:
             raise ValueError(
                 "component {} aggregate memory requires memory_aggregate_owner"
@@ -872,14 +861,10 @@ class ScenarioConfig:
                     str(item.metadata.get("memory_bandwidth_scope", "")).strip().lower() == "aggregate"
                     and str(item.metadata.get("memory_aggregate_owner", "")).strip() == owner
                 )
-                or (
-                    item.cost_profile_id == component.cost_profile_id
-                    and not item.metadata.get("memory_bandwidth_scope")
-                )
             )
         ]
         if not members:
-            members = [component]
+            raise ValueError("aggregate memory owner {} has no connected members".format(owner))
         return (
             sum(item.shared_bandwidth_gbps for item in members),
             sum(item.directional_bandwidth_gbps("read") or item.shared_bandwidth_gbps for item in members),
@@ -1117,6 +1102,10 @@ def hardware_from_dict(data: Mapping[str, Any]) -> HardwareSpec:
                 0.0,
             )
         metadata = _mapping(values.get("metadata", {}), "component metadata")
+        from .physical_contract import PHYSICAL_MEMORY_COMPONENT_KINDS, parse_required_physical_config
+        component_kind = normalize_component_kind(str(values.get("kind", "")))
+        if component_kind in PHYSICAL_MEMORY_COMPONENT_KINDS:
+            parse_required_physical_config(component_id, component_kind, metadata.get("physical_memory_config"))
         if (
             metadata.get("bandwidth_mode") is None
             and read_bandwidth > 0.0
@@ -1543,6 +1532,14 @@ def scheduler_from_dict(data: Mapping[str, Any]) -> SchedulerSpec:
             "slo_tbt_ns",
         ),
     )
+    required = (
+        "mode", "max_num_seqs", "max_num_batched_tokens", "prefill_chunk_tokens",
+        "policy", "mixed_phase_batching", "phase_candidate_order", "starvation_ns",
+        "preemption_enabled", "preemption_granularity", "preemption_policy",
+    )
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise ValueError("workload.scheduler missing explicit fields: " + ", ".join(missing))
     policy = data.get("policy", "decode_first")
     return SchedulerSpec(
         mode=str(data.get("mode", "static")),
@@ -1691,6 +1688,9 @@ def workload_from_dict(data: Mapping[str, Any]) -> WorkloadSpec:
     for raw_request in _array(data.get("requests", []), "requests"):
         values = _mapping(raw_request, "request")
         _reject_dataclass_unknown_fields(values, "workload request", RequestSpec)
+        missing = [key for key in ("request_id", "arrival_ns", "prompt_tokens", "output_tokens") if key not in values]
+        if missing:
+            raise ValueError("workload request missing explicit fields: " + ", ".join(missing))
         requests.append(
             RequestSpec(
                 request_id=str(values.get("request_id", "")),
@@ -1711,6 +1711,10 @@ def workload_from_dict(data: Mapping[str, Any]) -> WorkloadSpec:
             )
         )
 
+    if not requests:
+        missing = [key for key in ("request_count", "prompt_tokens", "output_tokens", "arrival_rate_rps", "random_seed") if key not in data]
+        if missing:
+            raise ValueError("synthetic workload missing explicit fields: " + ", ".join(missing))
     scheduler_raw = data.get("scheduler")
     if scheduler_raw is None:
         raise ValueError("V4 workload.scheduler is required")

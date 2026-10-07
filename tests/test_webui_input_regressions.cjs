@@ -9,13 +9,18 @@ const core = require(path.join(root, "src/heterollm_sim/webui/model-graph-core.j
 
 function loadApp() {
   const source = fs.readFileSync(path.join(root, "src/heterollm_sim/webui/app.js"), "utf8");
+  const storedValues = new Map();
   const context = {
     console,
     document: { addEventListener() {} },
     TopologyCore: {},
     ModelGraphCore: core,
     TraceViewCore: {},
-    localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+    localStorage: {
+      getItem(key) { return storedValues.has(key) ? storedValues.get(key) : null; },
+      setItem(key, value) { storedValues.set(key, String(value)); },
+      removeItem(key) { storedValues.delete(key); },
+    },
     window: { addEventListener() {}, setTimeout, clearTimeout },
     setTimeout,
     clearTimeout,
@@ -43,6 +48,8 @@ function loadApp() {
       updateRequestField,
       renderWorkload,
       applyWorkloadPreset,
+      workloadPresets: WORKLOAD_PRESETS,
+      setWorkloadPresetCatalog(items) { workloadPresetCatalog = items; },
       setLlamaRuntimeMode,
       renderRunJobDialog,
       setStubs(changed, notices) {
@@ -57,8 +64,20 @@ function loadApp() {
       resetPlacementForArchitecturePreset,
       applyPresetDetailToScenario,
       validatePhysicalMemoryConfig,
+      physicalMemoryContractIssues,
       hardwareInputForScenario,
       scenarioPayloadForTransport,
+      restoreStoredScenario,
+      restoreScenarioFromStorage,
+      currentProtocolConnectionDefaults,
+      storageScenarioKey: STORAGE_SCENARIO,
+      protocolInputs: dom,
+      localStorage,
+      setBootstrapStubs({ setScenario: setScenarioStub, loadReference: loadReferenceStub, notices }) {
+        setScenario = setScenarioStub;
+        loadReference = loadReferenceStub;
+        toast = (...args) => notices.push(args);
+      },
     };
   `;
   vm.createContext(context);
@@ -235,6 +254,7 @@ test("llama runtime mode fills an unspecified KV owner from GPU-local memory", (
 
 test("llama.cpp workload preset refreshes stale runtime batch and context defaults", () => {
   const api = loadApp();
+  api.setWorkloadPresetCatalog(api.workloadPresets);
   const previous = workload(64, 4);
   previous.requests = [{ request_id: "request-0000", prompt_tokens: 64, output_tokens: 4 }];
   previous.scheduler.max_num_seqs = 4;
@@ -266,6 +286,7 @@ test("llama.cpp workload preset refreshes stale runtime batch and context defaul
 
 test("llama.cpp workload preset preserves explicit runtime overrides", () => {
   const api = loadApp();
+  api.setWorkloadPresetCatalog(api.workloadPresets);
   api.state.scenario = {
     workload: workload(64, 4),
     profiles: {
@@ -427,6 +448,10 @@ test("DDR physical config validates and survives hardware input and scenario tra
     read_latency_ns: 40,
     write_latency_ns: 35,
     burst_interval_ns: 2.5,
+    read_recovery_ns: 0,
+    write_recovery_ns: 15,
+    read_to_write_ns: 0,
+    write_to_read_ns: 0,
     max_outstanding_requests: 64,
     capacity_bytes: 16 * 1024 ** 3,
     metadata: { source: "webui-ddr-regression" },
@@ -498,4 +523,88 @@ test("DDR physical config validates and survives hardware input and scenario tra
     JSON.parse(JSON.stringify(transportedHostMemory.metadata.physical_memory_config)),
     physicalMemoryConfig,
   );
+  assert.equal(api.physicalMemoryContractIssues().length, 0);
+  assert.equal(Object.hasOwn(payload.workload, "request_count"), false);
+  assert.equal(Object.hasOwn(payload.workload, "prompt_tokens"), false);
+  assert.equal(Object.hasOwn(payload.workload.scheduler, "mode"), false);
+  assert.equal(Object.hasOwn(payload.placement.parallel, "tp_degree"), false);
+
+  delete hostMemory.metadata.physical_memory_config;
+  const missingConfigIssues = api.physicalMemoryContractIssues();
+  assert.equal(missingConfigIssues.length, 1);
+  assert.match(missingConfigIssues[0].message_zh, /physical_memory_config/);
+});
+
+test("every DRAM and NAND component kind requires explicit physical memory configuration", () => {
+  const api = loadApp();
+  const componentKinds = [
+    "hbm", "hbm_stack", "gddr", "gddr_memory", "dram", "ddr", "ddr_memory",
+    "lpddr", "lpddr_memory", "host_memory", "cxl_memory", "memory",
+    "hbf", "ssd", "high_io_ssd", "nvme",
+  ];
+  api.state.scenario = {
+    hardware: {
+      components: componentKinds.map((kind, index) => ({
+        component_id: `${kind}-${index}`,
+        kind,
+        capacity_bytes: 1024,
+        metadata: {},
+      })),
+    },
+  };
+  assert.equal(api.physicalMemoryContractIssues().length, componentKinds.length);
+});
+
+test("failed stored scenario load preserves the draft and does not replace it with reference", async () => {
+  const api = loadApp();
+  const notices = [];
+  let referenceLoads = 0;
+  api.localStorage.setItem(api.storageScenarioKey, JSON.stringify({ name: "unfinished-draft" }));
+  api.setBootstrapStubs({
+    setScenario() { throw new Error("physical_memory_config missing"); },
+    loadReference() { referenceLoads += 1; },
+    notices,
+  });
+
+  const loaded = await api.restoreStoredScenario({ name: "unfinished-draft" });
+
+  assert.equal(loaded, false);
+  assert.equal(api.localStorage.getItem(api.storageScenarioKey), JSON.stringify({ name: "unfinished-draft" }));
+  assert.equal(referenceLoads, 0);
+  assert.match(notices[0][1], /主动点击/);
+});
+
+test("malformed stored scenario is retained and does not load the reference scenario", async () => {
+  const api = loadApp();
+  const notices = [];
+  let referenceLoads = 0;
+  const malformed = '{"name":';
+  api.localStorage.setItem(api.storageScenarioKey, malformed);
+  api.setBootstrapStubs({
+    setScenario() { throw new Error("should not be called"); },
+    loadReference() { referenceLoads += 1; },
+    notices,
+  });
+
+  await api.restoreScenarioFromStorage();
+
+  assert.equal(api.localStorage.getItem(api.storageScenarioKey), malformed);
+  assert.equal(referenceLoads, 0);
+  assert.match(notices[0][1], /不是有效 JSON/);
+});
+
+test("invalid protocol connection fields are rejected without replacing the entered values", () => {
+  const api = loadApp();
+  Object.assign(api.protocolInputs, {
+    protocolSelect: { value: "PCIe" },
+    protocolVersionInput: { value: "5.0" },
+    protocolUnitsInput: { value: "bad" },
+    protocolBandwidthInput: { value: "32 GB/s" },
+    protocolLatencyInput: { value: "150" },
+    protocolPayloadInput: { value: "" },
+  });
+
+  assert.throws(() => api.currentProtocolConnectionDefaults(), /通道数必须/);
+  assert.equal(api.protocolInputs.protocolUnitsInput.value, "bad");
+  assert.equal(api.protocolInputs.protocolBandwidthInput.value, "32 GB/s");
 });
