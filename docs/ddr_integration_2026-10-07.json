@@ -1,0 +1,241 @@
+{
+  "status": "completed",
+  "generated_at": "2026-10-07T11:00:39.217832+00:00",
+  "conclusion_zh": "本机 DDR 已与 GDDR 共用 DRAM 物理内核；CPU 缓存后的读写和主存 DMA 参与实际事件调度。两个原始 GGUF 场景完整完成，精度仍受未标定参数和其他已知覆盖缺口影响。",
+  "changes": [
+    "Route CPU post-cache logical backing reads and writebacks to shared DramCore; retain CPU pipeline/cache demands and remove legacy transaction padding and backing service.",
+    "Keep the HostMemoryProfile analytical energy coefficient and bill it once against resolved physical burst bytes.",
+    "Resolve host DMA at attached DDR and, when unambiguous, GPU memory endpoints; keep controller/link path and allocator-bound addresses.",
+    "Scope allocation extent promotion by physical owner as well as buffer and generation.",
+    "Enable a capacity/bandwidth-consistent physical DDR configuration in the local Acer preset; leave unmeasured organization/timing parameters explicitly analytical.",
+    "Preserve legacy scenarios without physical memory configuration, exclude NAND from CPU DRAM hook, and preserve ambiguous multi-backend GPU controller endpoints."
+  ],
+  "shared_input_override": {
+    "hardware_input.hardware.components[kind=host_memory].metadata.physical_memory_config": {
+      "kind": "DDR",
+      "generation": "DDR5",
+      "channels": 2,
+      "ranks_per_channel": 4,
+      "bank_groups_per_rank": 8,
+      "banks_per_group": 4,
+      "rows_per_bank": 65536,
+      "row_bytes": 8192,
+      "burst_bytes": 64,
+      "interleave_bytes": 64,
+      "data_width_bits": 64,
+      "data_rate_mt_s": 5600,
+      "interface_bandwidth_gb_s": 89.6,
+      "open_ns": 14.0,
+      "close_ns": 14.0,
+      "read_latency_ns": 14.0,
+      "write_latency_ns": 14.0,
+      "burst_interval_ns": 1.4285714285714286,
+      "read_recovery_ns": 0.0,
+      "write_recovery_ns": 15.0,
+      "capacity_bytes": 137438953472,
+      "max_outstanding_requests": 32,
+      "metadata": {
+        "parameter_basis": "analytical_equivalent_assumptions",
+        "configuration_scope": "local_acer_ddr5_128_gib_dual_channel",
+        "known_facts": [
+          "2 channels × 64-bit payload width",
+          "DDR5-5600 configured data rate",
+          "128 GiB installed capacity"
+        ],
+        "analytical_assumptions": [
+          "4 equivalent ranks per channel",
+          "8 bank groups per rank × 4 banks per group",
+          "65536 rows per bank × 8192 bytes per row",
+          "64-byte burst and interleave granularity",
+          "14 ns open/close and command-to-data delays; 15 ns write recovery"
+        ],
+        "assumption_source": "Representative DDR5 geometry in tools/measure_memory_precision.py, adjusted to match this machine's measured aggregate capacity and interface",
+        "burst_interval_basis": "64-byte payload / (5600 MT/s × 64 bits / 8) per channel; analytical lane scheduling interval, not a disclosed command timing",
+        "capacity_basis": "2 channels × 4 equivalent ranks/channel × 8 groups/rank × 4 banks/group × 65536 rows/bank × 8192 bytes/row",
+        "bandwidth_basis": "5600 MT/s × 64 bits / 8 × 2 channels = 89.6 GB/s decimal",
+        "cpu_visible_latency_ns": "HostMemoryProfile remains 100 ns; it is not a DRAM command timing"
+      }
+    }
+  },
+  "verification": {
+    "python": {
+      "command": ".venv/Scripts/python.exe -m pytest -q",
+      "passed": 241
+    },
+    "frontend": {
+      "command": "node --test tests/test_webui_input_regressions.cjs",
+      "passed": 12
+    },
+    "frontend_api": "POST /api/normalize on refreshed port 8765 preserves DDR, 128 GiB and 89.6 GB/s in hardware_input contract v2",
+    "final_energy_and_compatibility_change_smoke": {
+      "timing_delta_ns": {
+        "ttft_ns": 0.0,
+        "tpot_ns": 0.0,
+        "e2e_ns": 0.0
+      },
+      "dram_energy_pj": 672768.0,
+      "status": "finished"
+    },
+    "full_run_protocol": "Same actual GGUF models, llama mapping, one request, 512 input tokens, 128 output tokens; original source-derived storage contract preserved",
+    "native_reference": "Reuse native_comparison_2026-10-07 measured five-sample medians; no new native benchmark and no timing fitted to them"
+  },
+  "accuracy": {
+    "validated": false,
+    "signed_error_definition": "100 * (simulation_ns / native_median_ns - 1); negative means underestimated latency",
+    "change_definition": "100 * (new_simulation_ns / previous_simulation_ns - 1); a model change, not a measured accuracy error",
+    "limitations": [
+      "DDR bank/rank/row/burst mapping and command timings are analytical equivalents, not SPD/JEDEC/native trace calibration.",
+      "CPU caches keep their existing analytical traffic model; physical DRAM addresses are allocator-bound analytical layouts, not captured native addresses.",
+      "Existing omissions such as unbound native host output/sampling contracts and DRAM refresh modeling are not filled by this change.",
+      "Full runs validate DDR timing/address integration; the final energy-preservation change has zero timing delta in the final smoke test and separate demand/energy conservation regressions."
+    ]
+  },
+  "cases": [
+    {
+      "model": "Qwen3-0.6B F16",
+      "job_id": "2025e8c300464262844d15a1b6f3944d",
+      "status": "completed",
+      "wall_seconds": 142.28100000001723,
+      "input_base": "native_comparison_2026-10-07/scenario_qwen3_0_6b_f16_512_128.json",
+      "checks": [],
+      "task_count": 126336,
+      "batch_count": 128,
+      "native_median_ns": {
+        "ttft_ns": 18359000.0,
+        "tpot_ns": 2580244.0944881886,
+        "e2e_ns": 345511000.0
+      },
+      "prediction_ns": {
+        "ttft_ns": 8603843.679826261,
+        "tpot_ns": 1562446.6384559297,
+        "e2e_ns": 207034566.76372933
+      },
+      "previous_prediction_ns": {
+        "ttft_ns": 8581604.717921017,
+        "tpot_ns": 1562581.209884499,
+        "e2e_ns": 207029418.3732524
+      },
+      "signed_native_error_percent": {
+        "ttft_ns": -53.13555378927903,
+        "tpot_ns": -39.44578182375985,
+        "e2e_ns": -40.07873359640378
+      },
+      "change_from_previous_percent": {
+        "ttft_ns": 0.25914689194204144,
+        "tpot_ns": -0.008612123819096151,
+        "e2e_ns": 0.002486791740707872
+      },
+      "dram_owner_resources": {
+        "gddr0.gddr_fabric": {
+          "physical_bytes": 149028268544,
+          "resource_service_ns": 3179924375.7667894
+        },
+        "hostmem0.memory": {
+          "physical_bytes": 6617024,
+          "resource_service_ns": 485788.85714296415
+        }
+      },
+      "dram": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 2328670087,
+        "logical_bytes": 149034499196,
+        "logical_read_bytes": 147409786356,
+        "logical_write_bytes": 1624712840,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric",
+          "hostmem0.memory"
+        ],
+        "physical_bytes": 149034885568,
+        "physical_read_bytes": 147409944512,
+        "physical_write_bytes": 1624941056,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 24853745,
+        "row_hits": 2303787383,
+        "row_misses": 28959,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 169473352.87319416,
+        "task_count": 44160,
+        "turnaround_wait_ns": 0.0
+      },
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "wall_seconds_scope": "client submission through completion observation; includes a 20-second polling interval, not a controlled performance benchmark"
+    },
+    {
+      "model": "Qwen3.8-27B mixed",
+      "job_id": "bb7e1113010141e7a2af09b854a0047f",
+      "status": "completed",
+      "wall_seconds": 588.7820000000065,
+      "input_base": "native_comparison_2026-10-07/scenario_qwen3_8_27b_mixed_512_128.json",
+      "checks": [],
+      "task_count": 344576,
+      "batch_count": 128,
+      "native_median_ns": {
+        "ttft_ns": 287274000.0,
+        "tpot_ns": 19702141.732283466,
+        "e2e_ns": 2787361000.0
+      },
+      "prediction_ns": {
+        "ttft_ns": 214991976.90040058,
+        "tpot_ns": 18256089.341958236,
+        "e2e_ns": 2533515323.329097
+      },
+      "previous_prediction_ns": {
+        "ttft_ns": 214866434.55310252,
+        "tpot_ns": 18254350.45865348,
+        "e2e_ns": 2533168942.8020945
+      },
+      "signed_native_error_percent": {
+        "ttft_ns": -25.161352262856862,
+        "tpot_ns": -7.339569524848977,
+        "e2e_ns": -9.107025486505094
+      },
+      "change_from_previous_percent": {
+        "ttft_ns": 0.05842808699234592,
+        "tpot_ns": 0.00952585691118557,
+        "e2e_ns": 0.013673802846292382
+      },
+      "dram_owner_resources": {
+        "gddr0.gddr_fabric": {
+          "physical_bytes": 1780379224064,
+          "resource_service_ns": 36580158354.135574
+        },
+        "hostmem0.memory": {
+          "physical_bytes": 29723264,
+          "resource_service_ns": 1864559.4285735455
+        }
+      },
+      "dram": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 27818889802,
+        "logical_bytes": 1780407565244,
+        "logical_read_bytes": 1740547314820,
+        "logical_write_bytes": 39860250424,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric",
+          "hostmem0.memory"
+        ],
+        "physical_bytes": 1780408947328,
+        "physical_read_bytes": 1740547502720,
+        "physical_write_bytes": 39861444608,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 246679314,
+        "row_hits": 27572161336,
+        "row_misses": 49152,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 2000949094.9190109,
+        "task_count": 138432,
+        "turnaround_wait_ns": 0.0
+      },
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "wall_seconds_scope": "client submission through completion observation; includes a 20-second polling interval, not a controlled performance benchmark"
+    }
+  ]
+}

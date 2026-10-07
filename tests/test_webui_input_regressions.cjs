@@ -56,6 +56,9 @@ function loadApp() {
       },
       resetPlacementForArchitecturePreset,
       applyPresetDetailToScenario,
+      validatePhysicalMemoryConfig,
+      hardwareInputForScenario,
+      scenarioPayloadForTransport,
     };
   `;
   vm.createContext(context);
@@ -400,4 +403,99 @@ test("model preset replacement clears stale authoring maps and pipeline stages",
   assert.equal(api.state.scenario.placement.metadata.control_plane, undefined);
   assert.equal(changed, 1);
   assert.equal(graph.attributes.ui.detail.collapsed_groups[0], "source");
+});
+
+test("DDR physical config validates and survives hardware input and scenario transport", () => {
+  const api = loadApp();
+  const physicalMemoryConfig = {
+    kind: "DDR",
+    channels: 2,
+    subchannels_per_channel: 1,
+    pseudo_channels_per_channel: 1,
+    stacks: 1,
+    dies_per_stack: 1,
+    ranks_per_channel: 2,
+    bank_groups_per_rank: 4,
+    banks_per_group: 4,
+    rows_per_bank: 32768,
+    row_bytes: 8192,
+    burst_bytes: 64,
+    data_width_bits: 64,
+    data_rate_mt_s: 5600,
+    open_ns: 14,
+    close_ns: 14,
+    read_latency_ns: 40,
+    write_latency_ns: 35,
+    burst_interval_ns: 2.5,
+    max_outstanding_requests: 64,
+    capacity_bytes: 16 * 1024 ** 3,
+    metadata: { source: "webui-ddr-regression" },
+  };
+  const hostMemory = {
+    component_id: "hostmem0",
+    kind: "host_memory",
+    cost_profile_id: "hostmem-profile",
+    capacity_bytes: physicalMemoryConfig.capacity_bytes,
+    read_bandwidth_gbps: 716.8,
+    write_bandwidth_gbps: 716.8,
+    metadata: { physical_memory_config: physicalMemoryConfig },
+    ports: [],
+  };
+
+  const validated = api.validatePhysicalMemoryConfig(physicalMemoryConfig, hostMemory);
+  assert.equal(validated.kind, "DDR");
+  assert.deepEqual(JSON.parse(JSON.stringify(validated)), physicalMemoryConfig);
+
+  const graph = graphWithPorts(
+    { dtype: "fp16", shape: ["B", "T", "H"], layout: "logical" },
+    { dtype: "fp16", shape: ["B", "T", "H"], layout: "logical" },
+  );
+  api.state.scenario = {
+    schema_version: "4.0.0",
+    name: "ddr-transport-test",
+    hardware: {
+      name: "ddr-transport-hardware",
+      components: [
+        { component_id: "cpu0", kind: "cpu", cost_profile_id: "cpu-profile", metadata: {}, ports: [] },
+        { component_id: "gpu0", kind: "gpu", cost_profile_id: "gpu-profile", metadata: {}, ports: [] },
+        hostMemory,
+      ],
+      links: [],
+      metadata: {},
+    },
+    model: { name: "ddr-transport-model", graph },
+    placement: { metadata: {}, parallel: {} },
+    workload: { requests: [] },
+    profiles: {
+      components: {
+        cpu: { "cpu-profile": { pipeline: { core_count: 1 }, cache_hierarchy: { levels: [{}] } } },
+        gpu: { "gpu-profile": { tensor_core: { supported_dtypes: ["fp16"] }, cache_hierarchy: { levels: [{}] } } },
+        host_memory: { "hostmem-profile": {} },
+      },
+      host_orchestration: {
+        cpu_component_id: "cpu0",
+        gpu_component_id: "gpu0",
+        scheduler_resource_id: "host.scheduler",
+        pack_resource_id: "host.pack",
+        dma_resource_id: "host.dma",
+        submission_resource_id: "host.submit",
+      },
+      fusion: {},
+      runtime: { gpu_controllers: { gpu0: {} } },
+    },
+  };
+
+  const hardwareInput = api.hardwareInputForScenario();
+  const hardwareInputHostMemory = hardwareInput.hardware.components.find((item) => item.component_id === "hostmem0");
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(hardwareInputHostMemory.metadata.physical_memory_config)),
+    physicalMemoryConfig,
+  );
+
+  const payload = api.scenarioPayloadForTransport();
+  const transportedHostMemory = payload.hardware_input.hardware.components.find((item) => item.component_id === "hostmem0");
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(transportedHostMemory.metadata.physical_memory_config)),
+    physicalMemoryConfig,
+  );
 });

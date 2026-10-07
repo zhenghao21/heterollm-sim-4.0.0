@@ -528,6 +528,9 @@ def resolve_physical_task(
     timeline supplies the task completion time and per-resource busy demand.
     """
     metadata = dict(task.metadata)
+    energy_per_byte = _non_negative(
+        metadata.get("physical_energy_pj_per_byte", 0.0), "physical_energy_pj_per_byte"
+    )
     raw_config = metadata.get("physical_memory_config")
     access = metadata.get("memory_access")
     accesses = metadata.get("memory_accesses", access)
@@ -698,10 +701,15 @@ def resolve_physical_task(
             values = [item.counters.get(key) for item in results]
             if any(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
                 counters[key] = sum(float(value or 0) for value in values)
-    demands = tuple(ResourceDemand(str(resource_id), float(duration), bytes_moved=int(resource_bytes.get(resource_id, 0)))
+    # Timing comes from the physical core. An explicitly carried energy
+    # coefficient remains analytical, priced once against resolved bursts.
+    demands = tuple(ResourceDemand(str(resource_id), float(duration),
+                    bytes_moved=int(resource_bytes.get(resource_id, 0)),
+                    energy_pj=int(resource_bytes.get(resource_id, 0)) * energy_per_byte)
                     for resource_id, duration in sorted(resource_busy.items()) if float(duration) > 0)
     if not demands:
-        demands = (ResourceDemand(owner, result.latency_ns, bytes_moved=result.transfer_bytes),)
+        demands = (ResourceDemand(owner, result.latency_ns, bytes_moved=result.transfer_bytes,
+                                  energy_pj=result.transfer_bytes * energy_per_byte),)
     metadata.update({
         "memory_access": resolved_accesses[0] if len(resolved_accesses) == 1 else tuple(resolved_accesses),
         "memory_accesses": tuple(resolved_accesses),
@@ -711,6 +719,7 @@ def resolve_physical_task(
             "logical_read_bytes": sum(item.logical_bytes for item in results if item.operation is Operation.READ),
             "logical_write_bytes": sum(item.logical_bytes for item in results if item.operation is Operation.WRITE),
             "physical_bytes": sum(item.transfer_bytes for item in results),
+            "energy_pj": sum(demand.energy_pj for demand in demands),
             "service_ns": completion_ns - float(arrival_ns),
             "arrival_ns": float(arrival_ns),
             "completion_ns": completion_ns,

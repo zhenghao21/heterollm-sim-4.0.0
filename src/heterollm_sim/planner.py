@@ -93,6 +93,7 @@ from .ir import (
     ModelGraphExecutionView,
     RequestSpec,
     WorkloadSpec,
+    default_memory_resource_id,
     model_graph_execution_view,
     normalize_component_kind,
 )
@@ -4026,37 +4027,87 @@ def _gddr_access_alias(metadata: Mapping[str, object], side: str) -> Tuple[Optio
     return str(alias).strip(), alias_generation, _gddr_non_negative_int(offset, "alias_offset_bytes")
 
 
+def _physical_dram_config(scenario: ScenarioConfig, component: ComponentSpec):
+    """Resolve once per compilation; NAND is not a CPU cache backing model."""
+    def resolve():
+        from .memory_types import DramConfig, parse_physical_memory_config
+        raw = component.metadata.get("physical_memory_config")
+        if not isinstance(raw, Mapping):
+            return None
+        return raw if isinstance(parse_physical_memory_config(raw), DramConfig) else None
+
+    context = _active_compilation_context(scenario)
+    return resolve() if context is None else context.invariant(
+        ("physical_dram_config", component.component_id), resolve
+    )
+
+
 def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
-    """Attach one explicit GDDR access descriptor to a lowered memory phase.
+    """Attach shared DRAM-core accesses to a lowered compute memory phase.
 
     The planner still owns dependencies and compute demands; only the local
-    GDDR resource demand is replaced by the physical core at event dispatch.
+    backing-memory demand is replaced by the physical core at event dispatch.
     Addresses come from stable buffer/tensor identities and declared offsets.
     """
 
     if task.metadata.get("physical_memory_config") is not None:
         return task
     target_id = task.metadata.get("target_component")
-    if not isinstance(target_id, str):
-        return task
     target = scenario.hardware.component_map().get(target_id)
-    if target is None or _kind(target) != "gpu":
+    target_kind = _kind(target) if target is not None else None
+    if target_kind not in {None, "cpu", "gpu"}:
         return task
     candidates = []
     for component in scenario.hardware.components:
-        if _kind(component) != "gddr":
+        component_kind = _kind(component)
+        if component_kind not in ({"gddr", "hbm", "hbm_stack"} if target_kind == "gpu" else {"host_memory"}):
             continue
-        raw_config = component.metadata.get("physical_memory_config")
-        if not isinstance(raw_config, Mapping):
+        raw_config = _physical_dram_config(scenario, component)
+        if raw_config is None:
             continue
         service = component.metadata.get("memory_service", {})
-        owner = str(service.get("physical_owner") or component.metadata.get("memory_service_owner") or component.component_id + ".gddr_fabric")
-        resource_ids = {owner, component.component_id + ".gddr_fabric", component.component_id + ".access"}
+        owner = str(service.get("physical_owner") or component.metadata.get("physical_owner") or default_memory_resource_id(component))
+        resource_ids = {owner, str(service.get("resource_id") or owner), component.component_id + ".access"}
+        if component_kind == "host_memory":
+            profile = _resolve_component_profile(scenario, component.component_id, HostMemoryProfile)
+            resource_ids.add(profile.resource_id)
+            if target_kind == "cpu":
+                resource_ids.add(_component_resource_id(profile.resource_id,
+                    reference_component_id=scenario.host_orchestration_profile.cpu_component_id,
+                    target_component_id=target_id))
         if any(str(d.resource_id) in resource_ids and d.bytes_moved > 0 for d in task.demands):
             candidates.append((component, raw_config, owner, resource_ids))
     if len(candidates) != 1:
         return task
     component, raw_config, owner, resource_ids = candidates[0]
+    if _kind(component) == "host_memory":
+        # CPU cache estimates already determine misses and writebacks. Feed
+        # their payload to DRAM, not the old profile's rounded transactions;
+        # otherwise both the old 256-byte and physical burst padding are paid.
+        cost = task.metadata.get("cost_model", {})
+        cache = cost.get("cache", {}) if isinstance(cost, Mapping) else {}
+        if not isinstance(cache, Mapping) or not all(key in cache for key in (
+            "logical_backing_read_bytes", "logical_backing_write_bytes"
+        )):
+            raise ValueError("CPU DRAM task {} requires post-cache directional bytes".format(task.task_id))
+        reads = _gddr_non_negative_int(cache["logical_backing_read_bytes"], "logical_backing_read_bytes")
+        writes = _gddr_non_negative_int(cache["logical_backing_write_bytes"], "logical_backing_write_bytes")
+        preserved = tuple(d for d in task.demands if str(d.resource_id) not in resource_ids)
+        if reads + writes == 0:
+            return replace(task, demands=preserved)
+        metadata = dict(task.metadata)
+        metadata["cost_model"] = {**cost, "physical_read_bytes": reads, "physical_write_bytes": writes}
+        metadata["physical_energy_pj_per_byte"] = _resolve_component_profile(
+            scenario, component.component_id, HostMemoryProfile
+        ).energy_pj_per_byte
+        metadata["dram_backing_service"] = {
+            "source": "cpu_cache_misses_and_writebacks",
+            "logical_read_bytes": reads, "logical_write_bytes": writes,
+            "replaces_analytical_backing_service": True,
+            "address_evidence": "analytical_buffer_layout",
+        }
+        task = replace(task, demands=preserved + (ResourceDemand(owner, 0.0, bytes_moved=reads + writes),), metadata=metadata)
+        resource_ids = {owner}
     # Serving cohorts use stable ``cohort-*`` request identities.  Ordinary
     # compile/planning requests (for example ``tiny-request`` in the runtime
     # integration tests) intentionally keep generation zero unless the task
@@ -6368,8 +6419,16 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
     and conflicting declarations fail before dispatch.
     """
 
-    extents: Dict[Tuple[str, int], int] = {}
-    fixed: Dict[Tuple[str, int], int] = {}
+    extents: Dict[Tuple[str, int, str], int] = {}
+    fixed: Dict[Tuple[str, int, str], int] = {}
+
+    def allocation_key(task, row, buffer_id, generation):
+        contract = task.metadata.get("stateful_l2")
+        owner = row.get("physical_owner") or task.metadata.get("physical_owner") or (
+            contract.get("memory_resource") if isinstance(contract, Mapping) else ""
+        )
+        return (buffer_id, generation, str(owner or ""))
+
     for task in tasks:
         if task.metadata.get("physical_memory_config") is None:
             continue
@@ -6387,16 +6446,16 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
             extent = int(access.get("allocation_size_bytes") or 0)
             required = max(extent, offset + size)
-            key = (buffer_id, generation)
+            key = allocation_key(task, access, buffer_id, generation)
             previous = extents.get(key, 0)
             extents[key] = max(previous, required)
             if extent:
                 declared = fixed.get(key)
                 if declared is not None and declared != extent:
-                    raise ValueError("conflicting physical allocation extent for {} generation {}".format(*key))
+                    raise ValueError("conflicting physical allocation extent for {} generation {} on {}".format(*key))
                 fixed[key] = extent
             if key in fixed and required > fixed[key]:
-                raise ValueError("physical access exceeds declared allocation {} generation {}".format(*key))
+                raise ValueError("physical access exceeds declared allocation {} generation {} on {}".format(*key))
         # Stateful-L2 contracts carry the logical cache accesses separately
         # from the physical preview descriptors.  Their buffer_size_bytes is
         # the complete tensor extent and must participate in the same
@@ -6414,7 +6473,7 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
             size = int(access.get("size_bytes", access.get("byte_count", 0)) or 0)
             extent = int(access.get("buffer_size_bytes", access.get("allocation_size_bytes", 0)) or 0)
-            key = (buffer_id, generation)
+            key = allocation_key(task, access, buffer_id, generation)
             extents[key] = max(extents.get(key, 0), extent, offset + size)
     if not extents:
         return tuple(tasks)
@@ -6441,7 +6500,7 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             normalized_buffer_id = str(buffer_id)
             if normalized_buffer_id.startswith("@tasklocal"):
                 normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
-            key = (normalized_buffer_id, generation)
+            key = allocation_key(task, row, normalized_buffer_id, generation)
             extent = extents.get(key)
             if extent is None or row.get("allocation_size_bytes") is not None:
                 continue
@@ -6500,12 +6559,12 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                     normalized_buffer_id = str(buffer_id)
                     if normalized_buffer_id.startswith("@tasklocal"):
                         normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
-                    key = (normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
+                    key = allocation_key(task, item, normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
                     target_extent = extents.get(key)
                     if target_extent is not None:
                         declared_extent = item.get("size_bytes", item.get("buffer_size_bytes"))
                         if declared_extent is not None and int(declared_extent) > target_extent:
-                            raise ValueError("physical allocation declaration exceeds promoted extent for {} generation {}".format(*key))
+                            raise ValueError("physical allocation declaration exceeds promoted extent for {} generation {} on {}".format(*key))
                         item["size_bytes"] = target_extent
                         item["buffer_size_bytes"] = target_extent
                     updated_declarations.append(item)
@@ -6523,7 +6582,7 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                     normalized_buffer_id = raw_buffer_id
                     if normalized_buffer_id.startswith("@tasklocal"):
                         normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
-                    key = (normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
+                    key = allocation_key(task, item, normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
                     if item.get("allocation_size_bytes") is None and key in extents:
                         extent = extents[key]
                         item["allocation_size_bytes"] = extent
@@ -6552,7 +6611,7 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                 rows = []
                 for item in contract.get("accesses", ()):
                     row = dict(item)
-                    key = (str(row.get("buffer_id")), int(row.get("allocation_generation", row.get("generation", 0)) or 0))
+                    key = allocation_key(task, row, str(row.get("buffer_id")), int(row.get("allocation_generation", row.get("generation", 0)) or 0))
                     if row.get("buffer_size_bytes") is None and key in extents:
                         row["buffer_size_bytes"] = extents[key]
                     rows.append(row)
@@ -8387,6 +8446,42 @@ def _add_transfer_tasks(
                     ),
                     "evidence": raw_spec.get("evidence"),
                 }
+    if scenario is not None:
+        # A physical host backing store must participate in CPU DMA as well
+        # as CPU cache misses. Keep the topology's CPU/GPU controller hops,
+        # but originate/terminate the payload at the attached memory.
+        host_physical = False
+        endpoints = [source_component, target_component]
+        for index, endpoint in enumerate(endpoints):
+            if _kind(_component(scenario, endpoint)) == "cpu":
+                memory_id = _nearest_profile_component_id(scenario, endpoint, "host_memory")
+                if memory_id is not None and _physical_dram_config(scenario, _component(scenario, memory_id)) is not None:
+                    endpoints[index] = memory_id
+                    host_physical = True
+        if host_physical:
+            for index, endpoint in enumerate(endpoints):
+                if _kind(_component(scenario, endpoint)) == "gpu":
+                    ranks = tuple(rank for rank in _parallel_plan(scenario).ranks
+                                  if rank.component_id == endpoint)
+                    requested_rank = transfer_metadata.get("rank")
+                    matching = tuple(rank for rank in ranks if rank.rank == requested_rank)
+                    memories = {rank.memory_component_id for rank in (matching or ranks)
+                                if rank.memory_component_id
+                                and _component(scenario, rank.memory_component_id).is_active_memory
+                                and _component(scenario, rank.memory_component_id).cost_profile_id is not None}
+                    if len(memories) == 1:
+                        endpoints[index] = next(iter(memories))
+                    elif len(memories) > 1:
+                        # A controller-level payload has no declared shard.
+                        # Preserve that endpoint instead of inventing a bank
+                        # or rejecting an otherwise valid multi-memory GPU.
+                        transfer_metadata["gpu_memory_endpoint_resolution"] = "logical_controller_multiple_backends"
+                    else:
+                        memory_id = next((candidate for kind in ("gddr", "hbm", "dram", "ddr", "lpddr")
+                            if (candidate := _nearest_profile_component_id(scenario, endpoint, kind)) is not None), None)
+                        if memory_id is not None:
+                            endpoints[index] = memory_id
+            source_component, target_component = endpoints
     shared_page_offset = transfer_metadata.get("page_offset_bytes")
     if shared_page_offset is None:
         shared_page_offset = transfer_metadata.get("offset_bytes")
@@ -8415,6 +8510,37 @@ def _add_transfer_tasks(
             )
             if binding is not None:
                 state_bindings[component_id] = binding
+        if source_component in state_bindings:
+            source_page_offset = state_bindings[source_component]["address"]
+        if target_component in state_bindings:
+            target_page_offset = state_bindings[target_component]["address"]
+    if scenario is not None:
+        for component_id, address in (
+            (source_component, source_page_offset),
+            (target_component, target_page_offset),
+        ):
+            component = _component(scenario, component_id)
+            raw_config = component.metadata.get("physical_memory_config")
+            if component_id in state_bindings or address is not None or not isinstance(raw_config, Mapping):
+                continue
+            from .memory_types import DramConfig, parse_physical_memory_config
+            config = parse_physical_memory_config(raw_config)
+            if not isinstance(config, DramConfig):
+                continue
+            # The authoring IR may omit native addresses. Use an allocator
+            # binding, never one fixed address for all DMA payloads.
+            identity = str(transfer_metadata.get("buffer_id") or
+                           transfer_metadata.get("tensor_id") or "transfer:" + name)
+            generation = _gddr_access_generation(
+                transfer_metadata, "read", fallback_identity=builder.request.request_id
+            )
+            address = _gddr_stable_address(identity, 0, byte_count,
+                config.capacity_bytes, config.burst_bytes)
+            row = {"address": address, "buffer_id": identity,
+                   "byte_count": byte_count, "offset_bytes": 0,
+                   "address_source": "stable_buffer_tensor_offset",
+                   "allocation_generation": generation, "generation": generation}
+            state_bindings[component_id] = {"address": address, "accesses": (row,)}
         if source_component in state_bindings:
             source_page_offset = state_bindings[source_component]["address"]
         if target_component in state_bindings:
