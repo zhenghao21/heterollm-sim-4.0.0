@@ -7230,7 +7230,30 @@ def _weight_source_is_compute_local_backing(
     if _direct_device_memory(scenario, source, target):
         return True
     target_component = _component_map(scenario).get(target)
-    if target_component is None or _kind(target_component) != "cpu":
+    if target_component is None:
+        return False
+    if _kind(target_component) == "gpu":
+        # An automatic rank has no authored memory binding, but GPU costs
+        # still resolve its attached GDDR/HBM backend.  Use the same backend
+        # here so that its weight traffic is charged once by the GPU phase,
+        # rather than inventing a second storage-to-GPU transfer.  Multiple
+        # explicit backends require the invocation's rank-specific check.
+        declared = {
+            rank.memory_component_id
+            for rank in _parallel_plan(scenario).ranks
+            if rank.component_id == target and rank.memory_component_id
+        }
+        if len(declared) > 1:
+            return False
+        try:
+            attached_memory = _compute_local_runtime_memory_component_id(scenario, target)
+        except ValueError:
+            # This is an eligibility predicate, not GPU profile validation.
+            # Keep an unavailable backend non-local; _gpu_profiles reports
+            # the contract error if this GPU actually executes the operation.
+            return False
+        return source == attached_memory
+    if _kind(target_component) != "cpu":
         return False
     attached_host_memory = _nearest_profile_component_id(
         scenario, target, "host_memory"
@@ -7613,6 +7636,83 @@ def _direct_memory_phase(
             }})
 
 
+def _linear_state_endpoint_binding(
+    scenario: ScenarioConfig,
+    component_id: str,
+    byte_count: int,
+    metadata: Mapping[str, object],
+    request_id: str,
+    explicit_address: Optional[int] = None,
+    owner_request_ids: Sequence[str] = (),
+) -> Optional[Dict[str, object]]:
+    """Bind a recurrent-state endpoint to the ordinary physical allocator.
+
+    The preview needs a component-local address before pricing.  Dispatch
+    resolves this stable buffer through the runtime allocator, just as GPU
+    activation/weight descriptors do; source-file offsets are not addresses.
+    """
+    component = _component(scenario, component_id)
+    raw_config = component.metadata.get("physical_memory_config")
+    if raw_config is None or byte_count <= 0:
+        return None
+    from .memory_types import DramConfig, NandConfig, parse_physical_memory_config
+    config = (raw_config if isinstance(raw_config, (DramConfig, NandConfig))
+              else parse_physical_memory_config(raw_config))
+    layer_id = str(metadata["layer_id"])
+    layer = next(layer for layer in _execution_layers(scenario) if layer.layer_id == layer_id)
+    owners = max(1, int(metadata.get("linear_state_independent_owner_count", 1)))
+    owner_ids = tuple(dict.fromkeys(str(value) for value in owner_request_ids)) or (request_id,)
+    if len(owner_ids) < owners:
+        owner_ids = tuple("{}:owner={}".format(owner_ids[0], index) for index in range(owners))
+    owners = len(owner_ids)
+    owner_extent = _linear_state_bytes(layer, _parallel_plan(scenario).tp_degree)
+    extent = owner_extent * owners
+    temporary = (
+        metadata.get("state_storage") == "rolling_speculative_buffer"
+        or metadata.get("state_persistence") == "temporary_speculative"
+    )
+    identities = tuple("linear_state:{}:rank={}:owner={}:{}".format(
+        layer_id, metadata.get("rank", 0), owner_id,
+        "speculative" if temporary else "persistent",
+    ) for owner_id in owner_ids)
+    generation = (
+        _gddr_access_generation(metadata, "write", fallback_identity=request_id)
+        if temporary else 0
+    )
+    capacity = int(config.capacity_bytes)
+    alignment = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
+    if explicit_address is None:
+        explicit_address = component.metadata.get("memory_access_offset_bytes")
+    address = (
+        _gddr_stable_address("|".join(identities), 0, byte_count, capacity, alignment, extent)
+        if explicit_address is None else explicit_address
+    )
+    address = _gddr_non_negative_int(address, "linear-state endpoint address")
+    if address + extent > capacity:
+        raise ValueError("linear-state endpoint allocation exceeds physical capacity")
+    accesses = []
+    for index, identity in enumerate(identities):
+        size = byte_count // owners + int(index < byte_count % owners)
+        if not size:
+            continue
+        owner_address = (
+            _gddr_stable_address(identity, 0, size, capacity, alignment, owner_extent)
+            if explicit_address is None else address + index * owner_extent
+        )
+        accesses.append({
+            "address": owner_address,
+            "address_source": ("stable_buffer_tensor_offset" if explicit_address is None
+                               else "explicit_physical_address"),
+            "byte_count": size,
+            "buffer_id": identity,
+            "offset_bytes": 0,
+            "allocation_size_bytes": owner_extent,
+            "allocation_generation": generation,
+            "generation": generation,
+        })
+    return {**accesses[0], "address": address, "accesses": tuple(accesses)}
+
+
 def _add_direct_state_access(builder, scenario, router, storage, device, byte_count,
                              dependencies, *, name, read, metadata):
     from .data_motion import endpoint_service
@@ -7622,6 +7722,12 @@ def _add_direct_state_access(builder, scenario, router, storage, device, byte_co
     offset = metadata.get("source_offset_bytes" if read else "target_offset_bytes")
     if offset is None:
         offset = metadata.get("page_offset_bytes")
+    binding = _linear_state_endpoint_binding(
+        scenario, storage, byte_count, metadata, builder.request.request_id, offset,
+        getattr(builder, "_linear_state_owner_request_ids", ()),
+    )
+    if binding is not None:
+        offset = binding["address"]
     service = endpoint_service(_component(scenario, storage), byte_count, read=read,
         name=name, page_offset_bytes=offset, operation=operation,
         compact_preview=True)
@@ -7629,8 +7735,12 @@ def _add_direct_state_access(builder, scenario, router, storage, device, byte_co
     source, target = (storage, device) if read else (device, storage)
     for hop in router.route(source, target, byte_count):
         demands.extend(hop.demands(byte_count))
+    service_metadata = dict(service.metadata if service else {})
+    if binding is not None and isinstance(service_metadata.get("memory_access"), Mapping):
+        accesses = tuple({**service_metadata["memory_access"], **row} for row in binding["accesses"])
+        service_metadata["memory_access"] = accesses[0] if len(accesses) == 1 else accesses
     return builder.add(name, TaskCategory.MEMORY, tuple(demands), dependencies=dependencies,
-        advance=False, metadata={**(service.metadata if service else {}), **metadata, "direct_memory_component": storage,
+        advance=False, metadata={**service_metadata, **metadata, "direct_memory_component": storage,
             "access_kind": "READ" if read else "WRITE", "bytes": byte_count,
             "source_component": source, "target_component": target,
             "resource_accounting": "direct_memory_access", "resource_transfer_bytes": 0})
@@ -7674,6 +7784,8 @@ def _weight_backing_read_gate(
         reason = (
             "source_is_compute_local"
             if not source_is_remote
+            else "source_is_gpu_attached_runtime_memory"
+            if _kind(_component(scenario, target_component_id)) == "gpu"
             else "source_is_cpu_attached_host_memory"
         )
     elif scenario.weights_resident and source_is_offload:
@@ -8290,6 +8402,23 @@ def _add_transfer_tasks(
         target_page_offset = transfer_metadata.get("target_offset_bytes")
     if target_page_offset is None:
         target_page_offset = shared_page_offset
+    state_bindings = {}
+    if scenario is not None and str(transfer_metadata.get("event_kind", "")).startswith("linear_state_"):
+        for component_id, address in (
+            (source_component, source_page_offset),
+            (target_component, target_page_offset),
+        ):
+            binding = _linear_state_endpoint_binding(
+                scenario, component_id, byte_count, transfer_metadata,
+                builder.request.request_id, address,
+                getattr(builder, "_linear_state_owner_request_ids", ()),
+            )
+            if binding is not None:
+                state_bindings[component_id] = binding
+        if source_component in state_bindings:
+            source_page_offset = state_bindings[source_component]["address"]
+        if target_component in state_bindings:
+            target_page_offset = state_bindings[target_component]["address"]
     phases = (
         _transfer_phases(
             context.scenario,
@@ -8470,6 +8599,10 @@ def _add_transfer_tasks(
             elif dma_direction == "in":
                 phase_direction = "write"
         phase_metadata.update(transfer_metadata)
+        state_binding = state_bindings.get(phase_metadata.get("component_id"))
+        if state_binding is not None and isinstance(phase_metadata.get("memory_access"), Mapping):
+            accesses = tuple({**phase_metadata["memory_access"], **row} for row in state_binding["accesses"])
+            phase_metadata["memory_access"] = accesses[0] if len(accesses) == 1 else accesses
         if coherent_dma and context is not None and router is context.router():
             (
                 phase_demands,
@@ -12063,10 +12196,10 @@ def _add_rank_gemm(
     rank_local_weight_source = (
         _kind(target) == "gpu"
         and target_component_id == rank.component_id
-        and weight_source in {
-            rank.component_id,
-            rank.memory_component_id,
-        }
+        and (
+            weight_source in {rank.component_id, rank.memory_component_id}
+            or weight_read_decision.source_is_compute_local_backing
+        )
     )
     cpu_local_weight_source = (
         _kind(target) == "cpu"
@@ -14013,7 +14146,9 @@ def _add_linear_state_read(
             byte_count, prior, name=name + ".read", read=True, metadata={
                 "event_kind": "linear_state_read", "layer_id": layer.layer_id, "rank": rank.rank,
                 "operator_class": OperatorClass.MEMORY.value, "state_lifecycle": "read",
-                "state_kind": "recurrent_conv", "state_persistence": "committed",
+                "state_kind": "recurrent_conv",
+                "state_persistence": "temporary_speculative" if runtime.read_source == "speculative" else "committed",
+                "state_storage": "rolling_speculative_buffer" if runtime.read_source == "speculative" else "persistent_state",
                 **runtime.audit_metadata()})
         return _discard_side_branch_rank_value(builder, state_read, rank)
     state_read = _add_transfer_tasks(
@@ -14505,10 +14640,17 @@ def _add_kv_access(
                 "resource_accounting": "included_in_attention_kernel" if is_read else "direct_memory_store",
                 "resource_transfer_bytes": 0})
         return _discard_side_branch_rank_value(builder, local, rank)
+    local_memory = rank.memory_component_id
+    if (
+        source_component != target_component
+        and local_memory is None
+        and _kind(_component(scenario, rank.component_id)) in {"cpu", "gpu"}
+    ):
+        local_memory = _compute_local_runtime_memory_component_id(scenario, rank.component_id)
     if source_component == target_component or {
         source_component,
         target_component,
-    } == {rank.component_id, rank.memory_component_id}:
+    } == {rank.component_id, local_memory}:
         local = _add_join(
             builder,
             name + ".local",
@@ -16648,10 +16790,10 @@ def _compile_parallel_embedding(
         rank_local_weight_source = (
             _kind(_component(scenario, target_component_id)) == "gpu"
             and target_component_id == rank.component_id
-            and weight_source in {
-                rank.component_id,
-                rank.memory_component_id,
-            }
+            and (
+                weight_source in {rank.component_id, rank.memory_component_id}
+                or weight_read_decision.source_is_compute_local_backing
+            )
         )
         cpu_local_weight_source = (
             _kind(_component(scenario, target_component_id)) == "cpu"
@@ -18887,6 +19029,13 @@ def _compile_parallel_linear_mixer(
         len(tuple(dependencies)),
         builder._last_coherent_dma_task is not None,
     )
+    if any(component.metadata.get("physical_memory_config") is not None
+           for component in scenario.hardware.components):
+        # Physical recurrent buffers are owner-specific; a replay for another
+        # request cannot retain the previous request's nested descriptors.
+        cache_key += (tuple(getattr(builder, "_linear_state_owner_request_ids", (builder.request.request_id,))),)
+        if state_runtime.uses_temporary_state:
+            cache_key += (builder.request.request_id,)
     prefix = "{}.{}".format(phase, layer.layer_id)
     template = _task_segment_cache_get(cache, cache_key)
     if template is not None:
@@ -19294,6 +19443,23 @@ def _compile_parallel_linear_mixer_uncached(
             fallback_keys=("{}.linear_attention".format(layer.layer_id),),
             metadata={**metadata, "linear_op": "local_conv"},
         )
+        # A recurrent scan performs T updates of the same state, rather than
+        # materializing T complete state tensors.  Its activation output is
+        # [T, value_width]; the initial/final recurrent and convolution state
+        # is already read/written by the separate linear_state_* tasks.  Keep
+        # the arithmetic work proportional to T*S, but derive the scan's
+        # activation traffic from Q/K/V and the per-token controls.  This is
+        # also the K=1 layout of ggml_gated_delta_net (output plus final state).
+        scan_input_bytes = _activation_bytes(
+            layer, conv_output_elements, scenario=scenario
+        ) + sum(byte_count for _, byte_count in control_outputs)
+        gate_elements = max(1, token_batch * value_shard.local_size)
+        scan_output_bytes = _activation_bytes(
+            layer, gate_elements, scenario=scenario
+        )
+        scan_output_buffer = "{}.linear_recurrent_scan.rank{}.output".format(
+            layer.layer_id, rank.rank
+        )
         scan, scan_component = _add_rank_primitive(
             builder,
             scenario,
@@ -19307,11 +19473,8 @@ def _compile_parallel_linear_mixer_uncached(
                 input_count=2,
                 input_bits=activation_bits,
                 output_bits=activation_bits,
-                read_storage_bytes=(
-                    _activation_bytes(layer, 2 * max(1, token_batch * recurrent_elements), scenario=scenario)
-                    + sum(byte_count for _, byte_count in control_outputs)
-                    if control_outputs else None
-                ),
+                read_storage_bytes=scan_input_bytes,
+                write_storage_bytes=scan_output_bytes,
                 name="linear_recurrent_scan",
             ),
             "{}.linear_attention.state_update".format(layer.layer_id),
@@ -19321,9 +19484,17 @@ def _compile_parallel_linear_mixer_uncached(
             target_component_id=recurrent_target,
             input_component_bytes=control_outputs or None,
             fallback_keys=("{}.linear_state_update".format(layer.layer_id),),
-            metadata={**metadata, "linear_op": "scan_recurrent_update"},
+            metadata={
+                **metadata,
+                "linear_op": "scan_recurrent_update",
+                "output_buffer_id": scan_output_buffer,
+                "scan_input_bytes": scan_input_bytes,
+                "scan_output_elements": gate_elements,
+                "scan_output_bytes": scan_output_bytes,
+                "scan_recurrent_state_elements": recurrent_elements,
+                "state_io_accounting": "separate_linear_state_tasks",
+            },
         )
-        gate_elements = max(1, token_batch * value_shard.local_size)
         gate_reduce, gate_component = _add_rank_primitive(
             builder,
             scenario,
@@ -19349,6 +19520,7 @@ def _compile_parallel_linear_mixer_uncached(
             metadata={
                 **metadata,
                 "linear_op": "gate_norm_reduce",
+                "input_buffer_id": scan_output_buffer,
                 "output_gate": geometry.output_gate,
                 "gate_activation": geometry.gate_activation,
             },
@@ -23484,6 +23656,13 @@ def _serving_invocation_segment_binding(
         builder.previous is not None,
         builder._last_coherent_dma_task is not None,
     )
+    if any(layer.is_linear_attention for layer in _execution_layers(scenario)) and any(
+        component.metadata.get("physical_memory_config") is not None
+        for component in scenario.hardware.components
+    ):
+        key += (group.request_ids,)
+        if group.kind == "mtp":
+            key += (builder.request.request_id,)
     return cache, key, required_dynamic_attention_invocations
 
 
@@ -23502,6 +23681,7 @@ def _compile_or_replay_serving_invocation(
     # Replay can bypass _compile_parallel_iteration, so establish the graph
     # row count before either the cache lookup or dynamic task reconstruction.
     builder._cpu_graph_rows = max(1, int(group.token_batch))
+    builder._linear_state_owner_request_ids = group.request_ids
 
     physical_k = (int(group.nonflash_kv_view["physical_k_tokens"])
                   if group.nonflash_kv_view.get("applied") is True else 0)

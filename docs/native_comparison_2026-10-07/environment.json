@@ -1,0 +1,41 @@
+{
+  "server_binary_sha256": "9abb694e0ac4ba471f9749649a93304e1033278276b9ea25808c05230f038562",
+  "llama_cpp_commit": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+  "server_version": "version: 0.4.0-dev (build 1, commit d3146f2)\nbuilt with MSVC 19.44.35228.0 for Windows AMD64",
+  "build": {
+    "configuration": "Release",
+    "cuda": true,
+    "cuda_architectures": "120a-real",
+    "cuda_toolkit": "12.8"
+  },
+  "gpu": "NVIDIA GeForce RTX 5080, GPU-83b80720-113c-3f3d-c624-f1dc642b3f8b, 16303 MiB, 617.14, P0, 38, 1 %",
+  "host": {
+    "cpu": {
+      "Name": "AMD Ryzen 9 9950X3D 16-Core Processor          ",
+      "NumberOfCores": 16,
+      "NumberOfLogicalProcessors": 32
+    },
+    "memory": [
+      {
+        "Capacity": 34359738368,
+        "ConfiguredClockSpeed": 5600
+      },
+      {
+        "Capacity": 34359738368,
+        "ConfiguredClockSpeed": 5600
+      },
+      {
+        "Capacity": 34359738368,
+        "ConfiguredClockSpeed": 5600
+      },
+      {
+        "Capacity": 34359738368,
+        "ConfiguredClockSpeed": 5600
+      }
+    ],
+    "os": {
+      "Caption": "Microsoft Windows 11 专业版",
+      "Version": "10.0.26200"
+    }
+  }
+}

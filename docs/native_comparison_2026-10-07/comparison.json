@@ -1,0 +1,365 @@
+{
+  "schema": "heterollm.local-native-comparison/v1",
+  "status": "completed",
+  "generated_at": "2026-10-07T09:04:15.745360+00:00",
+  "accuracy_validated": false,
+  "conclusion": "Both actual GGUF workloads complete on the local RTX 5080 and in simulation. All six latency predictions underestimate the native engine medians; no universal prediction-accuracy claim is supported.",
+  "error_definition": "signed_error_percent = (simulation_ns / native_engine_median_ns - 1) * 100; negative means latency is underestimated",
+  "scope": {
+    "hardware": "Local AMD Ryzen 9 9950X3D / 128 GiB DDR5-5600 / NVIDIA RTX 5080",
+    "environment_file": "environment.json",
+    "llama_cpp_commit": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+    "model_cases": 2,
+    "other_hardware_or_presets_native_validated": false,
+    "gguf_identity_and_imported_shape_parity": "passed; see model identity files",
+    "native_dram_nand_trace_or_energy_validation": false,
+    "simulation_export": "Comparison exports omit repeated UI visualization and per-cohort cost/metadata objects. All compared request metrics, overall traffic summaries and batch boundaries are retained."
+  },
+  "protocol": {
+    "workload": "llama_cpp_default",
+    "requests": 1,
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "mapping_policy": "llama_cpp",
+    "gpu_layers_requested": -1,
+    "batch": 512,
+    "ubatch": 512,
+    "threads": 16,
+    "threads_batch": 16,
+    "parallel": 1,
+    "requested_native_context": 640,
+    "observed_native_and_simulated_context": 768,
+    "flash_attention": false,
+    "kv_type_k": "f16",
+    "kv_type_v": "f16",
+    "kv_unified": true,
+    "speculative_decoding": false,
+    "native_prompt_cache_reuse": false,
+    "native_warmups_per_model": 2,
+    "native_formal_samples_per_model": 5,
+    "primary_reference": "median of five native server engine timings",
+    "dispersion": "observed minimum/maximum; not a confidence interval or p95 estimate"
+  },
+  "measurement_boundaries": {
+    "simulation": "engine_request_begin to first/last token; TPOT = (last - first) / 127",
+    "native": "llama-server prompt-processing timer through first-token sampling; prompt_ms + predicted_ms through last generated token; TPOT = predicted_ms / 127",
+    "client": "QPC perf_counter_ns before HTTP POST through first/last non-empty SSE content; retained separately in native JSON",
+    "limitation": "Native does not expose the simulator engine-admission timestamp. The server engine timing excludes client transport and pre-prompt admission; the boundaries are close for this warm single request but not proven identical."
+  },
+  "logic_corrections": [
+    "Automatic GPU ranks resolve attached physical GDDR/HBM as local backing, preserving the GPU memory phase and avoiding an invented second addressed transfer.",
+    "Inferred CPU/GPU KV backing uses the same local resolution while CIM without explicit backing retains the existing remote path.",
+    "Physical recurrent state is allocated by layer/rank/actual request owner; committed state persists across decode cohorts and speculative scratch uses separate generations.",
+    "The recurrent scan keeps T*S arithmetic, reads T rows and writes T*value-width activations; initial/final state traffic is accounted separately once per invocation, instead of allocating T full states.",
+    "Native client timestamp collection uses Windows QPC perf_counter_ns and excludes the empty final stop notification."
+  ],
+  "source_alignment": {
+    "contract_file": "tensor_storage_contract.json",
+    "source": "Same llama.cpp checkout used to build the native CUDA executable",
+    "configured_existing_paths": "Explicit source-derived GET_ROWS embedding row access and F32 hidden activation storage; actual model GGUF binding qualified in both cases",
+    "default_source_availability": "The repository default source/llama.cpp-semantic directory was unavailable; this comparison explicitly supplied the actual build-source contract.",
+    "native_latency_used_for_parameter_fitting": false,
+    "gpu_and_gddr_timing_model": "Existing blackwell_analytical_v1 GPU model and physical GDDR preset; no timing parameters fitted to these results",
+    "physical_gddr_capacity_bytes": 16000000000,
+    "recurrent_scan_arithmetic_reduced": false
+  },
+  "verification": {
+    "affected_python_tests": {
+      "passed": 29,
+      "command": "py -3.12 -m pytest -q tests/test_gddr_runtime_integration.py tests/test_kv_backing_resolution.py"
+    },
+    "additional_direct_shared_memory_rank_regression": {
+      "passed": 1,
+      "command": "py -3.12 -m pytest -q tests/test_gddr_runtime_integration.py -k direct_linear_state_shared_memory"
+    },
+    "both_full_simulation_result_checks": "passed",
+    "both_native_formal_workloads": "five completed samples each; 512 processed prompt tokens, zero reused tokens, 128 outputs",
+    "gguf_model_import_parity": "passed for both files"
+  },
+  "remaining_limits": [
+    "Embedding row conversion/dequantization compute is not priced by the qualified storage contract.",
+    "GPU kernel efficiency, launch costs and GDDR behavior remain analytical estimates; this test does not isolate each contribution to total error.",
+    "Native sampling/host overhead and engine timing boundary differences are not an exact per-task match.",
+    "The 27B file is a qwen35 hybrid decoder with 64 executed backbone layers; 15 nextn tensors are excluded from execution in both paths because speculative decoding is disabled.",
+    "Only these two files on this RTX 5080 were compared to native inference; the earlier preset matrix is simulation coverage, not native validation of every combination.",
+    "Earlier zero numerical drift for the acceleration path means equivalence to the simulator reference; it does not imply zero native prediction error.",
+    "Host output and logits precision contracts are marked partial by both simulation reports; the native comparison does not validate these missing contracts."
+  ],
+  "pre_fix_observations": {
+    "qwen3_0_6b_f16": {
+      "ttft_ns": 11540364.350942725,
+      "tpot_ns": 5352740.461730673,
+      "e2e_ns": 691338402.9907382,
+      "bottleneck_resource": {
+        "resource_id": "hostmem0.memory",
+        "utilization": 0.7033161658676141
+      },
+      "interpretation": "Initial imported scenario after local GPU-backing fix, before explicit source-derived GET_ROWS/F32 hidden storage alignment. The absent default llama.cpp semantic source directory left the conservative whole CPU embedding-table read enabled. This is a latency observation, not a full archived job or a calibration target.",
+      "signed_error_percent_against_final_native_median": {
+        "ttft": -37.14056129994703,
+        "tpot": 107.4509335440386,
+        "e2e": 100.09157537408022
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "label": "Qwen3-0.6B F16",
+      "status": "compared",
+      "accuracy_validated": false,
+      "acceptance_threshold": null,
+      "files": {
+        "model_identity": "model_identity.json",
+        "scenario": "scenario_qwen3_0_6b_f16_512_128.json",
+        "simulation_job": "simulation_job.json",
+        "native_measurements": "native_qwen3_0_6b_f16.json"
+      },
+      "simulation": {
+        "job_id": "ece13a21dd5f451eba1ccb968a4c5b7b",
+        "status": "completed",
+        "report_checks": [],
+        "completed_requests": 1,
+        "visible_output_tokens": 128,
+        "batch_count": 128,
+        "task_count": 125824,
+        "execution_wall_time_s": 118.885159,
+        "bottleneck_resource": {
+          "resource_id": "gddr0.gddr_fabric:dram:data:0",
+          "utilization": 0.7498151780831983
+        },
+        "latency_boundary": "engine",
+        "tensor_storage": {
+          "qualified": true,
+          "reasons": [],
+          "graph_architecture": "qwen3",
+          "gguf_sha256": "ab9004daf660cd6a6ba1c07556e74fcceb2b756063ccce3f9c69d3a637b361cc",
+          "embedding_binding": {
+            "name": "token_embd.weight",
+            "shape": [
+              1024,
+              151936
+            ],
+            "type": "F16",
+            "n_bytes": 311164928,
+            "offset": 311164928
+          },
+          "status": "enabled",
+          "previous_f32_hidden_storage": false,
+          "f32_hidden_storage_requested": true,
+          "source_contract_schema": "llama.cpp.gguf.tensor-storage/v1",
+          "scope": "unsharded contiguous ordinary causal-text GGUF backbone; no supplied embeddings/adapters/MTP/experts; KV cache and non-hidden state dtypes remain separate",
+          "timing_completeness": "partial; row conversion/dequantization compute is unpriced"
+        }
+      },
+      "native": {
+        "warmup_requests": 2,
+        "formal_requests": 5,
+        "all_formal_prompt_tokens_processed": 512,
+        "all_formal_prompt_tokens_reused": 0,
+        "all_formal_output_tokens": 128,
+        "context": {
+          "requested_context": 640,
+          "props_n_ctx": 768,
+          "startup_n_ctx_slot": 768
+        },
+        "client_summary_ns": {
+          "ttft": {
+            "mean": 27143240.0,
+            "median": 19367900.0,
+            "interval_min": 18763600.0,
+            "interval_max": 40402300.0
+          },
+          "tpot": {
+            "mean": 2579935.590551181,
+            "median": 2580166.1417322834,
+            "interval_min": 2567985.0393700786,
+            "interval_max": 2588700.0
+          },
+          "e2e": {
+            "mean": 354795060.0,
+            "median": 347289100.0,
+            "interval_min": 345502000.0,
+            "interval_max": 368083400.0
+          }
+        }
+      },
+      "metrics": {
+        "ttft": {
+          "simulation_ns": 8581604.717921017,
+          "native_median_ns": 18359000.0,
+          "native_min_ns": 17662000.0,
+          "native_max_ns": 18477000.0,
+          "signed_error_ns": -9777395.282078983,
+          "absolute_error_ns": 9777395.282078983,
+          "signed_error_percent": -53.25668763047543,
+          "absolute_error_percent": 53.25668763047543,
+          "simulation_to_native_ratio": 0.46743312369524576,
+          "signed_error_percent_against_observed_native_range": [
+            -53.555205293494524,
+            -51.41204440085485
+          ]
+        },
+        "tpot": {
+          "simulation_ns": 1562581.209884499,
+          "native_median_ns": 2580244.0944881886,
+          "native_min_ns": 2569125.9842519686,
+          "native_max_ns": 2588669.291338583,
+          "signed_error_ns": -1017662.8846036897,
+          "absolute_error_ns": 1017662.8846036897,
+          "signed_error_percent": -39.44056637035152,
+          "absolute_error_percent": 39.44056637035152,
+          "simulation_to_native_ratio": 0.6055943362964847,
+          "signed_error_percent_against_observed_native_range": [
+            -39.637665764694916,
+            -39.17849029348154
+          ]
+        },
+        "e2e": {
+          "simulation_ns": 207029418.3732524,
+          "native_median_ns": 345510999.99999994,
+          "native_min_ns": 344659000.0,
+          "native_max_ns": 347238000.0,
+          "signed_error_ns": -138481581.62674755,
+          "absolute_error_ns": 138481581.62674755,
+          "signed_error_percent": -40.080223676452434,
+          "absolute_error_percent": 40.080223676452434,
+          "simulation_to_native_ratio": 0.5991977632354757,
+          "signed_error_percent_against_observed_native_range": [
+            -40.37823672142669,
+            -39.932101476168505
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "label": "Qwen3.8-27B IQ3_S/FFN-IQ4_XS (qwen35)",
+      "status": "compared",
+      "accuracy_validated": false,
+      "acceptance_threshold": null,
+      "files": {
+        "model_identity": "model_identity_qwen3_8.json",
+        "scenario": "scenario_qwen3_8_27b_mixed_512_128.json",
+        "simulation_job": "simulation_job_qwen3_8.json",
+        "native_measurements": "native_qwen3_8_27b_mixed.json"
+      },
+      "simulation": {
+        "job_id": "2add0ad73e6044eb9f31c56e334f0a71",
+        "status": "completed",
+        "report_checks": [],
+        "completed_requests": 1,
+        "visible_output_tokens": 128,
+        "batch_count": 128,
+        "task_count": 344064,
+        "execution_wall_time_s": 440.679162,
+        "bottleneck_resource": {
+          "resource_id": "gddr0.gddr_fabric:dram:data:0",
+          "utilization": 0.7321059487454619
+        },
+        "latency_boundary": "engine",
+        "tensor_storage": {
+          "qualified": true,
+          "reasons": [],
+          "graph_architecture": "qwen3_5_hybrid_transformer",
+          "gguf_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+          "embedding_binding": {
+            "name": "token_embd.weight",
+            "shape": [
+              5120,
+              248320
+            ],
+            "type": "Q8_0",
+            "n_bytes": 1350860800,
+            "offset": 1042964480
+          },
+          "status": "enabled",
+          "previous_f32_hidden_storage": false,
+          "f32_hidden_storage_requested": true,
+          "source_contract_schema": "llama.cpp.gguf.tensor-storage/v1",
+          "scope": "unsharded contiguous ordinary causal-text GGUF backbone; no supplied embeddings/adapters/MTP/experts; KV cache and non-hidden state dtypes remain separate",
+          "timing_completeness": "partial; row conversion/dequantization compute is unpriced"
+        }
+      },
+      "native": {
+        "warmup_requests": 2,
+        "formal_requests": 5,
+        "all_formal_prompt_tokens_processed": 512,
+        "all_formal_prompt_tokens_reused": 0,
+        "all_formal_output_tokens": 128,
+        "context": {
+          "requested_context": 640,
+          "props_n_ctx": 768,
+          "startup_n_ctx_slot": 768
+        },
+        "client_summary_ns": {
+          "ttft": {
+            "mean": 303126440.0,
+            "median": 306901500.0,
+            "interval_min": 286105500.0,
+            "interval_max": 312958800.0
+          },
+          "tpot": {
+            "mean": 19678301.88976378,
+            "median": 19701396.8503937,
+            "interval_min": 19513315.748031497,
+            "interval_max": 19788311.023622047
+          },
+          "e2e": {
+            "mean": 2802270780.0,
+            "median": 2806134000.0,
+            "interval_min": 2786123100.0,
+            "interval_max": 2820017000.0
+          }
+        }
+      },
+      "metrics": {
+        "ttft": {
+          "simulation_ns": 214866434.55310252,
+          "native_median_ns": 287274000.0,
+          "native_min_ns": 285189000.0,
+          "native_max_ns": 294858000.0,
+          "signed_error_ns": -72407565.44689748,
+          "absolute_error_ns": 72407565.44689748,
+          "signed_error_percent": -25.20505351925252,
+          "absolute_error_percent": 25.20505351925252,
+          "simulation_to_native_ratio": 0.7479494648074748,
+          "signed_error_percent_against_observed_native_range": [
+            -27.12884352701893,
+            -24.658232066067587
+          ]
+        },
+        "tpot": {
+          "simulation_ns": 18254350.45865348,
+          "native_median_ns": 19702141.732283466,
+          "native_min_ns": 19513669.29133858,
+          "native_max_ns": 19788874.01574803,
+          "signed_error_ns": -1447791.2736299857,
+          "absolute_error_ns": 1447791.2736299857,
+          "signed_error_percent": -7.348395384130595,
+          "absolute_error_percent": 7.348395384130595,
+          "simulation_to_native_ratio": 0.9265160461586941,
+          "signed_error_percent_against_observed_native_range": [
+            -7.754476358146367,
+            -6.453521446343602
+          ]
+        },
+        "e2e": {
+          "simulation_ns": 2533168942.8020945,
+          "native_median_ns": 2787361000.0,
+          "native_min_ns": 2773094000.0,
+          "native_max_ns": 2800461000.0,
+          "signed_error_ns": -254192057.19790554,
+          "absolute_error_ns": 254192057.19790554,
+          "signed_error_percent": -9.119452313421387,
+          "absolute_error_percent": 9.119452313421387,
+          "simulation_to_native_ratio": 0.9088054768657862,
+          "signed_error_percent_against_observed_native_range": [
+            -9.544573454081506,
+            -8.651890530862117
+          ]
+        }
+      }
+    }
+  ]
+}

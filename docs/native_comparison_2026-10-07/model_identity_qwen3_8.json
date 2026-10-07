@@ -1,0 +1,51 @@
+{
+  "schema_version": "heterollm.native-model-identity/v1",
+  "source": {
+    "path": "C:\\Users\\A\\.lmstudio\\models\\canhdu\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS-GGUF\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.gguf",
+    "file_size_bytes": 14865116128,
+    "sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+    "payload_hashing": true,
+    "reader": "read_gguf_metadata"
+  },
+  "model": {
+    "name": "Qwen3.8-27B-IQ3_S-FFN-IQ4_XS",
+    "gguf_architecture": "qwen35",
+    "architecture_adapter": "qwen35_hybrid_decoder",
+    "graph_architecture": "qwen3_5_hybrid_transformer",
+    "file_quantization": "MOSTLY_IQ3_M",
+    "file_type": 30,
+    "tensor_count": 866,
+    "tensor_types": {
+      "F32": 360,
+      "IQ3_S": 128,
+      "IQ4_XS": 304,
+      "Q4_K": 6,
+      "Q5_K": 65,
+      "Q6_K": 1,
+      "Q8_0": 2
+    },
+    "physical_tensor_bytes": 14854119424,
+    "opaque_tensor_count": 0,
+    "n_embd": 5120,
+    "n_head": 24,
+    "n_head_kv": 4,
+    "vocab_size": 248320,
+    "model_context_limit": 262144,
+    "declared_block_count": 65,
+    "main_layer_count": 64,
+    "imported_executable_layer_count": 64,
+    "nextn_layer_count": 1,
+    "nextn_tensor_count": 15,
+    "nextn_tensor_bytes": 265852928,
+    "nextn_in_executable_trunk": false,
+    "nextn_handling": "counted from GGUF metadata and included in physical tensor inventory; kept outside the 64-layer decoder graph"
+  },
+  "parity": {
+    "status": "pass",
+    "mismatches": [],
+    "runtime_context_requested": 640,
+    "runtime_context_effective": 768,
+    "prompt_tokens": 512,
+    "output_tokens": 128
+  }
+}

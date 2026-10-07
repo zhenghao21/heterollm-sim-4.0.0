@@ -15,8 +15,11 @@ from heterollm_sim.cost_models import CostPhase, GDDRProfile
 from heterollm_sim.data_motion import PhysicalRuntimeContext, endpoint_service, resolve_physical_task
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.event_kernel import UnifiedEventKernel
+from heterollm_sim.gguf_parity import GGUFTensor, GGUFMetadata, build_model_from_gguf
 from heterollm_sim.ir import (
     LayerSpec,
+    LinearAttentionSpec,
+    RankMappingSpec,
     RequestSpec,
     build_model_graph_from_layer_specs,
 )
@@ -27,7 +30,9 @@ from heterollm_sim.planner import (
     _direct_memory_phase,
     _gddr_stable_address,
     _gddr_allocation_size,
+    _linear_state_endpoint_binding,
     _promote_physical_allocation_extents,
+    _weight_source_is_compute_local_backing,
     compile_scenario,
     compile_serving_cohort_schedule,
     validate_scenario,
@@ -518,6 +523,345 @@ def _tiny_dense_gddr_scenario(prompt_tokens, *, stateful_l2):
         workload=workload,
         component_profiles=profiles,
     )
+
+
+def test_imported_qwen3_weights_use_inferred_gpu_memory_without_duplicate_transfer():
+    scenario = _tiny_dense_gddr_scenario(2, stateful_l2=False)
+    tensors = []
+    offset = 0
+    for name, shape in (
+        ("blk.0.attn_q.weight", (8, 8)),
+        ("blk.0.attn_k.weight", (8, 4)),
+        ("blk.0.attn_v.weight", (8, 4)),
+        ("blk.0.attn_output.weight", (8, 8)),
+        ("blk.0.ffn_gate.weight", (8, 16)),
+        ("blk.0.ffn_up.weight", (8, 16)),
+        ("blk.0.ffn_down.weight", (16, 8)),
+        ("token_embd.weight", (8, 16)),
+        ("output.weight", (8, 16)),
+    ):
+        size = shape[0] * shape[1] * 2
+        tensors.append(GGUFTensor(name, shape, 1, "F16", 1, size, offset))
+        offset += size
+    model = build_model_from_gguf(GGUFMetadata(
+        "tiny-qwen3.gguf", "test-directory", 3, len(tensors), 0,
+        "qwen3", 1, 8, 2, 1, 16, 16, "MOSTLY_F16", 1, {}, tuple(tensors),
+    ))
+    scenario = replace(
+        scenario,
+        model=model,
+        placement=replace(
+            scenario.placement,
+            model_name=model.name,
+            tensor_to_component={"model_weights": "hbm0"},
+            tensor_bytes={"model_weights": offset},
+            parallel=replace(
+                scenario.placement.parallel,
+                rank_mapping=(),
+                layer_to_stage={},
+            ),
+        ),
+    )
+    schedule = compile_scenario(scenario)
+    accesses = [task for task in schedule.tasks
+                if task.metadata.get("event_kind") == "model_weight_access"]
+    assert accesses
+    assert all(task.metadata["weight_source_is_compute_local_backing"]
+               for task in accesses)
+    assert all(task.metadata["weight_source_transfer_emitted"] is False
+               for task in accesses)
+    assert not any(task.metadata.get("event_kind") == "model_weight_read"
+                   for task in schedule.tasks)
+    physical = [task for task in schedule.tasks
+                if task.metadata.get("physical_memory_config")]
+    assert physical, "inferred local weights must retain real GDDR accesses"
+    assert any(access["operation"] == "read" and "weights" in access.get("buffer_id", "")
+               for task in physical for access in task.metadata["memory_accesses"])
+    kernel = UnifiedEventKernel.from_closed_graph(
+        schedule.tasks,
+        resource_capacities=schedule.resource_capacities,
+        resource_owners=schedule.resource_owners,
+    )
+    while kernel.has_active_tasks:
+        assert kernel.step() is not None
+
+
+def test_gpu_local_weight_backing_preserves_explicit_rank_memory_selection():
+    scenario = _gpu_gddr_scenario()
+    assert _weight_source_is_compute_local_backing(scenario, "hbm0", "gpu0")
+    rank = replace(scenario.placement.parallel.rank_mapping[0], memory_component_id="hbm1")
+    scenario = replace(
+        scenario,
+        placement=replace(scenario.placement, parallel=replace(
+            scenario.placement.parallel, rank_mapping=(rank,),
+        )),
+    )
+    assert _weight_source_is_compute_local_backing(scenario, "hbm1", "gpu0")
+    assert not _weight_source_is_compute_local_backing(scenario, "hbm0", "gpu0")
+
+
+def test_gpu_weight_backing_predicate_keeps_unavailable_memory_non_local():
+    scenario = _gpu_gddr_scenario()
+    scenario = replace(
+        scenario,
+        hardware=replace(
+            scenario.hardware,
+            components=(scenario.hardware.get_component("gpu0"),
+                        scenario.hardware.get_component("cpu0")),
+            links=(),
+        ),
+        placement=replace(scenario.placement, parallel=replace(
+            scenario.placement.parallel, rank_mapping=(),
+        )),
+    )
+    assert not _weight_source_is_compute_local_backing(scenario, "external_memory", "gpu0")
+
+
+def _tiny_linear_gddr_scenario(*, direct=False):
+    scenario = _tiny_dense_gddr_scenario(2, stateful_l2=False)
+    graph = build_model_graph_from_layer_specs(
+        "tiny-hybrid",
+        tuple(LayerSpec(
+            layer_id="linear-{:03d}".format(index), kind="dense", hidden_size=8,
+            intermediate_size=16, attention_heads=2, kv_heads=1,
+            sequence_mixer="linear_attention",
+            linear_attention=LinearAttentionSpec(
+                key_heads=1, value_heads=2, key_head_dim=2, value_head_dim=2,
+                conv_kernel_size=3,
+            ),
+            dtype="int8", quantization="w8a8", weight_bytes=512,
+            metadata={"gguf_tensor_bindings": [{"offset": 10**12}]},
+        ) for index in range(2)),
+        vocabulary_size=16, max_sequence_length=16,
+        embedding_weight_bytes=128, output_weight_bytes=128,
+    )
+    model = replace(scenario.model, name="tiny-hybrid", graph=graph)
+    metadata = dict(scenario.placement.metadata)
+    if direct:
+        metadata["llama_backend_memory"] = {"hbm0": {"access": "direct", "device_id": "gpu0"}}
+    return replace(scenario, model=model, placement=replace(
+        scenario.placement, model_name=model.name,
+        tensor_to_component={"linear_state": "hbm0"}, tensor_bytes={"linear_state": 192},
+        parallel=replace(scenario.placement.parallel, layer_to_stage={}), metadata=metadata,
+    ))
+
+
+@pytest.mark.parametrize("direct", (False, True))
+def test_linear_state_reads_and_writes_share_allocations_without_aliasing_other_layers(direct):
+    scenario = _tiny_linear_gddr_scenario(direct=direct)
+    schedule = compile_scenario(scenario)
+    state_tasks = [task for task in schedule.tasks
+                   if task.metadata.get("event_kind") in {"linear_state_read", "linear_state_write"}
+                   and task.metadata.get("physical_memory_config")]
+    assert state_tasks
+    previews = {}
+    for task in state_tasks:
+        access = task.metadata["memory_access"]
+        assert access["buffer_id"].startswith("linear_state:")
+        assert access["address_source"] == "stable_buffer_tensor_offset"
+        assert access["generation"] == 0
+        assert access["address"] + access["allocation_size_bytes"] <= task.metadata["physical_memory_config"]["capacity_bytes"]
+        previews.setdefault(access["buffer_id"], set()).add(access["address"])
+    assert len(previews) == 2
+    assert all(len(addresses) == 1 for addresses in previews.values())
+    kernel = UnifiedEventKernel.from_closed_graph(
+        schedule.tasks, resource_capacities=schedule.resource_capacities,
+        resource_owners=schedule.resource_owners,
+    )
+    ranges = {}
+    operations = {}
+    while kernel.has_active_tasks:
+        event = kernel.step()
+        assert event is not None
+        if (event.task.metadata.get("event_kind") not in {"linear_state_read", "linear_state_write"}
+                or not event.task.metadata.get("physical_memory_config")):
+            continue
+        for access in event.task.metadata["memory_accesses"]:
+            ranges.setdefault(access["buffer_id"], set()).add((access["address"], access["allocation_size_bytes"]))
+            operations.setdefault(access["buffer_id"], set()).add(access["operation"])
+    assert all(values == {"read", "write"} for values in operations.values())
+    assert all(len(values) == 1 for values in ranges.values())
+    (first, size), (second, other_size) = [next(iter(values)) for values in ranges.values()]
+    assert first + size <= second or second + other_size <= first
+
+
+def test_direct_linear_state_shared_memory_preserves_each_rank_read_write_identity():
+    scenario = _tiny_linear_gddr_scenario(direct=True)
+    scenario = replace(scenario, placement=replace(
+        scenario.placement, parallel=replace(
+            scenario.placement.parallel, tp_degree=2,
+            rank_mapping=tuple(RankMappingSpec(
+                rank=rank, component_id="gpu0", tp_rank=rank, pp_rank=0, ep_rank=0,
+                memory_component_id="hbm0",
+            ) for rank in range(2)),
+        ),
+    ))
+    schedule = compile_scenario(scenario)
+    state_tasks = [task for task in schedule.tasks
+                   if task.metadata.get("event_kind") in {"linear_state_read", "linear_state_write"}
+                   and task.metadata.get("physical_memory_config")]
+    preview_ids = {}
+    for task in state_tasks:
+        assert task.metadata["direct_memory_component"] == "hbm0"
+        owner = (task.metadata["layer_id"], task.metadata["rank"])
+        access = task.metadata["memory_access"]
+        assert "rank={}:".format(owner[1]) in access["buffer_id"]
+        preview_ids.setdefault(owner, set()).add(access["buffer_id"])
+    assert set(preview_ids) == {(layer, rank) for layer in ("linear-000", "linear-001")
+                               for rank in range(2)}
+    assert all(len(identities) == 1 for identities in preview_ids.values())
+    assert len(set.union(*preview_ids.values())) == 4
+    state_task_ids = {task.task_id for task in state_tasks}
+    kernel = UnifiedEventKernel.from_closed_graph(
+        schedule.tasks, resource_capacities=schedule.resource_capacities,
+        resource_owners=schedule.resource_owners,
+    )
+    ranges = {}
+    operations = {}
+    while kernel.has_active_tasks:
+        event = kernel.step()
+        assert event is not None
+        if event.task.task_id not in state_task_ids:
+            continue
+        for access in event.task.metadata["memory_accesses"]:
+            ranges.setdefault(access["buffer_id"], set()).add(
+                (access["address"], access["allocation_size_bytes"])
+            )
+            operations.setdefault(access["buffer_id"], set()).add(access["operation"])
+    assert len(ranges) == 4
+    assert all(values == {"read", "write"} for values in operations.values())
+    assert all(len(values) == 1 for values in ranges.values())
+    ordered = sorted(next(iter(values)) for values in ranges.values())
+    assert all(size == 48 for _, size in ordered)
+    assert all(base + size <= next_base
+               for (base, size), (next_base, _) in zip(ordered, ordered[1:]))
+
+
+def test_linear_state_endpoint_preserves_authored_address_and_rejects_capacity_overflow():
+    scenario = _tiny_linear_gddr_scenario()
+    metadata = {"layer_id": "linear-000", "rank": 0, "state_storage": "persistent_state"}
+    binding = _linear_state_endpoint_binding(scenario, "hbm0", 96, metadata, "cohort-0", 4096)
+    assert binding["address"] == 4096
+    assert binding["address_source"] == "explicit_physical_address"
+    capacity = scenario.hardware.get_component("hbm0").metadata["physical_memory_config"]["capacity_bytes"]
+    with pytest.raises(ValueError, match="exceeds physical capacity"):
+        _linear_state_endpoint_binding(scenario, "hbm0", 96, metadata, "cohort-0", capacity - 1)
+
+
+def test_serving_linear_state_uses_actual_request_owner_across_synthetic_cohorts():
+    scenario = _tiny_linear_gddr_scenario()
+    identities = []
+    for index, request_id in enumerate(("request-a", "request-a", "request-b")):
+        cohort = BatchCohort(
+            cohort_id="cohort-{:06d}".format(index), kind="decode", start_ns=0.0,
+            items=(BatchItem(request_id, "decode", 1, 2 + index, logit_tokens=1),),
+        )
+        schedule = compile_serving_cohort_schedule(scenario, cohort)
+        accesses = [task.metadata["memory_access"] for task in schedule.tasks
+                    if task.metadata.get("event_kind") in {"linear_state_read", "linear_state_write"}
+                    and task.metadata.get("physical_memory_config")]
+        assert accesses
+        assert all(access["generation"] == 0 for access in accesses)
+        assert all("owner=" + request_id in access["buffer_id"] for access in accesses)
+        identities.append({(access["buffer_id"], access["address"]) for access in accesses})
+    assert identities[0] == identities[1]
+    assert identities[0].isdisjoint(identities[2])
+
+
+def test_linear_state_multi_owner_transfer_keeps_separate_allocations_and_total_bytes():
+    scenario = _tiny_linear_gddr_scenario()
+    binding = _linear_state_endpoint_binding(
+        scenario, "hbm0", 192,
+        {"layer_id": "linear-000", "rank": 0, "linear_state_independent_owner_count": 2},
+        "cohort-000000", owner_request_ids=("request-a", "request-b"),
+    )
+    accesses = binding["accesses"]
+    assert len(accesses) == 2
+    assert len({access["buffer_id"] for access in accesses}) == 2
+    assert sum(access["byte_count"] for access in accesses) == 192
+    assert all(access["allocation_size_bytes"] == 96 for access in accesses)
+
+
+def test_linear_state_speculative_buffer_is_distinct_and_scoped_to_cohort():
+    scenario = _tiny_linear_gddr_scenario()
+    metadata = {"layer_id": "linear-000", "rank": 0, "state_storage": "rolling_speculative_buffer"}
+    first = _linear_state_endpoint_binding(scenario, "hbm0", 96, metadata, "cohort-000000",
+                                          owner_request_ids=("request-a",))
+    repeated = _linear_state_endpoint_binding(scenario, "hbm0", 96, metadata, "cohort-000000",
+                                             owner_request_ids=("request-a",))
+    next_cohort = _linear_state_endpoint_binding(scenario, "hbm0", 96, metadata, "cohort-000001",
+                                                owner_request_ids=("request-a",))
+    persistent = _linear_state_endpoint_binding(scenario, "hbm0", 96,
+                                                {**metadata, "state_storage": "persistent_state"},
+                                                "cohort-000000", owner_request_ids=("request-a",))
+    assert first == repeated
+    assert first["buffer_id"] == next_cohort["buffer_id"]
+    assert first["generation"] > 0 and first["generation"] != next_cohort["generation"]
+    assert first["buffer_id"] != persistent["buffer_id"]
+    assert persistent["generation"] == 0
+
+
+def test_recurrent_scan_keeps_work_linear_without_materializing_per_token_states():
+    scenario = _tiny_linear_gddr_scenario()
+    scenario = replace(scenario, workload=replace(
+        scenario.workload,
+        metadata={**scenario.workload.metadata, "llama_cpp_f32_hidden_storage": True},
+        scheduler=replace(scenario.workload.scheduler, max_num_batched_tokens=512,
+                          max_num_ubatch_tokens=512, prefill_chunk_tokens=512),
+    ))
+    scans_by_tokens = {}
+    state_extents = {}
+    for tokens in (1, 512):
+        cohort = BatchCohort(
+            cohort_id="cohort-000000", kind="prefill", start_ns=0.0,
+            items=(BatchItem("request-a", "prefill", tokens, tokens, logit_tokens=1),),
+        )
+        schedule = compile_serving_cohort_schedule(scenario, cohort)
+        scans = [task for task in schedule.tasks
+                 if task.metadata.get("linear_op") == "scan_recurrent_update"
+                 and task.metadata.get("physical_memory_config")]
+        assert len(scans) == 2
+        scans_by_tokens[tokens] = scans
+        state_extents[tokens] = {
+            access["buffer_id"]: access["allocation_size_bytes"]
+            for task in schedule.tasks
+            if task.metadata.get("event_kind") in {"linear_state_read", "linear_state_write"}
+            and task.metadata.get("physical_memory_config")
+            for access in task.metadata.get("memory_accesses", (task.metadata["memory_access"],))
+        }
+        assert len(state_extents[tokens]) == 2
+        assert set(state_extents[tokens].values()) == {96}
+        reductions = {task.metadata["layer_id"]: task for task in schedule.tasks
+                      if task.metadata.get("linear_op") == "gate_norm_reduce"
+                      and task.metadata.get("physical_memory_config")}
+        for task in scans:
+            cost = task.metadata["cost_model"]
+            # Tiny geometry: Q/K/V widths 2/2/4; value output is T*4 F32.
+            assert cost["read_bytes"] == tokens * 8 * 4
+            assert cost["write_bytes"] == tokens * 4 * 4
+            assert task.metadata["output_bytes"] == tokens * 4 * 4
+            assert task.metadata["state_io_accounting"] == "separate_linear_state_tasks"
+            output_access = next(access for access in task.metadata["memory_accesses"]
+                                 if access["operation"] == "write")
+            assert output_access["allocation_size_bytes"] == tokens * 4 * 4
+            reduction = reductions[task.metadata["layer_id"]]
+            input_access = next(access for access in reduction.metadata["memory_accesses"]
+                                if access["operation"] == "read")
+            assert input_access["buffer_id"] == output_access["buffer_id"]
+            assert input_access["byte_count"] == output_access["byte_count"]
+        kernel = UnifiedEventKernel.from_closed_graph(
+            schedule.tasks, resource_capacities=schedule.resource_capacities,
+            resource_owners=schedule.resource_owners,
+        )
+        while kernel.has_active_tasks:
+            assert kernel.step() is not None
+        allocator = kernel.physical_runtime.allocators["hbm0.memory"]
+        for buffer_id, extent in state_extents[tokens].items():
+            allocation = allocator.lookup(buffer_id, 0)
+            assert allocation.size_bytes == extent
+    assert state_extents[1] == state_extents[512]
+    for short, long in zip(scans_by_tokens[1], scans_by_tokens[512]):
+        assert long.metadata["analytical_ops"] == 512 * short.metadata["analytical_ops"]
 
 
 @pytest.mark.parametrize("prompt_tokens", (2, 5))
