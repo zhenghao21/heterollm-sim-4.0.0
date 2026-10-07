@@ -2269,7 +2269,11 @@ def _native_rtx5080_local(component_catalog=None) -> ArchitecturePresetDefinitio
             version="GDDR7",
             lanes=256,
             bandwidth_gbps=gddr7_gbps,
-            latency_ns=40.0,
+            # This link is a logical memory-service interface.  The attached
+            # GDDR7 component preset is authoritative for service latency
+            # (35 ns); keeping the two values aligned avoids the
+            # memory_component contract rejecting an otherwise valid preset.
+            latency_ns=35.0,
             metadata={
                 "bandwidth_source": "memory_component",
                 "bandwidth_resource_id": "gddr0.gddr_fabric",

@@ -345,7 +345,36 @@ def llama_cpp_kv_layer_mapping(scenario: ScenarioConfig, config: LlamaCppRuntime
         gpu_ranks = [r for r in plan.ranks if r.memory_component_id and r.memory_component_id in components]
         if not gpu_ranks:
             fallback = scenario.placement.kv_policy.cache_component
-            if not fallback: raise ValueError("llama.cpp KV placement requires rank memory or cache component")
+            if not fallback:
+                # A fresh UI scenario has no explicit rank mapping yet; the
+                # control plane materializes it later during the same
+                # lowering pass.  Keep llama.cpp validation usable by
+                # selecting a writable active memory endpoint as the
+                # provisional KV owner instead of rejecting the scenario
+                # before placement can run.  Prefer device-local memory so
+                # the default single-GPU path follows native llama.cpp
+                # residency semantics.
+                candidates = [
+                    component
+                    for component in scenario.hardware.components
+                    if component.is_active_memory and component.is_writable
+                ]
+                priority = {
+                    "hbm": 0,
+                    "gddr": 1,
+                    "hbf": 2,
+                    "dram": 3,
+                    "host_memory": 4,
+                    "ddr": 5,
+                    "ddr_memory": 6,
+                }
+                if candidates:
+                    fallback = min(
+                        candidates,
+                        key=lambda item: (priority.get(item.normalized_kind, 99), item.component_id),
+                    ).component_id
+            if not fallback:
+                raise ValueError("llama.cpp KV placement requires rank memory or writable active memory")
             owner = {layer.layer_id: fallback for layer in layers}
         elif config.split_mode == "layer":
             owner = {

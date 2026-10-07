@@ -780,7 +780,11 @@ class UnifiedEventKernel:
         self,
         resource_capacities: Optional[Mapping[str, int]] = None,
         resource_owners: Optional[Mapping[str, str]] = None,
+        *,
+        capture_physical_details: bool = True,
     ) -> None:
+        if not isinstance(capture_physical_details, bool):
+            raise TypeError("capture_physical_details must be a boolean")
         capacities = dict(resource_capacities or {})
         owners = dict(resource_owners or {})
         for resource_id, owner_id in owners.items():
@@ -813,7 +817,9 @@ class UnifiedEventKernel:
         self._l2_states = {}
         # Physical stages retain their own channel/bank clocks in this one
         # run context. Preview endpoint costs never reserve a whole device.
-        self.physical_runtime = PhysicalRuntimeContext()
+        self.physical_runtime = PhysicalRuntimeContext(
+            capture_details=capture_physical_details
+        )
         self._tasks: Dict[str, TaskSpec] = {}
         self._indegree: Dict[str, int] = {}
         self._dependents: Dict[str, List[str]] = {}
@@ -862,6 +868,20 @@ class UnifiedEventKernel:
         self._resource_groups: Dict[str, ResourceGroup] = {}
         self._sorted_demands: Dict[str, Tuple[ResourceDemand, ...]] = {}
         self._phase_sequence: Dict[str, Tuple[int, int]] = {}
+        # Physical access descriptors are registered lazily when a task is
+        # admitted.  Transient serving buffers use a cohort generation and
+        # must be released after their last scheduled user; otherwise every
+        # layer's activation remains resident beside the model weights and a
+        # large but valid model exhausts device memory before the first cohort
+        # completes.  Weight generations (normally zero) intentionally remain
+        # resident for the lifetime of this kernel.
+        self._physical_allocation_uses: Dict[Tuple[str, str, int], int] = {}
+        self._physical_allocation_task_keys: Dict[
+            str, Tuple[Tuple[str, str, int], ...]
+        ] = {}
+        self._physical_allocation_cache_owners: Dict[str, Set[str]] = {}
+        self._physical_allocation_last_end: Dict[Tuple[str, str, int], float] = {}
+        self._pending_physical_releases: Dict[Tuple[str, str, int], float] = {}
 
     @classmethod
     def from_closed_graph(
@@ -870,6 +890,7 @@ class UnifiedEventKernel:
         *,
         resource_capacities: Optional[Mapping[str, int]] = None,
         resource_owners: Optional[Mapping[str, str]] = None,
+        capture_physical_details: bool = True,
     ) -> "UnifiedEventKernel":
         chunk = tuple(tasks)
         layout = CompiledGraphLayout.compile(chunk)
@@ -878,6 +899,7 @@ class UnifiedEventKernel:
             layout,
             resource_capacities=resource_capacities,
             resource_owners=resource_owners,
+            capture_physical_details=capture_physical_details,
         )
 
     @classmethod
@@ -888,6 +910,7 @@ class UnifiedEventKernel:
         *,
         resource_capacities: Optional[Mapping[str, int]] = None,
         resource_owners: Optional[Mapping[str, str]] = None,
+        capture_physical_details: bool = True,
     ) -> "UnifiedEventKernel":
         """Load a graph only when it exactly matches a validated layout."""
 
@@ -899,6 +922,7 @@ class UnifiedEventKernel:
             layout,
             resource_capacities=resource_capacities,
             resource_owners=resource_owners,
+            capture_physical_details=capture_physical_details,
         )
 
     @classmethod
@@ -909,8 +933,13 @@ class UnifiedEventKernel:
         *,
         resource_capacities: Optional[Mapping[str, int]] = None,
         resource_owners: Optional[Mapping[str, str]] = None,
+        capture_physical_details: bool = True,
     ) -> "UnifiedEventKernel":
-        kernel = cls(resource_capacities=resource_capacities, resource_owners=resource_owners)
+        kernel = cls(
+            resource_capacities=resource_capacities,
+            resource_owners=resource_owners,
+            capture_physical_details=capture_physical_details,
+        )
         phase_sequence: Dict[str, Tuple[int, int]] = {}
         for task in tasks:
             kernel._validate_owner_demands(task)
@@ -943,6 +972,7 @@ class UnifiedEventKernel:
             for position in range(layout.task_count)
         }
         kernel._phase_sequence = phase_sequence
+        kernel._index_physical_allocation_uses(tasks)
 
         groups_to_refresh: Set[ResourceGroup] = set()
         for position in layout.root_positions:
@@ -952,6 +982,177 @@ class UnifiedEventKernel:
         for resource_group in sorted(groups_to_refresh):
             kernel._refresh_group(resource_group)
         return kernel
+
+    @staticmethod
+    def _physical_descriptor_rows(task: TaskSpec) -> Tuple[Mapping[str, object], ...]:
+        """Return allocation-bearing rows carried by one physical task."""
+
+        metadata = task.metadata
+        rows: List[Mapping[str, object]] = []
+        for field_name in (
+            "physical_allocations",
+            "memory_accesses",
+            "memory_access",
+        ):
+            raw = metadata.get(field_name)
+            if isinstance(raw, Mapping):
+                raw = (raw,)
+            if not isinstance(raw, (tuple, list)):
+                continue
+            rows.extend(item for item in raw if isinstance(item, Mapping))
+        contract = metadata.get("stateful_l2")
+        if isinstance(contract, Mapping):
+            raw = contract.get("accesses", ())
+            if isinstance(raw, Mapping):
+                raw = (raw,)
+            if isinstance(raw, (tuple, list)):
+                rows.extend(item for item in raw if isinstance(item, Mapping))
+        return tuple(rows)
+
+    def _index_physical_allocation_uses(
+        self, tasks: Sequence[TaskSpec]
+    ) -> None:
+        """Count future users of each physical buffer/generation.
+
+        A descriptor can occur in both ``physical_allocations`` and
+        ``memory_accesses`` for the same task.  Count each key once per task,
+        so release decisions are based on task lifetime rather than metadata
+        representation details.
+        """
+
+        alias_targets = {}
+        for task in tasks:
+            contract = task.metadata.get("stateful_l2")
+            owner_default = task.metadata.get("physical_owner") or (
+                contract.get("memory_resource") if isinstance(contract, Mapping) else None
+            )
+            for row in self._physical_descriptor_rows(task):
+                if row.get("buffer_id") and row.get("alias_of"):
+                    generation = int(row.get("generation", row.get("allocation_generation", 0)) or 0)
+                    owner = str(row.get("physical_owner") or owner_default or "")
+                    alias_targets[(owner, str(row["buffer_id"]), generation)] = (
+                        owner, str(row["alias_of"]),
+                        int(row.get("alias_generation", generation) or 0),
+                    )
+
+        for task in tasks:
+            if task.metadata.get("physical_memory_config") is None:
+                continue
+            # Generation numbers alone do not imply a temporary lifetime.
+            # Only a complete serving graph owns the full lifetime of these
+            # derived cohort buffers.  Dynamic submit() chunks may acquire
+            # more users later, so they deliberately do not call this index.
+            if not task.request_id.startswith(("cohort-", "online-cohort", "serving-")):
+                continue
+            contract = task.metadata.get("stateful_l2")
+            default_owner = task.metadata.get("physical_owner") or (
+                contract.get("memory_resource") if isinstance(contract, Mapping) else None
+            )
+            if default_owner and isinstance(contract, Mapping) and contract.get("owner"):
+                self._physical_allocation_cache_owners.setdefault(str(default_owner), set()).add(
+                    str(contract["owner"])
+                )
+            keys: Set[Tuple[str, str, int]] = set()
+            for row in self._physical_descriptor_rows(task):
+                buffer_id = row.get("buffer_id") or row.get("tensor_id")
+                if not buffer_id:
+                    continue
+                buffer_id = str(buffer_id)
+                if buffer_id.startswith("@tasklocal"):
+                    buffer_id = task.task_id + buffer_id[len("@tasklocal") :]
+                try:
+                    generation = int(
+                        row.get(
+                            "allocation_generation",
+                            row.get("generation", 0),
+                        )
+                        or 0
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                owner = row.get("physical_owner") or default_owner
+                if not owner:
+                    continue
+                key = (str(owner), buffer_id, generation)
+                keys.add(key)
+                if row.get("alias_of"):
+                    keys.add((
+                        str(owner), str(row["alias_of"]),
+                        int(row.get("alias_generation", generation) or 0),
+                    ))
+            if not keys:
+                continue
+            pending = list(keys)
+            while pending:
+                target = alias_targets.get(pending.pop())
+                if target is not None and target not in keys:
+                    keys.add(target)
+                    pending.append(target)
+            ordered = tuple(sorted(keys))
+            self._physical_allocation_task_keys[task.task_id] = ordered
+            for key in ordered:
+                self._physical_allocation_uses[key] = (
+                    self._physical_allocation_uses.get(key, 0) + 1
+                )
+
+    def _retire_transient_physical_allocations(self, task_id: str, end_ns: float) -> None:
+        """Retire buffers at completion time after their last scheduled user."""
+
+        keys = self._physical_allocation_task_keys.pop(task_id, ())
+        for key in keys:
+            self._physical_allocation_last_end[key] = max(
+                end_ns, self._physical_allocation_last_end.get(key, 0.0)
+            )
+            remaining = self._physical_allocation_uses.get(key, 0) - 1
+            if remaining > 0:
+                self._physical_allocation_uses[key] = remaining
+                continue
+            self._physical_allocation_uses.pop(key, None)
+            # Generation zero is the resident/static namespace.  Keep it
+            # registered even when this cohort has no later use; the runtime
+            # may consult resident weights through cache/L2 state after the
+            # task that first touched them.
+            if key[2] > 0:
+                self._pending_physical_releases[key] = self._physical_allocation_last_end.pop(key)
+            else:
+                self._physical_allocation_last_end.pop(key, None)
+
+    def _reclaim_physical_allocations(self, arrival_ns: float) -> None:
+        """Reclaim only buffers completed before the next task's arrival."""
+
+        pending = {
+            key for key, completion in self._pending_physical_releases.items()
+            if completion <= arrival_ns
+        }
+        if not pending:
+            return
+        # Aliases must be removed before their targets.  The allocator also
+        # guards this ordering, so defer a target with a still-live alias.
+        from .memory_allocator import AllocationError
+
+        while pending:
+            deferred = set()
+            for owner, buffer_id, generation in sorted(pending):
+                allocator = self.physical_runtime.allocators.get(owner)
+                if allocator is None:
+                    self._pending_physical_releases.pop((owner, buffer_id, generation), None)
+                    continue
+                try:
+                    allocator.release(buffer_id, generation)
+                except (AllocationError, KeyError):
+                    deferred.add((owner, buffer_id, generation))
+                    continue
+                self._pending_physical_releases.pop((owner, buffer_id, generation), None)
+                # Once a serving temporary is dead its dirty lines have no
+                # live backing destination.  Invalidate them together so a
+                # later eviction cannot recreate a freed buffer at a new base.
+                for cache_owner in self._physical_allocation_cache_owners.get(owner, ()):
+                    state = self._l2_states.get(cache_owner)
+                    if state is not None:
+                        state[1].discard_buffer(buffer_id, generation)
+            if deferred == pending:
+                break
+            pending = deferred
 
     @property
     def active_task_count(self) -> int:
@@ -1467,6 +1668,13 @@ class UnifiedEventKernel:
         }
 
         # Phase 2: commit the already validated/staged chunk.
+        # Appending tasks makes a former closed graph an open lifetime.  A
+        # future dynamic consumer can use the same allocation generation,
+        # so stop automatic reclamation instead of guessing its final use.
+        self._physical_allocation_uses.clear()
+        self._physical_allocation_task_keys.clear()
+        self._physical_allocation_last_end.clear()
+        self._pending_physical_releases.clear()
         for dependency_id in retained:
             self._completion_leases[dependency_id] += 1
         for task in chunk:
@@ -1626,6 +1834,10 @@ class UnifiedEventKernel:
             for positions in layout.dependent_positions
         )
 
+        self._physical_allocation_uses.clear()
+        self._physical_allocation_task_keys.clear()
+        self._physical_allocation_last_end.clear()
+        self._pending_physical_releases.clear()
         for dependency_id in retained:
             self._completion_leases[dependency_id] += 1
         for position, task in enumerate(chunk):
@@ -2169,9 +2381,13 @@ class UnifiedEventKernel:
             _version,
         ) = queued
         task = self._tasks[task_id]
+        self._reclaim_physical_allocations(start_ns)
         from .data_motion import is_physical_task
         is_physical = is_physical_task(task)
+        registered_physical_allocations = is_physical
         l2_snapshot = None
+        l2_transaction = None
+        l2_owner = None
         physical_snapshot = None
         if is_physical:
             try:
@@ -2186,8 +2402,14 @@ class UnifiedEventKernel:
                 # DRAM core.  This preserves cache reuse while retaining the
                 # physical event path for cold traffic.
                 if "stateful_l2" in task.metadata:
-                    l2_snapshot = copy.deepcopy(self._l2_states)
+                    contract = task.metadata["stateful_l2"]
+                    l2_owner = str(contract["owner"])
+                    previous_l2_state = self._l2_states.get(l2_owner)
+                    l2_snapshot = (l2_owner, previous_l2_state)
+                    if previous_l2_state is not None:
+                        l2_transaction = previous_l2_state[1].begin_transaction()
                     register_physical_allocations(task, self.physical_runtime)
+                    registered_physical_allocations = True
                     task = resolve_l2_task(task, self._l2_states, self.physical_runtime)
                     task, is_physical = _materialize_l2_physical_access(task, self.physical_runtime)
                 if is_physical:
@@ -2204,11 +2426,21 @@ class UnifiedEventKernel:
                             ))
             except (ValueError, TypeError, KeyError):
                 if l2_snapshot is not None:
-                    self._l2_states = l2_snapshot
+                    owner, previous = l2_snapshot
+                    if previous is None:
+                        self._l2_states.pop(owner, None)
+                    else:
+                        self._l2_states[owner] = previous
+                    if l2_transaction is not None:
+                        previous[1].rollback_transaction(l2_transaction)
                 if physical_snapshot is not None:
                     self.physical_runtime.restore(physical_snapshot)
                 heapq.heappush(self._ready_heap, queued)
                 raise
+            else:
+                if l2_transaction is not None:
+                    cache = self._l2_states[l2_owner][1]
+                    cache.commit_transaction(l2_transaction)
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
             # Core reservations happened on the shared timeline; publish
             # their earliest free lane to kernel readiness before the next
@@ -2372,6 +2604,15 @@ class UnifiedEventKernel:
             groups_to_refresh.sort()
         for changed_group in groups_to_refresh:
             self._refresh_group(changed_group)
+
+        # Physical allocations belong to this closed schedule.  Keep each
+        # transient generation alive until its last scheduled user, then
+        # return the address range to the owner allocator before admitting
+        # the next task.  Resident generation-zero weights stay registered.
+        if registered_physical_allocations:
+            self._retire_transient_physical_allocations(task_id, end_ns)
+            if not self._tasks:
+                self._reclaim_physical_allocations(float("inf"))
 
         return KernelEvent(
             task=task,

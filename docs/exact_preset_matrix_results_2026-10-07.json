@@ -1,0 +1,3637 @@
+{
+  "audit_date": "2026-10-07",
+  "status": "complete",
+  "implementation": "exact_state_transition_acceleration",
+  "model_count": 21,
+  "hardware_count": 3,
+  "total_combinations": 63,
+  "workload": {
+    "requests": 1,
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "llama_cpp": {
+      "policy": "llama_cpp",
+      "gpu_layers": -1,
+      "batch": 512,
+      "ubatch": 512,
+      "context": 640,
+      "parallel": 1,
+      "offload_kqv": true,
+      "device_memory_tiering": true
+    },
+    "retention_policy": "aggregate"
+  },
+  "totals": {
+    "completed": 53,
+    "capacity_rejected": 10
+  },
+  "hardware_totals": [
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "totals": {
+        "completed": 11,
+        "capacity_rejected": 10
+      },
+      "detail_file": "exact_matrix_native_2026-10-07.json"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "totals": {
+        "completed": 21
+      },
+      "detail_file": "exact_matrix_b200_2hbf_2026-10-07.json"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "totals": {
+        "completed": 21
+      },
+      "detail_file": "exact_matrix_b200_3hbf_2026-10-07.json"
+    }
+  ],
+  "notes": [
+    "Every combination was submitted to the same /api/run-jobs interface used by the frontend.",
+    "Completed reports were checked for one finished request with 128 visible output tokens, 128 cohorts, positive finite timing, and traffic counter consistency.",
+    "Capacity rejection means the unchanged model exceeds the shared device-memory capacity with gpu_layers=-1. No workload reduction or capacity override was used.",
+    "elapsed_s includes host execution and polling during three parallel hardware groups; it is not a serial performance benchmark or predicted inference duration.",
+    "These are execution and internal-consistency checks, not real-hardware calibration. Existing analytical preset assumptions remain in effect."
+  ],
+  "results": [
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-0_5b",
+      "status": "completed",
+      "job_id": "54ad484d32254428a7435d47b46cf92a",
+      "elapsed_s": 147.078,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 108672,
+      "makespan_ns": 604699702.5491066,
+      "ttft_ns": {
+        "p50": 10393660.01291178,
+        "p95": 10393660.01291178,
+        "p99": 10393660.01291178
+      },
+      "tpot_ns": {
+        "p50": 4679496.362866018,
+        "p95": 4679496.362866018,
+        "p99": 4679496.362866018
+      },
+      "throughput": {
+        "active_requests_per_s": 1.653713398211556,
+        "active_visible_tokens_per_s": 211.67531497107916,
+        "requests_per_s": 1.653713398211556,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 213.72192533283868,
+        "visible_output_tokens_per_s": 211.67531497107916
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 2009790000,
+        "logical_bytes": 128625784880,
+        "logical_read_bytes": 127961618944,
+        "logical_write_bytes": 664165936,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 128626560000,
+        "physical_read_bytes": 127961903104,
+        "physical_write_bytes": 664656896,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 19834816,
+        "row_hits": 1989938800,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 146379777.16907275,
+        "task_count": 43368,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-0_6b",
+      "status": "completed",
+      "job_id": "0e87c1d0e69a41518903ec9b32684b3a",
+      "elapsed_s": 183.234,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 687758928.9772321,
+      "ttft_ns": {
+        "p50": 11542647.817612091,
+        "p95": 11542647.817612091,
+        "p99": 11542647.817612091
+      },
+      "tpot_ns": {
+        "p50": 5324454.061730396,
+        "p95": 5324454.061730396,
+        "p99": 5324454.061730396
+      },
+      "throughput": {
+        "active_requests_per_s": 1.4539978441095665,
+        "active_visible_tokens_per_s": 186.1117240460245,
+        "requests_per_s": 1.4539978441095665,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 187.83649091728174,
+        "visible_output_tokens_per_s": 186.1117240460245
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 2304473928,
+        "logical_bytes": 147485630792,
+        "logical_read_bytes": 146639263744,
+        "logical_write_bytes": 846367048,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 147486331392,
+        "physical_read_bytes": 146639507456,
+        "physical_write_bytes": 846823936,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 23138225,
+        "row_hits": 2281319319,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 169127679.63023272,
+        "task_count": 50532,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-1b",
+      "status": "completed",
+      "job_id": "8e20e96f50474b97905dff70d0d3a65e",
+      "elapsed_s": 101.796,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 73856,
+      "makespan_ns": 1195429060.3371284,
+      "ttft_ns": {
+        "p50": 24147348.36960006,
+        "p95": 24147348.36960006,
+        "p99": 24147348.36960006
+      },
+      "tpot_ns": {
+        "p50": 9222621.490162332,
+        "p95": 9222621.490162332,
+        "p99": 9222621.490162332
+      },
+      "throughput": {
+        "active_requests_per_s": 0.8365197343604692,
+        "active_visible_tokens_per_s": 107.07452599814006,
+        "requests_per_s": 0.8365197343604692,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 108.43707301007382,
+        "visible_output_tokens_per_s": 107.07452599814006
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 5008951136,
+        "logical_bytes": 320572656864,
+        "logical_read_bytes": 319637733376,
+        "logical_write_bytes": 934923488,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 320572872704,
+        "physical_read_bytes": 319637815296,
+        "physical_write_bytes": 935057408,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 42794960,
+        "row_hits": 4966139792,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 354629406.0626857,
+        "task_count": 29040,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-1_5b",
+      "status": "completed",
+      "job_id": "f88c6123513b47aa8737f0c52b3293a2",
+      "elapsed_s": 199.141,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 1211379108.2169065,
+      "ttft_ns": {
+        "p50": 29044900.013096943,
+        "p95": 29044900.013096943,
+        "p99": 29044900.013096943
+      },
+      "tpot_ns": {
+        "p50": 9309634.589637402,
+        "p95": 9309634.589637402,
+        "p99": 9309634.589637402
+      },
+      "throughput": {
+        "active_requests_per_s": 0.8255054038961868,
+        "active_visible_tokens_per_s": 105.6646916987119,
+        "requests_per_s": 0.8255054038961868,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 107.4219106792919,
+        "visible_output_tokens_per_s": 105.6646916987119
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 6238888168,
+        "logical_bytes": 399287952424,
+        "logical_read_bytes": 398249337344,
+        "logical_write_bytes": 1038615080,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 399288842752,
+        "physical_read_bytes": 398249656320,
+        "physical_write_bytes": 1039186432,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 54507663,
+        "row_hits": 6184364121,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 443589905.7799051,
+        "task_count": 50532,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-1_7b",
+      "status": "completed",
+      "job_id": "0f165eb028fa416cade210bbde0e75a9",
+      "elapsed_s": 188.0,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 1505483512.0798588,
+      "ttft_ns": {
+        "p50": 33053277.575534094,
+        "p95": 33053277.575534094,
+        "p99": 33053277.575534094
+      },
+      "tpot_ns": {
+        "p50": 11593855.269169016,
+        "p95": 11593855.269169016,
+        "p99": 11593855.269169016
+      },
+      "throughput": {
+        "active_requests_per_s": 0.664238427040943,
+        "active_visible_tokens_per_s": 85.02251866124071,
+        "requests_per_s": 0.664238427040943,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 86.2574830311453,
+        "visible_output_tokens_per_s": 85.02251866124071
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 7049256392,
+        "logical_bytes": 451151708488,
+        "logical_read_bytes": 449938651136,
+        "logical_write_bytes": 1213057352,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 451152409088,
+        "physical_read_bytes": 449938894848,
+        "physical_write_bytes": 1213514240,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 62083452,
+        "row_hits": 6987156556,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 501662478.7698003,
+        "task_count": 50532,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-3b",
+      "status": "completed",
+      "job_id": "78432f302ee0491bbec30d7afc73aeb0",
+      "elapsed_s": 198.594,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 2186141178.0851097,
+      "ttft_ns": {
+        "p50": 59090159.16271949,
+        "p95": 59090159.16271949,
+        "p99": 59090159.16271949
+      },
+      "tpot_ns": {
+        "p50": 16748349.634665594,
+        "p95": 16748349.634665594,
+        "p99": 16748349.634665594
+      },
+      "throughput": {
+        "active_requests_per_s": 0.4574269996944673,
+        "active_visible_tokens_per_s": 58.55065596089182,
+        "requests_per_s": 0.4574269996944673,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 59.71053892556225,
+        "visible_output_tokens_per_s": 58.55065596089182
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 13034102856,
+        "logical_bytes": 834181831560,
+        "logical_read_bytes": 832461059072,
+        "logical_write_bytes": 1720772488,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 834182582784,
+        "physical_read_bytes": 832461352960,
+        "physical_write_bytes": 1721229824,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 110255751,
+        "row_hits": 12923830721,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 920956668.4581733,
+        "task_count": 50532,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-3b",
+      "status": "completed",
+      "job_id": "19421113f5004b2fa1f773d360ee76d0",
+      "elapsed_s": 233.297,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 1903786499.2555542,
+      "ttft_ns": {
+        "p50": 55957305.05270789,
+        "p95": 55957305.05270789,
+        "p99": 55957305.05270789
+      },
+      "tpot_ns": {
+        "p50": 14549742.969666837,
+        "p95": 14549742.969666837,
+        "p99": 14549742.969666837
+      },
+      "throughput": {
+        "active_requests_per_s": 0.5252689838860788,
+        "active_visible_tokens_per_s": 67.23442993741808,
+        "requests_per_s": 0.5252689838860788,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 68.73342996523306,
+        "visible_output_tokens_per_s": 67.23442993741808
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 12437605368,
+        "logical_bytes": 796005845048,
+        "logical_read_bytes": 794304348160,
+        "logical_write_bytes": 1701496888,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 796006743552,
+        "physical_read_bytes": 794304661504,
+        "physical_write_bytes": 1702082048,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 105645984,
+        "row_hits": 12331943000,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 879719173.3366364,
+        "task_count": 64860,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-4b",
+      "status": "completed",
+      "job_id": "525bdefc5b734dc9a10b77bbd54038d8",
+      "elapsed_s": 249.235,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 2332896759.1467557,
+      "ttft_ns": {
+        "p50": 68162803.59109557,
+        "p95": 68162803.59109557,
+        "p99": 68162803.59109557
+      },
+      "tpot_ns": {
+        "p50": 17832457.625988204,
+        "p95": 17832457.625988204,
+        "p99": 17832457.625988204
+      },
+      "throughput": {
+        "active_requests_per_s": 0.4286516306729941,
+        "active_visible_tokens_per_s": 54.867408726143246,
+        "requests_per_s": 0.4286516306729941,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 56.08261801126964,
+        "visible_output_tokens_per_s": 54.867408726143246
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 15197065656,
+        "logical_bytes": 972611726264,
+        "logical_read_bytes": 970260979712,
+        "logical_write_bytes": 2350746552,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 972612201984,
+        "physical_read_bytes": 970261164032,
+        "physical_write_bytes": 2351037952,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 128699218,
+        "row_hits": 15068350054,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 1074761889.8215091,
+        "task_count": 64860,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-7b",
+      "status": "completed",
+      "job_id": "2bc31626ae6b4a8ca8a6b405ee3bcb1a",
+      "elapsed_s": 174.266,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126136,
+      "makespan_ns": 3744146570.6330647,
+      "ttft_ns": {
+        "p50": 125558790.47255899,
+        "p95": 125558790.47255899,
+        "p99": 125558790.47255899
+      },
+      "tpot_ns": {
+        "p50": 28492733.58142241,
+        "p95": 28492733.58142241,
+        "p99": 28492733.58142241
+      },
+      "throughput": {
+        "active_requests_per_s": 0.26708356126958965,
+        "active_visible_tokens_per_s": 34.186695842507476,
+        "requests_per_s": 0.26708356126958965,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 35.09867200014817,
+        "visible_output_tokens_per_s": 34.186695842507476
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 28442940680,
+        "logical_bytes": 1820347426984,
+        "logical_read_bytes": 1816965882368,
+        "logical_write_bytes": 3381544616,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 1820348203520,
+        "physical_read_bytes": 1816966201344,
+        "physical_write_bytes": 3382002176,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 230675894,
+        "row_hits": 28212248402,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 1998652394.7373843,
+        "task_count": 50560,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-8b",
+      "status": "completed",
+      "job_id": "992f1022c4dd43bdacbdddf6cc2077c4",
+      "elapsed_s": 214.532,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 143488,
+      "makespan_ns": 3814671368.8343997,
+      "ttft_ns": {
+        "p50": 132136939.34304003,
+        "p95": 132136939.34304003,
+        "p99": 132136939.34304003
+      },
+      "tpot_ns": {
+        "p50": 28996245.695305914,
+        "p95": 28996245.695305914,
+        "p99": 28996245.695305914
+      },
+      "throughput": {
+        "active_requests_per_s": 0.2621457796259805,
+        "active_visible_tokens_per_s": 33.554659792125506,
+        "requests_per_s": 0.2621457796259805,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 34.48874402000042,
+        "visible_output_tokens_per_s": 33.554659792125506
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 30253224512,
+        "logical_bytes": 1936205945024,
+        "logical_read_bytes": 1933489504256,
+        "logical_write_bytes": 2716440768,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 1936206368768,
+        "physical_read_bytes": 1933489668096,
+        "physical_write_bytes": 2716700672,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 247491666,
+        "row_hits": 30005716462,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 2127786071.9430351,
+        "task_count": 57696,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-8b",
+      "status": "completed",
+      "job_id": "e4a20456c0db4db2bbe463f9fda4dfac",
+      "elapsed_s": 265.547,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 4142487959.676573,
+      "ttft_ns": {
+        "p50": 134543168.97222438,
+        "p95": 134543168.97222438,
+        "p99": 134543168.97222438
+      },
+      "tpot_ns": {
+        "p50": 31558527.194088113,
+        "p95": 31558527.194088113,
+        "p99": 31558527.194088113
+      },
+      "throughput": {
+        "active_requests_per_s": 0.2414008223401271,
+        "active_visible_tokens_per_s": 30.89930525953627,
+        "requests_per_s": 0.2414008223401271,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 31.688642662070535,
+        "visible_output_tokens_per_s": 30.89930525953627
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 30533384184,
+        "logical_bytes": 1954136112056,
+        "logical_read_bytes": 1951172513792,
+        "logical_write_bytes": 2963598264,
+        "organization_profile_limit": 32,
+        "owner_ids": [
+          "gddr0.gddr_fabric"
+        ],
+        "physical_bytes": 1954136587776,
+        "physical_read_bytes": 1951172698112,
+        "physical_write_bytes": 2963889664,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 251094420,
+        "row_hits": 30282273380,
+        "row_misses": 16384,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 2148582505.70497,
+        "task_count": 64860,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-14b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.062,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-028.mlp_weights (424673280 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-028.mlp_weights (424673280 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-14b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.063,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-024.attention_weights (125829120 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-024.attention_weights (125829120 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-30b-a3b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.078,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-012.expert_weights (1207959552 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-012.expert_weights (1207959552 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-32b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.062,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (849346560 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (849346560 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-32b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.094,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (786432000 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (786432000 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-70b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.079,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_3-70b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.094,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-72b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.093,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-009.attention_weights (301989888 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-009.attention_weights (301989888 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-235b-a22b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.109,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-003.expert_weights (4831838208 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-003.expert_weights (4831838208 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-405b",
+      "status": "capacity_rejected",
+      "job_id": null,
+      "elapsed_s": 0.094,
+      "error": {
+        "error": {
+          "code": "invalid_scenario",
+          "details": {
+            "errors": {
+              "scenario": [
+                {
+                  "code": "parse_error",
+                  "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+                  "message_en": "llama.cpp shared device-memory capacity exhausted for layer-002.mlp_weights (5234491392 bytes; device gpu0)",
+                  "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+                }
+              ],
+              "topology": []
+            },
+            "information": {
+              "scenario": [],
+              "topology": []
+            },
+            "valid": false,
+            "warnings": {
+              "scenario": [],
+              "topology": []
+            }
+          },
+          "message": "场景 JSON 解析失败：字段值或结构不符合配置约束",
+          "message_en": "llama.cpp shared device-memory capacity exhausted for layer-002.mlp_weights (5234491392 bytes; device gpu0)",
+          "message_zh": "场景 JSON 解析失败：字段值或结构不符合配置约束"
+        }
+      },
+      "report_available": false,
+      "batch_count": null,
+      "completed_requests": null,
+      "visible_output_tokens": null,
+      "task_count": null,
+      "makespan_ns": null,
+      "ttft_ns": null,
+      "tpot_ns": null,
+      "throughput": null,
+      "dram_traffic": {},
+      "storage_traffic": {}
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-0_5b",
+      "status": "completed",
+      "job_id": "56da7b982ff3468fa8a088dbbe853f4e",
+      "elapsed_s": 21.828,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 108672,
+      "makespan_ns": 1443849041.332524,
+      "ttft_ns": {
+        "p50": 15658161.166666668,
+        "p95": 15658161.166666668,
+        "p99": 15658161.166666668
+      },
+      "tpot_ns": {
+        "p50": 11245457.62517998,
+        "p95": 11245457.62517998,
+        "p99": 11245457.62517998
+      },
+      "throughput": {
+        "active_requests_per_s": 0.6925931807089077,
+        "active_visible_tokens_per_s": 88.65192713074019,
+        "requests_per_s": 0.6925931807089077,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 89.63069587966575,
+        "visible_output_tokens_per_s": 88.65192713074019
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-0_6b",
+      "status": "completed",
+      "job_id": "e1e5274ef7944a7e832d5e9b8b71d3e8",
+      "elapsed_s": 26.36,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 1651964796.1672854,
+      "ttft_ns": {
+        "p50": 18016893.845238097,
+        "p95": 18016893.845238097,
+        "p99": 18016893.845238097
+      },
+      "tpot_ns": {
+        "p50": 12865576.852068614,
+        "p95": 12865576.852068614,
+        "p99": 12865576.852068614
+      },
+      "throughput": {
+        "active_requests_per_s": 0.6053397761986784,
+        "active_visible_tokens_per_s": 77.48349135343084,
+        "requests_per_s": 0.6053397761986784,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 78.34541044377855,
+        "visible_output_tokens_per_s": 77.48349135343084
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_2-1b",
+      "status": "completed",
+      "job_id": "d34340e24ef94c598c5ea2b024eff43c",
+      "elapsed_s": 15.562,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 73856,
+      "makespan_ns": 3091354013.120161,
+      "ttft_ns": {
+        "p50": 30391975.452380955,
+        "p95": 30391975.452380955,
+        "p99": 30391975.452380955
+      },
+      "tpot_ns": {
+        "p50": 24101953.043956272,
+        "p95": 24101953.043956272,
+        "p99": 24101953.043956272
+      },
+      "throughput": {
+        "active_requests_per_s": 0.32348284788990617,
+        "active_visible_tokens_per_s": 41.40580452990799,
+        "requests_per_s": 0.32348284788990617,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 41.81985219269032,
+        "visible_output_tokens_per_s": 41.40580452990799
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-1_5b",
+      "status": "completed",
+      "job_id": "b49a8280d74f4cabaf9bb0b2705c19ae",
+      "elapsed_s": 28.078,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 3326404789.950212,
+      "ttft_ns": {
+        "p50": 33311184.55952381,
+        "p95": 33311184.55952381,
+        "p99": 33311184.55952381
+      },
+      "tpot_ns": {
+        "p50": 25929716.24630988,
+        "p95": 25929716.24630988,
+        "p99": 25929716.24630988
+      },
+      "throughput": {
+        "active_requests_per_s": 0.3006248677314367,
+        "active_visible_tokens_per_s": 38.4799830696239,
+        "requests_per_s": 0.3006248677314367,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 38.871972961606474,
+        "visible_output_tokens_per_s": 38.4799830696239
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-1_7b",
+      "status": "completed",
+      "job_id": "46d8604757de4101b243264339320899",
+      "elapsed_s": 28.281,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 4024029015.34156,
+      "ttft_ns": {
+        "p50": 39574615.27380952,
+        "p95": 39574615.27380952,
+        "p99": 39574615.27380952
+      },
+      "tpot_ns": {
+        "p50": 31373502.031168636,
+        "p95": 31373502.031168636,
+        "p99": 31373502.031168636
+      },
+      "throughput": {
+        "active_requests_per_s": 0.24850715444334837,
+        "active_visible_tokens_per_s": 31.80891576874859,
+        "requests_per_s": 0.24850715444334837,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 32.12729190305563,
+        "visible_output_tokens_per_s": 31.80891576874859
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_2-3b",
+      "status": "completed",
+      "job_id": "ddef5ada5088414f81e6d83959ffd7c8",
+      "elapsed_s": 28.781,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 6368457277.9101515,
+      "ttft_ns": {
+        "p50": 61697122.59523809,
+        "p95": 61697122.59523809,
+        "p99": 61697122.59523809
+      },
+      "tpot_ns": {
+        "p50": 49659374.119728975,
+        "p95": 49659374.119728975,
+        "p99": 49659374.119728975
+      },
+      "throughput": {
+        "active_requests_per_s": 0.1570239001945784,
+        "active_visible_tokens_per_s": 20.099059224906036,
+        "requests_per_s": 0.1570239001945784,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 20.29712130888844,
+        "visible_output_tokens_per_s": 20.099059224906036
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-3b",
+      "status": "completed",
+      "job_id": "8573a7c717ad40e6ae42907e86a79d0a",
+      "elapsed_s": 36.297,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 5720614684.481779,
+      "ttft_ns": {
+        "p50": 56897475.27380952,
+        "p95": 56897475.27380952,
+        "p99": 56897475.27380952
+      },
+      "tpot_ns": {
+        "p50": 44596014.2237478,
+        "p95": 44596014.2237478,
+        "p99": 44596014.2237478
+      },
+      "throughput": {
+        "active_requests_per_s": 0.17480638972463644,
+        "active_visible_tokens_per_s": 22.375217884753464,
+        "requests_per_s": 0.17480638972463644,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 22.601541210353183,
+        "visible_output_tokens_per_s": 22.375217884753464
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-4b",
+      "status": "completed",
+      "job_id": "0f53f83c2a984082a63796eb8e6c4c65",
+      "elapsed_s": 35.172,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 7027761272.725413,
+      "ttft_ns": {
+        "p50": 70753125.98809524,
+        "p95": 70753125.98809524,
+        "p99": 70753125.98809524
+      },
+      "tpot_ns": {
+        "p50": 54779407.4326403,
+        "p95": 54779407.4326403,
+        "p99": 54779407.4326403
+      },
+      "throughput": {
+        "active_requests_per_s": 0.14229282429967818,
+        "active_visible_tokens_per_s": 18.213481510358807,
+        "requests_per_s": 0.14229282429967818,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 18.400041762664685,
+        "visible_output_tokens_per_s": 18.213481510358807
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-7b",
+      "status": "completed",
+      "job_id": "e4b9c7f6343b4d9ea777005c27d50178",
+      "elapsed_s": 28.078,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126136,
+      "makespan_ns": 12048430657.765669,
+      "ttft_ns": {
+        "p50": 118096728.66666666,
+        "p95": 118096728.66666666,
+        "p99": 118096728.66666666
+      },
+      "tpot_ns": {
+        "p50": 93939482.57472181,
+        "p95": 93939482.57472181,
+        "p99": 93939482.57472181
+      },
+      "throughput": {
+        "active_requests_per_s": 0.08299836123100914,
+        "active_visible_tokens_per_s": 10.62379023756917,
+        "requests_per_s": 0.08299836123100914,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 10.729653552043592,
+        "visible_output_tokens_per_s": 10.62379023756917
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-8b",
+      "status": "completed",
+      "job_id": "1bb8e97e77014b6faa6c9d9c68c07185",
+      "elapsed_s": 31.828,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 143488,
+      "makespan_ns": 12507994203.920265,
+      "ttft_ns": {
+        "p50": 116993889.73809524,
+        "p95": 116993889.73809524,
+        "p99": 116993889.73809524
+      },
+      "tpot_ns": {
+        "p50": 97566762.13961813,
+        "p95": 97566762.13961813,
+        "p99": 97566762.13961813
+      },
+      "throughput": {
+        "active_requests_per_s": 0.07994886979453342,
+        "active_visible_tokens_per_s": 10.233455333700277,
+        "requests_per_s": 0.07994886979453342,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 10.330771565762625,
+        "visible_output_tokens_per_s": 10.233455333700277
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-8b",
+      "status": "completed",
+      "job_id": "5fd4d21e443e4ef881a746638bf75721",
+      "elapsed_s": 35.938,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 13155687684.50483,
+      "ttft_ns": {
+        "p50": 123711978.13095239,
+        "p95": 123711978.13095239,
+        "p99": 123711978.13095239
+      },
+      "tpot_ns": {
+        "p50": 102613797.66599903,
+        "p95": 102613797.66599903,
+        "p99": 102613797.66599903
+      },
+      "throughput": {
+        "active_requests_per_s": 0.07601275007294606,
+        "active_visible_tokens_per_s": 9.729632009337095,
+        "requests_per_s": 0.07601275007294606,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 9.822657318532388,
+        "visible_output_tokens_per_s": 9.729632009337095
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-14b",
+      "status": "completed",
+      "job_id": "2a1ebfe0aa4c4558be8564ad7ec36ce3",
+      "elapsed_s": 47.531,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 213120,
+      "makespan_ns": 22133538818.416622,
+      "ttft_ns": {
+        "p50": 207026557.95238093,
+        "p95": 207026557.95238093,
+        "p99": 207026557.95238093
+      },
+      "tpot_ns": {
+        "p50": 172649474.14683655,
+        "p95": 172649474.14683655,
+        "p99": 172649474.14683655
+      },
+      "throughput": {
+        "active_requests_per_s": 0.04518030343922823,
+        "active_visible_tokens_per_s": 5.783078840221213,
+        "requests_per_s": 0.04518030343922823,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 5.83806837996922,
+        "visible_output_tokens_per_s": 5.783078840221213
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-14b",
+      "status": "completed",
+      "job_id": "ef64b3249abf4dce8120b0b4f655a6fd",
+      "elapsed_s": 40.672,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 178384,
+      "makespan_ns": 22109032258.554447,
+      "ttft_ns": {
+        "p50": 212045319.55952382,
+        "p95": 212045319.55952382,
+        "p99": 212045319.55952382
+      },
+      "tpot_ns": {
+        "p50": 172417020.912296,
+        "p95": 172417020.912296,
+        "p99": 172417020.912296
+      },
+      "throughput": {
+        "active_requests_per_s": 0.04523038314411428,
+        "active_visible_tokens_per_s": 5.789489042446628,
+        "requests_per_s": 0.04523038314411428,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 5.845936472603785,
+        "visible_output_tokens_per_s": 5.789489042446628
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-30b-a3b",
+      "status": "completed",
+      "job_id": "9589df6ec2234b298a2e9a5684abaebc",
+      "elapsed_s": 150.359,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 610176,
+      "makespan_ns": 5502025238.823428,
+      "ttft_ns": {
+        "p50": 326954991.5238095,
+        "p95": 326954991.5238095,
+        "p99": 326954991.5238095
+      },
+      "tpot_ns": {
+        "p50": 40748307.544910386,
+        "p95": 40748307.544910386,
+        "p99": 40748307.544910386
+      },
+      "throughput": {
+        "active_requests_per_s": 0.18175125641805367,
+        "active_visible_tokens_per_s": 23.26416082151087,
+        "requests_per_s": 0.18175125641805367,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 24.73582259495779,
+        "visible_output_tokens_per_s": 23.26416082151087
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-32b",
+      "status": "completed",
+      "job_id": "715ed1b765f245f2a6c96e2f81558fd8",
+      "elapsed_s": 66.516,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 282880,
+      "makespan_ns": 44718520469.57014,
+      "ttft_ns": {
+        "p50": 415794262.95238096,
+        "p95": 415794262.95238096,
+        "p99": 415794262.95238096
+      },
+      "tpot_ns": {
+        "p50": 348840075.91682225,
+        "p95": 348840075.91682225,
+        "p99": 348840075.91682225
+      },
+      "throughput": {
+        "active_requests_per_s": 0.022362099405334207,
+        "active_visible_tokens_per_s": 2.8623487238827785,
+        "requests_per_s": 0.022362099405334207,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 2.8893997839303815,
+        "visible_output_tokens_per_s": 2.8623487238827785
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-32b",
+      "status": "completed",
+      "job_id": "9fe679c3d0d04b468e65b4668387cfa0",
+      "elapsed_s": 63.922,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 282880,
+      "makespan_ns": 42205446864.574486,
+      "ttft_ns": {
+        "p50": 400468405.80952376,
+        "p95": 400468405.80952376,
+        "p99": 400468405.80952376
+      },
+      "tpot_ns": {
+        "p50": 329172770.8156191,
+        "p95": 329172770.8156191,
+        "p99": 329172770.8156191
+      },
+      "throughput": {
+        "active_requests_per_s": 0.023693624266287745,
+        "active_visible_tokens_per_s": 3.0327839060848314,
+        "requests_per_s": 0.023693624266287745,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 3.0620352270012243,
+        "visible_output_tokens_per_s": 3.0327839060848314
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-70b",
+      "status": "completed",
+      "job_id": "ef2012e0e3f34c12a824d34f210ffae9",
+      "elapsed_s": 82.562,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 352544,
+      "makespan_ns": 314205473805.8054,
+      "ttft_ns": {
+        "p50": 2547304585.809524,
+        "p95": 2547304585.809524,
+        "p99": 2547304585.809524
+      },
+      "tpot_ns": {
+        "p50": 2454000985.3027496,
+        "p95": 2454000985.3027496,
+        "p99": 2454000985.3027496
+      },
+      "throughput": {
+        "active_requests_per_s": 0.0031826307412392493,
+        "active_visible_tokens_per_s": 0.4073767348786239,
+        "requests_per_s": 0.0031826307412392493,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.4107320520924618,
+        "visible_output_tokens_per_s": 0.4073767348786239
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_3-70b",
+      "status": "completed",
+      "job_id": "caf116da309d43f2812eacdd6320ca69",
+      "elapsed_s": 82.094,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 352544,
+      "makespan_ns": 314205473805.8054,
+      "ttft_ns": {
+        "p50": 2547304585.809524,
+        "p95": 2547304585.809524,
+        "p99": 2547304585.809524
+      },
+      "tpot_ns": {
+        "p50": 2454000985.3027496,
+        "p95": 2454000985.3027496,
+        "p99": 2454000985.3027496
+      },
+      "throughput": {
+        "active_requests_per_s": 0.0031826307412392493,
+        "active_visible_tokens_per_s": 0.4073767348786239,
+        "requests_per_s": 0.0031826307412392493,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.4107320520924618,
+        "visible_output_tokens_per_s": 0.4073767348786239
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-72b",
+      "status": "completed",
+      "job_id": "16ac48f3ba4c472b81afcee112ee0fdd",
+      "elapsed_s": 81.781,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 352544,
+      "makespan_ns": 331433827737.2308,
+      "ttft_ns": {
+        "p50": 2682696831.5238094,
+        "p95": 2682696831.5238094,
+        "p99": 2682696831.5238094
+      },
+      "tpot_ns": {
+        "p50": 2588591234.7965374,
+        "p95": 2588591234.7965374,
+        "p99": 2588591234.7965374
+      },
+      "throughput": {
+        "active_requests_per_s": 0.003017193527972726,
+        "active_visible_tokens_per_s": 0.3862007715805089,
+        "requests_per_s": 0.003017193527972726,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.389376595801885,
+        "visible_output_tokens_per_s": 0.3862007715805089
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-235b-a22b",
+      "status": "completed",
+      "job_id": "76d7e9bb66e6417b8601623863643084",
+      "elapsed_s": 311.734,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 1190880,
+      "makespan_ns": 137742099806.9794,
+      "ttft_ns": {
+        "p50": 12409384914.380953,
+        "p95": 12409384914.380953,
+        "p99": 12409384914.380953
+      },
+      "tpot_ns": {
+        "p50": 986871277.0893736,
+        "p95": 986871277.0893736,
+        "p99": 986871277.0893736
+      },
+      "throughput": {
+        "active_requests_per_s": 0.0072599445006379226,
+        "active_visible_tokens_per_s": 0.9292728960816541,
+        "requests_per_s": 0.0072599445006379226,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 1.0213460331796633,
+        "visible_output_tokens_per_s": 0.9292728960816541
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-405b",
+      "status": "completed",
+      "job_id": "6d0e9931ba3e4adbbec8103a3ae3f9e0",
+      "elapsed_s": 133.812,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 553584,
+      "makespan_ns": 2933436971043.8037,
+      "ttft_ns": {
+        "p50": 23237968655.45238,
+        "p95": 23237968655.45238,
+        "p99": 23237968655.45238
+      },
+      "tpot_ns": {
+        "p50": 22914952257.306137,
+        "p95": 22914952257.306137,
+        "p99": 22914952257.306137
+      },
+      "throughput": {
+        "active_requests_per_s": 0.000340897046662697,
+        "active_visible_tokens_per_s": 0.04363482197282521,
+        "requests_per_s": 0.000340897046662697,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.04398597740776197,
+        "visible_output_tokens_per_s": 0.04363482197282521
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-0_5b",
+      "status": "completed",
+      "job_id": "fd976e299add4bd8b72ec62db661643b",
+      "elapsed_s": 21.859,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 108672,
+      "makespan_ns": 1443850495.9991908,
+      "ttft_ns": {
+        "p50": 15658161.166666666,
+        "p95": 15658161.166666666,
+        "p99": 15658161.166666666
+      },
+      "tpot_ns": {
+        "p50": 11245457.62517998,
+        "p95": 11245457.62517998,
+        "p99": 11245457.62517998
+      },
+      "throughput": {
+        "active_requests_per_s": 0.692592482927374,
+        "active_visible_tokens_per_s": 88.65183781470387,
+        "requests_per_s": 0.692592482927374,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 89.63069587966575,
+        "visible_output_tokens_per_s": 88.65183781470387
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-0_6b",
+      "status": "completed",
+      "job_id": "95f918d0b2214d6283cd4c4e309fbbf8",
+      "elapsed_s": 26.453,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 1651966490.833952,
+      "ttft_ns": {
+        "p50": 18016893.845238097,
+        "p95": 18016893.845238097,
+        "p99": 18016893.845238097
+      },
+      "tpot_ns": {
+        "p50": 12865576.852068614,
+        "p95": 12865576.852068614,
+        "p99": 12865576.852068614
+      },
+      "throughput": {
+        "active_requests_per_s": 0.6053391552120263,
+        "active_visible_tokens_per_s": 77.48341186713937,
+        "requests_per_s": 0.6053391552120263,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 78.34541044377855,
+        "visible_output_tokens_per_s": 77.48341186713937
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_2-1b",
+      "status": "completed",
+      "job_id": "26fd030bf09f4246a1e44af98b92c44a",
+      "elapsed_s": 17.578,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 73856,
+      "makespan_ns": 3091354987.786828,
+      "ttft_ns": {
+        "p50": 30391975.45238095,
+        "p95": 30391975.45238095,
+        "p99": 30391975.45238095
+      },
+      "tpot_ns": {
+        "p50": 24101953.043956276,
+        "p95": 24101953.043956276,
+        "p99": 24101953.043956276
+      },
+      "throughput": {
+        "active_requests_per_s": 0.3234827458996946,
+        "active_visible_tokens_per_s": 41.40579147516091,
+        "requests_per_s": 0.3234827458996946,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 41.81985219269031,
+        "visible_output_tokens_per_s": 41.40579147516091
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-1_5b",
+      "status": "completed",
+      "job_id": "c2a609a3f22a49b5be7017d7e121b82b",
+      "elapsed_s": 28.157,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 3326406484.616879,
+      "ttft_ns": {
+        "p50": 33311184.55952381,
+        "p95": 33311184.55952381,
+        "p99": 33311184.55952381
+      },
+      "tpot_ns": {
+        "p50": 25929716.246309884,
+        "p95": 25929716.246309884,
+        "p99": 25929716.246309884
+      },
+      "throughput": {
+        "active_requests_per_s": 0.3006247145754875,
+        "active_visible_tokens_per_s": 38.4799634656624,
+        "requests_per_s": 0.3006247145754875,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 38.871972961606474,
+        "visible_output_tokens_per_s": 38.4799634656624
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-1_7b",
+      "status": "completed",
+      "job_id": "a06176b6639c414082024108f9912ca8",
+      "elapsed_s": 28.89,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 4024030710.008227,
+      "ttft_ns": {
+        "p50": 39574615.27380952,
+        "p95": 39574615.27380952,
+        "p99": 39574615.27380952
+      },
+      "tpot_ns": {
+        "p50": 31373502.03116864,
+        "p95": 31373502.03116864,
+        "p99": 31373502.03116864
+      },
+      "throughput": {
+        "active_requests_per_s": 0.24850704978788682,
+        "active_visible_tokens_per_s": 31.808902372849513,
+        "requests_per_s": 0.24850704978788682,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 32.12729190305563,
+        "visible_output_tokens_per_s": 31.808902372849513
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_2-3b",
+      "status": "completed",
+      "job_id": "66d7d268750342de98bf1973a3b8ee80",
+      "elapsed_s": 28.188,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126080,
+      "makespan_ns": 6368458972.576818,
+      "ttft_ns": {
+        "p50": 61697122.5952381,
+        "p95": 61697122.5952381,
+        "p99": 61697122.5952381
+      },
+      "tpot_ns": {
+        "p50": 49659374.11972898,
+        "p95": 49659374.11972898,
+        "p99": 49659374.11972898
+      },
+      "throughput": {
+        "active_requests_per_s": 0.15702385841003197,
+        "active_visible_tokens_per_s": 20.099053876484092,
+        "requests_per_s": 0.15702385841003197,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 20.297121308888435,
+        "visible_output_tokens_per_s": 20.099053876484092
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-3b",
+      "status": "completed",
+      "job_id": "7f9183bd3971407d9a7dd2cf9e59f80a",
+      "elapsed_s": 34.594,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 5720616859.148446,
+      "ttft_ns": {
+        "p50": 56897475.27380952,
+        "p95": 56897475.27380952,
+        "p99": 56897475.27380952
+      },
+      "tpot_ns": {
+        "p50": 44596014.2237478,
+        "p95": 44596014.2237478,
+        "p99": 44596014.2237478
+      },
+      "throughput": {
+        "active_requests_per_s": 0.17480632327277673,
+        "active_visible_tokens_per_s": 22.37520937891542,
+        "requests_per_s": 0.17480632327277673,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 22.601541210353183,
+        "visible_output_tokens_per_s": 22.37520937891542
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-4b",
+      "status": "completed",
+      "job_id": "caaa3fb642ee42e9bf3b3e51db81b103",
+      "elapsed_s": 35.563,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 7027763447.39208,
+      "ttft_ns": {
+        "p50": 70753125.98809524,
+        "p95": 70753125.98809524,
+        "p99": 70753125.98809524
+      },
+      "tpot_ns": {
+        "p50": 54779407.4326403,
+        "p95": 54779407.4326403,
+        "p99": 54779407.4326403
+      },
+      "throughput": {
+        "active_requests_per_s": 0.14229278026867684,
+        "active_visible_tokens_per_s": 18.213475874390635,
+        "requests_per_s": 0.14229278026867684,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 18.400041762664685,
+        "visible_output_tokens_per_s": 18.213475874390635
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-7b",
+      "status": "completed",
+      "job_id": "35a24a6aac3046038f7867d182fe11c8",
+      "elapsed_s": 28.375,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 126136,
+      "makespan_ns": 12048432352.432335,
+      "ttft_ns": {
+        "p50": 118096728.66666667,
+        "p95": 118096728.66666667,
+        "p99": 118096728.66666667
+      },
+      "tpot_ns": {
+        "p50": 93939482.5747218,
+        "p95": 93939482.5747218,
+        "p99": 93939482.5747218
+      },
+      "throughput": {
+        "active_requests_per_s": 0.08299834955691313,
+        "active_visible_tokens_per_s": 10.62378874328488,
+        "requests_per_s": 0.08299834955691313,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 10.729653552043594,
+        "visible_output_tokens_per_s": 10.62378874328488
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-8b",
+      "status": "completed",
+      "job_id": "86dbc84443e64ba1b7d8d97bc8e416c0",
+      "elapsed_s": 32.406,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 143488,
+      "makespan_ns": 12507996138.586933,
+      "ttft_ns": {
+        "p50": 116993889.73809524,
+        "p95": 116993889.73809524,
+        "p99": 116993889.73809524
+      },
+      "tpot_ns": {
+        "p50": 97566762.13961814,
+        "p95": 97566762.13961814,
+        "p99": 97566762.13961814
+      },
+      "throughput": {
+        "active_requests_per_s": 0.0799488574284908,
+        "active_visible_tokens_per_s": 10.233453750846822,
+        "requests_per_s": 0.0799488574284908,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 10.330771565762623,
+        "visible_output_tokens_per_s": 10.233453750846822
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-8b",
+      "status": "completed",
+      "job_id": "fbe0748a8b0243e2b9fefcc67008ed1b",
+      "elapsed_s": 35.515,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 160896,
+      "makespan_ns": 13155689859.171497,
+      "ttft_ns": {
+        "p50": 123711978.13095237,
+        "p95": 123711978.13095237,
+        "p99": 123711978.13095237
+      },
+      "tpot_ns": {
+        "p50": 102613797.66599904,
+        "p95": 102613797.66599904,
+        "p99": 102613797.66599904
+      },
+      "throughput": {
+        "active_requests_per_s": 0.07601273750785857,
+        "active_visible_tokens_per_s": 9.729630401005897,
+        "requests_per_s": 0.07601273750785857,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 9.822657318532386,
+        "visible_output_tokens_per_s": 9.729630401005897
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-14b",
+      "status": "completed",
+      "job_id": "c02d479c84ae4e23b2ba281a5e79cb7f",
+      "elapsed_s": 48.75,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 213120,
+      "makespan_ns": 22133541713.08329,
+      "ttft_ns": {
+        "p50": 207026557.95238096,
+        "p95": 207026557.95238096,
+        "p99": 207026557.95238096
+      },
+      "tpot_ns": {
+        "p50": 172649474.14683655,
+        "p95": 172649474.14683655,
+        "p99": 172649474.14683655
+      },
+      "throughput": {
+        "active_requests_per_s": 0.045180297530462245,
+        "active_visible_tokens_per_s": 5.783078083899167,
+        "requests_per_s": 0.045180297530462245,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 5.83806837996922,
+        "visible_output_tokens_per_s": 5.783078083899167
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-14b",
+      "status": "completed",
+      "job_id": "96fd9164c01e434ea7470663e657cd15",
+      "elapsed_s": 39.765,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 178384,
+      "makespan_ns": 22109034673.221115,
+      "ttft_ns": {
+        "p50": 212045319.5595238,
+        "p95": 212045319.5595238,
+        "p99": 212045319.5595238
+      },
+      "tpot_ns": {
+        "p50": 172417020.912296,
+        "p95": 172417020.912296,
+        "p99": 172417020.912296
+      },
+      "throughput": {
+        "active_requests_per_s": 0.045230378204219795,
+        "active_visible_tokens_per_s": 5.789488410140134,
+        "requests_per_s": 0.045230378204219795,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 5.845936472603785,
+        "visible_output_tokens_per_s": 5.789488410140134
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-30b-a3b",
+      "status": "completed",
+      "job_id": "b73eea5da854499ebcc4e13bbd39abaa",
+      "elapsed_s": 154.203,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 610176,
+      "makespan_ns": 5502028901.490095,
+      "ttft_ns": {
+        "p50": 326954991.52380955,
+        "p95": 326954991.52380955,
+        "p99": 326954991.52380955
+      },
+      "tpot_ns": {
+        "p50": 40748307.544910386,
+        "p95": 40748307.544910386,
+        "p99": 40748307.544910386
+      },
+      "throughput": {
+        "active_requests_per_s": 0.18175113542736454,
+        "active_visible_tokens_per_s": 23.26414533470266,
+        "requests_per_s": 0.18175113542736454,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 24.73582259495779,
+        "visible_output_tokens_per_s": 23.26414533470266
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-32b",
+      "status": "completed",
+      "job_id": "1d868ca243754281944a1246d20ba96f",
+      "elapsed_s": 63.812,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 282880,
+      "makespan_ns": 44718524324.23681,
+      "ttft_ns": {
+        "p50": 415794262.95238096,
+        "p95": 415794262.95238096,
+        "p99": 415794262.95238096
+      },
+      "tpot_ns": {
+        "p50": 348840075.91682225,
+        "p95": 348840075.91682225,
+        "p99": 348840075.91682225
+      },
+      "throughput": {
+        "active_requests_per_s": 0.022362097477756308,
+        "active_visible_tokens_per_s": 2.8623484771528074,
+        "requests_per_s": 0.022362097477756308,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 2.8893997839303815,
+        "visible_output_tokens_per_s": 2.8623484771528074
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-32b",
+      "status": "completed",
+      "job_id": "ca988c5903c64e2288d025853d2ef031",
+      "elapsed_s": 66.156,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 282880,
+      "makespan_ns": 42205450719.24115,
+      "ttft_ns": {
+        "p50": 400468405.8095238,
+        "p95": 400468405.8095238,
+        "p99": 400468405.8095238
+      },
+      "tpot_ns": {
+        "p50": 329172770.8156191,
+        "p95": 329172770.8156191,
+        "p99": 329172770.8156191
+      },
+      "throughput": {
+        "active_requests_per_s": 0.023693622102324983,
+        "active_visible_tokens_per_s": 3.032783629097598,
+        "requests_per_s": 0.023693622102324983,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 3.0620352270012243,
+        "visible_output_tokens_per_s": 3.032783629097598
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-70b",
+      "status": "completed",
+      "job_id": "5d528ec208e0457ba953d0d36b80764e",
+      "elapsed_s": 83.5,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 352544,
+      "makespan_ns": 314205478620.47205,
+      "ttft_ns": {
+        "p50": 2547304585.809524,
+        "p95": 2547304585.809524,
+        "p99": 2547304585.809524
+      },
+      "tpot_ns": {
+        "p50": 2454000985.3027496,
+        "p95": 2454000985.3027496,
+        "p99": 2454000985.3027496
+      },
+      "throughput": {
+        "active_requests_per_s": 0.003182630692470825,
+        "active_visible_tokens_per_s": 0.4073767286362656,
+        "requests_per_s": 0.003182630692470825,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.4107320520924618,
+        "visible_output_tokens_per_s": 0.4073767286362656
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_3-70b",
+      "status": "completed",
+      "job_id": "b6a0b6272027473ea08202c583ff36da",
+      "elapsed_s": 81.985,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 352544,
+      "makespan_ns": 314205478620.47205,
+      "ttft_ns": {
+        "p50": 2547304585.809524,
+        "p95": 2547304585.809524,
+        "p99": 2547304585.809524
+      },
+      "tpot_ns": {
+        "p50": 2454000985.3027496,
+        "p95": 2454000985.3027496,
+        "p99": 2454000985.3027496
+      },
+      "throughput": {
+        "active_requests_per_s": 0.003182630692470825,
+        "active_visible_tokens_per_s": 0.4073767286362656,
+        "requests_per_s": 0.003182630692470825,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.4107320520924618,
+        "visible_output_tokens_per_s": 0.4073767286362656
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-72b",
+      "status": "completed",
+      "job_id": "d5dd09fa4fd4420cb9309093d9a1a18f",
+      "elapsed_s": 83.203,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 352544,
+      "makespan_ns": 331433832551.8974,
+      "ttft_ns": {
+        "p50": 2682696831.5238094,
+        "p95": 2682696831.5238094,
+        "p99": 2682696831.5238094
+      },
+      "tpot_ns": {
+        "p50": 2588591234.7965374,
+        "p95": 2588591234.7965374,
+        "p99": 2588591234.7965374
+      },
+      "throughput": {
+        "active_requests_per_s": 0.0030171934841426167,
+        "active_visible_tokens_per_s": 0.38620076597025493,
+        "requests_per_s": 0.0030171934841426167,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.389376595801885,
+        "visible_output_tokens_per_s": 0.38620076597025493
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-235b-a22b",
+      "status": "completed",
+      "job_id": "bfa62d70e006431ab4993bd139239db6",
+      "elapsed_s": 313.609,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 1190880,
+      "makespan_ns": 137742106965.6461,
+      "ttft_ns": {
+        "p50": 12409384914.380953,
+        "p95": 12409384914.380953,
+        "p99": 12409384914.380953
+      },
+      "tpot_ns": {
+        "p50": 986871277.0893737,
+        "p95": 986871277.0893737,
+        "p99": 986871277.0893737
+      },
+      "throughput": {
+        "active_requests_per_s": 0.007259944123327571,
+        "active_visible_tokens_per_s": 0.9292728477859291,
+        "requests_per_s": 0.007259944123327571,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 1.0213460331796635,
+        "visible_output_tokens_per_s": 0.9292728477859291
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-405b",
+      "status": "completed",
+      "job_id": "1f6c3737fd994da59839bd8edc41f366",
+      "elapsed_s": 135.281,
+      "error": null,
+      "report_available": true,
+      "batch_count": 128,
+      "completed_requests": 1,
+      "visible_output_tokens": 128,
+      "task_count": 553584,
+      "makespan_ns": 2933436978618.4707,
+      "ttft_ns": {
+        "p50": 23237968655.45238,
+        "p95": 23237968655.45238,
+        "p99": 23237968655.45238
+      },
+      "tpot_ns": {
+        "p50": 22914952257.30614,
+        "p95": 22914952257.30614,
+        "p99": 22914952257.30614
+      },
+      "throughput": {
+        "active_requests_per_s": 0.0003408970457824389,
+        "active_visible_tokens_per_s": 0.043634821860152176,
+        "requests_per_s": 0.0003408970457824389,
+        "steady_requests_per_s": 0.0,
+        "steady_visible_tokens_per_s": 0.043985977407761966,
+        "visible_output_tokens_per_s": 0.043634821860152176
+      },
+      "dram_traffic": {
+        "accounting_semantics": "resolved analytical burst bytes and controller waits; no device accuracy claim",
+        "burst_count": 0,
+        "logical_bytes": 0,
+        "logical_read_bytes": 0,
+        "logical_write_bytes": 0,
+        "organization_profile_limit": 32,
+        "owner_ids": [],
+        "physical_bytes": 0,
+        "physical_read_bytes": 0,
+        "physical_write_bytes": 0,
+        "queue_wait_ns": 0.0,
+        "read_write_switches": 0,
+        "refresh_wait_ns": 0.0,
+        "row_conflicts": 0,
+        "row_hits": 0,
+        "row_misses": 0,
+        "schema_version": "heterollm.dram-traffic/v1",
+        "service_ns": 0.0,
+        "task_count": 0,
+        "turnaround_wait_ns": 0.0
+      },
+      "storage_traffic": {
+        "schema_version": "heterollm.nand-traffic/v1",
+        "task_count": 0
+      }
+    }
+  ]
+}

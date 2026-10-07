@@ -914,6 +914,7 @@ class TopologyRouter:
             read=read,
             name=name,
             page_offset_bytes=page_offset_bytes,
+            compact_preview=True,
         )
         if service is None:
             return None

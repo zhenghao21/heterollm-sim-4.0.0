@@ -3698,6 +3698,30 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
                 else str(output_id)
             )
             accesses.append(CacheAccess(output_identity, int(task.metadata.get("output_offset_bytes", 0)), write, "write"))
+    # The L2 contract is built after the physical descriptor is attached, so
+    # its CacheAccess rows would otherwise reset every serving activation to
+    # generation zero.  Scope only transient rows to the cohort identity;
+    # resident weights intentionally remain generation-stable.
+    serving_identity = str(getattr(task, "request_id", ""))
+    if (
+        task.metadata.get("physical_memory_config") is not None
+        and serving_identity.startswith(("cohort-", "online-cohort", "serving-"))
+    ):
+        serving_generation = _gddr_access_generation(
+            task.metadata, "read", fallback_identity=serving_identity
+        )
+        accesses = tuple(
+            replace(
+                access,
+                allocation_generation=(
+                    serving_generation
+                    if access.allocation_generation == 0
+                    and "weight" not in access.buffer_id.casefold()
+                    else access.allocation_generation
+                ),
+            )
+            for access in accesses
+        )
     cache_resource = _rank_gpu_resource(scenario, rank, gpu.cache_hierarchy.levels[-1].resource_id)
     return attach_l2_contract(task, gpu=gpu, hbm=hbm, memory_resource=memory_resource,
                               cache_resource=cache_resource, owner=target_id + ".l2", accesses=accesses)
@@ -3937,6 +3961,13 @@ def _gddr_allocation_size(
             return _gddr_non_negative_int(metadata[key], key)
     if declared is not None:
         return _gddr_non_negative_int(declared, "buffer_size_bytes")
+    # Projection identities are distinct physical matrix shards, whereas
+    # placement.tensor_bytes may describe a fused attention/MLP weight group.
+    # Applying the whole group extent to every projection duplicates resident
+    # weights (for example up+gate and down each claim all three MLP matrices).
+    # Infer the shard envelope from its complete lowered access range instead.
+    if side == "weight" and metadata.get("projection_id") is not None:
+        return None
     if identity.startswith("tensor:"):
         tensor_id = identity.split(":", 2)[1]
     elif identity.startswith(side + ":"):
@@ -3951,7 +3982,12 @@ def _gddr_allocation_size(
     return None
 
 
-def _gddr_access_generation(metadata: Mapping[str, object], side: str) -> int:
+def _gddr_access_generation(
+    metadata: Mapping[str, object],
+    side: str,
+    *,
+    fallback_identity: Optional[object] = None,
+) -> int:
     keys = {
         "read": ("input_allocation_generation", "input_generation", "allocation_generation", "generation"),
         "weight": ("weight_allocation_generation", "weight_generation", "allocation_generation", "generation"),
@@ -3960,6 +3996,21 @@ def _gddr_access_generation(metadata: Mapping[str, object], side: str) -> int:
     for key in keys:
         if metadata.get(key) is not None:
             return _gddr_non_negative_int(metadata[key], key)
+    # Read/write descriptors describe transient activation buffers.  They may
+    # have different extents in separate serving cohorts, while weight
+    # descriptors must remain generation-stable so the resident model is not
+    # allocated once per cohort.  Scope transient generations to the cohort's
+    # stable request identity without using Python's randomized hash.
+    if side in {"read", "write"} and fallback_identity is not None:
+        text = str(fallback_identity)
+        digits = "".join(char for char in text if char.isdigit())
+        if digits:
+            # Generation zero is the allocator's initial slot.  Keep the
+            # cohort-derived slot strictly positive so ``cohort-000000`` is
+            # still distinct from ordinary compile-time generation zero.
+            return (int(digits) % (2**31 - 2)) + 1
+        value = sum((index + 1) * ord(char) for index, char in enumerate(text))
+        return (value % (2**31 - 2)) + 1
     return 0
 
 
@@ -4006,6 +4057,18 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     if len(candidates) != 1:
         return task
     component, raw_config, owner, resource_ids = candidates[0]
+    # Serving cohorts use stable ``cohort-*`` request identities.  Ordinary
+    # compile/planning requests (for example ``tiny-request`` in the runtime
+    # integration tests) intentionally keep generation zero unless the task
+    # metadata declares one.  Scope the derived transient generation to the
+    # serving path so compile-time access descriptors remain backwards
+    # compatible while cohorts cannot resize generation zero in place.
+    request_identity = str(getattr(task, "request_id", ""))
+    generation_identity = (
+        request_identity
+        if request_identity.startswith(("cohort-", "online-cohort", "serving-"))
+        else None
+    )
     memory_demands = [d for d in task.demands if str(d.resource_id) in resource_ids and d.bytes_moved > 0]
     total_bytes = sum(int(d.bytes_moved) for d in memory_demands)
     if total_bytes <= 0:
@@ -4221,10 +4284,49 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 "buffer_size_bytes", item.get("allocation_bytes")
             )
             side = "write" if operation == "write" else "read"
-            generation = _gddr_non_negative_int(
-                item.get("allocation_generation", item.get("generation", _gddr_access_generation(metadata, side))),
-                "allocation_generation",
+            raw_generation = item.get(
+                "allocation_generation", item.get("generation")
             )
+            # Stateful-L2 descriptors are materialized with their cache
+            # generation (normally zero).  For serving cohorts that would
+            # reuse one activation tensor identity across different extents,
+            # so derive a cohort-scoped generation for transient buffers while
+            # keeping resident weight allocations on generation zero.  An
+            # explicit non-zero generation remains authoritative.
+            weight_ids = {
+                str(metadata[key]).strip()
+                for key in (
+                    "weight_buffer_id",
+                    "weight_tensor_id",
+                    "tensor_id",
+                    "rhs_tensor_id",
+                    "weight_allocation_id",
+                )
+                if metadata.get(key) is not None and str(metadata[key]).strip()
+            }
+            identity_base = (identity or "").removeprefix("tensor:").split(":rank=", 1)[0]
+            is_static_weight = (
+                identity_base in weight_ids
+                or "weight" in identity_base.casefold()
+            )
+            if (
+                generation_identity is not None
+                and side in {"read", "write"}
+                and not is_static_weight
+                and (raw_generation is None or int(raw_generation or 0) == 0)
+            ):
+                generation = _gddr_access_generation(
+                    metadata, side, fallback_identity=generation_identity
+                )
+            else:
+                generation = _gddr_non_negative_int(
+                    raw_generation
+                    if raw_generation is not None
+                    else _gddr_access_generation(
+                        metadata, side, fallback_identity=generation_identity
+                    ),
+                    "allocation_generation",
+                )
             alias_of = item.get("alias_of")
             alias_generation = item.get("alias_generation")
             if alias_of is not None:
@@ -4315,7 +4417,9 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                         offset,
                         activation,
                     ),
-                    generation=_gddr_access_generation(metadata, "read"),
+                    generation=_gddr_access_generation(
+                        metadata, "read", fallback_identity=generation_identity
+                    ),
                     alias_of=_gddr_access_alias(metadata, "read")[0],
                     alias_generation=_gddr_access_alias(metadata, "read")[1],
                     alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
@@ -4338,7 +4442,9 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                         offset,
                         weight,
                     ),
-                    generation=_gddr_access_generation(metadata, "weight"),
+                    generation=_gddr_access_generation(
+                        metadata, "weight", fallback_identity=generation_identity
+                    ),
                     alias_of=_gddr_access_alias(metadata, "weight")[0],
                     alias_generation=_gddr_access_alias(metadata, "weight")[1],
                     alias_offset_bytes=_gddr_access_alias(metadata, "weight")[2],
@@ -4354,7 +4460,9 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                     allocation_size=_gddr_allocation_size(
                         scenario, metadata, "read", identity, 0, remaining_read
                     ),
-                    generation=_gddr_access_generation(metadata, "read"),
+                    generation=_gddr_access_generation(
+                        metadata, "read", fallback_identity=generation_identity
+                    ),
                     alias_of=_gddr_access_alias(metadata, "read")[0],
                     alias_generation=_gddr_access_alias(metadata, "read")[1],
                     alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
@@ -4372,7 +4480,9 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 allocation_size=_gddr_allocation_size(
                     scenario, metadata, "read", identity, offset, read_bytes
                 ),
-                generation=_gddr_access_generation(metadata, "read"),
+                generation=_gddr_access_generation(
+                    metadata, "read", fallback_identity=generation_identity
+                ),
                 alias_of=_gddr_access_alias(metadata, "read")[0],
                 alias_generation=_gddr_access_alias(metadata, "read")[1],
                 alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
@@ -4390,7 +4500,9 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 allocation_size=_gddr_allocation_size(
                     scenario, metadata, "write", identity, offset, write_bytes
                 ),
-                generation=_gddr_access_generation(metadata, "write"),
+                generation=_gddr_access_generation(
+                    metadata, "write", fallback_identity=generation_identity
+                ),
                 alias_of=_gddr_access_alias(metadata, "write")[0],
                 alias_generation=_gddr_access_alias(metadata, "write")[1],
                 alias_offset_bytes=_gddr_access_alias(metadata, "write")[2],
@@ -6268,6 +6380,8 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             if not isinstance(access, Mapping) or not access.get("buffer_id"):
                 continue
             buffer_id = str(access["buffer_id"])
+            if buffer_id.startswith("@tasklocal"):
+                buffer_id = str(task.task_id) + buffer_id[len("@tasklocal"):]
             generation = int(access.get("allocation_generation", access.get("generation", 0)) or 0)
             offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
             size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
@@ -6283,6 +6397,25 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                 fixed[key] = extent
             if key in fixed and required > fixed[key]:
                 raise ValueError("physical access exceeds declared allocation {} generation {}".format(*key))
+        # Stateful-L2 contracts carry the logical cache accesses separately
+        # from the physical preview descriptors.  Their buffer_size_bytes is
+        # the complete tensor extent and must participate in the same
+        # cohort-wide promotion; otherwise the first cache miss can register
+        # a short final_norm.output generation before a later miss expands it.
+        contract = task.metadata.get("stateful_l2")
+        contract_accesses = contract.get("accesses", ()) if isinstance(contract, Mapping) else ()
+        for access in contract_accesses or ():
+            if not isinstance(access, Mapping) or not access.get("buffer_id"):
+                continue
+            buffer_id = str(access["buffer_id"])
+            if buffer_id.startswith("@tasklocal"):
+                buffer_id = str(task.task_id) + buffer_id[len("@tasklocal"):]
+            generation = int(access.get("allocation_generation", access.get("generation", 0)) or 0)
+            offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
+            size = int(access.get("size_bytes", access.get("byte_count", 0)) or 0)
+            extent = int(access.get("buffer_size_bytes", access.get("allocation_size_bytes", 0)) or 0)
+            key = (buffer_id, generation)
+            extents[key] = max(extents.get(key, 0), extent, offset + size)
     if not extents:
         return tuple(tasks)
 
@@ -6305,23 +6438,113 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             if not buffer_id:
                 continue
             generation = int(row.get("allocation_generation", row.get("generation", 0)) or 0)
-            key = (str(buffer_id), generation)
+            normalized_buffer_id = str(buffer_id)
+            if normalized_buffer_id.startswith("@tasklocal"):
+                normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
+            key = (normalized_buffer_id, generation)
             extent = extents.get(key)
             if extent is None or row.get("allocation_size_bytes") is not None:
                 continue
             row["allocation_size_bytes"] = extent
+            # The initial descriptor may have been hashed before the cohort
+            # envelope established its final extent.  Stable-address hashing
+            # includes the allocation size so leaving that old address in
+            # place makes the same buffer/generation appear at two bases and
+            # causes allocator ``address changed``/``cannot grow`` failures.
+            config = metadata.get("physical_memory_config")
+            if (
+                row.get("address_source") == "stable_buffer_tensor_offset"
+                and isinstance(config, Mapping)
+                and isinstance(row.get("offset_bytes", row.get("offset", 0)), int)
+                and isinstance(row.get("byte_count", row.get("size_bytes", 0)), int)
+            ):
+                capacity = int(config.get("capacity_bytes") or 0)
+                burst = int(config.get("burst_bytes") or 0)
+                if capacity > 0 and burst > 0:
+                    row["address"] = _gddr_stable_address(
+                        normalized_buffer_id,
+                        int(row.get("offset_bytes", row.get("offset", 0))),
+                        int(row.get("byte_count", row.get("size_bytes", 0))),
+                        capacity,
+                        burst,
+                        int(extent),
+                    )
             changed = True
-        if changed:
+        if changed or metadata.get("physical_allocations") is not None:
             metadata["memory_accesses"] = tuple(access_rows)
             metadata["memory_access"] = access_rows[0] if was_mapping else tuple(access_rows)
+            # The event kernel registers ``physical_allocations`` before it
+            # resolves a task's accesses.  A cohort may expose a short
+            # per-task declaration first and touch a larger extent later;
+            # leaving that declaration unchanged makes the allocator attempt
+            # an in-place growth and fail (for example final_norm.output
+            # generation 1).  Promote every declaration in the same complete
+            # lowered cohort to the already computed run-local extent.
+            declarations = metadata.get("physical_allocations")
+            if isinstance(declarations, Mapping):
+                declaration_rows = (dict(declarations),)
+                declarations_were_mapping = True
+            elif isinstance(declarations, (tuple, list)):
+                declaration_rows = tuple(dict(item) for item in declarations)
+                declarations_were_mapping = False
+            else:
+                declaration_rows = ()
+                declarations_were_mapping = False
+            if declaration_rows:
+                updated_declarations = []
+                for item in declaration_rows:
+                    buffer_id = item.get("buffer_id")
+                    if not buffer_id:
+                        updated_declarations.append(item)
+                        continue
+                    normalized_buffer_id = str(buffer_id)
+                    if normalized_buffer_id.startswith("@tasklocal"):
+                        normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
+                    key = (normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
+                    target_extent = extents.get(key)
+                    if target_extent is not None:
+                        declared_extent = item.get("size_bytes", item.get("buffer_size_bytes"))
+                        if declared_extent is not None and int(declared_extent) > target_extent:
+                            raise ValueError("physical allocation declaration exceeds promoted extent for {} generation {}".format(*key))
+                        item["size_bytes"] = target_extent
+                        item["buffer_size_bytes"] = target_extent
+                    updated_declarations.append(item)
+                metadata["physical_allocations"] = (
+                    updated_declarations[0]
+                    if declarations_were_mapping and len(updated_declarations) == 1
+                    else tuple(updated_declarations)
+                )
             bindings = metadata.get("physical_address_bindings")
             if isinstance(bindings, (tuple, list)):
                 updated_bindings = []
                 for binding in bindings:
                     item = dict(binding)
-                    key = (str(item.get("buffer_id")), int(item.get("allocation_generation", item.get("generation", 0)) or 0))
+                    raw_buffer_id = str(item.get("buffer_id"))
+                    normalized_buffer_id = raw_buffer_id
+                    if normalized_buffer_id.startswith("@tasklocal"):
+                        normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
+                    key = (normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
                     if item.get("allocation_size_bytes") is None and key in extents:
-                        item["allocation_size_bytes"] = extents[key]
+                        extent = extents[key]
+                        item["allocation_size_bytes"] = extent
+                        config = metadata.get("physical_memory_config")
+                        if (
+                            item.get("address_source") == "stable_buffer_tensor_offset"
+                            and isinstance(config, Mapping)
+                            and isinstance(item.get("offset_bytes", 0), int)
+                            and isinstance(item.get("byte_count", 0), int)
+                        ):
+                            capacity = int(config.get("capacity_bytes") or 0)
+                            burst = int(config.get("burst_bytes") or 0)
+                            if capacity > 0 and burst > 0:
+                                item["address"] = _gddr_stable_address(
+                                    normalized_buffer_id,
+                                    int(item.get("offset_bytes", 0)),
+                                    int(item.get("byte_count", 0)),
+                                    capacity,
+                                    burst,
+                                    int(extent),
+                                )
                     updated_bindings.append(item)
                 metadata["physical_address_bindings"] = tuple(updated_bindings)
             contract = metadata.get("stateful_l2")
@@ -7023,7 +7246,158 @@ def _direct_device_memory(scenario: ScenarioConfig, storage: Optional[str], devi
                 and entry.get("device_id") == device)
 
 
-def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_bytes=0):
+def _derive_direct_memory_page_offset(
+    scenario: ScenarioConfig,
+    rank: LogicalRank,
+    phase: object,
+    storage: str,
+    byte_count: int,
+) -> Optional[int]:
+    """Derive a stable physical address for an authored direct backing access.
+
+    GEMM phases normally carry only logical byte counts.  Physical DRAM/GDDR
+    services additionally require an address so that row/bank accounting can
+    be evaluated.  Keep an authored address authoritative, then derive a
+    deterministic, burst-aligned address from the execution identity and clamp
+    it to the storage capacity.  This is an analytical placement address; it
+    does not claim a native allocator offset.
+    """
+
+    component = _component(scenario, storage)
+    raw_config = component.metadata.get("physical_memory_config")
+    if raw_config is None:
+        return None
+    if not isinstance(raw_config, Mapping):
+        return None
+    try:
+        requested = max(1, int(byte_count))
+    except (TypeError, ValueError, OverflowError):
+        requested = 1
+    try:
+        capacity = int(raw_config.get("capacity_bytes") or component.capacity_bytes or 0)
+    except (TypeError, ValueError, OverflowError):
+        capacity = 0
+    if capacity <= 0:
+        # The physical service will provide the final contract error if its
+        # configuration is incomplete; do not invent an unbounded address.
+        return 0
+    alignment = raw_config.get("burst_bytes") or component.metadata.get("transfer_granularity_bytes") or 1
+    try:
+        alignment = max(1, int(alignment))
+    except (TypeError, ValueError, OverflowError):
+        alignment = 1
+    # Never pass an address whose request would exceed the physical geometry.
+    max_address = max(0, capacity - requested)
+    slots = max(1, max_address // alignment + 1)
+    phase_metadata = getattr(phase, "metadata", {})
+    phase_label = str(phase_metadata.get("phase", "")) if isinstance(phase_metadata, Mapping) else ""
+    # Use only stable numeric fields from the authored execution identity.
+    # Python's hash is process-randomized, and a cryptographic digest adds no
+    # meaning to an analytical address.  This keeps the fallback reproducible
+    # without introducing another hash-based contract.
+    phase_name = str(getattr(phase, "name", ""))
+    label = "{}|{}".format(phase_name, phase_label)
+    label_index = sum((index + 1) * ord(char) for index, char in enumerate(label))
+    try:
+        rank_index = max(0, int(rank.rank))
+    except (TypeError, ValueError):
+        rank_index = 0
+    candidate = (rank_index * 131 + label_index) * alignment
+    slot = (candidate // alignment) % slots
+    return int(slot * alignment)
+
+
+def _direct_memory_address(
+    scenario: ScenarioConfig,
+    rank: LogicalRank,
+    storage: str,
+    byte_count: int,
+    metadata: Optional[Mapping[str, object]] = None,
+) -> int:
+    """Derive a stable component-local address for direct physical accesses.
+
+    Directly exposed memory components (for example the local GDDR endpoint
+    selected by llama.cpp layer placement) carry a physical-memory contract.
+    Their cost service therefore requires an address even when the authoring
+    IR only describes a logical weight or KV read.  Keep the address local to
+    the component and deterministic across runs; an authored offset always
+    wins, while the fallback is wrapped by the declared capacity.
+    """
+
+    component = _component(scenario, storage)
+    values = dict(metadata or {})
+    for key in (
+        "page_offset_bytes",
+        "source_page_offset_bytes",
+        "target_page_offset_bytes",
+        "source_offset_bytes",
+        "target_offset_bytes",
+        "dram_address_bytes",
+        "memory_access_offset_bytes",
+    ):
+        value = values.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    raw_config = component.metadata.get("physical_memory_config")
+    raw_capacity = raw_config.get("capacity_bytes") if isinstance(raw_config, Mapping) else None
+    try:
+        capacity = max(0, int(raw_capacity or component.capacity_bytes or 0))
+    except (TypeError, ValueError, OverflowError):
+        capacity = max(0, int(component.capacity_bytes or 0))
+    if capacity <= 0:
+        return 0
+    try:
+        rank_index = max(0, int(rank.rank))
+    except (TypeError, ValueError):
+        rank_index = 0
+    label = "|".join(
+        str(values.get(key, ""))
+        for key in ("layer_id", "operator_id", "projection_id", "op_name")
+    )
+    match = re.search(r"(\d+)(?:\D*)$", label)
+    label_index = int(match.group(1)) if match else sum(ord(char) for char in label)
+    # ``placement.kv_policy`` is the authoring IR and only carries
+    # ``tokens_per_page``.  Physical page/transfer geometry belongs to the
+    # memory component, so do not read the runtime plan's ``bytes_per_page``
+    # field here (it is not present during planning).
+    page_bytes = None
+    if isinstance(raw_config, Mapping):
+        page_bytes = (
+            raw_config.get("page_bytes")
+            or raw_config.get("burst_bytes")
+            or raw_config.get("interleave_bytes")
+        )
+    if page_bytes is None:
+        page_bytes = component.metadata.get("transfer_granularity_bytes")
+    if page_bytes is None:
+        page_bytes = 256
+    try:
+        page_bytes = max(1, int(page_bytes))
+    except (TypeError, ValueError, OverflowError):
+        page_bytes = 256
+    try:
+        transfer_bytes = max(1, int(values.get("transfer_granularity_bytes", page_bytes) or page_bytes))
+    except (TypeError, ValueError, OverflowError):
+        transfer_bytes = page_bytes
+    stride = max(page_bytes, transfer_bytes)
+    candidate = (rank_index * max(1, int(scenario.model.num_layers)) + label_index) * stride
+    max_address = max(0, capacity - max(1, int(byte_count)))
+    # Wrap in page slots rather than raw bytes so the fallback remains aligned
+    # even when capacity is not an exact multiple of the page size.
+    slots = max(1, max_address // stride + 1)
+    return (candidate // stride % slots) * stride
+
+
+def _direct_memory_phase(
+    scenario,
+    rank,
+    phase,
+    storage,
+    *,
+    read_bytes=0,
+    write_bytes=0,
+    metadata: Optional[Mapping[str, object]] = None,
+):
     """Move an operand's backing service, preserving compute and GPU cache work."""
     if (not storage or storage == rank.memory_component_id
             or not _direct_device_memory(scenario, storage, rank.component_id)):
@@ -7053,17 +7427,112 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
     # NAND/HBF page, plane, queue and read/program latency model even though
     # endpoint_service correctly routes the same component through
     # PhysicalService.price().
-    page_offset = phase.metadata.get("page_offset_bytes")
+    phase_metadata = dict(phase.metadata)
+    # A caller may pass a sparse metadata mapping containing ``None`` values;
+    # those must not erase a valid authored offset already present on the phase.
+    for key, value in dict(metadata or {}).items():
+        if value is not None:
+            phase_metadata[key] = value
+    page_offset = phase_metadata.get("page_offset_bytes")
     if page_offset is None:
-        page_offset = _component(scenario, storage).metadata.get("dram_address_bytes")
+        page_offset = phase_metadata.get("dram_address_bytes")
+    storage_component = _component(scenario, storage)
+    if page_offset is None:
+        # Preserve explicit offsets authored on the storage component itself;
+        # this is the legacy location used by normalized hardware presets.
+        storage_metadata = storage_component.metadata
+        physical_metadata = storage_metadata.get("physical_memory_config")
+        for key in (
+            "page_offset_bytes",
+            "source_page_offset_bytes",
+            "target_page_offset_bytes",
+            "source_offset_bytes",
+            "target_offset_bytes",
+            "dram_address_bytes",
+            "memory_access_offset_bytes",
+        ):
+            candidate = storage_metadata.get(key)
+            if candidate is None and isinstance(physical_metadata, Mapping):
+                candidate = physical_metadata.get(key)
+            if isinstance(candidate, int) and not isinstance(candidate, bool) and candidate >= 0:
+                page_offset = candidate
+                break
+    if page_offset is None and storage_component.metadata.get("physical_memory_config") is not None:
+        page_offset = _direct_memory_address(
+            scenario, rank, storage,
+            max(moved_reads, moved_writes),
+            phase_metadata,
+        )
     if not isinstance(page_offset, int) or isinstance(page_offset, bool) or page_offset < 0:
         page_offset = None
+    if page_offset is None:
+        page_offset = _derive_direct_memory_page_offset(
+            scenario,
+            rank,
+            phase,
+            storage,
+            max(moved_reads, moved_writes),
+        )
+    # Some normalized llama scenarios resolve the physical service from a
+    # profile-owned component even when the logical storage component has no
+    # copied physical metadata.  The service remains the authoritative
+    # contract; provide its first aligned address rather than passing None to
+    # PhysicalService.price.
+    if page_offset is None:
+        service_component = getattr(service, "component", None)
+        if service_component is not None and service_component.metadata.get("physical_memory_config") is not None:
+            page_offset = 0
+    if page_offset is None:
+        # Direct backing phases are authored without a buffer offset.  A
+        # physical service still requires an address; zero is the stable base
+        # of the component-local analytical address space and is valid for
+        # every non-empty configured component.
+        page_offset = 0
+    def compact_service_bill(bill):
+        """Keep scalar pricing facts without embedding the full DRAM trace.
+
+        ``PhysicalService.price`` may expose every expanded burst interval and
+        payload for audit/replay.  A planner task only needs the aggregate
+        service/energy/byte counters; the physical event kernel recomputes the
+        detailed trace from ``physical_memory_config`` and ``memory_access`` at
+        dispatch.  Keeping those interval tuples in every phase metadata entry
+        made one 6 MiB GDDR read occupy tens of megabytes and multiplied that
+        cost across a serving cohort.
+        """
+        if not isinstance(bill, Mapping):
+            return bill
+        heavy_keys = {
+            "resource_intervals",
+            "resource_interval_payloads",
+            "resource_last_intervals",
+            "physical_resource_intervals",
+            "physical_resource_last_intervals",
+        }
+        compact = {key: value for key, value in bill.items() if key not in heavy_keys}
+        if any(key in bill for key in heavy_keys):
+            compact["details_truncated"] = True
+        return compact
+
     read_bill = (
-        dict(service.price(AccessKind.READ, moved_reads, page_offset_bytes=page_offset))
+        compact_service_bill(
+            dict(service.price(
+                AccessKind.READ,
+                moved_reads,
+                page_offset_bytes=page_offset,
+                summary_only=True,
+            ))
+        )
         if moved_reads else None
     )
     write_bill = (
-        dict(service.price(AccessKind.WRITE, moved_writes, page_offset_bytes=page_offset))
+        compact_service_bill(
+            dict(service.price(
+                AccessKind.WRITE,
+                moved_writes,
+                page_offset_bytes=page_offset,
+                summary_only=True,
+            ))
+        )
         if moved_writes else None
     )
     remote_service = dict(read_bill or write_bill or {})
@@ -7131,6 +7600,8 @@ def _direct_memory_phase(scenario, rank, phase, storage, *, read_bytes=0, write_
                 "memory_access": descriptors[0] if len(descriptors) == 1 else tuple(descriptors),
             }
     return replace(phase, demands=tuple(merged.values()), metadata={**phase.metadata,
+        **({"page_offset_bytes": page_offset, "page_offset_source": "derived_direct_backing"}
+           if page_offset is not None and "page_offset_bytes" not in phase.metadata else {}),
         **physical_metadata,
         "direct_memory_access": {"component_id": storage, "physical_owner": service.physical_owner,
             "resource_id": service.resource_id, "read_bytes": moved_reads, "write_bytes": moved_writes,
@@ -7152,7 +7623,8 @@ def _add_direct_state_access(builder, scenario, router, storage, device, byte_co
     if offset is None:
         offset = metadata.get("page_offset_bytes")
     service = endpoint_service(_component(scenario, storage), byte_count, read=read,
-        name=name, page_offset_bytes=offset, operation=operation)
+        name=name, page_offset_bytes=offset, operation=operation,
+        compact_preview=True)
     demands = list(service.demands if service else ())
     source, target = (storage, device) if read else (device, storage)
     for hop in router.route(source, target, byte_count):
@@ -12069,7 +12541,8 @@ def _add_rank_gemm(
                 direct_source = _kv_components(scenario, rank, target_component_id,
                                               dynamic_attention_replay.layer)[0]
             phase = _direct_memory_phase(scenario, rank, phase, direct_source,
-                                         read_bytes=workload.weight_bytes)
+                                         read_bytes=workload.weight_bytes,
+                                         metadata=operation_metadata)
         phase_demands = phase.demands + extra_phase_demands.get(phase.name, ())
         # ``estimate_cpu_gemm`` already passes activation + physical weight
         # bytes through the cache hierarchy to the local backing demand.
@@ -12654,7 +13127,14 @@ def _add_rank_fused_attention(
                   if item.layer_id == (metadata or {}).get("layer_id")), None)
     cache = _kv_components(scenario, rank, rank.component_id, layer)[0]
     for phase_index, phase in enumerate(estimate.phases):
-        phase = _direct_memory_phase(scenario, rank, phase, cache, read_bytes=phase.metadata.get("persistent_kv_read_bytes", workload.kv_read_bytes))
+        phase = _direct_memory_phase(
+            scenario,
+            rank,
+            phase,
+            cache,
+            read_bytes=phase.metadata.get("persistent_kv_read_bytes", workload.kv_read_bytes),
+            metadata=metadata,
+        )
         demands = tuple(
             _namespace_demand(
                 scenario,
@@ -13012,7 +13492,8 @@ def _add_rank_primitive(
         if operation_metadata.get("event_kind") == "embedding":
             phase = _direct_memory_phase(scenario, rank, phase,
                 operation_metadata.get("weight_source_component"),
-                read_bytes=int(operation_metadata.get("lookup_read_bytes", operation_metadata.get("weight_read_bytes", 0))))
+                read_bytes=int(operation_metadata.get("lookup_read_bytes", operation_metadata.get("weight_read_bytes", 0))),
+                metadata=operation_metadata)
         demands = tuple(
             _namespace_demand(
                 scenario,
@@ -13979,9 +14460,40 @@ def _add_kv_access(
             "source_offset_bytes" if is_read else "target_offset_bytes",
             metadata.get("page_offset_bytes"),
         )
+        # Physical DRAM/GDDR services require an explicit address.  KV
+        # accesses are generated from logical layer/token counts and do not
+        # carry an authored buffer offset, so derive a stable page-aligned
+        # address from rank and layer identity before entering the physical
+        # transaction model.  Keep it inside the declared component capacity
+        # for small analytical test memories as well as full-size VRAM.
+        owner_component = _component(scenario, owner)
+        if offset is None and owner_component.metadata.get("physical_memory_config") is not None:
+            raw_layer = str(metadata.get("layer_id", ""))
+            try:
+                layer_index = int(raw_layer.rsplit("-", 1)[-1])
+            except (TypeError, ValueError):
+                layer_index = 0
+            rank_index = int(metadata.get("rank", rank.rank) or 0)
+            raw_config = owner_component.metadata.get("physical_memory_config")
+            page_bytes = None
+            if isinstance(raw_config, Mapping):
+                page_bytes = raw_config.get("page_bytes") or raw_config.get("burst_bytes")
+            if page_bytes is None:
+                page_bytes = owner_component.metadata.get("transfer_granularity_bytes")
+            if page_bytes is None:
+                page_bytes = getattr(scenario.placement.kv_policy, "tokens_per_page", 16)
+            try:
+                page_bytes = max(1, int(page_bytes))
+            except (TypeError, ValueError, OverflowError):
+                page_bytes = 256
+            candidate = (rank_index * max(1, int(scenario.model.num_layers)) + layer_index) * page_bytes
+            capacity = int(owner_component.capacity_bytes or 0)
+            max_address = max(0, capacity - max(1, int(byte_count)))
+            slots = max(1, max_address // page_bytes + 1)
+            offset = (candidate // page_bytes % slots) * page_bytes
         service = endpoint_service(
             _component(scenario, owner), byte_count, read=is_read, name=name,
-            page_offset_bytes=offset)
+            page_offset_bytes=offset, compact_preview=True)
         demands = list(service.demands if service else ())
         if not is_read:
             for hop in router.route(rank.component_id, owner, byte_count, policy=plan.routing_policy):
@@ -15135,6 +15647,7 @@ def _append_storage_probe_tasks(
             name="storage_probe.{}".format(index),
             page_offset_bytes=raw.get("page_offset_bytes"),
             operation=operation,
+            compact_preview=True,
         )
         if service is None:
             raise ValueError("storage_probe entry produced no endpoint service")
@@ -26092,7 +26605,12 @@ def compile_serving_cohort_schedule(
     """
 
     with _compilation_scope(scenario):
-        return _lower_serving_cohort(scenario, cohort).schedule
+        lowering = _lower_serving_cohort(scenario, cohort)
+        schedule = lowering.schedule
+        return replace(
+            schedule,
+            tasks=_promote_physical_allocation_extents(schedule.tasks),
+        )
 
 
 def _summarize_cim_weight_conversion(tasks):
@@ -26168,10 +26686,23 @@ def _estimate_serving_cohort_cost(
         cached_router=cached_router,
         scenario_hash=scenario_hash,
     )
+    # A serving cohort reuses tensor identities across its ordered phases.
+    # Promote access-derived extents across the complete cohort before the
+    # event kernel registers any physical allocation.  Otherwise a smaller
+    # early slice can occupy a hashed address that a later larger slice needs
+    # to grow into, and the allocator correctly rejects the overlapping move.
+    lowering = replace(
+        lowering,
+        schedule=replace(
+            lowering.schedule,
+            tasks=_promote_physical_allocation_extents(lowering.schedule.tasks),
+        ),
+    )
     summary = execute_cost_schedule(
         lowering.schedule,
         control=execution_control,
         compiled_executor=compiled_executor,
+        retain_task_metadata=False,
     )
     kv_traffic = _summarize_kv_task_traffic(lowering.schedule.tasks)
     resource_busy_by_direction = _resource_busy_by_direction(
@@ -26439,7 +26970,8 @@ def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
 
 
 def _summarize_dram_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=None) -> Mapping[str, object]:
-    fields = ("logical_bytes", "physical_read_bytes", "physical_write_bytes", "physical_bytes", "burst_count",
+    fields = ("logical_bytes", "logical_read_bytes", "logical_write_bytes",
+              "physical_read_bytes", "physical_write_bytes", "physical_bytes", "burst_count",
               "row_hits", "row_misses", "row_conflicts", "queue_wait_ns", "service_ns")
     totals = {key: 0.0 for key in fields}
     count = 0
@@ -26455,8 +26987,17 @@ def _summarize_dram_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
             value = raw.get(key, 0)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 totals[key] += float(value)
+        # The resolved transaction ledger identifies memory resources and
+        # their submitting physical owners. Unrelated compute/cache demands
+        # can coexist on the task and do not belong in the DRAM ledger.
+        physical_resources = raw.get("resource_busy_ns", {})
+        resolved_owners = raw.get("resource_owners", {})
         for demand in task.demands:
-            row = resources.setdefault(str(demand.resource_id), {"owner": "unknown", "bytes_moved": 0, "service_ns": 0.0, "energy_pj": 0.0})
+            resource_id = str(demand.resource_id)
+            if resource_id not in physical_resources:
+                continue
+            owner = (resource_owners or {}).get(resource_id, resolved_owners.get(resource_id, "unknown"))
+            row = resources.setdefault(resource_id, {"owner": owner, "bytes_moved": 0, "service_ns": 0.0, "energy_pj": 0.0})
             row["bytes_moved"] += int(demand.bytes_moved)
             row["service_ns"] += float(demand.service_ns)
             row["energy_pj"] += float(demand.energy_pj)

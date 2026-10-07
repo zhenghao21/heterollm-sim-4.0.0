@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import copy
 import contextvars
+from bisect import bisect_left
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from enum import Enum
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
@@ -17,6 +18,72 @@ from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 from .contracts import EvidenceStatus, ResourceDemand, TaskCategory, TaskSpec
 from .ir import ComponentSpec, LinkSpec, OFFLOAD_STORAGE_COMPONENT_KINDS, default_memory_resource_id
 from .memory_service import realtime_memory_metrics
+
+
+class _OverlapCompletionIndex:
+    """Online interval overlap maxima for physical access ordering.
+
+    Each update stores a completion timestamp on the canonical segment-tree
+    cover of one byte range.  A query returns the maximum value among all
+    stored ranges intersecting the requested range.  The node-local value is
+    included on partial traversal because every range stored there covers the
+    whole node interval, hence it intersects whenever that node intersects.
+    This preserves the old pairwise ordering rule while reducing each access
+    from an O(previous_accesses) scan to O(log endpoints).
+    """
+
+    def __init__(self, endpoints: Sequence[int]) -> None:
+        self._endpoints = tuple(endpoints)
+        self._segments = max(1, len(self._endpoints) - 1)
+        self._values = [0.0] * (4 * self._segments + 4)
+        self._subtree = [0.0] * (4 * self._segments + 4)
+
+    def _indices(self, address: int, byte_count: int) -> Tuple[int, int]:
+        start = bisect_left(self._endpoints, address)
+        end = bisect_left(self._endpoints, address + byte_count)
+        # Validated accesses contribute both endpoints, so this is normally
+        # an exact segment range.  Keep the bounds checked for defensive use.
+        return max(0, min(self._segments - 1, start)), max(1, min(self._segments, end))
+
+    def update(self, address: int, byte_count: int, completion_ns: float) -> None:
+        left, right = self._indices(address, byte_count)
+        if right <= left:
+            return
+
+        def visit(node: int, lo: int, hi: int) -> None:
+            if right <= lo or hi <= left:
+                return
+            if left <= lo and hi <= right:
+                self._values[node] = max(self._values[node], completion_ns)
+            else:
+                mid = (lo + hi) // 2
+                visit(node * 2, lo, mid)
+                visit(node * 2 + 1, mid, hi)
+            child_max = 0.0
+            if hi - lo > 1:
+                child_max = max(self._subtree[node * 2], self._subtree[node * 2 + 1])
+            self._subtree[node] = max(self._values[node], child_max)
+
+        visit(1, 0, self._segments)
+
+    def query(self, address: int, byte_count: int) -> float:
+        left, right = self._indices(address, byte_count)
+        if right <= left:
+            return 0.0
+
+        def visit(node: int, lo: int, hi: int) -> float:
+            if right <= lo or hi <= left:
+                return 0.0
+            if left <= lo and hi <= right:
+                return self._subtree[node]
+            mid = (lo + hi) // 2
+            return max(
+                self._values[node],
+                visit(node * 2, lo, mid),
+                visit(node * 2 + 1, mid, hi),
+            )
+
+        return visit(1, 0, self._segments)
 
 
 @dataclass
@@ -39,12 +106,18 @@ class PhysicalRuntimeContext:
     runtimes: dict[str, _PhysicalRuntime] = field(default_factory=dict)
     allocators: dict[str, Any] = field(default_factory=dict)
     timeline: Any = None
+    # Exact event/replay runs retain expanded stage/mapping details. Aggregate
+    # cohort estimates set this false to avoid allocating those transient
+    # tuples; scalar timing and traffic counters remain unchanged.
+    capture_details: bool = True
     _committed_owners: set[str] = field(default_factory=set, repr=False)
 
     def __post_init__(self) -> None:
         if self.timeline is None:
             from .memory_transfer import ResourceTimeline
             self.timeline = ResourceTimeline()
+        if not isinstance(self.capture_details, bool):
+            raise ValueError("capture_details must be a boolean")
         if self.config is not None or self.physical_owner is not None:
             if self.config is None or not self.physical_owner:
                 raise ValueError("config and physical_owner must be provided together")
@@ -79,7 +152,11 @@ class PhysicalRuntimeContext:
             metadata.setdefault("channel_resource_prefix", f"{key}:nand:channel")
             metadata.setdefault("host_resource_id", f"{key}:nand:host")
             config = replace(config, metadata=metadata)
-        core = DramCore(config, self.timeline) if isinstance(config, DramConfig) else NandCore(config, self.timeline)
+        core = (
+            DramCore(config, self.timeline, capture_details=self.capture_details)
+            if isinstance(config, DramConfig)
+            else NandCore(config, self.timeline, capture_details=self.capture_details)
+        )
         current = _PhysicalRuntime(core=core, signature=signature)
         self.runtimes[key] = current
         capacity = int(getattr(config, "effective_capacity_bytes", getattr(config, "capacity_bytes", 0)) or 0)
@@ -88,32 +165,144 @@ class PhysicalRuntimeContext:
             self.allocators.setdefault(key, PhysicalAddressAllocator(capacity, alignment))
         return current
 
-    def preview_runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
+    def preview_runtime(
+        self,
+        config: Any,
+        owner: str,
+        *,
+        capture_details: Optional[bool] = None,
+    ) -> _PhysicalRuntime:
         from .memory_types import DramConfig, NandConfig, parse_physical_memory_config
         if not isinstance(config, (DramConfig, NandConfig)):
             config = parse_physical_memory_config(config)
         kind = str(getattr(config.kind, "value", config.kind))
         from .dram_core import DramCore
         from .nand_core import NandCore
-        core = DramCore(config) if isinstance(config, DramConfig) else NandCore(config)
+        # Preserve detailed preview bills by default.  Summary-only planner
+        # callers can disable transient stage/mapping tuples explicitly.
+        details = True if capture_details is None else capture_details
+        if not isinstance(details, bool):
+            raise ValueError("capture_details must be a boolean")
+        core = (
+            DramCore(config, capture_details=details)
+            if isinstance(config, DramConfig)
+            else NandCore(config, capture_details=details)
+        )
         return _PhysicalRuntime(core=core, signature=kind + ":" + repr(config))
 
     def snapshot(self) -> dict[str, Any]:
-        import copy as _copy
-        return _copy.deepcopy((self.runtimes, self.allocators, self.timeline.__dict__, self._committed_owners))
+        """Capture a transaction-local rollback point without copying history.
+
+        Physical tasks are submitted one at a time.  The old implementation
+        deep-copied every runtime, allocator and the complete timeline before
+        each task; once burst interval detail accumulated this duplicated the
+        whole run for every in-flight transaction.  Core state and allocator
+        entries are small mutable indexes, while timeline interval payloads
+        are replaced at ``metrics_snapshot`` and can therefore be retained by
+        reference for rollback.
+        """
+        runtime_state = {}
+        for owner, active in self.runtimes.items():
+            core = active.core
+            # Core indexes (DRAM bank rows / NAND array clocks) grow with the
+            # physical address stream.  Deep-copying them for every access
+            # recreated the original quadratic memory behaviour.  Their
+            # immutable configuration and scalar admission state are enough
+            # for the normal commit path; mutable indexes remain owned by the
+            # live core and are only consulted again after a successful task.
+            core_state = {}
+            for key, value in vars(core).items():
+                if key in {"config", "timeline"}:
+                    continue
+                if key == "_banks" and isinstance(value, dict):
+                    # Bank rows are mutable dataclasses; copy the small bank
+                    # index so a failed transaction cannot leak row state.
+                    core_state[key] = {
+                        name: copy.copy(bank) for name, bank in value.items()
+                    }
+                elif key in {"_array_ready", "_buffer_ready"} and isinstance(value, dict):
+                    # NAND readiness values are scalars, so a shallow dict
+                    # copy is sufficient and avoids copying timeline history.
+                    core_state[key] = dict(value)
+                elif key == "_inflight" and isinstance(value, list):
+                    core_state[key] = list(value)
+                else:
+                    core_state[key] = value
+            core_state["config"] = core.config
+            runtime_state[owner] = {
+                "active": active,
+                "clock_ns": active.clock_ns,
+                "core": core_state,
+            }
+        allocator_state = {
+            owner: dict(getattr(allocator, "_allocations", {}))
+            for owner, allocator in self.allocators.items()
+        }
+        timeline = self.timeline
+        timeline_state = {
+            "ready_ns": dict(timeline.ready_ns),
+            "directions": dict(timeline.directions),
+            "busy_ns": dict(timeline.busy_ns),
+            "bytes_moved": dict(timeline.bytes_moved),
+            "last_intervals": dict(timeline.last_intervals),
+            # submit() replaces these containers before appending details.
+            "_intervals": timeline._intervals,
+            "_interval_limit": timeline._interval_limit,
+            "_interval_count": timeline._interval_count,
+            "_intervals_truncated": timeline._intervals_truncated,
+            "_touched": timeline._touched,
+            "_interval_payloads": timeline._interval_payloads,
+            "lane_available": {
+                resource: tuple(lanes)
+                for resource, lanes in timeline.lane_available.items()
+            },
+        }
+        return {
+            "runtimes": dict(self.runtimes),
+            "runtime_state": runtime_state,
+            "allocators": dict(self.allocators),
+            "allocator_state": allocator_state,
+            "timeline": timeline_state,
+            "committed_owners": set(self._committed_owners),
+        }
 
     def restore(self, snapshot: dict[str, Any]) -> None:
-        runtimes, allocators, timeline_state, owners = snapshot
-        self.runtimes.clear(); self.runtimes.update(runtimes)
-        self.allocators.clear(); self.allocators.update(allocators)
-        lane_ref = getattr(self.timeline, "lane_available", None)
-        self.timeline.__dict__.clear(); self.timeline.__dict__.update(timeline_state)
-        if lane_ref is not None and "lane_available" in timeline_state:
-            lane_ref.clear(); lane_ref.update(timeline_state["lane_available"])
-            self.timeline.lane_available = lane_ref
-        for active in self.runtimes.values():
+        self.runtimes.clear()
+        self.runtimes.update(snapshot["runtimes"])
+        self.allocators.clear()
+        self.allocators.update(snapshot["allocators"])
+        for owner, state in snapshot.get("runtime_state", {}).items():
+            active = self.runtimes.get(owner)
+            if active is None:
+                continue
+            active.clock_ns = state["clock_ns"]
+            active.core.__dict__.clear()
+            active.core.__dict__.update(state["core"])
             active.core.timeline = self.timeline
-        self._committed_owners.clear(); self._committed_owners.update(owners)
+        for owner, allocations in snapshot.get("allocator_state", {}).items():
+            allocator = self.allocators.get(owner)
+            if allocator is not None and hasattr(allocator, "_allocations"):
+                allocator._allocations.clear()
+                allocator._allocations.update(allocations)
+        timeline_state = snapshot["timeline"]
+        timeline = self.timeline
+        for name in ("ready_ns", "directions", "busy_ns", "bytes_moved", "last_intervals"):
+            target = getattr(timeline, name)
+            target.clear()
+            target.update(timeline_state[name])
+        timeline._intervals = timeline_state["_intervals"]
+        timeline._interval_limit = timeline_state["_interval_limit"]
+        timeline._interval_count = timeline_state["_interval_count"]
+        timeline._intervals_truncated = timeline_state["_intervals_truncated"]
+        timeline._touched = timeline_state["_touched"]
+        timeline._interval_payloads = timeline_state["_interval_payloads"]
+        timeline.lane_available.clear()
+        timeline.lane_available.update({
+            resource: list(lanes)
+            for resource, lanes in timeline_state["lane_available"].items()
+        })
+        self._committed_owners.clear()
+        self._committed_owners.update(snapshot.get("committed_owners", ()))
 
 
 _CURRENT_PHYSICAL_CONTEXT: contextvars.ContextVar[PhysicalRuntimeContext | None] = contextvars.ContextVar(
@@ -140,9 +329,16 @@ def _physical_runtime(
     context: Optional[PhysicalRuntimeContext] = None,
     *,
     preview: bool = False,
+    capture_details: Optional[bool] = None,
 ) -> _PhysicalRuntime:
     context = context or current_physical_runtime_context()
-    return context.preview_runtime(config, owner) if preview else context.runtime(config, owner)
+    return (
+        context.preview_runtime(
+            config, owner, capture_details=capture_details
+        )
+        if preview
+        else context.runtime(config, owner)
+    )
 
 
 def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContext, *, config=None) -> None:
@@ -411,6 +607,21 @@ def resolve_physical_task(
         if isinstance(address, bool) or not isinstance(address, int) or address < 0:
             raise ValueError("physical task address must be a non-negative integer")
         validated.append((access, operation, address, byte_count))
+    # Previous accesses only constrain a new request when at least one side
+    # writes.  The old implementation scanned every prior descriptor for
+    # every descriptor (O(n**2)); a large line-expanded projection can contain
+    # tens of thousands of descriptors.  Compress address endpoints once and
+    # keep range-max indexes for all accesses and writes.  Each query and
+    # update is O(log n), while submission order and per-access timing stay
+    # unchanged.
+    endpoints = sorted({
+        point
+        for _access, _op, address, byte_count in validated
+        for point in (address, address + byte_count)
+    })
+    all_completion = _OverlapCompletionIndex(endpoints)
+    write_completion = _OverlapCompletionIndex(endpoints)
+
     snapshot = runtime.snapshot()
     placeholder_ids = set()
     for access, _op, _address, _bytes in validated:
@@ -425,16 +636,24 @@ def resolve_physical_task(
         owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
         active = runtime.runtime(config, owner)
         access_arrival = float(arrival_ns)
-        for previous, previous_result in zip(validated[:index], results):
-            previous_access, previous_operation, previous_address, previous_bytes = previous
-            overlaps = address < previous_address + previous_bytes and previous_address < address + byte_count
-            if overlaps and (operation is Operation.WRITE or previous_operation is Operation.WRITE):
-                access_arrival = max(access_arrival, previous_result.completion_ns)
+        if operation is Operation.WRITE:
+            access_arrival = max(
+                access_arrival,
+                all_completion.query(address, byte_count),
+            )
+        else:
+            access_arrival = max(
+                access_arrival,
+                write_completion.query(address, byte_count),
+            )
         request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation, address, byte_count, access_arrival)
         submit = getattr(active.core, "submit", active.core.execute)
         result = submit(request)
         active.clock_ns = max(active.clock_ns, result.completion_ns)
         results.append(result)
+        all_completion.update(address, byte_count, result.completion_ns)
+        if operation is Operation.WRITE:
+            write_completion.update(address, byte_count, result.completion_ns)
         resolved_accesses.append({**dict(access), "address": address})
       completion_ns = max(item.completion_ns for item in results)
     except Exception:
@@ -445,12 +664,15 @@ def resolve_physical_task(
     counters = dict(result.counters)
     resource_busy = {}
     resource_bytes = {}
+    resource_owners = {}
     resource_intervals = {}
     resource_interval_payloads = {}
     resource_last = {}
-    for item in results:
+    for (access, _operation, _address, _byte_count), item in zip(validated, results):
+        owner = str(access.get("physical_owner") or metadata.get("physical_owner") or task.task_id)
         for resource_id, value in item.counters.get("resource_busy_ns", {}).items():
             resource_busy[resource_id] = resource_busy.get(resource_id, 0.0) + value
+            resource_owners[resource_id] = owner
         for resource_id, value in item.counters.get("resource_bytes", {}).items():
             resource_bytes[resource_id] = resource_bytes.get(resource_id, 0) + value
         for resource_id, value in item.counters.get("resource_intervals", {}).items():
@@ -459,6 +681,7 @@ def resolve_physical_task(
             resource_interval_payloads.setdefault(resource_id, []).extend(value)
         resource_last.update(item.counters.get("resource_last_intervals", {}))
     counters.update({"resource_busy_ns": resource_busy, "resource_bytes": resource_bytes,
+                     "resource_owners": resource_owners,
                      "resource_intervals": resource_intervals, "resource_last_intervals": resource_last,
                      "resource_interval_payloads": resource_interval_payloads,
                      "operation_count": len(results)})
@@ -485,6 +708,8 @@ def resolve_physical_task(
         "physical_execution": {
             **counters,
             "logical_bytes": sum(item.logical_bytes for item in results),
+            "logical_read_bytes": sum(item.logical_bytes for item in results if item.operation is Operation.READ),
+            "logical_write_bytes": sum(item.logical_bytes for item in results if item.operation is Operation.WRITE),
             "physical_bytes": sum(item.transfer_bytes for item in results),
             "service_ns": completion_ns - float(arrival_ns),
             "arrival_ns": float(arrival_ns),
@@ -836,6 +1061,7 @@ class PhysicalService:
         runtime: Optional[PhysicalRuntimeContext] = None,
         arrival_ns: Optional[float] = None,
         preview: bool = False,
+        summary_only: bool = False,
     ) -> Mapping[str, object]:
         kind = AccessKind(kind)
         _non_negative_int(byte_count, "byte_count")
@@ -844,6 +1070,8 @@ class PhysicalService:
         read = kind is AccessKind.READ
         if page_offset_bytes is not None:
             _non_negative_int(page_offset_bytes, "page_offset_bytes")
+        if not isinstance(summary_only, bool):
+            raise TypeError("summary_only must be a boolean")
         if page_offset_bytes is None and self.component is not None:
             page_offset_bytes = self.component.metadata.get("memory_access_offset_bytes")
             if page_offset_bytes is not None:
@@ -885,7 +1113,13 @@ class PhysicalService:
             if arrival_ns is not None:
                 _non_negative(arrival_ns, "arrival_ns")
             context = runtime if runtime is not None else current_physical_runtime_context()
-            active_runtime = _physical_runtime(config, self.physical_owner, context, preview=preview or runtime is None)
+            active_runtime = _physical_runtime(
+                config,
+                self.physical_owner,
+                context,
+                preview=preview or runtime is None,
+                capture_details=(False if summary_only else None),
+            )
             request_arrival_ns = active_runtime.clock_ns if arrival_ns is None else float(arrival_ns)
             request = AccessRequest(
                 f"{self.service_id}:physical",
@@ -1410,8 +1644,14 @@ def endpoint_service(
     runtime: Optional[PhysicalRuntimeContext] = None,
     arrival_ns: Optional[float] = None,
     preview: bool = False,
+    compact_preview: bool = False,
 ) -> Optional[EndpointService]:
-    """Lower one memory access using the canonical physical transaction model."""
+    """Lower one memory access using the canonical physical transaction model.
+
+    ``compact_preview`` is for planner-authored physical tasks.  It removes
+    expanded interval/payload traces from the analytical preview while
+    preserving scalar counters; dispatch still recomputes the full trace.
+    """
     _non_negative_int(byte_count, "byte_count")
     address = page_offset_bytes if page_offset_bytes is not None else dram_address_bytes
     if address is None:
@@ -1440,7 +1680,25 @@ def endpoint_service(
         runtime=runtime,
         arrival_ns=arrival_ns,
         preview=preview,
+        summary_only=compact_preview,
     )
+    if compact_preview and runtime is None and component.metadata.get("physical_memory_config") is not None:
+        # Planner-authored endpoint tasks only need scalar preview counters.
+        # The event kernel resolves the physical descriptor again at dispatch,
+        # where the complete interval/payload trace is attached to the result.
+        # Avoid retaining one expanded burst tuple per task in a serving
+        # schedule while keeping the default endpoint API unchanged.
+        heavy_keys = {
+            "resource_intervals",
+            "resource_interval_payloads",
+            "resource_last_intervals",
+            "physical_resource_intervals",
+            "physical_resource_last_intervals",
+        }
+        billed = {
+            key: value for key, value in billed.items() if key not in heavy_keys
+        }
+        billed["details_truncated"] = True
     physical = int(billed.get("physical_bytes", 0))
     if op_name == "erase":
         physical = 0

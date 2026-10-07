@@ -260,6 +260,12 @@ class ExplicitCacheState:
         self.write_back = write_back
         self.write_allocate = write_allocate
         self._lines: "OrderedDict[LineKey, CacheLine]" = OrderedDict()
+        # OrderedDict does not expose a constant-time successor lookup.  Keep
+        # a tiny side index so transaction journaling stays O(touched lines),
+        # even when the cache holds a large resident working set.
+        self._lru_prev = {}
+        self._lru_next = {}
+        self._buffer_line_keys: Dict[Tuple[str, int], set[LineKey]] = {}
         self._buffer_sizes: Dict[Tuple[str, int], Optional[int]] = {}
         self._access_count = 0
         self._hit_lines = 0
@@ -270,6 +276,134 @@ class ExplicitCacheState:
         self._write_through_bytes = 0
         self._bypass_write_bytes = 0
         self._read_fill_bytes = 0
+        self._transaction = None
+
+    def begin_transaction(self):
+        """Begin a cheap, line-level rollback journal.
+
+        A cache may contain hundreds of thousands of lines.  Copying the
+        complete ``OrderedDict`` for every event makes a stateful simulation
+        quadratic in both time and peak memory.  The journal records only
+        lines and counters touched by the current access; rollback is used
+        only on an exceptional dispatch path.
+        """
+        if self._transaction is not None:
+            raise CacheStateError("cache transaction already active")
+        self._transaction = {
+            "lines": [],
+            "line_seen": set(),
+            "buffers": [],
+            "buffer_seen": set(),
+            "scalars": {
+                name: getattr(self, name)
+                for name in (
+                    "_access_count", "_hit_lines", "_miss_lines",
+                    "_eviction_lines", "_dirty_eviction_bytes",
+                    "_flush_writeback_bytes", "_write_through_bytes",
+                    "_bypass_write_bytes", "_read_fill_bytes",
+                )
+            },
+        }
+        return self._transaction
+
+    def commit_transaction(self, transaction) -> None:
+        if transaction is not self._transaction:
+            raise CacheStateError("invalid cache transaction")
+        self._transaction = None
+
+    def rollback_transaction(self, transaction) -> None:
+        if transaction is not self._transaction:
+            raise CacheStateError("invalid cache transaction")
+        # Undo line mutations in reverse order.  Normal dispatch never scans
+        # the cache; the exceptional rollback path restores membership and
+        # values and then appends restored lines to the LRU tail.  The event
+        # kernel retries the rejected task, so this path is intentionally
+        # bounded by the failed access rather than the full cache size.
+        for key, existed, old_line, successor in reversed(transaction["lines"]):
+            if existed:
+                self._lines.pop(key, None)
+                if successor is None or successor not in self._lines:
+                    self._lines[key] = old_line
+                else:
+                    restored = OrderedDict()
+                    for current_key, current_line in self._lines.items():
+                        if current_key == successor:
+                            restored[key] = old_line
+                        restored[current_key] = current_line
+                    self._lines = restored
+            else:
+                self._lines.pop(key, None)
+        for key, existed, old_value in reversed(transaction["buffers"]):
+            if existed:
+                self._buffer_sizes[key] = old_value
+            else:
+                self._buffer_sizes.pop(key, None)
+        for name, value in transaction["scalars"].items():
+            setattr(self, name, value)
+        self._rebuild_lru_links()
+        self._transaction = None
+
+    def _record_line(self, key) -> None:
+        transaction = self._transaction
+        if transaction is None or key in transaction["line_seen"]:
+            return
+        transaction["line_seen"].add(key)
+        transaction["lines"].append((key, key in self._lines,
+                                      self._lines.get(key), self._lru_next.get(key)))
+
+    def _pop_line(self, key, default=None):
+        self._record_line(key)
+        if key not in self._lines:
+            return default
+        previous = self._lru_prev.pop(key, None)
+        successor = self._lru_next.pop(key, None)
+        if previous is not None:
+            self._lru_next[previous] = successor
+        if successor is not None:
+            self._lru_prev[successor] = previous
+        buffer_key = key[:2]
+        buffer_lines = self._buffer_line_keys.get(buffer_key)
+        if buffer_lines is not None:
+            buffer_lines.discard(key)
+            if not buffer_lines:
+                self._buffer_line_keys.pop(buffer_key, None)
+        return self._lines.pop(key)
+
+    def _set_line(self, key, value) -> None:
+        self._record_line(key)
+        if key in self._lines:
+            self._lines[key] = value
+            return
+        previous = next(reversed(self._lines), None)
+        self._lines[key] = value
+        self._buffer_line_keys.setdefault(key[:2], set()).add(key)
+        self._lru_prev[key] = previous
+        self._lru_next[key] = None
+        if previous is not None:
+            self._lru_next[previous] = key
+
+    def _rebuild_lru_links(self) -> None:
+        self._lru_prev.clear()
+        self._lru_next.clear()
+        self._buffer_line_keys.clear()
+        previous = None
+        for key in self._lines:
+            self._buffer_line_keys.setdefault(key[:2], set()).add(key)
+            self._lru_prev[key] = previous
+            self._lru_next[key] = None
+            if previous is not None:
+                self._lru_next[previous] = key
+            previous = key
+
+    def _remember_buffer(self, key, value) -> None:
+        transaction = self._transaction
+        if transaction is None or key in transaction["buffer_seen"]:
+            return
+        transaction["buffer_seen"].add(key)
+        if key in self._buffer_sizes:
+            transaction["buffers"].append((key, True, self._buffer_sizes[key]))
+        else:
+            transaction["buffers"].append((key, False, None))
 
     @staticmethod
     def _positive_int(value: object, name: str) -> None:
@@ -327,7 +461,8 @@ class ExplicitCacheState:
     def _evict_one(self) -> Tuple[CacheLine, int, int]:
         if not self._lines:
             raise CacheStateError("cache has no resident line to evict")
-        _key, victim = self._lines.popitem(last=False)
+        _key = next(iter(self._lines))
+        victim = self._pop_line(_key)
         dirty_bytes = victim.size_bytes if victim.dirty else 0
         clean_bytes = victim.size_bytes if not victim.dirty else 0
         self._eviction_lines += 1
@@ -362,8 +497,10 @@ class ExplicitCacheState:
             raise CacheStateError("access must be a CacheAccess")
         specs = self._line_specs(access)
         # Validate the complete range before remembering size or mutating LRU.
+        buffer_key = (access.buffer_id, access.allocation_generation)
+        self._remember_buffer(buffer_key, access.buffer_size_bytes)
         self._buffer_sizes.setdefault(
-            (access.buffer_id, access.allocation_generation),
+            buffer_key,
             access.buffer_size_bytes,
         )
         hit_lines = miss_lines = allocated_lines = 0
@@ -379,7 +516,7 @@ class ExplicitCacheState:
             buffer_size = self._buffer_sizes[
                 (access.buffer_id, access.allocation_generation)
             ]
-            line = self._lines.pop(key, None)
+            line = self._pop_line(key, None)
             if line is not None:
                 hit_lines += 1
                 self._hit_lines += 1
@@ -400,7 +537,7 @@ class ExplicitCacheState:
                             buffer_size_bytes=buffer_size,
                             allocation_generation=access.allocation_generation,
                         ))
-                self._lines[key] = line
+                self._set_line(key, line)
                 continue
 
             miss_lines += 1
@@ -435,9 +572,9 @@ class ExplicitCacheState:
                     read_for_ownership_bytes += physical_size
 
             dirty_line = access.operation == "write" and self.write_back
-            self._lines[key] = CacheLine(
+            self._set_line(key, CacheLine(
                 key[0], key[2], physical_size, dirty_line, key[1]
-            )
+            ))
             allocated_lines += 1
             if access.operation == "write" and not self.write_back:
                 write_through_bytes += covered_bytes
@@ -531,6 +668,20 @@ class ExplicitCacheState:
                 allocation_generation=allocation_generation,
             )
         )
+
+    def discard_buffer(self, buffer_id: str, allocation_generation: int = 0) -> None:
+        """Invalidate a freed allocation without writing dead data back.
+
+        Allocation lifetime belongs to the physical event kernel.  Retaining
+        dirty lines after it frees their backing buffer would make a future
+        eviction recreate an invalid physical destination.
+        """
+
+        key = (buffer_id, allocation_generation)
+        for line_key in tuple(self._buffer_line_keys.get(key, ())):
+            self._pop_line(line_key)
+        self._remember_buffer(key, None)
+        self._buffer_sizes.pop(key, None)
 
     def flush(self, buffer_id: Optional[str] = None) -> CacheFlushResult:
         if buffer_id is not None and (

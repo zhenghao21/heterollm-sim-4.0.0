@@ -14,6 +14,9 @@ dependencies = [
     # package.  Keep the upper bound below newer CPU-dispatch baselines; the
     # offline wheelhouse pins this exact version for Python 3.12.
     "numpy>=2.0.2,<2.4",
+    # Compile the same float64 memory transitions without fast-math.  The
+    # Python exact path remains available for unsupported resource calendars.
+    "numba==0.62.1",
     "ortools==9.15.6755",
 ]
 

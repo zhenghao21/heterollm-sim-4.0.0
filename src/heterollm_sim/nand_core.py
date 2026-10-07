@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Dict, Iterable, Optional
 
-from .memory_mapping import split_nand_request, validate_nand_request
+from .memory_mapping import map_nand_address, split_nand_request, validate_nand_request
 from .memory_transfer import ResourceTimeline
 from .memory_types import AccessRequest, NandConfig, Operation, StageTiming, TransactionResult
 
@@ -12,11 +12,22 @@ from .memory_types import AccessRequest, NandConfig, Operation, StageTiming, Tra
 class NandCore:
     """Model page read, page program and block erase without FTL/GC state."""
 
-    def __init__(self, config: NandConfig, timeline: Optional[ResourceTimeline] = None) -> None:
+    def __init__(
+        self,
+        config: NandConfig,
+        timeline: Optional[ResourceTimeline] = None,
+        *,
+        capture_details: bool = True,
+    ) -> None:
         if not isinstance(config, NandConfig):
             raise TypeError("config must be NandConfig")
+        if not isinstance(capture_details, bool):
+            raise TypeError("capture_details must be a boolean")
         self.config = config
         self.timeline = timeline or ResourceTimeline()
+        # Keep exact stage/mapping traces for normal runs; aggregate serving
+        # estimates can disable them while preserving scalar timing/counters.
+        self.capture_details = capture_details
         self._array_ready: Dict[str, float] = {}
         self._buffer_ready: Dict[str, float] = {}
         self._inflight: list[float] = []
@@ -56,7 +67,13 @@ class NandCore:
         if len(inflight) >= self.config.max_outstanding_requests:
             effective_arrival = max(effective_arrival, min(inflight))
             inflight = [end for end in inflight if end > effective_arrival]
-        before_metrics = self.timeline.metrics_snapshot(max_intervals=self.config.max_expanded_segments)
+        before_metrics = self.timeline.metrics_snapshot(
+            max_intervals=(
+                self.config.max_expanded_segments
+                if self.capture_details
+                else 0
+            )
+        )
         result = self._execute_accepted(
             request if effective_arrival == request.arrival_ns
             else replace(request, arrival_ns=effective_arrival)
@@ -70,13 +87,21 @@ class NandCore:
         return result
 
     def _execute_accepted(self, request: AccessRequest) -> TransactionResult:
+        first_page = request.address // self.config.page_bytes
+        last_page = (request.address + request.byte_count - 1) // self.config.page_bytes
+        page_count = last_page - first_page + 1
+        if not self.capture_details and request.operation is not Operation.ERASE and page_count >= 128:
+            return self._execute_accelerated_accepted(request, page_count)
+        return self._execute_detailed_accepted(request)
+
+    def _execute_detailed_accepted(self, request: AccessRequest) -> TransactionResult:
         segments = split_nand_request(request, self.config)
         stages = []
         mappings = []
         segment_count = 0
         details_truncated = False
         def record(stage):
-            if not details_truncated:
+            if self.capture_details and not details_truncated:
                 stages.append(stage)
         completion = request.arrival_ns + self.config.front_ns
         logical_bytes = 0
@@ -87,7 +112,7 @@ class NandCore:
             if segment_count > self.config.max_expanded_segments and not details_truncated:
                 stages.clear(); mappings.clear(); details_truncated = True
             m = segment.mapping
-            if not details_truncated:
+            if self.capture_details and not details_truncated:
                 mappings.append(m)
             logical_bytes += segment.logical_bytes
             array_id = self._array_id(m)
@@ -183,6 +208,60 @@ class NandCore:
                 "erase_operations": erases,
                 "page_count": segment_count,
                 "details_truncated": details_truncated,
+                "bandwidth_ceiling_gb_s": self.config.host_bandwidth_gb_s,
+                "array_units": self.config.array_units,
+                "write_completion": "media_program_complete" if request.operation is Operation.WRITE else "n/a",
+            },
+        )
+
+    def _execute_accelerated_accepted(self, request: AccessRequest, page_count: int) -> TransactionResult:
+        from ._nand_acceleration import execute_full_pages
+
+        page = self.config.page_bytes
+        end = request.address + request.byte_count
+        cursor = request.address
+        parts = []
+        accelerated_pages = 0
+        # Partial boundary pages retain the original RMW/transfer transitions.
+        if cursor % page:
+            length = min(end - cursor, page - cursor % page)
+            parts.append(self._execute_detailed_accepted(replace(request, address=cursor, byte_count=length)))
+            cursor += length
+        full_pages = (end - cursor) // page
+        if full_pages:
+            result = execute_full_pages(self, request, cursor // page, full_pages)
+            if result is not None:
+                accelerated_pages = result["accelerated_pages"]
+                count = result["page_count"]
+                parts.append(TransactionResult(
+                    request_id=request.request_id, operation=request.operation,
+                    arrival_ns=request.arrival_ns, completion_ns=result["completion_ns"],
+                    logical_bytes=count * page, transfer_bytes=result["internal_transfer_bytes"],
+                    counters={
+                        "host_transfer_bytes": result["host_transfer_bytes"],
+                        "internal_transfer_bytes": result["internal_transfer_bytes"],
+                        "pages_read": count if request.operation is Operation.READ else 0,
+                        "pages_programmed": count if request.operation is Operation.WRITE else 0,
+                    },
+                ))
+                cursor += count * page
+        if cursor < end:
+            parts.append(self._execute_detailed_accepted(replace(request, address=cursor, byte_count=end - cursor)))
+        pages_read = sum(part.counters["pages_read"] for part in parts)
+        pages_programmed = sum(part.counters["pages_programmed"] for part in parts)
+        host_bytes = sum(part.counters["host_transfer_bytes"] for part in parts)
+        internal_bytes = sum(part.counters["internal_transfer_bytes"] for part in parts)
+        return TransactionResult(
+            request_id=request.request_id, operation=request.operation,
+            arrival_ns=request.arrival_ns, completion_ns=max(part.completion_ns for part in parts),
+            logical_bytes=request.byte_count, transfer_bytes=internal_bytes,
+            counters={
+                "host_transfer_bytes": host_bytes, "internal_transfer_bytes": internal_bytes,
+                "physical_read_bytes": pages_read * page, "physical_write_bytes": pages_programmed * page,
+                "pages_read": pages_read, "pages_programmed": pages_programmed,
+                "erase_operations": 0, "page_count": page_count,
+                "details_truncated": page_count > self.config.max_expanded_segments,
+                "accelerated_pages": accelerated_pages,
                 "bandwidth_ceiling_gb_s": self.config.host_bandwidth_gb_s,
                 "array_units": self.config.array_units,
                 "write_completion": "media_program_complete" if request.operation is Operation.WRITE else "n/a",

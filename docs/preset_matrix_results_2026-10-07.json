@@ -1,0 +1,856 @@
+{
+  "audit_date": "2026-10-07",
+  "workload": {
+    "requests": 1,
+    "input_tokens": 512,
+    "output_tokens": 128,
+    "scheduling_policy": "llama_cpp",
+    "gpu_layers": -1,
+    "batch": 512,
+    "ubatch": 512,
+    "context": 640,
+    "parallel": 1,
+    "offload_kqv": true,
+    "device_memory_tiering": true,
+    "native_kernel_model_preset": "blackwell_analytical_v1",
+    "retention_policy": "aggregate"
+  },
+  "total_combinations": 63,
+  "totals": {
+    "completed": 53,
+    "capacity_rejected": 10
+  },
+  "hardware_totals": {
+    "local-native-rtx5080-9950x3d-gddr7-ddr5": {
+      "capacity_rejected": 10,
+      "completed": 11
+    },
+    "nvidia-b200-1gpu-2hbf-2hbm": {
+      "completed": 21
+    },
+    "nvidia-b200-1gpu-3hbf-2hbm": {
+      "completed": 21
+    }
+  },
+  "notes": [
+    "Batch runs use the same /api/run-jobs interface as the frontend, with preset payloads aligned to frontend runtime settings.",
+    "Results combine monitored runs from several audit passes; failed combinations were rerun after fixes.",
+    "capacity_rejected means the unchanged preset exceeds device-memory capacity under gpu_layers=-1; the simulation is rejected during llama runtime materialization.",
+    "elapsed_s records host execution and polling time, not predicted model inference time. Parallel audit runs can contend for host CPU.",
+    "A job ID identifies a monitored run; reports in restarted in-memory services are not persistent.",
+    "Token-role and DRAM summary reporting corrections were regression-tested after the monitored runs started; they do not change scheduling, allocations or completion status and do not backfill old in-memory reports.",
+    "The original matrix above used historical approximate bulk paths. The current implementation was rerun over all 63 combinations; see exact_preset_matrix_results_2026-10-07.json."
+  ],
+  "resolved_issues": [
+    "Preset replacement retained stale placement and KV ownership.",
+    "Large HBF requests expanded into per-page work, causing excessive time and memory use.",
+    "Physical dispatch repeatedly copied growing runtime and cache histories.",
+    "Fused weight projections each reserved the whole fused tensor, overcounting device memory.",
+    "Transient allocations were retained beyond last use; reclamation now waits for actual completion and invalidates freed L2 lines, while preserving aliases and dynamic submission safety.",
+    "Ordinary decode tokens were incorrectly counted as speculative draft tokens in scheduler events.",
+    "DRAM summaries omitted logical read/write direction and actual memory ownership."
+  ],
+  "validation": {
+    "python_tests_passed": 139,
+    "frontend_tests_passed": 11
+  },
+  "results": [
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-405b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-002.mlp_weights (5234491392 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-70b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-8b",
+      "job_id": "0fd345c6873d4ccea62ef5b0f85a994f",
+      "status": "completed",
+      "error": null,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-1b",
+      "job_id": "aacc9d495ba04a05bf3a356e4763f913",
+      "status": "completed",
+      "error": null,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-3b",
+      "job_id": "bff2b498865344438b1a8acf8dda3964",
+      "status": "completed",
+      "error": null,
+      "report_available": true,
+      "elapsed_s": 350.45,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_3-70b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-009.mlp_weights (1409286144 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-0_5b",
+      "job_id": "ca4aa948fcb24ce2842bfa18d5579686",
+      "status": "completed",
+      "error": null,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-14b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-028.mlp_weights (424673280 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-1_5b",
+      "job_id": "77d3d4ad02974e63a9582658fe4d8530",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 1061.03,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-32b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (849346560 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-3b",
+      "job_id": "d74adccba4ce4e259715d1e95bcd8daf",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 1375.75,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-72b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-009.attention_weights (301989888 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-7b",
+      "job_id": "e22b4449df5f416e895cc1e9482445e7",
+      "status": "completed",
+      "error": null,
+      "report_available": true,
+      "elapsed_s": 1195.94,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-0_6b",
+      "job_id": null,
+      "status": "completed",
+      "execution_method": "frontend_browser",
+      "note": "Completed earlier in the same audit; runtime services have since restarted."
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-14b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-024.attention_weights (125829120 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-1_7b",
+      "job_id": "3852a25a4d734506ba8bd5534f317d05",
+      "status": "completed",
+      "execution_method": "frontend_browser",
+      "note": "Completed earlier in the same audit; runtime services have since restarted."
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-235b-a22b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-003.expert_weights (4831838208 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-30b-a3b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-012.expert_weights (1207959552 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-32b",
+      "status": "capacity_rejected",
+      "error": "ValueError: llama.cpp shared device-memory capacity exhausted for layer-016.mlp_weights (786432000 bytes; device gpu0)",
+      "execution_method": "llama_runtime_materialization"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-4b",
+      "job_id": "c41b772c734141cd837936467b901fbb",
+      "status": "completed",
+      "error": null,
+      "report_available": true,
+      "elapsed_s": 459.16,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-8b",
+      "job_id": "564a23e14b6f49959f21d79318947951",
+      "status": "completed",
+      "error": null,
+      "report_available": true,
+      "elapsed_s": 547.73,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-405b",
+      "job_id": "09c59890de4b4775941de1d6fb958c54",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 117.31,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-70b",
+      "job_id": "7a51128ac6f2474abf387d5bf353bb91",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 73.94,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_1-8b",
+      "job_id": "2fff65a7f22c4955b03e69764fbe3def",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 30.72,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_2-1b",
+      "job_id": "94e6ec665d674c19bc7b08caa15f4f03",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 15.31,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_2-3b",
+      "job_id": "bd643897acdd4850b134ef0127a0487f",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 26.89,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "llama3_3-70b",
+      "job_id": "d0314ed64752450f845ff068f809a898",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 74.23,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-0_5b",
+      "job_id": "4b742867eb57428eb48c66092e15fe33",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 21.73,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-14b",
+      "job_id": "e20277cab0bd4313b7a7c60ab34ed294",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 45.3,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-1_5b",
+      "job_id": "970a7978c3ae4737a5ee825abb81be83",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 24.42,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-32b",
+      "job_id": "802af3a8bf2e4b71ad152b08b3c1ceaa",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 60.42,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-3b",
+      "job_id": "5b5fd074828c42eab268db758436182f",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 32.38,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-72b",
+      "job_id": "dd5314b0b0b34c5a9bf2d5c7d7b44c0a",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 73.39,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen2_5-7b",
+      "job_id": "6c96df3fce5c4a86a99b2f836d0a7f7c",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 27.83,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-0_6b",
+      "job_id": "3d3b9023ac1348e585a062f67186ec6c",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 25.28,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-14b",
+      "job_id": "2b6f7e2e7e6e4a0582e8811db7dd58d1",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 37.39,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-1_7b",
+      "job_id": "bcf342d5b52c4f79878d1c2a9b393c83",
+      "status": "completed",
+      "execution_method": "frontend_browser",
+      "note": "Completed earlier in the same audit; runtime services have since restarted."
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-235b-a22b",
+      "job_id": "b0bc2582ca534cfaa90a027993760b49",
+      "status": "completed",
+      "execution_method": "frontend_browser",
+      "note": "Completed earlier in the same audit; runtime services have since restarted."
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-30b-a3b",
+      "job_id": "86fa0f506e084ac8b673f99ace63aef3",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 149.8,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-32b",
+      "job_id": "6215a251ccce4d959b2f76b301dcf24f",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 67.22,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-4b",
+      "job_id": "b2a7e057412342208f3df77fd76dd892",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 36.94,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+      "model": "qwen3-8b",
+      "job_id": "a31f714e222641f3a1eece3cf3e56558",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 35.28,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-405b",
+      "job_id": "a6636627536c4588b4670982c9ffbac2",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 126.59,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-70b",
+      "job_id": "f88ff9f0b7154157a0d6df25b9dd394a",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 84.22,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_1-8b",
+      "job_id": "89aec3dc72b54a6db9a2bf4fbcfbcc47",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 31.8,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_2-1b",
+      "job_id": "3be7aef6fc534463929b79cd1e09b0a3",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 15.31,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_2-3b",
+      "job_id": "436e7b6b60bc442bb38e3c16580e5547",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 27.24,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "llama3_3-70b",
+      "job_id": "ca34082b82e24188967b5f4426f98af6",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 75.34,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-0_5b",
+      "job_id": "e424fe12400344e5971f118e1326e43d",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 25.36,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-14b",
+      "job_id": "51f4ea02e36d42bea501f119f13c2bc6",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 46.02,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-1_5b",
+      "job_id": "83581ed5045e44d79444578207de7692",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 26.44,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-32b",
+      "job_id": "834452b78bc840e69bb17295006af983",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 61.45,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-3b",
+      "job_id": "180e88a927794542b77ab2c678de71a7",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 31.91,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-72b",
+      "job_id": "a9e12aff44cb48adb81f505619df9714",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 75.24,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen2_5-7b",
+      "job_id": "5e994b904bc347e6ae9fa47b801264d3",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 27.66,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-0_6b",
+      "job_id": "4fc2e60028954b5f99b9f95ee1182c22",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 26.91,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-14b",
+      "job_id": "43cf891081104bf989b6dcc47ed592cb",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 37.11,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-1_7b",
+      "job_id": "809721af59194e58a0d4210fc70b44e9",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 26.55,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-235b-a22b",
+      "job_id": "af8586578ab346d5afe4645b18af1a92",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 286.88,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-30b-a3b",
+      "job_id": "73134d43ab97409598bf5162e0865b02",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 142.64,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-32b",
+      "job_id": "416fe3b9bbbe410fb9b2b9f71645dec9",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 61.38,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-4b",
+      "job_id": "5a2b0846de2347ebbf78b843453699cb",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 32.77,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    },
+    {
+      "hardware": "nvidia-b200-1gpu-3hbf-2hbm",
+      "model": "qwen3-8b",
+      "job_id": "77b0a7785bdb481190d48f8aa2db4569",
+      "status": "completed",
+      "error": null,
+      "elapsed_s": 33.56,
+      "report_available": true,
+      "execution_method": "frontend_run_job_api"
+    }
+  ],
+  "accuracy_validation": {
+    "status": "not_validated_against_hardware",
+    "completion_matrix_is_not_accuracy_validation": true,
+    "large_request_bulk_paths_are_not_event_equivalent": true,
+    "gddr_bulk_limitations": [
+      "bank row state and ACT/PRE reservations omitted",
+      "command scheduling can be ignored by data start",
+      "read/write turnaround omitted",
+      "address-dependent lane distribution simplified"
+    ],
+    "nand_bulk_limitations": [
+      "per-page media/channel/host pipeline replaced by per-array aggregate reservations"
+    ],
+    "comparison_scope": "Individual synthetic memory transactions; these percentages are not whole-model error bounds.",
+    "sample_comparisons": [
+      {
+        "case": "Native GDDR7 cold read 6 MiB",
+        "detailed_ns": 6877.6,
+        "bulk_ns": 6588.6,
+        "relative_change_percent": -4.202
+      },
+      {
+        "case": "Native GDDR7 with shared command resource, read 576 KiB",
+        "detailed_ns": 4964.2,
+        "bulk_ns": 649.4,
+        "relative_change_percent": -86.918
+      },
+      {
+        "case": "Synthetic HBF, 4 array units, read 9000 aligned pages of 4096 B",
+        "detailed_ns": 112962438.39999561,
+        "bulk_ns": 116647200.0,
+        "relative_change_percent": 3.2619352522798684
+      }
+    ],
+    "applies_to": "Historical matrix runs using the old approximate bulk paths; those paths have now been removed."
+  },
+  "exact_acceleration_validation": {
+    "status": "completed_full_preset_matrix_and_precision_differential_checks",
+    "hardware_calibration_status": "not_validated_against_hardware",
+    "methods": {
+      "dram": "Execute row boundaries and ACT/PRE/turnaround transitions; compose repeated row-hit command/data recurrences. Preserve bank rows, recovery gates, resource calendars and physical bytes.",
+      "compiled_dram": "Numba float64 implementation of the same recurrence; fastmath=False, no sampling, no reduced precision, no parallel reductions.",
+      "nand": "Exact binary-rational timing state and guarded affine recurrence composition; prove maximum-branch stability before jumping. Partial-page RMW and final states retained.",
+      "fallback": "Unsupported geometry/resource calendars use the original detailed state transitions or the exact Python accelerator.",
+      "planner_preview": "Do not construct expanded physical interval traces in temporary planning previews; dispatch recomputes the physical transaction."
+    },
+    "precision_scope": {
+      "reference": "Original per-burst/per-page model, plus Python state-transition accelerator for compiled differential checks.",
+      "hardware_parameters_and_scheduler_rules_changed": false,
+      "universal_bitwise_equivalence_claimed": false,
+      "floating_point_note": "Closed-form composition and exact binary-rational evaluation can differ from serial float additions by rounding. This does not introduce a physical approximation, but no universal numerical error bound is claimed.",
+      "compiled_random_checks": {
+        "mixed_requests": 150,
+        "maximum_difference_from_python_accelerator_ns": 0.0
+      },
+      "nand_sample": {
+        "pages": 100000,
+        "operation": "write",
+        "reference_duration_approx_s": 20.005,
+        "maximum_checked_timing_state_difference_ns": 0.00944,
+        "integer_counters_identical": true,
+        "scope": "One synthetic fixture, not a bound for all configurations."
+      },
+      "full_default_workload_differential_checks": {
+        "record": "precision_results_2026-10-07.json",
+        "models": 11,
+        "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+        "reference": "float64 per-burst traversal without repeated-row folding, independently checked against original Python burst fixtures",
+        "maximum_prediction_time_difference_ns": 0.0,
+        "maximum_prediction_time_relative_difference": 0.0,
+        "maximum_memory_service_difference_ns": 0.0,
+        "maximum_throughput_relative_difference": 0.0,
+        "integer_counter_mismatches": 0,
+        "numeric_fields_compared": 2464,
+        "nonzero_numeric_fields": 0,
+        "remaining_preset_scope": {
+          "combinations": 42,
+          "physical_memory_acceleration_executed": false,
+          "reason": "These presets have no physical_memory_config and their full reports contain zero physical DRAM/NAND tasks; they use existing analytical memory profiles."
+        }
+      },
+      "measured_memory_roundoff": {
+        "record": "memory_precision_2026-10-07.json",
+        "maximum_request_duration_difference_ns": 0.49169921875,
+        "maximum_request_duration_relative_difference": 3.905252918366966e-10,
+        "scope": "Representative fixtures only; nonzero drift occurs in the listed non-binary NAND timing fixture. No universal error bound or hardware accuracy claim."
+      }
+    },
+    "microbenchmarks": [
+      {
+        "case": "Native GDDR7 64 MiB",
+        "detailed_python_elapsed_s": 11.899,
+        "exact_python_elapsed_s": 0.0667,
+        "compiled_numeric_warm_elapsed_s": 0.0002863,
+        "scope": "Numeric loop alone; full wrapper and end-to-end costs are separate."
+      },
+      {
+        "case": "Synthetic NAND 9000 aligned pages read",
+        "detailed_elapsed_s": 0.115,
+        "accelerated_elapsed_s": 0.00092
+      },
+      {
+        "case": "Synthetic NAND 100000 aligned pages write",
+        "detailed_elapsed_s": 1.397,
+        "accelerated_elapsed_s": 0.00046
+      }
+    ],
+    "full_default_workload_runs": [
+      {
+        "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+        "model": "qwen3-0_6b",
+        "job_id": "56ac25db2c2a4fb1aa33f7f724737701",
+        "status": "completed",
+        "elapsed_s": 162.469,
+        "report_available": true,
+        "error": null,
+        "batch_count": 128,
+        "completed_requests": 1,
+        "task_count": 126080,
+        "makespan_ns": 687758928.9772321,
+        "dram_task_count": 50532,
+        "dram_physical_bytes": 147486331392,
+        "dram_service_ns": 169127679.63023272,
+        "dram_logical_read_bytes": 146639263744,
+        "dram_logical_write_bytes": 846367048,
+        "throughput": {
+          "requests_per_s": 1.4539978441095665,
+          "visible_output_tokens_per_s": 186.1117240460245,
+          "active_requests_per_s": 1.4539978441095665,
+          "active_visible_tokens_per_s": 186.1117240460245,
+          "steady_requests_per_s": 0.0,
+          "steady_visible_tokens_per_s": 187.83649091728174
+        },
+        "ttft_ns": {
+          "p50": 11542647.817612091,
+          "p95": 11542647.817612091,
+          "p99": 11542647.817612091
+        },
+        "tpot_ns": {
+          "p50": 5324454.061730396,
+          "p95": 5324454.061730396,
+          "p99": 5324454.061730396
+        },
+        "compiled_dram": {
+          "compiled_calls": 76040,
+          "compiled_hits": 76040,
+          "compiled_fallbacks": 0,
+          "summary_gate_fallbacks": 0
+        },
+        "execution_method": "RunJobManager_same_frontend_payload_aggregate",
+        "previous_exact_python_elapsed_s": 470.91,
+        "host_execution_speedup": 2.898,
+        "makespan_matches_previous_exact_run": true,
+        "task_count_and_physical_bytes_match_previous_exact_run": true
+      },
+      {
+        "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+        "model": "qwen3-4b",
+        "status": "completed",
+        "elapsed_s": 34.14,
+        "batch_count": 128,
+        "task_count": 160896,
+        "completed_requests": 1,
+        "makespan_approx_s": 7.027761,
+        "ttft_approx_ms": 70.753,
+        "tpot_approx_ms": 54.779,
+        "visible_output_tokens_per_s": 18.213,
+        "report_available": true,
+        "error": null,
+        "note": "Ran after the exact NAND replacement; the later compiled DRAM path is unused in this case."
+      },
+      {
+        "hardware": "nvidia-b200-1gpu-2hbf-2hbm",
+        "model": "qwen3-30b-a3b",
+        "status": "completed",
+        "elapsed_s": 135.03,
+        "batch_count": 128,
+        "task_count": 610176,
+        "completed_requests": 1,
+        "makespan_approx_s": 5.502025,
+        "ttft_approx_ms": 326.955,
+        "tpot_approx_ms": 40.748,
+        "visible_output_tokens_per_s": 23.264,
+        "report_available": true,
+        "error": null,
+        "note": "Ran after the exact NAND replacement; the later compiled DRAM path is unused in this case."
+      }
+    ],
+    "validation": {
+      "python_tests_passed": 217,
+      "python_suite_elapsed_s": 42.23,
+      "dram_differential_and_repeat_add_tests": 48,
+      "compiled_numeric_test": 1,
+      "compiled_wrapper_boundary_tests": 9,
+      "nand_differential_tests": 19,
+      "communication_preview_dispatch_regression": 1,
+      "frontend_regression_tests_passed": 11
+    },
+    "full_matrix_validation": {
+      "status": "complete",
+      "total_combinations": 63,
+      "totals": {
+        "completed": 53,
+        "capacity_rejected": 10
+      },
+      "record": "exact_preset_matrix_results_2026-10-07.json"
+    }
+  }
+}

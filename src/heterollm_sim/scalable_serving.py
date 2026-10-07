@@ -121,6 +121,7 @@ def execute_cost_schedule(
     *,
     control: Optional[ExecutionControl] = None,
     compiled_executor: Optional[CompiledGraphExecutor] = None,
+    retain_task_metadata: bool = True,
 ) -> ScheduleCostResult:
     """Execute and reduce a cohort schedule in one exact pass.
 
@@ -131,13 +132,27 @@ def execute_cost_schedule(
     execution_control = control or ExecutionControl()
     execution_control.raise_if_cancelled()
     bulk_events = None
-    if compiled_executor is not None:
+    # The compiled drain returns a tuple of KernelEvent objects.  That fast
+    # path is useful for analytical graphs, but physical/stateful tasks carry
+    # per-dispatch DRAM/L2 details in each event and retaining the whole tuple
+    # defeats aggregate retention.  Let the normal kernel consume those events
+    # one at a time so completed physical payloads can be reclaimed promptly.
+    has_physical_or_stateful = bool(
+        getattr(schedule, "resource_owners", {})
+        or any(
+            task.metadata.get("stateful_l2") is not None
+            or task.metadata.get("physical_memory_config") is not None
+            for task in schedule.tasks
+        )
+    )
+    if compiled_executor is not None and not has_physical_or_stateful:
         compiled_tasks, compiled_layout = compiled_executor._compiled_layout(
             schedule.tasks
         )
         kernel = UnifiedEventKernel(
             resource_capacities=getattr(schedule, "resource_capacities", {}),
             resource_owners=getattr(schedule, "resource_owners", {}),
+            capture_physical_details=retain_task_metadata,
         )
         bulk_events = kernel._drain_prevalidated_compiled(
             compiled_tasks,
@@ -149,16 +164,15 @@ def execute_cost_schedule(
             schedule.tasks,
             resource_capacities=getattr(schedule, "resource_capacities", {}),
             resource_owners=getattr(schedule, "resource_owners", {}),
+            capture_physical_details=retain_task_metadata,
         )
-    task_by_id = {task.task_id: task for task in schedule.tasks}
     total_tasks = len(schedule.tasks)
     execution_control.report("cohort_tasks", 0, total_tasks)
     resource_last_path: Dict[
         Tuple[str, int], Tuple[float, Optional[_PathLink]]
     ] = {}
-    end_by_task: Dict[str, float] = {}
     end_path_by_task: Dict[str, Optional[_PathLink]] = {}
-    # start, end, id, category, duration, metadata, sorted demands
+    # start, end, id, category, duration, metadata, sorted demands, dependencies
     records: List[
         Tuple[
             float,
@@ -168,6 +182,7 @@ def execute_cost_schedule(
             float,
             Mapping[str, Any],
             Tuple[ResourceDemand, ...],
+            Tuple[str, ...],
         ]
     ] = []
 
@@ -215,7 +230,6 @@ def execute_cost_schedule(
         end_path = _extend_path(
             start_path, task_duration, task.category, task.task_id
         )
-        end_by_task[task_id] = end_ns
         end_path_by_task[task_id] = end_path
 
         for demand in sorted_demands:
@@ -236,6 +250,51 @@ def execute_cost_schedule(
                 interval_path,
             )
 
+        if retain_task_metadata:
+            record_metadata = task.metadata
+        else:
+            # Serving estimation only consumes these envelope fields after
+            # execution.  Drop large physical descriptors (memory_accesses,
+            # allocation tables, cache contracts) from the retained record;
+            # the live event has already committed them and the schedule
+            # remains the source of task-level detail for exact replay.
+            record_metadata = {
+                key: task.metadata[key]
+                for key in (
+                    "analytical_ops", "cohort_id", "coverage_component",
+                    "dma_engine_resource_id", "event_kind",
+                    "execution_component", "gpu_consumer_component_id",
+                    "gpu_consumer_request_ids", "layer_id", "modeled_memory_write_bytes",
+                    "opaque_device_fence", "operator_id", "operator_invocation_group_id",
+                    "orchestration_stage",
+                    "physical_invocation_group_ids", "physical_memory_config",
+                    "request_ids", "resource_directions", "serving_cohort_complete",
+                    "serving_output_stage", "target_component", "tensor_id",
+                    "transfer_execution", "weight_tensor_id",
+                )
+                if key in task.metadata
+            }
+            if task.metadata.get("cost_model"):
+                # Stage refinement only checks presence; retaining the full
+                # kernel model per task needlessly repeats a large mapping.
+                record_metadata["cost_model"] = True
+            physical_execution = task.metadata.get("physical_execution")
+            if isinstance(physical_execution, Mapping):
+                # Preserve scalar traffic accounting for aggregate reports,
+                # while dropping the expanded interval/payload tuples that
+                # the details-disabled physical runtime never needs.
+                heavy_physical_keys = {
+                    "resource_intervals",
+                    "resource_interval_payloads",
+                    "resource_last_intervals",
+                    "physical_resource_intervals",
+                    "physical_resource_last_intervals",
+                }
+                record_metadata["physical_execution"] = {
+                    key: value
+                    for key, value in physical_execution.items()
+                    if key not in heavy_physical_keys
+                }
         records.append(
             (
                 start_ns,
@@ -243,8 +302,9 @@ def execute_cost_schedule(
                 task.task_id,
                 task.category,
                 task_duration,
-                task.metadata,
+                record_metadata,
                 sorted_demands,
+                tuple(task.dependencies),
             )
         )
         if kernel.completed_count % 256 == 0:
@@ -263,7 +323,7 @@ def execute_cost_schedule(
     state_bytes = {"read": 0, "write": 0, "prefetch": 0, "offload": 0}
     energy_pj = 0.0
     bytes_moved = 0
-    for _start, _end, task_id, category, duration, metadata, demands in ordered:
+    for _start, _end, task_id, category, duration, metadata, demands, _dependencies in ordered:
         category_time[category] = category_time.get(category, 0.0) + duration
         task_energy = sum(demand.energy_pj for demand in demands)
         task_bytes = sum(demand.bytes_moved for demand in demands)
@@ -360,11 +420,11 @@ def execute_cost_schedule(
                 start_ns=start_ns,
                 end_ns=end_ns,
                 category=category,
-                dependencies=tuple(task_by_id[task_id].dependencies),
+                dependencies=dependencies,
                 metadata=metadata,
                 demands=demands,
             )
-            for start_ns, end_ns, task_id, category, _duration, metadata, demands in ordered
+            for start_ns, end_ns, task_id, category, _duration, metadata, demands, dependencies in ordered
         ),
     )
 

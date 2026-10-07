@@ -48,3 +48,6 @@ def test_native_rtx_architecture_uses_formal_gddr_endpoint_and_link():
     assert link.protocol == "GDDR"
     assert link.version == "GDDR7"
     assert link.target_component == "gddr0"
+    # The link delegates service accounting to the attached memory component;
+    # its latency must therefore match the component's memory-service latency.
+    assert link.latency_ns == memory.metadata["read_latency_ns"]

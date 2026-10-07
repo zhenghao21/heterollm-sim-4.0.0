@@ -59,3 +59,18 @@ def test_allocation_generation_prevents_stale_line_hits():
     assert reused.miss_lines == 1
     assert reused.read_fill_bytes == 64
     assert reused.backing_accesses[0].allocation_generation == 2
+
+
+def test_transaction_rollback_restores_lru_and_counters_without_full_copy():
+    cache = ExplicitCacheState(128, 64)
+    cache.read("a", 0, 64, buffer_size_bytes=64)
+    cache.read("b", 0, 64, buffer_size_bytes=64)
+    before = tuple(line.key for line in cache.resident_lines())
+    before_snapshot = cache.snapshot()
+
+    transaction = cache.begin_transaction()
+    cache.write("c", 0, 64, buffer_size_bytes=64)
+    cache.rollback_transaction(transaction)
+
+    assert tuple(line.key for line in cache.resident_lines()) == before
+    assert cache.snapshot() == before_snapshot

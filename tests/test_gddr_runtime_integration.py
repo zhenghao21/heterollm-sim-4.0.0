@@ -8,8 +8,12 @@ from urllib.request import Request, urlopen
 import pytest
 
 from heterollm_sim.component_presets import get_component_preset
+from heterollm_sim.communication import TopologyRouter
 from heterollm_sim.config import scenario_from_dict
-from heterollm_sim.cost_models import GDDRProfile
+from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
+from heterollm_sim.cost_models import CostPhase, GDDRProfile
+from heterollm_sim.data_motion import PhysicalRuntimeContext, endpoint_service, resolve_physical_task
+from heterollm_sim.dram_core import DramCore
 from heterollm_sim.event_kernel import UnifiedEventKernel
 from heterollm_sim.ir import (
     LayerSpec,
@@ -17,8 +21,19 @@ from heterollm_sim.ir import (
     build_model_graph_from_layer_specs,
 )
 from heterollm_sim.kernel_model import KernelModelProfile
-from heterollm_sim.planner import compile_scenario, validate_scenario
+from heterollm_sim.memory_types import AccessRequest, Operation, parse_physical_memory_config
+from heterollm_sim.planner import (
+    _direct_memory_address,
+    _direct_memory_phase,
+    _gddr_stable_address,
+    _gddr_allocation_size,
+    _promote_physical_allocation_extents,
+    compile_scenario,
+    compile_serving_cohort_schedule,
+    validate_scenario,
+)
 from heterollm_sim.reference import build_reference_scenario
+from heterollm_sim.serving import BatchCohort, BatchItem
 from heterollm_sim.web import build_server, scenario_to_payload
 
 
@@ -138,6 +153,245 @@ def test_real_gpu_gddr_compile_carries_gemm_attention_and_directional_physical_a
         and item["address"] + item["byte_count"] <= capacity
         for item in accesses
     )
+
+
+def test_direct_memory_address_prefers_metadata_and_aligns_stable_fallback():
+    scenario = _gpu_gddr_scenario()
+    rank = scenario.placement.parallel.rank_mapping[0]
+    component = scenario.hardware.get_component("hbm0")
+    capacity = component.metadata["physical_memory_config"]["capacity_bytes"]
+    burst = component.metadata["physical_memory_config"]["burst_bytes"]
+    metadata = {"layer_id": "layer-007", "operator_id": "qkv"}
+
+    first = _direct_memory_address(scenario, rank, "hbm0", 1024, metadata)
+    second = _direct_memory_address(scenario, rank, "hbm0", 1024, metadata)
+    assert first == second
+    assert first % burst == 0
+    assert 0 <= first <= capacity - 1024
+    assert _direct_memory_address(
+        scenario,
+        rank,
+        "hbm0",
+        1024,
+        {**metadata, "page_offset_bytes": 4096},
+    ) == 4096
+
+
+def test_direct_memory_phase_drops_expanded_physical_trace_from_phase_metadata():
+    """A planner preview must keep counters, not one tuple per DRAM burst."""
+
+    scenario = _gpu_gddr_scenario()
+    placement = replace(
+        scenario.placement,
+        metadata={
+            "llama_backend_memory": {
+                "hbm0": {"access": "direct", "device_id": "gpu0"},
+            },
+        },
+    )
+    scenario = replace(scenario, placement=placement)
+    # Use HBM1 as the logical local backing so hbm0 is exercised through the
+    # direct-addressed GDDR path.
+    rank = replace(
+        scenario.placement.parallel.rank_mapping[0],
+        memory_component_id="hbm1",
+    )
+    phase = CostPhase(
+        "gpu_gemm",
+        TaskCategory.COMPUTE,
+        (ResourceDemand("gpu0.hbm_fabric", 10.0, bytes_moved=1024),),
+    )
+
+    lowered = _direct_memory_phase(
+        scenario,
+        rank,
+        phase,
+        "hbm0",
+        read_bytes=6 * 1024 * 1024,
+    )
+    direct = lowered.metadata["direct_memory_access"]
+    bill = direct["read_service"]
+    assert bill["physical_bytes"] > 0
+    assert bill["details_truncated"] is True
+    assert "resource_intervals" not in bill
+    assert "resource_interval_payloads" not in bill
+    assert "physical_resource_intervals" not in bill
+
+
+def test_planner_endpoint_preview_can_drop_expanded_physical_trace():
+    scenario = _gpu_gddr_scenario()
+    component = scenario.hardware.get_component("hbm0")
+    full = endpoint_service(
+        component,
+        1024 * 1024,
+        read=True,
+        name="full-preview",
+        page_offset_bytes=0,
+    )
+    compact = endpoint_service(
+        component,
+        1024 * 1024,
+        read=True,
+        name="compact-preview",
+        page_offset_bytes=0,
+        compact_preview=True,
+    )
+    assert full is not None and compact is not None
+    full_bill = full.metadata["physical_execution"]
+    compact_bill = compact.metadata["physical_execution"]
+    assert full_bill["physical_bytes"] == compact_bill["physical_bytes"]
+    assert full_bill["resource_intervals"]
+    assert compact_bill["details_truncated"] is True
+    assert "resource_intervals" not in compact_bill
+    assert "resource_interval_payloads" not in compact_bill
+
+
+def test_communication_preview_preserves_timing_and_dispatch_trace():
+    component = _gpu_gddr_scenario().hardware.get_component("hbm0")
+    phase = TopologyRouter._endpoint_phase(component, 65536, read=True,
+                                          name="communication", page_offset_bytes=0)
+    full = endpoint_service(component, 65536, read=True, name="full", page_offset_bytes=0)
+    assert phase.demands[0].service_ns == pytest.approx(full.demands[0].service_ns)
+    assert phase.demands[0].bytes_moved == full.demands[0].bytes_moved
+    assert "resource_intervals" not in phase.metadata["physical_execution"]
+    task = TaskSpec(task_id="endpoint", request_id="request", name=phase.name,
+                    category=TaskCategory.COMMUNICATION, demands=phase.demands, metadata=phase.metadata)
+    dispatched = resolve_physical_task(task, PhysicalRuntimeContext(capture_details=True), 0)
+    assert dispatched.metadata["physical_execution"]["resource_intervals"]
+
+
+def test_promoted_gddr_extent_rehashes_inferred_stable_address():
+    scenario = _gpu_gddr_scenario()
+    config = scenario.hardware.get_component("hbm0").metadata["physical_memory_config"]
+    buffer_id = "tensor:final_norm.output:rank=0:tp_rank=0:pp_rank=0"
+    first_address = _gddr_stable_address(
+        buffer_id, 0, 2, config["capacity_bytes"], config["burst_bytes"], 2
+    )
+    second_address = _gddr_stable_address(
+        buffer_id, 0, 2048, config["capacity_bytes"], config["burst_bytes"], 2048
+    )
+    def task(task_id, byte_count, address):
+        return TaskSpec(
+            task_id=task_id,
+            request_id="cohort-000000",
+            name=task_id,
+            category=TaskCategory.COMPUTE,
+            demands=(ResourceDemand("hbm0.gddr_fabric", 1.0, bytes_moved=byte_count),),
+            metadata={
+                "physical_memory_config": config,
+                "memory_accesses": ({
+                    "operation": "write", "address": address,
+                    "byte_count": byte_count, "offset_bytes": 0,
+                    "allocation_generation": 1, "generation": 1,
+                    "buffer_id": buffer_id,
+                    "address_source": "stable_buffer_tensor_offset",
+                },),
+            },
+        )
+
+    promoted = _promote_physical_allocation_extents((
+        task("norm.reduce", 2, first_address),
+        task("norm.apply", 2048, second_address),
+    ))
+    addresses = [row["address"] for item in promoted for row in item.metadata["memory_accesses"]]
+    extents = [row["allocation_size_bytes"] for item in promoted for row in item.metadata["memory_accesses"]]
+    assert addresses == [second_address, second_address]
+    assert extents == [2048, 2048]
+
+
+def test_gddr_weight_projection_does_not_claim_fused_tensor_extent():
+    """Each MLP projection must allocate its own shard, not the fused group."""
+
+    scenario = _gpu_gddr_scenario()
+    placement = replace(
+        scenario.placement,
+        tensor_bytes={"layer-000.mlp_weights": 149_422_080},
+    )
+    scenario = replace(scenario, placement=placement)
+    metadata = {
+        "projection_id": "mlp.up_gate",
+        "weight_tensor_id": "layer-000.mlp_weights",
+    }
+    assert _gddr_allocation_size(
+        scenario,
+        metadata,
+        "weight",
+        "tensor:layer-000.mlp_weights:projection_id=mlp.up_gate",
+        0,
+        99_614_720,
+    ) is None
+
+
+def test_aggregate_physical_runtime_keeps_scalar_timing_without_stage_trace():
+    """Aggregate cohort execution must not retain burst-sized stage tuples."""
+
+    scenario = _gpu_gddr_scenario()
+    raw_config = scenario.hardware.get_component("hbm0").metadata[
+        "physical_memory_config"
+    ]
+    config = parse_physical_memory_config(raw_config)
+    core = DramCore(config, capture_details=False)
+    result = core.submit(
+        AccessRequest(
+            "aggregate-preview",
+            Operation.READ,
+            0,
+            6 * 1024 * 1024,
+            0.0,
+        )
+    )
+    assert result.completion_ns > 0
+    assert result.transfer_bytes > 0
+    assert result.mapping == ()
+    assert result.stages == ()
+    assert result.counters["burst_count"] > 0
+
+
+def test_closed_physical_schedule_releases_transient_generation_buffers():
+    """Sequential serving activations must not accumulate in the GDDR allocator."""
+
+    raw = dict(_gpu_gddr_scenario().hardware.get_component("hbm0").metadata[
+        "physical_memory_config"
+    ])
+    raw["capacity_bytes"] = 64 * 1024 * 1024
+    owner = "hbm0.memory"
+    size = 48 * 1024 * 1024
+
+    def task(task_id, buffer_id, dependencies=()):
+        return TaskSpec(
+            task_id=task_id,
+            request_id="cohort-000000",
+            name=task_id,
+            category=TaskCategory.MEMORY,
+            dependencies=tuple(dependencies),
+            demands=(ResourceDemand(owner, 1.0, bytes_moved=size),),
+            metadata={
+                "physical_memory_config": raw,
+                "physical_owner": owner,
+                "memory_accesses": ({
+                    "operation": "write",
+                    "buffer_id": buffer_id,
+                    "offset_bytes": 0,
+                    "byte_count": size,
+                    "allocation_size_bytes": size,
+                    "allocation_generation": 1,
+                    "generation": 1,
+                    "address_source": "stable_buffer_tensor_offset",
+                    "physical_owner": owner,
+                    "resource_id": owner,
+                },),
+            },
+        )
+
+    schedule = (task("activation.0", "activation.0"),
+                task("activation.1", "activation.1", ("activation.0",)))
+    kernel = UnifiedEventKernel.from_closed_graph(
+        schedule,
+        resource_capacities={owner: 1},
+    )
+    while kernel.has_active_tasks:
+        assert kernel.step() is not None
+    assert kernel.physical_runtime.allocators[owner].allocations() == ()
 
 
 def test_frontend_transport_round_trip_accepts_default_gddr_component(tmp_path):
@@ -342,3 +596,34 @@ def test_tiny_dense_gddr_runs_prefill_and_two_decode_steps(
     else:
         assert all("l2_execution" not in event.task.metadata
                    for event in physical_events)
+
+
+@pytest.mark.parametrize("cohort_index", (0, 1))
+def test_serving_gddr_promotes_final_norm_extent_before_l2_registration(cohort_index):
+    scenario = _tiny_dense_gddr_scenario(5, stateful_l2=True)
+    cohort = BatchCohort(
+        cohort_id="cohort-{:06d}".format(cohort_index),
+        kind="prefill",
+        start_ns=0.0,
+        items=(BatchItem("tiny-request", "prefill", 5, 5, logit_tokens=1),),
+    )
+    schedule = compile_serving_cohort_schedule(scenario, cohort)
+    norm_accesses = [
+        access
+        for task in schedule.tasks
+        for access in task.metadata.get("stateful_l2", {}).get("accesses", ())
+        if "final_norm.output" in access["buffer_id"]
+    ]
+    assert len(norm_accesses) >= 2
+    assert len({access["size_bytes"] for access in norm_accesses}) > 1
+    extent = max(access["offset_bytes"] + access["size_bytes"] for access in norm_accesses)
+    assert all(access["buffer_size_bytes"] == extent for access in norm_accesses)
+    assert all(access["allocation_generation"] == cohort_index + 1 for access in norm_accesses)
+
+    kernel = UnifiedEventKernel.from_closed_graph(
+        schedule.tasks,
+        resource_capacities=schedule.resource_capacities,
+        resource_owners=schedule.resource_owners,
+    )
+    while kernel.has_active_tasks:
+        assert kernel.step() is not None

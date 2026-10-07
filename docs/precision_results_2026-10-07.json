@@ -1,0 +1,928 @@
+{
+  "date": "2026-10-07",
+  "status": "complete",
+  "full_matrix": {
+    "record": "exact_preset_matrix_results_2026-10-07.json",
+    "combinations": 63,
+    "totals": {
+      "completed": 53,
+      "capacity_rejected": 10
+    }
+  },
+  "full_workload_differential_models": 11,
+  "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+  "method": "Same default 512/128 workload; every DRAM burst traversed in float64 with row folding disabled; NAND reference uses the original page loop. The numeric single-burst kernel is separately checked against the original Python burst loop.",
+  "relative_error_denominator": "abs(reference prediction); not an absolute timestamp for request-duration comparisons",
+  "prediction_time_ns": {
+    "fields": 77,
+    "maximum_absolute_difference": 0.0,
+    "maximum_absolute_field": "qwen2_5-0_5b:summary.makespan_ns",
+    "maximum_relative_difference": 0.0,
+    "maximum_relative_field": "qwen2_5-0_5b:summary.makespan_ns",
+    "zero_reference_nonzero_count": 0
+  },
+  "memory_service_ns": {
+    "fields": 11,
+    "maximum_absolute_difference": 0.0,
+    "maximum_absolute_field": "qwen2_5-0_5b:summary.dram_traffic.service_ns",
+    "maximum_relative_difference": 0.0,
+    "maximum_relative_field": "qwen2_5-0_5b:summary.dram_traffic.service_ns",
+    "zero_reference_nonzero_count": 0
+  },
+  "throughput": {
+    "fields": 66,
+    "maximum_absolute_difference": 0.0,
+    "maximum_absolute_field": "qwen2_5-0_5b:summary.throughput.active_requests_per_s",
+    "maximum_relative_difference": 0.0,
+    "maximum_relative_field": "qwen2_5-0_5b:summary.throughput.active_requests_per_s",
+    "zero_reference_nonzero_count": 0
+  },
+  "integer_counter_mismatches": 0,
+  "numeric_fields_compared": 2464,
+  "nonzero_numeric_fields": 0,
+  "b200_scope": {
+    "combinations": 42,
+    "physical_memory_acceleration_executed": false,
+    "reason": "These presets have no physical_memory_config and their full reports contain zero physical DRAM/NAND tasks; they use existing analytical memory profiles."
+  },
+  "memory_differential": {
+    "record": "memory_precision_2026-10-07.json",
+    "dram_cases": 4,
+    "nand_cases": 3,
+    "integer_counter_mismatches": 0,
+    "maximum_request_duration_error_ns": 0.49169921875,
+    "maximum_completion_timestamp_error_ns": 0.49169921875,
+    "maximum_request_duration_relative_error": 3.905252918366966e-10,
+    "maximum_calendar_or_state_error_ns": 0.49169921875,
+    "serial_numeric_vs_original_python_max_duration_error_ns": 0.0,
+    "cases": [
+      {
+        "case": "native_gddr7_physical_memory_config",
+        "duration_error": {
+          "absolute_error": 0.0,
+          "relative_error": 0.0,
+          "zero_reference_nonzero_actual": false
+        },
+        "calendar_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "busy_ns.dram:bank:0:0:0:0:0:0",
+          "max_relative_location": "busy_ns.dram:bank:0:0:0:0:0:0"
+        },
+        "state_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "acceptance_ns",
+          "max_relative_location": "acceptance_ns"
+        }
+      },
+      {
+        "case": "native_ddr5_5600_derived_representative",
+        "duration_error": {
+          "absolute_error": 0.0,
+          "relative_error": 0.0,
+          "zero_reference_nonzero_actual": false
+        },
+        "calendar_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "busy_ns.dram:bank:0:0:0:0:0:0",
+          "max_relative_location": "busy_ns.dram:bank:0:0:0:0:0:0"
+        },
+        "state_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "acceptance_ns",
+          "max_relative_location": "acceptance_ns"
+        }
+      },
+      {
+        "case": "heterogeneous_shared_command",
+        "duration_error": {
+          "absolute_error": 0.0,
+          "relative_error": 0.0,
+          "zero_reference_nonzero_actual": false
+        },
+        "calendar_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "busy_ns.dram:bank:0:0:0:0:0:0",
+          "max_relative_location": "busy_ns.dram:bank:0:0:0:0:0:0"
+        },
+        "state_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "acceptance_ns",
+          "max_relative_location": "acceptance_ns"
+        }
+      },
+      {
+        "case": "nested_resource_alias_fallback",
+        "duration_error": {
+          "absolute_error": 0.0,
+          "relative_error": 0.0,
+          "zero_reference_nonzero_actual": false
+        },
+        "calendar_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "busy_ns.dram:bank:0:0:0:0:0:0",
+          "max_relative_location": "busy_ns.dram:bank:0:0:0:0:0:0"
+        },
+        "state_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "acceptance_ns",
+          "max_relative_location": "acceptance_ns"
+        }
+      },
+      {
+        "case": "nand_aligned_read_write_and_partial_rmw",
+        "duration_error": {
+          "absolute_error": 0.0,
+          "relative_error": 0.0,
+          "zero_reference_nonzero_actual": false
+        },
+        "calendar_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "busy_ns.nand:array:0",
+          "max_relative_location": "busy_ns.nand:array:0"
+        },
+        "state_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "acceptance_ns",
+          "max_relative_location": "acceptance_ns"
+        }
+      },
+      {
+        "case": "nand_shared_host_alias_and_followup",
+        "duration_error": {
+          "absolute_error": 0.0,
+          "relative_error": 0.0,
+          "zero_reference_nonzero_actual": false
+        },
+        "calendar_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "busy_ns.nand:array:0",
+          "max_relative_location": "busy_ns.nand:array:0"
+        },
+        "state_error": {
+          "max_absolute_error": 0.0,
+          "max_relative_error": 0.0,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "acceptance_ns",
+          "max_relative_location": "acceptance_ns"
+        }
+      },
+      {
+        "case": "nand_100000_page_write_roundoff",
+        "duration_error": {
+          "path": "",
+          "actual": 1259071382.1107178,
+          "reference": 1259071381.6190186,
+          "absolute_error": 0.49169921875,
+          "relative_error": 3.905252918366966e-10,
+          "zero_reference_nonzero_actual": false
+        },
+        "calendar_error": {
+          "max_absolute_error": 0.49169921875,
+          "max_relative_error": 4.31113585362215e-12,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "lane_available.nand:host.[0]",
+          "max_relative_location": "busy_ns.nand:host"
+        },
+        "state_error": {
+          "max_absolute_error": 0.49169921875,
+          "max_relative_error": 4.910809128266007e-13,
+          "zero_reference_nonzero_actual_count": 0,
+          "key_mismatch_count": 0,
+          "max_absolute_location": "inflight.[0]",
+          "max_relative_location": "inflight.[0]"
+        }
+      }
+    ]
+  },
+  "results": [
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-0_5b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 57600,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 57600,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 2762757752,
+        "dram_skipped_row_hit_bursts": 2702670720,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 148.804273
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 57600,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 57600,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 2762757752,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 180.015493
+      },
+      "detail_file": "precision_native_group1_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-0_6b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 76040,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 76040,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 3542902208,
+        "dram_skipped_row_hit_bursts": 3468784640,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 183.231198
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 76040,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 76040,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 3542902208,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 219.415896
+      },
+      "detail_file": "precision_native_group1_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-1b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 66224,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 66224,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 6818391296,
+        "dram_skipped_row_hit_bursts": 6697971584,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 101.983958
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 66224,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 66224,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 6818391296,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 170.037539
+      },
+      "detail_file": "precision_native_group1_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-1_5b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 68928,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 68928,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 7891534784,
+        "dram_skipped_row_hit_bursts": 7748239104,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 198.949943
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 68928,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 68928,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 7891534784,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 273.275221
+      },
+      "detail_file": "precision_native_group1_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-1_7b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 115412,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 115412,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 9900226880,
+        "dram_skipped_row_hit_bursts": 9723287040,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 176.646764
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 115412,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 115412,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 9900226880,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 282.400377
+      },
+      "detail_file": "precision_native_group2_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_2-3b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 115412,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 115412,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 17691652928,
+        "dram_skipped_row_hit_bursts": 17389627008,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 189.570799
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 115412,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 115412,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 17691652928,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 373.822554
+      },
+      "detail_file": "precision_native_group2_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-3b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 148204,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 148204,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 15235258848,
+        "dram_skipped_row_hit_bursts": 14966583936,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 224.28157
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 148204,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 148204,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 15235258848,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 374.994676
+      },
+      "detail_file": "precision_native_group2_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-4b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 148204,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 148204,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 19731711488,
+        "dram_skipped_row_hit_bursts": 19389413504,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 234.544295
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 148204,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 148204,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 19731711488,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 441.007184
+      },
+      "detail_file": "precision_native_group3_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen3-8b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 157476,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 157476,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 39570919168,
+        "dram_skipped_row_hit_bursts": 38915696768,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 253.471923
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 157476,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 157476,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 39570919168,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 641.093387
+      },
+      "detail_file": "precision_native_group3_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "qwen2_5-7b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 115468,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 115468,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 34332900992,
+        "dram_skipped_row_hit_bursts": 33768212608,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 182.407776
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 115468,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 115468,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 34332900992,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 536.668105
+      },
+      "detail_file": "precision_native_group4_2026-10-07.json"
+    },
+    {
+      "hardware": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+      "model": "llama3_1-8b",
+      "status": "completed",
+      "numeric_fields_compared": 224,
+      "nonzero_numeric_fields": 0,
+      "integer_counter_mismatches": 0,
+      "prediction_time_ns": {
+        "fields": 7,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.makespan_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.makespan_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "memory_service_ns": {
+        "fields": 1,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.dram_traffic.service_ns",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.dram_traffic.service_ns",
+        "zero_reference_nonzero_count": 0
+      },
+      "throughput": {
+        "fields": 6,
+        "maximum_absolute_difference": 0.0,
+        "maximum_absolute_field": "summary.throughput.active_requests_per_s",
+        "maximum_relative_difference": 0.0,
+        "maximum_relative_field": "summary.throughput.active_requests_per_s",
+        "zero_reference_nonzero_count": 0
+      },
+      "accelerated_call_counts": {
+        "dram_compiled_dispatches": 140064,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 140064,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 38225538048,
+        "dram_skipped_row_hit_bursts": 37595390848,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": false,
+        "dram_reference_method": "production_accelerated_path",
+        "host_elapsed_s": 223.931122
+      },
+      "reference_call_counts": {
+        "dram_compiled_dispatches": 140064,
+        "dram_compiled_fallbacks": 0,
+        "dram_compiled_results": 140064,
+        "dram_python_accelerated_calls": 0,
+        "dram_total_bursts": 38225538048,
+        "dram_skipped_row_hit_bursts": 0,
+        "nand_accelerated_calls": 0,
+        "nand_accelerated_pages": 0,
+        "nand_detailed_calls": 0,
+        "nand_detailed_pages": 0,
+        "dram_reference_full_burst_traversal": true,
+        "dram_reference_method": "serial_numeric_full_burst",
+        "host_elapsed_s": 606.476035
+      },
+      "detail_file": "precision_native_group4_2026-10-07.json"
+    }
+  ],
+  "scope_limit": "Measured optimization drift for these runs and listed memory fixtures, not a universal numerical error bound and not validation against real hardware."
+}

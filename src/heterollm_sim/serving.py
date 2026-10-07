@@ -2288,8 +2288,12 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
                 "swap/offload, managed residency and native allocation contracts "
                 "require distributed migration lowering"
             )
-        if scenario.workload.mtp is not None and scenario.workload.mtp.candidate_tokens > 0:
-            raise ValueError("memory_tiers layer partitioning does not yet support MTP scratch-state capacity")
+        # MTP verifier scratch is a transient reservation on the same
+        # layer-owned KV endpoints.  The online ledger accounts for it with
+        # temporary pages, so static layer partitioning remains valid as long
+        # as the normal per-component capacity proof below leaves room for
+        # those reservations.  Rejecting every MTP request here made the
+        # default workload impossible to run through llama.cpp placement.
         # Include unpartitioned state in the same per-component capacity proof.
         if not kv_component_bytes and bytes_per_page and cache_component:
             kv_component_bytes = {cache_component: bytes_per_page}
@@ -9452,6 +9456,46 @@ class _OnlineRuntime:
         )
         self._max_batch_tokens = max(self._max_batch_tokens, batch.token_count)
 
+    @staticmethod
+    def _compact_retained_batch_cost_metadata(
+        metadata: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        """Keep reportable cohort facts without retaining the planner DAG.
+
+        The planner's prepared execution stages and residency traces are useful
+        while a cohort is being scheduled, but retaining them for every
+        continuous-batching cohort makes aggregate runs grow with the full
+        execution graph.  The report only needs the realized stage schedule,
+        scalar ledgers, and invocation-group counts after the cohort commits.
+        """
+        retained = dict(metadata)
+        for key in (
+            "execution_stages",
+            "residency_accesses",
+            "transient_residency_operator_facts",
+            "transient_residency_envelopes",
+            "item_terminal_tasks",
+        ):
+            retained.pop(key, None)
+        for key in (
+            "operator_invocation_groups",
+            "mtp_proposer_invocation_groups",
+            "mtp_draft_catchup_invocation_groups",
+        ):
+            raw = retained.get(key)
+            if isinstance(raw, _ABCSequence) and not isinstance(
+                raw, (str, bytes, _ABCMapping)
+            ):
+                # Reporting uses only len(); retain stable ids for diagnostics.
+                retained[key] = tuple(
+                    {"group_id": str(row.get("group_id", ""))}
+                    if isinstance(row, _ABCMapping)
+                    else {"group_id": str(index)}
+                    for index, row in enumerate(raw)
+                )
+        retained["retention_details_truncated"] = True
+        return retained
+
     def run(self) -> ServingResult:
         self.execution_control.raise_if_cancelled()
         self.execution_control.report(
@@ -15094,6 +15138,15 @@ class _OnlineRuntime:
             batch=self.batches[-1],
             details={"state_commit": "post_terminal_boundary"},
         )
+        # The full planner metadata is no longer needed after prompt-cache
+        # accounting and state commit.  Drop it before the next cohort starts
+        # so aggregate runs have bounded retained memory.
+        retained_cost = BatchCost(
+            cost.duration_ns,
+            cost.energy_pj,
+            self._compact_retained_batch_cost_metadata(cost.metadata),
+        )
+        self.batches[-1] = replace(self.batches[-1], cost=retained_cost)
         self.events.append(ServingEvent(end_ns, "batch_end", cohort_id=cohort.cohort_id, details={"kind": cohort.kind}))
         self.now = end_ns
         self._llama_graph_runtime.commit(graph_transition)
@@ -16593,6 +16646,8 @@ def _batch_item_verifier_tokens(item: BatchItem) -> int:
 def _batch_item_main_tokens(item: BatchItem) -> int:
     if item.main_tokens is not None:
         return max(0, int(item.main_tokens))
+    if item.phase == "decode":
+        return _batch_item_verifier_tokens(item)
     return 1 if item.phase == "mtp" and _batch_item_verifier_tokens(item) else 0
 
 

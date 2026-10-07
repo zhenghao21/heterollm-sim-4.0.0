@@ -11,6 +11,73 @@ from heterollm_sim.dram_core import DramCore
 from heterollm_sim.event_kernel import UnifiedEventKernel
 
 
+def _cohort_buffer_task(task_id, buffer_id, *, owner="gddr0", dependencies=(), alias_of=None, compute=None):
+    declaration = {"buffer_id": buffer_id, "size_bytes": 64, "generation": 1,
+                   "physical_owner": owner}
+    if alias_of is not None:
+        declaration.update(alias_of=alias_of, alias_generation=1)
+    demands = (ResourceDemand(owner, 1.0, bytes_moved=64),)
+    if compute:
+        demands += (ResourceDemand(compute, 1000.0),)
+    return TaskSpec(
+        task_id=task_id, request_id="cohort-000000", name=task_id,
+        category=TaskCategory.MEMORY, dependencies=tuple(dependencies), demands=demands,
+        metadata={
+            "physical_memory_config": _config().__dict__, "physical_owner": owner,
+            "physical_allocations": (declaration,),
+            "memory_access": {"operation": "read", "buffer_id": buffer_id,
+                              "byte_count": 64, "offset_bytes": 0, "generation": 1,
+                              "allocation_generation": 1, "physical_owner": owner,
+                              "resource_id": owner, "address_source": "stable_buffer_tensor_offset"},
+        },
+    )
+
+
+def test_closed_serving_buffer_lifetimes_are_owner_scoped():
+    tasks = (_cohort_buffer_task("first", "same", owner="gddr0"),
+             _cohort_buffer_task("second", "same", owner="gddr1", dependencies=("first",)))
+    kernel = UnifiedEventKernel.from_closed_graph(tasks)
+    while kernel.has_active_tasks:
+        assert kernel.step() is not None
+    assert all(allocator.allocations() == () for allocator in kernel.physical_runtime.allocators.values())
+
+
+def test_dynamic_submit_keeps_same_generation_for_later_consumers():
+    kernel = UnifiedEventKernel()
+    kernel.submit((_cohort_buffer_task("first", "persistent"),))
+    first = kernel.step()
+    assert first is not None
+    allocation = kernel.physical_runtime.allocators["gddr0"].lookup("persistent", 1)
+    kernel.submit((_cohort_buffer_task("second", "persistent", dependencies=("first",)),))
+    second = kernel.step()
+    assert second is not None
+    assert kernel.physical_runtime.allocators["gddr0"].lookup("persistent", 1) == allocation
+
+
+def test_closed_serving_alias_chain_keeps_future_targets_live():
+    tasks = (_cohort_buffer_task("root", "root"),
+             _cohort_buffer_task("view", "view", alias_of="root", dependencies=("root",)),
+             _cohort_buffer_task("leaf", "leaf", alias_of="view", dependencies=("view",)))
+    kernel = UnifiedEventKernel.from_closed_graph(tasks)
+    while kernel.has_active_tasks:
+        assert kernel.step() is not None
+    assert kernel.physical_runtime.allocators["gddr0"].allocations() == ()
+
+
+def test_parallel_physical_tasks_do_not_reuse_buffers_before_completion():
+    tasks = (_cohort_buffer_task("first", "first", compute="compute0"),
+             _cohort_buffer_task("second", "second", compute="compute1"))
+    kernel = UnifiedEventKernel.from_closed_graph(tasks)
+    first = kernel.step()
+    assert first is not None
+    assert kernel.physical_runtime.allocators["gddr0"].get_allocation("first", 1) is not None
+    second = kernel.step()
+    assert second is not None
+    assert second.start_ns < first.end_ns
+    assert first.task.metadata["memory_accesses"][0]["address"] != second.task.metadata["memory_accesses"][0]["address"]
+    assert kernel.physical_runtime.allocators["gddr0"].allocations() == ()
+
+
 def _config():
     return DramConfig(
         kind=MemoryKind.GDDR,
@@ -243,3 +310,37 @@ def test_physical_batch_same_lane_contends_and_overlap_write_reads_wait():
     )), PhysicalRuntimeContext(), 0.0)
     intervals = overlap.metadata["physical_resource_intervals"]
     assert overlap.metadata["physical_completion_ns"] >= max(item.end_ns for item in intervals)
+
+
+def test_physical_runtime_rollback_restores_only_transaction_state():
+    runtime = PhysicalRuntimeContext()
+    core = runtime.runtime(_config(), "gddr0").core
+    original_submit = core.submit
+    calls = {"count": 0}
+
+    def fail_on_second(request):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("synthetic physical failure")
+        return original_submit(request)
+
+    core.submit = fail_on_second
+    with pytest.raises(RuntimeError, match="synthetic physical failure"):
+        resolve_physical_task(
+            _multi_access_task((
+                {"operation": "read", "address": 0, "byte_count": 1},
+                {"operation": "read", "address": 64, "byte_count": 1},
+            )),
+            runtime,
+            0.0,
+        )
+    assert runtime.timeline.ready_ns == {}
+    assert runtime.timeline.busy_ns == {}
+    assert runtime.allocators["gddr0"].allocations() == ()
+
+
+def test_physical_runtime_snapshot_keeps_interval_history_by_reference():
+    runtime = PhysicalRuntimeContext()
+    runtime.timeline._intervals = {"gddr0:data:0": [(0.0, 1.0)] * 1000}
+    snapshot = runtime.snapshot()
+    assert snapshot["timeline"]["_intervals"] is runtime.timeline._intervals

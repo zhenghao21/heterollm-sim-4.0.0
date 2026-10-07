@@ -42,12 +42,20 @@ function loadApp() {
       addRequest,
       updateRequestField,
       renderWorkload,
+      applyWorkloadPreset,
+      setLlamaRuntimeMode,
+      renderRunJobDialog,
       setStubs(changed, notices) {
         markWorkloadChanged = changed;
         toast = (...args) => notices.push(args);
         renderRequestTable = () => {};
         hydrateConceptHelp = () => {};
       },
+      setScenarioChangedStub(changed) {
+        markScenarioChanged = changed;
+      },
+      resetPlacementForArchitecturePreset,
+      applyPresetDetailToScenario,
     };
   `;
   vm.createContext(context);
@@ -191,4 +199,205 @@ test("empty deadline remains nullable while invalid request numbers are rejected
   assert.equal(api.state.scenario.workload.requests[0].prompt_tokens, 8);
   assert.equal(changed, 1);
   assert.equal(notices.length, 1);
+});
+
+test("llama runtime mode fills an unspecified KV owner from GPU-local memory", () => {
+  const api = loadApp();
+  api.state.scenario = {
+    hardware: {
+      components: [
+        { component_id: "gpu0", kind: "gpu", metadata: {} },
+        { component_id: "gddr0", kind: "gddr", metadata: {} },
+        { component_id: "hostmem0", kind: "host_memory", metadata: {} },
+      ],
+      links: [
+        { source_component: "gpu0", target_component: "gddr0" },
+        { source_component: "gpu0", target_component: "hostmem0" },
+      ],
+    },
+    placement: { kv_policy: { cache_component: null }, metadata: {} },
+    profiles: {},
+    workload: {
+      requests: [{ prompt_tokens: 8, output_tokens: 2 }],
+      prompt_tokens: 8,
+      output_tokens: 2,
+      scheduler: { max_num_seqs: 1, max_num_batched_tokens: 16, max_num_ubatch_tokens: 16 },
+      metadata: {},
+    },
+  };
+  assert.equal(api.setLlamaRuntimeMode("llama_cpp"), true);
+  assert.equal(api.state.scenario.placement.kv_policy.cache_component, "gddr0");
+  assert.equal(api.state.scenario.profiles.llama_cpp.policy, "llama_cpp");
+});
+
+test("llama.cpp workload preset refreshes stale runtime batch and context defaults", () => {
+  const api = loadApp();
+  const previous = workload(64, 4);
+  previous.requests = [{ request_id: "request-0000", prompt_tokens: 64, output_tokens: 4 }];
+  previous.scheduler.max_num_seqs = 4;
+  previous.scheduler.max_num_batched_tokens = 256;
+  previous.scheduler.max_num_ubatch_tokens = 256;
+  api.state.scenario = {
+    workload: previous,
+    profiles: {
+      llama_cpp: {
+        policy: "llama_cpp",
+        batch: 256,
+        ubatch: 256,
+        context: 68,
+        parallel: 4,
+      },
+    },
+  };
+  api.setStubs(() => {}, []);
+  api.setScenarioChangedStub(() => {});
+  api.applyWorkloadPreset("llama_cpp_default");
+  assert.equal(api.state.scenario.workload.prompt_tokens, 512);
+  assert.equal(api.state.scenario.workload.output_tokens, 128);
+  assert.equal(api.state.scenario.workload.mtp, null);
+  assert.equal(api.state.scenario.profiles.llama_cpp.batch, 512);
+  assert.equal(api.state.scenario.profiles.llama_cpp.ubatch, 512);
+  assert.equal(api.state.scenario.profiles.llama_cpp.context, 640);
+  assert.equal(api.state.scenario.profiles.llama_cpp.parallel, 1);
+});
+
+test("llama.cpp workload preset preserves explicit runtime overrides", () => {
+  const api = loadApp();
+  api.state.scenario = {
+    workload: workload(64, 4),
+    profiles: {
+      llama_cpp: {
+        policy: "llama_cpp",
+        batch: 1024,
+        ubatch: 128,
+        context: 4096,
+        parallel: 2,
+      },
+    },
+  };
+  api.setStubs(() => {}, []);
+  api.setScenarioChangedStub(() => {});
+  api.applyWorkloadPreset("llama_cpp_default");
+  assert.equal(api.state.scenario.profiles.llama_cpp.batch, 1024);
+  assert.equal(api.state.scenario.profiles.llama_cpp.ubatch, 128);
+  assert.equal(api.state.scenario.profiles.llama_cpp.context, 4096);
+  assert.equal(api.state.scenario.profiles.llama_cpp.parallel, 2);
+});
+
+test("run dialog scopes risk to logical scale and explains the first cohort count", () => {
+  const api = loadApp();
+  const element = () => ({ textContent: "", innerHTML: "", hidden: false, setAttribute() {}, removeAttribute() {} });
+  for (const name of [
+    "runJobDialog", "runEstimateRisk", "runEstimateSummary", "runEstimateWarnings",
+    "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount",
+    "runProgressBar", "runProgressMessage", "startRunJobButton", "cancelRunJobButton",
+    "dismissRunJobButton",
+  ]) api.dom[name] = element();
+  api.state.runEstimate = { schema_version: "4.0.0", risk_level: "low", risk_level_zh: "低", warnings: [] };
+  api.state.runJob = {
+    job_id: "test-job", status: "running",
+    progress: { stage: "serving_cohorts", unit: "serving_batches", completed: 0, total: null },
+  };
+  api.renderRunJobDialog();
+  assert.equal(api.dom.runEstimateRisk.textContent, "逻辑规模风险：低");
+  assert.match(api.dom.runEstimateWarnings.innerHTML, /不保证运行耗时或峰值内存/);
+  assert.match(api.dom.runProgressMessage.textContent, /完成前批次计数保持 0/);
+  assert.match(api.dom.runProgressMessage.textContent, /详细事件可能耗时较长/);
+  api.state.runJob.progress.completed = 1;
+  api.renderRunJobDialog();
+  assert.doesNotMatch(api.dom.runProgressMessage.textContent, /完成前批次计数保持 0/);
+});
+
+test("architecture preset reset removes model-specific placement while preserving parallel policy", () => {
+  const api = loadApp();
+  const placement = {
+    hardware_name: "old-hardware",
+    op_to_component: { "layer-000": "gpu-old" },
+    tensor_to_component: { hidden: "gddr-old" },
+    tensor_bytes: { hidden: 128 },
+    parallel: {
+      tp_degree: 2,
+      pp_degree: 3,
+      ep_degree: 4,
+      rank_mapping: [{ rank: 0, component_id: "gpu-old" }],
+      layer_to_stage: { "layer-000": 0, "layer-001": 1 },
+      collective_algorithm: "ring",
+      routing_policy: "bandwidth_aware",
+      allow_padding: false,
+    },
+    kv_policy: {
+      cache_component: "gddr-old",
+      offload_component: "host-old",
+      dtype: "fp16",
+      tokens_per_page: 32,
+    },
+    metadata: { control_plane: { decision: { old: true } }, ui: { keep: true }, keep: "yes" },
+  };
+  api.resetPlacementForArchitecturePreset(placement, "new-hardware");
+  assert.equal(placement.hardware_name, "new-hardware");
+  assert.equal(Object.keys(placement.op_to_component).length, 0);
+  assert.equal(Object.keys(placement.tensor_to_component).length, 0);
+  assert.equal(Object.keys(placement.tensor_bytes).length, 0);
+  assert.equal(placement.parallel.rank_mapping.length, 0);
+  assert.equal(Object.keys(placement.parallel.layer_to_stage).length, 0);
+  assert.equal(placement.parallel.tp_degree, 2);
+  assert.equal(placement.parallel.pp_degree, 3);
+  assert.equal(placement.parallel.ep_degree, 4);
+  assert.equal(placement.parallel.collective_algorithm, "ring");
+  assert.equal(placement.parallel.routing_policy, "bandwidth_aware");
+  assert.equal(placement.parallel.allow_padding, false);
+  assert.equal(placement.kv_policy.cache_component, null);
+  assert.equal(placement.kv_policy.offload_component, null);
+  assert.equal(placement.kv_policy.dtype, "fp16");
+  assert.equal(placement.kv_policy.tokens_per_page, 32);
+  assert.equal(placement.metadata.control_plane, undefined);
+  assert.equal(placement.metadata.ui.keep, true);
+  assert.equal(placement.metadata.keep, "yes");
+});
+
+test("model preset replacement clears stale authoring maps and pipeline stages", () => {
+  const api = loadApp();
+  const graph = graphWithPorts(
+    { dtype: "fp16", shape: ["B", "T", "H"], layout: "logical" },
+    { dtype: "fp16", shape: ["B", "T", "H"], layout: "logical" },
+  );
+  graph.graph_id = "new-model-graph";
+  graph.attributes = { ui: { detail: { collapsed_groups: ["source"] } } };
+  api.state.scenario = {
+    model: { name: "old-model", graph: { ...graph, graph_id: "old-model-graph" } },
+    placement: {
+      op_to_component: { old: "gpu0" },
+      tensor_to_component: { old_tensor: "gddr0" },
+      tensor_bytes: { old_tensor: 64 },
+      parallel: {
+        tp_degree: 2, pp_degree: 2, ep_degree: 1,
+        rank_mapping: [{ rank: 0, component_id: "gpu0" }],
+        layer_to_stage: { old: 0 },
+        collective_algorithm: "ring", routing_policy: "bandwidth_aware", allow_padding: false,
+      },
+      metadata: { control_plane: { decision: { stale: true } } },
+    },
+  };
+  let changed = 0;
+  api.setScenarioChangedStub(() => { changed += 1; });
+  const applied = api.applyPresetDetailToScenario({
+    preset: { support_level: "exact" },
+    model: { schema_version: "4.0.0", name: "new-model", graph },
+  });
+  assert.equal(applied.level, "exact");
+  assert.equal(applied.removedByGroup.op_to_component, 1);
+  assert.equal(applied.removedByGroup.tensor_to_component, 1);
+  assert.equal(applied.removedByGroup.tensor_bytes, 1);
+  assert.equal(applied.layerToStage.removed, 1);
+  assert.equal(api.state.scenario.model.name, "new-model");
+  assert.equal(Object.keys(api.state.scenario.placement.op_to_component).length, 0);
+  assert.equal(Object.keys(api.state.scenario.placement.tensor_to_component).length, 0);
+  assert.equal(Object.keys(api.state.scenario.placement.tensor_bytes).length, 0);
+  assert.equal(Object.keys(api.state.scenario.placement.parallel.layer_to_stage).length, 0);
+  assert.equal(api.state.scenario.placement.parallel.tp_degree, 2);
+  assert.equal(api.state.scenario.placement.parallel.pp_degree, 2);
+  assert.equal(api.state.scenario.placement.parallel.collective_algorithm, "ring");
+  assert.equal(api.state.scenario.placement.metadata.control_plane, undefined);
+  assert.equal(changed, 1);
+  assert.equal(graph.attributes.ui.detail.collapsed_groups[0], "source");
 });

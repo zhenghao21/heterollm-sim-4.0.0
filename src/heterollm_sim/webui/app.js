@@ -4222,6 +4222,27 @@ function runProgressDetailText(progressValue) {
     : uiText("当前批次内 {completed}/{total} 个拓扑任务", "Current cohort: {completed}/{total} topology tasks", { completed: formatNumber(completed), total: formatNumber(total) });
 }
 
+function runProgressMessageWithHints(progressValue, status) {
+  const progress = asObject(progressValue);
+  const message = progress.message
+    ? runProgressMessageText(progress.message)
+    : uiText("后台仿真正在运行。", "The background simulation is running.");
+  const detail = runProgressDetailText(progress);
+  const firstCohort = status === "running"
+    && progress.stage === "serving_cohorts"
+    && runProgressUnit(progress) === "serving_batches"
+    && Math.max(0, Number(progress.completed) || 0) === 0;
+  const hint = firstCohort
+    ? uiText(
+      "首个在线批次正在准备、编译或执行；完成前批次计数保持 0。详细事件可能耗时较长。",
+      "The first online cohort is being prepared, compiled, or executed; its count stays at 0 until completion. Detailed events can take substantial time.",
+    )
+    : "";
+  const parts = [detail, message, hint].filter(Boolean)
+    .map((item) => item.replace(/[。.]+\s*$/u, ""));
+  return `${parts.join(uiText("。", ". "))}${uiText("。", ".")}`;
+}
+
 function syncRunButtons() {
   const active = runJobIsActive() || state.runJobSubmitting;
   const modelGraphReadOnly = state.scenario?.model?.graph?.executable === false;
@@ -4245,7 +4266,7 @@ function renderRunJobDialog() {
   const riskZh = String(estimate.risk_level_zh || ({ low: "低", medium: "中", high: "高", critical: "极高" }[risk]));
   const riskEn = ({ low: "Low", medium: "Medium", high: "High", critical: "Critical" }[risk]);
   dom.runEstimateRisk.textContent = estimate.risk_level
-    ? uiText(`风险：${riskZh}`, `Risk: ${riskEn}`)
+    ? uiText(`逻辑规模风险：${riskZh}`, `Logical-scale risk: ${riskEn}`)
     : uiText("等待估算", "Awaiting estimate");
   const facts = [
     [uiText("请求数（Requests）", "Requests"), estimate.request_count],
@@ -4261,7 +4282,13 @@ function renderRunJobDialog() {
     const display = typeof value === "number" ? formatResultNumber(value).html : escapeHtml(value ?? "—");
     return `<div><dt>${escapeHtml(label)}</dt><dd>${display}</dd></div>`;
   }).join("");
-  const warnings = asArray(estimate.warnings);
+  const warnings = [
+    uiText(
+      "逻辑规模风险只反映任务规模估算，不保证运行耗时或峰值内存；详细事件成本可能因场景而异。",
+      "Logical-scale risk reflects estimated task scale only; it does not guarantee runtime or peak memory, and detailed-event cost varies by scenario.",
+    ),
+    ...asArray(estimate.warnings),
+  ];
   dom.runEstimateWarnings.innerHTML = warnings.length
     ? warnings.map((item) => `<p>${escapeHtml(runEstimateWarningText(item))}</p>`).join("")
     : `<p>${escapeHtml(uiText("未发现需要额外提示的运行规模风险。", "No additional run-scale risks were identified."))}</p>`;
@@ -4285,13 +4312,7 @@ function renderRunJobDialog() {
     if (ratio == null) dom.runProgressBar.removeAttribute("value");
     else dom.runProgressBar.value = ratio;
     dom.runProgressBar.textContent = ratio == null ? uiText("运行中", "Running") : `${formatNumber(ratio * 100)}%`;
-    const progressMessage = progress.message
-      ? runProgressMessageText(progress.message)
-      : uiText("后台仿真正在运行。", "The background simulation is running.");
-    const detailMessage = runProgressDetailText(progress);
-    dom.runProgressMessage.textContent = detailMessage
-      ? uiText("{detail}。{message}", "{detail}. {message}", { detail: detailMessage, message: progressMessage })
-      : progressMessage;
+    dom.runProgressMessage.textContent = runProgressMessageWithHints(progress, job.status);
     dom.runProgressBar.setAttribute(
       "aria-valuetext",
       uiText("{stage}：{count}。{message}", "{stage}: {count}. {message}", {
@@ -10919,6 +10940,9 @@ function resetPlacementForArchitecturePreset(placement, hardwareName) {
   placement.tensor_to_component = {};
   placement.tensor_bytes = {};
   placement.parallel = asObject(placement.parallel);
+  // Pipeline stages are model-specific. Clear them when the hardware preset
+  // changes so a previous model's layer ids cannot survive into validation.
+  clearParallelLayerToStage(placement);
   placement.parallel.rank_mapping = [];
   placement.kv_policy = asObject(placement.kv_policy);
   placement.kv_policy.cache_component = null;
@@ -11512,12 +11536,23 @@ function applyPresetDetailToScenario(payload) {
     error.code = "preset_not_materializable";
     throw error;
   }
-  const removedByGroup = { op_to_component: 0, tensor_to_component: 0, tensor_bytes: 0 };
-  delete asObject(state.scenario.placement.metadata).control_plane;
-  const layerToStage = clearParallelLayerToStage(state.scenario.placement);
+  const placement = asObject(state.scenario.placement);
+  const removedByGroup = {
+    op_to_component: Object.keys(asObject(placement.op_to_component)).length,
+    tensor_to_component: Object.keys(asObject(placement.tensor_to_component)).length,
+    tensor_bytes: Object.keys(asObject(placement.tensor_bytes)).length,
+  };
+  // Authoring placement is model-specific. Retaining entries from the prior
+  // preset can make validation reject valid models because old operator/tensor
+  // ids no longer exist in the new graph.
+  placement.op_to_component = {};
+  placement.tensor_to_component = {};
+  placement.tensor_bytes = {};
+  delete asObject(placement.metadata).control_plane;
+  const layerToStage = clearParallelLayerToStage(placement);
   resetModelGraphForPreset(nextModel.graph);
   state.scenario.model = nextModel;
-  state.scenario.placement.model_name = nextModel.name;
+  placement.model_name = nextModel.name;
   markScenarioChanged();
   return { preset, level, nextModel, removedByGroup, layerToStage };
 }
@@ -14923,11 +14958,50 @@ function llamaRuntimeDefaults(scenario = state.scenario) {
   };
 }
 
+// An architecture preset intentionally clears placement targets because those
+// targets belong to the previous hardware graph.  llama.cpp still needs one
+// writable active-memory owner when KV offload is enabled, though; leaving the
+// target empty makes the backend reject the scenario before it can materialize
+// rank-local memory.  Prefer memory directly attached to a GPU (GDDR/HBM), then
+// fall back to any writable active memory such as host DRAM.
+function defaultLlamaKvCacheComponent(scenario = state.scenario) {
+  const components = asArray(scenario?.hardware?.components);
+  const byId = new Map(components.map((component) => [String(component.component_id || ""), component]));
+  const attachedToGpu = new Set();
+  asArray(scenario?.hardware?.links).forEach((link) => {
+    const source = byId.get(String(link?.source_component || ""));
+    const target = byId.get(String(link?.target_component || ""));
+    const sourceIsGpu = normalizedComponentKind(source?.kind) === "gpu";
+    const targetIsGpu = normalizedComponentKind(target?.kind) === "gpu";
+    if (sourceIsGpu && target) attachedToGpu.add(String(target.component_id || ""));
+    if (targetIsGpu && source) attachedToGpu.add(String(source.component_id || ""));
+  });
+  const candidates = components
+    .filter((component) => isWritableActiveRankMemory(component))
+    .sort((left, right) => {
+      const leftAttached = attachedToGpu.has(String(left.component_id || "")) ? 0 : 1;
+      const rightAttached = attachedToGpu.has(String(right.component_id || "")) ? 0 : 1;
+      return leftAttached - rightAttached
+        || String(left.component_id || "").localeCompare(String(right.component_id || ""));
+    });
+  return String(candidates[0]?.component_id || "");
+}
+
 function setLlamaRuntimeMode(mode, scenario = state.scenario) {
   if (!["auto", "llama_cpp"].includes(mode)) return false;
   scenario.profiles = asObject(scenario.profiles);
-  if (mode === "llama_cpp") scenario.profiles.llama_cpp = { ...llamaRuntimeDefaults(scenario), ...asObject(scenario.profiles.llama_cpp) };
-  else delete scenario.profiles.llama_cpp;
+  if (mode === "llama_cpp") {
+    scenario.profiles.llama_cpp = { ...llamaRuntimeDefaults(scenario), ...asObject(scenario.profiles.llama_cpp) };
+    // Architecture-preset replacement clears cache/offload targets.  Fill
+    // only an unspecified cache target; an explicit user choice remains
+    // authoritative and is validated by the backend.
+    scenario.placement = asObject(scenario.placement);
+    scenario.placement.kv_policy = asObject(scenario.placement.kv_policy);
+    if (!String(scenario.placement.kv_policy.cache_component || "").trim()) {
+      const cacheComponent = defaultLlamaKvCacheComponent(scenario);
+      if (cacheComponent) scenario.placement.kv_policy.cache_component = cacheComponent;
+    }
+  } else delete scenario.profiles.llama_cpp;
   clearLlamaRuntimeExposure(scenario);
   scenario.workload = asObject(scenario.workload);
   scenario.workload.metadata = asObject(scenario.workload.metadata);
@@ -15178,6 +15252,9 @@ function applyWorkloadPreset(presetId) {
     return;
   }
   const workload = state.scenario.workload;
+  const previousLlamaDefaults = state.scenario.profiles?.llama_cpp
+    ? llamaRuntimeDefaults(state.scenario)
+    : null;
   const metadata = asObject(workload.metadata);
   for (const field of [
     "llama_cpp_runtime",
@@ -15239,6 +15316,26 @@ function applyWorkloadPreset(presetId) {
       workload_preset_source_scenario: preset.sourceId,
     },
   };
+  // A workload preset changes the request span and scheduler limits that
+  // llamaRuntimeDefaults derives batch/context from.  Refresh those
+  // auto-derived runtime fields when llama.cpp mode is active; otherwise a
+  // profile created for the previous workload (for example batch=256,
+  // context=68) can make the new 512+128 baseline internally inconsistent.
+  if (preset.id === "llama_cpp_default" && state.scenario.profiles?.llama_cpp) {
+    const defaults = llamaRuntimeDefaults(state.scenario);
+    const currentProfile = asObject(state.scenario.profiles.llama_cpp);
+    const autoDerived = (field) => (
+      currentProfile[field] == null
+      || (previousLlamaDefaults && currentProfile[field] === previousLlamaDefaults[field])
+    );
+    state.scenario.profiles.llama_cpp = {
+      ...currentProfile,
+      ...(autoDerived("batch") ? { batch: defaults.batch } : {}),
+      ...(autoDerived("ubatch") ? { ubatch: defaults.ubatch } : {}),
+      ...(autoDerived("context") ? { context: defaults.context } : {}),
+      ...(autoDerived("parallel") ? { parallel: defaults.parallel } : {}),
+    };
+  }
   markScenarioChanged(`${workloadPresetLabel(preset)}：${workloadPresetDescription(preset)}`, {
     mappingImpact: false,
   });

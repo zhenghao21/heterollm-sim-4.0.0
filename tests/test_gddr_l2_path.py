@@ -174,3 +174,33 @@ def test_gddr_presets_derive_command_interval_from_lane_payload_budget():
         command_ceiling = config["data_lanes"] * config["burst_bytes"] / interval
         assert command_ceiling >= config["interface_bandwidth_gb_s"]
         assert config["metadata"]["command_interval_model"] == "per_lane_burst_payload_budget"
+
+
+def test_freed_serving_buffer_discards_l2_dirty_lines_before_address_reuse():
+    config = _config()
+    owner = "gddr0.gddr_fabric"
+
+    def temporary(task_id, buffer_id, operation, dependencies=()):
+        access = {"operation": operation, "byte_count": 64,
+                  "buffer_id": buffer_id, "offset_bytes": 0, "generation": 1,
+                  "allocation_generation": 1, "allocation_size_bytes": 64,
+                  "physical_owner": owner, "resource_id": owner,
+                  "address_source": "stable_buffer_tensor_offset"}
+        task = _task(task_id, config=config, access=access)
+        contract = {**task.metadata["stateful_l2"], "capacity_bytes": 64,
+                    "accesses": ({"buffer_id": buffer_id, "offset_bytes": 0,
+                                  "size_bytes": 64, "operation": operation,
+                                  "buffer_size_bytes": 64, "allocation_generation": 1},)}
+        return replace(task, request_id="cohort-000000", dependencies=tuple(dependencies),
+                       metadata={**task.metadata, "physical_owner": owner, "stateful_l2": contract})
+
+    kernel = UnifiedEventKernel.from_closed_graph((
+        temporary("write", "dead", "write"),
+        temporary("read", "next", "read", ("write",)),
+    ))
+    assert kernel.step() is not None
+    second = kernel.step()
+    assert second is not None
+    assert second.task.metadata["l2_execution"]["dirty_eviction_bytes"] == 0
+    assert kernel.physical_runtime.allocators[owner].allocations() == ()
+    assert kernel._l2_states["gpu0.l2"][1].resident_lines() == ()
