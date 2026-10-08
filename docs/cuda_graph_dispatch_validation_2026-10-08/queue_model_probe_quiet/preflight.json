@@ -1,0 +1,29 @@
+{
+  "schema": "heterollm.cuda-queue-quiet-preflight/v1",
+  "started_utc": "2026-10-08T16:04:20.926963+00:00",
+  "started_beijing": "2026-10-09T00:04:20.926963+08:00",
+  "logical_cpu_count": 32,
+  "cpu_samples": [
+    {
+      "time_utc": "2026-10-08T16:04:19.375697+00:00",
+      "cpu_percent": 2.2,
+      "available_memory_bytes": 109547102208
+    },
+    {
+      "time_utc": "2026-10-08T16:04:19.876440+00:00",
+      "cpu_percent": 3.3,
+      "available_memory_bytes": 109548679168
+    },
+    {
+      "time_utc": "2026-10-08T16:04:20.376795+00:00",
+      "cpu_percent": 3.9,
+      "available_memory_bytes": 109546979328
+    }
+  ],
+  "gpu_status_csv": "2026/10/09 00:04:20.921, 25 %, 17 %, 1553 MiB, 19.07 W",
+  "gpu_context": "No known native/model/microbenchmark compute process was seen in the preflight process listing, but GPU utilization remained about25% (about19W). The full activity attribution is not established; this is low CPU load, not a GPU-idle or zero-contention experiment.",
+  "plan_source": "docs\\cuda_graph_dispatch_validation_2026-10-08\\queue_model_probe\\experiment_plan.json",
+  "plan_bytes_equal": true,
+  "fixed_model_source": "docs\\cuda_graph_dispatch_validation_2026-10-08\\queue_model_probe\\queue_model_identification.json",
+  "parameter_refitting_allowed": false
+}

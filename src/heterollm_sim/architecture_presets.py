@@ -23,6 +23,7 @@ from .component_presets import (
     materialize_component_payload,
 )
 from .serde import to_primitive
+from .schema_v4 import ControllerProfile, GPUControllerProfile
 from .topology import validate_topology
 
 
@@ -2672,9 +2673,39 @@ def architecture_preset_detail(preset_id: str, *, component_catalog=None) -> Dic
     item = get_architecture_preset(preset_id)
     hardware = materialize_architecture_payload(preset_id, component_catalog=component_catalog) if item.loadable else None
     topology_view = hardware["metadata"]["topology_view"] if hardware else None
+    profiles: Dict[str, Any] = {}
+    if hardware is not None:
+        # These are the existing analytical scenario policies, now explicitly
+        # supplied with the selected architecture rather than inherited from a
+        # previously loaded reference scenario. They are not device measurements.
+        profiles["fusion"] = {
+            "qkv_rope": True,
+            "flash_attention": True,
+            "gemm_epilogue_activation": True,
+            "residual_norm": True,
+            "max_fused_working_set_bytes": 30 * 1024**2,
+        }
+        gpu_ids = {
+            component["component_id"] for component in hardware["components"]
+            if str(component["kind"]).strip().lower().replace("-", "_").replace(" ", "_") == "gpu"
+        }
+        if gpu_ids:
+            # architecture_default historically invents gpu0 for GPU-free
+            # hardware. Bind only devices that the selected preset contains.
+            profiles["runtime"] = to_primitive(ControllerProfile(
+                gpu_controllers={gpu_id: GPUControllerProfile() for gpu_id in sorted(gpu_ids)},
+            ))
     return {
         "preset": _metadata(item),
         "hardware": hardware,
+        "profiles": profiles,
+        "profiles_parameter_basis": {
+            "kind": "existing_analytical_template",
+            "runtime_source": "schema_v4.ControllerProfile / GPUControllerProfile",
+            "fusion_source": "reference.build_reference_scenario.fusion_policy",
+            "is_native_measurement": False,
+            "is_manufacturer_specification": False,
+        } if profiles else {},
         "components": hardware["components"] if hardware else [],
         "links": hardware["links"] if hardware else [],
         "groups": topology_view["groups"] if topology_view else [],

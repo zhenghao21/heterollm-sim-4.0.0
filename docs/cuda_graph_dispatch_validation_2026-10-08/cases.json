@@ -1,0 +1,17 @@
+{
+  "schema": "heterollm.frontend-gguf-validation-cases/v1",
+  "date": "2026-10-08",
+  "hardware_preset": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+  "cases": [
+    {"preset_id": "qwen3-0_6b", "case_id": "qwen3_0_6b_f16", "name": "Qwen3 0.6B · F16"},
+    {"preset_id": "qwen3-1_7b", "case_id": "qwen3_1_7b_q8_0", "name": "Qwen3 1.7B · Q8_0"},
+    {"preset_id": "qwen3-4b", "case_id": "qwen3_4b_q4_k_m", "name": "Qwen3 4B · Q4_K_M"},
+    {"preset_id": "qwen3-8b", "case_id": "qwen3_8b_q4_k_m", "name": "Qwen3 8B · Q4_K_M"},
+    {"preset_id": "qwen3_8-27b-iq3-s-iq4-xs", "case_id": "qwen3_8_27b_mixed", "name": "Qwen3.8 27B · IQ3_S / IQ4_XS"},
+    {"preset_id": "qwen2_5-0_5b", "case_id": "qwen2_5_0_5b_q4_k_m", "name": "Qwen2.5 0.5B Instruct · Q4_K_M"},
+    {"preset_id": "qwen2_5-7b", "case_id": "qwen2_5_7b_q4_k_m", "name": "Qwen2.5 7B Instruct · Q4_K_M"},
+    {"preset_id": "llama3_2-1b", "case_id": "llama3_2_1b_q4_k_m", "name": "Llama 3.2 1B Instruct · Q4_K_M"},
+    {"preset_id": "llama3_1-8b", "case_id": "llama3_1_8b_q4_k_m", "name": "Llama 3.1 8B Instruct · Q4_K_M"},
+    {"preset_id": "qwen3-14b", "case_id": "qwen3_14b_q4_k_m", "name": "Qwen3 14B · Q4_K_M"}
+  ]
+}

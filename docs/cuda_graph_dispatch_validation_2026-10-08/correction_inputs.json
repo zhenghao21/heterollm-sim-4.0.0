@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.cuda-dispatch-correction-inputs/v1",
+  "prepared_utc": "2026-10-08T14:19:48.567528+00:00",
+  "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08",
+  "model_count": 10,
+  "scenario_inputs_changed": false,
+  "native_measurements_reused": true,
+  "native_measurement_manifest": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\native_timing_manifest.json",
+  "native_values_used_for_calibration": false,
+  "device_dispatch_calibration_installed": false,
+  "scope": "Rerun unchanged browser inputs after source-lowering fixes; independent dispatch probes remain diagnostics."
+}

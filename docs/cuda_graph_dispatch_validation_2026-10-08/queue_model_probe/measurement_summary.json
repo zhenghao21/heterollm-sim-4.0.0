@@ -1,0 +1,1852 @@
+{
+  "hardware_id": "NVIDIA GeForce RTX 5080",
+  "architecture": "sm_120",
+  "driver_version": "617.14",
+  "runtime_version": "12080",
+  "cpu_id": "AMD Ryzen 9 9950X3D 16-Core Processor",
+  "os_id": "Windows-11-10.0.26200-SP0",
+  "runtime_id": "CUDA-12080-driver-617.14",
+  "schema": "heterollm.cuda-queue-probe-suite/v1",
+  "target_llm_latency_used": false,
+  "prediction_qualified": false,
+  "started_utc": "2026-10-08T14:39:49.748862+00:00",
+  "finished_utc": "2026-10-08T14:40:04.267935+00:00",
+  "cases": [
+    {
+      "case_id": "threshold_holdout_7000",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_7000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 1233152.0,
+          "repeat_mad_ns": 32864.0,
+          "minimum_ns": 1168736.0,
+          "maximum_ns": 2044288.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 316992.0,
+          "repeat_mad_ns": 32928.0,
+          "minimum_ns": 252480.0,
+          "maximum_ns": 1127968.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 7168.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 7136,
+          "maximum_ns": 7168,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 237700,
+          "repeat_mad_ns": 42900,
+          "minimum_ns": 175800,
+          "maximum_ns": 280600,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248399.125,
+            "cpu_percent": 68.5,
+            "available_memory_bytes": 91174596608
+          },
+          {
+            "monotonic_seconds": 248399.187,
+            "cpu_percent": 74.8,
+            "available_memory_bytes": 91131133952
+          },
+          {
+            "monotonic_seconds": 248399.25,
+            "cpu_percent": 67.5,
+            "available_memory_bytes": 91092193280
+          },
+          {
+            "monotonic_seconds": 248399.312,
+            "cpu_percent": 62.6,
+            "available_memory_bytes": 91208527872
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "nodes_holdout_33",
+      "split": "holdout_nodes",
+      "source": "nodes_holdout_33.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 104576.0,
+          "repeat_mad_ns": 2240.0,
+          "minimum_ns": 98720.0,
+          "maximum_ns": 112864.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 74144.0,
+          "repeat_mad_ns": 2240.0,
+          "minimum_ns": 68352.0,
+          "maximum_ns": 82432.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 928,
+          "repeat_mad_ns": 0,
+          "minimum_ns": 896,
+          "maximum_ns": 928,
+          "repeat_count": 693
+        },
+        "host_submission_span": {
+          "median_ns": 51100,
+          "repeat_mad_ns": 700,
+          "minimum_ns": 49900,
+          "maximum_ns": 68700,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248399.39,
+            "cpu_percent": 69.3,
+            "available_memory_bytes": 91166347264
+          },
+          {
+            "monotonic_seconds": 248399.437,
+            "cpu_percent": 76.3,
+            "available_memory_bytes": 91095838720
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "observer_off_payload_256",
+      "split": "observer_control",
+      "source": "observer_off_payload_256.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 464480.0,
+          "repeat_mad_ns": 10880.0,
+          "minimum_ns": 444800.0,
+          "maximum_ns": 1069728.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 441984.0,
+          "repeat_mad_ns": 10880.0,
+          "minimum_ns": 422080.0,
+          "maximum_ns": 1047040.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 176.0,
+          "repeat_mad_ns": 16.0,
+          "minimum_ns": 160,
+          "maximum_ns": 192,
+          "repeat_count": 2688
+        },
+        "host_submission_span": null,
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248399.562,
+            "cpu_percent": 65.2,
+            "available_memory_bytes": 91163156480
+          },
+          {
+            "monotonic_seconds": 248399.609,
+            "cpu_percent": 72.2,
+            "available_memory_bytes": 91087732736
+          },
+          {
+            "monotonic_seconds": 248399.656,
+            "cpu_percent": 68.0,
+            "available_memory_bytes": 91172810752
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "nodes_holdout_255",
+      "split": "holdout_nodes",
+      "source": "nodes_holdout_255.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 1035552.0,
+          "repeat_mad_ns": 30208.0,
+          "minimum_ns": 908672.0,
+          "maximum_ns": 1577760.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 803232.0,
+          "repeat_mad_ns": 29888.0,
+          "minimum_ns": 676192.0,
+          "maximum_ns": 1345120.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 928,
+          "repeat_mad_ns": 0,
+          "minimum_ns": 896,
+          "maximum_ns": 928,
+          "repeat_count": 5355
+        },
+        "host_submission_span": {
+          "median_ns": 383500,
+          "repeat_mad_ns": 23600,
+          "minimum_ns": 353700,
+          "maximum_ns": 641500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248399.734,
+            "cpu_percent": 64.0,
+            "available_memory_bytes": 91163369472
+          },
+          {
+            "monotonic_seconds": 248399.796,
+            "cpu_percent": 69.2,
+            "available_memory_bytes": 91081732096
+          },
+          {
+            "monotonic_seconds": 248399.859,
+            "cpu_percent": 74.5,
+            "available_memory_bytes": 91085115392
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_750",
+      "split": "train_threshold",
+      "source": "threshold_train_750.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 475328.0,
+          "repeat_mad_ns": 46688.0,
+          "minimum_ns": 418048.0,
+          "maximum_ns": 1745920.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 357792.0,
+          "repeat_mad_ns": 46592.0,
+          "minimum_ns": 300480.0,
+          "maximum_ns": 1628384.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 928.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 896,
+          "maximum_ns": 928,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 250100,
+          "repeat_mad_ns": 4600,
+          "minimum_ns": 244100,
+          "maximum_ns": 289400,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248400.0,
+            "cpu_percent": 62.1,
+            "available_memory_bytes": 91147075584
+          },
+          {
+            "monotonic_seconds": 248400.078,
+            "cpu_percent": 74.2,
+            "available_memory_bytes": 91085750272
+          },
+          {
+            "monotonic_seconds": 248400.125,
+            "cpu_percent": 69.3,
+            "available_memory_bytes": 91160580096
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "observer_off_payload_0",
+      "split": "observer_control",
+      "source": "observer_off_payload_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 444736.0,
+          "repeat_mad_ns": 7744.0,
+          "minimum_ns": 419520.0,
+          "maximum_ns": 1171040.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 422304.0,
+          "repeat_mad_ns": 7520.0,
+          "minimum_ns": 396768.0,
+          "maximum_ns": 1148320.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 192,
+          "repeat_count": 2688
+        },
+        "host_submission_span": null,
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248400.218,
+            "cpu_percent": 75.0,
+            "available_memory_bytes": 91158249472
+          },
+          {
+            "monotonic_seconds": 248400.296,
+            "cpu_percent": 71.7,
+            "available_memory_bytes": 91099181056
+          },
+          {
+            "monotonic_seconds": 248400.343,
+            "cpu_percent": 69.5,
+            "available_memory_bytes": 91111219200
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_1000",
+      "split": "train_threshold",
+      "source": "threshold_train_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 708064.0,
+          "repeat_mad_ns": 5216.0,
+          "minimum_ns": 669664.0,
+          "maximum_ns": 1193216.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 557504.0,
+          "repeat_mad_ns": 5504.0,
+          "minimum_ns": 519296.0,
+          "maximum_ns": 1042656.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 236800,
+          "repeat_mad_ns": 4100,
+          "minimum_ns": 231500,
+          "maximum_ns": 266800,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248400.453,
+            "cpu_percent": 76.2,
+            "available_memory_bytes": 91155607552
+          },
+          {
+            "monotonic_seconds": 248400.515,
+            "cpu_percent": 72.9,
+            "available_memory_bytes": 91078639616
+          },
+          {
+            "monotonic_seconds": 248400.578,
+            "cpu_percent": 71.4,
+            "available_memory_bytes": 91141472256
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_0",
+      "split": "train_threshold",
+      "source": "threshold_train_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 468640.0,
+          "repeat_mad_ns": 13632.0,
+          "minimum_ns": 425312.0,
+          "maximum_ns": 578144.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 446176.0,
+          "repeat_mad_ns": 13824.0,
+          "minimum_ns": 402880.0,
+          "maximum_ns": 555296.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 192,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 185900,
+          "repeat_mad_ns": 4100,
+          "minimum_ns": 181400,
+          "maximum_ns": 253400,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248400.671,
+            "cpu_percent": 66.4,
+            "available_memory_bytes": 91156676608
+          },
+          {
+            "monotonic_seconds": 248400.734,
+            "cpu_percent": 70.0,
+            "available_memory_bytes": 91093692416
+          },
+          {
+            "monotonic_seconds": 248400.796,
+            "cpu_percent": 66.7,
+            "available_memory_bytes": 91188248576
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_1125",
+      "split": "train_threshold",
+      "source": "threshold_train_1125.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 684704.0,
+          "repeat_mad_ns": 21440.0,
+          "minimum_ns": 657600.0,
+          "maximum_ns": 1678016.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 517696.0,
+          "repeat_mad_ns": 21088.0,
+          "minimum_ns": 490912.0,
+          "maximum_ns": 1511200.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1312.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1280,
+          "maximum_ns": 1312,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 252200,
+          "repeat_mad_ns": 5500,
+          "minimum_ns": 207800,
+          "maximum_ns": 273800,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248400.875,
+            "cpu_percent": 69.6,
+            "available_memory_bytes": 91177750528
+          },
+          {
+            "monotonic_seconds": 248400.921,
+            "cpu_percent": 76.0,
+            "available_memory_bytes": 91110699008
+          },
+          {
+            "monotonic_seconds": 248400.984,
+            "cpu_percent": 69.4,
+            "available_memory_bytes": 91119984640
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "payload_train_256_1000",
+      "split": "train_payload",
+      "source": "payload_train_256_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 712992.0,
+          "repeat_mad_ns": 23424.0,
+          "minimum_ns": 670144.0,
+          "maximum_ns": 1818976.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 562592.0,
+          "repeat_mad_ns": 23296.0,
+          "minimum_ns": 519648.0,
+          "maximum_ns": 1668544.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 189300,
+          "repeat_mad_ns": 10600,
+          "minimum_ns": 173300,
+          "maximum_ns": 303500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248401.109,
+            "cpu_percent": 66.7,
+            "available_memory_bytes": 91168247808
+          },
+          {
+            "monotonic_seconds": 248401.171,
+            "cpu_percent": 74.0,
+            "available_memory_bytes": 91098816512
+          },
+          {
+            "monotonic_seconds": 248401.218,
+            "cpu_percent": 67.4,
+            "available_memory_bytes": 91166879744
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "mixed_shuffled_holdout",
+      "split": "holdout_mixed_body",
+      "source": "mixed_shuffled_holdout.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 665920.0,
+          "repeat_mad_ns": 11360.0,
+          "minimum_ns": 622336.0,
+          "maximum_ns": 1580704.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 450912.0,
+          "repeat_mad_ns": 11392.0,
+          "minimum_ns": 407136.0,
+          "maximum_ns": 1365472.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1280.0,
+          "repeat_mad_ns": 736.0,
+          "minimum_ns": 256,
+          "maximum_ns": 4160,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 251500,
+          "repeat_mad_ns": 5500,
+          "minimum_ns": 203300,
+          "maximum_ns": 278900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248401.312,
+            "cpu_percent": 69.5,
+            "available_memory_bytes": 91161473024
+          },
+          {
+            "monotonic_seconds": 248401.375,
+            "cpu_percent": 73.5,
+            "available_memory_bytes": 91090120704
+          },
+          {
+            "monotonic_seconds": 248401.421,
+            "cpu_percent": 74.4,
+            "available_memory_bytes": 91122860032
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_4000",
+      "split": "train_threshold",
+      "source": "threshold_train_4000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 1001984.0,
+          "repeat_mad_ns": 30720.0,
+          "minimum_ns": 899328.0,
+          "maximum_ns": 2043040.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 471040.0,
+          "repeat_mad_ns": 30912.0,
+          "minimum_ns": 368288.0,
+          "maximum_ns": 1511808.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 4160.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 4128,
+          "maximum_ns": 4160,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 255800,
+          "repeat_mad_ns": 5100,
+          "minimum_ns": 248300,
+          "maximum_ns": 300500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248401.546,
+            "cpu_percent": 71.2,
+            "available_memory_bytes": 91160309760
+          },
+          {
+            "monotonic_seconds": 248401.593,
+            "cpu_percent": 76.0,
+            "available_memory_bytes": 91082649600
+          },
+          {
+            "monotonic_seconds": 248401.64,
+            "cpu_percent": 80.0,
+            "available_memory_bytes": 91067883520
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "mixed_alternating_holdout",
+      "split": "holdout_mixed_body",
+      "source": "mixed_alternating_holdout.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 821728.0,
+          "repeat_mad_ns": 28192.0,
+          "minimum_ns": 736768.0,
+          "maximum_ns": 1480288.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 337600.0,
+          "repeat_mad_ns": 28320.0,
+          "minimum_ns": 252512.0,
+          "maximum_ns": 996288.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 3776.0,
+          "repeat_mad_ns": 3360.0,
+          "minimum_ns": 384,
+          "maximum_ns": 7168,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 255200,
+          "repeat_mad_ns": 7900,
+          "minimum_ns": 172800,
+          "maximum_ns": 354100,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248401.765,
+            "cpu_percent": 77.6,
+            "available_memory_bytes": 91136729088
+          },
+          {
+            "monotonic_seconds": 248401.828,
+            "cpu_percent": 68.0,
+            "available_memory_bytes": 91076218880
+          },
+          {
+            "monotonic_seconds": 248401.89,
+            "cpu_percent": 72.1,
+            "available_memory_bytes": 91150934016
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_5000",
+      "split": "train_threshold",
+      "source": "threshold_train_5000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 1168096.0,
+          "repeat_mad_ns": 20096.0,
+          "minimum_ns": 1117696.0,
+          "maximum_ns": 1451616.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 505664.0,
+          "repeat_mad_ns": 19904.0,
+          "minimum_ns": 455456.0,
+          "maximum_ns": 789024.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 5184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 5152,
+          "maximum_ns": 5184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 254000,
+          "repeat_mad_ns": 5200,
+          "minimum_ns": 185300,
+          "maximum_ns": 288000,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248401.984,
+            "cpu_percent": 64.5,
+            "available_memory_bytes": 91149168640
+          },
+          {
+            "monotonic_seconds": 248402.046,
+            "cpu_percent": 73.1,
+            "available_memory_bytes": 91097341952
+          },
+          {
+            "monotonic_seconds": 248402.093,
+            "cpu_percent": 66.0,
+            "available_memory_bytes": 91075112960
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_2000",
+      "split": "train_threshold",
+      "source": "threshold_train_2000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 745984.0,
+          "repeat_mad_ns": 25824.0,
+          "minimum_ns": 685376.0,
+          "maximum_ns": 1421824.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 468480.0,
+          "repeat_mad_ns": 25536.0,
+          "minimum_ns": 407936.0,
+          "maximum_ns": 1144672.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 2176.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 2144,
+          "maximum_ns": 2176,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 249800,
+          "repeat_mad_ns": 2600,
+          "minimum_ns": 181500,
+          "maximum_ns": 269900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248402.234,
+            "cpu_percent": 64.1,
+            "available_memory_bytes": 91127988224
+          },
+          {
+            "monotonic_seconds": 248402.296,
+            "cpu_percent": 71.1,
+            "available_memory_bytes": 91068260352
+          },
+          {
+            "monotonic_seconds": 248402.359,
+            "cpu_percent": 64.2,
+            "available_memory_bytes": 91143639040
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "payload_train_256_0",
+      "split": "train_payload",
+      "source": "payload_train_256_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 461440.0,
+          "repeat_mad_ns": 24096.0,
+          "minimum_ns": 426592.0,
+          "maximum_ns": 682848.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 438912.0,
+          "repeat_mad_ns": 24160.0,
+          "minimum_ns": 404256.0,
+          "maximum_ns": 660096.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 160.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 224,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 230900,
+          "repeat_mad_ns": 29100,
+          "minimum_ns": 187500,
+          "maximum_ns": 263100,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248402.453,
+            "cpu_percent": 72.9,
+            "available_memory_bytes": 91137822720
+          },
+          {
+            "monotonic_seconds": 248402.515,
+            "cpu_percent": 71.9,
+            "available_memory_bytes": 91065987072
+          },
+          {
+            "monotonic_seconds": 248402.578,
+            "cpu_percent": 68.8,
+            "available_memory_bytes": 91140751360
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_1750",
+      "split": "train_threshold",
+      "source": "threshold_train_1750.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 737536.0,
+          "repeat_mad_ns": 20928.0,
+          "minimum_ns": 698464.0,
+          "maximum_ns": 806048.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 493376.0,
+          "repeat_mad_ns": 20320.0,
+          "minimum_ns": 453792.0,
+          "maximum_ns": 561696.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1920.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1888,
+          "maximum_ns": 1920,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 182600,
+          "repeat_mad_ns": 7400,
+          "minimum_ns": 173600,
+          "maximum_ns": 372800,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248402.671,
+            "cpu_percent": 69.8,
+            "available_memory_bytes": 91127078912
+          },
+          {
+            "monotonic_seconds": 248402.734,
+            "cpu_percent": 72.9,
+            "available_memory_bytes": 91037347840
+          },
+          {
+            "monotonic_seconds": 248402.796,
+            "cpu_percent": 71.3,
+            "available_memory_bytes": 91121324032
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_holdout_500",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_500.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 456704.0,
+          "repeat_mad_ns": 21856.0,
+          "minimum_ns": 421536.0,
+          "maximum_ns": 979136.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 371648.0,
+          "repeat_mad_ns": 21728.0,
+          "minimum_ns": 336704.0,
+          "maximum_ns": 894304.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 672.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 640,
+          "maximum_ns": 672,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 192200,
+          "repeat_mad_ns": 16500,
+          "minimum_ns": 175500,
+          "maximum_ns": 343900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248402.89,
+            "cpu_percent": 63.4,
+            "available_memory_bytes": 91154354176
+          },
+          {
+            "monotonic_seconds": 248402.937,
+            "cpu_percent": 70.4,
+            "available_memory_bytes": 91146301440
+          },
+          {
+            "monotonic_seconds": 248403.015,
+            "cpu_percent": 59.3,
+            "available_memory_bytes": 91154251776
+          },
+          {
+            "monotonic_seconds": 248403.062,
+            "cpu_percent": 63.8,
+            "available_memory_bytes": 91144503296
+          },
+          {
+            "monotonic_seconds": 248403.109,
+            "cpu_percent": 65.6,
+            "available_memory_bytes": 91145396224
+          },
+          {
+            "monotonic_seconds": 248403.171,
+            "cpu_percent": 70.7,
+            "available_memory_bytes": 91149639680
+          },
+          {
+            "monotonic_seconds": 248403.234,
+            "cpu_percent": 62.5,
+            "available_memory_bytes": 91140759552
+          },
+          {
+            "monotonic_seconds": 248403.296,
+            "cpu_percent": 57.1,
+            "available_memory_bytes": 91144056832
+          },
+          {
+            "monotonic_seconds": 248403.359,
+            "cpu_percent": 67.8,
+            "available_memory_bytes": 91137150976
+          },
+          {
+            "monotonic_seconds": 248403.406,
+            "cpu_percent": 64.1,
+            "available_memory_bytes": 91149139968
+          },
+          {
+            "monotonic_seconds": 248403.453,
+            "cpu_percent": 57.8,
+            "available_memory_bytes": 91137331200
+          },
+          {
+            "monotonic_seconds": 248403.515,
+            "cpu_percent": 75.0,
+            "available_memory_bytes": 91105169408
+          },
+          {
+            "monotonic_seconds": 248403.578,
+            "cpu_percent": 81.2,
+            "available_memory_bytes": 91012739072
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_1250",
+      "split": "train_threshold",
+      "source": "threshold_train_1250.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 715520.0,
+          "repeat_mad_ns": 20672.0,
+          "minimum_ns": 685888.0,
+          "maximum_ns": 1242560.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 532640.0,
+          "repeat_mad_ns": 21088.0,
+          "minimum_ns": 502592.0,
+          "maximum_ns": 1059456.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1440.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1408,
+          "maximum_ns": 1440,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 257200,
+          "repeat_mad_ns": 6500,
+          "minimum_ns": 244500,
+          "maximum_ns": 302900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248403.703,
+            "cpu_percent": 65.0,
+            "available_memory_bytes": 91103268864
+          },
+          {
+            "monotonic_seconds": 248403.781,
+            "cpu_percent": 73.1,
+            "available_memory_bytes": 91022229504
+          },
+          {
+            "monotonic_seconds": 248403.843,
+            "cpu_percent": 75.4,
+            "available_memory_bytes": 91103608832
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_holdout_3000",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_3000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 957792.0,
+          "repeat_mad_ns": 24352.0,
+          "minimum_ns": 912864.0,
+          "maximum_ns": 1898592.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 553600.0,
+          "repeat_mad_ns": 24480.0,
+          "minimum_ns": 508544.0,
+          "maximum_ns": 1494592.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 3168.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 3136,
+          "maximum_ns": 3168,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 243700,
+          "repeat_mad_ns": 8700,
+          "minimum_ns": 229600,
+          "maximum_ns": 272100,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248403.937,
+            "cpu_percent": 70.5,
+            "available_memory_bytes": 91091046400
+          },
+          {
+            "monotonic_seconds": 248404.0,
+            "cpu_percent": 71.4,
+            "available_memory_bytes": 91011678208
+          },
+          {
+            "monotonic_seconds": 248404.046,
+            "cpu_percent": 66.7,
+            "available_memory_bytes": 91005296640
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_625",
+      "split": "train_threshold",
+      "source": "threshold_train_625.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 479424.0,
+          "repeat_mad_ns": 9920.0,
+          "minimum_ns": 459872.0,
+          "maximum_ns": 510400.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 378240.0,
+          "repeat_mad_ns": 10080.0,
+          "minimum_ns": 358656.0,
+          "maximum_ns": 409056.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 800.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 768,
+          "maximum_ns": 800,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 251400,
+          "repeat_mad_ns": 4500,
+          "minimum_ns": 224100,
+          "maximum_ns": 274500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248404.171,
+            "cpu_percent": 64.5,
+            "available_memory_bytes": 91105906688
+          },
+          {
+            "monotonic_seconds": 248404.234,
+            "cpu_percent": 73.3,
+            "available_memory_bytes": 91042553856
+          },
+          {
+            "monotonic_seconds": 248404.281,
+            "cpu_percent": 67.0,
+            "available_memory_bytes": 91098939392
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_holdout_1500",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_1500.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 726848.0,
+          "repeat_mad_ns": 14048.0,
+          "minimum_ns": 692544.0,
+          "maximum_ns": 1020800.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 515104.0,
+          "repeat_mad_ns": 14048.0,
+          "minimum_ns": 480896.0,
+          "maximum_ns": 809024.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1664.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1632,
+          "maximum_ns": 1664,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 246400,
+          "repeat_mad_ns": 2300,
+          "minimum_ns": 240200,
+          "maximum_ns": 350200,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248404.375,
+            "cpu_percent": 79.3,
+            "available_memory_bytes": 91088924672
+          },
+          {
+            "monotonic_seconds": 248404.421,
+            "cpu_percent": 75.0,
+            "available_memory_bytes": 91046047744
+          },
+          {
+            "monotonic_seconds": 248404.5,
+            "cpu_percent": 68.2,
+            "available_memory_bytes": 91032948736
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_875",
+      "split": "train_threshold",
+      "source": "threshold_train_875.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 574336.0,
+          "repeat_mad_ns": 15040.0,
+          "minimum_ns": 537728.0,
+          "maximum_ns": 691456.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 440736.0,
+          "repeat_mad_ns": 15424.0,
+          "minimum_ns": 403712.0,
+          "maximum_ns": 557728.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1056.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1024,
+          "maximum_ns": 1056,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 203400,
+          "repeat_mad_ns": 20100,
+          "minimum_ns": 173400,
+          "maximum_ns": 272700,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248404.593,
+            "cpu_percent": 70.6,
+            "available_memory_bytes": 91080884224
+          },
+          {
+            "monotonic_seconds": 248404.64,
+            "cpu_percent": 75.0,
+            "available_memory_bytes": 91023208448
+          },
+          {
+            "monotonic_seconds": 248404.703,
+            "cpu_percent": 72.4,
+            "available_memory_bytes": 91033739264
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_375",
+      "split": "train_threshold",
+      "source": "threshold_train_375.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 474112.0,
+          "repeat_mad_ns": 20192.0,
+          "minimum_ns": 413664.0,
+          "maximum_ns": 1109952.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 405728.0,
+          "repeat_mad_ns": 20064.0,
+          "minimum_ns": 345376.0,
+          "maximum_ns": 1041696.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 544.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 512,
+          "maximum_ns": 544,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 249500,
+          "repeat_mad_ns": 10900,
+          "minimum_ns": 199200,
+          "maximum_ns": 300700,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248404.812,
+            "cpu_percent": 69.9,
+            "available_memory_bytes": 91089612800
+          },
+          {
+            "monotonic_seconds": 248404.875,
+            "cpu_percent": 77.5,
+            "available_memory_bytes": 91009036288
+          },
+          {
+            "monotonic_seconds": 248404.921,
+            "cpu_percent": 74.2,
+            "available_memory_bytes": 91088175104
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "payload_train_64_0",
+      "split": "train_payload",
+      "source": "payload_train_64_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 475616.0,
+          "repeat_mad_ns": 21856.0,
+          "minimum_ns": 427744.0,
+          "maximum_ns": 1038208.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 453056.0,
+          "repeat_mad_ns": 22176.0,
+          "minimum_ns": 405248.0,
+          "maximum_ns": 1015776.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 192,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 180600,
+          "repeat_mad_ns": 5700,
+          "minimum_ns": 173700,
+          "maximum_ns": 268500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248405.046,
+            "cpu_percent": 76.6,
+            "available_memory_bytes": 91044929536
+          },
+          {
+            "monotonic_seconds": 248405.109,
+            "cpu_percent": 84.6,
+            "available_memory_bytes": 91011960832
+          },
+          {
+            "monotonic_seconds": 248405.156,
+            "cpu_percent": 69.0,
+            "available_memory_bytes": 91117113344
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "geometry_holdout",
+      "split": "holdout_geometry",
+      "source": "geometry_holdout.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 467552.0,
+          "repeat_mad_ns": 13568.0,
+          "minimum_ns": 431616.0,
+          "maximum_ns": 1344736.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 346752.0,
+          "repeat_mad_ns": 13664.0,
+          "minimum_ns": 310784.0,
+          "maximum_ns": 1224032.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 960.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 896,
+          "maximum_ns": 960,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 240900,
+          "repeat_mad_ns": 3800,
+          "minimum_ns": 234700,
+          "maximum_ns": 265900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248405.265,
+            "cpu_percent": 62.1,
+            "available_memory_bytes": 91085537280
+          },
+          {
+            "monotonic_seconds": 248405.328,
+            "cpu_percent": 74.6,
+            "available_memory_bytes": 91004420096
+          },
+          {
+            "monotonic_seconds": 248405.39,
+            "cpu_percent": 67.2,
+            "available_memory_bytes": 91113619456
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "payload_train_64_1000",
+      "split": "train_payload",
+      "source": "payload_train_64_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 676032.0,
+          "repeat_mad_ns": 26656.0,
+          "minimum_ns": 649376.0,
+          "maximum_ns": 1362496.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 525920.0,
+          "repeat_mad_ns": 27104.0,
+          "minimum_ns": 498816.0,
+          "maximum_ns": 1212096.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 180700,
+          "repeat_mad_ns": 8700,
+          "minimum_ns": 172000,
+          "maximum_ns": 328100,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248405.484,
+            "cpu_percent": 64.4,
+            "available_memory_bytes": 91078606848
+          },
+          {
+            "monotonic_seconds": 248405.531,
+            "cpu_percent": 70.2,
+            "available_memory_bytes": 91011325952
+          },
+          {
+            "monotonic_seconds": 248405.593,
+            "cpu_percent": 70.5,
+            "available_memory_bytes": 91068555264
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_0",
+      "split": "holdout_payload",
+      "source": "payload_holdout_1024_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 601120.0,
+          "repeat_mad_ns": 25760.0,
+          "minimum_ns": 550688.0,
+          "maximum_ns": 1558880.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 578048.0,
+          "repeat_mad_ns": 25632.0,
+          "minimum_ns": 527712.0,
+          "maximum_ns": 1536288.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 192,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 223500,
+          "repeat_mad_ns": 24300,
+          "minimum_ns": 195500,
+          "maximum_ns": 299500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248405.687,
+            "cpu_percent": 70.8,
+            "available_memory_bytes": 91073470464
+          },
+          {
+            "monotonic_seconds": 248405.75,
+            "cpu_percent": 79.6,
+            "available_memory_bytes": 91006971904
+          },
+          {
+            "monotonic_seconds": 248405.812,
+            "cpu_percent": 72.3,
+            "available_memory_bytes": 91078610944
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_125",
+      "split": "train_threshold",
+      "source": "threshold_train_125.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 460320.0,
+          "repeat_mad_ns": 23712.0,
+          "minimum_ns": 422432.0,
+          "maximum_ns": 1532352.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 424640.0,
+          "repeat_mad_ns": 23616.0,
+          "minimum_ns": 386784.0,
+          "maximum_ns": 1496864.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 288.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 256,
+          "maximum_ns": 288,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 252600,
+          "repeat_mad_ns": 8100,
+          "minimum_ns": 237500,
+          "maximum_ns": 304900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248405.906,
+            "cpu_percent": 70.7,
+            "available_memory_bytes": 91074318336
+          },
+          {
+            "monotonic_seconds": 248405.968,
+            "cpu_percent": 73.4,
+            "available_memory_bytes": 90989088768
+          },
+          {
+            "monotonic_seconds": 248406.015,
+            "cpu_percent": 71.3,
+            "available_memory_bytes": 91024572416
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_1000",
+      "split": "holdout_payload",
+      "source": "payload_holdout_1024_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 781440.0,
+          "repeat_mad_ns": 22656.0,
+          "minimum_ns": 732320.0,
+          "maximum_ns": 1418048.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 630624.0,
+          "repeat_mad_ns": 22336.0,
+          "minimum_ns": 581792.0,
+          "maximum_ns": 1267264.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 205100,
+          "repeat_mad_ns": 16000,
+          "minimum_ns": 187600,
+          "maximum_ns": 299700,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248406.125,
+            "cpu_percent": 75.8,
+            "available_memory_bytes": 91061219328
+          },
+          {
+            "monotonic_seconds": 248406.187,
+            "cpu_percent": 72.2,
+            "available_memory_bytes": 90982674432
+          },
+          {
+            "monotonic_seconds": 248406.25,
+            "cpu_percent": 66.9,
+            "available_memory_bytes": 91062108160
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    },
+    {
+      "case_id": "threshold_train_250",
+      "split": "train_threshold",
+      "source": "threshold_train_250.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 438944.0,
+          "repeat_mad_ns": 9120.0,
+          "minimum_ns": 424640.0,
+          "maximum_ns": 1105984.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 386912.0,
+          "repeat_mad_ns": 9248.0,
+          "minimum_ns": 372480.0,
+          "maximum_ns": 1053984.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 416.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 384,
+          "maximum_ns": 416,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 247300,
+          "repeat_mad_ns": 3400,
+          "minimum_ns": 239900,
+          "maximum_ns": 273000,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 248406.343,
+            "cpu_percent": 65.4,
+            "available_memory_bytes": 91057614848
+          },
+          {
+            "monotonic_seconds": 248406.39,
+            "cpu_percent": 76.3,
+            "available_memory_bytes": 90996334592
+          },
+          {
+            "monotonic_seconds": 248406.453,
+            "cpu_percent": 64.0,
+            "available_memory_bytes": 91070173184
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "Concurrent simulator CPU work was active; do not qualify driver-supply timings without a quiet replication."
+      }
+    }
+  ]
+}

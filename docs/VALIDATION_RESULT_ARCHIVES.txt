@@ -1,0 +1,17 @@
+完整仿真结果的存储与恢复
+
+以下两轮实验的 ui_*_result.json 单文件超过 GitHub 的 100 MiB 限制，
+因此以同名 .json.gz 无损压缩文件提交。原始 JSON 保留在本机并由 .gitignore 排除；
+全部 40 份结果均已逐字节核对解压内容与原文件一致，没有删减字段或重新计算数值。
+
+目录：
+- docs/gguf_preset_native_validation_2026-10-08
+- docs/cuda_graph_dispatch_validation_2026-10-08
+
+report.html、comparison_summary.json 和 native 数据可直接查看。
+新克隆的仓库在重新生成报告或用分析工具读取完整结果前，请先在项目根目录执行：
+
+.venv\Scripts\python.exe -c "import gzip,pathlib,shutil; files=[p for d in ('gguf_preset_native_validation_2026-10-08','cuda_graph_dispatch_validation_2026-10-08') for p in (pathlib.Path('docs')/d).glob('ui_*_result.json.gz')]; [(shutil.copyfileobj(gzip.open(p,'rb'),p.with_suffix('').open('wb'))) for p in files if not p.with_suffix('').exists()]"
+
+该命令仅恢复缺失的 JSON，不覆盖已有原文件。也可用支持 gzip 的解压工具逐个解压。
+本轮归档仅改变仓库存储形式；仿真输入、结果数值和此前验证结论均不变。

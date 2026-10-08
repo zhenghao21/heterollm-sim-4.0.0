@@ -1,5 +1,6 @@
 """The automatic producer accepts fresh GGUF inputs, never timing records."""
 from copy import deepcopy
+from dataclasses import replace
 import json
 from pathlib import Path
 import subprocess
@@ -70,8 +71,10 @@ def fake_probe(args, records, *, corrupt=False):
     return run
 
 
-def test_fresh_model_generates_only_dry_capture_and_bound_fragment(tmp_path, monkeypatch):
+@pytest.mark.parametrize("architecture", ["qwen2", "qwen3", "qwen35", "llama"])
+def test_fresh_model_generates_only_dry_capture_and_bound_fragment(tmp_path, monkeypatch, architecture):
     args, payload, gguf = setup_case(tmp_path, monkeypatch)
+    gguf.architecture = architecture
     records = []
     monkeypatch.setattr(compiler.subprocess, "check_output", lambda *a, **k: SOURCE_REVISION)
     monkeypatch.setattr(compiler, "read_gguf_metadata_only", lambda _: gguf)
@@ -97,7 +100,7 @@ def test_fresh_model_generates_only_dry_capture_and_bound_fragment(tmp_path, mon
         compiler.compile_structure(args)
 
 
-@pytest.mark.parametrize("mutation", ["architecture", "startup", "context", "model", "workload", "source", "model_graph", "weight_format", "policy"])
+@pytest.mark.parametrize("mutation", ["architecture", "startup", "context", "model", "workload", "source", "model_graph", "weight_format", "weight_shape", "weight_offset", "policy", "experts", "derived"])
 def test_invalid_inputs_fail_before_gpu_process(tmp_path, monkeypatch, mutation):
     args, payload, gguf = setup_case(tmp_path, monkeypatch)
     revision = SOURCE_REVISION
@@ -106,8 +109,14 @@ def test_invalid_inputs_fail_before_gpu_process(tmp_path, monkeypatch, mutation)
     elif mutation == "context": args.context = 640
     elif mutation == "model": payload["workload"]["metadata"]["native_model_path"] = "different.gguf"
     elif mutation == "workload": args.output_tokens = 64
-    elif mutation == "model_graph": payload["model"]["name"] = "different imported graph"
+    elif mutation == "model_graph": payload["model"]["graph"]["attributes"]["metadata"]["gguf_declared_block_count"] += 1
     elif mutation == "weight_format": payload["model"]["metadata"]["metadata"]["gguf_file_quantization"] = "Q8_0"
+    elif mutation == "weight_shape": payload["model"]["graph"]["attributes"]["metadata"]["gguf_embedding_binding"]["shape"][0] += 1
+    elif mutation == "weight_offset": payload["model"]["graph"]["attributes"]["metadata"]["gguf_embedding_binding"]["offset"] += 32
+    elif mutation == "experts":
+        gguf.architecture = "llama"
+        gguf.metadata["llama.expert_count"] = 8
+    elif mutation == "derived": payload["model"]["metadata"]["gguf_preset_changes"] = {"layer_count": {"before": 28, "after": 29}}
     elif mutation == "policy": payload["profiles"]["llama_cpp"]["policy"] = "generic"
     else: revision = "other-source"
     args.scenario.write_text(json.dumps(payload), encoding="utf-8")
@@ -115,6 +124,53 @@ def test_invalid_inputs_fail_before_gpu_process(tmp_path, monkeypatch, mutation)
     monkeypatch.setattr(compiler, "read_gguf_metadata_only", lambda _: gguf)
     monkeypatch.setattr(compiler.subprocess, "run", lambda *a, **k: pytest.fail("must not start GPU process"))
     with pytest.raises(ValueError): compiler.compile_structure(args)
+
+
+def test_catalog_labels_and_tensor_order_do_not_change_compilation(tmp_path, monkeypatch):
+    args, payload, gguf = setup_case(tmp_path, monkeypatch)
+    payload["model"]["name"] = "Qwen catalog display name"
+    payload["model"]["metadata"].update(model_preset_id="catalog-id", gguf_preset_origin={"url": "source"},
+                                          gguf_preset_changes={})
+    payload["model"]["graph"]["tensors"].reverse()
+    assert compiler.validate_inputs(args, payload, gguf) == [1, 2]
+
+
+@pytest.mark.parametrize("field", ["size", "data_start", "directory_end", "tensor_count"])
+def test_source_geometry_is_checked_before_source_labels_are_removed(tmp_path, monkeypatch, field):
+    args, payload, gguf = setup_case(tmp_path, monkeypatch)
+    source = dict(path="remote.gguf", size=100, data_start=32, directory_end=30, tensor_count=1)
+    gguf.sources = ({**source, "path": "local.gguf"},)
+    payload["model"]["metadata"]["metadata"]["gguf_sources"] = [source]
+    assert compiler.validate_inputs(args, payload, gguf) == [1, 2]
+    source[field] += 1
+    with pytest.raises(ValueError, match="source file geometry"):
+        compiler.validate_inputs(args, payload, gguf)
+
+
+@pytest.mark.parametrize("mutation", [None, "identity", "tensor", "metadata", "split"])
+def test_preset_full_directory_identity_and_metadata_are_checked(monkeypatch, mutation):
+    from heterollm_sim.gguf_model_catalog import GGUFModelCatalog, inventory_to_gguf
+    record = GGUFModelCatalog()._records()["qwen3-0_6b"]
+    gguf = inventory_to_gguf(record["inventory"])
+    gguf = replace(gguf, sources=({"path": "actual.gguf", "data_start": 0},))
+    payload = {"model": {"metadata": {"model_preset_id": record["id"]}}}
+    monkeypatch.setattr(GGUFModelCatalog, "_records", lambda self: {record["id"]: record})
+    if mutation == "identity": gguf = replace(gguf, sha256="different")
+    elif mutation == "tensor":
+        # Even a tensor unused by a particular invocation must still match.
+        last = replace(gguf.tensor_directory[-1], offset=gguf.tensor_directory[-1].offset + 32)
+        gguf = replace(gguf, tensor_directory=(*gguf.tensor_directory[:-1], last))
+    elif mutation == "metadata": gguf = replace(gguf, metadata={**gguf.metadata, "general.name": "different"})
+    elif mutation == "split": gguf = replace(gguf, sources=(*gguf.sources, {"path": "second.gguf"}))
+    if mutation is None:
+        compiler.validate_preset_inventory(payload, gguf)
+    else:
+        with pytest.raises(ValueError): compiler.validate_preset_inventory(payload, gguf)
+
+
+def test_attach_case_rejects_path_components(tmp_path):
+    with pytest.raises(ValueError, match="case ID"):
+        preparation.attach_graph_experiment(tmp_path, "../different", Path("unused"), Path("unused"))
 
 
 def test_probe_failure_does_not_publish_fragment(tmp_path, monkeypatch):

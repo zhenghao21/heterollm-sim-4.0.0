@@ -1,26 +1,25 @@
 diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
-index 5ae3b8d..80893a2 100644
 --- a/ggml/src/ggml-cuda/ggml-cuda.cu
 +++ b/ggml/src/ggml-cuda/ggml-cuda.cu
-@@ -2584,6 +2584,8 @@ static const void * ggml_cuda_graph_get_key(ggml_cgraph * cgraph) {
+@@ -2584,5 +2584,7 @@
      return cgraph->nodes[0];
  }
- 
+-
++
 +#include "native_cuda_graph_trace.inc"
 +
  static bool ggml_cuda_graph_update_required(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph) {
      bool res = false;
- 
-@@ -2630,6 +2632,7 @@ static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_c
+@@ -2630,6 +2632,7 @@
      ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
- 
+-
++
  #if CUDART_VERSION >= 12000
 +    heterollm_graph_trace_event("update", graph_key);
      cudaGraphExecUpdateResultInfo result_info;
      cudaError_t stat = cudaGraphExecUpdate(graph->instance, graph->graph, &result_info);
  #else
-@@ -2645,10 +2648,13 @@ static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_c
- 
+@@ -2646,9 +2649,12 @@
          // The pre-existing graph exec cannot be updated due to violated constraints
          // so instead clear error and re-instantiate
 +        heterollm_graph_trace_event("update_failed", graph_key);
@@ -33,21 +32,55 @@ index 5ae3b8d..80893a2 100644
      } else {
          GGML_ASSERT(stat == cudaSuccess);
      }
-@@ -4360,10 +4366,12 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
+@@ -4314,6 +4320,9 @@
+                     continue;
+                 }
+-
++
++#ifdef USE_CUDA_GRAPH
++                const auto heterollm_dispatch_before = heterollm_graph_capture_frontier(cuda_ctx->stream());
++#endif
+                 int nodes_to_skip = ggml_cuda_try_fuse(cuda_ctx, cgraph, i);
+-
++
+                 if (nodes_to_skip != 0) {
+@@ -4322,6 +4331,9 @@
+                     GGML_LOG_INFO("nodes_fused: %d, first: %s (%s), last: %s (%s)\n",
+                             nodes_to_skip + 1, ggml_op_name(node->op), node->name,
+                             ggml_op_name(cgraph->nodes[last_fused]->op), cgraph->nodes[last_fused]->name);
++#endif
++#ifdef USE_CUDA_GRAPH
++                    heterollm_graph_trace_dispatch(cuda_ctx, cgraph, i, i + nodes_to_skip, heterollm_dispatch_before);
+ #endif
+                     i += nodes_to_skip;
+                     continue;
+@@ -4348,6 +4360,9 @@
+                     GGML_LOG_ERROR("%s: op not supported %s (%s)\n", __func__, node->name, ggml_op_name(node->op));
+                 }
+                 GGML_ASSERT(ok);
++#ifdef USE_CUDA_GRAPH
++                heterollm_graph_trace_dispatch(cuda_ctx, cgraph, i, i, heterollm_dispatch_before);
++#endif
+-
++
+                 if (!is_concurrent_event_active) {
+                     try_launch_concurrent_event(node);
+@@ -4360,10 +4375,12 @@
          if (use_cuda_graph && cuda_graph_update_required) { // End CUDA graph capture
              if (graph->graph != nullptr) {
                  CUDA_CHECK(cudaGraphDestroy(graph->graph));
 +                heterollm_graph_trace_event("destroy_graph", graph_key);
                  graph->graph = nullptr;
              }
- 
+-
++
              CUDA_CHECK(cudaStreamEndCapture(cuda_ctx->stream(), &graph->graph));
 +            heterollm_graph_trace_event("capture_end", graph_key);
              graph_evaluated_or_captured = true; // CUDA graph has been captured
- 
+-
++
              std::lock_guard<std::mutex> lock(ggml_cuda_lock);
-@@ -4377,14 +4385,20 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
- 
+@@ -4378,13 +4395,19 @@
      if (use_cuda_graph) {
          ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
 +        if (std::getenv("HETEROLLM_CUDA_GRAPH_CAPTURE_ONLY") != nullptr) {
@@ -67,9 +100,10 @@ index 5ae3b8d..80893a2 100644
  #else
          GGML_UNUSED(graph_key);
          graph_evaluated_or_captured = true;
-@@ -4413,6 +4427,24 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+@@ -4413,6 +4436,24 @@
      ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backend->context;
- 
+-
++
      ggml_cuda_set_device(cuda_ctx->device);
 +#ifdef USE_CUDA_GRAPH
 +    heterollm_graph_trace_snapshot(cuda_ctx, cgraph);
@@ -89,27 +123,33 @@ index 5ae3b8d..80893a2 100644
 +        return GGML_STATUS_SUCCESS;
 +    }
 +#endif
- 
+-
++
      bool use_cuda_graph             = false;
      bool cuda_graph_update_required = false;
-@@ -4428,6 +4460,7 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+@@ -4428,6 +4469,7 @@
          const bool graph_compatible = ggml_cuda_graph_check_compability(cgraph);
          if (graph_compatible) {
              const bool properties_changed = ggml_cuda_graph_update_required(cuda_ctx, cgraph);
 +            heterollm_graph_trace_event(properties_changed ? "properties_changed" : "properties_stable", graph_key);
- 
+-
++
              if (!graph->warmup_complete) {
                  // Warmup: need at least 2 calls with no property change on the 2nd call
-@@ -4461,8 +4494,12 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+@@ -4461,8 +4503,12 @@
          }
- 
+-
++
          CUDA_CHECK(cudaStreamBeginCapture(cuda_ctx->stream(), cudaStreamCaptureModeRelaxed));
+-    }
+-
 +        heterollm_graph_trace_event("capture_begin", graph_key);
-     }
- 
++    }
++
 +#ifdef USE_CUDA_GRAPH
 +    if (!use_cuda_graph) heterollm_graph_trace_event("direct", graph_key);
 +#endif
      ggml_cuda_graph_evaluate_and_capture(cuda_ctx, cgraph, use_cuda_graph, cuda_graph_update_required, graph_key);
- 
+-
++
      return GGML_STATUS_SUCCESS;

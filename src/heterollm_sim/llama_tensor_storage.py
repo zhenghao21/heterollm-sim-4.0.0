@@ -81,6 +81,39 @@ def derive_llama_tensor_storage_contract(source_root: str | Path) -> dict[str, A
         'accuracy_validated': False, 'native_latency_used': False}
 
 
+def _source_file_identities_valid(sources) -> bool:
+    """A split model has one published/measured identity per physical file."""
+    if not isinstance(sources, (list, tuple)) or not sources:
+        return False
+    names = []
+    for source in sources:
+        if not isinstance(source, Mapping):
+            return False
+        name = source.get('path', source.get('filename'))
+        size = source.get('size', source.get('size_bytes'))
+        digest = source.get('sha256')
+        if (not isinstance(name, str) or not name or type(size) is not int or size <= 0
+                or not isinstance(digest, str) or not re.fullmatch('[0-9a-fA-F]{64}', digest)):
+            return False
+        names.append(name)
+    return len(set(names)) == len(names)
+
+
+def _split_inventory_identity_valid(metadata) -> bool:
+    sources = metadata.get('gguf_sources')
+    if not _source_file_identities_valid(sources) or len(sources) < 2:
+        return False
+    count = len(sources)
+    tensors = metadata.get('gguf_tensor_count')
+    return (type(tensors) is int and tensors > 0
+        and all(type(source.get('split_no')) is int for source in sources)
+        and sorted(source['split_no'] for source in sources) == list(range(count))
+        and all(source.get('split_count') == count and source.get('split_tensors_count') == tensors
+                and type(source.get('tensor_count')) is int and source['tensor_count'] > 0
+                for source in sources)
+        and sum(source['tensor_count'] for source in sources) == tensors)
+
+
 def _qualification(scenario, contract) -> dict[str, Any]:
     reasons = []
     if not isinstance(contract, Mapping):
@@ -112,19 +145,37 @@ def _qualification(scenario, contract) -> dict[str, Any]:
             for key, value in mapping.items():
                 if key == "metadata":
                     continue
-                if key in {"gguf_sha256", "gguf_embedding_binding"} and key in metadata and metadata[key] != value:
+                if key in {"gguf_sha256", "gguf_embedding_binding", "gguf_sources", "gguf_tensor_count"} and key in metadata and metadata[key] != value:
                     reasons.append("conflicting_nested_gguf_evidence")
                 metadata[key] = value
     architectures = contract.get('architectures', ())
     if (not isinstance(architectures, (list, tuple, set, frozenset))
             or view.architecture not in _ARCHITECTURES or view.architecture not in architectures):
         reasons.append('graph_architecture_not_source_qualified')
-    if not isinstance(metadata.get('gguf_sha256'), str) or not re.fullmatch('[0-9a-fA-F]{64}', metadata['gguf_sha256']):
+    origin = metadata.get('gguf_preset_origin', {})
+    derived_inventory = (metadata.get('gguf_derived_inventory') is True
+        and isinstance(origin, Mapping)
+        and ((isinstance(origin.get('sha256'), str)
+              and bool(re.fullmatch('[0-9a-fA-F]{64}', origin['sha256'])))
+             or _source_file_identities_valid(origin.get('files')))
+        and isinstance(metadata.get('gguf_preset_changes'), Mapping)
+        and bool(metadata['gguf_preset_changes']))
+    if (not derived_inventory and not _split_inventory_identity_valid(metadata)
+            and (not isinstance(metadata.get('gguf_sha256'), str)
+                 or not re.fullmatch('[0-9a-fA-F]{64}', metadata['gguf_sha256']))):
         reasons.append('typed_gguf_identity_required')
     binding = metadata.get('gguf_embedding_binding')
     if not isinstance(binding, Mapping):
         reasons.append('gguf_embedding_binding_missing')
         binding = {}
+    if _split_inventory_identity_valid(metadata):
+        source = next((item for item in metadata['gguf_sources']
+                       if item['path'] == binding.get('source_path')), None)
+        offset, physical, size = (binding.get(key) for key in ('offset', 'physical_offset', 'n_bytes'))
+        if (source is None or any(type(value) is not int for value in (offset, physical, size))
+                or type(source.get('data_start')) is not int or offset < 0 or size <= 0
+                or physical != source['data_start'] + offset or physical + size > source['size']):
+            reasons.append('split_embedding_physical_source_mismatch')
     shape = binding.get('shape')
     if (not isinstance(shape, (list, tuple)) or len(shape) != 2
             or any(type(v) is not int or v <= 0 for v in shape)):

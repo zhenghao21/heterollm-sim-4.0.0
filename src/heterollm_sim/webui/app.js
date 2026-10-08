@@ -1641,6 +1641,7 @@ const TIMESERIES_DEFAULT_COLORS = Object.freeze(["#5eb6c0", "#d57a3b", "#8e78d6"
 
 const state = {
   scenario: null,
+  scenarioPersistenceEnabled: true,
   view: "architecture",
   dirty: false,
   busy: false,
@@ -1977,7 +1978,7 @@ function reconcileMappingFingerprint(value, { mapped = false } = {}) {
     ui.mapping_stale = state.mappingStale;
     if (state.mappingStaleReason) ui.mapping_stale_reason = state.mappingStaleReason;
     else delete ui.mapping_stale_reason;
-    localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+    persistCurrentScenario();
   }
   return !state.mappingStale;
 }
@@ -1990,7 +1991,7 @@ function markMappingStale(reason = "影响映射的场景输入已修改。") {
     const ui = placementUiMetadata(state.scenario.placement, { create: true });
     ui.mapping_stale = true;
     ui.mapping_stale_reason = reason;
-    localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+    persistCurrentScenario();
   }
 }
 
@@ -2178,7 +2179,7 @@ function travelTopologyHistory(direction) {
       });
     } else {
       state.dirty = true;
-      localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+      persistCurrentScenario();
       renderAll();
     }
   } finally {
@@ -3061,9 +3062,62 @@ function ensureScenarioShape(scenario) {
   return scenario;
 }
 
-function setScenario(incoming, { dirty = false, message = "" } = {}) {
+function createEmptyScenario() {
+  return {
+    schema_version: AUTHORING_SCHEMA_VERSION,
+    name: "untitled-scenario",
+    weights_resident: true,
+    assumptions: [],
+    hardware: { name: "", components: [], links: [], require_connected: true, metadata: {} },
+    model: { name: "", graph: { graph_id: "empty-model", operators: [], tensors: [], attributes: {} } },
+    placement: {
+      model_name: "", hardware_name: "",
+      parallel: {
+        tp_degree: 1, pp_degree: 1, ep_degree: 1, rank_mapping: [], layer_to_stage: {},
+        collective_algorithm: "auto", routing_policy: "lowest_latency", allow_padding: true,
+      },
+      kv_policy: {
+        cache_component: null, offload_component: null, tokens_per_page: 16, dtype: null,
+        offload_ratio: 1, allocation_policy: "lazy", preemption_mode: "auto",
+        prefetch_distance: 0, layout_mode: "auto", kv_unified: true, pool_components: [],
+      },
+      metadata: {},
+    },
+    workload: {
+      name: "llama-cpp-default-baseline",
+      requests: [{ request_id: "request-0000", arrival_ns: 0, prompt_tokens: 512, output_tokens: 128, priority: 0, deadline_ns: null, metadata: {} }],
+      request_count: 1, prompt_tokens: 512, output_tokens: 128, arrival_rate_rps: 0, random_seed: 0,
+      scheduler: {
+        mode: "continuous", max_num_seqs: 1, max_num_batched_tokens: 512, max_num_ubatch_tokens: 512,
+        prefill_chunk_tokens: 512, mixed_phase_batching: false, policy: "decode_first",
+        phase_candidate_order: "least_recently_served", starvation_ns: 5_000_000,
+        preemption_enabled: false, preemption_granularity: "boundary", preemption_policy: "auto",
+        slo_ttft_ns: null, slo_tbt_ns: null, prefill_stop_offsets: [],
+      },
+      mtp: null,
+      metadata: { workload_preset_id: "llama_cpp_default" },
+    },
+    profiles: {},
+  };
+}
+
+function persistCurrentScenario() {
+  // Rendering an untouched empty workspace must not overwrite the last draft.
+  if (!state.scenario || (!state.scenarioPersistenceEnabled && !state.dirty)) return;
+  state.scenarioPersistenceEnabled = true;
+  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  if (dom.restoreScenarioButton) dom.restoreScenarioButton.hidden = true;
+}
+
+function initializeEmptyWorkspace() {
+  setScenario(createEmptyScenario(), { persist: false });
+  if (dom.restoreScenarioButton) dom.restoreScenarioButton.hidden = localStorage.getItem(STORAGE_SCENARIO) == null;
+}
+
+function setScenario(incoming, { dirty = false, message = "", persist = true } = {}) {
   const scenario = ensureScenarioShape(deepClone(incoming));
   state.scenario = scenario;
+  state.scenarioPersistenceEnabled = persist;
   state.scenarioGeneration += 1;
   state.mappingGeneration += 1;
   state.dirty = dirty;
@@ -3121,7 +3175,7 @@ function setScenario(incoming, { dirty = false, message = "" } = {}) {
   scenario.hardware.metadata.topology_view = deepClone(state.topologyView);
   state.nodePositions = state.topologyView.layout.positions;
   resetTopologyHistory();
-  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(scenario));
+  persistCurrentScenario();
   renderAll();
   if (message) toast(message, scenario.name, "success");
 }
@@ -3218,7 +3272,7 @@ function markScenarioChanged(message = "", {
   state.runEstimateInputFingerprint = "";
   resetTracePlaybackState();
   state.validation = { errors: [], warnings: [], information: [] };
-  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  persistCurrentScenario();
   const interactionState = captureRenderInteractionState();
   renderAll();
   restoreRenderInteractionState(interactionState);
@@ -3230,7 +3284,7 @@ function saveTopologyView() {
   state.topologyView.layout.positions = state.nodePositions;
   state.scenario.hardware.metadata = asObject(state.scenario.hardware.metadata);
   state.scenario.hardware.metadata.topology_view = deepClone(state.topologyView);
-  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  persistCurrentScenario();
 }
 
 function savePositions() {
@@ -3363,7 +3417,7 @@ function acceptRuntimePlacement(report) {
   const ui = placementUiMetadata(state.scenario.placement, { create: true });
   ui.mapping_stale = false;
   delete ui.mapping_stale_reason;
-  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  persistCurrentScenario();
 }
 
 function placementUiMetadata(placement, { create = false } = {}) {
@@ -4027,11 +4081,12 @@ async function validateScenario({ quiet = false, navigation = false } = {}) {
   if (!state.scenario) return null;
   const requestGeneration = ++validationRequestGeneration;
   const requestSnapshot = scenarioRequestSnapshot();
-  const physicalIssues = physicalMemoryContractIssues();
-  if (physicalIssues.length) {
+  const missingInputs = missingScenarioInputIssues();
+  const inputIssues = [...missingInputs, ...physicalMemoryContractIssues()];
+  if (inputIssues.length) {
     const validation = {
       valid: false,
-      errors: physicalIssues.map((issue) => normalizeIssue(issue, "physical_memory_contract", "error")),
+      errors: inputIssues.map((issue) => normalizeIssue(issue, issue.source || "physical_memory_contract", "error")),
       warnings: [],
       information: [],
     };
@@ -4044,8 +4099,8 @@ async function validateScenario({ quiet = false, navigation = false } = {}) {
     renderDiagnostics();
     if (!quiet || validation.errors.length) openDiagnostics();
     toast(
-      uiText("物理内存配置未通过", "Physical memory configuration failed"),
-      uiText("请先修复所有 DRAM/NAND 组件的 physical_memory_config。", "Complete physical_memory_config for every DRAM/NAND component first."),
+      missingInputs.length ? uiText("场景尚未配置完整", "Scenario setup is incomplete") : uiText("物理内存配置未通过", "Physical memory configuration failed"),
+      missingInputs.length ? uiText("请先选择硬件和模型，再校验并运行。", "Choose hardware and a model before validating and running.") : uiText("请先修复所有 DRAM/NAND 组件的 physical_memory_config。", "Complete physical_memory_config for every DRAM/NAND component first."),
       "error",
     );
     return validation;
@@ -4227,13 +4282,14 @@ function runProgressMessageWithHints(progressValue, status) {
 function syncRunButtons() {
   const active = runJobIsActive() || state.runJobSubmitting;
   const modelGraphReadOnly = state.scenario?.model?.graph?.executable === false;
+  const incomplete = missingScenarioInputIssues().length > 0;
   if (dom.runButton) dom.runButton.textContent = active ? uiText("查看仿真进度", "View simulation progress") : uiText("运行仿真", "Run simulation");
   if (dom.rerunButton) dom.rerunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("重新运行", "Run again");
   if (dom.emptyRunButton) dom.emptyRunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("运行当前场景", "Run current scenario");
   for (const button of [dom.runButton, dom.rerunButton, dom.emptyRunButton, dom.traceRunButton]) {
-    if (button) button.disabled = state.busy || modelGraphReadOnly;
+    if (button) button.disabled = state.busy || (!active && (modelGraphReadOnly || incomplete));
   }
-  if (dom.compareButton) dom.compareButton.disabled = state.busy || active || modelGraphReadOnly;
+  if (dom.compareButton) dom.compareButton.disabled = state.busy || active || modelGraphReadOnly || incomplete;
 }
 
 function renderRunJobDialog() {
@@ -4829,6 +4885,7 @@ function renderAll() {
   // before the scenario is ready, but must not replace its current selection.
   renderModelGraphDiagnostics();
   renderConnectionState();
+  syncRunButtons();
 }
 
 function traceStepSummary() {
@@ -4918,7 +4975,9 @@ function renderSteps() {
   dom.workloadCount.textContent = String(requests);
   renderRunStepSummary();
   dom.architectureStatus.textContent = uiText(`${components} 组件 · ${links} 链路 · ${groups} 组`, `${components} components · ${links} links · ${groups} groups`);
+  if (!components) dom.architectureStatus.textContent = uiText("待选择硬件", "Choose hardware");
   dom.modelStatus.textContent = layerSummary.count == null ? "—" : uiText(`${layerSummary.count} 层`, `${layerSummary.count} layers`);
+  if (!asArray(scenario.model?.graph?.operators).length) dom.modelStatus.textContent = uiText("待选择模型", "Choose model");
   dom.modelStatus.title = layerSummary.reason || "";
   dom.mappingStatus.textContent = state.mappingStale
     ? uiText(`已过期 · ${opMappings} 算子 · ${tensorMappings} 张量`, `Stale · ${opMappings} operators · ${tensorMappings} tensors`)
@@ -5094,6 +5153,21 @@ function validatePhysicalMemoryConfig(value, component) {
     throw new Error("physical_memory_config.capacity_bytes 必须为正整数且与组件 capacity_bytes 一致。");
   }
   return { ...value, kind };
+}
+
+function missingScenarioInputIssues(scenario = state.scenario) {
+  const issues = [];
+  if (!asArray(scenario?.hardware?.components).length) issues.push({
+    code: "hardware_missing", source: "scenario_input", field_path: "hardware.components",
+    message_zh: "尚未选择硬件，请载入硬件预设或导入硬件参数。",
+    message_en: "No hardware selected. Load a hardware preset or import hardware parameters.",
+  });
+  if (!asArray(scenario?.model?.graph?.operators).length) issues.push({
+    code: "model_missing", source: "scenario_input", field_path: "model.graph",
+    message_zh: "尚未选择模型，请应用模型预设或导入模型文件。",
+    message_en: "No model selected. Apply a model preset or import a model file.",
+  });
+  return issues;
 }
 
 function physicalMemoryContractIssues(scenario = state.scenario) {
@@ -9674,6 +9748,7 @@ function architectureEvidenceCopy(status) {
   return {
     diagram_verified: "官方架构图已核验（Diagram Verified）",
     config_verified_no_official_diagram: "官方配置已核验，未找到独立架构图",
+    gguf_tensor_metadata: "本机 GGUF 结构与张量量化（GGUF Metadata）",
     unpinned_source: "来源未固定版本（Unpinned Source）",
     gated_config: "官方配置受访问限制（Gated Config）",
     metadata_only_unsupported_ir: "仅元数据，当前 IR 不完整支持",
@@ -10537,6 +10612,8 @@ function architecturePresetDetailItem(payload) {
   return {
     ...preset,
     hardware: deepClone(asObject(payload?.hardware ?? preset.hardware)),
+    profiles: deepClone(asObject(payload?.profiles ?? preset.profiles)),
+    profiles_parameter_basis: deepClone(asObject(payload?.profiles_parameter_basis ?? preset.profiles_parameter_basis)),
     topology_view: deepClone(asObject(payload?.topology_view ?? preset.topology_view)),
     compatibility: deepClone(asObject(payload?.compatibility ?? preset.compatibility)),
     usage_hint: payload?.usage_hint ?? preset.usage_hint,
@@ -11081,6 +11158,15 @@ function applyArchitecturePresetDetail(detail) {
   const normalized = collisionSafeArchitectureTopologyView(rawTopologyView, hardware);
   try {
     state.scenario.hardware = hardware;
+    const presetProfiles = asObject(detail.profiles);
+    for (const field of ["fusion", "runtime"]) {
+      // A preset supplies the initial policy/controller parameters without
+      // borrowing them from an automatically loaded reference scenario.
+      if (state.scenario.profiles?.[field] == null && presetProfiles[field] != null) {
+        state.scenario.profiles = asObject(state.scenario.profiles);
+        state.scenario.profiles[field] = deepClone(presetProfiles[field]);
+      }
+    }
     const rebuiltProfiles = resetArchitectureDependentProfiles(state.scenario);
     resetPlacementForArchitecturePreset(state.scenario.placement, hardware.name);
     state.topologyView = normalized.view;
@@ -11450,10 +11536,29 @@ function compactPresetNumber(value) {
   return value !== "" && Number.isFinite(number) ? formatNumber(number, 4) : String(value ?? "—");
 }
 
+function ggufSourceFactsMarkup(source) {
+  const ggufSource = asObject(source);
+  const files = asArray(ggufSource.files).filter((file) => file && typeof file === "object");
+  const filenames = files.map((file) => file.filename).filter((filename) => filename != null && String(filename).trim());
+  if (!filenames.length && ggufSource.filename != null && String(ggufSource.filename).trim()) filenames.push(ggufSource.filename);
+  const facts = [];
+  if (filenames.length) {
+    facts.push(`<div class="span-all"><dt>GGUF 文件</dt><dd>${filenames.map((filename) => escapeHtml(filename)).join(" · ")}${files.length > 1 ? `（${files.length} 个分片）` : ""}</dd></div>`);
+  }
+  if (ggufSource.repo != null && String(ggufSource.repo).trim()) facts.push(`<div><dt>仓库</dt><dd>${escapeHtml(ggufSource.repo)}</dd></div>`);
+  if (ggufSource.revision != null && String(ggufSource.revision).trim()) facts.push(`<div><dt>仓库修订</dt><dd><code>${escapeHtml(ggufSource.revision)}</code></dd></div>`);
+  if (ggufSource.variant != null && String(ggufSource.variant).trim()) facts.push(`<div><dt>变体</dt><dd>${escapeHtml(ggufSource.variant)}</dd></div>`);
+  return facts.join("");
+}
+
 function modelPresetCardMarkup(preset, selectedId = "") {
   const id = presetId(preset);
   const level = presetSupportLevel(preset);
-  const disabled = level === "out_of_domain" || !id;
+  const pendingGguf = preset.source_status === "pending_gguf";
+  const unsupportedGguf = preset.source_status === "gguf_unsupported";
+  const generationDisabled = preset.generation_allowed === false;
+  const disabled = level === "out_of_domain" || generationDisabled || !id;
+  const ggufSourceFacts = ggufSourceFactsMarkup(preset.gguf_source);
   const familyName = presetText(preset, ["family", "model_family"]);
   const name = presetText(preset, ["display_name", "name"], id || "未命名预设");
   const scale = presetCatalogValue(presetText(preset, ["scale", "parameter_scale", "parameters", "parameter_count"]));
@@ -11474,15 +11579,21 @@ function modelPresetCardMarkup(preset, selectedId = "") {
   const evidenceHref = /^https:\/\/[^\s]+$/i.test(evidenceSource) ? evidenceSource : "";
   const evidenceNotes = String(evidence.notes || "—");
   const evidenceUncertainty = String(evidence.uncertainty || "—");
-  const outOfDomainNotice = level === "out_of_domain"
+  const outOfDomainNotice = pendingGguf
+    ? `<p class="preset-ood-notice"><strong>待补齐 GGUF</strong> · 条目已保留，绑定兼容文件后才能运行。</p>`
+    : unsupportedGguf
+    ? `<p class="preset-ood-notice"><strong>已有 GGUF，架构待适配</strong></p>`
+    : level === "out_of_domain"
     ? `<p class="preset-ood-notice" role="alert"><strong>超出适用域，不能应用。</strong>限制详情已展开，请先确认适用边界。</p>`
     : "";
   return `<article class="preset-card support-${escapeHtml(level)} ${selectedId === id ? "is-selected" : ""}" data-preset-id="${escapeHtml(id)}">
-    <div class="preset-card-head"><h3>${escapeHtml(name)}</h3><span class="preset-badge-stack"><span class="support-badge">${escapeHtml(presetSupportCopy(level))}</span><span class="architecture-evidence-badge status-${escapeHtml(evidenceStatus || "unknown")}">${escapeHtml(evidenceLabel)}</span></span></div>
+    <div class="preset-card-head"><h3>${escapeHtml(name)}</h3><span class="preset-badge-stack"><span class="support-badge">${escapeHtml(pendingGguf ? "待补齐 GGUF" : presetSupportCopy(level))}</span><span class="architecture-evidence-badge status-${escapeHtml(evidenceStatus || "unknown")}">${escapeHtml(evidenceLabel)}</span></span></div>
     <dl class="preset-facts preset-primary-facts">
       <div><dt>规模（Scale）</dt><dd>${escapeHtml(scale)}</dd></div>
       <div><dt>架构（Architecture）</dt><dd>${escapeHtml(architecture)}</dd></div>
       <div><dt>上下文（Context）</dt><dd>${escapeHtml(context)}</dd></div>
+      <div><dt>权重格式</dt><dd>${escapeHtml(preset.quantization || "待读取 GGUF")}</dd></div>
+      <div><dt>配置来源</dt><dd>${escapeHtml(preset.source_status === "gguf_derived" ? "基于 GGUF 修改" : pendingGguf ? "待补齐 GGUF" : preset.source_status === "gguf_ready" || unsupportedGguf ? "GGUF" : source)}</dd></div>
     </dl>
     ${outOfDomainNotice}
     <details class="preset-details" ${level === "out_of_domain" ? "open" : ""}>
@@ -11494,6 +11605,7 @@ function modelPresetCardMarkup(preset, selectedId = "") {
         <div><dt>许可证类别（License）</dt><dd>${escapeHtml(license)}</dd></div>
         <div class="span-all"><dt>预设 ID（Preset ID）</dt><dd><code>${escapeHtml(id)}</code></dd></div>
         <div class="span-all"><dt>来源（Source）</dt><dd>${escapeHtml(source)}</dd></div>
+        ${ggufSourceFacts}
         <div class="span-all"><dt>架构证据（Architecture Evidence）</dt><dd>${escapeHtml(evidenceLabel)}</dd></div>
         <div class="span-all"><dt>证据来源（Evidence Source）</dt><dd>${evidenceHref ? `<a class="preset-evidence-link" href="${escapeHtml(evidenceHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(evidenceSource)}</a>` : escapeHtml(evidenceSource || "—")}</dd></div>
         <div class="span-all"><dt>核验说明（Verification Notes）</dt><dd>${escapeHtml(evidenceNotes)}</dd></div>
@@ -11504,7 +11616,8 @@ function modelPresetCardMarkup(preset, selectedId = "") {
         <div class="span-all"><dt>不支持（Unsupported）</dt><dd>${escapeHtml(unsupported)}</dd></div>
       </dl>
     </details>
-    <div class="preset-card-footer"><button type="button" class="button ${disabled ? "button-quiet" : "button-primary"}" data-apply-preset="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>${disabled ? "不可应用（Out of Domain）" : "应用模型预设"}</button></div>
+    <div class="preset-card-footer"><button type="button" class="button ${disabled ? "button-quiet" : "button-primary"}" data-apply-preset="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>${pendingGguf ? "待补齐 GGUF" : unsupportedGguf ? "架构待适配" : disabled ? "不可应用（Out of Domain）" : "应用模型预设"}</button>
+    ${pendingGguf ? `<button type="button" class="button button-secondary" data-bind-gguf="${escapeHtml(id)}">绑定本机 GGUF</button>` : preset.source_status?.startsWith("gguf_") ? `<button type="button" class="button button-secondary" data-edit-gguf-preset="${escapeHtml(id)}" ${generationDisabled ? "disabled" : ""}>编辑并另存</button>` : ""}</div>
   </article>`;
 }
 
@@ -11523,6 +11636,99 @@ function renderModelPresets() {
     .map((preset) => modelPresetCardMarkup(preset, state.selectedPresetId))
     .join("");
   $$('[data-apply-preset]', dom.presetList).forEach((button) => button.addEventListener("click", () => applyModelPreset(button.dataset.applyPreset, button)));
+  $$('[data-bind-gguf]', dom.presetList).forEach((button) => button.addEventListener("click", () => importGgufPreset(button.dataset.bindGguf)));
+  $$('[data-edit-gguf-preset]', dom.presetList).forEach((button) => button.addEventListener("click", () => openGgufPresetEditor(button.dataset.editGgufPreset)));
+}
+
+const GGUF_PARAMETER_LABELS = Object.freeze({
+  layer_count: "主干层数", hidden_size: "隐藏维度", intermediate_size: "前馈层维度",
+  attention_heads: "注意力头数", kv_heads: "KV 头数", head_dim: "每个注意力头的维度",
+  vocabulary_size: "词表大小", max_sequence_length: "最大上下文长度",
+});
+
+async function importGgufPreset(presetId = null) {
+  if (state.busy) return;
+  const path = window.prompt("请输入本机 GGUF 文件的完整路径：");
+  if (!path?.trim()) return;
+  setBusy(true, "正在导入 GGUF", "读取模型结构和张量目录，完成后会加入预设库。");
+  try {
+    const payload = await apiRequest("/model-presets/import-gguf", {
+      method: "POST", body: JSON.stringify({ path: path.trim(), ...(presetId ? { preset_id: presetId } : {}) }),
+    });
+    dom.presetSearchInput.value = payload.preset.name;
+    await loadModelPresets({ offset: 0, selectedId: payload.preset.id });
+    toast("GGUF 预设已保存", "可在预设窗口应用，或编辑参数后另存为新预设。", "success");
+  } catch (error) {
+    showOperationError("GGUF 导入失败", error);
+  } finally { setBusy(false); }
+}
+
+async function openGgufPresetEditor(presetId = state.scenario?.model?.metadata?.model_preset_id) {
+  if (state.busy) return;
+  if (!presetId) {
+    toast("请先选择 GGUF 模型预设", "从模型预设库应用一个已绑定 GGUF 的模型，再编辑参数。", "info");
+    return;
+  }
+  setBusy(true, "正在读取模型参数");
+  try {
+    const payload = await apiRequest(`/model-presets/${encodeURIComponent(presetId)}/configuration`, { method: "GET", headers: {} });
+    state.ggufPresetEditing = { presetId, parameters: deepClone(payload.parameters) };
+    const field = (key, label, value, type = "number") => `<label class="field"><span>${escapeHtml(label)}</span><input data-gguf-parameter="${escapeHtml(key)}" type="${type}" ${type === "number" ? 'min="1" step="1"' : 'maxlength="160"'} required value="${escapeHtml(String(value))}"></label>`;
+    dom.ggufPresetEditorFields.innerHTML = field("name", "新预设名称", `${payload.name}（自定义）`, "text")
+      + Object.entries(GGUF_PARAMETER_LABELS).map(([key, label]) => field(key, label, payload.parameters[key])).join("")
+      + `<label class="field"><span>矩阵权重量化（归一化权重保留原类型）</span><select data-gguf-parameter="weight_quantization">${payload.quantizations.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value === "preserve" ? "保留逐张量原始格式" : value)}</option>`).join("")}</select></label>`;
+    dom.ggufPresetEditorSource.textContent = `来源：${payload.origin.filename}。此处修改仿真配置，不修改 GGUF 权重文件。`;
+    dom.ggufPresetEditorNotice.textContent = "原始预设保留。修改参数后，请另存为新的模型预设。";
+    dom.ggufPresetEditorError.textContent = "";
+    dom.modelPresetsDialog.close();
+    showModalDialog(dom.ggufPresetEditorDialog, dom.modelEditPresetButton, dom.ggufPresetEditorFields.querySelector("input"));
+  } catch (error) { showOperationError("无法编辑模型预设", error); }
+  finally { setBusy(false); }
+}
+
+function ggufPresetEditorPayload() {
+  const parameters = {};
+  let name = "";
+  for (const input of $$('[data-gguf-parameter]', dom.ggufPresetEditorFields)) {
+    const key = input.dataset.ggufParameter;
+    if (key === "name") name = input.value.trim();
+    else if (key === "weight_quantization") parameters[key] = input.value;
+    else {
+      const value = Number(input.value);
+      if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${GGUF_PARAMETER_LABELS[key]}必须是正整数`);
+      parameters[key] = value;
+    }
+  }
+  if (!name) throw new Error("请填写新预设名称");
+  return { source_preset_id: state.ggufPresetEditing.presetId, name, parameters };
+}
+
+async function submitGgufPresetEditor(save) {
+  if (state.busy || !state.ggufPresetEditing) return;
+  dom.ggufPresetEditorError.textContent = "";
+  try {
+    const request = ggufPresetEditorPayload();
+    setBusy(true, save ? "正在另存模型预设" : "正在校验模型参数");
+    const payload = await apiRequest(save ? "/model-presets" : "/model-presets/preview", {
+      method: "POST", body: JSON.stringify(request),
+    });
+    if (!save) {
+      const bytes = payload.model.graph.attributes.metadata.gguf_physical_weight_bytes;
+      dom.ggufPresetEditorNotice.textContent = `校验通过：${payload.preset.layer_count} 层，权重约 ${(bytes / 2 ** 30).toFixed(3)} GiB。请另存为新预设，原始预设保留。`;
+      return;
+    }
+    state.modelPresetsLoaded = false;
+    dom.ggufPresetEditorDialog.close();
+    const applied = applyPresetDetailToScenario(payload);
+    toast("已另存并应用新模型预设", `${applied.nextModel.name}；原始预设保留。模型变化后须重新校验，Graph 结构绑定需重新生成。`, "success", 7000);
+  } catch (error) {
+    dom.ggufPresetEditorError.textContent = chineseMessage(error, "模型参数无效，原始预设未修改。");
+  } finally { setBusy(false); }
+}
+
+function invalidateModelStructureBindings(scenario) {
+  const metadata = asObject(scenario?.workload?.metadata);
+  for (const key of ["cuda_graph_structural_program", "cuda_graph_comparison_request_id", "cuda_graph_experiment", "llama_cpp_gpu_native_invocations"]) delete metadata[key];
 }
 
 function schedulePresetCatalogSearch() {
@@ -11675,6 +11881,7 @@ function applyPresetDetailToScenario(payload) {
   const layerToStage = clearParallelLayerToStage(placement);
   resetModelGraphForPreset(nextModel.graph);
   state.scenario.model = nextModel;
+  invalidateModelStructureBindings(state.scenario);
   placement.model_name = nextModel.name;
   markScenarioChanged();
   return { preset, level, nextModel, removedByGroup, layerToStage };
@@ -12038,7 +12245,7 @@ function commitModelGraphHistory(before, label, semantic = true) {
 function saveModelGraphLayout() {
   // Model layout is browser-side view state. Persist it with the local scenario
   // snapshot, but never turn a clean semantic scenario into a modified one.
-  localStorage.setItem(STORAGE_SCENARIO, JSON.stringify(state.scenario));
+  persistCurrentScenario();
 }
 
 function scheduleModelGraphViewportSave(delayMs = 140) {
@@ -13570,6 +13777,10 @@ function renderModelGraphInspector() {
   hydrateConceptHelp(dom.modelGraphInspectorContent);
   $$('[data-model-param], [data-model-template-param], [data-model-port-field]', dom.modelGraphInspectorContent)
     .forEach((control) => control.addEventListener("change", () => updateModelGraphInspector(operator, control)));
+  if (state.scenario?.model?.metadata?.model_preset_id) {
+    $$('input', dom.modelGraphInspectorContent).forEach((control) => { control.readOnly = true; });
+    dom.modelGraphInspectorContent.insertAdjacentHTML("afterbegin", '<p class="inspector-note">此模型来自 GGUF。请使用上方“编辑参数 / 另存预设”，以同步更新张量形状与权重大小。</p>');
+  }
 }
 
 function updateModelGraphInspector(operator, control) {
@@ -14442,6 +14653,11 @@ function renderModel() {
   const model = state.scenario.model;
   ensureScenarioModelGraph(model);
   const graph = model.graph;
+  if (!graph.operators.length) {
+    dom.modelMetaForm.innerHTML = `<p class="muted">${escapeHtml(uiText("尚未选择模型，请从模型预设库选择或导入模型。", "No model selected. Choose a model preset or import a model."))}</p>`;
+    renderModelGraph();
+    return;
+  }
   const summary = graph.executable === false
     ? {
       architecture: String(graph.attributes?.architecture || "unknown"),
@@ -19598,7 +19814,14 @@ function renderRequestResults(requests) {
 
 function openJsonDialog() {
   if (!state.scenario) return;
-  dom.jsonEditor.value = JSON.stringify(scenarioPayloadForTransport(), null, 2);
+  let payloadText;
+  try {
+    payloadText = JSON.stringify(scenarioPayloadForTransport(), null, 2);
+  } catch (error) {
+    showOperationError("JSON 场景生成失败", error);
+    return;
+  }
+  dom.jsonEditor.value = payloadText;
   dom.jsonEditor.classList.remove("has-error");
   dom.jsonStatus.textContent = "JSON 可编辑 · Schema 与 runtime metadata 保留 · 不适用能力默认值省略";
   showModalDialog(dom.jsonDialog, dom.jsonButton, dom.jsonEditor);
@@ -19644,7 +19867,13 @@ async function copyJson() {
 
 function exportScenario() {
   if (!state.scenario) return;
-  const text = `${JSON.stringify(scenarioPayloadForTransport(), null, 2)}\n`;
+  let text;
+  try {
+    text = `${JSON.stringify(scenarioPayloadForTransport(), null, 2)}\n`;
+  } catch (error) {
+    showOperationError("场景导出失败", error);
+    return;
+  }
   const blob = new Blob([text], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -19792,7 +20021,13 @@ async function loadModelArtifactById() {
 
 function exportHardwareInput() {
   if (!state.scenario) return;
-  const text = `${JSON.stringify(hardwareInputForScenario(state.scenario), null, 2)}\n`;
+  let text;
+  try {
+    text = `${JSON.stringify(hardwareInputForScenario(state.scenario), null, 2)}\n`;
+  } catch (error) {
+    showOperationError("硬件参数导出失败", error);
+    return;
+  }
   const blob = new Blob([text], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -19923,7 +20158,12 @@ async function importScenarioFile(file) {
       };
       const runtimeIssue = runtimeGpuControllerIssue(next);
       if (runtimeIssue) throw new Error(runtimeIssue);
-      const normalized = await normalizeScenarioThroughBackend(next);
+      // Hardware can be authored before a model is selected. Full scenario
+      // normalization requires an executable model; keep this as a draft
+      // until then and retain strict backend validation at run time.
+      const normalized = asArray(next.model?.graph?.operators).length
+        ? await normalizeScenarioThroughBackend(next)
+        : next;
       ensureScenarioShape(normalized);
       // Hardware replacement invalidates hardware-bound placement/KV targets;
       // keep model, workload, and scheduler inputs for the next candidate run.
@@ -19959,7 +20199,8 @@ async function importScenarioFile(file) {
 
 function cacheDom() {
   const ids = [
-    "connectionState", "dirtyMark", "loadReferenceButton", "importButton", "fileInput", "exportButton", "importHardwareButton", "hardwareFileInput", "exportHardwareButton", "canonicalExportButton", "jsonButton", "settingsButton",
+    "modelEditPresetButton", "importGgufPresetButton", "ggufPresetEditorDialog", "ggufPresetEditorForm", "ggufPresetEditorSource", "ggufPresetEditorNotice", "ggufPresetEditorFields", "ggufPresetEditorError", "closeGgufPresetEditorButton", "previewGgufPresetButton", "saveGgufPresetButton",
+    "connectionState", "dirtyMark", "loadReferenceButton", "restoreScenarioButton", "importButton", "fileInput", "exportButton", "importHardwareButton", "hardwareFileInput", "exportHardwareButton", "canonicalExportButton", "jsonButton", "settingsButton",
     "validateButton", "runButton", "architectureStatus", "architectureCount", "modelStatus", "modelCount", "mappingStatus", "mappingCount",
     "workloadStatus", "workloadCount", "playbackStatus", "playbackCount", "resultsStatus", "resultsCount", "errorCount", "warningCount", "diagnosticToggle", "diagnosticPanel",
     "diagnosticContent", "closeDiagnosticsButton", "hardwareName", "topologySummary", "hardwarePresetsButton", "topologyEditMenuButton", "topologyGroupMenuButton", "topologyConnectMenuButton", "selectModeButton", "connectModeButton", "protocolSelect", "protocolCatalogButton", "protocolVersionInput", "protocolUnitsInput", "protocolBandwidthInput", "protocolLatencyInput", "protocolPayloadInput", "protocolPresetSelection",
@@ -19997,6 +20238,7 @@ function bindStaticEvents() {
   bindToolbarMenus();
   $$(".step-button").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
   dom.loadReferenceButton.addEventListener("click", () => loadReference());
+  dom.restoreScenarioButton.addEventListener("click", () => { if (!state.busy) void restoreScenarioFromStorage(); });
   dom.importButton.addEventListener("click", () => dom.fileInput.click());
   dom.fileInput.addEventListener("change", () => importScenarioFile(dom.fileInput.files?.[0]));
   dom.importHardwareButton.addEventListener("click", () => dom.hardwareFileInput.click());
@@ -20006,6 +20248,16 @@ function bindStaticEvents() {
   dom.canonicalExportButton.addEventListener("click", () => { void exportCanonicalIr(); });
   dom.jsonButton.addEventListener("click", openJsonDialog);
   dom.modelPresetsButton.addEventListener("click", openModelPresetsDialog);
+  dom.modelEditPresetButton.addEventListener("click", () => { void openGgufPresetEditor(); });
+  dom.importGgufPresetButton.addEventListener("click", () => { void importGgufPreset(); });
+  dom.closeGgufPresetEditorButton.addEventListener("click", () => { if (!state.busy) dom.ggufPresetEditorDialog.close(); });
+  dom.previewGgufPresetButton.addEventListener("click", () => { void submitGgufPresetEditor(false); });
+  dom.ggufPresetEditorForm.addEventListener("submit", (event) => { event.preventDefault(); void submitGgufPresetEditor(true); });
+  dom.ggufPresetEditorFields.addEventListener("input", () => {
+    dom.ggufPresetEditorNotice.textContent = "模型配置已修改，请校验并另存为新的模型预设。原始预设保留。";
+    dom.ggufPresetEditorError.textContent = "";
+  });
+  dom.ggufPresetEditorDialog.addEventListener("cancel", (event) => { if (state.busy) event.preventDefault(); });
   dom.modelNewGraphButton.addEventListener("click", createCustomModelGraph);
   dom.modelSaveFileButton.addEventListener("click", () => { void saveCurrentModelArtifact(); });
   dom.modelLoadFileButton.addEventListener("click", () => { void loadModelArtifactById(); });
@@ -20436,7 +20688,6 @@ async function restoreStoredScenario(stored) {
 async function restoreScenarioFromStorage() {
   const raw = localStorage.getItem(STORAGE_SCENARIO);
   if (raw == null) {
-    await loadReference({ quiet: true });
     return false;
   }
   let stored;
@@ -20471,7 +20722,7 @@ async function bootstrap() {
   renderConnectionState();
   await probeConnection();
   await loadWorkloadPresetCatalog();
-  await restoreScenarioFromStorage();
+  initializeEmptyWorkspace();
 }
 
 document.addEventListener("DOMContentLoaded", bootstrap);

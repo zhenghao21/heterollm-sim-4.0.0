@@ -37,6 +37,7 @@ PLACEHOLDERS / BOUNDARIES
       </div>
       <div class="top-actions" aria-label="场景操作">
         <button type="button" class="button button-quiet" id="loadReferenceButton">载入参考</button>
+        <button type="button" class="button button-quiet" id="restoreScenarioButton" data-i18n-zh="恢复上次场景" data-i18n-en="Restore last scenario" hidden>恢复上次场景</button>
         <button type="button" class="button button-quiet" id="importButton">导入 JSON / 模型文件</button>
         <input type="file" id="fileInput" accept="application/json,.json" hidden>
         <button type="button" class="button button-quiet" id="exportButton">导出 JSON</button>
@@ -284,6 +285,7 @@ PLACEHOLDERS / BOUNDARIES
             <div><h1 id="modelTitle" data-concept-help="model_graph">模型语义组件图（Model Graph）</h1><p data-i18n-zh="可新建标准 Decoder 模型图，再编辑算子端口的 Shape、DType 与连接；重复模式以可折叠组显示，虚线 ×N 回线仅是视图提示。" data-i18n-en="Create a standard Decoder graph, then edit operator port Shape, DType, and connections. Repeat patterns are collapsible; the dashed ×N loop is visual only.">可新建标准 Decoder 模型图，再编辑算子端口的 Shape、DType 与连接；重复模式以可折叠组显示，虚线 ×N 回线仅是视图提示。</p></div>
             <div class="view-head-actions">
               <button type="button" class="button button-secondary" id="modelPresetsButton" aria-haspopup="dialog" aria-controls="modelPresetsDialog">模型预设（Model Presets）</button>
+              <button type="button" class="button button-secondary" id="modelEditPresetButton">编辑参数 / 另存预设</button>
               <button type="button" class="button button-quiet" id="modelNewGraphButton">新建模型图</button>
               <button type="button" class="button button-quiet" id="modelSaveFileButton">保存模型文件</button>
               <button type="button" class="button button-quiet" id="modelLoadFileButton">加载模型文件</button>
@@ -593,6 +595,17 @@ PLACEHOLDERS / BOUNDARIES
     </form>
   </dialog>
 
+  <dialog class="gguf-preset-editor" id="ggufPresetEditorDialog" aria-labelledby="ggufPresetEditorTitle">
+    <form id="ggufPresetEditorForm">
+      <header class="dialog-head"><h2 id="ggufPresetEditorTitle">编辑模型参数并另存预设</h2><button type="button" class="icon-button" id="closeGgufPresetEditorButton" aria-label="关闭模型参数编辑">×</button></header>
+      <p id="ggufPresetEditorSource" class="muted"></p>
+      <p id="ggufPresetEditorNotice" role="status">原始预设保留。修改参数后，请另存为新的模型预设。</p>
+      <div id="ggufPresetEditorFields" class="gguf-preset-fields"></div>
+      <p id="ggufPresetEditorError" class="gguf-preset-error" role="alert"></p>
+      <div class="gguf-preset-actions"><button type="button" class="button button-secondary" id="previewGgufPresetButton">校验修改</button><button type="submit" class="button button-primary" id="saveGgufPresetButton">另存新预设并应用</button></div>
+    </form>
+  </dialog>
+
   <dialog class="model-presets-dialog" id="modelPresetsDialog" aria-labelledby="modelPresetsDialogTitle" aria-describedby="modelPresetsDescription">
     <div class="preset-dialog-shell">
       <header class="dialog-head">
@@ -602,7 +615,7 @@ PLACEHOLDERS / BOUNDARIES
         <button type="button" class="button button-quiet preset-fullscreen-button" id="presetFullscreenButton" aria-pressed="false">全屏（Fullscreen）</button>
         <button type="button" class="icon-button" id="closeModelPresetsButton" aria-label="关闭模型预设">×</button>
       </header>
-      <div class="preset-mode-tabs" role="tablist" aria-label="模型目录来源">
+        <div class="preset-mode-tabs" role="tablist" aria-label="模型目录来源">
         <button type="button" class="tool-button is-active" id="localPresetTab" role="tab" aria-selected="true" aria-controls="localPresetPanel">本地目录（Local Catalog）</button>
         <button type="button" class="tool-button" id="remotePresetTab" role="tab" aria-selected="false" aria-controls="remotePresetPanel">在线搜索（Remote Search）</button>
       </div>
@@ -646,6 +659,7 @@ PLACEHOLDERS / BOUNDARIES
           <h2 id="hardwarePresetsDialogTitle">硬件预设库（Hardware Presets）</h2>
           <p id="hardwarePresetsDescription">组件预设追加到当前拓扑；架构预设经确认后替换硬件。两套目录继续独立筛选、缓存与滚动，后端 API 保持分离。</p>
         </div>
+        <div class="gguf-catalog-actions"><button type="button" class="button button-secondary" id="importGgufPresetButton">从本机 GGUF 新建预设</button><p class="muted">可运行预设均由 GGUF 构图；待补齐条目保留显示，绑定兼容 GGUF 后可用。在线配置导入只增加待补齐条目。</p></div>
         <button type="button" class="icon-button" id="closeHardwarePresetsButton" aria-label="关闭硬件预设库">×</button>
       </header>
       <nav class="hardware-preset-tabs" role="tablist" aria-label="硬件预设类型">

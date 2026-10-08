@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from html import escape
 import json
+import math
 from pathlib import Path
 import statistics
 
@@ -39,6 +40,9 @@ def native_metrics(path, mode):
     result = {}
     for key, _ in METRICS:
         values = [sample[key] for sample in record['samples']]
+        if any(isinstance(value, bool) or not isinstance(value, (int, float))
+               or not math.isfinite(value) or value <= 0 for value in values):
+            raise ValueError('native timing must be positive and finite: ' + path.name + ': ' + key)
         median = statistics.median(values)
         result[key] = {'median_ns': median, 'min_ns': min(values), 'max_ns': max(values),
                        'mad_ns': statistics.median(abs(value - median) for value in values)}

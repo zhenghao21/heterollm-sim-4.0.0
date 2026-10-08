@@ -1,0 +1,487 @@
+{
+  "schema": "heterollm.native-metric-summary/v1",
+  "units": "ms",
+  "range_meaning": "Observed min/max across 5 timed repetitions, not a confidence interval.",
+  "rows": [
+    {
+      "preset_id": "qwen3-0_6b",
+      "case_id": "qwen3_0_6b_f16",
+      "name": "Qwen3 0.6B · F16",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 18.745,
+            "min_ms": 17.788,
+            "max_ms": 19.409,
+            "range_over_median_pct": 8.6476393704988
+          },
+          "tpot": {
+            "median_ms": 3.859881889763779,
+            "min_ms": 3.83251968503937,
+            "max_ms": 3.9411417322834645,
+            "range_over_median_pct": 2.8141287828561476
+          },
+          "e2e": {
+            "median_ms": 509.351,
+            "min_ms": 504.518,
+            "max_ms": 519.27,
+            "range_over_median_pct": 2.896234620134249
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 18.144,
+            "min_ms": 17.46,
+            "max_ms": 19.204,
+            "range_over_median_pct": 9.611992945326278
+          },
+          "tpot": {
+            "median_ms": 2.6474094488188977,
+            "min_ms": 2.622086614173228,
+            "max_ms": 2.7926062992125984,
+            "range_over_median_pct": 6.44100160311223
+          },
+          "e2e": {
+            "median_ms": 354.365,
+            "min_ms": 351.78299999999996,
+            "max_ms": 372.549,
+            "range_over_median_pct": 5.860059543126455
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 30.428133055594277
+    },
+    {
+      "preset_id": "qwen3-1_7b",
+      "case_id": "qwen3_1_7b_q8_0",
+      "name": "Qwen3 1.7B · Q8_0",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 26.064,
+            "min_ms": 24.552,
+            "max_ms": 27.225,
+            "range_over_median_pct": 10.255524861878452
+          },
+          "tpot": {
+            "median_ms": 5.192448818897638,
+            "min_ms": 5.179165354330709,
+            "max_ms": 5.3337559055118104,
+            "range_over_median_pct": 2.977218583618528
+          },
+          "e2e": {
+            "median_ms": 684.366,
+            "min_ms": 683.658,
+            "max_ms": 703.4509999999999,
+            "range_over_median_pct": 2.892165887843622
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 26.094,
+            "min_ms": 25.895,
+            "max_ms": 26.665,
+            "range_over_median_pct": 2.9508699317850846
+          },
+          "tpot": {
+            "median_ms": 3.5985669291338582,
+            "min_ms": 3.582527559055118,
+            "max_ms": 3.819488188976378,
+            "range_over_median_pct": 6.584860990157937
+          },
+          "e2e": {
+            "median_ms": 483.11199999999997,
+            "min_ms": 481.093,
+            "max_ms": 510.97,
+            "range_over_median_pct": 6.184280249714353
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 29.40736389592704
+    },
+    {
+      "preset_id": "qwen3-4b",
+      "case_id": "qwen3_4b_q4_k_m",
+      "name": "Qwen3 4B · Q4_K_M",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 51.0,
+            "min_ms": 50.812,
+            "max_ms": 55.736,
+            "range_over_median_pct": 9.654901960784313
+          },
+          "tpot": {
+            "median_ms": 7.398244094488189,
+            "min_ms": 7.3507165354330715,
+            "max_ms": 7.630606299212598,
+            "range_over_median_pct": 3.7831917980112197
+          },
+          "e2e": {
+            "median_ms": 994.949,
+            "min_ms": 984.3530000000001,
+            "max_ms": 1019.932,
+            "range_over_median_pct": 3.575962184996405
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 52.509,
+            "min_ms": 51.877,
+            "max_ms": 55.494,
+            "range_over_median_pct": 6.888342950732255
+          },
+          "tpot": {
+            "median_ms": 5.599047244094487,
+            "min_ms": 5.536527559055118,
+            "max_ms": 5.7295433070866135,
+            "range_over_median_pct": 3.447296291973185
+          },
+          "e2e": {
+            "median_ms": 763.588,
+            "min_ms": 755.016,
+            "max_ms": 783.1460000000001,
+            "range_over_median_pct": 3.6839237913639447
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 23.253553699737374
+    },
+    {
+      "preset_id": "qwen3-8b",
+      "case_id": "qwen3_8b_q4_k_m",
+      "name": "Qwen3 8B · Q4_K_M",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 79.355,
+            "min_ms": 77.906,
+            "max_ms": 82.317,
+            "range_over_median_pct": 5.558565937874111
+          },
+          "tpot": {
+            "median_ms": 9.637204724409449,
+            "min_ms": 9.600094488188976,
+            "max_ms": 9.831519685039371,
+            "range_over_median_pct": 2.4013726331270417
+          },
+          "e2e": {
+            "median_ms": 1306.242,
+            "min_ms": 1298.734,
+            "max_ms": 1326.769,
+            "range_over_median_pct": 2.146233240088743
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 79.083,
+            "min_ms": 78.818,
+            "max_ms": 81.121,
+            "range_over_median_pct": 2.912130293489119
+          },
+          "tpot": {
+            "median_ms": 7.963393700787401,
+            "min_ms": 7.867393700787402,
+            "max_ms": 8.205,
+            "range_over_median_pct": 4.23947768875494
+          },
+          "e2e": {
+            "median_ms": 1092.472,
+            "min_ms": 1078.242,
+            "max_ms": 1121.103,
+            "range_over_median_pct": 3.9233042128310838
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 16.3652676915916
+    },
+    {
+      "preset_id": "qwen3_8-27b-iq3-s-iq4-xs",
+      "case_id": "qwen3_8_27b_mixed",
+      "name": "Qwen3.8 27B · IQ3_S / IQ4_XS",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 251.603,
+            "min_ms": 250.058,
+            "max_ms": 261.827,
+            "range_over_median_pct": 4.677607182744244
+          },
+          "tpot": {
+            "median_ms": 24.76611023622047,
+            "min_ms": 24.63963779527559,
+            "max_ms": 24.892913385826773,
+            "range_over_median_pct": 1.022670044409181
+          },
+          "e2e": {
+            "median_ms": 3395.978,
+            "min_ms": 3391.0609999999997,
+            "max_ms": 3413.003,
+            "range_over_median_pct": 0.6461172598880345
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 251.386,
+            "min_ms": 250.437,
+            "max_ms": 262.536,
+            "range_over_median_pct": 4.812917187114636
+          },
+          "tpot": {
+            "median_ms": 20.538771653543307,
+            "min_ms": 20.32614960629921,
+            "max_ms": 20.682125984251968,
+            "range_over_median_pct": 1.7331921497425375
+          },
+          "e2e": {
+            "median_ms": 2859.282,
+            "min_ms": 2833.814,
+            "max_ms": 2877.067,
+            "range_over_median_pct": 1.5127224247206117
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 15.803871520958024
+    },
+    {
+      "preset_id": "qwen2_5-0_5b",
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "name": "Qwen2.5 0.5B Instruct · Q4_K_M",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 13.805,
+            "min_ms": 12.735,
+            "max_ms": 14.086,
+            "range_over_median_pct": 9.786309308221659
+          },
+          "tpot": {
+            "median_ms": 3.2248661417322833,
+            "min_ms": 3.2051102362204724,
+            "max_ms": 3.2903622047244094,
+            "range_over_median_pct": 2.643581617255679
+          },
+          "e2e": {
+            "median_ms": 423.387,
+            "min_ms": 419.784,
+            "max_ms": 431.681,
+            "range_over_median_pct": 2.809958737514378
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 13.1,
+            "min_ms": 12.475,
+            "max_ms": 14.185,
+            "range_over_median_pct": 13.053435114503817
+          },
+          "tpot": {
+            "median_ms": 1.7813307086614174,
+            "min_ms": 1.7423779527559053,
+            "max_ms": 1.9695905511811025,
+            "range_over_median_pct": 12.755217058820934
+          },
+          "e2e": {
+            "median_ms": 238.704,
+            "min_ms": 233.77,
+            "max_ms": 264.323,
+            "range_over_median_pct": 12.7995341510825
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 43.6203756846573
+    },
+    {
+      "preset_id": "qwen2_5-7b",
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "name": "Qwen2.5 7B Instruct · Q4_K_M",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 67.662,
+            "min_ms": 67.089,
+            "max_ms": 71.293,
+            "range_over_median_pct": 6.213236380834146
+          },
+          "tpot": {
+            "median_ms": 8.65447244094488,
+            "min_ms": 8.500661417322835,
+            "max_ms": 8.874,
+            "range_over_median_pct": 4.313822537707504
+          },
+          "e2e": {
+            "median_ms": 1166.35,
+            "min_ms": 1147.246,
+            "max_ms": 1194.087,
+            "range_over_median_pct": 4.016032923222017
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 69.479,
+            "min_ms": 67.593,
+            "max_ms": 72.953,
+            "range_over_median_pct": 7.714561234329798
+          },
+          "tpot": {
+            "median_ms": 7.353496062992126,
+            "min_ms": 7.283677165354331,
+            "max_ms": 7.639330708661418,
+            "range_over_median_pct": 4.83652320284743
+          },
+          "e2e": {
+            "median_ms": 1001.487,
+            "min_ms": 993.291,
+            "max_ms": 1042.547,
+            "range_over_median_pct": 4.91828650796266
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 14.134950915248423
+    },
+    {
+      "preset_id": "llama3_2-1b",
+      "case_id": "llama3_2_1b_q4_k_m",
+      "name": "Llama 3.2 1B Instruct · Q4_K_M",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 18.233,
+            "min_ms": 17.058,
+            "max_ms": 19.092,
+            "range_over_median_pct": 11.155596994460595
+          },
+          "tpot": {
+            "median_ms": 2.915488188976378,
+            "min_ms": 2.8471968503937006,
+            "max_ms": 3.0001496062992126,
+            "range_over_median_pct": 5.246214218388367
+          },
+          "e2e": {
+            "median_ms": 388.212,
+            "min_ms": 378.652,
+            "max_ms": 399.252,
+            "range_over_median_pct": 5.306378988799934
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 18.792,
+            "min_ms": 18.025,
+            "max_ms": 19.738,
+            "range_over_median_pct": 9.11558109833972
+          },
+          "tpot": {
+            "median_ms": 2.0470078740157485,
+            "min_ms": 1.9688897637795275,
+            "max_ms": 2.119,
+            "range_over_median_pct": 7.333153825441398
+          },
+          "e2e": {
+            "median_ms": 278.68100000000004,
+            "min_ms": 268.074,
+            "max_ms": 287.905,
+            "range_over_median_pct": 7.116021544346402
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 28.21422315641967
+    },
+    {
+      "preset_id": "llama3_1-8b",
+      "case_id": "llama3_1_8b_q4_k_m",
+      "name": "Llama 3.1 8B Instruct · Q4_K_M",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 73.716,
+            "min_ms": 72.605,
+            "max_ms": 76.927,
+            "range_over_median_pct": 5.863041944760974
+          },
+          "tpot": {
+            "median_ms": 9.056614173228347,
+            "min_ms": 8.958015748031496,
+            "max_ms": 9.17151968503937,
+            "range_over_median_pct": 2.357436597431731
+          },
+          "e2e": {
+            "median_ms": 1222.795,
+            "min_ms": 1211.856,
+            "max_ms": 1238.4989999999998,
+            "range_over_median_pct": 2.1788607248148515
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 75.158,
+            "min_ms": 73.316,
+            "max_ms": 76.192,
+            "range_over_median_pct": 3.826605284866548
+          },
+          "tpot": {
+            "median_ms": 7.612259842519685,
+            "min_ms": 7.5677007874015745,
+            "max_ms": 7.94488188976378,
+            "range_over_median_pct": 4.9549162819612445
+          },
+          "e2e": {
+            "median_ms": 1041.915,
+            "min_ms": 1035.8319999999999,
+            "max_ms": 1082.316,
+            "range_over_median_pct": 4.4614004021441405
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 14.7923404986118
+    },
+    {
+      "preset_id": "qwen3-14b",
+      "case_id": "qwen3_14b_q4_k_m",
+      "name": "Qwen3 14B · Q4_K_M",
+      "modes": {
+        "off": {
+          "ttft": {
+            "median_ms": 136.188,
+            "min_ms": 129.531,
+            "max_ms": 138.005,
+            "range_over_median_pct": 6.2222809645490065
+          },
+          "tpot": {
+            "median_ms": 15.320062992125983,
+            "min_ms": 15.213732283464568,
+            "max_ms": 15.452921259842519,
+            "range_over_median_pct": 1.5612793269902767
+          },
+          "e2e": {
+            "median_ms": 2082.252,
+            "min_ms": 2068.332,
+            "max_ms": 2092.584,
+            "range_over_median_pct": 1.1647005261610988
+          }
+        },
+        "on": {
+          "ttft": {
+            "median_ms": 130.967,
+            "min_ms": 130.139,
+            "max_ms": 132.431,
+            "range_over_median_pct": 1.750059175212076
+          },
+          "tpot": {
+            "median_ms": 13.6934094488189,
+            "min_ms": 13.348259842519685,
+            "max_ms": 13.752984251968503,
+            "range_over_median_pct": 2.9556146039562567
+          },
+          "e2e": {
+            "median_ms": 1870.2830000000001,
+            "min_ms": 1826.1960000000001,
+            "max_ms": 1876.768,
+            "range_over_median_pct": 2.7039758154247115
+          }
+        }
+      },
+      "e2e_graph_reduction_pct": 10.179795721171104
+    }
+  ]
+}

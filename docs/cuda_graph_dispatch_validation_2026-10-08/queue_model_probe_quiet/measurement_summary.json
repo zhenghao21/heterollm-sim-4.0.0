@@ -1,0 +1,1697 @@
+{
+  "hardware_id": "NVIDIA GeForce RTX 5080",
+  "architecture": "sm_120",
+  "driver_version": "617.14",
+  "runtime_version": "12080",
+  "cpu_id": "AMD Ryzen 9 9950X3D 16-Core Processor",
+  "os_id": "Windows-11-10.0.26200-SP0",
+  "runtime_id": "CUDA-12080-driver-617.14",
+  "schema": "heterollm.cuda-queue-probe-suite/v1",
+  "target_llm_latency_used": false,
+  "prediction_qualified": false,
+  "started_utc": "2026-10-08T16:04:21.408653+00:00",
+  "finished_utc": "2026-10-08T16:04:32.084097+00:00",
+  "cases": [
+    {
+      "case_id": "threshold_holdout_7000",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_7000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 1191040.0,
+          "repeat_mad_ns": 6496.0,
+          "minimum_ns": 1171008.0,
+          "maximum_ns": 1835488.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 274720.0,
+          "repeat_mad_ns": 6720.0,
+          "minimum_ns": 255424.0,
+          "maximum_ns": 919264.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 7168.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 7136,
+          "maximum_ns": 7168,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 172800,
+          "repeat_mad_ns": 8300,
+          "minimum_ns": 164100,
+          "maximum_ns": 231900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253471.468,
+            "cpu_percent": 8.9,
+            "available_memory_bytes": 109461602304
+          },
+          {
+            "monotonic_seconds": 253471.515,
+            "cpu_percent": 5.9,
+            "available_memory_bytes": 109394178048
+          },
+          {
+            "monotonic_seconds": 253471.578,
+            "cpu_percent": 6.1,
+            "available_memory_bytes": 109391298560
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "nodes_holdout_33",
+      "split": "holdout_nodes",
+      "source": "nodes_holdout_33.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 98752.0,
+          "repeat_mad_ns": 3552.0,
+          "minimum_ns": 92096.0,
+          "maximum_ns": 126272.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 68288.0,
+          "repeat_mad_ns": 3552.0,
+          "minimum_ns": 61632.0,
+          "maximum_ns": 95808.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 928,
+          "repeat_mad_ns": 0,
+          "minimum_ns": 896,
+          "maximum_ns": 928,
+          "repeat_count": 693
+        },
+        "host_submission_span": {
+          "median_ns": 50400,
+          "repeat_mad_ns": 3400,
+          "minimum_ns": 44700,
+          "maximum_ns": 134300,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253471.671,
+            "cpu_percent": 10.0,
+            "available_memory_bytes": 109465985024
+          },
+          {
+            "monotonic_seconds": 253471.718,
+            "cpu_percent": 8.1,
+            "available_memory_bytes": 109379723264
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "observer_off_payload_256",
+      "split": "observer_control",
+      "source": "observer_off_payload_256.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 409984.0,
+          "repeat_mad_ns": 3264.0,
+          "minimum_ns": 391360.0,
+          "maximum_ns": 546336.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 386624.0,
+          "repeat_mad_ns": 3296.0,
+          "minimum_ns": 368032.0,
+          "maximum_ns": 522880.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 224,
+          "repeat_count": 2688
+        },
+        "host_submission_span": null,
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253471.812,
+            "cpu_percent": 5.3,
+            "available_memory_bytes": 109463474176
+          },
+          {
+            "monotonic_seconds": 253471.875,
+            "cpu_percent": 6.2,
+            "available_memory_bytes": 109419819008
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "nodes_holdout_255",
+      "split": "holdout_nodes",
+      "source": "nodes_holdout_255.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 907488.0,
+          "repeat_mad_ns": 23424.0,
+          "minimum_ns": 861664.0,
+          "maximum_ns": 1491200.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 675744.0,
+          "repeat_mad_ns": 23200.0,
+          "minimum_ns": 630528.0,
+          "maximum_ns": 1259488.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 896,
+          "repeat_mad_ns": 0,
+          "minimum_ns": 896,
+          "maximum_ns": 928,
+          "repeat_count": 5355
+        },
+        "host_submission_span": {
+          "median_ns": 328300,
+          "repeat_mad_ns": 2000,
+          "minimum_ns": 326200,
+          "maximum_ns": 427600,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253471.953,
+            "cpu_percent": 9.8,
+            "available_memory_bytes": 109446905856
+          },
+          {
+            "monotonic_seconds": 253472.0,
+            "cpu_percent": 7.3,
+            "available_memory_bytes": 109393825792
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_750",
+      "split": "train_threshold",
+      "source": "threshold_train_750.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 440512.0,
+          "repeat_mad_ns": 15328.0,
+          "minimum_ns": 402560.0,
+          "maximum_ns": 1060928.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 323424.0,
+          "repeat_mad_ns": 15424.0,
+          "minimum_ns": 285632.0,
+          "maximum_ns": 943840.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 928.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 896,
+          "maximum_ns": 928,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 172700,
+          "repeat_mad_ns": 8600,
+          "minimum_ns": 163700,
+          "maximum_ns": 245800,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253472.14,
+            "cpu_percent": 6.6,
+            "available_memory_bytes": 109470216192
+          },
+          {
+            "monotonic_seconds": 253472.187,
+            "cpu_percent": 10.7,
+            "available_memory_bytes": 109383917568
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "observer_off_payload_0",
+      "split": "observer_control",
+      "source": "observer_off_payload_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 413408.0,
+          "repeat_mad_ns": 3488.0,
+          "minimum_ns": 406912.0,
+          "maximum_ns": 427872.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 390336.0,
+          "repeat_mad_ns": 3680.0,
+          "minimum_ns": 383904.0,
+          "maximum_ns": 404992.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 224,
+          "repeat_count": 2688
+        },
+        "host_submission_span": null,
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253472.312,
+            "cpu_percent": 8.6,
+            "available_memory_bytes": 109426589696
+          },
+          {
+            "monotonic_seconds": 253472.359,
+            "cpu_percent": 5.7,
+            "available_memory_bytes": 109393846272
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_1000",
+      "split": "train_threshold",
+      "source": "threshold_train_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 664512.0,
+          "repeat_mad_ns": 12992.0,
+          "minimum_ns": 625376.0,
+          "maximum_ns": 956992.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 514592.0,
+          "repeat_mad_ns": 13184.0,
+          "minimum_ns": 475456.0,
+          "maximum_ns": 806752.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 172100,
+          "repeat_mad_ns": 2900,
+          "minimum_ns": 164600,
+          "maximum_ns": 263300,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253472.437,
+            "cpu_percent": 6.6,
+            "available_memory_bytes": 109472202752
+          },
+          {
+            "monotonic_seconds": 253472.484,
+            "cpu_percent": 12.8,
+            "available_memory_bytes": 109390274560
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_0",
+      "split": "train_threshold",
+      "source": "threshold_train_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 443520.0,
+          "repeat_mad_ns": 23072.0,
+          "minimum_ns": 387328.0,
+          "maximum_ns": 1080064.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 420544.0,
+          "repeat_mad_ns": 22976.0,
+          "minimum_ns": 364128.0,
+          "maximum_ns": 1057120.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 224,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 188100,
+          "repeat_mad_ns": 20300,
+          "minimum_ns": 164500,
+          "maximum_ns": 331600,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253472.609,
+            "cpu_percent": 6.8,
+            "available_memory_bytes": 109431660544
+          },
+          {
+            "monotonic_seconds": 253472.656,
+            "cpu_percent": 8.0,
+            "available_memory_bytes": 109381468160
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_1125",
+      "split": "train_threshold",
+      "source": "threshold_train_1125.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 686880.0,
+          "repeat_mad_ns": 17504.0,
+          "minimum_ns": 661216.0,
+          "maximum_ns": 1345248.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 520192.0,
+          "repeat_mad_ns": 17632.0,
+          "minimum_ns": 494560.0,
+          "maximum_ns": 1178720.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1312.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1280,
+          "maximum_ns": 1312,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 188500,
+          "repeat_mad_ns": 20400,
+          "minimum_ns": 165200,
+          "maximum_ns": 256700,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253472.781,
+            "cpu_percent": 5.6,
+            "available_memory_bytes": 109455716352
+          },
+          {
+            "monotonic_seconds": 253472.828,
+            "cpu_percent": 9.8,
+            "available_memory_bytes": 109379452928
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "payload_train_256_1000",
+      "split": "train_payload",
+      "source": "payload_train_256_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 661088.0,
+          "repeat_mad_ns": 9216.0,
+          "minimum_ns": 638368.0,
+          "maximum_ns": 1436928.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 511104.0,
+          "repeat_mad_ns": 9344.0,
+          "minimum_ns": 488192.0,
+          "maximum_ns": 1286976.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 174000,
+          "repeat_mad_ns": 6000,
+          "minimum_ns": 165300,
+          "maximum_ns": 396600,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253472.937,
+            "cpu_percent": 14.9,
+            "available_memory_bytes": 109455577088
+          },
+          {
+            "monotonic_seconds": 253473.0,
+            "cpu_percent": 7.8,
+            "available_memory_bytes": 109386088448
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "mixed_shuffled_holdout",
+      "split": "holdout_mixed_body",
+      "source": "mixed_shuffled_holdout.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 616352.0,
+          "repeat_mad_ns": 9440.0,
+          "minimum_ns": 586304.0,
+          "maximum_ns": 947168.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 401632.0,
+          "repeat_mad_ns": 9824.0,
+          "minimum_ns": 371104.0,
+          "maximum_ns": 732160.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1312.0,
+          "repeat_mad_ns": 768.0,
+          "minimum_ns": 256,
+          "maximum_ns": 4160,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 170100,
+          "repeat_mad_ns": 1700,
+          "minimum_ns": 164700,
+          "maximum_ns": 268900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253473.109,
+            "cpu_percent": 7.5,
+            "available_memory_bytes": 109467656192
+          },
+          {
+            "monotonic_seconds": 253473.156,
+            "cpu_percent": 6.3,
+            "available_memory_bytes": 109384908800
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_4000",
+      "split": "train_threshold",
+      "source": "threshold_train_4000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 941568.0,
+          "repeat_mad_ns": 18432.0,
+          "minimum_ns": 914880.0,
+          "maximum_ns": 1554720.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 410560.0,
+          "repeat_mad_ns": 18464.0,
+          "minimum_ns": 384160.0,
+          "maximum_ns": 1023808.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 4160.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 4128,
+          "maximum_ns": 4160,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 167900,
+          "repeat_mad_ns": 3900,
+          "minimum_ns": 163800,
+          "maximum_ns": 278800,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253473.281,
+            "cpu_percent": 6.0,
+            "available_memory_bytes": 109426143232
+          },
+          {
+            "monotonic_seconds": 253473.343,
+            "cpu_percent": 4.7,
+            "available_memory_bytes": 109390438400
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "mixed_alternating_holdout",
+      "split": "holdout_mixed_body",
+      "source": "mixed_alternating_holdout.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 762112.0,
+          "repeat_mad_ns": 22624.0,
+          "minimum_ns": 737536.0,
+          "maximum_ns": 1036640.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 278080.0,
+          "repeat_mad_ns": 22784.0,
+          "minimum_ns": 253600.0,
+          "maximum_ns": 552800.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 3776.0,
+          "repeat_mad_ns": 3392.0,
+          "minimum_ns": 384,
+          "maximum_ns": 7168,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 170500,
+          "repeat_mad_ns": 5500,
+          "minimum_ns": 163800,
+          "maximum_ns": 234500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253473.437,
+            "cpu_percent": 7.9,
+            "available_memory_bytes": 109434097664
+          },
+          {
+            "monotonic_seconds": 253473.5,
+            "cpu_percent": 3.0,
+            "available_memory_bytes": 109386248192
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_5000",
+      "split": "train_threshold",
+      "source": "threshold_train_5000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 1140192.0,
+          "repeat_mad_ns": 8576.0,
+          "minimum_ns": 1120608.0,
+          "maximum_ns": 1736832.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 477984.0,
+          "repeat_mad_ns": 8416.0,
+          "minimum_ns": 458144.0,
+          "maximum_ns": 1074336.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 5184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 5152,
+          "maximum_ns": 5184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 164800,
+          "repeat_mad_ns": 1000,
+          "minimum_ns": 163300,
+          "maximum_ns": 230000,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253473.609,
+            "cpu_percent": 7.6,
+            "available_memory_bytes": 109425115136
+          },
+          {
+            "monotonic_seconds": 253473.656,
+            "cpu_percent": 7.3,
+            "available_memory_bytes": 109388398592
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_2000",
+      "split": "train_threshold",
+      "source": "threshold_train_2000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 682336.0,
+          "repeat_mad_ns": 12512.0,
+          "minimum_ns": 648928.0,
+          "maximum_ns": 738752.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 405056.0,
+          "repeat_mad_ns": 12512.0,
+          "minimum_ns": 371616.0,
+          "maximum_ns": 461536.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 2176.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 2144,
+          "maximum_ns": 2176,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 172100,
+          "repeat_mad_ns": 7400,
+          "minimum_ns": 163200,
+          "maximum_ns": 282400,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253473.781,
+            "cpu_percent": 12.3,
+            "available_memory_bytes": 109463449600
+          },
+          {
+            "monotonic_seconds": 253473.828,
+            "cpu_percent": 12.5,
+            "available_memory_bytes": 109378830336
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "payload_train_256_0",
+      "split": "train_payload",
+      "source": "payload_train_256_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 451584.0,
+          "repeat_mad_ns": 12800.0,
+          "minimum_ns": 417344.0,
+          "maximum_ns": 1059968.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 428032.0,
+          "repeat_mad_ns": 12992.0,
+          "minimum_ns": 393632.0,
+          "maximum_ns": 1036448.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 224,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 181500,
+          "repeat_mad_ns": 12900,
+          "minimum_ns": 168200,
+          "maximum_ns": 314500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253473.953,
+            "cpu_percent": 6.5,
+            "available_memory_bytes": 109441773568
+          },
+          {
+            "monotonic_seconds": 253474.015,
+            "cpu_percent": 16.3,
+            "available_memory_bytes": 109368320000
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_1750",
+      "split": "train_threshold",
+      "source": "threshold_train_1750.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 668096.0,
+          "repeat_mad_ns": 8512.0,
+          "minimum_ns": 647360.0,
+          "maximum_ns": 1881472.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 423552.0,
+          "repeat_mad_ns": 8672.0,
+          "minimum_ns": 402880.0,
+          "maximum_ns": 1636864.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1920.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1888,
+          "maximum_ns": 1920,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 169900,
+          "repeat_mad_ns": 4500,
+          "minimum_ns": 164500,
+          "maximum_ns": 262500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253474.109,
+            "cpu_percent": 7.5,
+            "available_memory_bytes": 109461643264
+          },
+          {
+            "monotonic_seconds": 253474.171,
+            "cpu_percent": 8.7,
+            "available_memory_bytes": 109377146880
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_holdout_500",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_500.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 450464.0,
+          "repeat_mad_ns": 9024.0,
+          "minimum_ns": 404384.0,
+          "maximum_ns": 1086080.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 366080.0,
+          "repeat_mad_ns": 9120.0,
+          "minimum_ns": 320096.0,
+          "maximum_ns": 1001728.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 672.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 640,
+          "maximum_ns": 672,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 167300,
+          "repeat_mad_ns": 2600,
+          "minimum_ns": 164000,
+          "maximum_ns": 211300,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253474.281,
+            "cpu_percent": 0.8,
+            "available_memory_bytes": 109486972928
+          },
+          {
+            "monotonic_seconds": 253474.328,
+            "cpu_percent": 0.0,
+            "available_memory_bytes": 109487329280
+          },
+          {
+            "monotonic_seconds": 253474.39,
+            "cpu_percent": 0.9,
+            "available_memory_bytes": 109488467968
+          },
+          {
+            "monotonic_seconds": 253474.437,
+            "cpu_percent": 1.0,
+            "available_memory_bytes": 109489094656
+          },
+          {
+            "monotonic_seconds": 253474.5,
+            "cpu_percent": 0.0,
+            "available_memory_bytes": 109489582080
+          },
+          {
+            "monotonic_seconds": 253474.562,
+            "cpu_percent": 0.0,
+            "available_memory_bytes": 109489602560
+          },
+          {
+            "monotonic_seconds": 253474.609,
+            "cpu_percent": 0.0,
+            "available_memory_bytes": 109489602560
+          },
+          {
+            "monotonic_seconds": 253474.656,
+            "cpu_percent": 2.7,
+            "available_memory_bytes": 109489602560
+          },
+          {
+            "monotonic_seconds": 253474.703,
+            "cpu_percent": 6.6,
+            "available_memory_bytes": 109489692672
+          },
+          {
+            "monotonic_seconds": 253474.765,
+            "cpu_percent": 4.9,
+            "available_memory_bytes": 109462249472
+          },
+          {
+            "monotonic_seconds": 253474.828,
+            "cpu_percent": 14.4,
+            "available_memory_bytes": 109369495552
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_1250",
+      "split": "train_threshold",
+      "source": "threshold_train_1250.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 699328.0,
+          "repeat_mad_ns": 23808.0,
+          "minimum_ns": 666368.0,
+          "maximum_ns": 1310560.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 516672.0,
+          "repeat_mad_ns": 24000.0,
+          "minimum_ns": 483712.0,
+          "maximum_ns": 1127776.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1440.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1408,
+          "maximum_ns": 1440,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 200300,
+          "repeat_mad_ns": 26300,
+          "minimum_ns": 163100,
+          "maximum_ns": 243900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253474.937,
+            "cpu_percent": 9.9,
+            "available_memory_bytes": 109420449792
+          },
+          {
+            "monotonic_seconds": 253475.0,
+            "cpu_percent": 10.9,
+            "available_memory_bytes": 109380763648
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_holdout_3000",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_3000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 907968.0,
+          "repeat_mad_ns": 11520.0,
+          "minimum_ns": 890464.0,
+          "maximum_ns": 1177312.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 504000.0,
+          "repeat_mad_ns": 11360.0,
+          "minimum_ns": 486464.0,
+          "maximum_ns": 773216.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 3168.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 3136,
+          "maximum_ns": 3168,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 166000,
+          "repeat_mad_ns": 2600,
+          "minimum_ns": 163200,
+          "maximum_ns": 206500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253475.109,
+            "cpu_percent": 16.1,
+            "available_memory_bytes": 109455663104
+          },
+          {
+            "monotonic_seconds": 253475.156,
+            "cpu_percent": 12.4,
+            "available_memory_bytes": 109371916288
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_625",
+      "split": "train_threshold",
+      "source": "threshold_train_625.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 424992.0,
+          "repeat_mad_ns": 8160.0,
+          "minimum_ns": 392192.0,
+          "maximum_ns": 497664.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 323936.0,
+          "repeat_mad_ns": 8192.0,
+          "minimum_ns": 291136.0,
+          "maximum_ns": 396704.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 800.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 768,
+          "maximum_ns": 800,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 167500,
+          "repeat_mad_ns": 2600,
+          "minimum_ns": 162100,
+          "maximum_ns": 191400,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253475.296,
+            "cpu_percent": 8.6,
+            "available_memory_bytes": 109441318912
+          },
+          {
+            "monotonic_seconds": 253475.343,
+            "cpu_percent": 4.4,
+            "available_memory_bytes": 109378928640
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_holdout_1500",
+      "split": "holdout_threshold",
+      "source": "threshold_holdout_1500.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 686304.0,
+          "repeat_mad_ns": 18688.0,
+          "minimum_ns": 645984.0,
+          "maximum_ns": 1023456.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 474688.0,
+          "repeat_mad_ns": 18752.0,
+          "minimum_ns": 434080.0,
+          "maximum_ns": 811584.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1664.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1632,
+          "maximum_ns": 1664,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 194500,
+          "repeat_mad_ns": 11700,
+          "minimum_ns": 163900,
+          "maximum_ns": 349100,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253475.453,
+            "cpu_percent": 18.5,
+            "available_memory_bytes": 109416992768
+          },
+          {
+            "monotonic_seconds": 253475.515,
+            "cpu_percent": 4.9,
+            "available_memory_bytes": 109379461120
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_875",
+      "split": "train_threshold",
+      "source": "threshold_train_875.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 589920.0,
+          "repeat_mad_ns": 15968.0,
+          "minimum_ns": 561472.0,
+          "maximum_ns": 1218336.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 456224.0,
+          "repeat_mad_ns": 16128.0,
+          "minimum_ns": 427584.0,
+          "maximum_ns": 1084416.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1056.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1024,
+          "maximum_ns": 1056,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 168700,
+          "repeat_mad_ns": 4800,
+          "minimum_ns": 163100,
+          "maximum_ns": 205900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253475.609,
+            "cpu_percent": 6.1,
+            "available_memory_bytes": 109460271104
+          },
+          {
+            "monotonic_seconds": 253475.671,
+            "cpu_percent": 6.4,
+            "available_memory_bytes": 109375836160
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_375",
+      "split": "train_threshold",
+      "source": "threshold_train_375.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 424768.0,
+          "repeat_mad_ns": 10304.0,
+          "minimum_ns": 395200.0,
+          "maximum_ns": 680576.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 356128.0,
+          "repeat_mad_ns": 10432.0,
+          "minimum_ns": 326816.0,
+          "maximum_ns": 612064.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 544.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 512,
+          "maximum_ns": 544,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 171100,
+          "repeat_mad_ns": 1800,
+          "minimum_ns": 167800,
+          "maximum_ns": 248500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253475.781,
+            "cpu_percent": 6.7,
+            "available_memory_bytes": 109439328256
+          },
+          {
+            "monotonic_seconds": 253475.828,
+            "cpu_percent": 4.3,
+            "available_memory_bytes": 109376208896
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "payload_train_64_0",
+      "split": "train_payload",
+      "source": "payload_train_64_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 384576.0,
+          "repeat_mad_ns": 6016.0,
+          "minimum_ns": 377248.0,
+          "maximum_ns": 469440.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 361120.0,
+          "repeat_mad_ns": 6144.0,
+          "minimum_ns": 353792.0,
+          "maximum_ns": 446016.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 224,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 165600,
+          "repeat_mad_ns": 900,
+          "minimum_ns": 164500,
+          "maximum_ns": 176400,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253475.937,
+            "cpu_percent": 12.3,
+            "available_memory_bytes": 109442228224
+          },
+          {
+            "monotonic_seconds": 253476.0,
+            "cpu_percent": 14.3,
+            "available_memory_bytes": 109409452032
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "geometry_holdout",
+      "split": "holdout_geometry",
+      "source": "geometry_holdout.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 448832.0,
+          "repeat_mad_ns": 8288.0,
+          "minimum_ns": 391488.0,
+          "maximum_ns": 487616.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 328864.0,
+          "repeat_mad_ns": 8128.0,
+          "minimum_ns": 271072.0,
+          "maximum_ns": 367264.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 928.0,
+          "repeat_mad_ns": 32.0,
+          "minimum_ns": 896,
+          "maximum_ns": 960,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 169000,
+          "repeat_mad_ns": 2100,
+          "minimum_ns": 165700,
+          "maximum_ns": 286700,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253476.093,
+            "cpu_percent": 5.9,
+            "available_memory_bytes": 109461364736
+          },
+          {
+            "monotonic_seconds": 253476.156,
+            "cpu_percent": 16.7,
+            "available_memory_bytes": 109386014720
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "payload_train_64_1000",
+      "split": "train_payload",
+      "source": "payload_train_64_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 664416.0,
+          "repeat_mad_ns": 7456.0,
+          "minimum_ns": 648800.0,
+          "maximum_ns": 1267392.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 514048.0,
+          "repeat_mad_ns": 7328.0,
+          "minimum_ns": 498496.0,
+          "maximum_ns": 1117088.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 165000,
+          "repeat_mad_ns": 1100,
+          "minimum_ns": 162700,
+          "maximum_ns": 180600,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253476.265,
+            "cpu_percent": 12.9,
+            "available_memory_bytes": 109436489728
+          },
+          {
+            "monotonic_seconds": 253476.312,
+            "cpu_percent": 4.8,
+            "available_memory_bytes": 109379354624
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_0",
+      "split": "holdout_payload",
+      "source": "payload_holdout_1024_0.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 503296.0,
+          "repeat_mad_ns": 17376.0,
+          "minimum_ns": 470624.0,
+          "maximum_ns": 776736.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 480480.0,
+          "repeat_mad_ns": 17184.0,
+          "minimum_ns": 447872.0,
+          "maximum_ns": 754048.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 192.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 160,
+          "maximum_ns": 224,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 185100,
+          "repeat_mad_ns": 2600,
+          "minimum_ns": 180100,
+          "maximum_ns": 322500,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253476.421,
+            "cpu_percent": 7.0,
+            "available_memory_bytes": 109416173568
+          },
+          {
+            "monotonic_seconds": 253476.5,
+            "cpu_percent": 4.5,
+            "available_memory_bytes": 109456211968
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_125",
+      "split": "train_threshold",
+      "source": "threshold_train_125.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 419424.0,
+          "repeat_mad_ns": 5152.0,
+          "minimum_ns": 369312.0,
+          "maximum_ns": 1032000.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 383616.0,
+          "repeat_mad_ns": 5216.0,
+          "minimum_ns": 333664.0,
+          "maximum_ns": 996352.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 288.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 256,
+          "maximum_ns": 288,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 171200,
+          "repeat_mad_ns": 2900,
+          "minimum_ns": 163600,
+          "maximum_ns": 373600,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253476.578,
+            "cpu_percent": 6.8,
+            "available_memory_bytes": 109458046976
+          },
+          {
+            "monotonic_seconds": 253476.625,
+            "cpu_percent": 7.4,
+            "available_memory_bytes": 109377351680
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_1000",
+      "split": "holdout_payload",
+      "source": "payload_holdout_1024_1000.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 710944.0,
+          "repeat_mad_ns": 15328.0,
+          "minimum_ns": 691936.0,
+          "maximum_ns": 1361536.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 560800.0,
+          "repeat_mad_ns": 15680.0,
+          "minimum_ns": 541664.0,
+          "maximum_ns": 1211520.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 1184.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 1152,
+          "maximum_ns": 1184,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 184400,
+          "repeat_mad_ns": 4200,
+          "minimum_ns": 178800,
+          "maximum_ns": 291900,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253476.75,
+            "cpu_percent": 7.7,
+            "available_memory_bytes": 109421789184
+          },
+          {
+            "monotonic_seconds": 253476.796,
+            "cpu_percent": 5.2,
+            "available_memory_bytes": 109375705088
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    },
+    {
+      "case_id": "threshold_train_250",
+      "split": "train_threshold",
+      "source": "threshold_train_250.json.gz",
+      "summary": {
+        "device_span": {
+          "median_ns": 385856.0,
+          "repeat_mad_ns": 6304.0,
+          "minimum_ns": 374592.0,
+          "maximum_ns": 439104.0,
+          "repeat_count": 21
+        },
+        "uncovered_gap": {
+          "median_ns": 334272.0,
+          "repeat_mad_ns": 6144.0,
+          "minimum_ns": 323136.0,
+          "maximum_ns": 387584.0,
+          "repeat_count": 21
+        },
+        "effective_body": {
+          "median_ns": 416.0,
+          "repeat_mad_ns": 0.0,
+          "minimum_ns": 384,
+          "maximum_ns": 416,
+          "repeat_count": 2688
+        },
+        "host_submission_span": {
+          "median_ns": 165700,
+          "repeat_mad_ns": 1400,
+          "minimum_ns": 162400,
+          "maximum_ns": 174800,
+          "repeat_count": 21
+        },
+        "prediction_qualified": false
+      },
+      "measurement_environment": {
+        "logical_cpu_count": 32,
+        "cpu_samples": [
+          {
+            "monotonic_seconds": 253476.906,
+            "cpu_percent": 7.8,
+            "available_memory_bytes": 109441548288
+          },
+          {
+            "monotonic_seconds": 253476.968,
+            "cpu_percent": 4.0,
+            "available_memory_bytes": 109447372800
+          }
+        ],
+        "quiet_environment_qualified": false,
+        "note": "CPU contention is recorded independently; quiet-environment qualification is not assumed by the measurement tool."
+      }
+    }
+  ]
+}

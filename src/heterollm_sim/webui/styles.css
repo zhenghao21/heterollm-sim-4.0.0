@@ -7792,3 +7792,12 @@ details:is(.inspector-advanced-profile, .inspector-section.hbf-media-section, .i
 .component-preset-editor-shell .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid var(--line); }
 .component-preset-actions .button-danger { color: var(--danger, #ff847c); border-color: color-mix(in srgb, var(--danger, #ff847c) 45%, var(--line)); }
 @media (max-width: 620px) { .component-preset-editor-grid { grid-template-columns: 1fr; } .component-preset-editor-grid .field-span-all { grid-column: auto; } }
+/* GGUF-backed model configuration and immutable Save As workflow. */
+.gguf-preset-editor { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; padding: 24px; }
+.gguf-preset-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+.gguf-preset-fields .field:first-child { grid-column: 1 / -1; }
+.gguf-preset-actions, .gguf-catalog-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.gguf-preset-actions { justify-content: flex-end; }
+.gguf-catalog-actions { padding: 0 20px 12px; }
+.gguf-preset-error { color: #d64f4f; white-space: pre-wrap; }
+@media (max-width: 540px) { .gguf-preset-fields { grid-template-columns: 1fr; } }

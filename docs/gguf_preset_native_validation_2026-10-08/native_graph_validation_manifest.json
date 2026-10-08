@@ -1,0 +1,262 @@
+{
+  "schema": "heterollm.native-graph-validation/v1",
+  "started_local": "2026-10-08 19:36:30",
+  "source_revision": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+  "diagnostic_server": "F:\\codex_project\\_runtime_sources\\llama.cpp\\build-native-5080-sm120-graph-diag\\bin\\llama-server.exe",
+  "latency_values_retained": false,
+  "native_timings_used_to_fit_simulator": false,
+  "models": [
+    {
+      "preset_id": "qwen3-0_6b",
+      "model_slug": "qwen3_0_6b_f16",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen3_0_6b_f16_off.json",
+        "on": "native_graph_diagnostic_qwen3_0_6b_f16_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "qwen3-1_7b",
+      "model_slug": "qwen3_1_7b_q8_0",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen3_1_7b_q8_0_off.json",
+        "on": "native_graph_diagnostic_qwen3_1_7b_q8_0_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "qwen3-4b",
+      "model_slug": "qwen3_4b_q4_k_m",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen3_4b_q4_k_m_off.json",
+        "on": "native_graph_diagnostic_qwen3_4b_q4_k_m_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "qwen3-8b",
+      "model_slug": "qwen3_8b_q4_k_m",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen3_8b_q4_k_m_off.json",
+        "on": "native_graph_diagnostic_qwen3_8b_q4_k_m_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "qwen3_8-27b-iq3-s-iq4-xs",
+      "model_slug": "qwen3_8_27b_mixed",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen3_8_27b_mixed_off.json",
+        "on": "native_graph_diagnostic_qwen3_8_27b_mixed_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "qwen2_5-0_5b",
+      "model_slug": "qwen2_5_0_5b_q4_k_m",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen2_5_0_5b_q4_k_m_off.json",
+        "on": "native_graph_diagnostic_qwen2_5_0_5b_q4_k_m_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "qwen2_5-7b",
+      "model_slug": "qwen2_5_7b_q4_k_m",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen2_5_7b_q4_k_m_off.json",
+        "on": "native_graph_diagnostic_qwen2_5_7b_q4_k_m_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "llama3_2-1b",
+      "model_slug": "llama3_2_1b_q4_k_m",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_llama3_2_1b_q4_k_m_off.json",
+        "on": "native_graph_diagnostic_llama3_2_1b_q4_k_m_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "llama3_1-8b",
+      "model_slug": "llama3_1_8b_q4_k_m",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_llama3_1_8b_q4_k_m_off.json",
+        "on": "native_graph_diagnostic_llama3_1_8b_q4_k_m_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    },
+    {
+      "preset_id": "qwen3-14b",
+      "model_slug": "qwen3_14b_q4_k_m",
+      "diagnostic_files": {
+        "off": "native_graph_diagnostic_qwen3_14b_q4_k_m_off.json",
+        "on": "native_graph_diagnostic_qwen3_14b_q4_k_m_on.json"
+      },
+      "off_events": {
+        "direct": 386
+      },
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      }
+    }
+  ],
+  "finished_local": "2026-10-08 19:38:58",
+  "status": "completed"
+}

@@ -1,0 +1,129 @@
+{
+  "checked_utc": "2026-10-08T16:11:55.649Z",
+  "report": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_dispatch_validation_2026-10-08\\report.html",
+  "method": "Static final HTML opened from local file in headless Edge; desktop/narrow screenshots, report counts, local-link existence and scroll geometry checked.",
+  "comparison_rows": 60,
+  "input_rows": 20,
+  "missing_links": [],
+  "page_errors": [],
+  "links": [
+    {
+      "text": "原始实测清单与运行配置",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/native_timing_manifest.json"
+    },
+    {
+      "text": "独立测量结论与限制",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/README.md"
+    },
+    {
+      "text": "独立测量分类统计",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/independent_dispatch_summary.json"
+    },
+    {
+      "text": "早期队列候选探索（事后分析）",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/queue_candidate_holdout.json"
+    },
+    {
+      "text": "31 组队列实验的预先划分计划",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/queue_model_probe/experiment_plan.json"
+    },
+    {
+      "text": "31 组队列模型识别与留出检验",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/queue_model_probe/queue_model_identification.json"
+    },
+    {
+      "text": "低 CPU 负载复测与两轮比较",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/queue_model_probe_quiet/quiet_comparison.json"
+    },
+    {
+      "text": "固定原模型的复测留出结果",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/queue_model_probe_quiet/queue_model_identification.json"
+    },
+    {
+      "text": "源码调用归属检查报告",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/source_dispatch_coverage.html"
+    },
+    {
+      "text": "源码调用归属明细",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/source_dispatch_coverage.json"
+    },
+    {
+      "text": "结果页检查记录",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/render_checks/result_page_checks.json"
+    },
+    {
+      "text": "Graph off · 桌面截图",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/render_checks/ui_llama3_2_1b_q4_k_m_graph_off_desktop.png"
+    },
+    {
+      "text": "Graph off · 窄屏截图",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/render_checks/ui_llama3_2_1b_q4_k_m_graph_off_narrow.png"
+    },
+    {
+      "text": "Graph on · 桌面截图",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/render_checks/ui_llama3_2_1b_q4_k_m_graph_on_desktop.png"
+    },
+    {
+      "text": "Graph on · 窄屏截图",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/render_checks/ui_llama3_2_1b_q4_k_m_graph_on_narrow.png"
+    },
+    {
+      "text": "Graph on · 桌面截图",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/render_checks/ui_qwen3_8_27b_mixed_graph_on_desktop.png"
+    },
+    {
+      "text": "Graph on · 窄屏截图",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/render_checks/ui_qwen3_8_27b_mixed_graph_on_narrow.png"
+    },
+    {
+      "text": "完整对照数据",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/comparison_summary.json"
+    },
+    {
+      "text": "输入与实测复用说明",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/correction_inputs.json"
+    },
+    {
+      "text": "修复前报告",
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/gguf_preset_native_validation_2026-10-08/report.html"
+    }
+  ],
+  "checks": [
+    {
+      "viewport": 1440,
+      "document_width": 1440,
+      "tables": [
+        {
+          "client_width": 0,
+          "scroll_width": 1338
+        },
+        {
+          "client_width": 1338,
+          "scroll_width": 1338
+        },
+        {
+          "client_width": 1338,
+          "scroll_width": 1338
+        }
+      ]
+    },
+    {
+      "viewport": 390,
+      "document_width": 390,
+      "tables": [
+        {
+          "client_width": 364,
+          "scroll_width": 949
+        },
+        {
+          "client_width": 364,
+          "scroll_width": 927
+        },
+        {
+          "client_width": 364,
+          "scroll_width": 394
+        }
+      ]
+    }
+  ]
+}

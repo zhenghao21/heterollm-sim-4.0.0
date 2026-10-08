@@ -1,0 +1,396 @@
+{
+  "schema": "heterollm.cuda-queue-model-identification/v1",
+  "target_llm_latency_used": false,
+  "prediction_qualified": false,
+  "fitted_from_train_only": {
+    "quantum_ns": 2048.0,
+    "tail_lower_exclusive_ns": 960.0,
+    "tail_upper_inclusive_ns": 992.0,
+    "tail_midpoint_ns": 976.0,
+    "threshold_training": [
+      {
+        "case_id": "threshold_train_0",
+        "actual_body_median_ns": 192.0,
+        "modal_start_period_ns": 2048.0,
+        "tail_lower_exclusive_ns": -192.0,
+        "tail_upper_inclusive_ns": 1856.0
+      },
+      {
+        "case_id": "threshold_train_125",
+        "actual_body_median_ns": 288.0,
+        "modal_start_period_ns": 2048.0,
+        "tail_lower_exclusive_ns": -288.0,
+        "tail_upper_inclusive_ns": 1760.0
+      },
+      {
+        "case_id": "threshold_train_250",
+        "actual_body_median_ns": 416.0,
+        "modal_start_period_ns": 2048.0,
+        "tail_lower_exclusive_ns": -416.0,
+        "tail_upper_inclusive_ns": 1632.0
+      },
+      {
+        "case_id": "threshold_train_375",
+        "actual_body_median_ns": 544.0,
+        "modal_start_period_ns": 2048.0,
+        "tail_lower_exclusive_ns": -544.0,
+        "tail_upper_inclusive_ns": 1504.0
+      },
+      {
+        "case_id": "threshold_train_625",
+        "actual_body_median_ns": 800.0,
+        "modal_start_period_ns": 2048.0,
+        "tail_lower_exclusive_ns": -800.0,
+        "tail_upper_inclusive_ns": 1248.0
+      },
+      {
+        "case_id": "threshold_train_750",
+        "actual_body_median_ns": 928.0,
+        "modal_start_period_ns": 2048.0,
+        "tail_lower_exclusive_ns": -928.0,
+        "tail_upper_inclusive_ns": 1120.0
+      },
+      {
+        "case_id": "threshold_train_875",
+        "actual_body_median_ns": 1056.0,
+        "modal_start_period_ns": 2048.0,
+        "tail_lower_exclusive_ns": -1056.0,
+        "tail_upper_inclusive_ns": 992.0
+      },
+      {
+        "case_id": "threshold_train_1000",
+        "actual_body_median_ns": 1184.0,
+        "modal_start_period_ns": 4096.0,
+        "tail_lower_exclusive_ns": 864.0,
+        "tail_upper_inclusive_ns": 2912.0
+      },
+      {
+        "case_id": "threshold_train_1125",
+        "actual_body_median_ns": 1312.0,
+        "modal_start_period_ns": 4096.0,
+        "tail_lower_exclusive_ns": 736.0,
+        "tail_upper_inclusive_ns": 2784.0
+      },
+      {
+        "case_id": "threshold_train_1250",
+        "actual_body_median_ns": 1440.0,
+        "modal_start_period_ns": 4096.0,
+        "tail_lower_exclusive_ns": 608.0,
+        "tail_upper_inclusive_ns": 2656.0
+      },
+      {
+        "case_id": "threshold_train_1750",
+        "actual_body_median_ns": 1920.0,
+        "modal_start_period_ns": 4096.0,
+        "tail_lower_exclusive_ns": 128.0,
+        "tail_upper_inclusive_ns": 2176.0
+      },
+      {
+        "case_id": "threshold_train_2000",
+        "actual_body_median_ns": 2176.0,
+        "modal_start_period_ns": 4096.0,
+        "tail_lower_exclusive_ns": -128.0,
+        "tail_upper_inclusive_ns": 1920.0
+      },
+      {
+        "case_id": "threshold_train_4000",
+        "actual_body_median_ns": 4160.0,
+        "modal_start_period_ns": 6144.0,
+        "tail_lower_exclusive_ns": -64.0,
+        "tail_upper_inclusive_ns": 1984.0
+      },
+      {
+        "case_id": "threshold_train_5000",
+        "actual_body_median_ns": 5184.0,
+        "modal_start_period_ns": 8192.0,
+        "tail_lower_exclusive_ns": 960.0,
+        "tail_upper_inclusive_ns": 3008.0
+      }
+    ],
+    "packet_models": [
+      {
+        "extra_parameter_bytes": 0,
+        "actual_parameter_extent_bytes": 32,
+        "packet_period_nodes": 11,
+        "pulse_even_ns": 5280.0,
+        "pulse_odd_ns": 26928.0,
+        "training_case_pulses": [
+          {
+            "case_id": "threshold_train_0",
+            "pulse_even_ns": 5088.0,
+            "pulse_odd_ns": 30064.0
+          },
+          {
+            "case_id": "threshold_train_125",
+            "pulse_even_ns": 5120.0,
+            "pulse_odd_ns": 28720.0
+          },
+          {
+            "case_id": "threshold_train_250",
+            "pulse_even_ns": 5088.0,
+            "pulse_odd_ns": 24480.0
+          },
+          {
+            "case_id": "threshold_train_375",
+            "pulse_even_ns": 5120.0,
+            "pulse_odd_ns": 28688.0
+          },
+          {
+            "case_id": "threshold_train_625",
+            "pulse_even_ns": 6080.0,
+            "pulse_odd_ns": 29312.0
+          },
+          {
+            "case_id": "threshold_train_750",
+            "pulse_even_ns": 6336.0,
+            "pulse_odd_ns": 25824.0
+          },
+          {
+            "case_id": "threshold_train_875",
+            "pulse_even_ns": 6080.0,
+            "pulse_odd_ns": 28928.0
+          },
+          {
+            "case_id": "threshold_train_1000",
+            "pulse_even_ns": 4032.0,
+            "pulse_odd_ns": 29648.0
+          },
+          {
+            "case_id": "threshold_train_1125",
+            "pulse_even_ns": 3936.0,
+            "pulse_odd_ns": 24944.0
+          },
+          {
+            "case_id": "threshold_train_1250",
+            "pulse_even_ns": 4064.0,
+            "pulse_odd_ns": 28032.0
+          },
+          {
+            "case_id": "threshold_train_1750",
+            "pulse_even_ns": 6112.0,
+            "pulse_odd_ns": 29600.0
+          },
+          {
+            "case_id": "threshold_train_2000",
+            "pulse_even_ns": 6080.0,
+            "pulse_odd_ns": 29072.0
+          },
+          {
+            "case_id": "threshold_train_4000",
+            "pulse_even_ns": 12288.0,
+            "pulse_odd_ns": 12608.0
+          },
+          {
+            "case_id": "threshold_train_5000",
+            "pulse_even_ns": 10176.0,
+            "pulse_odd_ns": 10864.0
+          }
+        ]
+      },
+      {
+        "extra_parameter_bytes": 64,
+        "actual_parameter_extent_bytes": 96,
+        "packet_period_nodes": 11,
+        "pulse_even_ns": 5056.0,
+        "pulse_odd_ns": 27472.0,
+        "training_case_pulses": [
+          {
+            "case_id": "payload_train_64_0",
+            "pulse_even_ns": 5152.0,
+            "pulse_odd_ns": 30064.0
+          },
+          {
+            "case_id": "payload_train_64_1000",
+            "pulse_even_ns": 4064.0,
+            "pulse_odd_ns": 23456.0
+          }
+        ]
+      },
+      {
+        "extra_parameter_bytes": 256,
+        "actual_parameter_extent_bytes": 288,
+        "packet_period_nodes": 10,
+        "pulse_even_ns": 5056.0,
+        "pulse_odd_ns": 26096.0,
+        "training_case_pulses": [
+          {
+            "case_id": "payload_train_256_0",
+            "pulse_even_ns": 5120.0,
+            "pulse_odd_ns": 25776.0
+          },
+          {
+            "case_id": "payload_train_256_1000",
+            "pulse_even_ns": 3840.0,
+            "pulse_odd_ns": 26528.0
+          }
+        ]
+      }
+    ]
+  },
+  "holdout_results": [
+    {
+      "case_id": "threshold_holdout_500",
+      "split": "holdout_threshold",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 456704,
+        "predicted_span_ns": 448736.0,
+        "span_error_percent": -1.7446748878923724,
+        "observed_gap_ns": 371648,
+        "predicted_gap_ns": 363808.0,
+        "gap_error_percent": -2.109522989495438,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.00828157349896
+      }
+    },
+    {
+      "case_id": "threshold_holdout_1500",
+      "split": "holdout_threshold",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 726848,
+        "predicted_span_ns": 709824.0,
+        "span_error_percent": -2.3421678260103884,
+        "observed_gap_ns": 515104,
+        "predicted_gap_ns": 497920.0,
+        "gap_error_percent": -3.336025346337823,
+        "regular_edge_cadence_agreement_within_64ns_percent": 93.37474120082815
+      }
+    },
+    {
+      "case_id": "threshold_holdout_3000",
+      "split": "holdout_threshold",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 957792,
+        "predicted_span_ns": 971424.0,
+        "span_error_percent": 1.4232735291169751,
+        "observed_gap_ns": 553600,
+        "predicted_gap_ns": 567264.0,
+        "gap_error_percent": 2.4682080924855576,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.09109730848861
+      }
+    },
+    {
+      "case_id": "threshold_holdout_7000",
+      "split": "holdout_threshold",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 1233152,
+        "predicted_span_ns": 1235520.0,
+        "span_error_percent": 0.19202823334025787,
+        "observed_gap_ns": 316992,
+        "predicted_gap_ns": 319296.0,
+        "gap_error_percent": 0.726832222895224,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.38095238095238
+      }
+    },
+    {
+      "case_id": "nodes_holdout_33",
+      "split": "holdout_nodes",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 104576,
+        "predicted_span_ns": 98672.0,
+        "span_error_percent": -5.645654834761327,
+        "observed_gap_ns": 74144,
+        "predicted_gap_ns": 68272.0,
+        "gap_error_percent": -7.919723780750976,
+        "regular_edge_cadence_agreement_within_64ns_percent": 95.07389162561576
+      }
+    },
+    {
+      "case_id": "nodes_holdout_255",
+      "split": "holdout_nodes",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 1035552,
+        "predicted_span_ns": 902336.0,
+        "span_error_percent": -12.864250177683012,
+        "observed_gap_ns": 803232,
+        "predicted_gap_ns": 669664.0,
+        "gap_error_percent": -16.628819568941477,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.19461697722568
+      }
+    },
+    {
+      "case_id": "geometry_holdout",
+      "split": "holdout_geometry",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 467552,
+        "predicted_span_ns": 449024.0,
+        "span_error_percent": -3.9627677777017367,
+        "observed_gap_ns": 346752,
+        "predicted_gap_ns": 328224.0,
+        "gap_error_percent": -5.343300110741966,
+        "regular_edge_cadence_agreement_within_64ns_percent": 91.30434782608695
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_0",
+      "split": "holdout_payload",
+      "result": {
+        "status": "unsupported_parameter_extent",
+        "reason": "Training does not identify a packet-period rule for this new argument footprint; no nearest-family fallback."
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_1000",
+      "split": "holdout_payload",
+      "result": {
+        "status": "unsupported_parameter_extent",
+        "reason": "Training does not identify a packet-period rule for this new argument footprint; no nearest-family fallback."
+      }
+    },
+    {
+      "case_id": "mixed_alternating_holdout",
+      "split": "holdout_mixed_body",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 821728,
+        "predicted_span_ns": 842304.0,
+        "span_error_percent": 2.503991588457488,
+        "observed_gap_ns": 337600,
+        "predicted_gap_ns": 358048.0,
+        "gap_error_percent": 6.056872037914696,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.17391304347827
+      }
+    },
+    {
+      "case_id": "mixed_shuffled_holdout",
+      "split": "holdout_mixed_body",
+      "result": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 665920,
+        "predicted_span_ns": 652128.0,
+        "span_error_percent": -2.0711196540124988,
+        "observed_gap_ns": 450912,
+        "predicted_gap_ns": 436960.0,
+        "gap_error_percent": -3.094173585976867,
+        "regular_edge_cadence_agreement_within_64ns_percent": 93.08488612836439
+      }
+    }
+  ],
+  "observer_controls": [
+    {
+      "extra_parameter_bytes": 0,
+      "observer_off_event_ns": 447360,
+      "observer_on_event_ns": 471264,
+      "difference_percent": 5.3433476394849855,
+      "matched_environment_qualified": false
+    },
+    {
+      "extra_parameter_bytes": 256,
+      "observer_off_event_ns": 467168,
+      "observer_on_event_ns": 464064,
+      "difference_percent": -0.6644290704842848,
+      "matched_environment_qualified": false
+    }
+  ],
+  "limitations": [
+    "Heavy concurrent simulator CPU work was active; driver supply pulse amplitudes need quiet replication.",
+    "Known synthetic parameter footprints have independently observed packet periods; a general size-to-packet mapping is not identified.",
+    "The quantized effective-body tail is an empirical probe-domain parameter, not a pure hardware dispatch latency.",
+    "CUPTI, native model latency, D2D costs, and Graph replay timings do not enter this fit."
+  ]
+}

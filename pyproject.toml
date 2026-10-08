@@ -34,7 +34,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-heterollm_sim = ["webui/*"]
+heterollm_sim = ["webui/*", "model_preset_data/*.json", "model_preset_data/gguf/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,16 @@
+{
+  "schema": "heterollm.cuda-dispatch-etw-access/v1",
+  "started_utc": "2026-10-08T14:28:04.968539+00:00",
+  "scope": "dedicated_memory_session_access_check_no_application_event_collection",
+  "provider": "Microsoft-Windows-DxgKrnl",
+  "event_id_allowlist": [
+    65535
+  ],
+  "etl_written": false,
+  "consumer_started": false,
+  "elevation_requested": false,
+  "start_trace_status": 5,
+  "start_trace_error": "\u62d2\u7edd\u8bbf\u95ee\u3002",
+  "provider_enable_attempted": false,
+  "session_started": false
+}

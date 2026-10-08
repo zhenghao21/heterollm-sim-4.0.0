@@ -36,6 +36,7 @@ from .contracts import (
 )
 from .control_plane_state import mapping_fingerprint_status
 from .model_catalog import CatalogError, HuggingFaceClient, ModelCatalog
+from .gguf_model_catalog import GGUFModelCatalog
 from .model_artifacts import (
     MODEL_ARTIFACT_SCHEMA,
     ModelArtifactError,
@@ -259,9 +260,16 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             if path.startswith("/api/model-presets/"):
-                if path == "/api/model-presets/import":
+                if path in {"/api/model-presets/import", "/api/model-presets/import-gguf", "/api/model-presets/preview"}:
                     raise HttpError(405, "method_not_allowed", "此端点要求使用 POST 方法", message_en="endpoint requires POST")
                 preset_id = unquote(path[len("/api/model-presets/") :])
+                if preset_id.endswith("/configuration"):
+                    try:
+                        configuration = self._model_catalog().configuration(preset_id[:-len("/configuration")])
+                    except ValueError as exc:
+                        raise HttpError(422, "gguf_configuration_unavailable", str(exc), message_en=str(exc)) from exc
+                    self._send_json(200, configuration)
+                    return
                 try:
                     detail = self._model_catalog().detail(preset_id)
                 except KeyError as exc:
@@ -615,6 +623,23 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 )
                 ensure_valid_or_http_error(scenario)
                 self._send_json(200, compare_with_gpu_baseline(scenario))
+                return
+            if path in {"/api/model-presets", "/api/model-presets/preview"}:
+                payload = self._read_json_object()
+                if set(payload) - {"source_preset_id", "name", "parameters"}:
+                    raise ValueError("模型预设编辑请求包含未知字段")
+                detail = self._model_catalog().derive(
+                    payload.get("source_preset_id"), payload.get("name"), payload.get("parameters"),
+                    save=path == "/api/model-presets")
+                self._send_json(201 if path == "/api/model-presets" else 200, detail)
+                return
+            if path == "/api/model-presets/import-gguf":
+                payload = self._read_json_object()
+                if set(payload) - {"path", "preset_id", "name"}:
+                    raise ValueError("GGUF 导入请求包含未知字段")
+                detail = self._model_catalog().import_gguf(
+                    payload.get("path"), preset_id=payload.get("preset_id"), name=payload.get("name"))
+                self._send_json(201, detail)
                 return
             if path == "/api/model-presets/import":
                 payload = self._read_json_object()
@@ -1081,8 +1106,14 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Closing a polling page may disconnect during either write. The
+            # background job is independent of this response; do not retry an
+            # error response on the same closed socket or cancel the job.
+            self.close_connection = True
 
 
 def validation_payload(
@@ -2039,7 +2070,7 @@ def build_server(
     run_job_manager: Optional[RunJobManager] = None,
 ) -> ThreadingHTTPServer:
     server = HeteroLLMThreadingHTTPServer((host, port), HeteroLLMRequestHandler)
-    server.model_catalog = model_catalog or ModelCatalog(  # type: ignore[attr-defined]
+    server.model_catalog = model_catalog or GGUFModelCatalog(  # type: ignore[attr-defined]
         catalog_cache_dir,
         hf_client=hf_client,
     )

@@ -13,15 +13,21 @@ from heterollm_sim.config import model_from_dict
 
 def test_bundled_catalog_contains_only_qwen_and_llama_families():
     presets = list_model_presets()
-    assert len(presets) == 21
+    assert len(presets) == 22
     assert {item["family"] for item in presets} == {
         "Qwen2.5",
         "Qwen3",
+        "Qwen3.5",
         "Llama3.1",
         "Llama3.2",
         "Llama3.3",
     }
-    assert all(item["source_repo"].startswith(("Qwen/", "meta-llama/")) for item in presets)
+    assert all(
+        item["source_repo"].startswith(("Qwen/", "meta-llama/"))
+        or (item["id"] == "qwen3_8-27b-iq3-s-iq4-xs"
+            and item["source_repo"] == "canhdu/Qwen3.8-27B-IQ3_S-FFN-IQ4_XS-GGUF")
+        for item in presets
+    )
 
 
 def test_every_bundled_preset_materializes_to_an_executable_graph():

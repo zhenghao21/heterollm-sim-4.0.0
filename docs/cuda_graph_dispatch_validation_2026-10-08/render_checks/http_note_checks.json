@@ -1,0 +1,31 @@
+{
+  "checked_utc": "2026-10-08T16:17:52.176Z",
+  "scope": "New post-run HTTP fix note only; no simulation or result-page rerun",
+  "links": [
+    {
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/docs/cuda_graph_dispatch_validation_2026-10-08/http_observer_disconnect_review.json",
+      "text": "通信异常与修复说明"
+    },
+    {
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/tests/test_web_disconnected_response.py",
+      "text": "断连回归测试"
+    },
+    {
+      "href": "file:///F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/src/heterollm_sim/web.py",
+      "text": "HTTP 响应处理代码"
+    }
+  ],
+  "page_errors": [],
+  "checks": [
+    {
+      "viewport": "desktop",
+      "width": 1440,
+      "document_width": 1440
+    },
+    {
+      "viewport": "narrow",
+      "width": 390,
+      "document_width": 390
+    }
+  ]
+}

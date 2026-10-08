@@ -1,3 +1,7 @@
 .venv/
 .pytest_cache/
 __pycache__/
+
+# Full validation results are versioned losslessly as .json.gz (GitHub file limit).
+/docs/gguf_preset_native_validation_2026-10-08/ui_*_result.json
+/docs/cuda_graph_dispatch_validation_2026-10-08/ui_*_result.json

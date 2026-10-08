@@ -1,0 +1,2804 @@
+{
+  "schema": "heterollm.frontend-gguf-validation-runs/v1",
+  "methodology": "Real frontend file import, validation, run estimate and background run buttons. Captured actual /api/run-jobs POST body and final UI job snapshot. One job per independent backend service.",
+  "runs": [
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "preset_id": "qwen3-0_6b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8794/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_0_6b_f16_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:47:21.423Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "49c8224fe4c1dc5a81213a2b7cee8aa8e14f84adac4d3e483b14bc7df776c1fd",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.4 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 1503391744 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.4 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "49c8224fe4c1dc5a81213a2b7cee8aa8e14f84adac4d3e483b14bc7df776c1fd",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "49c8224fe4c1dc5a81213a2b7cee8aa8e14f84adac4d3e483b14bc7df776c1fd",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "49c8224fe4c1dc5a81213a2b7cee8aa8e14f84adac4d3e483b14bc7df776c1fd",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 345856,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 28,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_off_job_created.json",
+      "job_id": "25abd40678d64b23a836210e2b1ce0d3",
+      "wall_seconds": 2336.753,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.143Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T12:40:29Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_off_result.json",
+      "finished_at": "2026-10-08T12:40:20.731448Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "preset_id": "qwen3-1_7b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8795/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_1_7b_q8_0_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:47:21.440Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "6683b247090fe30963bce27578b852d277ead4a5dddcf93ff3ccfae97a2a9c6c",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.703 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 1828466688 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.703 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "6683b247090fe30963bce27578b852d277ead4a5dddcf93ff3ccfae97a2a9c6c",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "6683b247090fe30963bce27578b852d277ead4a5dddcf93ff3ccfae97a2a9c6c",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "6683b247090fe30963bce27578b852d277ead4a5dddcf93ff3ccfae97a2a9c6c",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 345856,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 28,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_off_job_created.json",
+      "job_id": "6badf2ad68d344e79b4d34a158602736",
+      "wall_seconds": 2338.256,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.155Z",
+      "observer_status": "finished",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_off_result.json",
+      "finished_at": "2026-10-08T12:35:28.066059Z",
+      "recovered_report_rendering_checked": false,
+      "last_observed_at": "2026-10-08T12:38:02Z",
+      "recovery_read_failures": 0
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "preset_id": "qwen3-4b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8796/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_4b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:47:21.457Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "24fbdd64a115cd613d53e97676923006459fa0f5c7c7b62c643f34c795a6ce0c",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 2.32 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 2491313664 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 2.32 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "24fbdd64a115cd613d53e97676923006459fa0f5c7c7b62c643f34c795a6ce0c",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "24fbdd64a115cd613d53e97676923006459fa0f5c7c7b62c643f34c795a6ce0c",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "24fbdd64a115cd613d53e97676923006459fa0f5c7c7b62c643f34c795a6ce0c",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 444672,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 36,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_off_job_created.json",
+      "job_id": "8294699c2e9e43f99daa62190e98b886",
+      "wall_seconds": 2337.023,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.158Z",
+      "observer_status": "finished",
+      "observer_finished_at": "2026-10-08T12:03:38.441Z",
+      "last_observed_at": "2026-10-08T12:54:01Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T12:53:50.791321Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "preset_id": "qwen3-8b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8797/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_8b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:58:47.381Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "7bbef3ae5fda239c461cd6a5e52ea9c2ab41db21ab675899e29f7c4e7b73fdbb",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.677 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 5021810688 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.677 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "7bbef3ae5fda239c461cd6a5e52ea9c2ab41db21ab675899e29f7c4e7b73fdbb",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "7bbef3ae5fda239c461cd6a5e52ea9c2ab41db21ab675899e29f7c4e7b73fdbb",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "7bbef3ae5fda239c461cd6a5e52ea9c2ab41db21ab675899e29f7c4e7b73fdbb",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 444672,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 36,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_off_job_created.json",
+      "job_id": "0b6e446c6f704aa3b1a8beb2f935bbfc",
+      "wall_seconds": 1648.504,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.161Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:07:38Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T13:07:13.651004Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "preset_id": "qwen3_8-27b-iq3-s-iq4-xs",
+      "mode": "off",
+      "url": "http://127.0.0.1:8798/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_8_27b_mixed_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:58:47.402Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "dbfb968386dd0c6c1931100737002e45b2de9edc8bd7d483e1f537934f9fa15f",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 13.59 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 14588246016 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 13.59 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "dbfb968386dd0c6c1931100737002e45b2de9edc8bd7d483e1f537934f9fa15f",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "dbfb968386dd0c6c1931100737002e45b2de9edc8bd7d483e1f537934f9fa15f",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "dbfb968386dd0c6c1931100737002e45b2de9edc8bd7d483e1f537934f9fa15f",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 790528,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 64,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_off_job_created.json",
+      "job_id": "a2da46e9eebc477f986ebd4fa839e8fe",
+      "wall_seconds": 1653.455,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.163Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:20:40Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_off_result.json",
+      "finished_at": "2026-10-08T13:20:29.354219Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "preset_id": "qwen2_5-0_5b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8799/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen2_5_0_5b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:58:47.417Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "97069975c3e160e6bd5fe111c43e1973703c9f6f2912fd758b73be2457e775ad",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 463 MiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 485448704 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 463 MiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "97069975c3e160e6bd5fe111c43e1973703c9f6f2912fd758b73be2457e775ad",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "97069975c3e160e6bd5fe111c43e1973703c9f6f2912fd758b73be2457e775ad",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "97069975c3e160e6bd5fe111c43e1973703c9f6f2912fd758b73be2457e775ad",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 296448,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 24,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_off_job_created.json",
+      "job_id": "69a005e32b84460eadf369d8f1697451",
+      "wall_seconds": 1626.155,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.166Z",
+      "observer_status": "finished",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T12:25:42.283281Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "preset_id": "qwen2_5-7b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8800/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen2_5_7b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:58:47.434Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "145ecb9ce398325bd1c45dd1de6709a95d4e96cb256c7d35b91cfe7ff4ebaf6e",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.356 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 4677105664 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.356 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "145ecb9ce398325bd1c45dd1de6709a95d4e96cb256c7d35b91cfe7ff4ebaf6e",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "145ecb9ce398325bd1c45dd1de6709a95d4e96cb256c7d35b91cfe7ff4ebaf6e",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "145ecb9ce398325bd1c45dd1de6709a95d4e96cb256c7d35b91cfe7ff4ebaf6e",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 345856,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 28,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_off_job_created.json",
+      "job_id": "3f9fc5d89f58453ea93c0ffe53dc5b2f",
+      "wall_seconds": 1649.346,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.168Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T12:42:45Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T12:42:14.452546Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "preset_id": "llama3_2-1b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8801/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_llama3_2_1b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:58:47.452Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "ae90d2bef1ffe3a32586ea81861c914bb85802126ce295891fc37417ca011e60",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 762.8 MiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 799854592 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 762.8 MiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "ae90d2bef1ffe3a32586ea81861c914bb85802126ce295891fc37417ca011e60",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "ae90d2bef1ffe3a32586ea81861c914bb85802126ce295891fc37417ca011e60",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "ae90d2bef1ffe3a32586ea81861c914bb85802126ce295891fc37417ca011e60",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 197632,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 16,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_off_job_created.json",
+      "job_id": "93bb4a9f93ef41a98a8dda4ea30f17cb",
+      "wall_seconds": 1405.225,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.170Z",
+      "observer_status": "finished",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T12:19:25.361868Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "preset_id": "llama3_1-8b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8802/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_llama3_1_8b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T11:58:47.471Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "c1877b7ec58773d41e88a666164d63ac45663f5685a7ace79d53a5e195793294",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.575 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 4912881664 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.575 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "c1877b7ec58773d41e88a666164d63ac45663f5685a7ace79d53a5e195793294",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "c1877b7ec58773d41e88a666164d63ac45663f5685a7ace79d53a5e195793294",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "c1877b7ec58773d41e88a666164d63ac45663f5685a7ace79d53a5e195793294",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 395264,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 32,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_off_job_created.json",
+      "job_id": "6c10606f8bca41c78ddf5cf07afb41ea",
+      "wall_seconds": 1651.966,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.172Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T12:57:18Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T12:57:06.223909Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "preset_id": "qwen3-14b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8803/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_14b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:42.441Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 8.378 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 8995773440 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 8.378 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 494080,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 40,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_off_job_created.json",
+      "job_id": "008c87a2777842d8970e079b7fde3568",
+      "wall_seconds": 1055.863,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.174Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:22:52Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T13:22:31.870488Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "preset_id": "qwen3-14b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8804/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_14b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:49.899Z",
+      "page_errors": [],
+      "console_errors": [
+        "Failed to load resource: net::ERR_NO_BUFFER_SPACE"
+      ],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "5713193980fe0bb4fc6bb7a667b8538f7edf44e5dfd71f388cba2afe69632197",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 8.378 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 8995773440 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 8.378 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "5713193980fe0bb4fc6bb7a667b8538f7edf44e5dfd71f388cba2afe69632197",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "5713193980fe0bb4fc6bb7a667b8538f7edf44e5dfd71f388cba2afe69632197",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "5713193980fe0bb4fc6bb7a667b8538f7edf44e5dfd71f388cba2afe69632197",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 494080,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 40,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_on_job_created.json",
+      "job_id": "24f59b5f4e7945cfbb0a54393a617883",
+      "wall_seconds": 1050.367,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.176Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:22:16Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_14b_q4_k_m_graph_on_result.json",
+      "finished_at": "2026-10-08T13:21:48.475248Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "preset_id": "llama3_1-8b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8805/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_llama3_1_8b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:49.922Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "62e968160fc0a4201e35e866da3f43f095daea67729aa9e53ae8298d05a4ce3e",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.575 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 4912881664 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.575 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "62e968160fc0a4201e35e866da3f43f095daea67729aa9e53ae8298d05a4ce3e",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "62e968160fc0a4201e35e866da3f43f095daea67729aa9e53ae8298d05a4ce3e",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "62e968160fc0a4201e35e866da3f43f095daea67729aa9e53ae8298d05a4ce3e",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 395264,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 32,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_on_job_created.json",
+      "job_id": "9aa9e0fb52514b1899fb62092a5143e4",
+      "wall_seconds": 1046.158,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.178Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:06:30Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_1_8b_q4_k_m_graph_on_result.json",
+      "finished_at": "2026-10-08T13:06:22.583709Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "preset_id": "llama3_2-1b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8806/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_llama3_2_1b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:49.940Z",
+      "page_errors": [],
+      "console_errors": [
+        "Failed to load resource: net::ERR_NO_BUFFER_SPACE"
+      ],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "522bd810d562187913d69318e6d237fbbb93a981d5aaae441a28b7960bdaaedd",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 762.8 MiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 799854592 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 762.8 MiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "522bd810d562187913d69318e6d237fbbb93a981d5aaae441a28b7960bdaaedd",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "522bd810d562187913d69318e6d237fbbb93a981d5aaae441a28b7960bdaaedd",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "522bd810d562187913d69318e6d237fbbb93a981d5aaae441a28b7960bdaaedd",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 197632,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 16,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_on_job_created.json",
+      "job_id": "a948122f9d31472c87b4ea91b350713b",
+      "wall_seconds": 1049.753,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.180Z",
+      "observer_status": "finished",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_llama3_2_1b_q4_k_m_graph_on_result.json",
+      "finished_at": "2026-10-08T12:30:06.191278Z",
+      "recovered_report_rendering_checked": false,
+      "last_observed_at": "2026-10-08T12:38:11Z",
+      "recovery_read_failures": 0
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "preset_id": "qwen2_5-7b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8807/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen2_5_7b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:49.962Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "ec88e5526e20d327622939aa8a3fcb7d4b095836d29aaec60a4a8037bca10a07",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.356 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 4677105664 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.356 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "ec88e5526e20d327622939aa8a3fcb7d4b095836d29aaec60a4a8037bca10a07",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "ec88e5526e20d327622939aa8a3fcb7d4b095836d29aaec60a4a8037bca10a07",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "ec88e5526e20d327622939aa8a3fcb7d4b095836d29aaec60a4a8037bca10a07",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 345856,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 28,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_on_job_created.json",
+      "job_id": "cd226b0b0d4e4fa3a8f734b247f9b123",
+      "wall_seconds": 1048.973,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.182Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T12:52:19Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_7b_q4_k_m_graph_on_result.json",
+      "finished_at": "2026-10-08T12:52:03.491379Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "preset_id": "qwen2_5-0_5b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8808/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen2_5_0_5b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:49.985Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "63f4ed051756a2a7acd6dce9f2ab13ccd5ca9bead2d453cc89f3b54dafb72f3e",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 463 MiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 485448704 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 463 MiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "63f4ed051756a2a7acd6dce9f2ab13ccd5ca9bead2d453cc89f3b54dafb72f3e",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "63f4ed051756a2a7acd6dce9f2ab13ccd5ca9bead2d453cc89f3b54dafb72f3e",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "63f4ed051756a2a7acd6dce9f2ab13ccd5ca9bead2d453cc89f3b54dafb72f3e",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 296448,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 24,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_on_job_created.json",
+      "job_id": "8da8201c9474455cbe3bb6a08bafad55",
+      "wall_seconds": 1050.844,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.184Z",
+      "observer_status": "finished",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen2_5_0_5b_q4_k_m_graph_on_result.json",
+      "finished_at": "2026-10-08T12:35:18.010885Z",
+      "recovered_report_rendering_checked": false,
+      "last_observed_at": "2026-10-08T12:38:18Z",
+      "recovery_read_failures": 0
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "preset_id": "qwen3_8-27b-iq3-s-iq4-xs",
+      "mode": "on",
+      "url": "http://127.0.0.1:8809/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_8_27b_mixed_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:50.013Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "db4a82c4f4b1a5630ac891299effaf2785f56a46a43d71a91e8bb6d47f9beb78",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 13.59 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 14588246016 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 13.59 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "db4a82c4f4b1a5630ac891299effaf2785f56a46a43d71a91e8bb6d47f9beb78",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "db4a82c4f4b1a5630ac891299effaf2785f56a46a43d71a91e8bb6d47f9beb78",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "db4a82c4f4b1a5630ac891299effaf2785f56a46a43d71a91e8bb6d47f9beb78",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 790528,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 64,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_on_job_created.json",
+      "job_id": "0f0a9f01631643d19f0f2e007ac6be79",
+      "wall_seconds": 1046.919,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.185Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:28:02Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8_27b_mixed_graph_on_result.json",
+      "finished_at": "2026-10-08T13:27:41.094390Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "preset_id": "qwen3-8b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8810/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_8b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:50.044Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "53bca91842985fdbdb71b81fd99d16e8d413da1b6851baa3fb0349c26982d875",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.677 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 5021810688 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 4.677 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "53bca91842985fdbdb71b81fd99d16e8d413da1b6851baa3fb0349c26982d875",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "53bca91842985fdbdb71b81fd99d16e8d413da1b6851baa3fb0349c26982d875",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "53bca91842985fdbdb71b81fd99d16e8d413da1b6851baa3fb0349c26982d875",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 444672,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 36,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_on_job_created.json",
+      "job_id": "9a969f7084774755a2a2694abd3d798b",
+      "wall_seconds": 1045.855,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.187Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:15:55Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_on_result.json",
+      "finished_at": "2026-10-08T13:15:39.803868Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "preset_id": "qwen3-4b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8811/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_4b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:50.061Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "aed100f847f4e95fca808ccb4a46b7e51a5904a35875146f74ff80009890a587",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 2.32 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 2491313664 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 2.32 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "aed100f847f4e95fca808ccb4a46b7e51a5904a35875146f74ff80009890a587",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "aed100f847f4e95fca808ccb4a46b7e51a5904a35875146f74ff80009890a587",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "aed100f847f4e95fca808ccb4a46b7e51a5904a35875146f74ff80009890a587",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 444672,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 36,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_on_job_created.json",
+      "job_id": "0f9cb720bff348c8afcb4790e83e0ea0",
+      "wall_seconds": 1048.719,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.189Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:16:32Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_on_result.json",
+      "finished_at": "2026-10-08T13:16:07.302293Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "preset_id": "qwen3-1_7b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8812/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_1_7b_q8_0_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:50.075Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "cb629e86a4b4ddb2e23fee665554e87885228451348f4b2d8307408e1d396c7d",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.703 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 1828466688 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.703 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "cb629e86a4b4ddb2e23fee665554e87885228451348f4b2d8307408e1d396c7d",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "cb629e86a4b4ddb2e23fee665554e87885228451348f4b2d8307408e1d396c7d",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "cb629e86a4b4ddb2e23fee665554e87885228451348f4b2d8307408e1d396c7d",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 345856,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 28,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_on_job_created.json",
+      "job_id": "08bd59300cf446a19683983b7720df2b",
+      "wall_seconds": 1049.478,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.191Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T12:59:30Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_on_result.json",
+      "finished_at": "2026-10-08T12:59:22.621533Z",
+      "recovered_report_rendering_checked": false
+    },
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "preset_id": "qwen3-0_6b",
+      "mode": "on",
+      "url": "http://127.0.0.1:8813/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_0_6b_f16_graph_on.json",
+      "status": "completed",
+      "started_at": "2026-10-08T12:08:50.095Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_on_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "5d42d9a5308b73a50643b883450a56ac642ddabadcedb762ec0ac4a8aa19afda",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.4 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 1503391744 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 1.4 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "5d42d9a5308b73a50643b883450a56ac642ddabadcedb762ec0ac4a8aa19afda",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "5d42d9a5308b73a50643b883450a56ac642ddabadcedb762ec0ac4a8aa19afda",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "5d42d9a5308b73a50643b883450a56ac642ddabadcedb762ec0ac4a8aa19afda",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 345856,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 28,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_on_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_on_job_created.json",
+      "job_id": "b28c532a169a44c5a1a3a9deb34f7f79",
+      "wall_seconds": 1049.894,
+      "last_progress": {
+        "completed": 1,
+        "message": "仿真任务已完成",
+        "metadata": {},
+        "ratio": 1.0,
+        "scope": "primary",
+        "stage": "completed",
+        "total": 1,
+        "unit": "workflow_steps",
+        "unit_label_zh": "流程步骤"
+      },
+      "observer_recovery": "serial read-only API after observer restart",
+      "recovery_started_at": "2026-10-08T12:22:06.193Z",
+      "observer_status": "finished",
+      "last_observed_at": "2026-10-08T13:02:47Z",
+      "recovery_read_failures": 0,
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_on_result.json",
+      "finished_at": "2026-10-08T13:02:29.780418Z",
+      "recovered_report_rendering_checked": false
+    }
+  ],
+  "recovery_methodology": "All jobs were submitted through the frontend. This observer only performs serial GET requests on original job IDs. Each HTTP response streams to disk; one snapshot at a time is parsed, its report released, and terminal raw bytes retained without reserialization. Original submission/job_created files are preserved. Recovered report rendering is not revalidated.",
+  "updated_at": "2026-10-08T13:28:02Z",
+  "observer_interruptions": [
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "mode": "off",
+      "job_id": "8294699c2e9e43f99daa62190e98b886",
+      "record_status": "running",
+      "simulation_status": "running",
+      "error": null,
+      "observer_error": "UNKNOWN: unknown error, open 'F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\ui_runs.json'",
+      "verified_at": "2026-10-08T12:06:38.230467+00:00",
+      "action": "Read-only recovery of original backend job; no resubmission."
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "mode": "off",
+      "job_id": "0b6e446c6f704aa3b1a8beb2f935bbfc",
+      "record_status": "failed",
+      "simulation_status": "running",
+      "error": "page.waitForTimeout: Target page, context or browser has been closed",
+      "observer_error": null,
+      "verified_at": "2026-10-08T12:06:38.230467+00:00",
+      "action": "Read-only recovery of original backend job; no resubmission."
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "mode": "off",
+      "job_id": "a2da46e9eebc477f986ebd4fa839e8fe",
+      "record_status": "failed",
+      "simulation_status": "running",
+      "error": "page.waitForTimeout: Target page, context or browser has been closed",
+      "observer_error": null,
+      "verified_at": "2026-10-08T12:06:38.230467+00:00",
+      "action": "Read-only recovery of original backend job; no resubmission."
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "mode": "off",
+      "job_id": "69a005e32b84460eadf369d8f1697451",
+      "record_status": "failed",
+      "simulation_status": "running",
+      "error": "page.waitForTimeout: Target page, context or browser has been closed",
+      "observer_error": null,
+      "verified_at": "2026-10-08T12:06:38.230467+00:00",
+      "action": "Read-only recovery of original backend job; no resubmission."
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "mode": "off",
+      "job_id": "3f9fc5d89f58453ea93c0ffe53dc5b2f",
+      "record_status": "failed",
+      "simulation_status": "running",
+      "error": "page.waitForTimeout: Target page, context or browser has been closed",
+      "observer_error": null,
+      "verified_at": "2026-10-08T12:06:38.230467+00:00",
+      "action": "Read-only recovery of original backend job; no resubmission."
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "mode": "off",
+      "job_id": "93bb4a9f93ef41a98a8dda4ea30f17cb",
+      "record_status": "failed",
+      "simulation_status": "running",
+      "error": "page.waitForTimeout: Target page, context or browser has been closed",
+      "observer_error": null,
+      "verified_at": "2026-10-08T12:06:38.230467+00:00",
+      "action": "Read-only recovery of original backend job; no resubmission."
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "mode": "off",
+      "job_id": "6c10606f8bca41c78ddf5cf07afb41ea",
+      "record_status": "failed",
+      "simulation_status": "running",
+      "error": "page.waitForTimeout: Target page, context or browser has been closed",
+      "observer_error": null,
+      "verified_at": "2026-10-08T12:06:38.230467+00:00",
+      "action": "Read-only recovery of original backend job; no resubmission."
+    }
+  ],
+  "failed_attempts": [
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "preset_id": "qwen3-14b",
+      "mode": "off",
+      "url": "http://127.0.0.1:8803/",
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\scenario_qwen3_14b_q4_k_m_graph_off.json",
+      "status": "failed",
+      "started_at": "2026-10-08T11:58:47.490Z",
+      "page_errors": [],
+      "console_errors": [],
+      "progress_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\failed_attempts\\b86b23311849421a9bcbcd6dab52f42e\\ui_qwen3_14b_q4_k_m_graph_off_progress.jsonl",
+      "validation": {
+        "current_input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+        "diagnostics": [],
+        "errors": {
+          "scenario": [],
+          "topology": []
+        },
+        "fingerprint_algorithm": "sha256",
+        "information": {
+          "scenario": [
+            {
+              "code": "validation_information",
+              "message": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 8.378 GiB 为显式详细放置",
+              "message_en": "resident model weights are capacity-checked as physical TP/PP/EP shards across 2 component(s); 8995773440 bytes are explicit detailed placements",
+              "message_zh": "常驻模型权重按 2 个组件上的物理 TP/PP/EP 分片校验容量；其中 8.378 GiB 为显式详细放置"
+            },
+            {
+              "code": "validation_information",
+              "message": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型",
+              "message_en": "all operators, collectives, KV traffic, and host orchestration use the task/transaction-level analytical lowering",
+              "message_zh": "所有算子、集合通信、KV 流量和主机编排均使用任务/事务级解析降低模型"
+            },
+            {
+              "code": "validation_information",
+              "message": "请求调度采用确定性的连续批处理",
+              "message_en": "request scheduling uses deterministic continuous batching",
+              "message_zh": "请求调度采用确定性的连续批处理"
+            }
+          ],
+          "topology": []
+        },
+        "input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+        "mapping": {
+          "current_fingerprint_schema": "runtime-control-plane-v4",
+          "current_input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+          "fingerprint_algorithm": "sha256",
+          "fingerprint_present": true,
+          "fingerprint_schema": "runtime-control-plane-v4",
+          "input_fingerprint": "92fc42d4c7438787d35a4b5e93079ff0ae6f86dbecb5d3398108b5618eb40e1c",
+          "mapping_stale": false
+        },
+        "mapping_stale": false,
+        "valid": true,
+        "warnings": {
+          "scenario": [
+            {
+              "code": "validation_warning",
+              "message": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_en": "采用独立结构测量实验成本，泛化精度尚未验证。",
+              "message_zh": "采用独立结构测量实验成本，泛化精度尚未验证。"
+            }
+          ],
+          "topology": []
+        }
+      },
+      "estimate": {
+        "dynamic_preemption_modeled": false,
+        "estimate_basis": "no_preemption_baseline",
+        "estimate_basis_zh": "无抢占基线",
+        "estimated_cohort_count": 386,
+        "estimated_event_task_count": 494080,
+        "estimated_mtp_round_count": 0,
+        "event_tasks_per_layer_rank": 32,
+        "explanation": [
+          "规模由请求 token、模型层数和并行 world size 的逻辑乘积估算。",
+          "cohort 数按调度容量和 prefill 分块近似；到达间隔与抢占可能改变实际数量。",
+          "事件任务数是统一事件内核的等价逻辑规模，不是已编译任务的精确计数。",
+          "每个 layer/rank/cohort 使用 32 个典型 lowering phase 的结构系数，覆盖计算、内存、通信和同步任务。",
+          "estimated_cohort_count 是无抢占基线；不预测动态抢占或重算后的实际 batch 数。",
+          "连续批处理推荐 aggregate，只保留完整精确汇总。"
+        ],
+        "layer_count": 40,
+        "mtp_candidate_tokens": 1,
+        "mtp_candidate_tokens_semantics": "max_draft_tokens",
+        "mtp_enabled": false,
+        "mtp_proposal_length_model": "disabled",
+        "mtp_verifier_width_at_max": 1,
+        "output_tokens": 386,
+        "prompt_tokens": 1540,
+        "recommended_retention_policy": "aggregate",
+        "request_count": 5,
+        "risk_level": "medium",
+        "risk_level_zh": "中",
+        "scheduler_mode": "continuous",
+        "schema_version": "4.0.0",
+        "total_tokens": 1926,
+        "warnings": [
+          "本结果不包含墙钟秒数；实际运行时间取决于主机、并发和场景细节。",
+          "该连续场景不建议保留完整事件历史。"
+        ],
+        "world_size": 1
+      },
+      "submission_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\failed_attempts\\b86b23311849421a9bcbcd6dab52f42e\\ui_qwen3_14b_q4_k_m_graph_off_submission.json",
+      "model_semantics_preserved": true,
+      "retention_policy": "aggregate",
+      "job_created_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\failed_attempts\\b86b23311849421a9bcbcd6dab52f42e\\ui_qwen3_14b_q4_k_m_graph_off_job_created.json",
+      "job_id": "b86b23311849421a9bcbcd6dab52f42e",
+      "wall_seconds": 52.915,
+      "last_progress": {
+        "completed": 2,
+        "message": "仿真任务执行失败",
+        "metadata": {
+          "cohort_kind": "prefill",
+          "finished_requests": 2,
+          "request_count": 5,
+          "simulated_time_ns": 27478048.19787098
+        },
+        "ratio": null,
+        "scope": "primary",
+        "stage": "failed",
+        "total": null,
+        "unit": "serving_batches",
+        "unit_label_zh": "在线批次"
+      },
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\failed_attempts\\b86b23311849421a9bcbcd6dab52f42e\\ui_qwen3_14b_q4_k_m_graph_off_result.json",
+      "finished_at": "2026-10-08T11:59:40.813Z",
+      "report_stale": false,
+      "simulation_status": "failed",
+      "error": "Simulation failed: {\"diagnostic_id\":\"c1ba6c67740f411dbea1606367bb60de\",\"exception_type\":\"ValueError\",\"message\":\"physical access exceeds declared allocation tensor:cohort-000002.prefill.layer-000.rank000.source_f32.score:rank=0:tp_rank=0:pp_rank=0 generation 3 on gddr0.gddr_fabric\"}",
+      "archived_at": "2026-10-08T12:06:38.230467+00:00",
+      "retry_reason": "Fix repeated softmax pass address mapping; preserve failed original attempt."
+    }
+  ],
+  "scheduling_methodology": "One shared queue across Graph modes. Existing jobs recover on their original ports. New off jobs are all submitted before new on jobs start, but off completion is not a barrier. On jobs use reversed requested order; prepared inputs and simulation costs are unchanged."
+}

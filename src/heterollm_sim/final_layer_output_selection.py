@@ -7,6 +7,7 @@ from typing import Mapping, Optional, Tuple
 
 SOURCE_KEY = "llama_cpp_final_layer_output_selection"
 _BACKEND_COMMIT = "0f3a71be15af836d277c9f918adfafb45732677e"
+_CUDA_SOURCE_COMMIT = "d3146f2b56c2db4711ac8391871c9e529d1946d7"
 _ARCHITECTURES = {
     "qwen2": ("qwen2", "before_last_ffn"),
     "qwen2_decoder": ("qwen2", "before_last_ffn"),
@@ -59,9 +60,12 @@ class FinalLayerOutputSelection:
     graph_architecture: str
     token_rows: int
     selected_indices: Tuple[int, ...]
+    backend_commit: str = _BACKEND_COMMIT
 
     def __post_init__(self) -> None:
         _architecture(self.graph_architecture)
+        if self.backend_commit not in {_BACKEND_COMMIT, _CUDA_SOURCE_COMMIT}:
+            raise ValueError("final-layer selection requires a supported source revision")
         if type(self.token_rows) is not int or self.token_rows <= 0:
             raise ValueError("token_rows must be a positive integer")
         if not isinstance(self.selected_indices, tuple):
@@ -101,7 +105,7 @@ class FinalLayerOutputSelection:
         """Return fresh JSON-compatible facts without changing invocation identity."""
         return {
             "model": "fixed_source_final_layer_output_selection/v1",
-            "backend_commit": _BACKEND_COMMIT,
+            "backend_commit": self.backend_commit,
             "graph_architecture": self.graph_architecture,
             "backend_architecture": _architecture(self.graph_architecture)[0],
             "position": self.position,
@@ -122,16 +126,39 @@ class FinalLayerOutputPolicy:
     """Architecture-derived policy; callers cannot override the selection position."""
 
     graph_architecture: str
+    backend_commit: str = _BACKEND_COMMIT
 
     def __post_init__(self) -> None:
         _architecture(self.graph_architecture)
+        if self.backend_commit not in {_BACKEND_COMMIT, _CUDA_SOURCE_COMMIT}:
+            raise ValueError("final-layer selection requires a supported source revision")
 
     @property
     def position(self) -> str:
         return _architecture(self.graph_architecture)[1]
 
     def select(self, *, token_rows: int, selected_indices: Tuple[int, ...]) -> FinalLayerOutputSelection:
-        return FinalLayerOutputSelection(self.graph_architecture, token_rows, selected_indices)
+        return FinalLayerOutputSelection(self.graph_architecture, token_rows, selected_indices,
+                                         self.backend_commit)
+
+
+def source_program_policy(program: object, graph_architecture: str, *, mtp_present: bool) -> FinalLayerOutputPolicy:
+    """Use the admitted d3146f2 completion graph without mutating a GGUF model.
+
+    The capture-only producer uses explicit batch.logits on the last token and
+    ordinary completion (no embeddings/MTP). At this revision qwen2/qwen3/llama
+    GET_ROWS both residual inputs before the last FFN. qwen35 gathers after its
+    final norm when embeddings_nextn_masked is false. These are independently
+    reviewed source rules, not a relabeling of the historical model opt-in.
+    """
+    if (not isinstance(program, Mapping)
+            or program.get("schema") != "heterollm.cuda-graph-source-program/v1"
+            or not isinstance(program.get("contract"), Mapping)
+            or program["contract"].get("source_revision") != _CUDA_SOURCE_COMMIT):
+        raise ValueError("final-layer selection requires the pinned CUDA source program")
+    if type(mtp_present) is not bool or mtp_present:
+        raise ValueError("CUDA source output selection excludes every present MTP configuration")
+    return FinalLayerOutputPolicy(graph_architecture, _CUDA_SOURCE_COMMIT)
 
 
 def resolve_declaration(
@@ -161,5 +188,5 @@ def resolve_declaration(
 
 __all__ = (
     "SOURCE_KEY", "source_declaration", "resolve_declaration", "model_declaration",
-    "FinalLayerOutputPolicy", "FinalLayerOutputSelection",
+    "FinalLayerOutputPolicy", "FinalLayerOutputSelection", "source_program_policy",
 )

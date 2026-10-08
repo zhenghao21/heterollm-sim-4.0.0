@@ -133,6 +133,7 @@ from .final_layer_output_selection import (
     FinalLayerOutputSelection as _FinalOutputSelection,
     resolve_declaration as _resolve_final_output_declaration,
     model_declaration as _model_final_output_declaration,
+    source_program_policy as _source_program_output_policy,
 )
 from .serde import stable_hash, to_primitive
 from .llama_gpu_invocations import (
@@ -4848,21 +4849,37 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             offset = _gddr_non_negative_int(
                 metadata.get("input_offset_bytes", 0), "input_offset_bytes"
             )
-            append_descriptor(
-                "read",
-                read_bytes,
-                identity=identity,
-                offset=offset,
-                allocation_size=_gddr_allocation_size(
-                    scenario, metadata, "read", identity, offset, read_bytes
-                ),
-                generation=_gddr_access_generation(
-                    metadata, "read", fallback_identity=generation_identity
-                ),
-                alias_of=_gddr_access_alias(metadata, "read")[0],
-                alias_generation=_gddr_access_alias(metadata, "read")[1],
-                alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
+            allocation_size = _gddr_allocation_size(
+                scenario, metadata, "read", identity, offset, read_bytes
             )
+            read_passes = metadata.get("input_buffer_read_passes")
+            if read_passes is not None:
+                # A declared multi-pass workload revisits the same tensor.
+                # Preserve its cache-selected prefix of the ordered passes,
+                # instead of treating traffic volume as a larger allocation.
+                if (type(read_passes) is not int or read_passes <= 0
+                        or not allocation_size or offset != 0
+                        or cost.get("read_bytes") != read_passes * allocation_size
+                        or read_bytes > read_passes * allocation_size):
+                    raise ValueError("repeated input reads require an exact declared pass count and tensor extent")
+                pass_bytes = tuple(min(allocation_size, read_bytes - start)
+                    for start in range(0, read_bytes, allocation_size))
+            else:
+                pass_bytes = (read_bytes,)
+            for byte_count in pass_bytes:
+                append_descriptor(
+                    "read",
+                    byte_count,
+                    identity=identity,
+                    offset=offset,
+                    allocation_size=allocation_size,
+                    generation=_gddr_access_generation(
+                        metadata, "read", fallback_identity=generation_identity
+                    ),
+                    alias_of=_gddr_access_alias(metadata, "read")[0],
+                    alias_generation=_gddr_access_alias(metadata, "read")[1],
+                    alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
+                )
         if write_bytes:
             identity = _gddr_stable_identity(task, metadata, "write")
             offset = _gddr_non_negative_int(
@@ -11155,6 +11172,20 @@ def _gemm_epilogue_declared(scenario, rank, target_id, workload, epilogue, phase
     ) is not None
 
 
+def _source_bound_cuda_graph(scenario: ScenarioConfig) -> bool:
+    """Select the pinned CUDA lowering without changing generic GPU policies."""
+    program = scenario.workload.metadata.get("cuda_graph_structural_program")
+    if program is None:
+        return False
+    from .cuda_graph_lifecycle import SOURCE_REVISION
+    if (not isinstance(program, Mapping)
+            or program.get("schema") != "heterollm.cuda-graph-source-program/v1"
+            or not isinstance(program.get("contract"), Mapping)
+            or program["contract"].get("source_revision") != SOURCE_REVISION):
+        raise ValueError("CUDA source lowering requires the pinned structural compilation contract")
+    return True
+
+
 def _residual_norm_fusion_decision(
     scenario: ScenarioConfig,
     router: TopologyRouter,
@@ -11215,6 +11246,13 @@ def _residual_norm_fusion_decision(
             "fusion_apply_target": apply_target,
         }
     )
+    if allowed and _source_bound_cuda_graph(scenario):
+        # d3146f2 fuses RMS_NORM -> MUL (optionally a following ADD), never
+        # ADD -> RMS_NORM. The attention residual belongs to the preceding
+        # projection's native dispatch or its own ADD dispatch, not this norm.
+        allowed = False
+        audit.update(fusion_enabled=False,
+                     fusion_decision="source_boundary_requires_residual_before_norm")
     return allowed, audit
 
 
@@ -11381,7 +11419,11 @@ def _declared_physical_projections(
     if (isinstance(layer_gpu, Mapping)
             and any(key in layer_gpu.get("generated_gpu_aliases", ()) for key in projection_ids)):
         return False
-    if not _serving_bool_capability(
+    source_projection = (combined_projection_id in {"attention.qkv", "mlp.up_gate"}
+                  and execution_component_id is not None
+                  and _kind(_component(scenario, execution_component_id)) == "gpu"
+                  and _source_bound_cuda_graph(scenario))
+    if not source_projection and not _serving_bool_capability(
         scenario, ("llama_cpp_physical_projection_invocations",)
     ):
         return False
@@ -12470,16 +12512,21 @@ def _physical_projection_buffer_metadata(metadata, name, index):
 
 
 def _mixed_projection_calls(scenario, workload, name, metadata):
-    """Partition a logical mixed-format GEMM at proven physical matrices.
+    """Partition a logical GEMM at proven physical CUDA matrix boundaries.
 
     This is graph lowering, not a new mixed-format kernel.  Each CUDA call
     reads the shared activation and only its own packed weight, and writes
     its own output columns.  Cross-column epilogues must be lowered by their
     owning operator before reaching this function.
     """
-    if len(set(workload.packed_weight_formats)) <= 1:
-        return ()
     projection_id = metadata.get("projection_id")
+    mixed_formats = len(set(workload.packed_weight_formats)) > 1
+    source_qkv = (projection_id == "attention.qkv"
+                  and "physical_projection_segment_index" not in metadata
+                  and "mmvf_physical_tensor" not in metadata
+                  and _source_bound_cuda_graph(scenario))
+    if not mixed_formats and not source_qkv:
+        return ()
     layer = _layer_for_gemm_operation(scenario, name, metadata)
     projection = (_materialize_weight_projection(
         layer, projection_id,
@@ -12488,6 +12535,8 @@ def _mixed_projection_calls(scenario, workload, name, metadata):
         allow_padding=metadata.get("projection_allow_padding", True),
     ) if layer is not None and projection_id else None)
     if projection is None or len(projection.segments) < 2:
+        if not mixed_formats:
+            return ()  # A real packed QKV matrix remains one invocation.
         raise ValueError("mixed-format GPU GEMM requires physical projection segments")
     if (workload.k, workload.n, workload.weight_bytes) != (
         projection.k, projection.n,
@@ -12586,16 +12635,19 @@ def _add_rank_gemm(
     # A single CUDA dispatch cannot consume matrices with different GGUF
     # block layouts.  Do this before any transfer/phase is charged, so a
     # segment never inherits the parent projection's full weight traffic.
-    if (len(set(workload.packed_weight_formats)) > 1
+    source_qkv = (dict(metadata or {}).get("projection_id") == "attention.qkv"
+                  and "physical_projection_segment_index" not in (metadata or {})
+                  and "mmvf_physical_tensor" not in (metadata or {})
+                  and _source_bound_cuda_graph(scenario))
+    if ((len(set(workload.packed_weight_formats)) > 1 or source_qkv)
             and _kind(_component(scenario, target_component_id)) == "gpu"
             and _gpu_profiles(scenario, target_component_id,
                               rank.memory_component_id if target_component_id == rank.component_id else None)[0].kernel_model is not None):
         if not model_weight_read or dynamic_rhs or dynamic_attention_replay is not None:
             raise ValueError("mixed-format physical splitting requires static model weights")
+        calls = _mixed_projection_calls(scenario, workload, name, dict(metadata or {}))
         prior = tuple(dependencies)
-        for index, (segment_workload, segment_metadata) in enumerate(
-            _mixed_projection_calls(scenario, workload, name, dict(metadata or {}))
-        ):
+        for index, (segment_workload, segment_metadata) in enumerate(calls):
             last = _add_rank_gemm(
                 builder, scenario, router, plan, rank, segment_workload,
                 target_component_id, name + ".physical_{}".format(index), prior,
@@ -12605,7 +12657,8 @@ def _add_rank_gemm(
                 keep_output_on_target=keep_output_on_target, metadata=segment_metadata,
             )
             prior = (last,)
-        return last
+        if calls:
+            return last
     invocation_task_start = len(builder.tasks)
     placement_component_id = str(target_component_id)
     prior = tuple(dependencies)
@@ -16097,6 +16150,35 @@ def _gpu_invocation_kv_contract(
         "rope_arithmetic": "inherited_three_ops_and_precomputed_sin_cos_approximation"}
 
 
+def _source_rope_frequency_binding(scenario, layer, rotary_dim):
+    """Resolve the pinned Llama CUDA RoPE factor input from its real GGUF."""
+    metadata = scenario.model.graph.attributes.get("metadata", {})
+    if metadata.get("gguf_architecture_id") != "llama":
+        return None
+    bindings = metadata.get("gguf_rope_frequency_bindings")
+    if not isinstance(bindings, (list, tuple)):
+        raise ValueError("native Llama RoPE requires its GGUF frequency factor inventory")
+    if any(not isinstance(row, Mapping) or "rope_factors_" in row.get("name", "") for row in bindings):
+        raise ValueError("native Llama long/short RoPE factors require an explicit context selection contract")
+    block_names = {row["name"] for row in layer.metadata.get("gguf_tensor_bindings", ())}
+    # llama_model::get_rope_factors selects the layer tensor, with a shared
+    # rope_freqs.weight backing tensor duplicated by the loader when present.
+    selected = [row for row in bindings if row.get("name") in block_names]
+    if not selected:
+        selected = [row for row in bindings if row.get("name") == "rope_freqs.weight"]
+    if len(selected) > 1:
+        raise ValueError("native Llama RoPE frequency factor binding is ambiguous")
+    if not selected:
+        if bindings:
+            raise ValueError("native Llama RoPE has no frequency factor binding for this layer")
+        return None
+    binding = selected[0]
+    if (rotary_dim <= 0 or rotary_dim % 2 or tuple(binding.get("shape", ())) != (rotary_dim // 2,)
+            or binding.get("type") != "F32" or binding.get("n_bytes") != rotary_dim * 2):
+        raise ValueError("native Llama RoPE frequency factors must be one F32 value per rotary pair")
+    return binding
+
+
 def _source_f32_kv_contract(scenario, router, plan, rank, layer, token_batch,
                             context_tokens, kv_materialized_tokens, kv_append_tokens,
                             *, owner_request_ids=None):
@@ -16119,7 +16201,7 @@ def _source_f32_kv_contract(scenario, router, plan, rank, layer, token_batch,
     if (not isinstance(declaration, Mapping)
             or declaration.get("schema") != "llama.cpp.cuda-rope/v1"
             or declaration.get("source_revision") != "d3146f2b56c2db4711ac8391871c9e529d1946d7"
-            or architecture not in {"qwen3", "qwen35"}
+            or architecture not in {"qwen2", "llama", "qwen3", "qwen35"}
             or not qualified["qualified"] or not _f32_hidden_storage_enabled(scenario)
             or config is None or config.flash_attn or plan.world_size != 1
             or len(request_ids) != 1 or request_ids[0] not in {
@@ -17433,7 +17515,16 @@ def _f32_hidden_storage_enabled(scenario: Optional[ScenarioConfig]) -> bool:
         return False
 
     def resolve() -> bool:
-        value = scenario.workload.metadata.get("llama_cpp_f32_hidden_storage", False)
+        key = "llama_cpp_f32_hidden_storage"
+        # A model can declare its native runtime storage contract without
+        # leaving a workload override behind when the user switches models.
+        # Explicit workload values (including False) always take precedence.
+        if key in scenario.workload.metadata:
+            value = scenario.workload.metadata[key]
+        elif scenario.llama_cpp_config is not None:
+            value = scenario.model.metadata.get(key, False)
+        else:
+            value = False
         if not isinstance(value, bool):
             raise ValueError("llama_cpp_f32_hidden_storage must be an explicit boolean")
         if not value:
@@ -17792,12 +17883,19 @@ def _final_output_selection(
     selected_indices: Tuple[int, ...],
 ) -> Optional[_FinalOutputSelection]:
     declaration = _model_final_output_declaration(scenario.model)
-    if declaration is None:
-        return None
-    policy = _resolve_final_output_declaration(
-        declaration,
-        _execution_view(scenario).architecture, mtp_present=scenario.workload.mtp is not None,
-    )
+    if _source_bound_cuda_graph(scenario):
+        if declaration is not None:
+            raise ValueError("final output selection has conflicting model and CUDA program source owners")
+        policy = _source_program_output_policy(
+            scenario.workload.metadata["cuda_graph_structural_program"],
+            _execution_view(scenario).architecture, mtp_present=scenario.workload.mtp is not None)
+    else:
+        if declaration is None:
+            return None
+        policy = _resolve_final_output_declaration(
+            declaration,
+            _execution_view(scenario).architecture, mtp_present=scenario.workload.mtp is not None,
+        )
     if policy is None:
         return None
     if plan.world_size != 1 or not _f32_hidden_storage_enabled(scenario):
@@ -17989,6 +18087,27 @@ def _add_output_row_selection(
             "output_bytes": output_capacity, "input_rows": selection.token_rows,
             "output_rows": rows, "width": width, "element_bytes": 4,
             "allocation_alias": "distinct_get_rows_output"}}
+    if _source_bound_cuda_graph(scenario):
+        # GET_ROWS reads the declared source rows, not the first output-sized
+        # prefix of the input. Indices are a separate shared tensor; appending
+        # their bytes to the source row fabricated both a read range and owner.
+        index_task = next(task for task in builder.tasks if task.task_id == indices_dependency)
+        index_id = index_task.metadata["final_layer_output_selection"]["index_tensor_id"]
+        def identity(tensor_id):
+            return "tensor:{}:rank={}:tp_rank={}:pp_rank={}".format(
+                tensor_id, rank.rank, rank.tp_rank, rank.pp_rank)
+        metadata.update(buffer_view_cache_policy="aggregate_directional_v1",
+            buffer_accesses=[
+                {"buffer_id": identity(input_tensor_id), "operation": "read",
+                 "offset_bytes": 4 * width * row, "size_bytes": 4 * width,
+                 "buffer_size_bytes": input_capacity}
+                for row in selection.selected_indices
+            ] + [
+                {"buffer_id": identity(index_id), "operation": "read", "offset_bytes": 0,
+                 "size_bytes": 4 * rows, "buffer_size_bytes": 4 * rows},
+                {"buffer_id": identity(name + ".selected"), "operation": "write", "offset_bytes": 0,
+                 "size_bytes": output_capacity, "buffer_size_bytes": output_capacity},
+            ])
     if _kind(_component(scenario, target_component)) == "gpu":
         return _add_rank_primitive(builder, scenario, router, plan, rank,
             OperatorClass.MEMORY, MemoryWorkload(read_bytes=output_capacity + 4 * rows,
@@ -18607,6 +18726,7 @@ def _compile_parallel_layer_body(
             logical_context_tokens, kv_materialized_tokens, kv_append_tokens,
             owner_request_ids=getattr(builder, "_linear_state_owner_request_ids", None))
         source_f32 = source_f32_kv.get("status") == "applied"
+        source_context_copy = source_f32 and _source_bound_cuda_graph(scenario)
         source_base = prefix + ".rank{:03d}.source_f32".format(rank.rank)
 
         def source_id(role):
@@ -18619,7 +18739,7 @@ def _compile_parallel_layer_body(
                     "buffer_size_bytes": extent if extent is not None else offset + size}
 
         def source_projection_reads(operand):
-            index = 0 if operand == "q" else 1
+            index = {"q": 0, "k": 1, "v": 2}[operand]
             width = query_shard.local_size if operand == "q" else kv_projection_shard.local_size
             if operand == "q" and gate_width:
                 # Qwen3.5 Q and gate are interleaved by head in the one real
@@ -19013,7 +19133,7 @@ def _compile_parallel_layer_body(
                 ("k", (qkv_output_bytes - query_output_bytes) // 2, "key"),
                 ("v", (qkv_output_bytes - query_output_bytes) // 2, "value"),
             )
-            for projection_suffix, output_bytes, projection_name in split_specs:
+            for projection_index, (projection_suffix, output_bytes, projection_name) in enumerate(split_specs):
                 workload = _layer_gemm(
                     layer,
                     token_batch,
@@ -19051,6 +19171,8 @@ def _compile_parallel_layer_body(
                             **qkv_rope_audit,
                             "projection_id": "attention.{}".format(projection_suffix),
                             "physical_projection": projection_name,
+                            **({"output_buffer_id": source_base + ".qkv:segment:" + str(projection_index)}
+                               if source_f32 else {}),
                             **({"output_offset_bytes": generic_projection(projection_suffix)["offset_bytes"],
                                 "output_buffer_size_bytes": qkv_transient_output_bytes} if generic_kv is not None else {}),
                             "modeled_memory_write_bytes": output_bytes,
@@ -19079,7 +19201,9 @@ def _compile_parallel_layer_body(
                 builder, scenario, router, plan, rank, layer, qkv_bias,
                 token_batch, query_shard.local_size, kv_projection_shard.local_size,
                 activation_bits, prefix, qkv, qkv_component, rank_meta,
-                projection_accesses={part: generic_projection(part) for part in ("q", "k", "v")} if generic_kv is not None else None,
+                projection_accesses=({part: source_projection_reads(part)[0] for part in ("q", "k", "v")}
+                    if source_f32 else {part: generic_projection(part) for part in ("q", "k", "v")}
+                    if generic_kv is not None else None),
             )
         rope_dependencies: Tuple[str, ...] = (qkv,)
         rope_source_component = qkv_component
@@ -19277,7 +19401,7 @@ def _compile_parallel_layer_body(
                 context.invariant(("llama_cpp_tensor_storage_qualification",),
                                   lambda: qualify_llama_tensor_storage_contract(scenario)))
             graph_architecture = scenario.model.graph.attributes.get("metadata", {}).get("gguf_architecture_id")
-            position_components = 1 if graph_architecture == "qwen3" else 4 if graph_architecture == "qwen35" else None
+            position_components = 1 if graph_architecture in {"qwen2", "llama", "qwen3"} else 4 if graph_architecture == "qwen35" else None
             if (not isinstance(source_rope_contract, Mapping)
                     or source_rope_contract.get("schema") != "llama.cpp.cuda-rope/v1"
                     or source_rope_contract.get("strategy") != "runtime_sin_cos"
@@ -19289,6 +19413,8 @@ def _compile_parallel_layer_body(
                     or _kind(_component(scenario, rope_target)) != "gpu"):
                 raise ValueError("native CUDA RoPE requires its qualified GGUF/F32/GPU source contract")
             rotary_dim = attention_execution.rotary_dim if attention_execution is not None else head_dim
+            frequency_binding = _source_rope_frequency_binding(scenario, layer, rotary_dim)
+            frequency_bytes = frequency_binding["n_bytes"] if frequency_binding is not None else 0
             previous_rope = rope_dependencies
             source_rope_ends = {}
             for operand, width, heads in (("q", query_shard.local_size, query_head_shard.local_size),
@@ -19299,10 +19425,11 @@ def _compile_parallel_layer_body(
                 rope, rope_component = _add_rank_primitive(
                     builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
                     ElementwiseWorkload(elements=elements, operations_per_element=3,
+                        fixed_operations=elements // 2 if frequency_binding is not None else 0,
                         fixed_transcendental_operations=elements, input_count=1,
                         input_bits=32, output_bits=32, dependency_depth=3,
-                        working_set_bytes=2 * data_bytes + position_bytes,
-                        read_storage_bytes=data_bytes + position_bytes,
+                        working_set_bytes=2 * data_bytes + position_bytes + frequency_bytes,
+                        read_storage_bytes=data_bytes + position_bytes + frequency_bytes,
                         write_storage_bytes=data_bytes, name="native_cuda_rope_" + operand),
                     "{}.attention.rope".format(layer.layer_id),
                     "{}.rank{:03d}.rope_{}".format(prefix, rank.rank, operand),
@@ -19312,17 +19439,24 @@ def _compile_parallel_layer_body(
                         "rope_table_strategy": "runtime_sin_cos", "rope_rotated_elements": elements,
                         "rope_qk_traffic_elements": token_batch * width,
                         "rope_position_input_bytes": position_bytes,
+                        **({"rope_frequency_factor_binding": frequency_binding,
+                            "rope_frequency_factor_read_bytes": frequency_bytes,
+                            "rope_frequency_factor_divisions": elements // 2,
+                            "rope_frequency_factor_memory_semantics": "one_shared_vector_per_kernel_broadcast_over_rows_and_heads",
+                            "rope_frequency_factor_compute_semantics": "one_division_per_rotary_pair_at_declared_generic_arithmetic_rate"}
+                           if frequency_binding is not None else {}),
                         "sin_cos_function_evaluations": elements,
                         "native_rope_source_contract": source_rope_contract,
                         "timing_completeness": "partial",
                         "unpriced_terms": ("powf frequency generation and angle arithmetic",
                             "YaRN interpolation", "compiler lowering and instruction-specific SFU rates"),
                         "transcendental_rate_source": "existing declared GPU special-function capacity; not native measurement",
-                        **({"buffer_accesses": [
-                            source_access(operand + "_norm", data_bytes, "read"),
+                        **({"buffer_accesses": (
+                            [source_access(operand + "_norm", data_bytes, "read")] if has_qk_norm else source_projection_reads(operand)) + [
                             source_access("positions", position_bytes, "read"),
                             source_access(operand + "_rope", data_bytes, "write"),
-                        ]} if source_f32 else {}),
+                        ] + ([source_access("", frequency_bytes, "read", identity=frequency_binding["name"])]
+                             if frequency_binding is not None else [])} if source_f32 else {}),
                     })
                 previous_rope = (rope,)
                 source_rope_ends[operand] = rope
@@ -19823,6 +19957,8 @@ def _compile_parallel_layer_body(
                         else "separate_qk_scale_task"
                     ),
                     **({"input_buffer_id": source_base + (".scaled_score" if attention_execution is not None else ".score"),
+                        "input_buffer_size_bytes": softmax_workload.write_bytes,
+                        "input_buffer_read_passes": softmax_workload.input_count,
                         "output_buffer_id": source_base + ".probabilities",
                         "softmax_memory_semantics": "existing_two_pass_score_model",
                         "address_precision": "aggregate_cache_selected_read_prefix"} if source_f32 else
@@ -19904,7 +20040,8 @@ def _compile_parallel_layer_body(
                     "persistent_request_buffers": {source_f32_kv["request_id"]: (source_f32_kv["k_cache_id"], source_f32_kv["v_cache_id"])},
                     "buffer_accesses": [source_access("probabilities", pv_workload.activation_bytes, "read")]
                         + _source_f32_kv_read_accesses(source_f32_kv, "v")
-                        + [source_access("context", pv_workload.output_bytes, "write")],
+                        + [source_access("pv_raw" if source_context_copy else "context",
+                                         pv_workload.output_bytes, "write")],
                 } if source_f32 else {})},
                 dynamic_attention_replay=(
                     _DynamicAttentionCostTaskReplayPayload(
@@ -19927,6 +20064,37 @@ def _compile_parallel_layer_body(
             )
         attention_context = pv
         attention_context_component = pv_component
+        if source_context_copy and not flash_allowed:
+            # build_attn's PERMUTE is a view, but its following CONT always
+            # materializes a distinct F32 output. With one token the view is
+            # contiguous and cpy.cu uses D2D memcpy; otherwise it uses a copy
+            # kernel. Preserve both physical read/write streams in either case.
+            context_bytes = 4 * token_batch * query_shard.local_size
+            context_copy_kernel = token_batch > 1 and query_head_shard.local_size > 1
+            attention_context = _add_rank_tensor_kernel(
+                builder, scenario, router, plan, rank,
+                TensorKernelWorkload(operations=0, read_bytes=context_bytes,
+                    write_bytes=context_bytes, streaming_fraction=1.0,
+                    name="native_attention_context_contiguous"),
+                prefix + ".rank{:03d}.attention_context_contiguous".format(rank.rank),
+                (pv,), input_is_local=True, emit_kernel_launch=context_copy_kernel,
+                execution_component_id=pv_component,
+                metadata={**{key: value for key, value in rank_meta.items() if key != "phase"},
+                    "execution_phase": phase, "event_kind": "attention_context_contiguous",
+                    "source_operation": "CONT", "source_input_operation": "PERMUTE",
+                    "source_execution": "f32_scalar_kernel" if context_copy_kernel else "cuda_memcpy_d2d",
+                    "source_raw_shape": (head_dim, token_batch, query_head_shard.local_size),
+                    "source_input_shape": (head_dim, query_head_shard.local_size, token_batch),
+                    "source_input_strides_bytes": (4, 4 * head_dim * token_batch, 4 * head_dim),
+                    "source_output_shape": (query_shard.local_size, token_batch),
+                    "source_input_dtype": "F32", "source_output_dtype": "F32",
+                    "source_revision": source_f32_kv["source_revision"],
+                    "buffer_accesses": [source_access("pv_raw", context_bytes, "read"),
+                                        source_access("context", context_bytes, "write")],
+                    "modeled_memory_write_bytes": context_bytes,
+                    "persistent_output_bytes": 0},
+            )
+            attention_context_component = pv_component
         if source_attention is not None:
             owner = lambda role: prefix + ".rank{:03d}.qwen35.{}".format(rank.rank, role)
             gate_name = prefix + ".rank{:03d}".format(rank.rank)
@@ -19981,7 +20149,7 @@ def _compile_parallel_layer_body(
                     "{}.rank{:03d}.attention_gate".format(
                         prefix, rank.rank
                     ),
-                    (pv, qkv),
+                    (attention_context, qkv),
                     source_component_id=pv_component,
                     input_component_bytes=(
                         (

@@ -1,0 +1,139 @@
+{
+  "schema": "heterollm.frontend-gguf-native-preparation/v1",
+  "source_commit": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+  "hardware_preset": "local-native-rtx5080-9950x3d-gddr7-ddr5",
+  "model_source": "frontend original GGUF presets, full native file identity and tensor directory checked independently",
+  "native_timing_used_for_prediction": false,
+  "cases": [
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "preset_id": "qwen3-0_6b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+        "sha256": "ab9004daf660cd6a6ba1c07556e74fcceb2b756063ccce3f9c69d3a637b361cc",
+        "size_bytes": 1509347424,
+        "tensor_count": 311,
+        "architecture": "qwen3"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_0_6b_f16_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "preset_id": "qwen3-1_7b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-1.7B-Q8_0.gguf",
+        "sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+        "size_bytes": 1834426016,
+        "tensor_count": 310,
+        "architecture": "qwen3"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_1_7b_q8_0_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "preset_id": "qwen3-4b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-4B-Q4_K_M.gguf",
+        "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+        "size_bytes": 2497280256,
+        "tensor_count": 398,
+        "architecture": "qwen3"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_4b_q4_k_m_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "preset_id": "qwen3-8b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-8B-Q4_K_M.gguf",
+        "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+        "size_bytes": 5027783488,
+        "tensor_count": 399,
+        "architecture": "qwen3"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_8b_q4_k_m_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "preset_id": "qwen3_8-27b-iq3-s-iq4-xs",
+      "model": {
+        "path": "C:\\Users\\A\\.lmstudio\\models\\canhdu\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS-GGUF\\Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.gguf",
+        "sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
+        "size_bytes": 14865116128,
+        "tensor_count": 866,
+        "architecture": "qwen35"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_8_27b_mixed_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "preset_id": "qwen2_5-0_5b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+        "size_bytes": 491400032,
+        "tensor_count": 291,
+        "architecture": "qwen2"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen2_5_0_5b_q4_k_m_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "preset_id": "qwen2_5-7b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        "sha256": "65b8fcd92af6b4fefa935c625d1ac27ea29dcb6ee14589c55a8f115ceaaa1423",
+        "size_bytes": 4683074240,
+        "tensor_count": 339,
+        "architecture": "qwen2"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen2_5_7b_q4_k_m_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "preset_id": "llama3_2-1b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+        "sha256": "6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83",
+        "size_bytes": 807694464,
+        "tensor_count": 147,
+        "architecture": "llama"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_llama3_2_1b_q4_k_m_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "preset_id": "llama3_1-8b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        "sha256": "7b064f5842bf9532c91456deda288a1b672397a54fa729aa665952863033557c",
+        "size_bytes": 4920739232,
+        "tensor_count": 292,
+        "architecture": "llama"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_llama3_1_8b_q4_k_m_512_128.json",
+      "source_identity_verified": true
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "preset_id": "qwen3-14b",
+      "model": {
+        "path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-14B-Q4_K_M.gguf",
+        "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
+        "size_bytes": 9001752960,
+        "tensor_count": 443,
+        "architecture": "qwen3"
+      },
+      "scenario_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_14b_q4_k_m_512_128.json",
+      "source_identity_verified": true
+    }
+  ]
+}

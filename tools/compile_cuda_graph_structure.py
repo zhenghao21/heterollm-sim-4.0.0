@@ -15,17 +15,93 @@ from pathlib import Path
 import subprocess
 
 from heterollm_sim.config import scenario_from_dict
-from heterollm_sim.cuda_graph_contract import build_cuda_graph_contract
+from heterollm_sim.cuda_graph_contract import build_cuda_graph_contract, comparable_cuda_graph_model
 from heterollm_sim.cuda_graph_lifecycle import SOURCE_REVISION
 from heterollm_sim.cuda_graph_serving import _load_capture_topologies
 from heterollm_sim.cuda_graph_structure import load_cuda_graph_structure
-from heterollm_sim.gguf_parity import build_model_from_gguf, read_gguf_metadata_only
+from heterollm_sim.gguf_parity import build_model_from_gguf, read_gguf_metadata, read_gguf_metadata_only
 from heterollm_sim.serde import to_primitive
 
 
 MODE_VARIABLES = ("HETEROLLM_CUDA_GRAPH_TRACE", "HETEROLLM_CUDA_GRAPH_DRY_RUN",
     "HETEROLLM_CUDA_GRAPH_CAPTURE_ONLY", "HETEROLLM_CUDA_GRAPH_LABEL",
     "GGML_CUDA_DISABLE_GRAPHS", "GGML_CUDA_GRAPH_OPT", "LLAMA_GRAPH_REUSE_DISABLE")
+SUPPORTED_ARCHITECTURES = frozenset({"qwen2", "qwen3", "qwen35", "llama"})
+
+
+def validate_preset_inventory(payload, gguf):
+    """Match the entire preset inventory, including non-executed tensors."""
+    from heterollm_sim.gguf_model_catalog import GGUFModelCatalog, inventory_to_gguf
+
+    metadata = payload["model"].get("metadata", {})
+    preset_id = metadata.get("model_preset_id")
+    if not preset_id:
+        return
+    record = GGUFModelCatalog()._records().get(preset_id)
+    if record is None or record.get("changes") or metadata.get("gguf_preset_changes"):
+        raise ValueError("native structural compilation requires an original known GGUF preset")
+    expected = inventory_to_gguf(record["inventory"])
+    if not expected.sha256 or expected.sha256 != gguf.sha256:
+        raise ValueError("preset and local GGUF file identities differ")
+    if len(gguf.sources) != 1:
+        raise ValueError("catalog structural compilation currently requires one complete GGUF file")
+    def directory(value):
+        source = value.sources[0] if value.sources else gguf.sources[0]
+        result = []
+        for tensor in value.tensor_directory:
+            if tensor.source_path and tensor.source_path != source["path"]:
+                raise ValueError("GGUF tensor references a different source file")
+            row = dict(tensor.__dict__)
+            row.pop("source_path")
+            if row["physical_offset"] is None:
+                row["physical_offset"] = source["data_start"] + row["offset"]
+            result.append(row)
+        return result
+    if directory(expected) != directory(gguf):
+        raise ValueError("preset and local GGUF complete tensor directories differ")
+    fresh_metadata = deepcopy(dict(gguf.metadata))
+    # Old preset records predate array digests. The matching whole-file identity
+    # above still proves those arrays came from the identical source file.
+    for key, value in expected.metadata.items():
+        actual = fresh_metadata.get(key)
+        if isinstance(value, dict) and isinstance(actual, dict) and "value_sha256" not in value:
+            actual.pop("value_sha256", None)
+    if dict(expected.metadata) != fresh_metadata:
+        raise ValueError("preset and local GGUF metadata differ")
+
+
+def comparable_imported_model(model, gguf):
+    """Ignore catalog labels, while checking recorded file geometry explicitly.
+
+    The preset URL and the local weight path identify copies of the same file.
+    Legacy single-file records predate gguf_sources. They still bind every
+    executable tensor's offset, type, shape and byte size through the graph.
+    No source geometry or executable descriptor is removed without checking it.
+    """
+    result = comparable_cuda_graph_model(to_primitive(model))
+    metadata = result["metadata"]
+    if metadata.get("gguf_derived_inventory") or metadata.get("gguf_preset_changes"):
+        raise ValueError("native structural compilation requires an unedited GGUF inventory")
+    for key in ("model_preset_id", "gguf_preset_origin", "gguf_preset_changes"):
+        metadata.pop(key, None)
+    result.pop("name", None)  # Catalog display name is not a graph input.
+    actual_sources = getattr(gguf, "sources", ())
+    geometry = ("size", "data_start", "directory_end", "tensor_count")
+    for attributes in (metadata, result["graph"]["attributes"]):
+        evidence = attributes.get("metadata", {})
+        recorded = evidence.get("gguf_sources", [])
+        if recorded:
+            if len(recorded) != len(actual_sources) or any(
+                    any(record.get(key) != actual.get(key) for key in geometry)
+                    for record, actual in zip(recorded, actual_sources)):
+                raise ValueError("scenario GGUF source file geometry differs from local GGUF")
+        elif len(actual_sources) > 1:
+            raise ValueError("split GGUF requires complete source file geometry")
+        # Metadata-only import intentionally does not reread/hash weight data.
+        evidence.pop("gguf_sha256", None)
+        evidence.pop("gguf_sources", None)
+        attributes.pop("artifact_id", None)
+    return result
 
 
 def validate_inputs(args, payload, gguf):
@@ -38,8 +114,14 @@ def validate_inputs(args, payload, gguf):
         raise ValueError("cuda_device must be nonnegative and timeout must be positive")
     if args.context % 256:
         raise ValueError("context must be a multiple of 256 to match native effective context")
-    if gguf.architecture not in {"qwen3", "qwen35"}:
-        raise ValueError("source-assisted scenario coverage currently requires qwen3 or qwen35")
+    if gguf.architecture not in SUPPORTED_ARCHITECTURES:
+        raise ValueError("source-assisted scenario coverage requires qwen2, qwen3, qwen35 or llama")
+    # llama.cpp also routes some MoE variants through its llama architecture.
+    # Their data-dependent expert dispatch is outside this fixed-token probe.
+    if gguf.architecture in {"qwen2", "llama"} and any(
+            gguf.metadata.get(f"{gguf.architecture}.{key}", 0) != 0
+            for key in ("expert_count", "expert_used_count")):
+        raise ValueError("source-assisted scenario coverage requires a dense qwen2/llama model")
     # Do not guess tokenizer defaults: the harness uses the resolved BOS/EOS.
     startup_tokens = []
     for key in ("tokenizer.ggml.bos_token_id", "tokenizer.ggml.eos_token_id"):
@@ -63,14 +145,8 @@ def validate_inputs(args, payload, gguf):
     model_path = scenario.workload.metadata.get("native_model_path")
     if not model_path or Path(model_path).resolve() != args.model.resolve():
         raise ValueError("scenario GGUF path differs from requested model")
-    authored, imported = to_primitive(scenario.model), to_primitive(build_model_from_gguf(gguf))
-    for model in (authored, imported):
-        # Metadata-only import intentionally does not reread/hash weight data.
-        # Compare every executable node, tensor geometry and quantization type.
-        for attributes in (model["metadata"], model["graph"]["attributes"]):
-            attributes.get("metadata", {}).pop("gguf_sha256", None)
-            attributes.pop("ui", None)
-            attributes.pop("artifact_id", None)
+    authored = comparable_imported_model(scenario.model, gguf)
+    imported = comparable_imported_model(build_model_from_gguf(gguf), gguf)
     if authored != imported:
         raise ValueError("scenario model graph/geometry/weight formats differ from GGUF; reimport the selected model")
     if not scenario.workload.requests or any(
@@ -174,7 +250,13 @@ def compile_structure(args):
     if revision != SOURCE_REVISION:
         raise ValueError("source checkout revision differs from the supported structural compiler")
     payload = json.loads(args.scenario.read_text(encoding="utf-8"))
-    gguf = read_gguf_metadata_only(args.model)
+    if payload.get("model", {}).get("metadata", {}).get("model_preset_id"):
+        # Catalog comparison needs identity as well as all tensor descriptors;
+        # this reads/hashes weights but never executes or measures the model.
+        gguf = read_gguf_metadata(args.model)
+        validate_preset_inventory(payload, gguf)
+    else:
+        gguf = read_gguf_metadata_only(args.model)
     startup = validate_inputs(args, payload, gguf)
     device = require_local_device(args, payload)
     requests, prefixes, labels, comparison = request_plan(

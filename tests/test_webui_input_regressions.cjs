@@ -95,6 +95,7 @@ function loadApp({ scheduleTimer = setTimeout, cancelTimer = clearTimeout } = {}
       resetPlacementForArchitecturePreset,
       resetArchitectureDependentProfiles,
       applyArchitecturePresetDetail,
+      architecturePresetDetailItem,
       travelTopologyHistory,
       loadArchitectureFromPreset,
       hostOrchestrationProfileDraft,
@@ -126,12 +127,24 @@ function loadApp({ scheduleTimer = setTimeout, cancelTimer = clearTimeout } = {}
         toast = (...args) => notices.push(args);
       },
       applyPresetDetailToScenario,
+      modelPresetCardMarkup,
+      invalidateModelStructureBindings,
+      openJsonDialog,
+      exportScenario,
+      exportHardwareInput,
+      setOperationErrorStub(notices) {
+        showOperationError = (...args) => notices.push(args);
+      },
       validatePhysicalMemoryConfig,
       physicalMemoryContractIssues,
       hardwareInputForScenario,
       scenarioPayloadForTransport,
       restoreStoredScenario,
       restoreScenarioFromStorage,
+      initializeEmptyWorkspace,
+      createEmptyScenario,
+      persistCurrentScenario,
+      missingScenarioInputIssues,
       currentProtocolConnectionDefaults,
       storageScenarioKey: STORAGE_SCENARIO,
       protocolInputs: dom,
@@ -839,6 +852,108 @@ test("every DRAM and NAND component kind requires explicit physical memory confi
   assert.equal(api.physicalMemoryContractIssues().length, componentKinds.length);
 });
 
+test("opening a workspace stays empty and preserves the previous draft until explicit restore", async () => {
+  const api = loadApp();
+  prepareImportRun(api, () => { throw new Error("empty startup must not request a reference scenario"); });
+  const saved = api.localStorage.getItem(api.storageScenarioKey);
+  api.dom.restoreScenarioButton = { hidden: true };
+
+  api.initializeEmptyWorkspace();
+  assert.equal(api.state.scenario.hardware.components.length, 0);
+  assert.equal(api.state.scenario.model.graph.operators.length, 0);
+  assert.equal(Object.keys(api.state.scenario.profiles).length, 0);
+  assert.equal(api.state.scenario.workload.requests[0].prompt_tokens, 512);
+  assert.equal(api.state.scenario.workload.requests[0].output_tokens, 128);
+  assert.equal(api.dom.restoreScenarioButton.hidden, false);
+  api.persistCurrentScenario(); // Empty canvas layout changes must not erase saved input.
+  assert.equal(api.localStorage.getItem(api.storageScenarioKey), saved);
+  api.syncRunButtons();
+  assert.equal(api.dom.runButton.disabled, true);
+  assert.deepEqual(Array.from(api.missingScenarioInputIssues(), (item) => item.code), ["hardware_missing", "model_missing"]);
+
+  assert.equal(await api.restoreScenarioFromStorage(), true);
+  assert.equal(api.state.scenario.name, "old-scenario");
+  assert.equal(api.dom.restoreScenarioButton.hidden, true);
+});
+
+test("a fresh workspace does not load a reference or persist an untouched blank draft", async () => {
+  const api = loadApp();
+  prepareImportRun(api, () => { throw new Error("unexpected request"); });
+  api.localStorage.removeItem(api.storageScenarioKey);
+  api.dom.restoreScenarioButton = { hidden: false };
+  api.initializeEmptyWorkspace();
+  assert.equal(api.dom.restoreScenarioButton.hidden, true);
+  assert.equal(await api.restoreScenarioFromStorage(), false);
+  api.persistCurrentScenario();
+  assert.equal(api.localStorage.getItem(api.storageScenarioKey), null);
+
+  api.state.dirty = true;
+  api.state.scenario.name = "user-edited-draft";
+  api.persistCurrentScenario();
+  assert.equal(JSON.parse(api.localStorage.getItem(api.storageScenarioKey)).name, "user-edited-draft");
+});
+
+test("blank workspace payload actions report construction errors and stop cleanly", () => {
+  const api = loadApp();
+  api.state.scenario = api.createEmptyScenario();
+  api.dom.jsonEditor = { value: "", classList: { remove() {} } };
+  const notices = [];
+  api.setOperationErrorStub(notices);
+
+  assert.doesNotThrow(() => api.openJsonDialog());
+  assert.doesNotThrow(() => api.exportScenario());
+  assert.doesNotThrow(() => api.exportHardwareInput());
+
+  assert.deepEqual(notices.map(([title]) => title), [
+    "JSON 场景生成失败",
+    "场景导出失败",
+    "硬件参数导出失败",
+  ]);
+  assert.ok(notices.every(([, error]) => error?.name === "Error" && error.message));
+});
+
+test("applying the real Qwen3.8 GGUF preset preserves operators, quantization, layer overrides, and unrelated inputs", () => {
+  const api = loadApp();
+  api.stubScenarioRendering();
+  const presetModel = JSON.parse(fs.readFileSync(path.join(
+    root,
+    "src/heterollm_sim/model_preset_data/qwen3_8_27b_iq3_s_iq4_xs.json",
+  ), "utf8"));
+  const scenario = api.createEmptyScenario();
+  scenario.hardware = {
+    schema_version: "4.0.0",
+    name: "preserved-hardware",
+    components: [{ schema_version: "4.0.0", component_id: "gpu0", kind: "gpu", ports: [], metadata: { keep: true } }],
+    links: [],
+    metadata: { keep: true },
+  };
+  scenario.workload.requests = [{ request_id: "preserved-request", prompt_tokens: 23, output_tokens: 7, metadata: { keep: true } }];
+  const originalHardware = JSON.parse(JSON.stringify(scenario.hardware));
+  const originalRequests = JSON.parse(JSON.stringify(scenario.workload.requests));
+  api.state.scenario = scenario;
+
+  api.applyPresetDetailToScenario({
+    preset: { id: "qwen3_8-27b-iq3-s-iq4-xs", support_level: "analytical_approximation" },
+    model: presetModel,
+  });
+
+  const appliedGraph = api.state.scenario.model.graph;
+  assert.equal(appliedGraph.operators.length, 229);
+  assert.equal(appliedGraph.operators.some((operator) => operator.operator_id === "lm_head"), true);
+  const layerGroups = appliedGraph.operators.filter((operator) => operator.op_kind === "layer_group");
+  assert.equal(layerGroups.length, 32);
+  const overriddenLayers = new Set(layerGroups.flatMap((operator) => Object.keys(operator.parameters.overrides || {})));
+  assert.equal(overriddenLayers.size, 64);
+  const quantizationTypes = new Set(layerGroups
+    .flatMap((operator) => Object.values(operator.parameters.overrides || {}))
+    .flatMap((override) => override.metadata?.gguf_tensor_bindings || [])
+    .map((binding) => binding.type));
+  assert.deepEqual(Array.from(quantizationTypes).sort(), ["F32", "IQ3_S", "IQ4_XS", "Q5_K"]);
+  assert.equal(appliedGraph.attributes.metadata.gguf_physical_weight_bytes, 14854119424);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.state.scenario.hardware)), originalHardware);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.state.scenario.workload.requests)), originalRequests);
+});
+
 test("failed stored scenario load preserves the draft and does not replace it with reference", async () => {
   const api = loadApp();
   const notices = [];
@@ -1084,6 +1199,78 @@ test("architecture preset load restores its button after success, cancellation, 
   }
 });
 
+test("GGUF catalog keeps pending entries visible and exposes only binding until ready", () => {
+  const api = loadApp();
+  const base = { id: "pending-model", name: "Pending Model", support_level: "out_of_domain", generation_allowed: false, source_status: "pending_gguf" };
+  const pending = api.modelPresetCardMarkup(base);
+  assert.match(pending, /待补齐 GGUF/);
+  assert.match(pending, /data-apply-preset="pending-model" disabled/);
+  assert.match(pending, /data-bind-gguf="pending-model"/);
+  assert.doesNotMatch(pending, /data-edit-gguf-preset/);
+  const ready = api.modelPresetCardMarkup({ ...base, source_status: "gguf_ready", support_level: "analytical_approximation", generation_allowed: true, quantization: "MOSTLY_Q8_0" });
+  assert.match(ready, /data-edit-gguf-preset="pending-model"/);
+  assert.match(ready, /MOSTLY_Q8_0/);
+  assert.doesNotMatch(ready, /data-apply-preset="pending-model" disabled/);
+});
+
+test("GGUF unsupported and non-generatable presets disable apply and edit", () => {
+  const api = loadApp();
+  const unsupported = api.modelPresetCardMarkup({
+    id: "unsupported-model", name: "Unsupported Model", support_level: "analytical_approximation",
+    generation_allowed: false, source_status: "gguf_unsupported", quantization: "MOSTLY_Q4_K_M",
+  });
+  assert.match(unsupported, /已有 GGUF，架构待适配/);
+  assert.match(unsupported, /data-apply-preset="unsupported-model" disabled/);
+  assert.match(unsupported, /data-edit-gguf-preset="unsupported-model" disabled/);
+});
+
+test("GGUF source facts show actual files and provenance as escaped text", () => {
+  const api = loadApp();
+  const markup = api.modelPresetCardMarkup({
+    id: "source-model", name: "Source Model", support_level: "analytical_approximation",
+    generation_allowed: true, source_status: "gguf_ready", quantization: "MOSTLY_Q8_0",
+    gguf_source: {
+      filename: "fallback.gguf", repo: "org/<model>", revision: "a".repeat(40), variant: "Instruct",
+      files: [
+        { filename: "weights-00001-of-00002.gguf", size_bytes: 12, sha256: "a".repeat(64), url: "https://example.test/1" },
+        { filename: "weights-00002-of-00002.gguf", size_bytes: 34, sha256: "b".repeat(64), url: "https://example.test/2" },
+      ],
+    },
+  });
+  assert.match(markup, /weights-00001-of-00002\.gguf/);
+  assert.match(markup, /weights-00002-of-00002\.gguf/);
+  assert.match(markup, /2 个分片/);
+  assert.match(markup, /org\/&lt;model&gt;/);
+  assert.match(markup, new RegExp("a".repeat(40)));
+  assert.match(markup, /Instruct/);
+  assert.match(markup, /MOSTLY_Q8_0/);
+  assert.doesNotMatch(markup, /fallback\.gguf/);
+  assert.doesNotMatch(markup, /<model>/);
+});
+
+test("GGUF local source displays only filename provenance that exists", () => {
+  const api = loadApp();
+  const markup = api.modelPresetCardMarkup({
+    id: "local-model", name: "Local Model", support_level: "analytical_approximation",
+    generation_allowed: true, source_status: "gguf_derived", gguf_source: { filename: "local.gguf", sha256: "c".repeat(64) },
+  });
+  assert.match(markup, /local\.gguf/);
+  assert.doesNotMatch(markup, /<dt>仓库<\/dt>/);
+  assert.doesNotMatch(markup, /<dt>仓库修订<\/dt>/);
+  assert.doesNotMatch(markup, /<dt>变体<\/dt>/);
+});
+
+test("model structure changes invalidate graph bindings without changing user runtime costs", () => {
+  const api = loadApp();
+  const scenario = {
+    workload: { metadata: { cuda_graph_structural_program: { contract: "old" }, cuda_graph_comparison_request_id: "old", cuda_graph_experiment: {}, llama_cpp_gpu_native_invocations: {}, llama_cpp_f32_hidden_storage: false, user_note: "keep" } },
+    profiles: { kernel: { graph_enabled: true, graph_launch_ns: 17 } },
+  };
+  api.invalidateModelStructureBindings(scenario);
+  assert.deepEqual(scenario.workload.metadata, { llama_cpp_f32_hidden_storage: false, user_note: "keep" });
+  assert.deepEqual(scenario.profiles.kernel, { graph_enabled: true, graph_launch_ns: 17 });
+});
+
 function historyHardware(preset) {
   return {
     schema_version: "4.0.0",
@@ -1109,6 +1296,27 @@ function prepareArchitectureHistory(api, preset, metadata = {}) {
   };
   api.state.topologyView = { layout: { positions: {}, bounds: {} }, viewport: { x: 0, y: 0, scale: 1 } };
 }
+
+test("hardware presets supply initial runtime policies and preserve explicitly edited policies", () => {
+  const api = loadApp();
+  prepareArchitectureHistory(api, "nvidia-rtx-5080");
+  api.stubArchitectureHistoryRendering();
+  const profiles = {
+    fusion: { flash_attention: true },
+    runtime: { gpu_controllers: { gpu0: { command_processor: { command_submission_latency_ns: 5000 } } } },
+  };
+  const detail = api.architecturePresetDetailItem({ preset: { id: "nvidia-rtx-5080" }, hardware: historyHardware("nvidia-rtx-5080"), profiles });
+  api.applyArchitecturePresetDetail(detail);
+  assert.equal(api.state.scenario.profiles.fusion.flash_attention, true);
+  assert.equal(api.state.scenario.profiles.runtime.gpu_controllers.gpu0.command_processor.command_submission_latency_ns, 5000);
+  api.state.scenario.profiles.fusion.flash_attention = false;
+  api.state.scenario.profiles.runtime.gpu_controllers.gpu0.command_processor.command_submission_latency_ns = 123;
+  api.applyArchitecturePresetDetail(detail);
+  assert.equal(api.state.scenario.profiles.fusion.flash_attention, false);
+  assert.equal(api.state.scenario.profiles.runtime.gpu_controllers.gpu0.command_processor.command_submission_latency_ns, 123);
+  assert.equal(profiles.fusion.flash_attention, true);
+  assert.equal(profiles.runtime.gpu_controllers.gpu0.command_processor.command_submission_latency_ns, 5000);
+});
 
 test("hardware import undo and redo restore the matching kernel without reverting workload edits", () => {
   for (const originalPreset of ["nvidia-rtx-5080", "nvidia-b200"]) {

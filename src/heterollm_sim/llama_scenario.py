@@ -689,6 +689,9 @@ def apply_llama_runtime_config(
             SOURCE_KEY, AUDIT_KEY, derive_llama_tensor_storage_contract,
             apply_llama_tensor_storage_contract,
         )
+        if SOURCE_KEY not in lowered.workload.metadata and SOURCE_KEY in lowered.model.metadata:
+            lowered = apply_llama_tensor_storage_contract(
+                lowered, lowered.model.metadata[SOURCE_KEY], f32_hidden_storage=False)
         if SOURCE_KEY not in lowered.workload.metadata:
             source_root = Path(__file__).resolve().parents[2] / "source/llama.cpp-semantic"
             try:

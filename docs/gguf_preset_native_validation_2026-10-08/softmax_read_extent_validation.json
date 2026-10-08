@@ -1,0 +1,484 @@
+{
+  "comparisons": [
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "shape": [
+        16,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "shape": [
+        24,
+        256,
+        4
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "shape": [
+        24,
+        256,
+        4
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "shape": [
+        24,
+        256,
+        4
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "shape": [
+        24,
+        256,
+        4
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "shape": [
+        14,
+        64,
+        2
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "shape": [
+        14,
+        64,
+        2
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "shape": [
+        14,
+        64,
+        2
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "shape": [
+        14,
+        64,
+        2
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "shape": [
+        28,
+        128,
+        4
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "shape": [
+        28,
+        128,
+        4
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "shape": [
+        28,
+        128,
+        4
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "shape": [
+        28,
+        128,
+        4
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "shape": [
+        32,
+        64,
+        8
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "shape": [
+        32,
+        64,
+        8
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "shape": [
+        32,
+        64,
+        8
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "shape": [
+        32,
+        64,
+        8
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "shape": [
+        32,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "shape": [
+        40,
+        128,
+        8
+      ],
+      "tokens": 2,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "shape": [
+        40,
+        128,
+        8
+      ],
+      "tokens": 512,
+      "prior": 0,
+      "identical_cost_demands_physical_accesses": false,
+      "old_error": "physical access exceeds declared allocation tensor:prefill.layer-000.rank000.source_f32.score:rank=0:tp_rank=0:pp_rank=0 generation 3 on gddr0.gddr_fabric"
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "shape": [
+        40,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 512,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "shape": [
+        40,
+        128,
+        8
+      ],
+      "tokens": 1,
+      "prior": 638,
+      "identical_cost_demands_physical_accesses": true,
+      "old_error": null
+    }
+  ]
+}

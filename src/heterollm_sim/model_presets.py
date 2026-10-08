@@ -4,13 +4,16 @@ The catalog intentionally stores layer patterns rather than thousands of expande
 layer dictionaries.  ``materialize_model_payload`` expands a supported preset into
 the ordinary :class:`ModelSpec` JSON shape used by the rest of the simulator.
 
-This module performs no network or filesystem I/O at import or request time.
-Upstream repository names and revisions are provenance, not runtime dependencies.
+Catalog listing performs no network or model-file I/O. Exact GGUF-derived
+presets load only their packaged structural JSON when requested; source weights
+and upstream repositories are not runtime dependencies.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from importlib.resources import files
+import json
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from .ir import (
@@ -31,14 +34,15 @@ EXACT = "exact"
 APPROXIMATION = "analytical_approximation"
 OUT_OF_DOMAIN = "out_of_domain"
 SUPPORT_LEVELS = frozenset({EXACT, APPROXIMATION, OUT_OF_DOMAIN})
-CATALOG_VERSION = "0.6"
-CATALOG_CUTOFF_AT = "2026-10-06T00:00:00Z"
+CATALOG_VERSION = "0.7"
+CATALOG_CUTOFF_AT = "2026-10-08T00:00:00Z"
 
 DIAGRAM_VERIFIED = "diagram_verified"
 CONFIG_VERIFIED_NO_OFFICIAL_DIAGRAM = "config_verified_no_official_diagram"
 UNPINNED_SOURCE = "unpinned_source"
 GATED_CONFIG = "gated_config"
 METADATA_ONLY_UNSUPPORTED_IR = "metadata_only_unsupported_ir"
+GGUF_TENSOR_METADATA = "gguf_tensor_metadata"
 ARCHITECTURE_EVIDENCE_STATUSES = frozenset(
     {
         DIAGRAM_VERIFIED,
@@ -46,6 +50,7 @@ ARCHITECTURE_EVIDENCE_STATUSES = frozenset(
         UNPINNED_SOURCE,
         GATED_CONFIG,
         METADATA_ONLY_UNSUPPORTED_IR,
+        GGUF_TENSOR_METADATA,
     }
 )
 
@@ -138,6 +143,7 @@ class PresetDefinition:
     mtp: MTPBranchSpec = field(default_factory=MTPBranchSpec)
     text_backbone_only: bool = False
     architecture_evidence: Optional[ArchitectureEvidence] = None
+    model_payload_resource: Optional[str] = None
 
     @property
     def layer_count(self) -> int:
@@ -495,9 +501,58 @@ _PRESETS: Tuple[PresetDefinition, ...] = (
 
 
 
+_PRESETS += (
+    PresetDefinition(
+        preset_id="qwen3_8-27b-iq3-s-iq4-xs",
+        name="Qwen3.8-27B",
+        family="Qwen3.5",
+        parameter_scale="27B",
+        source_repo="canhdu/Qwen3.8-27B-IQ3_S-FFN-IQ4_XS-GGUF",
+        source_revision="local-gguf",
+        license="unspecified",
+        openness="unspecified",
+        commercial_use="unspecified",
+        support_level=APPROXIMATION,
+        notes=(
+            "本机 GGUF 对照模型，文件名为 Qwen3.8-27B，实际架构为 qwen35。"
+            "保留 IQ3_S / IQ4_XS 等逐张量混合量化、物理权重字节及 64 层混合注意力结构；"
+            "与 2026-10-08 native 对照使用相同模型结构。"
+        ),
+        vocabulary_size=248320,
+        max_sequence_length=262144,
+        patterns=(),
+        architecture="qwen35",
+        layer_count_override=64,
+        model_kind_override="hybrid",
+        text_backbone_only=True,
+        coverage="text_backbone_only",
+        limitations=(
+            "Qwen3.8 是该 GGUF 的文件命名，不表示官方模型系列名称。",
+            "该预设仅包含文本主干；文件中另含的 MTP 层未在此主干图中启用。",
+            "包含模型结构与量化信息，不包含权重数据、Graph 实验绑定或 native 实测耗时。",
+        ),
+        architecture_evidence=ArchitectureEvidence(
+            status=GGUF_TENSOR_METADATA,
+            source_type="local_gguf_tensor_directory",
+            source_url="Qwen3.8-27B-IQ3_S-FFN-IQ4_XS.gguf",
+            notes="结构和逐张量量化来自已用于 native 对照的本机 GGUF 元数据。",
+            uncertainty="未声明为官方架构图；结构对应不代表仿真耗时预测准确。",
+        ),
+        model_payload_resource="qwen3_8_27b_iq3_s_iq4_xs.json",
+    ),
+)
+
 _BY_ID: Mapping[str, PresetDefinition] = {item.preset_id: item for item in _PRESETS}
 if len(_BY_ID) != len(_PRESETS):  # import-time invariant, never user input
     raise RuntimeError("duplicate model preset id")
+
+
+def _bundled_model_resource(definition: PresetDefinition) -> Optional[str]:
+    # Only built-in definitions can select packaged files. Cached imports
+    # cannot turn an arbitrary resource path into a filesystem read.
+    if definition == _BY_ID.get(definition.preset_id):
+        return definition.model_payload_resource
+    return None
 
 
 def _architecture_config_url(definition: PresetDefinition) -> str:
@@ -525,6 +580,8 @@ def _resolved_architecture_evidence(
 
 
 def _architecture_evidence(definition: PresetDefinition) -> ArchitectureEvidence:
+    if _bundled_model_resource(definition) and definition.architecture_evidence:
+        return definition.architecture_evidence
     config_url = _architecture_config_url(definition)
     if definition.access == "gated":
         conservative = CONSERVATIVE_DIAGRAM_OVERRIDES.get(definition.preset_id)
@@ -630,7 +687,7 @@ def _metadata(definition: PresetDefinition) -> Dict[str, Any]:
         "support_level": definition.support_level,
         "generation_allowed": (
             definition.support_level != OUT_OF_DOMAIN
-            and bool(definition.patterns)
+            and bool(definition.patterns or _bundled_model_resource(definition))
             and definition.layer_count > 0
         ),
         "modalities": list(definition.modalities),
@@ -651,6 +708,8 @@ def model_preset_metadata(definition: PresetDefinition) -> Dict[str, Any]:
 
 
 def _provenance_status(definition: PresetDefinition) -> str:
+    if _bundled_model_resource(definition):
+        return GGUF_TENSOR_METADATA
     if definition.source_sha and definition.config_hash:
         return "pinned_commit_and_config"
     if definition.source_sha:
@@ -771,6 +830,14 @@ def materialize_preset_definition(definition: PresetDefinition) -> Dict[str, Any
         raise UnsupportedPresetError(
             "模型预设 {!r} 超出当前可执行组件域，只能查看结构图，不能映射或仿真".format(definition.preset_id)
         )
+    if definition.model_payload_resource is not None:
+        resource_name = _bundled_model_resource(definition)
+        if resource_name is None:
+            raise UnsupportedPresetError("只有内置模型预设可以读取打包的模型结构资源")
+        from .config import model_from_dict
+
+        payload = json.loads(files("heterollm_sim").joinpath("model_preset_data", resource_name).read_text(encoding="utf-8"))
+        return to_primitive(model_from_dict(payload))
     if not definition.patterns:
         raise UnsupportedPresetError(
             "模型预设 {!r} 没有可生成的层模式".format(definition.preset_id)

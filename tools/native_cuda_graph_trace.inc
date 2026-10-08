@@ -23,6 +23,94 @@ static FILE * heterollm_graph_trace_file() {
 static thread_local uint64_t heterollm_graph_call_id = 0;
 static std::mutex heterollm_graph_trace_mutex;
 
+// Capture-frontier introspection does not submit kernels or change the graph.
+// Record the source operation/fusion owning each emitted CUDA chain segment;
+// GGML nodes and CUDA nodes are deliberately not assumed to be one-to-one.
+struct heterollm_graph_frontier {
+    cudaGraph_t graph = nullptr;
+    std::vector<cudaGraphNode_t> dependencies;
+    bool active = false;
+};
+
+static heterollm_graph_frontier heterollm_graph_capture_frontier(cudaStream_t stream) {
+    heterollm_graph_frontier result;
+    if (std::getenv("HETEROLLM_CUDA_GRAPH_CAPTURE_ONLY") == nullptr) return result;
+    cudaStreamCaptureStatus status;
+    unsigned long long id = 0;
+    const cudaGraphNode_t * dependencies = nullptr;
+    size_t count = 0;
+    CUDA_CHECK(cudaStreamGetCaptureInfo_v2(stream, &status, &id, &result.graph, &dependencies, &count));
+    if (status != cudaStreamCaptureStatusActive || !result.graph)
+        GGML_ABORT("source dispatch ownership requires active stream capture");
+    if (count) result.dependencies.assign(dependencies, dependencies + count);
+    result.active = true;
+    return result;
+}
+
+static void heterollm_graph_trace_string(FILE * file, const char * value) {
+    std::fputc('"', file);
+    for (const unsigned char * p = reinterpret_cast<const unsigned char *>(value); *p; ++p) {
+        if (*p == '"' || *p == '\\') std::fprintf(file, "\\%c", *p);
+        else if (*p < 0x20) std::fprintf(file, "\\u%04x", unsigned(*p));
+        else std::fputc(*p, file);
+    }
+    std::fputc('"', file);
+}
+
+static void heterollm_graph_trace_tensor(FILE * file, const ggml_tensor * tensor) {
+    std::fprintf(file, "{\"name\":");
+    heterollm_graph_trace_string(file, tensor->name);
+    std::fprintf(file, ",\"op\":");
+    heterollm_graph_trace_string(file, ggml_op_name(tensor->op));
+    std::fprintf(file, ",\"type\":");
+    heterollm_graph_trace_string(file, ggml_type_name(tensor->type));
+    std::fprintf(file, ",\"tensor\":\"%p\",\"data\":\"%p\",\"ne\":[", (const void *) tensor, tensor->data);
+    for (int j = 0; j < GGML_MAX_DIMS; ++j) std::fprintf(file, "%s%lld", j ? "," : "", (long long) tensor->ne[j]);
+    std::fprintf(file, "],\"nb\":[");
+    for (int j = 0; j < GGML_MAX_DIMS; ++j) std::fprintf(file, "%s%llu", j ? "," : "", (unsigned long long) tensor->nb[j]);
+    std::fprintf(file, "]}");
+}
+
+static void heterollm_graph_trace_dispatch(ggml_backend_cuda_context * ctx, ggml_cgraph * cgraph,
+        int first, int last, const heterollm_graph_frontier & before) {
+    if (!before.active) return;
+    const auto after = heterollm_graph_capture_frontier(ctx->stream());
+    if (!after.active || after.graph != before.graph || first < 0 || last < first || last >= cgraph->n_nodes)
+        GGML_ABORT("source dispatch ownership crossed a capture boundary");
+    FILE * file = heterollm_graph_trace_file();
+    if (!file) GGML_ABORT("source dispatch ownership requires trace output");
+    std::lock_guard<std::mutex> lock(heterollm_graph_trace_mutex);
+    std::fprintf(file, "{\"kind\":\"source_dispatch\",\"schema\":\"heterollm.cuda-source-dispatch/v1\","
+                 "\"source_revision\":\"d3146f2b56c2db4711ac8391871c9e529d1946d7\",\"capture_only\":true,"
+                 "\"call_id\":%llu,\"first_ggml_index\":%d,\"last_ggml_index\":%d,\"before\":[",
+                 (unsigned long long) heterollm_graph_call_id, first, last);
+    for (size_t j = 0; j < before.dependencies.size(); ++j)
+        std::fprintf(file, "%s\"%p\"", j ? "," : "", (void *) before.dependencies[j]);
+    std::fprintf(file, "],\"after\":[");
+    for (size_t j = 0; j < after.dependencies.size(); ++j)
+        std::fprintf(file, "%s\"%p\"", j ? "," : "", (void *) after.dependencies[j]);
+    std::fprintf(file, "],\"source_nodes\":[");
+    for (int i = first; i <= last; ++i) {
+        const auto * node = cgraph->nodes[i];
+        if (i != first) std::fputc(',', file);
+        std::fprintf(file, "{\"ggml_index\":%d,\"output\":", i);
+        heterollm_graph_trace_tensor(file, node);
+        std::fprintf(file, ",\"sources\":[");
+        bool comma = false;
+        for (int j = 0; j < GGML_MAX_SRC; ++j) {
+            if (!node->src[j]) continue;
+            if (comma) std::fputc(',', file);
+            comma = true;
+            std::fprintf(file, "{\"slot\":%d,\"tensor\":", j);
+            heterollm_graph_trace_tensor(file, node->src[j]);
+            std::fputc('}', file);
+        }
+        std::fprintf(file, "]}");
+    }
+    std::fprintf(file, "]}\n");
+    std::fflush(file);
+}
+
 static void heterollm_graph_trace_event(const char * event, const void * key) {
     FILE * file = heterollm_graph_trace_file();
     if (!file) return;

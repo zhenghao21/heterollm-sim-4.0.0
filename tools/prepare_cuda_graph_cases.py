@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import replace
 import json
 from pathlib import Path
+import re
 
 from heterollm_sim.config import HostOutputContract, SamplingPolicy, scenario_from_dict
 from heterollm_sim.cuda_graph_lifecycle import SOURCE_REVISION
@@ -51,14 +52,17 @@ def apply_configured_output_contract(scenario, source_revision):
             }}))
 
 
-def attach_graph_experiment(output, slug, fragment_path, costs_path):
+def attach_graph_experiment(output, slug, fragment_path, costs_path, *, base_scenario=None):
     """Build matched on/off inputs from explicit source-compiled structure."""
+    if not isinstance(slug, str) or re.fullmatch(r"[a-z0-9][a-z0-9_-]*", slug) is None:
+        raise ValueError("case ID must contain only lowercase letters, digits, underscores or hyphens")
     from heterollm_sim.runtime_residual import load_runtime_structure_measurements
     from heterollm_sim.serde import to_primitive
     fragment = json.loads(fragment_path.read_text(encoding='utf-8'))
     costs = load_runtime_structure_measurements(costs_path)
     raw_costs = to_primitive(costs)
-    base = json.loads((output / f'scenario_{slug}_512_128.json').read_text(encoding='utf-8'))
+    base_path = base_scenario if base_scenario is not None else output / f'scenario_{slug}_512_128.json'
+    base = json.loads(base_path.read_text(encoding='utf-8'))
     for mode in ('off', 'on'):
         payload = deepcopy(base)
         payload['name'] = f'frontend-cuda-graph/{slug}/{mode}/512-128'
@@ -112,14 +116,16 @@ def main():
     parser.add_argument('--output', type=Path, default=ROOT / 'docs/cuda_graph_validation_2026-10-08')
     parser.add_argument('--source-root', type=Path, default=Path('F:/codex_project/_runtime_sources/llama.cpp'))
     parser.add_argument('--server', type=Path)
-    parser.add_argument('--attach-case', choices=[slug for slug, _ in CASES])
+    parser.add_argument('--attach-case', help='case ID of an existing scenario_<ID>_512_128.json')
+    parser.add_argument('--base-scenario', type=Path, help='explicit frontend-exported base for --attach-case')
     parser.add_argument('--program-fragment', type=Path)
     parser.add_argument('--experimental-costs', type=Path)
     args = parser.parse_args()
     if args.attach_case:
         if args.program_fragment is None or args.experimental_costs is None:
             parser.error('--attach-case requires --program-fragment and --experimental-costs')
-        attach_graph_experiment(args.output, args.attach_case, args.program_fragment, args.experimental_costs)
+        attach_graph_experiment(args.output, args.attach_case, args.program_fragment, args.experimental_costs,
+                                base_scenario=args.base_scenario)
         return
     server = args.server or args.source_root / 'build-native-5080-sm120/bin/llama-server.exe'
     preparation = prepare(args.output, args.source_root, server, CASES)

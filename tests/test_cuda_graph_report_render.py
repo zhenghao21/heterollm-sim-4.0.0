@@ -74,3 +74,13 @@ def test_host_summary_refuses_an_e2e_interval_disguised_as_host_service(tmp_path
         "end_to_end_sensitivity_computed": True})
     with pytest.raises(ValueError, match="scope mismatch"):
         renderer.host_cost_summary(path)
+
+
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), True, None, "100"])
+def test_native_metrics_rejects_invalid_sample_even_when_median_would_be_valid(tmp_path, value):
+    path = tmp_path / "native.json"
+    data = native("off", [100] * 5)
+    data["samples"][0]["engine_ttft_ns"] = value
+    write(path, data)
+    with pytest.raises(ValueError, match="positive and finite"):
+        renderer.native_metrics(path, "off")

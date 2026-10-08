@@ -1,0 +1,197 @@
+{
+  "phase": "prepared",
+  "updated_utc": "2026-10-08T11:45:37.108181+00:00",
+  "target_llm_latency_used": false,
+  "cases": [
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_0_6b_f16_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_0_6b_f16\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_0_6b_f16\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_0_6b_f16\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "qwen3_1_7b_q8_0",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_1_7b_q8_0_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_1_7b_q8_0\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_1_7b_q8_0\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_1_7b_q8_0\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "qwen3_4b_q4_k_m",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_4b_q4_k_m_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_4b_q4_k_m\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_4b_q4_k_m\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_4b_q4_k_m\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "qwen3_8b_q4_k_m",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_8b_q4_k_m_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_8b_q4_k_m\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_8b_q4_k_m\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_8b_q4_k_m\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_8_27b_mixed_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_8_27b_mixed\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_8_27b_mixed\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_8_27b_mixed\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen2_5_0_5b_q4_k_m_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen2_5_0_5b_q4_k_m\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen2_5_0_5b_q4_k_m\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen2_5_0_5b_q4_k_m\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen2_5_7b_q4_k_m_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen2_5_7b_q4_k_m\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen2_5_7b_q4_k_m\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen2_5_7b_q4_k_m\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_llama3_2_1b_q4_k_m_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\llama3_2_1b_q4_k_m\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\llama3_2_1b_q4_k_m\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\llama3_2_1b_q4_k_m\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "llama3_1_8b_q4_k_m",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_llama3_1_8b_q4_k_m_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\llama3_1_8b_q4_k_m\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\llama3_1_8b_q4_k_m\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\llama3_1_8b_q4_k_m\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    },
+    {
+      "case_id": "qwen3_14b_q4_k_m",
+      "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\gguf_preset_native_validation_2026-10-08\\base\\scenario_qwen3_14b_q4_k_m_512_128.json",
+      "fragment": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_14b_q4_k_m\\program_fragment.json",
+      "dry_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_14b_q4_k_m\\dry.jsonl",
+      "capture_path": "F:\\codex_project\\_scratch\\37-gguf-preset-native-validation\\structures\\qwen3_14b_q4_k_m\\capture.jsonl",
+      "structural_calls": 386,
+      "source_lifecycle_events_without_time_eviction": {
+        "ordinary_submit": 7,
+        "capture": 4,
+        "instantiate": 2,
+        "update": 3,
+        "first_launch_submit": 2,
+        "destroy_graph": 3,
+        "update_failure": 1,
+        "destroy_exec": 1,
+        "replay_submit": 377
+      }
+    }
+  ]
+}

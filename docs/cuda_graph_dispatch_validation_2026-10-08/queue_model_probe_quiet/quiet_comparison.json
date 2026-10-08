@@ -1,0 +1,288 @@
+{
+  "schema": "heterollm.cuda-queue-low-cpu-replication/v1",
+  "prediction_qualified": false,
+  "target_llm_latency_used": false,
+  "plan_bytes_equal": true,
+  "fitted_model_equal": true,
+  "parameter_refit": false,
+  "case_count": 31,
+  "repetitions": 21,
+  "started_utc": "2026-10-08T16:04:21.408653+00:00",
+  "finished_utc": "2026-10-08T16:04:32.084097+00:00",
+  "started_beijing": "2026-10-09T00:04:21.408653+08:00",
+  "finished_beijing": "2026-10-09T00:04:32.084097+08:00",
+  "cpu_case_mean_percent_range": [
+    2.8454545454545457,
+    14.25
+  ],
+  "cpu_sample_percent_range": [
+    0.0,
+    18.5
+  ],
+  "gpu_background": "No known native/model/microbenchmark compute process was seen in the preflight process listing, but GPU utilization remained about25% (about19W). The full activity attribution is not established; this is low CPU load, not a GPU-idle or zero-contention experiment.",
+  "holdout_comparison": [
+    {
+      "case_id": "threshold_holdout_500",
+      "split": "holdout_threshold",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 456704,
+        "predicted_span_ns": 448736.0,
+        "span_error_percent": -1.7446748878923724,
+        "observed_gap_ns": 371648,
+        "predicted_gap_ns": 363808.0,
+        "gap_error_percent": -2.109522989495438,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.00828157349896
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 450464,
+        "predicted_span_ns": 448736.0,
+        "span_error_percent": -0.3836044611778111,
+        "observed_gap_ns": 366080,
+        "predicted_gap_ns": 364320.0,
+        "gap_error_percent": -0.48076923076922906,
+        "regular_edge_cadence_agreement_within_64ns_percent": 91.42857142857143
+      }
+    },
+    {
+      "case_id": "threshold_holdout_1500",
+      "split": "holdout_threshold",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 726848,
+        "predicted_span_ns": 709824.0,
+        "span_error_percent": -2.3421678260103884,
+        "observed_gap_ns": 515104,
+        "predicted_gap_ns": 497920.0,
+        "gap_error_percent": -3.336025346337823,
+        "regular_edge_cadence_agreement_within_64ns_percent": 93.37474120082815
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 686304,
+        "predicted_span_ns": 709824.0,
+        "span_error_percent": 3.427052734648206,
+        "observed_gap_ns": 474688,
+        "predicted_gap_ns": 498016.0,
+        "gap_error_percent": 4.914385870297955,
+        "regular_edge_cadence_agreement_within_64ns_percent": 94.03726708074534
+      }
+    },
+    {
+      "case_id": "threshold_holdout_3000",
+      "split": "holdout_threshold",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 957792,
+        "predicted_span_ns": 971424.0,
+        "span_error_percent": 1.4232735291169751,
+        "observed_gap_ns": 553600,
+        "predicted_gap_ns": 567264.0,
+        "gap_error_percent": 2.4682080924855576,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.09109730848861
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 907968,
+        "predicted_span_ns": 971424.0,
+        "span_error_percent": 6.988792556565859,
+        "observed_gap_ns": 504000,
+        "predicted_gap_ns": 567424.0,
+        "gap_error_percent": 12.584126984126986,
+        "regular_edge_cadence_agreement_within_64ns_percent": 93.04347826086956
+      }
+    },
+    {
+      "case_id": "threshold_holdout_7000",
+      "split": "holdout_threshold",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 1233152,
+        "predicted_span_ns": 1235520.0,
+        "span_error_percent": 0.19202823334025787,
+        "observed_gap_ns": 316992,
+        "predicted_gap_ns": 319296.0,
+        "gap_error_percent": 0.726832222895224,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.38095238095238
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 1191040,
+        "predicted_span_ns": 1235520.0,
+        "span_error_percent": 3.734551316496515,
+        "observed_gap_ns": 274720,
+        "predicted_gap_ns": 319392.0,
+        "gap_error_percent": 16.26092020966803,
+        "regular_edge_cadence_agreement_within_64ns_percent": 85.92132505175984
+      }
+    },
+    {
+      "case_id": "nodes_holdout_33",
+      "split": "holdout_nodes",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 104576,
+        "predicted_span_ns": 98672.0,
+        "span_error_percent": -5.645654834761327,
+        "observed_gap_ns": 74144,
+        "predicted_gap_ns": 68272.0,
+        "gap_error_percent": -7.919723780750976,
+        "regular_edge_cadence_agreement_within_64ns_percent": 95.07389162561576
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 98752,
+        "predicted_span_ns": 98672.0,
+        "span_error_percent": -0.08101101749837802,
+        "observed_gap_ns": 68288,
+        "predicted_gap_ns": 68208.0,
+        "gap_error_percent": -0.11715089034676218,
+        "regular_edge_cadence_agreement_within_64ns_percent": 94.25287356321839
+      }
+    },
+    {
+      "case_id": "nodes_holdout_255",
+      "split": "holdout_nodes",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 1035552,
+        "predicted_span_ns": 902336.0,
+        "span_error_percent": -12.864250177683012,
+        "observed_gap_ns": 803232,
+        "predicted_gap_ns": 669664.0,
+        "gap_error_percent": -16.628819568941477,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.19461697722568
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 907488,
+        "predicted_span_ns": 902304.0,
+        "span_error_percent": -0.5712472231037768,
+        "observed_gap_ns": 675744,
+        "predicted_gap_ns": 670784.0,
+        "gap_error_percent": -0.7340057773358,
+        "regular_edge_cadence_agreement_within_64ns_percent": 90.99378881987577
+      }
+    },
+    {
+      "case_id": "geometry_holdout",
+      "split": "holdout_geometry",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 467552,
+        "predicted_span_ns": 449024.0,
+        "span_error_percent": -3.9627677777017367,
+        "observed_gap_ns": 346752,
+        "predicted_gap_ns": 328224.0,
+        "gap_error_percent": -5.343300110741966,
+        "regular_edge_cadence_agreement_within_64ns_percent": 91.30434782608695
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 448832,
+        "predicted_span_ns": 448992.0,
+        "span_error_percent": 0.035648082133188375,
+        "observed_gap_ns": 328864,
+        "predicted_gap_ns": 328800.0,
+        "gap_error_percent": -0.01946093217864986,
+        "regular_edge_cadence_agreement_within_64ns_percent": 91.92546583850931
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_0",
+      "split": "holdout_payload",
+      "concurrent_cpu": {
+        "status": "unsupported_parameter_extent",
+        "reason": "Training does not identify a packet-period rule for this new argument footprint; no nearest-family fallback."
+      },
+      "low_cpu": {
+        "status": "unsupported_parameter_extent",
+        "reason": "Training does not identify a packet-period rule for this new argument footprint; no nearest-family fallback."
+      }
+    },
+    {
+      "case_id": "payload_holdout_1024_1000",
+      "split": "holdout_payload",
+      "concurrent_cpu": {
+        "status": "unsupported_parameter_extent",
+        "reason": "Training does not identify a packet-period rule for this new argument footprint; no nearest-family fallback."
+      },
+      "low_cpu": {
+        "status": "unsupported_parameter_extent",
+        "reason": "Training does not identify a packet-period rule for this new argument footprint; no nearest-family fallback."
+      }
+    },
+    {
+      "case_id": "mixed_alternating_holdout",
+      "split": "holdout_mixed_body",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 821728,
+        "predicted_span_ns": 842304.0,
+        "span_error_percent": 2.503991588457488,
+        "observed_gap_ns": 337600,
+        "predicted_gap_ns": 358048.0,
+        "gap_error_percent": 6.056872037914696,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.17391304347827
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 762112,
+        "predicted_span_ns": 842304.0,
+        "span_error_percent": 10.522337924084656,
+        "observed_gap_ns": 278080,
+        "predicted_gap_ns": 358432.0,
+        "gap_error_percent": 28.895281933256612,
+        "regular_edge_cadence_agreement_within_64ns_percent": 94.28571428571429
+      }
+    },
+    {
+      "case_id": "mixed_shuffled_holdout",
+      "split": "holdout_mixed_body",
+      "concurrent_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 665920,
+        "predicted_span_ns": 652128.0,
+        "span_error_percent": -2.0711196540124988,
+        "observed_gap_ns": 450912,
+        "predicted_gap_ns": 436960.0,
+        "gap_error_percent": -3.094173585976867,
+        "regular_edge_cadence_agreement_within_64ns_percent": 93.08488612836439
+      },
+      "low_cpu": {
+        "status": "candidate_evaluated_not_qualified",
+        "observed_span_ns": 616352,
+        "predicted_span_ns": 652128.0,
+        "span_error_percent": 5.804475364726658,
+        "observed_gap_ns": 401632,
+        "predicted_gap_ns": 437024.0,
+        "gap_error_percent": 8.812046848856658,
+        "regular_edge_cadence_agreement_within_64ns_percent": 92.83643892339545
+      }
+    }
+  ],
+  "observer_controls": [
+    {
+      "extra_parameter_bytes": 0,
+      "observer_off_event_ns": 416064,
+      "observer_on_event_ns": 446144,
+      "difference_percent": 7.229656975849874,
+      "matched_environment_qualified": false
+    },
+    {
+      "extra_parameter_bytes": 256,
+      "observer_off_event_ns": 412640,
+      "observer_on_event_ns": 454208,
+      "difference_percent": 10.073671965878251,
+      "matched_environment_qualified": false
+    }
+  ],
+  "findings": [
+    "Long-chain255-node error changed from-12.86% to-0.57% without parameter changes; CPU environment materially affected that failure.",
+    "Alternating and shuffled mixed-body error is now+10.52%/+5.80%, so low CPU contention does not establish general queue-model correctness.",
+    "Observer on/off device-event medians differ+7.23%/+10.07%; separate-process controls do not isolate observer effect from all run-order/graphics variation, and cannot prove negligible perturbation.",
+    "1056-byte CUDA argument extent remains explicitly unsupported; no fallback profile was used.",
+    "Do not deploy or refit against these holdouts."
+  ]
+}

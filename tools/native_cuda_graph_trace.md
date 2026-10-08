@@ -71,6 +71,13 @@ binary's identity: use the corresponding instrumented build.
 base scenario. It reads metadata/tensor geometry, checks the complete model
 graph against the scenario, then runs separate **dry** and **capture-only**
 processes. It never reads `native_*.json`, live events or model latency data.
+For a catalog preset it additionally checks the original catalog inventory
+against the complete local tensor directory and metadata, and reads the weight
+file to verify its existing source identity. This identity check does not run
+inference. Edited/derived presets cannot be paired with the unchanged weights.
+Catalog display names and remote/local source locations are normalized only
+for this import comparison; file geometry and every tensor binding remain
+checked, and the produced contract still contains the authored scenario.
 
 Example, from this repository's root:
 
@@ -92,7 +99,8 @@ model/config/request contract into both newly generated JSONL files and the
 fragment. A changed scenario requires recompilation, not relabeling old files.
 The fragment references those files by path; it is not a portable bundle.
 
-Supported scope is Qwen3/Qwen35 decoder text models, one CUDA GPU, one sequence,
+Supported scope is dense Qwen2/Qwen2.5, Qwen3, Llama and Qwen35 decoder text
+models, one CUDA GPU, one sequence,
 no MTP, prompt 1–512 tokens, positive output length and
 `prompt + output <= context`. Context must be a multiple of 256 to match native
 padding. Explicit valid GGUF BOS and EOS IDs are required rather than guessed
@@ -103,7 +111,11 @@ device is the sole device exposed to each child. Unsupported inputs fail.
 The current bundled producer also checks `nvidia-smi` identity and supports
 only the RTX 5080/sm120 scenario profile on a machine with one physical RTX 5080,
 compute capability 12.0 and driver 617.14. Multi-GPU ordinal mapping is not
-qualified by this tool. A different GPU, driver, or simulated hardware profile
+qualified by this tool. Qwen2 and Llama use the pinned runtime's
+`src/models/qwen2.cpp` and `src/models/llama.cpp` graph constructors and the same
+instrumented CUDA backend; they are not mapped to a Qwen3 surrogate. Llama MoE
+variants are rejected even when their GGUF architecture ID is `llama`.
+A different GPU, driver, or simulated hardware profile
 requires a separately supported build/dispatch contract; it is rejected here.
 
 `prepare_cuda_graph_cases.py` now declares the pinned server's F32 host-logit
@@ -112,7 +124,11 @@ min-p .05, min-keep 0. Preparing those settings no longer requires a completed
 native measurement. Later paired validation must still check the observed
 server settings. Its existing `--attach-case`, `--program-fragment`, and
 `--experimental-costs` options attach structure and independent runtime costs;
-that local report utility's case list remains the five validation cases.
+the default preparation list remains the original five validation cases.
+`--attach-case` also accepts a new case ID when its matching
+`scenario_<ID>_512_128.json` already exists, so frontend-exported Qwen2.5 and
+Llama cases use the same strict attachment path. `--base-scenario` supplies an
+explicit frontend export path when base files are kept in a separate directory.
 
 ## Harness invocation and mode semantics
 
@@ -191,6 +207,26 @@ types, pitches, contexts and device ordinals. `src_device`/`dst_device` are
 pointer addresses, not device numbers. Driver queries handle cuBLAS kernels
 whose functions cannot be resolved by the runtime query. GGML node count and
 captured CUDA node count are different quantities.
+
+The updated capture exporter also emits `source_dispatch` records with schema
+`heterollm.cuda-source-dispatch/v1`. It reads the active capture frontier before
+and after each `ggml_cuda_try_fuse` / `ggml_cuda_compute_forward` dispatch. These
+queries neither execute kernels nor add CUDA nodes. Each record contains the
+inclusive GGML index range (including fused/view nodes), tensor names,
+operations, types, shapes, strides, input slots and process-local identities.
+The `before` / `after` CUDA frontiers determine the actual emitted nodes from
+the complete typed chain. A group may own zero, one, or several CUDA nodes;
+the parser never substitutes the number of simulated operations for this count.
+
+`heterollm_sim.cuda_graph_dispatch.iter_source_dispatches` validates these
+records and yields each call without retaining previous calls. The convenience
+`load_source_dispatches` retains all calls. Both reject missing ownership,
+overlapping GGML ranges, incomplete tensor descriptors, unmatched frontiers,
+and uncovered CUDA nodes. Older diagnostic binaries do not emit this evidence;
+they cannot supply source ownership for device-dispatch prediction. Rebuild the
+diagnostic bundle with the updated patch/include to obtain it. Ownership does
+not measure kernel execution time or justify splitting a modeled body's work
+proportionally across several native kernels.
 
 Live `event` records are observed validation outcomes. Neither these outcomes
 nor native timing values may become prediction inputs. Successful structure

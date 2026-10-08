@@ -1,0 +1,26 @@
+{
+  "schema": "heterollm.http-observer-disconnect-review/v1",
+  "discovery_stage": "post-run service stderr inspection",
+  "observed_polling_disconnects": 2,
+  "service_ports": [8800, 8809],
+  "stderr_sources": [
+    {"path": "F:/codex_project/_scratch/37-graph-dispatch-validation/ui-8800.err.log", "bytes": 4124, "time_utc": "2026-10-08T14:31:51.383292+00:00"},
+    {"path": "F:/codex_project/_scratch/37-graph-dispatch-validation/ui-8809.err.log", "bytes": 4124, "time_utc": "2026-10-08T14:32:03.915156+00:00"}
+  ],
+  "exception": "ConnectionAbortedError: WinError 10053",
+  "trigger": "The browser closed after submission while an HTTP response was being written.",
+  "previous_behavior": "The response write exception was classified as internal_error, followed by an attempted HTTP 500 write to the disconnected socket.",
+  "completed_simulations": 20,
+  "failed_simulations": 0,
+  "fix_stage": "after all 20 simulations completed",
+  "matrix_rerun_after_http_fix": false,
+  "numerical_results_modified": false,
+  "fix_scope": "Catch BrokenPipeError, ConnectionResetError and ConnectionAbortedError only around response header/body writes, then set close_connection=true. Do not cancel or mutate backend jobs. Preserve unrelated I/O failures and backend connection failures.",
+  "validation": {
+    "method": "targeted HTTP handler tests plus related capacity diagnostics and model-input protocol tests",
+    "passed_tests": 14,
+    "new_regression_file": "../../tests/test_web_disconnected_response.py",
+    "coverage": ["header disconnect", "body disconnect", "normal response", "unrelated I/O failure", "backend connection failure"]
+  },
+  "implementation": "../../src/heterollm_sim/web.py"
+}

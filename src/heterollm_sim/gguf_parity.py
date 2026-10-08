@@ -1,13 +1,14 @@
 """Minimal GGUF metadata reader and native/simulator parity checks."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path
 import struct
 import os
 from typing import Any, BinaryIO, Mapping
 import json
+import re
 
 
 class GGUFError(ValueError):
@@ -18,7 +19,7 @@ class GGUFError(ValueError):
 # parser change must invalidate an old directory rather than silently reusing
 # geometry produced by a different parser.
 GGUF_METADATA_CACHE_SCHEMA = "gguf-metadata-cache/v1"
-GGUF_METADATA_PARSER_SOURCE = "heterollm_sim.gguf_parity:gguf-directory-parser/v1"
+GGUF_METADATA_PARSER_SOURCE = "heterollm_sim.gguf_parity:gguf-directory-parser/v2"
 GGUF_MODEL_PRESET_SCHEMA = "heterollm.gguf-model-preset/v1"
 
 
@@ -69,6 +70,8 @@ class GGUFTensor:
     block_size: int | None
     n_bytes: int | None
     offset: int
+    source_path: str = ""
+    physical_offset: int | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,7 @@ class GGUFMetadata:
     file_type: int | None
     metadata: Mapping[str, Any]
     tensor_directory: tuple[GGUFTensor, ...] = ()
+    sources: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def n_layer_nextn(self) -> int:
@@ -113,7 +117,8 @@ class GGUFMetadata:
                 "vocab_size": self.vocab_size, "context_length": self.context_length,
                 "quantization": self.quantization, "file_type": self.file_type,
                 "metadata": dict(self.metadata),
-                "tensor_directory": [t.__dict__ for t in self.tensor_directory]}
+                "tensor_directory": [t.__dict__ for t in self.tensor_directory],
+                "sources": [dict(source) for source in self.sources]}
 
 
 class _HashedReadStream:
@@ -135,6 +140,19 @@ class _HashedReadStream:
 
     def fileno(self) -> int:
         return self.raw.fileno()
+
+
+class _ValueDigestStream:
+    """Retain equality evidence for large metadata arrays without exporting them."""
+
+    def __init__(self, raw):
+        self.raw = raw
+        self.digest = sha256()
+
+    def read(self, size=-1):
+        data = self.raw.read(size)
+        self.digest.update(data)
+        return data
 
 
 def _read_string(f: BinaryIO) -> str:
@@ -170,13 +188,15 @@ def _read_value(f: BinaryIO, value_type: int) -> Any:
         # Keep exported metadata bounded; token types/scores can contain one
         # entry per vocabulary item and are not needed for parity.
         if count > 4096:
+            values = _ValueDigestStream(f)
             for _ in range(count):
-                _read_value(f, subtype)
-            return {"count": count, "truncated": True}
+                _read_value(values, subtype)
+            return {"count": count, "truncated": True, "value_sha256": values.digest.hexdigest()}
         if subtype == 8:
+            values = _ValueDigestStream(f)
             for _ in range(count):
-                _read_string(f)
-            return {"count": count}
+                _read_string(values)
+            return {"count": count, "value_sha256": values.digest.hexdigest()}
         return [_read_value(f, subtype) for _ in range(count)]
     raise GGUFError(f"unsupported GGUF metadata type {value_type}")
 
@@ -188,108 +208,92 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
-def _read_gguf_metadata(
-    path: str | Path,
-    *,
-    hash_payload: bool = True,
-    allow_unknown_types: bool = False,
-) -> GGUFMetadata:
-    p = Path(path)
-    with p.open("rb") as raw:
-        f = _HashedReadStream(raw) if hash_payload else raw
-        initial_stat = os.fstat(f.fileno())
-        head = f.read(24)
-        if len(head) != 24 or head[:4] != b"GGUF":
-            raise GGUFError(f"not a GGUF file: {p}")
-        version, tensor_count, kv_count = struct.unpack("<IQQ", head[4:])
-        metadata: dict[str, Any] = {}
-        for _ in range(kv_count):
-            key = _read_string(f)
-            type_raw = f.read(4)
-            if len(type_raw) != 4:
-                raise GGUFError("truncated GGUF metadata type")
-            metadata[key] = _read_value(f, struct.unpack("<I", type_raw)[0])
-        alignment = _as_int(metadata.get("general.alignment")) or 32
-        directory = []
-        names_seen: set[str] = set()
-        for _ in range(int(tensor_count)):
-            name = _read_string(f)
-            if name in names_seen:
-                raise GGUFError(f"duplicate GGUF tensor name: {name}")
-            names_seen.add(name)
-            raw = f.read(4)
-            if len(raw) != 4:
-                raise GGUFError("truncated GGUF tensor rank")
-            (rank,) = struct.unpack("<I", raw)
-            if rank > 8:
-                raise GGUFError("invalid GGUF tensor rank")
-            dims_raw = f.read(8 * rank)
-            type_raw = f.read(4); offset_raw = f.read(8)
-            if len(dims_raw) != 8 * rank or len(type_raw) != 4 or len(offset_raw) != 8:
-                raise GGUFError("truncated GGUF tensor directory")
-            dims = tuple(int(x) for x in struct.unpack("<" + "Q" * rank, dims_raw))
-            type_id = struct.unpack("<I", type_raw)[0]
-            offset = struct.unpack("<Q", offset_raw)[0]
-            spec = _TENSOR_TYPES.get(type_id)
-            if spec is None:
-                if not allow_unknown_types:
-                    raise GGUFError(f"unsupported GGUF tensor type {type_id}")
-                directory.append(GGUFTensor(
-                    name, dims, type_id, f"GGML_TYPE_{type_id}", None, None, offset
-                ))
-                continue
-            type_name, block_size, block_bytes = spec
-            elements = 1
-            for dim in dims: elements *= dim
-            if block_size > 1 and elements % block_size:
-                raise GGUFError(
-                    f"GGUF tensor {name} has {elements} elements, not divisible by {block_size}"
-                )
-            n_bytes = (elements // block_size) * block_bytes
-            directory.append(GGUFTensor(name, dims, type_id, type_name, block_size, n_bytes, offset))
-        data_start = ((f.tell() + alignment - 1) // alignment) * alignment
-        file_size = initial_stat.st_size
-        ordered = sorted(directory, key=lambda tensor: tensor.offset)
-        for index, tensor in enumerate(ordered):
-            start = data_start + tensor.offset
-            if start >= file_size:
-                raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
-            next_start = (
-                data_start + ordered[index + 1].offset
-                if index + 1 < len(ordered) else file_size
-            )
-            if next_start <= start:
-                raise GGUFError(f"overlapping GGUF tensor payload: {tensor.name}")
-            if tensor.n_bytes is not None and start + tensor.n_bytes > file_size:
-                raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
-            if tensor.n_bytes is not None and start + tensor.n_bytes > next_start:
-                raise GGUFError(f"overlapping GGUF tensor payload: {tensor.name}")
-        # Full identity mode hashes the exact bytes returned to the parser.
-        # Metadata-only mode stops after the directory and never touches the
-        # tensor payload; the sidecar loader validates size/mtime/file-id.
-        if hash_payload:
-            for _chunk in iter(lambda: f.read(1024 * 1024), b""):
-                pass
-            digest = f.digest.hexdigest()
-            bytes_read = f.bytes_read
-        else:
-            digest = ""
-            bytes_read = None
-        final_stat = os.fstat(f.fileno())
-        path_stat = p.stat()
-        # Windows fstat/stat can differ in timestamp semantics; ctime
-        # is not a portable content-change clock. Check identity, size and mtime.
-        identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size,
-                                 stat.st_mtime_ns)
-        if ((hash_payload and bytes_read != file_size)
-                or identity(initial_stat) != identity(final_stat)
-                or identity(final_stat) != identity(path_stat)):
+def parse_gguf_directory(f, *, path: str, file_size: int, digest: str = "",
+                         source: Mapping[str, Any] | None = None,
+                         allow_unknown_types: bool = False) -> GGUFMetadata:
+    """Parse a directory from a sequential stream; validate against total file size.
+
+    The caller supplies the actual file boundary, even when only a prefix is
+    available. Local and HTTP readers both use this parser.
+    """
+    head = f.read(24)
+    if len(head) != 24 or head[:4] != b"GGUF":
+        raise GGUFError(f"not a GGUF file: {path}")
+    version, tensor_count, kv_count = struct.unpack("<IQQ", head[4:])
+    if version not in (2, 3) or tensor_count > 10_000_000 or kv_count > 1_000_000:
+        raise GGUFError("unsupported GGUF version or implausible header counts")
+    metadata: dict[str, Any] = {}
+    for _ in range(kv_count):
+        key = _read_string(f)
+        type_raw = f.read(4)
+        if len(type_raw) != 4:
+            raise GGUFError("truncated GGUF metadata type")
+        if key in metadata:
+            raise GGUFError(f"duplicate GGUF metadata key: {key}")
+        metadata[key] = _read_value(f, struct.unpack("<I", type_raw)[0])
+    alignment = metadata.get("general.alignment", 32)
+    if type(alignment) is not int or alignment <= 0 or alignment & (alignment - 1):
+        raise GGUFError("invalid GGUF alignment")
+    directory = []
+    names_seen: set[str] = set()
+    for _ in range(int(tensor_count)):
+        name = _read_string(f)
+        if name in names_seen:
+            raise GGUFError(f"duplicate GGUF tensor name: {name}")
+        names_seen.add(name)
+        raw = f.read(4)
+        if len(raw) != 4:
+            raise GGUFError("truncated GGUF tensor rank")
+        (rank,) = struct.unpack("<I", raw)
+        if not 1 <= rank <= 8:
+            raise GGUFError("invalid GGUF tensor rank")
+        dims_raw = f.read(8 * rank)
+        type_raw = f.read(4); offset_raw = f.read(8)
+        if len(dims_raw) != 8 * rank or len(type_raw) != 4 or len(offset_raw) != 8:
+            raise GGUFError("truncated GGUF tensor directory")
+        dims = tuple(int(x) for x in struct.unpack("<" + "Q" * rank, dims_raw))
+        if any(dim <= 0 for dim in dims):
+            raise GGUFError(f"invalid GGUF tensor dimensions: {name}")
+        type_id = struct.unpack("<I", type_raw)[0]
+        offset = struct.unpack("<Q", offset_raw)[0]
+        if offset % alignment:
+            raise GGUFError(f"unaligned GGUF tensor offset: {name}")
+        spec = _TENSOR_TYPES.get(type_id)
+        if spec is None:
+            if not allow_unknown_types:
+                raise GGUFError(f"unsupported GGUF tensor type {type_id}")
+            directory.append(GGUFTensor(
+                name, dims, type_id, f"GGML_TYPE_{type_id}", None, None, offset
+            ))
+            continue
+        type_name, block_size, block_bytes = spec
+        elements = 1
+        for dim in dims: elements *= dim
+        if block_size > 1 and elements % block_size:
             raise GGUFError(
-                f"GGUF changed during metadata/hash read: {p}; "
-                f"bytes_read={bytes_read}, expected_bytes={file_size}; "
-                f"initial={identity(initial_stat)}, final={identity(final_stat)}, "
-                f"path={identity(path_stat)}"
+                f"GGUF tensor {name} has {elements} elements, not divisible by {block_size}"
             )
+        n_bytes = (elements // block_size) * block_bytes
+        directory.append(GGUFTensor(name, dims, type_id, type_name, block_size, n_bytes, offset))
+    data_start = ((f.tell() + alignment - 1) // alignment) * alignment
+    if data_start > file_size:
+        raise GGUFError("truncated GGUF data alignment")
+    directory = [replace(t, source_path=path, physical_offset=data_start + t.offset) for t in directory]
+    ordered = sorted(directory, key=lambda tensor: tensor.offset)
+    for index, tensor in enumerate(ordered):
+        start = data_start + tensor.offset
+        if start >= file_size:
+            raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
+        next_start = (
+            data_start + ordered[index + 1].offset
+            if index + 1 < len(ordered) else file_size
+        )
+        if next_start <= start:
+            raise GGUFError(f"overlapping GGUF tensor payload: {tensor.name}")
+        if tensor.n_bytes is not None and start + tensor.n_bytes > file_size:
+            raise GGUFError(f"truncated GGUF tensor payload: {tensor.name}")
+        if tensor.n_bytes is not None and start + tensor.n_bytes > next_start:
+            raise GGUFError(f"overlapping GGUF tensor payload: {tensor.name}")
     arch = metadata.get("general.architecture")
     prefix = str(arch) if arch else ""
     pick = lambda suffix: metadata.get(f"{prefix}.{suffix}") if prefix else None
@@ -307,19 +311,180 @@ def _read_gguf_metadata(
     trunk_layers = raw_layers - nextn if raw_layers is not None else None
     if trunk_layers is not None and trunk_layers <= 0:
         raise GGUFError("GGUF block_count is not larger than nextn_predict_layers")
-    return GGUFMetadata(str(p.resolve()), digest, int(version), int(tensor_count), int(kv_count),
+    source_info = dict(source or {"path": path, "size": file_size, "sha256": digest})
+    source_info.update(data_start=data_start, directory_end=f.tell(), tensor_count=int(tensor_count))
+    if "split.count" in metadata:
+        source_info.update(split_no=metadata.get("split.no"), split_count=metadata.get("split.count"),
+                           split_tensors_count=metadata.get("split.tensors.count"))
+    return GGUFMetadata(path, digest, int(version), int(tensor_count), int(kv_count),
                         str(arch) if arch is not None else None, trunk_layers,
                         _as_int(pick("embedding_length")), _as_int(pick("attention.head_count")),
                         _as_int(pick("attention.head_count_kv")), _as_int(vocab), _as_int(pick("context_length")),
                         _FILE_TYPE_NAMES.get(int(file_type)) if file_type is not None else None,
-                        _as_int(file_type), metadata, tuple(directory))
+                        _as_int(file_type), metadata, tuple(directory), (source_info,))
+
+
+
+def _read_gguf_metadata(path: str | Path, *, hash_payload: bool = True,
+                        allow_unknown_types: bool = False) -> GGUFMetadata:
+    p = Path(path).resolve(strict=True)
+    with p.open("rb") as raw:
+        f = _HashedReadStream(raw) if hash_payload else raw
+        initial_stat = os.fstat(f.fileno())
+        result = parse_gguf_directory(f, path=str(p), file_size=initial_stat.st_size,
+                                     allow_unknown_types=allow_unknown_types)
+        if hash_payload:
+            for _chunk in iter(lambda: f.read(1024 * 1024), b""):
+                pass
+            digest, bytes_read = f.digest.hexdigest(), f.bytes_read
+        else:
+            digest, bytes_read = "", None
+        final_stat, path_stat = os.fstat(f.fileno()), p.stat()
+        identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        if ((hash_payload and bytes_read != initial_stat.st_size)
+                or identity(initial_stat) != identity(final_stat)
+                or identity(final_stat) != identity(path_stat)):
+            raise GGUFError(f"GGUF changed during metadata/hash read: {p}")
+    return replace(result, sha256=digest,
+                   sources=({**result.sources[0], "sha256": digest},))
+
+
+_SPLIT_FILENAME = re.compile(r"^(.*)-(\d{5})-of-(\d{5})\.gguf$", re.IGNORECASE)
+
+
+def _split_coordinates(gguf: GGUFMetadata) -> tuple[int, int] | None:
+    fields = ("split.no", "split.count", "split.tensors.count")
+    if not any(key in gguf.metadata for key in fields):
+        return None
+    if any(type(gguf.metadata.get(key)) is not int for key in fields):
+        raise GGUFError("GGUF split metadata requires integer no, count and tensors.count")
+    index, count, tensors = (gguf.metadata[key] for key in fields)
+    if count < 1 or index < 0 or index >= count or tensors < 1:
+        raise GGUFError("invalid GGUF split metadata")
+    return index, count
+
+
+def merge_gguf_shards(shards: list[GGUFMetadata] | tuple[GGUFMetadata, ...]) -> GGUFMetadata:
+    """Require a complete, consistent shard group before exposing any tensors."""
+    if not shards:
+        raise GGUFError("empty GGUF shard group")
+    coordinates = [_split_coordinates(shard) for shard in shards]
+    if len(shards) == 1 and coordinates[0] is None:
+        return shards[0]
+    if any(item is None for item in coordinates):
+        raise GGUFError("GGUF shard group contains a file without split metadata")
+    count = coordinates[0][1]
+    if len(shards) != count or any(item[1] != count for item in coordinates):
+        raise GGUFError("incomplete or inconsistent GGUF shard group")
+    if sorted(item[0] for item in coordinates) != list(range(count)):
+        raise GGUFError("duplicate or missing GGUF shard index")
+    ordered = [shard for _, shard in sorted(zip(coordinates, shards), key=lambda row: row[0][0])]
+    first = ordered[0]
+    global_metadata = {key: value for key, value in first.metadata.items() if not key.startswith("split.")}
+    expected_tensors = first.metadata["split.tensors.count"]
+    tensors = []
+    seen = set()
+    for shard in ordered:
+        if shard.version != first.version or shard.metadata["split.tensors.count"] != expected_tensors:
+            raise GGUFError("inconsistent GGUF shard version or tensor count")
+        candidate = {key: value for key, value in shard.metadata.items() if not key.startswith("split.")}
+        # llama.cpp emits all model metadata in shard 0; later shards may
+        # repeat it or contain only split fields. Conflicting repeats fail.
+        if any(key not in global_metadata or global_metadata[key] != value for key, value in candidate.items()):
+            raise GGUFError("inconsistent GGUF shard metadata")
+        for tensor in shard.tensor_directory:
+            if tensor.name in seen:
+                raise GGUFError(f"duplicate GGUF tensor across shards: {tensor.name}")
+            seen.add(tensor.name)
+            tensors.append(tensor)
+    if len(tensors) != expected_tensors:
+        raise GGUFError("GGUF split tensor count does not match complete directory")
+    merged = replace(first, sha256=first.sha256 if count == 1 else "", tensor_count=len(tensors),
+                     tensor_directory=tuple(tensors),
+                     sources=tuple(source for shard in ordered for source in shard.sources))
+    validate_gguf_inventory(merged)
+    return merged
+
+
+def _read_local_gguf_group(path, *, hash_payload, allow_unknown_types):
+    p = Path(path).resolve(strict=True)
+    first = _read_gguf_metadata(p, hash_payload=hash_payload, allow_unknown_types=allow_unknown_types)
+    coordinate = _split_coordinates(first)
+    match = _SPLIT_FILENAME.fullmatch(p.name)
+    if coordinate is None:
+        if match:
+            raise GGUFError("split GGUF filename is missing split metadata")
+        return first
+    index, count = coordinate
+    if count == 1:
+        return merge_gguf_shards([first])
+    if not match or int(match[2]) != index + 1 or int(match[3]) != count:
+        raise GGUFError("GGUF split filename disagrees with metadata")
+    shards = []
+    for number in range(1, count + 1):
+        candidate = p.with_name(f"{match[1]}-{number:05d}-of-{count:05d}.gguf")
+        if not candidate.is_file():
+            raise GGUFError(f"missing GGUF shard: {candidate}")
+        shard = first if candidate == p else _read_gguf_metadata(candidate, hash_payload=hash_payload,
+                                                                allow_unknown_types=allow_unknown_types)
+        if _split_coordinates(shard) != (number - 1, count):
+            raise GGUFError(f"GGUF shard filename disagrees with split metadata: {candidate}")
+        shards.append(shard)
+    return merge_gguf_shards(shards)
+
+
+def validate_gguf_inventory(gguf: GGUFMetadata) -> None:
+    """Reject incomplete split inventories, including serialized first shards."""
+    if len(gguf.tensor_directory) != gguf.tensor_count:
+        raise GGUFError("GGUF inventory tensor count mismatch")
+    if len({tensor.name for tensor in gguf.tensor_directory}) != gguf.tensor_count:
+        raise GGUFError("duplicate GGUF inventory tensor name")
+    coordinates = _split_coordinates(gguf)
+    if coordinates is not None:
+        count = coordinates[1]
+        if len(gguf.sources) != count:
+            raise GGUFError("incomplete GGUF split inventory sources")
+        if gguf.tensor_count != gguf.metadata["split.tensors.count"]:
+            raise GGUFError("incomplete GGUF split inventory tensor directory")
+        if sorted(source.get("split_no", -1) for source in gguf.sources) != list(range(count)):
+            raise GGUFError("duplicate or missing GGUF split inventory source")
+        if any(source.get("split_count") != count or source.get("split_tensors_count") != gguf.tensor_count
+               for source in gguf.sources):
+            raise GGUFError("inconsistent GGUF split inventory sources")
+        if count > 1 and gguf.sha256:
+            raise GGUFError("multi-shard GGUF inventory cannot claim a single-file SHA256")
+    elif len(gguf.sources) > 1:
+        raise GGUFError("multiple GGUF sources require complete split metadata")
+    if gguf.sources:
+        by_path = {source.get("path"): source for source in gguf.sources}
+        if len(by_path) != len(gguf.sources) or None in by_path:
+            raise GGUFError("duplicate or missing GGUF physical source path")
+        if (any(tensor.source_path not in by_path for tensor in gguf.tensor_directory)
+                or any(type(source.get("tensor_count")) is not int or source["tensor_count"] < 0
+                       for source in gguf.sources)
+                or sum(source["tensor_count"] for source in gguf.sources) != gguf.tensor_count):
+            raise GGUFError("GGUF inventory has unassigned or inconsistent physical tensor sources")
+        for path, source in by_path.items():
+            tensors = sorted((tensor for tensor in gguf.tensor_directory if tensor.source_path == path),
+                             key=lambda tensor: tensor.offset)
+            if len(tensors) != source.get("tensor_count"):
+                raise GGUFError("GGUF inventory tensor physical source mismatch")
+            size, start = source.get("size"), source.get("data_start")
+            if type(size) is not int or type(start) is not int or not 0 <= start <= size:
+                raise GGUFError("invalid GGUF inventory source bounds")
+            for index, tensor in enumerate(tensors):
+                physical = start + tensor.offset
+                boundary = start + tensors[index + 1].offset if index + 1 < len(tensors) else size
+                if (tensor.offset < 0 or tensor.physical_offset != physical or not start <= physical < boundary <= size
+                        or (tensor.n_bytes is not None and (tensor.n_bytes <= 0 or physical + tensor.n_bytes > boundary))):
+                    raise GGUFError(f"invalid GGUF inventory physical tensor range: {tensor.name}")
 
 
 def read_gguf_metadata(
     path: str | Path, *, allow_unknown_types: bool = False
 ) -> GGUFMetadata:
     """Read and hash a GGUF in the historical, strict default mode."""
-    return _read_gguf_metadata(
+    return _read_local_gguf_group(
         path, hash_payload=True, allow_unknown_types=allow_unknown_types
     )
 
@@ -328,7 +493,7 @@ def read_gguf_metadata_only(
     path: str | Path, *, allow_unknown_types: bool = False
 ) -> GGUFMetadata:
     """Read header/metadata/tensor directory without reading tensor payload."""
-    return _read_gguf_metadata(
+    return _read_local_gguf_group(
         path, hash_payload=False, allow_unknown_types=allow_unknown_types
     )
 
@@ -368,8 +533,10 @@ def _metadata_cache_document(gguf: GGUFMetadata, stat: os.stat_result,
                  "vocab_size": gguf.vocab_size, "context_length": gguf.context_length,
                  "quantization": gguf.quantization, "file_type": gguf.file_type,
                  "metadata": dict(gguf.metadata),
+                 "sources": [dict(item) for item in gguf.sources],
                  "tensor_directory": [dict(name=t.name, shape=list(t.shape), type_id=t.type_id,
-                    type_name=t.type_name, block_size=t.block_size, n_bytes=t.n_bytes, offset=t.offset)
+                    type_name=t.type_name, block_size=t.block_size, n_bytes=t.n_bytes, offset=t.offset,
+                    source_path=t.source_path, physical_offset=t.physical_offset)
                     for t in gguf.tensor_directory]},
     }
 
@@ -381,7 +548,15 @@ def write_gguf_metadata_cache(gguf_path: str | Path, cache_path: str | Path | No
     if target.resolve() == source or (target.exists() and target.samefile(source)):
         raise GGUFError("GGUF metadata cache output must not overwrite source GGUF")
     before = source.stat()
+    # Reject unsupported shard caches before the historical full-file hash
+    # path can accidentally scan hundreds of GB of weights.
+    preliminary = _read_gguf_metadata(source, hash_payload=False)
+    coordinate = _split_coordinates(preliminary)
+    if coordinate is not None and coordinate[1] > 1:
+        raise GGUFError("split GGUF metadata caches are unsupported; read the complete shard group directly")
     gguf = read_gguf_metadata(source)
+    if len(gguf.sources) > 1:
+        raise GGUFError("split GGUF metadata caches are unsupported; read the complete shard group directly")
     stat = source.stat()
     if _cache_source_stat(before) != _cache_source_stat(stat):
         raise GGUFError("GGUF changed during metadata cache creation")
@@ -430,7 +605,8 @@ def _metadata_from_cache(document: Mapping[str, Any], source: Path) -> GGUFMetad
                     or not isinstance(item.get("name"), str) or not isinstance(item.get("type_name"), str)):
                 raise ValueError("invalid tensor")
         tensors = tuple(GGUFTensor(str(item["name"]), tuple(int(x) for x in item["shape"]), int(item["type_id"]),
-            str(item["type_name"]), _as_int(item.get("block_size")), _as_int(item.get("n_bytes")), int(item["offset"]))
+            str(item["type_name"]), _as_int(item.get("block_size")), _as_int(item.get("n_bytes")), int(item["offset"]),
+            str(item.get("source_path", "")), _as_int(item.get("physical_offset")))
             for item in data["tensor_directory"])
         if len(tensors) != data["tensor_count"]:
             raise ValueError("tensor count mismatch")
@@ -438,7 +614,8 @@ def _metadata_from_cache(document: Mapping[str, Any], source: Path) -> GGUFMetad
             int(data["metadata_kv_count"]), data.get("architecture"), _as_int(data.get("n_layer")),
             _as_int(data.get("n_embd")), _as_int(data.get("n_head")), _as_int(data.get("n_head_kv")),
             _as_int(data.get("vocab_size")), _as_int(data.get("context_length")), data.get("quantization"),
-            _as_int(data.get("file_type")), dict(data.get("metadata") or {}), tensors)
+            _as_int(data.get("file_type")), dict(data.get("metadata") or {}), tensors,
+            tuple(data.get("sources", ())))
     except (KeyError, TypeError, ValueError) as exc:
         raise GGUFError("invalid GGUF metadata cache geometry") from exc
 
@@ -484,6 +661,11 @@ def read_gguf_metadata_cache(gguf_path: str | Path, cache_path: str | Path | Non
     if expected != actual:
         raise GGUFError(f"GGUF metadata cache source identity mismatch: {source}")
     gguf = _metadata_from_cache(document, source)
+    if _split_coordinates(gguf) is not None and _split_coordinates(gguf)[1] > 1:
+        raise GGUFError("split GGUF metadata caches are unsupported; read the complete shard group directly")
+    if _SPLIT_FILENAME.fullmatch(source.name) and _split_coordinates(gguf) is None:
+        raise GGUFError("split GGUF cache is missing split metadata")
+    validate_gguf_inventory(gguf)
     if str(source_info.get("sha256")) != gguf.sha256:
         raise GGUFError("GGUF metadata cache source SHA256 binding mismatch")
     if strict:
@@ -850,12 +1032,12 @@ def _resolve_attention_head_dim(
 
 def _unique_tensor_bytes(tensors: tuple[GGUFTensor, ...] | list[GGUFTensor]) -> int:
     """Count physical payload bytes once for tensors sharing a GGUF offset."""
-    seen: set[tuple[int, int]] = set()
+    seen: set[tuple[str, int, int]] = set()
     total = 0
     for tensor in tensors:
         if tensor.n_bytes is None:
             continue
-        identity = (int(tensor.offset), int(tensor.n_bytes))
+        identity = (tensor.source_path, int(tensor.offset), int(tensor.n_bytes))
         if identity in seen:
             continue
         seen.add(identity)
@@ -894,7 +1076,9 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
 
     def binding(t: GGUFTensor) -> dict[str, Any]:
         return {"name": t.name, "shape": list(t.shape), "type": t.type_name,
-                "block_size": t.block_size, "n_bytes": t.n_bytes, "offset": t.offset}
+                "block_size": t.block_size, "n_bytes": t.n_bytes, "offset": t.offset,
+                **({"source_path": t.source_path, "physical_offset": t.physical_offset}
+                   if len(gguf.sources) > 1 else {})}
     layers = []
     # Qwen3.5/3.8 GGUFs encode a 3-linear/1-full hybrid sequence.  The
     # metadata also carries the final ``nextn`` block; llama.cpp reports it in
@@ -1078,6 +1262,22 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
         else:
             resolved_head_dim = declared_head_dim
         metadata: dict[str, Any] = {"gguf_tensor_bindings": [binding(t) for t in tensors], "gguf_physical_weight_bytes": _unique_tensor_bytes(tensors)}
+        biases = [names.get(f"blk.{index}.attn_{part}.bias") for part in ("q", "k", "v")]
+        if gguf.architecture == "qwen2" or any(t is not None for t in biases):
+            if is_linear_block or is_qwen35 or any(t is None for t in biases):
+                raise GGUFError("GGUF ordinary Q/K/V bias requires all three explicit vectors")
+            widths = [extent(t)[1] for t in (q, k, v)]
+            if (len({t.type_name for t in biases}) != 1 or biases[0].type_name not in {"F16", "F32"}
+                    or any(t.shape != (width,) for t, width in zip(biases, widths))):
+                raise GGUFError("GGUF Q/K/V bias types or shapes disagree with their projections")
+            metadata["attention_qkv_bias"] = {
+                "schema_version": "heterollm.attention-qkv-bias/v1",
+                "query_elements": widths[0], "key_elements": widths[1], "value_elements": widths[2],
+                "storage_bits": 16 if biases[0].type_name == "F16" else 32,
+                "weight_bytes": sum(t.n_bytes for t in biases),
+                "source": "GGUF physical Q/K/V bias vectors; llama.cpp build_qkv",
+                "weight_bindings": {part: binding(t) for part, t in zip(("q", "k", "v"), biases)},
+            }
         if gguf.architecture in {"qwen3", "qwen3moe"} and not is_linear_block:
             q_norm, k_norm = find("attn_q_norm"), find("attn_k_norm")
             if q_norm is None or k_norm is None:
@@ -1176,7 +1376,7 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
     output_tied_to_embedding = output is None
     if output_tied_to_embedding:
         output = embedding
-    elif (output.offset, output.n_bytes) == (embedding.offset, embedding.n_bytes):
+    elif (output.source_path, output.offset, output.n_bytes) == (embedding.source_path, embedding.offset, embedding.n_bytes):
         output_tied_to_embedding = True
     tie_values: list[tuple[str, bool]] = []
     tie_keys = [
@@ -1236,7 +1436,8 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
         # weight_projection_descriptors; feeding a mixed file label such as
         # Q4_K_M into its single-format registry would incorrectly reject the
         # otherwise valid mixed tensor graph.
-        metadata={"gguf_sha256": gguf.sha256, "gguf_file_quantization": gguf.quantization, "gguf_tensor_count": len(gguf.tensor_directory),
+        metadata={"gguf_sha256": gguf.sha256, "gguf_sources": [dict(source) for source in gguf.sources],
+                  "gguf_file_quantization": gguf.quantization, "gguf_tensor_count": len(gguf.tensor_directory),
                   # This is the simulator equivalent of llama.cpp's
                   # architecture enum.  Keep both the implementation family
                   # and the raw GGUF ID in the artifact for auditability.
@@ -1257,6 +1458,13 @@ def _build_model_from_gguf_registered(gguf: GGUFMetadata):
                   # audit fields as one global artifact format.
                   "gguf_embedding_binding": {k: v for k, v in binding(embedding).items() if k != "block_size"},
                   "gguf_output_binding": {k: v for k, v in binding(output).items() if k != "block_size"},
+                  # Llama's CUDA RoPE reads these optional F32 factors in
+                  # addition to positions. Preserve the real global/per-layer
+                  # bindings; the vector is shared, not duplicated per head.
+                  **({"gguf_rope_frequency_bindings": [binding(t) for t in gguf.tensor_directory
+                      if t.name == "rope_freqs.weight" or t.name.endswith(".rope_freqs.weight")
+                      or "rope_factors_long" in t.name or "rope_factors_short" in t.name]}
+                     if gguf.architecture == "llama" else {}),
                   **({"weight_projection_descriptors": output_projection}
                      if output_projection else {}),
                   # Static input only; these bytes already belong to the model
@@ -1276,12 +1484,30 @@ def build_model_from_gguf(gguf: GGUFMetadata):
     call avoids a second, competing architecture registry.
     """
 
-    return _build_model_from_gguf_registered(gguf)
+    validate_gguf_inventory(gguf)
+    model = _build_model_from_gguf_registered(gguf)
+    # Storage semantics belong to the native architecture, not to the entry
+    # point used to load it. Keep preset loads and direct GGUF imports equal.
+    if gguf.architecture in {"llama", "qwen2", "qwen3", "qwen35"}:
+        from importlib.resources import files
+        storage_contract = json.loads(files("heterollm_sim").joinpath(
+            "model_preset_data", "llama_tensor_storage_contract.json").read_text(encoding="utf-8"))
+        model = replace(model, metadata={
+            **model.metadata,
+            "llama_cpp_f32_hidden_storage": True,
+            "llama_cpp_hidden_storage_source": (
+                "llama.cpp ggml_get_rows/ggml_mul_mat produce F32; ordinary "
+                "normalization and residual operations preserve hidden dtype"
+            ),
+            "llama_cpp_tensor_storage_contract": storage_contract,
+        })
+    return model
 
 
 __all__ = ["GGUFError", "GGUFTensor", "GGUFMetadata", "GGUF_METADATA_CACHE_SCHEMA",
            "GGUF_METADATA_PARSER_SOURCE", "GGUF_MODEL_PRESET_SCHEMA",
-           "read_gguf_metadata", "read_gguf_metadata_only",
+           "read_gguf_metadata", "read_gguf_metadata_only", "parse_gguf_directory",
+           "merge_gguf_shards", "validate_gguf_inventory",
            "write_gguf_metadata_cache", "read_gguf_metadata_cache", "gguf_metadata_digest",
            "build_gguf_model_preset", "import_gguf_model_preset", "compare_gguf_to_model",
            "assert_gguf_parity", "build_model_from_gguf"]
